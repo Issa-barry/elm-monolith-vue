@@ -32,6 +32,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SolvabiliteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
@@ -168,7 +169,9 @@ class VenteRevendeurDerogationIntegrationTest extends TestCase
         ]);
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivraisonPartageCategorie::create([
-            'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+            'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
+            'categorie_id' => $categorie->id,
             'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => 300,
             'effective_from' => now()->subDay(),

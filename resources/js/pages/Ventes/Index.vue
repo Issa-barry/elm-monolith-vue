@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import NatureOperationBadge from '@/components/commande-vente/NatureOperationBadge.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -21,6 +22,7 @@ import {
     ArrowLeft,
     CheckCircle,
     ChevronRight,
+    CircleAlert,
     HandCoins,
     History,
     MoreHorizontal,
@@ -50,6 +52,7 @@ interface Commande {
     reference: string;
     statut: string;
     statut_label: string;
+    nature_operation: 'vente_standard' | 'distribution_client';
     total_commande: number;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
@@ -109,6 +112,8 @@ interface Filters {
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
+    nature_filtree: 'vente_standard' | 'distribution_client';
+    page_title: string;
     periode: string;
     statuts_actifs: string[];
     sites: SiteOption[];
@@ -137,10 +142,16 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,
 );
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Ventes', href: '/backoffice/ventes' },
-];
+    {
+        title: props.page_title,
+        href:
+            props.nature_filtree === 'distribution_client'
+                ? '/backoffice/distributions'
+                : '/backoffice/ventes',
+    },
+]);
 
 // ── Options statique ──────────────────────────────────────────────────────────
 const filtresStatut = [
@@ -232,7 +243,7 @@ const filterFields: FilterField[] = [
         key: 'numero_commande',
         label: 'N° commande',
         type: 'text',
-        placeholder: 'CMD-…',
+        placeholder: 'VTE-…, DST-…',
         inline: true,
     },
 ];
@@ -416,7 +427,7 @@ function confirmDelete(c: Commande) {
 </script>
 
 <template>
-    <Head title="Ventes" />
+    <Head :title="page_title" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
@@ -452,6 +463,29 @@ function confirmDelete(c: Commande) {
                     Nouveau
                 </Button>
                 <div v-else class="w-8" />
+            </div>
+
+            <div
+                v-if="can('ventes.create') && !can_creer_commande"
+                role="status"
+                class="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+            >
+                <span
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                >
+                    <CircleAlert class="h-4 w-4" />
+                </span>
+                <div>
+                    <p class="text-xs font-semibold">
+                        Création de commande indisponible
+                    </p>
+                    <p
+                        class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                    >
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour continuer.
+                    </p>
+                </div>
             </div>
 
             <!-- KPI cards -->
@@ -543,6 +577,9 @@ function confirmDelete(c: Commande) {
                                 :status="c.statut"
                                 :label="c.statut_label"
                             />
+                            <NatureOperationBadge
+                                :nature="c.nature_operation"
+                            />
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ c.created_at }}</span
@@ -581,6 +618,20 @@ function confirmDelete(c: Commande) {
                     <Plus class="mr-2 h-4 w-4" />
                     Créer la première commande
                 </Button>
+                <div
+                    v-if="can('ventes.create') && !can_creer_commande"
+                    role="status"
+                    class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                >
+                    <CircleAlert
+                        class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    />
+                    <p class="text-xs leading-5">
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour créer une
+                        commande.
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -596,38 +647,65 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <ListPageActions>
-                    <template #filters>
-                        <DataFilters
-                            trigger-only
-                            url="/backoffice/ventes"
-                            :base-params="{ periode: 'all' }"
-                            :values="filterValues"
-                            :sites="sites"
-                            :result-count="commandesFiltrees.length"
-                            :fields="filterFields"
-                        />
-                    </template>
-                    <template #primary>
-                        <Link
-                            v-if="can('ventes.create') && can_creer_commande"
-                            href="/backoffice/ventes/create"
-                        >
-                            <Button>
+                <div class="flex flex-col items-end gap-2">
+                    <ListPageActions>
+                        <template #filters>
+                            <DataFilters
+                                trigger-only
+                                url="/backoffice/ventes"
+                                :base-params="{ periode: 'all' }"
+                                :values="filterValues"
+                                :sites="sites"
+                                :result-count="commandesFiltrees.length"
+                                :fields="filterFields"
+                            />
+                        </template>
+                        <template #primary>
+                            <Link
+                                v-if="
+                                    can('ventes.create') && can_creer_commande
+                                "
+                                href="/backoffice/ventes/create"
+                            >
+                                <Button>
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Nouvelle commande
+                                </Button>
+                            </Link>
+                            <Button
+                                v-else-if="can('ventes.create')"
+                                disabled
+                                v-tooltip.left="raison_blocage_commande"
+                            >
                                 <Plus class="mr-2 h-4 w-4" />
                                 Nouvelle commande
                             </Button>
-                        </Link>
-                        <Button
-                            v-else-if="can('ventes.create')"
-                            disabled
-                            v-tooltip.left="raison_blocage_commande"
+                        </template>
+                    </ListPageActions>
+                    <div
+                        v-if="can('ventes.create') && !can_creer_commande"
+                        role="status"
+                        class="flex max-w-md items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                    >
+                        <span
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
                         >
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouvelle commande
-                        </Button>
-                    </template>
-                </ListPageActions>
+                            <CircleAlert class="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p class="text-xs font-semibold">
+                                Création de commande indisponible
+                            </p>
+                            <p
+                                class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                            >
+                                Aucun produit vendable n'est disponible pour
+                                votre agence. Réapprovisionnez le stock pour
+                                continuer.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- KPI cards -->
@@ -808,10 +886,15 @@ function confirmDelete(c: Commande) {
                         style="width: 130px"
                     >
                         <template #body="{ data }">
-                            <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
-                            />
+                            <div class="flex flex-col items-start gap-1">
+                                <StatusDot
+                                    :status="data.statut"
+                                    :label="data.statut_label"
+                                />
+                                <NatureOperationBadge
+                                    :nature="data.nature_operation"
+                                />
+                            </div>
                         </template>
                     </Column>
 
@@ -949,6 +1032,22 @@ function confirmDelete(c: Commande) {
                                 <Plus class="mr-2 h-4 w-4" />
                                 Créer la première commande
                             </Button>
+                            <div
+                                v-if="
+                                    can('ventes.create') && !can_creer_commande
+                                "
+                                role="status"
+                                class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                            >
+                                <CircleAlert
+                                    class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                                />
+                                <p class="text-xs leading-5">
+                                    Aucun produit vendable n'est disponible pour
+                                    votre agence. Réapprovisionnez le stock pour
+                                    créer une commande.
+                                </p>
+                            </div>
                         </div>
                     </template>
                 </DataTable>

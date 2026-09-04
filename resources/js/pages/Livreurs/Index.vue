@@ -79,6 +79,20 @@ const pendingCount = computed(
     () => props.livreurs.filter((l) => l.has_account && !l.is_active).length,
 );
 
+// Mini stats — calculées sur l'ensemble des livreurs (indépendantes des
+// filtres actifs), même pattern que Vehicules/Index.vue.
+const livreurStats = computed(() => {
+    const total = props.livreurs.length;
+    const actifs = props.livreurs.filter((l) => l.is_active).length;
+
+    return {
+        total,
+        actifs,
+        inactifs: total - actifs,
+        enAttente: pendingCount.value,
+    };
+});
+
 const livreursFiltres = computed(() => {
     let list = props.livreurs;
     if (statutFilter.value === 'actif') list = list.filter((l) => l.is_active);
@@ -141,6 +155,69 @@ function approuver(livreur: Livreur) {
                         Gérer les équipes
                     </Button>
                 </Link>
+            </div>
+
+            <!-- Mini stats — vue d'ensemble indépendante des filtres -->
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ livreurStats.total }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ livreurStats.actifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Actifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-muted-foreground tabular-nums"
+                    >
+                        {{ livreurStats.inactifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Inactifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold tabular-nums"
+                        :class="
+                            livreurStats.enAttente > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
+                    >
+                        {{ livreurStats.enAttente }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        En attente
+                    </p>
+                </div>
             </div>
 
             <!-- Alerte inscriptions en attente -->

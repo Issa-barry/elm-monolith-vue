@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ArrowRight,
@@ -24,7 +23,6 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { useToast } from 'primevue/usetoast';
 import {
@@ -126,6 +124,16 @@ interface Transfert {
     validation_motif: string | null;
     lignes: Ligne[];
     commission: Commission | null;
+    // Moteur générique (organisation migrée) : la commission n'est jamais écrite dans `commission`
+    // ci-dessus (relation legacy CommissionLogistique) — cf.
+    // TransfertLogistiqueController::mapTransfertDetail(), incident du 02/09/2026.
+    commission_generique_genere: boolean;
+    commission_generique_montant_total: number;
+    // Statut agrégé (impayé/partiel/payé) recalculé côté serveur depuis
+    // CommissionEnveloppePart — alimente le libellé de l'étape "Commission" du stepper
+    // ci-dessous. null tant qu'aucune part n'existe (commission pas encore générée).
+    commission_statut: string | null;
+    commission_statut_label: string | null;
     is_brouillon: boolean;
     is_cloture: boolean;
     is_terminal: boolean;
@@ -134,10 +142,6 @@ interface Transfert {
     created_at: string;
 }
 
-interface BaseCalculOption {
-    value: string;
-    label: string;
-}
 interface TypeEcartOption {
     value: string;
     label: string;
@@ -158,12 +162,10 @@ const props = defineProps<{
     transfert: Transfert;
     contexte: 'transferts' | 'receptions';
     types_ecart: TypeEcartOption[];
-    bases_calcul: BaseCalculOption[];
     can_avancer: boolean;
     can_valider_reception: boolean;
     can_annuler: boolean;
     can_update: boolean;
-    can_generer_commission: boolean;
     can_valider_reception_admin: boolean;
     activites: Activite[];
 }>();
@@ -194,7 +196,7 @@ const STEPS = computed(() => [
     { key: 'reception', shortLabel: 'Réceptionné', icon: PackageCheck },
     {
         key: 'commission',
-        shortLabel: props.transfert.commission?.statut_label ?? 'Commission',
+        shortLabel: props.transfert.commission_statut_label ?? 'Commission',
         icon: ShieldCheck,
     },
     { key: 'cloture', shortLabel: 'Clôturé', icon: CheckCircle2 },
@@ -205,7 +207,11 @@ const STEPS = computed(() => [
 // afin que "Réceptionné" passe au vert.
 const currentStepIdx = computed(() => {
     const statut = props.transfert.statut;
-    if (statut === 'reception' && props.transfert.commission) return 4;
+    // commission_generique_genere (moteur CommissionEnveloppe, seul moteur depuis le
+    // 03/09/2026) — remplace l'ancien test sur `commission` (relation legacy jamais peuplée
+    // pour une commission générée après cette date, cf. TypeScript ci-dessus).
+    if (statut === 'reception' && props.transfert.commission_generique_genere)
+        return 4;
     const map: Record<string, number> = {
         brouillon: 0,
         chargement: 1,
@@ -220,9 +226,9 @@ const currentStepIdx = computed(() => {
 const commissionStepState = computed((): 'done' | 'current' | 'future' => {
     const s = props.transfert.statut;
     if (s !== 'reception' && s !== 'cloture') return 'future';
-    const c = props.transfert.commission;
-    if (!c) return 'future';
-    if (s === 'cloture' || c.is_versee) return 'done';
+    if (!props.transfert.commission_generique_genere) return 'future';
+    if (s === 'cloture' || props.transfert.commission_statut === 'paye')
+        return 'done';
     return 'current';
 });
 
@@ -268,7 +274,6 @@ const mainActionLabel = computed(() => {
 
 const showChargementDialog = ref(false);
 const showReceptionDialog = ref(false);
-const showCommissionDialog = ref(false);
 const processing = ref(false);
 const dialogErrors = ref<string[]>([]);
 
@@ -372,75 +377,6 @@ function annulerTransfert() {
     );
 }
 
-// ── Commission ────────────────────────────────────────────────────────────────
-
-const commissionForm = useForm({
-    base_calcul: 'par_pack',
-    valeur_base: 0 as number,
-    quantite_reference: null as number | null,
-});
-
-const needsQuantite = computed(() =>
-    ['par_pack', 'par_km'].includes(commissionForm.base_calcul),
-);
-
-const totalQuantiteRecue = computed(() =>
-    props.transfert.lignes.reduce((sum, l) => sum + (l.quantite_recue ?? 0), 0),
-);
-
-const gainPreview = computed(() => {
-    const base = commissionForm.valeur_base ?? 0;
-    if (commissionForm.base_calcul === 'forfait') return base;
-    const qte = commissionForm.quantite_reference ?? 0;
-    return base * qte;
-});
-
-// Erreur métier générale renvoyée par le backend (ex: transfert déjà commissionné),
-// pas liée à un champ précis du formulaire — hors du typage strict de FormDataErrors.
-const commissionGeneralError = computed(
-    () =>
-        (commissionForm.errors as Record<string, string | undefined>)
-            .commission,
-);
-
-watch(showCommissionDialog, (open) => {
-    if (open) {
-        commissionForm.quantite_reference = totalQuantiteRecue.value;
-    }
-});
-
-function submitCommission() {
-    commissionForm.post(
-        `/backoffice/logistique/${props.transfert.id}/commission`,
-        {
-            onSuccess: () => {
-                showCommissionDialog.value = false;
-                toast.add({
-                    severity: 'success',
-                    summary: 'Commission générée',
-                    life: 3000,
-                });
-            },
-            onError: (errors) => {
-                const firstError = Object.values(errors)[0];
-                if (
-                    firstError &&
-                    !errors.base_calcul &&
-                    !errors.valeur_base &&
-                    !errors.quantite_reference
-                ) {
-                    toast.add({
-                        severity: 'error',
-                        summary: 'Erreur',
-                        detail: String(firstError),
-                        life: 5000,
-                    });
-                }
-            },
-        },
-    );
-}
-
 // ── Versement ─────────────────────────────────────────────────────────────────
 
 const MODES_PAIEMENT = [
@@ -503,19 +439,11 @@ const partLivreurTotal = computed(() => livreurTotals.value.net);
 // ── Validation admin ──────────────────────────────────────────────────────────
 
 const showValidationCommissionDialog = ref(false);
-const validationEtape = ref<'review' | 'montant'>('review');
-const montantParPack = ref<number>(200);
 const validationProcessing = ref(false);
 const validationErrors = ref<string[]>([]);
 
-const totalCommissionPreview = computed(
-    () => montantParPack.value * totalQuantiteRecue.value,
-);
-
 watch(showValidationCommissionDialog, (open) => {
     if (open) {
-        validationEtape.value = 'review';
-        montantParPack.value = 200;
         validationErrors.value = [];
     }
 });
@@ -525,7 +453,9 @@ function submitValiderAccord() {
     validationErrors.value = [];
     router.post(
         `/backoffice/logistique/${props.transfert.id}/validation-reception`,
-        { decision: 'accord', montant_par_pack: montantParPack.value },
+        {
+            decision: 'accord',
+        },
         {
             onSuccess: () => {
                 showValidationCommissionDialog.value = false;
@@ -741,6 +671,7 @@ function activiteDotClass(action: string): string {
                             style="min-width: 80px"
                         >
                             <div
+                                :data-testid="`stepper-step-${step.key}`"
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
                                     stepState(idx) === 'done'
@@ -1140,9 +1071,41 @@ function activiteDotClass(action: string): string {
                                 !transfert.commission
                             "
                         >
+                            <!-- Moteur générique : commission déjà générée (n'est jamais écrite
+                            dans transfert.commission, cf. TypeScript ci-dessus) — sans ce bloc,
+                            cet onglet affichait "en attente" indéfiniment même après succès. -->
+                            <div
+                                v-if="transfert.commission_generique_genere"
+                                class="m-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400"
+                                >
+                                    <CheckCircle2 class="h-4 w-4 shrink-0" />
+                                    <span class="text-sm font-semibold"
+                                        >Commission générée</span
+                                    >
+                                </div>
+                                <p
+                                    class="mt-1 text-xs text-emerald-700 dark:text-emerald-400"
+                                >
+                                    {{
+                                        formatGNF(
+                                            transfert.commission_generique_montant_total,
+                                        )
+                                    }}
+                                    au total, selon le barème configuré
+                                    (Paramètres > Commissions > Transferts
+                                    logistiques). Détail par bénéficiaire
+                                    disponible dans Comptabilité > Commissions
+                                    (filtre Processus = "Transferts
+                                    logistiques").
+                                </p>
+                            </div>
+
                             <!-- Refus -->
                             <div
-                                v-if="
+                                v-else-if="
                                     transfert.validation_reception === 'refus'
                                 "
                                 class="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30"
@@ -1190,8 +1153,8 @@ function activiteDotClass(action: string): string {
                                 <p class="mt-1 text-xs">
                                     Un administrateur doit approuver cette
                                     réception pour que la commission soit
-                                    générée automatiquement (200 FG × packs
-                                    reçus).
+                                    générée automatiquement selon le barème
+                                    configuré (Paramètres > Commissions).
                                 </p>
                             </div>
                         </div>
@@ -1529,101 +1492,6 @@ function activiteDotClass(action: string): string {
             :types-ecart="types_ecart"
         />
 
-        <!-- ══ Dialog : Générer la commission ════════════════════════════════ -->
-        <Dialog
-            v-model:visible="showCommissionDialog"
-            modal
-            header="Générer la commission logistique"
-            :style="{ width: '480px' }"
-            :draggable="false"
-        >
-            <div class="space-y-4 py-2">
-                <div>
-                    <Label class="mb-1.5 block text-sm">Base de calcul</Label>
-                    <Dropdown
-                        v-model="commissionForm.base_calcul"
-                        :options="bases_calcul"
-                        option-label="label"
-                        option-value="value"
-                        class="w-full"
-                    />
-                    <p
-                        v-if="commissionForm.errors.base_calcul"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ commissionForm.errors.base_calcul }}
-                    </p>
-                </div>
-                <div>
-                    <Label class="mb-1.5 block text-sm"
-                        >Valeur de base (GNF)</Label
-                    >
-                    <InputNumber
-                        v-model="commissionForm.valeur_base"
-                        :min="0"
-                        class="w-full"
-                        input-class="w-full"
-                    />
-                    <p
-                        v-if="commissionForm.errors.valeur_base"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ commissionForm.errors.valeur_base }}
-                    </p>
-                </div>
-                <div v-if="needsQuantite">
-                    <Label class="mb-1.5 block text-sm">Qté réceptionnée</Label>
-                    <InputNumber
-                        v-model="commissionForm.quantite_reference"
-                        :min="1"
-                        :use-grouping="false"
-                        :disabled="commissionForm.processing"
-                        class="w-full"
-                        input-class="w-full"
-                    />
-                    <p
-                        v-if="commissionForm.errors.quantite_reference"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ commissionForm.errors.quantite_reference }}
-                    </p>
-                </div>
-                <p
-                    v-if="commissionGeneralError"
-                    class="text-xs text-destructive"
-                >
-                    {{ commissionGeneralError }}
-                </p>
-
-                <!-- Aperçu du gain total -->
-                <div
-                    v-if="commissionForm.valeur_base > 0"
-                    class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30"
-                >
-                    <p class="text-xs text-emerald-700 dark:text-emerald-400">
-                        Commission totale estimée
-                    </p>
-                    <p
-                        class="mt-0.5 text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
-                    >
-                        {{ new Intl.NumberFormat('fr-FR').format(gainPreview) }}
-                        GNF
-                    </p>
-                </div>
-            </div>
-            <template #footer>
-                <Button variant="outline" @click="showCommissionDialog = false"
-                    >Annuler</Button
-                >
-                <Button
-                    :disabled="commissionForm.processing"
-                    @click="submitCommission"
-                >
-                    {{ commissionForm.processing ? 'Calcul…' : 'Générer' }}
-                </Button>
-            </template>
-        </Dialog>
-
         <!-- ══ Dialog : Générer commission (validation admin) ══════════════ -->
         <Dialog
             v-model:visible="showValidationCommissionDialog"
@@ -1686,111 +1554,36 @@ function activiteDotClass(action: string): string {
                 </tbody>
             </table>
 
-            <!-- Étape 2 : saisie du montant par pack -->
-            <div
-                v-if="validationEtape === 'montant'"
-                class="mt-5 space-y-4 rounded-xl border bg-muted/30 p-4"
-            >
-                <p class="text-sm font-medium">Calcul de la commission</p>
-                <div class="flex items-end gap-4">
-                    <div class="flex-1">
-                        <Label
-                            for="val-montant-pack"
-                            class="mb-1.5 block text-xs font-medium"
-                        >
-                            Montant par pack (GNF)
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <InputNumber
-                            v-model="montantParPack"
-                            input-id="val-montant-pack"
-                            :min="1"
-                            :use-grouping="false"
-                            class="w-full"
-                            input-class="w-full"
-                        />
-                    </div>
-                    <div
-                        class="rounded-lg border bg-background px-4 py-2 text-center"
-                    >
-                        <p
-                            class="text-[10px] tracking-wide text-muted-foreground uppercase"
-                        >
-                            Total commission
-                        </p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">
-                            {{
-                                new Intl.NumberFormat('fr-FR').format(
-                                    totalCommissionPreview,
-                                )
-                            }}
-                            <span class="text-sm font-normal">GNF</span>
-                        </p>
-                        <p class="mt-0.5 text-[10px] text-muted-foreground">
-                            {{ totalQuantiteRecue }} packs ×
-                            {{ montantParPack }} GNF
-                        </p>
-                    </div>
-                </div>
-                <p class="text-xs text-muted-foreground">
-                    La commission sera répartie selon les pourcentages définis
-                    dans l'équipe.
-                </p>
-            </div>
-
             <template #footer>
-                <!-- Étape 1 : review -->
-                <template v-if="validationEtape === 'review'">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
-                        :disabled="validationProcessing"
-                        @click="submitValiderInvalider"
-                    >
-                        <ShieldX class="mr-1.5 h-3.5 w-3.5" />
-                        Non, renvoyer pour correction
-                    </Button>
-                    <Button size="sm" @click="validationEtape = 'montant'">
-                        <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
-                        Oui, générer la commission
-                    </Button>
-                </template>
-
-                <!-- Étape 2 : saisie montant -->
-                <template v-else>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="validationProcessing"
-                        @click="validationEtape = 'review'"
-                    >
-                        ← Retour
-                    </Button>
-                    <Button
-                        size="sm"
-                        :disabled="
-                            validationProcessing ||
-                            !montantParPack ||
-                            montantParPack < 1
-                        "
-                        @click="submitValiderAccord"
-                    >
-                        <ShieldCheck
-                            v-if="!validationProcessing"
-                            class="mr-1.5 h-3.5 w-3.5"
-                        />
-                        <span
-                            v-else
-                            class="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
-                        />
-                        {{
-                            validationProcessing
-                                ? 'Génération…'
-                                : 'Confirmer et générer'
-                        }}
-                    </Button>
-                </template>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+                    :disabled="validationProcessing"
+                    @click="submitValiderInvalider"
+                >
+                    <ShieldX class="mr-1.5 h-3.5 w-3.5" />
+                    Non, renvoyer pour correction
+                </Button>
+                <Button
+                    size="sm"
+                    :disabled="validationProcessing"
+                    @click="submitValiderAccord"
+                >
+                    <ShieldCheck
+                        v-if="!validationProcessing"
+                        class="mr-1.5 h-3.5 w-3.5"
+                    />
+                    <span
+                        v-else
+                        class="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    {{
+                        validationProcessing
+                            ? 'Génération…'
+                            : 'Oui, générer la commission'
+                    }}
+                </Button>
             </template>
         </Dialog>
 

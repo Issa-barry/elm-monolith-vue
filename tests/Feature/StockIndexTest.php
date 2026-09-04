@@ -6,11 +6,13 @@ use App\Models\Categorie;
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
+use App\Models\ProduitSeuilAlerte;
 use App\Models\ProduitType;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
+use App\Services\ProduitSeuilAlerteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -68,9 +70,18 @@ class StockIndexTest extends TestCase
     {
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Bidon premium',
-            'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 5,
         ], ['sku' => 'BIDON-001']);
+        // Activation ET seuil PAR SITE (remplacent les anciennes colonnes globales
+        // produits.alerte_stock_active/seuil_alerte_stock, désormais historiques/figées) — ici
+        // uniquement sur Agence Alpha, cf. StockStatutService::alerteActivePourSite()/
+        // seuilEffectifPourSite().
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->siteA->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 5,
+        ]);
         $variante = $produit->variantePrincipale()->first();
         $secondeVariante = $this->makeVariante($produit, [
             'sku' => 'BIDON-002',
@@ -101,7 +112,74 @@ class StockIndexTest extends TestCase
                 ->where('stocks.data.0.seuil_effectif', 5)
                 ->where('stocks.data.1.site_nom', 'Agence Beta')
                 ->where('stocks.data.1.qte_disponible', 0)
+                // Agence Beta n'a aucune ligne produit_seuils_alerte (jamais configurée) :
+                // disponible par défaut (mode "Tous les sites") — statutPour() étant une
+                // fonction pure, l'état réel (Rupture, quantité 0) reste affiché tel quel, que
+                // l'alerte soit active ou non sur ce site (décision du 02/09/2026 après-midi).
                 ->where('stocks.data.1.statut', 'rupture')
+            );
+    }
+
+    /**
+     * Une alerte désactivée (actif=false) n'exclut PLUS ce site du filtre "Rupture de stock" —
+     * le stock physique reste réel indépendamment de l'alerte (décision du 02/09/2026
+     * après-midi) : seule la DISPONIBILITÉ gouverne ces filtres, jamais l'alerte.
+     */
+    public function test_le_filtre_rupture_inclut_un_site_disponible_meme_sans_alerte_active(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit sans alerte mais disponible',
+        ], ['sku' => 'RUPT-SANS-ALERTE-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->siteA->id,
+            'actif' => false,
+            'seuil_alerte_stock' => 10,
+        ]);
+        $this->stock($produit->variantePrincipale()->first(), $this->siteA, 0);
+
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['rupture'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 1)
+                ->where('stocks.data.0.produit_nom', 'Produit sans alerte mais disponible')
+            );
+    }
+
+    /**
+     * Régression 02/09/2026 après-midi : les filtres de statut (Rupture/Stock faible/Stock
+     * négatif/Disponible) doivent exclure un site NON DISPONIBLE pour ce produit — aucune
+     * rupture "métier" ne peut exister là où le produit n'est pas vendu/géré.
+     */
+    public function test_le_filtre_rupture_exclut_un_site_non_disponible(): void
+    {
+        $produitDisponible = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible',
+        ], ['sku' => 'RUPT-DISPO-001']);
+        $this->stock($produitDisponible->variantePrincipale()->first(), $this->siteA, 0);
+
+        $produitNonDisponible = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit non disponible',
+        ], ['sku' => 'RUPT-NON-DISPO-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produitNonDisponible->id,
+            'site_id' => $this->siteA->id,
+            'disponible' => false,
+        ]);
+        $this->stock($produitNonDisponible->variantePrincipale()->first(), $this->siteA, 0);
+
+        // Scopé sur siteA (site_ids) : la page croise chaque variante avec CHAQUE site
+        // consultable (cf. stockQuery()), donc sans ce filtre siteB apparaîtrait aussi — hors
+        // sujet ici, où seul siteA porte une configuration explicite pour les deux produits.
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['rupture'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 1)
+                ->where('stocks.data.0.produit_nom', 'Produit disponible')
             );
     }
 
@@ -114,9 +192,8 @@ class StockIndexTest extends TestCase
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Eau minérale',
             'categorie_id' => $categorie->id,
-            'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 10,
         ], ['sku' => 'EAU-FILTRE-001']);
+        app(ProduitSeuilAlerteService::class)->definir($produit, $this->siteA->id, true, 10);
         $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
 
         $autre = $this->makeProduitAvecVariante($this->organization, [

@@ -21,6 +21,20 @@ class CommissionProcessus extends Model
 
     public const CODE_VENTE = 'vente';
 
+    /**
+     * Décision produit du 02/09/2026 : processus métier réel et courant, jamais fusionné avec
+     * CODE_LOGISTIQUE_TRANSFERT — chaque distribution génère une CommissionEnveloppe rattachée à
+     * CE code (identité/reporting, cf. CommissionEnveloppeGenerator::genererPourCommandeVente()),
+     * pour rester traçable et pouvoir diverger un jour sans dette technique. Il n'a en revanche pas
+     * d'onglet dédié dans Settings\CommissionRegleController::processusCodesDisponibles() : tant
+     * qu'aucune CommissionRegle active ne lui est propre, le MONTANT (jamais l'identité) est résolu
+     * par repli automatique sur celui de CODE_LOGISTIQUE_TRANSFERT — cf.
+     * CommissionProcessusDefaults::processusResolutionBareme(). Toujours présent dans
+     * App\Support\Commission\CommissionProcessusFilter (reporting), qu'il ait ou non sa propre
+     * configuration.
+     */
+    public const CODE_DISTRIBUTION_CLIENT = 'distribution_client';
+
     public const CODE_LOGISTIQUE_TRANSFERT = 'logistique_transfert';
 
     protected $table = 'commission_processus';

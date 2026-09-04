@@ -426,10 +426,11 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit par
-     * l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son
-     * id) — une colonne d'usage vide sur une ligne "vehicules" qui sert d'ancrage à des
-     * livreurs supplémentaires ne doit donc jamais désactiver un usage déjà configuré.
+     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit sur ses usages
+     * par l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son id
+     * — seuls la capacité et le site font exception, voir tests dédiés) — une colonne d'usage
+     * vide sur une ligne "vehicules" qui sert d'ancrage à des livreurs supplémentaires ne doit
+     * donc jamais désactiver un usage déjà configuré.
      */
     public function test_confirm_ne_modifie_pas_les_usages_dun_vehicule_deja_existant(): void
     {
@@ -451,6 +452,33 @@ class ImportFlotteTest extends TestCase
         $vehiculeExistant->refresh();
         $this->assertTrue($vehiculeExistant->livraison_vente);
         $this->assertTrue($vehiculeExistant->livraison_logistique);
+    }
+
+    /**
+     * Contrairement au reste d'une ligne "véhicule déjà existant" (simple ancrage, jamais
+     * modifié — cf. test ci-dessus), le site EST mis à jour — un véhicule peut changer de site
+     * d'affectation entre deux imports, et une ré-importation doit pouvoir le refléter (cf.
+     * ImportFlotteExecutor::executerGroupe()).
+     */
+    public function test_confirm_met_a_jour_le_site_dun_vehicule_deja_existant(): void
+    {
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kaloum', 'type' => 'depot']);
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $autreSite->id,
+        ]);
+
+        // ligneVehicule() envoie 'vehicule_site' => 'Matoto' ($this->site), différent du site
+        // actuel du véhicule (Kaloum).
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame($this->site->id, $vehiculeExistant->fresh()->site_id);
     }
 
     /** L'aperçu (avant confirmation) reste cohérent avec ce qui sera réellement appliqué. */
@@ -612,6 +640,95 @@ class ImportFlotteTest extends TestCase
             ->assertStatus(422);
 
         $this->assertSame(0, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Même nom qu'un livreur déjà en base (casse/espaces différents), mais un tout autre
+     * numéro de téléphone — le rapprochement reste strictement par téléphone (jamais de fusion
+     * automatique par nom), mais l'utilisateur doit être bloqué avant de créer un second
+     * `Livreur`/`Personne` désignant probablement la même personne.
+     */
+    public function test_analyse_bloque_un_livreur_dont_le_nom_correspond_exactement_a_un_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'camara',
+            'livreur_prenom' => '  Ibrahima ',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString('existe déjà', $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Nom proche (faute de frappe) d'un livreur déjà en base, téléphone différent — signalé
+     * pour confirmation/correction, jamais fusionné ni créé silencieusement (même mécanique que
+     * l'immatriculation proche d'un véhicule existant, cf. test ci-dessus).
+     */
+    public function test_analyse_signale_un_nom_de_livreur_proche_dun_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camaraa',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("nom proche d'un livreur existant", $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Le même livreur déjà en base, réimporté avec exactement le même téléphone : le
+     * rapprochement se fait par téléphone (chemin normal, jamais par le contrôle de nom
+     * ci-dessus) — aucune erreur, pas de doublon.
+     */
+    public function test_analyse_naffiche_aucune_erreur_quand_le_meme_livreur_est_retrouve_par_telephone(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000001',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camara',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
     }
 
     // ── confirmation / création ──────────────────────────────────────────────

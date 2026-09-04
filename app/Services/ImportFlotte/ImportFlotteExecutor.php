@@ -18,11 +18,16 @@ use Illuminate\Support\Facades\Storage;
  * (voir ImportFlotteParser). Tout-ou-rien : si un seul groupe est en erreur,
  * rien n'est enregistré.
  *
- * Exception à la règle "une ligne véhicule déjà existant ne sert que d'ancrage, jamais
- * modifiée" (cf. executerGroupe()) : la capacité (upsertCapacite()) est mise à jour même pour un
- * véhicule déjà en base, sur les groupes de capacité effectivement renseignés dans le fichier —
- * une ré-importation avec des valeurs corrigées doit pouvoir corriger la flotte déjà configurée,
- * contrairement aux autres champs (identité, équipe...).
+ * Exceptions à la règle "une ligne véhicule déjà existant ne sert que d'ancrage, jamais
+ * modifiée" (cf. executerGroupe()) :
+ * - la capacité (upsertCapacite()) est mise à jour même pour un véhicule déjà en base, sur les
+ *   groupes de capacité effectivement renseignés dans le fichier ;
+ * - le site (vehicule_site) est lui aussi mis à jour pour un véhicule déjà en base — un même
+ *   véhicule peut changer de site d'affectation entre deux imports, et la ré-importation doit
+ *   pouvoir le refléter.
+ * Une ré-importation avec des valeurs corrigées doit pouvoir corriger la flotte déjà configurée
+ * sur ces deux champs, contrairement au reste (identité, usages, catégorie, propriétaire,
+ * équipe...).
  */
 class ImportFlotteExecutor
 {
@@ -125,6 +130,11 @@ class ImportFlotteExecutor
         // un brouillon à 0 %, cf. ImportFlotteParser).
         if ($vData['existe']) {
             $vehiculeId = $vData['id'];
+
+            // Seul le site est réécrit pour un véhicule déjà en base (cf. docblock de classe) :
+            // toujours réappliqué, comme upsertCapacite() ci-dessous, plutôt que conditionné à un
+            // changement effectif — écrire la même valeur est sans effet.
+            Vehicule::whereKey($vehiculeId)->update(['site_id' => $vData['site_id']]);
         } else {
             $vehicule = Vehicule::create([
                 'organization_id' => $orgId,

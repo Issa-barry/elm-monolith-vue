@@ -16,9 +16,6 @@ use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
-use App\Http\Controllers\CommissionLogistiqueController;
-use App\Http\Controllers\CommissionPaymentController;
-use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -48,6 +45,7 @@ use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FonctionRhController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ImportProduitsController;
+use App\Http\Controllers\ImportVehiculesMajController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -213,6 +211,16 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
             Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
             Route::resource('ventes', CommandeVenteController::class)->except([]);
+            // Même liste que ventes.index, filtrée sur nature_operation=distribution_client côté
+            // contrôleur (déterminé par le nom de route, jamais un paramètre client) — la création
+            // reste sur ventes.create/ventes.store, avec le choix de nature sur le formulaire.
+            Route::get('distributions', [CommandeVenteController::class, 'index'])->name('distributions.index');
+            // Même contrôleur/données que ventes.show — seul le composant Inertia rendu diffère
+            // (Distributions/Show au lieu de Ventes/Show), choisi côté contrôleur selon
+            // nature_operation, jamais par ce nom de route lui-même. Le paramètre {vente} doit
+            // rester identique à celui de ventes.show : show(CommandeVente $vente) résout le
+            // binding implicite par nom de paramètre, pas par position.
+            Route::get('distributions/{vente}', [CommandeVenteController::class, 'show'])->name('distributions.show');
             Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
@@ -262,6 +270,22 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
             });
 
+            // Import de mise à jour en masse (site, capacités, usages) — doit être avant
+            // Route::resource('vehicules') pour la même raison que "propositions" ci-dessus :
+            // sinon vehicules/{vehicule} intercepterait vehicules/imports-maj, vehicules/export
+            // et vehicules/export-maj. Entièrement séparé de l'import flotte (création) —
+            // cf. ImportVehiculesMajController.
+            Route::prefix('vehicules/imports-maj')->name('vehicules.imports-maj.')->group(function () {
+                Route::get('/', [ImportVehiculesMajController::class, 'index'])->name('index');
+                Route::get('/nouveau', [ImportVehiculesMajController::class, 'create'])->name('create');
+                Route::post('/', [ImportVehiculesMajController::class, 'store'])->name('store');
+                Route::get('/{importVehiculesMaj}', [ImportVehiculesMajController::class, 'show'])->name('show');
+                Route::post('/{importVehiculesMaj}/confirmer', [ImportVehiculesMajController::class, 'confirm'])->name('confirm');
+                Route::post('/{importVehiculesMaj}/relancer', [ImportVehiculesMajController::class, 'retry'])->name('retry');
+            });
+            Route::get('vehicules/export', [VehiculeController::class, 'export'])->name('vehicules.export');
+            Route::get('vehicules/export-maj', [VehiculeController::class, 'exportMaj'])->name('vehicules.export-maj');
+
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
             Route::resource('vehicules', VehiculeController::class);
             Route::patch('vehicules/{vehicule}/derogation-impayes', [VehiculeController::class, 'updateDerogation'])->name('vehicules.derogation-impayes.update');
@@ -292,6 +316,21 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
             Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
             Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
+
+            // Déclarée avant le resource() : sinon "verifier-telephone" est capturé par
+            // equipes-livraison/{equipes_livraison} (route "show") et tente une résolution
+            // de modèle avec cette chaîne comme identifiant.
+            Route::get('equipes-livraison/verifier-telephone', [EquipeLivraisonController::class, 'verifierTelephone'])
+                ->name('equipes-livraison.verifier-telephone');
+
+            // Transfert de véhicule d'un livreur (changement d'équipe) — déclarées avant le
+            // resource() pour la même raison que verifier-telephone ci-dessus.
+            Route::get('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transfertDonnees'])
+                ->name('equipes-livraison.transfert.donnees');
+            Route::get('equipes-livraison/transfert-livreur/{livreur}/vehicule/{vehicule}', [EquipeLivraisonController::class, 'transfertDonneesArrivee'])
+                ->name('equipes-livraison.transfert.donnees-arrivee');
+            Route::post('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transferer'])
+                ->name('equipes-livraison.transfert.store');
 
             Route::resource('equipes-livraison', EquipeLivraisonController::class)
                 ->only(['index', 'store', 'show', 'update', 'destroy']);
@@ -483,6 +522,13 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
 
+            Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
+                Route::get('commissions/cashback', [CashbackController::class, 'index'])
+                    ->name('commissions.cashback.index');
+                Route::get('commissions/cashback/{client}', [CashbackController::class, 'show'])
+                    ->name('commissions.cashback.show');
+            });
+
             // ── Trésorerie : Financement des agences + Mouvements de fonds ──────────
             // Remplace l'ancien "Besoin de trésorerie" (BesoinTresorerieController) —
             // cf. compte-rendu du chantier Financement des agences (2026-08-22).
@@ -540,6 +586,14 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
+            // Ajustement/validation directement depuis la liste, sans passer par une période
+            // (cf. CommissionAjustementController::ajusterParts()/validerParts()).
+            Route::patch('commissions/ajustements/ajuster', [CommissionAjustementController::class, 'ajusterParts'])
+                ->name('commissions.ajustements.ajuster');
+            Route::post('commissions/ajustements/valider', [CommissionAjustementController::class, 'validerParts'])
+                ->name('commissions.ajustements.valider');
+            Route::get('commissions/vehicules/{vehiculeId}/repartir', [CommissionAjustementController::class, 'repartirVehicule'])
+                ->name('commissions.vehicules.repartir');
 
             // ── Commission sites ────────────────────────────────────────────────────
             Route::get('commissions/sites', [CommissionSiteController::class, 'index'])
@@ -626,25 +680,12 @@ Route::prefix('backoffice')->group(function () {
             Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
             Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
 
-            // Commissions logistiques — par livreur (système global)
-            Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
-                ->name('logistique.commissions.index');
-            Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
-                ->name('logistique.commissions.livreur');
-            Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
-                ->name('logistique.commissions.livreur.paiements');
-
-            // Rétro-compat : accès par véhicule (depuis page transfert Show)
-            Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
-                ->name('logistique.commissions.vehicule');
-            Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
-                ->name('logistique.commissions.releve');
-            Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
-                ->name('logistique.commissions.paiements.store');
-
-            // Rétro-compat : accès direct par commission (page transfert Show)
-            Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
-                ->name('logistique.commissions.show');
+            // Écran de paiement direct « /logistique/commissions » retiré le 04/09/2026 (moteur
+            // legacy CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026,
+            // cf. docs/commissions.md COMM-007 et section Historique/héritage) : les commissions
+            // de transfert logistique apparaissent désormais dans les écrans Commission
+            // vente/sites/propriétaires/consultants (filtre Processus = Transfert logistique,
+            // cible Livreur) et se paient via Comptabilité > Fiches — jamais plus par ici.
 
             Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
             Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
@@ -659,9 +700,6 @@ Route::prefix('backoffice')->group(function () {
 
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
-
-            // Commission logistique (accès direct, backward compat)
-            Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
 
             // Versements de parts de commission
             Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])

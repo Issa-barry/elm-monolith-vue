@@ -46,6 +46,85 @@ async function openStepperModal(page: Page) {
     ).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * Crée un véhicule (préfixé E2EEQ-/E2EEQVH-, balayé par les cleanups existants
+ * de ce fichier) avec une équipe enregistrée composée d'un unique membre — pour
+ * le test de conflit de téléphone ci-dessous, qui a besoin d'un livreur déjà
+ * affecté à un véhicule AUTRE que celui en cours d'édition.
+ */
+async function createVehiculeAvecEquipe(
+    page: Page,
+    unique: string,
+    membre: { role: 'chauffeur' | 'convoyeur'; nom: string; telephone: string },
+): Promise<void> {
+    await navigateToFirstSiteVehiclesTab(page);
+    await page.getByTestId('add-site-vehicle-btn').click({ timeout: 10_000 });
+    await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
+    await page
+        .locator('#nom_vehicule')
+        .fill(`${E2E_VH_PREFIX}${unique}`, { timeout: 10_000 });
+    await page
+        .locator('#immatriculation')
+        .fill(`${SETUP_VH_PREFIX}${unique}`, { timeout: 10_000 });
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    await page
+        .getByRole('checkbox', { name: /livraison vente/i })
+        .check({ timeout: 10_000 });
+    await page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first()
+        .click({ timeout: 10_000 });
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
+
+    await page
+        .locator('aside button')
+        .filter({ hasText: /equipe/i })
+        .click();
+    const btn = page
+        .getByRole('button', { name: /ajouter une équipe|gérer l'équipe/i })
+        .first();
+    await expect(btn).toBeVisible({ timeout: 10_000 });
+    await btn.click();
+    const dialog = page.locator('[role="dialog"]').filter({ hasText: /équipe/i });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    await selectOptionFromCombobox(
+        page,
+        page.getByTestId('role-dropdown-0'),
+        new RegExp(membre.role, 'i'),
+    );
+    await page.getByTestId('nom-complet-0').fill(membre.nom);
+    const phone0 = page.getByTestId('telephone-0');
+    await phone0.click();
+    await phone0.fill(membre.telephone);
+    await phone0.blur();
+
+    // Pas de barème de commission configuré sur cette organisation (cf.
+    // commentaire du test "créer une équipe..." plus bas) : les étapes
+    // Répartition/Récapitulatif s'affichent vides, "Suivant" reste actif.
+    //
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()).
+    const suivantStep1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep1).toBeEnabled({ timeout: 10_000 });
+    await suivantStep1.click();
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).toBeVisible({ timeout: 5_000 });
+    const suivantStep2 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep2).toBeEnabled({ timeout: 5_000 });
+    await suivantStep2.click();
+    const enregistrerBtn = dialog.getByRole('button', {
+        name: /enregistrer l'équipe/i,
+    });
+    await expect(enregistrerBtn).toBeVisible({ timeout: 5_000 });
+    await enregistrerBtn.click();
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
+}
+
 test.beforeAll(async ({ browser }) => {
     test.setTimeout(120_000);
     // storageState explicite : browser.newContext() n'hérite PAS de
@@ -197,6 +276,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     const phone0 = page.getByTestId('telephone-0');
     await phone0.click();
     await phone0.fill('620111222');
+    await phone0.blur();
 
     // +224 affiché dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
@@ -216,7 +296,15 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     // commission-v2-full-chain.spec.ts, sur l'organisation dédiée "Eau La
     // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
     // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
-    await dialog.getByRole('button', { name: /suivant/i }).click();
+    //
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()).
+    const suivantStep1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep1).toBeEnabled({ timeout: 10_000 });
+    await suivantStep1.click();
     await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
         {
             timeout: 5_000,
@@ -421,6 +509,96 @@ test('fermeture avec modifications : "Quitter" ferme le wizard', async ({
     // "Quitter" ferme tout
     await page.getByRole('button', { name: /^quitter$/i }).click();
     await expect(dialog).toBeHidden({ timeout: 5_000 });
+});
+
+test('étape 1 : conflit de téléphone avec un livreur d\'un AUTRE véhicule détecté en amont, bloque "Suivant" (incident PHP-LARAVEL-66)', async ({
+    page,
+}) => {
+    test.setTimeout(120_000);
+
+    // Véhicule A : équipe déjà enregistrée avec un chauffeur portant phoneConflict —
+    // reproduit exactement la situation de l'incident (numéro déjà affecté ailleurs).
+    const phoneConflict = `6${randomDigits(8)}`;
+    await createVehiculeAvecEquipe(page, randomDigits(6), {
+        role: 'chauffeur',
+        nom: 'Conflit Existant',
+        telephone: phoneConflict,
+    });
+
+    // Véhicule B : nouvelle équipe, on tente de réutiliser le même numéro pour un membre.
+    const uniqueB = randomDigits(6);
+    await navigateToFirstSiteVehiclesTab(page);
+    await page.getByTestId('add-site-vehicle-btn').click({ timeout: 10_000 });
+    await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
+    await page
+        .locator('#nom_vehicule')
+        .fill(`${E2E_VH_PREFIX}${uniqueB}`, { timeout: 10_000 });
+    await page
+        .locator('#immatriculation')
+        .fill(`${SETUP_VH_PREFIX}${uniqueB}`, { timeout: 10_000 });
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    await page
+        .getByRole('checkbox', { name: /livraison vente/i })
+        .check({ timeout: 10_000 });
+    await page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first()
+        .click({ timeout: 10_000 });
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
+
+    await page
+        .locator('aside button')
+        .filter({ hasText: /equipe/i })
+        .click();
+    const btn = page
+        .getByRole('button', { name: /ajouter une équipe|gérer l'équipe/i })
+        .first();
+    await expect(btn).toBeVisible({ timeout: 10_000 });
+    await btn.click();
+    const dialog = page.locator('[role="dialog"]').filter({ hasText: /équipe/i });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    await selectOptionFromCombobox(
+        page,
+        page.getByTestId('role-dropdown-0'),
+        /chauffeur/i,
+    );
+    await page.getByTestId('nom-complet-0').fill('Nouveau Membre');
+    const phone0 = page.getByTestId('telephone-0');
+    await phone0.click();
+    await phone0.fill(phoneConflict);
+    await phone0.blur();
+
+    // Le contrôle live (GET equipes-livraison/verifier-telephone, déclenché au blur)
+    // doit signaler le conflit sous le champ, immatriculation du véhicule A incluse.
+    const error0 = page.getByTestId('telephone-error-0');
+    await expect(error0).toBeVisible({ timeout: 10_000 });
+    await expect(error0).toContainText(/déjà affecté au véhicule/i);
+    await expect(error0).toContainText(new RegExp(escapeRegExp(SETUP_VH_PREFIX), 'i'));
+
+    // Cœur de la demande : "Suivant" ne doit JAMAIS laisser passer à l'étape
+    // "Répartition" tant que le conflit n'est pas résolu — réglé "en amont", pas
+    // seulement découvert après un aller-retour complet du formulaire.
+    //
+    // "Répartition livreurs"/"Membres" sont aussi les libellés de navigation du
+    // stepper, toujours présents dans le DOM quel que soit l'étape active (cf.
+    // classe "hidden sm:inline" — visible dès le viewport par défaut des tests) :
+    // les utiliser pour vérifier qu'on N'A PAS avancé serait toujours faux. Le
+    // marqueur fiable est le maintien de l'erreur de conflit (donc de l'étape 1).
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await expect(error0).toBeVisible();
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).not.toBeVisible({ timeout: 3_000 });
+
+    // Corriger avec un numéro libre : le conflit disparaît et "Suivant" fonctionne.
+    await phone0.fill(`7${randomDigits(8)}`);
+    await phone0.blur();
+    await expect(error0).not.toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await expect(
+        dialog.getByText(/répartition livreurs/i).first(),
+    ).toBeVisible({ timeout: 5_000 });
 });
 
 test('fermeture sans modifications : ferme directement sans confirmation', async ({

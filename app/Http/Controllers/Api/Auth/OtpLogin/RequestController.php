@@ -70,7 +70,15 @@ class RequestController extends Controller
             return response()->json(['error' => "Impossible d'envoyer un code de connexion à ce compte pour le moment."], 503);
         }
 
-        $otp->generateAndSend($phone, OtpPurpose::LOGIN, $channel, $destination);
+        // Repli EXPLICITE (cf. audit du 31/08/2026, point 2) : si $channel est
+        // choisi "disponible" mais échoue réellement à l'envoi (ex: SMS —
+        // panne Nimba, solde insuffisant, sender name refusé...), ce canal de
+        // repli retransportera le MÊME code — jamais recalculé plus tard.
+        // `null` pour email (synchrone, ses échecs remontent déjà en erreur
+        // ici sans avoir besoin d'un repli différé).
+        $fallback = $channels->fallbackFor($channel->channel(), OtpPurpose::LOGIN, $phone, $user->email);
+
+        $otp->generateAndSend($phone, OtpPurpose::LOGIN, $channel, $destination, fallback: $fallback);
 
         return response()->json([
             'sent' => true,

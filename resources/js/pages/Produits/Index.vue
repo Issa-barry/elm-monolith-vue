@@ -83,9 +83,6 @@ interface Produit {
     prix_achat: number | null;
     cout: number | null;
     qte_stock: number | null;
-    alerte_stock_active: boolean;
-    seuil_alerte_stock: number | null;
-    seuil_alerte_effectif: number;
     description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
@@ -96,6 +93,11 @@ interface Produit {
     last_mouvement_type: 'entree' | 'sortie' | null;
     last_mouvement_quantite: number | null;
     stocks_par_site: SiteStock[];
+}
+
+interface ProduitTableRow extends Produit {
+    table_row_key: string;
+    stock_site_label: string | null;
 }
 
 interface Site {
@@ -225,6 +227,104 @@ const filteredProduits = computed(() => {
     if (showOnlyFaibles.value)
         return props.produits.filter((p) => p.has_stock && p.is_low_stock);
     return props.produits;
+});
+
+function siteLabel(siteId: string, stock?: SiteStock): string {
+    return (
+        stock?.site_nom ??
+        stock?.site_code ??
+        props.sites.find((site) => site.id === siteId)?.nom ??
+        'Agence non renseignée'
+    );
+}
+
+function stockAlertRows(statut: 'rupture' | 'stock_faible'): ProduitTableRow[] {
+    const selectedSiteIds = props.filters.site_ids ?? [];
+    const selectedSiteSet = new Set(selectedSiteIds);
+
+    return filteredProduits.value.flatMap((produit) => {
+        const stocksDansLePerimetre = produit.stocks_par_site.filter(
+            (stock) =>
+                selectedSiteSet.size === 0 ||
+                selectedSiteSet.has(String(stock.site_id)),
+        );
+        const stocksConcernes = stocksDansLePerimetre.filter((stock) =>
+            statut === 'rupture'
+                ? stock.qte_stock <= 0
+                : stock.statut === 'stock_faible',
+        );
+
+        if (stocksConcernes.length > 0) {
+            const stocksParAgence = stocksConcernes.reduce((groupes, stock) => {
+                const siteId = String(stock.site_id);
+                const stocks = groupes.get(siteId) ?? [];
+                stocks.push(stock);
+                groupes.set(siteId, stocks);
+                return groupes;
+            }, new Map<string, SiteStock[]>());
+
+            return Array.from(stocksParAgence, ([siteId, stocks]) => {
+                const mouvementEstScopeSurCetteAgence =
+                    selectedSiteIds.length === 1 &&
+                    String(selectedSiteIds[0]) === siteId;
+
+                return {
+                    ...produit,
+                    table_row_key: `${produit.id}:${siteId}:${statut}`,
+                    stock_site_label: siteLabel(siteId, stocks[0]),
+                    qte_stock: stocks.reduce(
+                        (total, stock) => total + stock.qte_stock,
+                        0,
+                    ),
+                    is_out_of_stock: statut === 'rupture',
+                    is_low_stock: statut === 'stock_faible',
+                    last_mouvement_type: mouvementEstScopeSurCetteAgence
+                        ? produit.last_mouvement_type
+                        : null,
+                    last_mouvement_quantite: mouvementEstScopeSurCetteAgence
+                        ? produit.last_mouvement_quantite
+                        : null,
+                };
+            });
+        }
+
+        // Produit legacy sans ventilation de stock : si un filtre agence est actif,
+        // chaque agence sélectionnée porte le stock nul retourné par le backend.
+        if (stocksDansLePerimetre.length === 0 && selectedSiteIds.length > 0) {
+            return selectedSiteIds.map((siteId) => ({
+                ...produit,
+                table_row_key: `${produit.id}:${siteId}:${statut}:fallback`,
+                stock_site_label: siteLabel(String(siteId)),
+                last_mouvement_type:
+                    selectedSiteIds.length === 1
+                        ? produit.last_mouvement_type
+                        : null,
+                last_mouvement_quantite:
+                    selectedSiteIds.length === 1
+                        ? produit.last_mouvement_quantite
+                        : null,
+            }));
+        }
+
+        return [
+            {
+                ...produit,
+                table_row_key: `${produit.id}:sans-agence:${statut}`,
+                stock_site_label: 'Stock non ventilé',
+            },
+        ];
+    });
+}
+
+const tableProduits = computed<ProduitTableRow[]>(() => {
+    if (showOnlyRuptures.value) return stockAlertRows('rupture');
+    if (showOnlyFaibles.value) return stockAlertRows('stock_faible');
+
+    return filteredProduits.value.map((produit) => ({
+        ...produit,
+        table_row_key: produit.id,
+        stock_site_label: null,
+    }));
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -487,53 +587,105 @@ function confirmArchive(produit: Produit) {
             <!-- Alertes stock (cliquables pour filtrer) -->
             <div
                 v-if="ruptures.length > 0 || faibles.length > 0"
-                class="flex flex-col gap-2"
+                class="flex flex-col gap-1.5"
             >
                 <button
                     v-if="ruptures.length > 0"
                     type="button"
-                    class="flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors"
+                    class="group flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-destructive/30 focus-visible:outline-none"
                     :class="
                         showOnlyRuptures
-                            ? 'border-destructive bg-destructive/10 text-destructive'
-                            : 'border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10'
+                            ? 'border-destructive/50 bg-destructive/10 text-destructive shadow-sm'
+                            : 'border-destructive/25 bg-destructive/5 text-destructive hover:border-destructive/40 hover:bg-destructive/10'
                     "
                     @click="toggleRuptures"
                 >
-                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                    <div>
-                        <span class="font-semibold">Rupture de stock</span>
-                        <span class="text-destructive/80"> — </span>
-                        <span class="text-destructive/80">
+                    <span
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-destructive/10"
+                    >
+                        <AlertTriangle class="h-4 w-4" />
+                    </span>
+                    <div
+                        class="min-w-0 flex-1 lg:flex lg:items-baseline lg:gap-2"
+                    >
+                        <div
+                            class="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                        >
+                            <span class="text-sm font-semibold"
+                                >Rupture de stock</span
+                            >
+                            <span class="text-xs font-medium opacity-70">
+                                {{ ruptures.length }} produit{{
+                                    ruptures.length > 1 ? 's' : ''
+                                }}
+                                concerné{{ ruptures.length > 1 ? 's' : '' }}
+                            </span>
+                        </div>
+                        <p
+                            class="mt-0.5 truncate text-xs opacity-75 lg:mt-0"
+                            :title="ruptures.map((p) => p.nom).join(', ')"
+                        >
                             {{ ruptures.map((p) => p.nom).join(', ') }}
-                        </span>
+                        </p>
                     </div>
-                    <span class="ml-auto shrink-0 text-xs opacity-70">{{
-                        showOnlyRuptures ? 'Afficher tout' : 'Filtrer'
-                    }}</span>
+                    <span
+                        class="inline-flex h-7 shrink-0 items-center rounded-md border border-destructive/20 bg-background/70 px-2.5 text-xs font-semibold shadow-sm transition-colors group-hover:bg-background"
+                    >
+                        {{
+                            showOnlyRuptures
+                                ? 'Afficher tout'
+                                : 'Voir les produits'
+                        }}
+                    </span>
                 </button>
                 <button
                     v-if="faibles.length > 0"
                     type="button"
-                    class="flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors"
+                    class="group flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-amber-500/30 focus-visible:outline-none"
                     :class="
                         showOnlyFaibles
-                            ? 'border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-950/30'
-                            : 'border-amber-400/30 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:hover:bg-amber-950/30'
+                            ? 'border-amber-500/60 bg-amber-100 text-amber-800 shadow-sm dark:bg-amber-950/35 dark:text-amber-300'
+                            : 'border-amber-400/35 bg-amber-50/80 text-amber-800 hover:border-amber-500/50 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30'
                     "
                     @click="toggleFaibles"
                 >
-                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                    <div>
-                        <span class="font-semibold">Stock faible</span>
-                        <span class="opacity-80"> — </span>
-                        <span class="opacity-80">{{
-                            faibles.map((p) => p.nom).join(', ')
-                        }}</span>
+                    <span
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-500/10"
+                    >
+                        <AlertTriangle class="h-4 w-4" />
+                    </span>
+                    <div
+                        class="min-w-0 flex-1 lg:flex lg:items-baseline lg:gap-2"
+                    >
+                        <div
+                            class="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                        >
+                            <span class="text-sm font-semibold"
+                                >Stock faible</span
+                            >
+                            <span class="text-xs font-medium opacity-70">
+                                {{ faibles.length }} produit{{
+                                    faibles.length > 1 ? 's' : ''
+                                }}
+                                concerné{{ faibles.length > 1 ? 's' : '' }}
+                            </span>
+                        </div>
+                        <p
+                            class="mt-0.5 truncate text-xs opacity-75 lg:mt-0"
+                            :title="faibles.map((p) => p.nom).join(', ')"
+                        >
+                            {{ faibles.map((p) => p.nom).join(', ') }}
+                        </p>
                     </div>
-                    <span class="ml-auto shrink-0 text-xs opacity-70">{{
-                        showOnlyFaibles ? 'Afficher tout' : 'Filtrer'
-                    }}</span>
+                    <span
+                        class="inline-flex h-7 shrink-0 items-center rounded-md border border-amber-600/20 bg-background/70 px-2.5 text-xs font-semibold shadow-sm transition-colors group-hover:bg-background"
+                    >
+                        {{
+                            showOnlyFaibles
+                                ? 'Afficher tout'
+                                : 'Voir les produits'
+                        }}
+                    </span>
                 </button>
             </div>
 
@@ -661,10 +813,10 @@ function confirmArchive(produit: Produit) {
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="filteredProduits"
-                    :paginator="filteredProduits.length > 20"
+                    :value="tableProduits"
+                    :paginator="tableProduits.length > 20"
                     :rows="20"
-                    data-key="id"
+                    data-key="table_row_key"
                     striped-rows
                     removable-sort
                     class="text-sm"
@@ -768,9 +920,9 @@ function confirmArchive(produit: Produit) {
 
                     <!-- Agence -->
                     <Column header="Agence" style="width: 150px">
-                        <template #body>
+                        <template #body="{ data }">
                             <span class="text-sm text-muted-foreground">
-                                {{ currentSiteLabel }}
+                                {{ data.stock_site_label ?? currentSiteLabel }}
                             </span>
                         </template>
                     </Column>
@@ -1052,22 +1204,38 @@ function confirmArchive(produit: Produit) {
             >
                 <div
                     v-if="ruptures.length > 0"
-                    class="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive"
+                    class="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-destructive"
                 >
-                    <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <div>
-                        <span class="font-semibold">Rupture</span> —
-                        {{ ruptures.map((p) => p.nom).join(', ') }}
+                    <span
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10"
+                    >
+                        <AlertTriangle class="h-4 w-4" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-semibold">
+                            Rupture de stock · {{ ruptures.length }}
+                        </p>
+                        <p class="mt-0.5 truncate text-xs opacity-75">
+                            {{ ruptures.map((p) => p.nom).join(', ') }}
+                        </p>
                     </div>
                 </div>
                 <div
                     v-if="faibles.length > 0"
-                    class="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:bg-amber-950/20 dark:text-amber-400"
+                    class="flex items-start gap-3 rounded-xl border border-amber-400/35 bg-amber-50/80 p-3 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
                 >
-                    <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <div>
-                        <span class="font-semibold">Stock faible</span> —
-                        {{ faibles.map((p) => p.nom).join(', ') }}
+                    <span
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10"
+                    >
+                        <AlertTriangle class="h-4 w-4" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-semibold">
+                            Stock faible · {{ faibles.length }}
+                        </p>
+                        <p class="mt-0.5 truncate text-xs opacity-75">
+                            {{ faibles.map((p) => p.nom).join(', ') }}
+                        </p>
                     </div>
                 </div>
             </div>

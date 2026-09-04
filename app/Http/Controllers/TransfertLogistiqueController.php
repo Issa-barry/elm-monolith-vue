@@ -2,21 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\BaseCalculLogistique;
+use App\Enums\StatutCommission;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\TransfertActiviteService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -181,8 +186,17 @@ class TransfertLogistiqueController extends Controller
             ];
         }
 
+        // Statut de commission (colonne "Commission" de la liste) : batché en une seule requête
+        // pour toute la page plutôt qu'un mapTransfert() par ligne (N+1), cf. commentaire de
+        // mapTransfert() sur l'origine de ce recalcul à la volée.
+        $enveloppesParTransfert = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->whereIn('source_id', $transferts->pluck('id'))
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get()
+            ->groupBy('source_id');
+
         return Inertia::render('Logistique/Index', [
-            'transferts' => $transferts->map(fn ($t) => $this->mapTransfert($t))->values(),
+            'transferts' => $transferts->map(fn ($t) => $this->mapTransfert($t, $enveloppesParTransfert->get($t->id, collect())))->values(),
             'kpis' => $kpis,
             'statuts' => $statutsFiltre,
             'sites' => $sites->map(fn ($site) => ['id' => $site->id, 'nom' => $site->nom])->values(),
@@ -316,6 +330,7 @@ class TransfertLogistiqueController extends Controller
         }
 
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
+        $this->ensurePartageLivraisonCategorieConfigure($data, $orgId);
 
         $transfert = DB::transaction(function () use ($data, $orgId) {
             $transfert = TransfertLogistique::create([
@@ -409,12 +424,10 @@ class TransfertLogistiqueController extends Controller
             'contexte' => $contexte,
             'statuts' => StatutTransfert::options(),
             'types_ecart' => TypeEcartLogistique::options(),
-            'bases_calcul' => BaseCalculLogistique::options(),
             'can_avancer' => $user->can('avancerStatut', $transfert_logistique),
             'can_valider_reception' => $user->can('validerReception', $transfert_logistique),
             'can_annuler' => $user->can('annuler', $transfert_logistique),
             'can_update' => $user->can('update', $transfert_logistique),
-            'can_generer_commission' => $user->can('genererCommission', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
             'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
@@ -553,9 +566,21 @@ class TransfertLogistiqueController extends Controller
 
     // ── Mapping ───────────────────────────────────────────────────────────────
 
-    private function mapTransfert(TransfertLogistique $t): array
+    /**
+     * $enveloppesGeneriques : enveloppes déjà chargées (avec leur relation `parts`) pour ce
+     * transfert — passées par l'appelant pour éviter un N+1 sur une liste (cf. buildIndex()) ;
+     * requêtées à la volée si omises (usage isolé, ex: mapTransfertDetail()).
+     *
+     * @param  Collection<int, CommissionEnveloppe>|null  $enveloppesGeneriques
+     */
+    private function mapTransfert(TransfertLogistique $t, ?Collection $enveloppesGeneriques = null): array
     {
         $user = auth()->user();
+        $enveloppesGeneriques ??= CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->where('source_id', $t->id)
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get();
+        $commissionStatut = $this->commissionStatutGenerique($enveloppesGeneriques);
 
         return [
             'id' => $t->id,
@@ -572,8 +597,8 @@ class TransfertLogistiqueController extends Controller
             'date_arrivee_prevue' => $t->date_arrivee_prevue?->format(self::DATE_DISPLAY_FORMAT),
             'date_depart_reelle' => $t->date_depart_reelle?->format(self::DATE_DISPLAY_FORMAT),
             'date_arrivee_reelle' => $t->date_arrivee_reelle?->format(self::DATE_DISPLAY_FORMAT),
-            'commission_statut' => $t->commission?->statut?->value,
-            'commission_statut_label' => $t->commission?->statut_label,
+            'commission_statut' => $commissionStatut?->value,
+            'commission_statut_label' => $commissionStatut?->label(),
             'is_brouillon' => $t->isBrouillon(),
             'is_cloture' => $t->isCloture(),
             'is_terminal' => $t->isTerminal(),
@@ -598,7 +623,14 @@ class TransfertLogistiqueController extends Controller
 
     private function mapTransfertDetail(TransfertLogistique $t): array
     {
-        $base = $this->mapTransfert($t);
+        // Chargée une seule fois ici et transmise à mapTransfert() : évite de requêter deux fois
+        // les mêmes CommissionEnveloppe (statut agrégé du stepper + genere/montant_total ci-dessous).
+        $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->where('source_id', $t->id)
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get();
+
+        $base = $this->mapTransfert($t, $enveloppesGeneriques);
 
         $base['notes'] = $t->notes;
         $base['vehicule_id'] = $t->vehicule_id;
@@ -637,6 +669,16 @@ class TransfertLogistiqueController extends Controller
         } else {
             $base['commission'] = null;
         }
+
+        // Moteur générique (seul moteur depuis le 03/09/2026) : la commission n'est JAMAIS écrite
+        // dans $t->commission (relation vers l'ancien CommissionLogistique, table conservée vide
+        // pour l'historique) — elle vit dans CommissionEnveloppe/CommissionEnveloppePart, générée
+        // par CommissionEnveloppeGenerator::genererPourTransfertLogistique(). Sans ce bloc,
+        // l'onglet "Commission logistique" affichait indéfiniment "en attente de validation
+        // admin" même après une génération réussie, la case ci-dessus restant toujours null
+        // (régression constatée le 02/09/2026, cf. incident production).
+        $base['commission_generique_genere'] = $enveloppesGeneriques->isNotEmpty();
+        $base['commission_generique_montant_total'] = (float) $enveloppesGeneriques->sum('montant_total');
 
         return $base;
     }
@@ -690,6 +732,34 @@ class TransfertLogistiqueController extends Controller
     }
 
     /**
+     * Statut agrégé (impayé/partiel/payé) de la commission générique d'un transfert.
+     * Contrairement à l'ancien CommissionLogistique::statut (colonne stockée, recalculée par
+     * recalculStatutGlobal()), CommissionEnveloppe ne porte aucun statut propre — seules ses
+     * parts (CommissionEnveloppePart::statut) en portent un — donc recalculé à la volée ici avec
+     * la même règle d'agrégation que l'ancien modèle, pour préserver le même comportement visuel
+     * (badge "Commission" de Logistique/Index.vue et étape "Commission" du stepper de
+     * Logistique/Show.vue). Retourne null tant qu'aucune part n'existe (rien à afficher).
+     *
+     * @param  Collection<int, CommissionEnveloppe>  $enveloppes  Doit avoir sa relation `parts` chargée.
+     */
+    private function commissionStatutGenerique(Collection $enveloppes): ?StatutCommission
+    {
+        $parts = $enveloppes->flatMap(fn (CommissionEnveloppe $e) => $e->parts);
+        if ($parts->isEmpty()) {
+            return null;
+        }
+
+        $totalNet = (float) $parts->sum('montant_net');
+        $totalVerse = (float) $parts->sum('montant_verse');
+
+        return match (true) {
+            $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE,
+            $totalVerse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
+    }
+
+    /**
      * Même contrôle que la vente web/PDV (VehiculeCapaciteService), mais sans exigence de
      * chargement complet : un transfert peut charger moins que la capacité du véhicule, il ne
      * peut simplement jamais la dépasser. $lignes utilise 'quantite_demandee' (pas 'qte' comme la
@@ -705,6 +775,47 @@ class TransfertLogistiqueController extends Controller
         }
 
         $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'] ?? [], 'quantite_demandee', false);
+    }
+
+    /**
+     * Garde-fou préventif, symétrique à CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
+     * — réduit le risque qu'un transfert apparaisse chargé/réceptionné mais reste bloqué "à
+     * régulariser" faute de partage Livreur configuré pour une catégorie transférée (cf. incident
+     * CMD-300826-007, 30/08/2026, même famille de problème côté vente). S'applique désormais à
+     * toute organisation (moteur générique devenu le seul moteur, décision du 03/09/2026) — plus
+     * de garde conditionnel à un état "migré/non migré". La configuration de partage peut encore
+     * changer entre cette création et la génération réelle (chargement validé/réception) — ce
+     * contrôle réduit le risque, il ne l'élimine pas.
+     */
+    private function ensurePartageLivraisonCategorieConfigure(array $data, string $orgId): void
+    {
+        $vehicule = Vehicule::query()->with('equipe')->find($data['vehicule_id'] ?? null);
+        if (! $vehicule || ! $vehicule->equipe) {
+            return;
+        }
+
+        $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($data['lignes'] ?? []);
+
+        $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
+            $orgId,
+            $vehicule->equipe->id,
+            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            $vehicule->type_vehicule_id,
+            $categorieIds,
+            Carbon::today(),
+        );
+
+        if ($manquantes->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'vehicule_id' => sprintf(
+                'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « Transfert logistique » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
+                $vehicule->nom_vehicule,
+                $manquantes->pluck('nom')->implode(', '),
+            ),
+        ]);
     }
 
     /**

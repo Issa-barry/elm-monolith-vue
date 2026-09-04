@@ -23,6 +23,7 @@ use App\Services\MediaService;
 use App\Services\MouvementStockMotifService;
 use App\Services\MouvementStockService;
 use App\Services\ProduitService;
+use App\Services\ProduitSeuilAlerteService;
 use App\Services\StockStatutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -43,6 +44,7 @@ class ProduitController extends Controller
         private readonly ProduitService $produitService,
         private readonly MediaService $mediaService,
         private readonly StockStatutService $stockStatutService,
+        private readonly ProduitSeuilAlerteService $seuilAlerteService,
     ) {}
 
     /**
@@ -94,6 +96,7 @@ class ProduitController extends Controller
             ->with([
                 'categorie:id,nom',
                 'produitType',
+                'seuilsAlerte',
                 'variantes' => fn ($q) => $q->orderBy('position'),
                 // Pas de limit() ici : une contrainte LIMIT sur un eager load hasMany s'applique
                 // à l'ensemble du résultat, pas par produit. getImageUrlAttribute() prend le
@@ -167,22 +170,31 @@ class ProduitController extends Controller
                 ? ($siteStocksAll->isNotEmpty() ? (int) $siteStocksAll->sum('qte_stock') : (int) ($p->qte_stock ?? 0))
                 : (int) $siteStocksScope->sum('qte_stock');
 
-            // Seuil désormais unique au niveau PRODUIT (repli sur le seuil global de
-            // l'organisation) — appliqué à chaque ligne variante × site individuellement,
-            // jamais à un total agrégé (cf. décision produit : un stock élevé ailleurs ne doit
-            // jamais masquer une alerte locale).
-            $seuilEffectif = $this->stockStatutService->seuilEffectif($p);
-            $alerteActive = $hasStock && (bool) $p->alerte_stock_active;
-
+            // Statut résolu via statutPour() (fonction PURE, seulement qte/seuil — le stock
+            // physique reste réel, cf. StockStatutService) pour CHAQUE site, puis filtré pour
+            // les badges "alerte" de cette page (bannière rupture/stock faible) aux sites à la
+            // fois DISPONIBLES (ce produit y est réellement vendu/géré) ET ALERTE ACTIVE (choix
+            // explicite de surveillance) — jamais à un total agrégé ni à la configuration d'un
+            // AUTRE site (cf. décision produit : un stock élevé ailleurs ne doit jamais masquer
+            // une alerte locale). Un site non disponible ou sans alerte peut être en rupture
+            // physique réelle sans jamais alimenter ces badges — cf. stocks_par_site ci-dessous
+            // pour l'état réel, affiché indépendamment de ce filtre.
             if ($hasStock && $siteStocksScope->isNotEmpty()) {
-                $isRupture = $siteStocksScope->contains(fn ($s) => $s->qte_stock <= 0);
-                $isLowStock = $siteStocksScope->contains(
-                    fn ($s) => $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) === StockStatut::STOCK_FAIBLE
-                );
+                $statutsAlerteParSite = $siteStocksScope
+                    ->filter(fn ($s) => $this->stockStatutService->disponiblePourSite($p, $s->site_id)
+                        && $this->stockStatutService->alerteActivePourSite($p, $s->site_id))
+                    ->map(fn ($s) => $this->stockStatutService->statutPour(
+                        $s->qte_stock,
+                        $this->stockStatutService->seuilEffectifPourSite($p, $s->site_id),
+                    ));
+                $isRupture = $statutsAlerteParSite->contains(fn (StockStatut $s) => in_array($s, [StockStatut::RUPTURE, StockStatut::STOCK_NEGATIF], true));
+                $isLowStock = $statutsAlerteParSite->contains(StockStatut::STOCK_FAIBLE);
             } elseif ($hasStock) {
-                $statutFallback = $this->stockStatutService->statutPour($qteDisplay, $seuilEffectif, $alerteActive);
-                $isRupture = $statutFallback === StockStatut::RUPTURE;
-                $isLowStock = $statutFallback === StockStatut::STOCK_FAIBLE;
+                // Aucune ligne VarianteStock pour ce produit : aucun site connu, donc aucune
+                // configuration par site ne peut s'appliquer — repli sur le seuil global, jamais
+                // d'alerte possible (aucun site n'a été explicitement activé pour l'alerte).
+                $isRupture = false;
+                $isLowStock = false;
             } else {
                 $isRupture = false;
                 $isLowStock = false;
@@ -215,10 +227,7 @@ class ProduitController extends Controller
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
                 'description' => $p->description,
-                'alerte_stock_active' => $p->alerte_stock_active,
                 'qte_stock' => $qteDisplay,
-                'seuil_alerte_stock' => $p->seuil_alerte_stock,
-                'seuil_alerte_effectif' => $seuilEffectif,
                 'has_stock' => $hasStock,
                 'in_stock' => $inStock,
                 'is_low_stock' => $isLowStock,
@@ -233,7 +242,12 @@ class ProduitController extends Controller
                     'site_code' => $s->site?->code,
                     'site_nom' => $s->site?->nom,
                     'qte_stock' => $s->qte_stock,
-                    'statut' => ($hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) : StockStatut::DISPONIBLE)->value,
+                    // Statut réel (fonction pure, cf. StockStatutService::statutPour()) — jamais
+                    // masqué par la disponibilité/l'alerte. `disponible_sur_site` indique au
+                    // frontend d'afficher "Non disponible" à la place du statut coloré quand ce
+                    // produit n'est pas géré sur ce site (pas de rupture "métier" possible).
+                    'statut' => ($hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $this->stockStatutService->seuilEffectifPourSite($p, $s->site_id)) : StockStatut::DISPONIBLE)->value,
+                    'disponible_sur_site' => $this->stockStatutService->disponiblePourSite($p, $s->site_id),
                     'updated_at' => $s->updated_at?->toISOString(),
                 ])->values()->all(),
             ];
@@ -317,7 +331,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'fournisseur', 'produitType', 'variantes.valeurs.option', 'variantes.media', 'medias']);
+        $produit->load(['categorie', 'fournisseur', 'produitType', 'variantes.valeurs.option', 'variantes.media', 'medias', 'seuilsAlerte']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -350,16 +364,21 @@ class ProduitController extends Controller
 
         $totalStock = $varianteStocksRaw->isNotEmpty() ? $varianteStocksRaw->sum('qte_stock') : (int) ($produit->qte_stock ?? 0);
 
-        // Seuil unique au niveau PRODUIT, évalué pour CHAQUE couple variante × site
-        // individuellement — jamais sur le total agrégé (cf. décision produit : un stock élevé
-        // ailleurs — autre variante, autre site — ne doit jamais masquer une alerte locale).
+        // Seuil résolu PAR SITE, évalué pour CHAQUE couple variante × site individuellement —
+        // jamais sur le total agrégé (cf. décision produit : un stock élevé ailleurs — autre
+        // variante, autre site — ne doit jamais masquer une alerte locale), ni sur la
+        // configuration d'un AUTRE site. `statut` reste TOUJOURS l'état physique réel (fonction
+        // pure statutPour(), cf. StockStatutService) — `disponible_sur_site`/`alerte_active` sont
+        // exposés séparément pour piloter l'affichage ("Non disponible" à la place du statut
+        // coloré) et le comptage d'alerte, jamais pour masquer le stock physique réel.
         $hasStock = $produit->produitType?->gere_stock ?? true;
-        $seuilEffectif = $this->stockStatutService->seuilEffectif($produit);
-        $alerteActive = $hasStock && (bool) $produit->alerte_stock_active;
         $varianteLibelleParId = $produit->variantes->pluck('libelle', 'id');
 
-        $varianteStocksDetail = $varianteStocksRaw->map(function (VarianteStock $s) use ($hasStock, $seuilEffectif, $alerteActive, $varianteLibelleParId) {
-            $statut = $hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) : StockStatut::DISPONIBLE;
+        $varianteStocksDetail = $varianteStocksRaw->map(function (VarianteStock $s) use ($hasStock, $produit, $varianteLibelleParId) {
+            $seuil = $this->stockStatutService->seuilEffectifPourSite($produit, $s->site_id);
+            $disponibleSurSite = $this->stockStatutService->disponiblePourSite($produit, $s->site_id);
+            $alerteActive = $this->stockStatutService->alerteActivePourSite($produit, $s->site_id);
+            $statut = $hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $seuil) : StockStatut::DISPONIBLE;
 
             return [
                 'variante_id' => $s->produit_variante_id,
@@ -368,6 +387,9 @@ class ProduitController extends Controller
                 'site_code' => $s->site?->code,
                 'site_nom' => $s->site?->nom,
                 'qte_stock' => $s->qte_stock,
+                'seuil_effectif' => $seuil,
+                'disponible_sur_site' => $disponibleSurSite,
+                'alerte_active' => $alerteActive,
                 'statut' => $statut->value,
                 'statut_label' => $statut->label(),
             ];
@@ -375,15 +397,19 @@ class ProduitController extends Controller
 
         $stocksParSite = $varianteStocksRaw
             ->groupBy('site_id')
-            ->map(function (Collection $parSite, $siteId) use ($hasStock, $seuilEffectif, $alerteActive) {
+            ->map(function (Collection $parSite, $siteId) use ($hasStock, $produit) {
                 $premier = $parSite->first();
-                // Pire statut parmi les variantes de ce site (rupture > stock faible >
-                // disponible) — un résumé par site reste utile, mais ne doit jamais faire
-                // disparaître le pire cas derrière une moyenne/somme.
+                $seuil = $this->stockStatutService->seuilEffectifPourSite($produit, $siteId);
+                $disponibleSurSite = $this->stockStatutService->disponiblePourSite($produit, $siteId);
+                $alerteActive = $this->stockStatutService->alerteActivePourSite($produit, $siteId);
+                // Pire statut réel parmi les variantes de ce site (stock négatif > rupture >
+                // stock faible > disponible) — un résumé par site reste utile, mais ne doit
+                // jamais faire disparaître le pire cas derrière une moyenne/somme.
                 $statuts = $hasStock
-                    ? $parSite->map(fn (VarianteStock $s) => $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive))
+                    ? $parSite->map(fn (VarianteStock $s) => $this->stockStatutService->statutPour($s->qte_stock, $seuil))
                     : collect();
                 $pire = match (true) {
+                    $statuts->contains(StockStatut::STOCK_NEGATIF) => StockStatut::STOCK_NEGATIF,
                     $statuts->contains(StockStatut::RUPTURE) => StockStatut::RUPTURE,
                     $statuts->contains(StockStatut::STOCK_FAIBLE) => StockStatut::STOCK_FAIBLE,
                     default => StockStatut::DISPONIBLE,
@@ -394,6 +420,9 @@ class ProduitController extends Controller
                     'site_code' => $premier->site?->code,
                     'site_nom' => $premier->site?->nom,
                     'qte_stock' => $parSite->sum('qte_stock'),
+                    'seuil_effectif' => $seuil,
+                    'disponible_sur_site' => $disponibleSurSite,
+                    'alerte_active' => $alerteActive,
                     'statut' => $pire->value,
                     'statut_label' => $pire->label(),
                     'updated_at' => $parSite->max('updated_at'),
@@ -456,15 +485,15 @@ class ProduitController extends Controller
 
         $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
 
-        if ($hasStock && $varianteStocksDetail->isNotEmpty()) {
-            $isRupture = $varianteStocksDetail->contains(fn (array $d) => $d['statut'] === StockStatut::RUPTURE->value);
-            $isLowStock = $varianteStocksDetail->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
-            $nombreAlertesStock = $varianteStocksDetail->filter(fn (array $d) => $d['statut'] !== StockStatut::DISPONIBLE->value)->count();
-        } elseif ($hasStock) {
-            $statutFallback = $this->stockStatutService->statutPour($totalStock, $seuilEffectif, $alerteActive);
-            $isRupture = $statutFallback === StockStatut::RUPTURE;
-            $isLowStock = $statutFallback === StockStatut::STOCK_FAIBLE;
-            $nombreAlertesStock = ($isRupture || $isLowStock) ? 1 : 0;
+        // Badges d'en-tête ("Rupture" / "Stock faible — N alerte(s)") : surface d'ALERTE, filtrée
+        // aux couples variante × site à la fois disponibles ET avec alerte active — un site en
+        // rupture réelle mais non disponible ou sans alerte n'y apparaît jamais (cf.
+        // stocks_par_site/variante_stocks_detail ci-dessus pour l'état réel, toujours affiché).
+        $detailAlerte = $varianteStocksDetail->filter(fn (array $d) => $d['disponible_sur_site'] && $d['alerte_active']);
+        if ($hasStock && $detailAlerte->isNotEmpty()) {
+            $isRupture = $detailAlerte->contains(fn (array $d) => in_array($d['statut'], [StockStatut::RUPTURE->value, StockStatut::STOCK_NEGATIF->value], true));
+            $isLowStock = $detailAlerte->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
+            $nombreAlertesStock = $detailAlerte->filter(fn (array $d) => $d['statut'] !== StockStatut::DISPONIBLE->value)->count();
         } else {
             $isRupture = false;
             $isLowStock = false;
@@ -502,9 +531,10 @@ class ProduitController extends Controller
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
                 'qte_stock' => $totalStock,
-                'alerte_stock_active' => $produit->alerte_stock_active,
-                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
-                'seuil_alerte_effectif' => $seuilEffectif,
+                // Résumé "X/Y agences" du bandeau Alerte — scopé aux agences DISPONIBLES : une
+                // agence où ce produit n'est pas vendu/géré n'a pas sa place dans ce ratio.
+                'nombre_sites_alerte_active' => $stocksParSite->filter(fn (array $s) => $s['disponible_sur_site'] && $s['alerte_active'])->count(),
+                'nombre_sites_stock' => $stocksParSite->filter(fn (array $s) => $s['disponible_sur_site'])->count(),
                 'description' => $produit->description,
                 'in_stock' => ! $hasStock || ! $isRupture,
                 'is_low_stock' => $isLowStock,
@@ -642,8 +672,6 @@ class ProduitController extends Controller
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
-                'alerte_stock_active' => $produit->alerte_stock_active,
-                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
                 'description' => $produit->description,
                 'has_variantes' => $produit->variantes->count() > 1,
                 'variantes_count' => $produit->variantes->count(),
@@ -675,6 +703,17 @@ class ProduitController extends Controller
             'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
             'seuilOrganisationDefaut' => Parametre::getSeuilStockFaible($orgId),
+            // Sites ACTIFS de l'organisation + seuils spécifiques déjà enregistrés pour ce
+            // produit — alimente la section "Alerte de stock faible" par agence de
+            // ProduitForm.vue. Un site désactivé après coup n'apparaît plus ici, mais ses
+            // éventuelles lignes produit_seuils_alerte restent en base (pas de suppression
+            // arbitraire de données historiques).
+            'sites' => Site::where('organization_id', $orgId)->actives()->orderBy('nom')->get(['id', 'nom', 'code', 'type'])
+                ->map(fn (Site $s) => ['id' => $s->id, 'code' => $s->code, 'label' => $s->label]),
+            // Disponibilité ET alerte, indexées par site_id (cf. ProduitSeuilAlerteService::
+            // pourProduit()) — un site absent de cette collection est disponible (défaut TRUE)
+            // mais sans alerte (défaut FALSE), cf. StockStatutService.
+            'seuilsAlerteSite' => $this->seuilAlerteService->pourProduit($produit),
         ]);
     }
 
@@ -683,11 +722,41 @@ class ProduitController extends Controller
         $this->authorize('update', $produit);
 
         $data = $this->validerFormulaire($request, $produit);
+        $seuilsSite = $data['seuils_site'] ?? [];
+        $disponibiliteMode = $data['disponibilite_mode'] ?? null;
+        $sitesDisponibles = $data['sites_disponibles'] ?? [];
+        unset($data['seuils_site'], $data['disponibilite_mode'], $data['sites_disponibles']);
 
         $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur', 'produitType']));
 
-        $produit = DB::transaction(function () use ($produit, $data, $request) {
+        $produit = DB::transaction(function () use ($produit, $data, $request, $seuilsSite, $disponibiliteMode, $sitesDisponibles) {
             $produit = $this->produitService->mettreAJourSimple($produit, $data);
+
+            if ($request->has('disponibilite_mode')) {
+                // "tous" → aucune restriction (repli sur le défaut de colonne, disponible
+                // partout) ; "selection" → seuls les sites cochés sont disponibles, tous les
+                // autres sites actifs de l'organisation deviennent explicitement indisponibles.
+                $this->seuilAlerteService->definirDisponibilitePourSites(
+                    $produit,
+                    $disponibiliteMode === 'selection' ? $sitesDisponibles : null,
+                );
+            }
+
+            if ($request->has('seuils_site')) {
+                // Ne persiste que pour les sites ACTUELLEMENT actifs — protège contre une
+                // désactivation de site survenue entre le chargement du formulaire et la
+                // soumission (jamais d'erreur bloquante pour ce cas rare, on ignore juste la
+                // ligne périmée).
+                $sitesActifsIds = Site::where('organization_id', $produit->organization_id)
+                    ->actives()->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+                foreach ($seuilsSite as $ligne) {
+                    if (! in_array((string) ($ligne['site_id'] ?? ''), $sitesActifsIds, true)) {
+                        continue;
+                    }
+                    $this->seuilAlerteService->definir($produit, $ligne['site_id'], (bool) ($ligne['actif'] ?? false), $ligne['seuil'] ?? null);
+                }
+            }
 
             if ($request->hasFile('images')) {
                 $this->mediaService->ajouter($produit, $request->file('images'));
@@ -1061,11 +1130,22 @@ class ProduitController extends Controller
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',
-            // Le formulaire (ProduitForm.vue) force toujours un choix explicite Oui/Non côté
-            // UI — pas de "required" strict ici pour ne pas casser les intégrations qui
-            // omettent le champ ; absent => false (défaut colonne), jamais d'alerte implicite.
-            'alerte_stock_active' => 'boolean',
-            'seuil_alerte_stock' => 'nullable|integer|min:1',
+            // L'activation ("être alerté ?") ET le seuil ne sont plus configurés au niveau
+            // produit (anciennes colonnes alerte_stock_active/seuil_alerte_stock, conservées en
+            // base à titre historique mais plus jamais écrites ici) : ils se règlent désormais
+            // PAR SITE, cf. ProduitSeuilAlerteService — absent ou vide à la création, un produit
+            // n'ayant pas encore d'id ne peut pas porter de configuration spécifique par site.
+            'seuils_site' => 'nullable|array',
+            'seuils_site.*.site_id' => ['required_with:seuils_site', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            'seuils_site.*.actif' => ['sometimes', 'boolean'],
+            'seuils_site.*.seuil' => ['nullable', 'integer', 'min:1'],
+            // Disponibilité — notion INDÉPENDANTE de l'alerte (cf. ProduitSeuilAlerteService::
+            // definirDisponibilitePourSites()) : "tous" = disponible partout (défaut) ; "selection"
+            // = seuls les sites listés dans sites_disponibles le sont, tous les autres deviennent
+            // explicitement indisponibles.
+            'disponibilite_mode' => ['nullable', 'in:tous,selection'],
+            'sites_disponibles' => ['nullable', 'array'],
+            'sites_disponibles.*' => [Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'description' => 'nullable|string',
             'images' => 'nullable|array',
             'images.*' => 'image|max:2048',
@@ -1115,8 +1195,6 @@ class ProduitController extends Controller
             'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
-            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
-            'alerte_stock_active' => $produit->alerte_stock_active,
             'description' => $produit->description,
             'code_barres' => $variante?->code_barres,
             'fournisseur' => $produit->fournisseur?->nom_complet,

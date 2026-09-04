@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
-use App\Enums\BaseCalculLogistique;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
-use App\Models\CommissionLogistique;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
@@ -21,15 +20,15 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
  *
  * Le déclencheur ne choisit QUE le moment de naissance de la commission,
  * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
- * CommissionEnveloppeGenerator / CommissionLogistiqueService) et ne devient
- * IMPAYE(E) qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionEnveloppeGenerator) et ne devient IMPAYE(E) qu'à la validation de
+ * la période de paiement qui la couvre (cf.
  * CommissionAdjustmentService::activerCommissionsCreees()).
  *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
- * CommissionEnveloppeGenerator / CommissionLogistiqueService, seules sources de
- * vérité du calcul (barèmes, parts). Chaque méthode est idempotente par
- * construction, via l'idempotence déjà portée par ces générateurs (existence
- * check + contrainte unique BDD sur source_id / transfert_logistique_id).
+ * CommissionEnveloppeGenerator, seule source de vérité du calcul (barèmes,
+ * parts). Chaque méthode est idempotente par construction, via l'idempotence
+ * déjà portée par ce générateur (existence check + contrainte unique BDD sur
+ * source_id).
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
@@ -44,6 +43,11 @@ class CommissionTriggerService
      * CommandeVenteService::validerChargement()), une fois les quantités
      * réellement chargées connues.
      *
+     * Réservé à vente_standard (décision produit du 30/08/2026) : distribution_client ne génère
+     * jamais de commission au chargement, quel que soit le déclencheur configuré pour
+     * l'organisation — sa commission naît exclusivement à la validation de réception, cf.
+     * onReceptionDistributionValidee().
+     *
      * Sous CHARGEMENT_VALIDE : génère la commission maintenant, en CREEE, sur
      * la base des quantités chargées.
      *
@@ -53,6 +57,10 @@ class CommissionTriggerService
      */
     public static function onChargementValide(CommandeVente $commande): void
     {
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
             return;
         }
@@ -73,11 +81,19 @@ class CommissionTriggerService
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis
      * le chargement.
+     *
+     * Réservé à vente_standard, comme onChargementValide() : l'encaissement d'une facture de
+     * distribution ne déclenche jamais sa commission, même sous FACTURE_ENCAISSEE — seule la
+     * réception validée le fait (décision produit du 30/08/2026).
      */
     public static function onFactureVenteEncaissee(FactureVente $facture): void
     {
         $commande = $facture->commande;
         if (! $commande) {
+            return;
+        }
+
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
             return;
         }
 
@@ -111,6 +127,10 @@ class CommissionTriggerService
             return;
         }
 
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::FACTURE_ENCAISSEE) {
             return;
         }
@@ -124,6 +144,25 @@ class CommissionTriggerService
                 $commission->update(['statut' => StatutCommission::ANNULEE->value]);
             }
         }
+    }
+
+    /**
+     * Appelé à la validation réelle de la réception d'une distribution (cf.
+     * CommandeVenteService::validerReceptionDistribution()) — UNIQUE déclencheur de commission
+     * pour distribution_client (décision produit du 30/08/2026), jamais conditionné au paramètre
+     * organisation Parametre::getDeclencheurCommissionVente() qui ne régit plus que
+     * vente_standard : la réception est la seule confirmation que la mission de distribution a
+     * réellement eu lieu, contrairement au chargement (simple départ du véhicule) ou à
+     * l'encaissement (simple paiement, indépendant de la livraison effective). Génère sur la base
+     * des quantités réellement reçues (quantite_livree), jamais chargées — cf.
+     * CommissionEnveloppeGenerator::contexteDepuisCommandeVente().
+     */
+    public static function onReceptionDistributionValidee(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
@@ -173,42 +212,43 @@ class CommissionTriggerService
             return;
         }
 
-        CommissionLogistiqueService::genererDepuisChargement($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_chargee',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
      * Appelé à la validation admin réelle de la réception (« accord ») — les deux
-     * points d'entrée existants : ReceptionValidationAdminController::store()
-     * (backoffice web, montant par pack saisi par l'admin) et
-     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (montant
-     * automatique 200 FG/pack, cf. CommissionLogistiqueService::genererAutomatique()).
+     * points d'entrée existants : ReceptionValidationAdminController::store() (backoffice web) et
+     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (API mobile).
      *
-     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la
-     * quantité réellement reçue — $montantParPack si fourni (saisie admin), sinon
-     * le montant automatique historique.
+     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la quantité
+     * réellement reçue, montant résolu par CommissionRegle (Paramètres > Commissions >
+     * Transferts logistiques).
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis le
-     * départ du transfert — retourne null.
+     * départ du transfert.
+     *
+     * Décision produit du 03/09/2026 : le moteur générique (CommissionEnveloppeGenerator) est
+     * désormais le SEUL moteur de commission logistique — l'ancien CommissionLogistiqueService et
+     * la bascule par organisation (estMigreVersMoteurGenerique(), retirée) sont abandonnés après
+     * vérification en production qu'aucun solde `commission_logistique_parts` n'existait plus. La
+     * saisie manuelle d'un montant par pack n'a donc plus de sens et n'est plus acceptée par ce
+     * point d'entrée (cf. ReceptionValidationAdminController).
      */
-    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert, ?float $montantParPack = null): ?CommissionLogistique
+    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert): void
     {
         if (self::declencheurLogistique($transfert->organization_id) !== DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE) {
-            return null;
+            return;
         }
 
-        if ($montantParPack !== null) {
-            $transfert->loadMissing('lignes');
-            $quantiteRecue = (int) $transfert->lignes->sum('quantite_recue');
-
-            return CommissionLogistiqueService::genererPourTransfert(
-                $transfert,
-                BaseCalculLogistique::PAR_PACK->value,
-                $montantParPack,
-                $quantiteRecue > 0 ? $quantiteRecue : 0,
-            );
-        }
-
-        return CommissionLogistiqueService::genererAutomatique($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_recue',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     // ── Lecture politique organisation ───────────────────────────────────────

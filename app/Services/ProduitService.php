@@ -38,9 +38,10 @@ class ProduitService
      * Crée un produit + sa/ses variante(s) en une transaction. Point d'entrée unique partagé
      * par les controllers Web et API (élimine la duplication de logique constatée avant refonte).
      *
-     * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description,
-     * seuil_alerte_stock/alerte_stock_active), les champs de CHAMPS_VARIANTE_CREATION, et
-     * optionnellement 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
+     * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description),
+     * les champs de CHAMPS_VARIANTE_CREATION, et optionnellement 'options' => [['nom'=>..,
+     * 'valeurs'=>[..]], ...]. L'alerte de stock faible (activation + seuil) ne se configure plus
+     * ici : elle se règle PAR SITE via ProduitSeuilAlerteService, après création du produit.
      */
     public function creer(array $donnees): Produit
     {
@@ -228,8 +229,13 @@ class ProduitService
             ];
         }
 
+        // Le contrôle de marge compare toujours au prix de vente : un type non vendable (ex.
+        // Matière de production, achetée et consommée en fabrication, jamais vendue telle
+        // quelle) n'a jamais de prix_vente saisi — la comparaison retomberait systématiquement
+        // sur 0, rejetant CHAQUE création quel que soit le prix d'achat renseigné. Correctif du
+        // 30/08/2026 : bug réel bloquant la création de tout produit « Matière de production ».
         $champReference = $type->champPrixReference();
-        if ($champReference === null) {
+        if ($champReference === null || ! $type->isVendable()) {
             return null;
         }
 

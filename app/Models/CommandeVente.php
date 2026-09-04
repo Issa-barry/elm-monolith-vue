@@ -4,8 +4,9 @@ namespace App\Models;
 
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
-use App\Services\CommandeNumeroService;
+use App\Services\ReferenceNumeroService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,7 @@ class CommandeVente extends Model
         'total_commande',
         'mode_tarification_snapshot',
         'commission_eligible_snapshot',
+        'nature_operation',
         'statut',
         'motif_annulation',
         'annulee_at',
@@ -40,6 +42,7 @@ class CommandeVente extends Model
         'chargement_demarre_at',
         'chargement_valide_at',
         'livree_at',
+        'reception_validee_at',
         'validated_at',
         'closed_at',
         'created_by',
@@ -55,12 +58,14 @@ class CommandeVente extends Model
             'total_commande' => 'decimal:2',
             'mode_tarification_snapshot' => ModeTarification::class,
             'commission_eligible_snapshot' => 'boolean',
+            'nature_operation' => NatureOperation::class,
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
             'a_charger_at' => 'datetime',
             'chargement_demarre_at' => 'datetime',
             'chargement_valide_at' => 'datetime',
             'livree_at' => 'datetime',
+            'reception_validee_at' => 'datetime',
             'validated_at' => 'datetime',
             'closed_at' => 'datetime',
         ];
@@ -70,7 +75,13 @@ class CommandeVente extends Model
     {
         static::creating(function (CommandeVente $c) {
             if (empty($c->reference)) {
-                [$c->reference, $c->numero] = app(CommandeNumeroService::class)->generer();
+                // Repli sur VENTE_STANDARD (même valeur que le défaut colonne) si nature_operation
+                // n'a pas été renseigné avant la création — jamais un null pointer ici : les deux
+                // points d'entrée réels (CommandeVenteController::store(), PdvCheckoutService::
+                // checkout()) le renseignent toujours explicitement, ce repli ne sert qu'aux
+                // créations directes (tests, scripts) qui s'en remettent au défaut colonne.
+                $prefixe = ($c->nature_operation ?? NatureOperation::VENTE_STANDARD)->prefixeReference();
+                [$c->reference, $c->numero] = app(ReferenceNumeroService::class)->generer($c->organization_id, $prefixe);
             }
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeVente::BROUILLON;

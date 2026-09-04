@@ -64,6 +64,42 @@ const LIST_PAGE_ACTIONS_IMPORT_RE =
 const DATAFILTERS_TAG_RE = /<DataFilters\b/g;
 const TRIGGER_ONLY_RE = /\btrigger-only\b|:trigger-only\s*=/;
 
+// Détecte un champ de recherche "search" fait maison branché directement sur un
+// <input> (bypass total de DataFilters), PAS le cas légitime d'un ref `search`
+// utilisé uniquement dans le bloc mobile (`sm:hidden`) — cf. convention établie
+// dans Vehicules/Fournisseurs/Packings/Prestataires/Index.vue, où `search`/
+// `mobileSearch` alimente une carte-liste mobile en dehors de tout DataFilters.
+// Signal : le <input v-model="search"> le plus proche est précédé (dans le
+// fichier) par un marqueur `sm:flex` (bloc desktop) plutôt que `sm:hidden`
+// (bloc mobile) — reproduit exactement l'anomalie constatée sur
+// Factures/Index.vue (30/08/2026) : recherche locale dupliquant/contournant
+// DataFilters au lieu d'un champ `type: 'text', inline: true` dans filterFields.
+const SEARCH_INPUT_RE = /<input\b[^>]*v-model="search"/g;
+const RESPONSIVE_MARKER_RE = /sm:hidden|sm:flex/g;
+
+function checkDuplicateDesktopSearch(content) {
+    if (!DATAFILTERS_IMPORT_RE.test(content)) return [];
+    if (!content.includes('sm:hidden') || !content.includes('sm:flex')) {
+        // Pas de split mobile/desktop reconnaissable : contexte insuffisant
+        // pour trancher sans faux positif, on ne se prononce pas.
+        return [];
+    }
+
+    const markers = [...content.matchAll(RESPONSIVE_MARKER_RE)].map((m) => ({
+        index: m.index,
+        kind: m[0],
+    }));
+
+    const hits = [];
+    for (const match of content.matchAll(SEARCH_INPUT_RE)) {
+        const preceding = markers.filter((m) => m.index < match.index).pop();
+        if (preceding?.kind === 'sm:flex') {
+            hits.push(content.slice(0, match.index).split('\n').length);
+        }
+    }
+    return hits;
+}
+
 // Phase 1 de la standardisation des pages de liste (AGENTS.md §2) : chemins
 // des pages déjà migrées vers <ListPageActions> + <DataFilters trigger-only>.
 // Allowlist volontairement positive (pas un ban général sur toutes les pages
@@ -248,6 +284,15 @@ function main() {
                         line: filterHit.line,
                         type: 'filter',
                         detail: `Filtres faits maison détectés (${filterHit.names.join(', ')}) sans import de DataFilters.vue. Utilise <DataFilters :fields="..." /> (ordre Filtres/Recherche/Agence, Agence via site_ids[]).`,
+                    });
+                }
+
+                for (const line of checkDuplicateDesktopSearch(content)) {
+                    violations.push({
+                        file: relPath,
+                        line,
+                        type: 'duplicate-search',
+                        detail: "Champ de recherche fait maison détecté dans la section desktop, en plus de <DataFilters>. Aucun champ de recherche hors DataFilters n'est autorisé : exprime-le comme un champ type: 'text' avec inline: true dans filterFields (cf. Ventes/Index.vue), ou comme un champ 'search' dans filterFields mirroré localement via @apply (cf. Sites/Index.vue). Un ref `search`/`mobileSearch` utilisé uniquement dans le bloc mobile (sm:hidden) reste autorisé.",
                     });
                 }
             }

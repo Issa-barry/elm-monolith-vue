@@ -83,4 +83,9 @@ class Client extends Model
     {
         return $this->hasMany(ClientVehicle::class);
     }
+
+    public function cashbackTransactions(): HasMany
+    {
+        return $this->hasMany(CashbackTransaction::class);
+    }
 }

@@ -11,6 +11,10 @@ use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
+use App\Models\EquipeLivreur;
+use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -40,7 +44,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
         $this->initOrgAndUser(['vehicules.read']);
     }
 
-    private function makeVehicule(): Vehicule
+    private function makeVehicule(array $overrides = []): Vehicule
     {
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -55,6 +59,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
             'type_vehicule_id' => $typeVehicule->id,
             'proprietaire_id' => $proprietaire->id,
             'site_id' => $site->id,
+            ...$overrides,
         ]);
     }
 
@@ -203,6 +208,90 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Vehicules/Show')
                 ->has('baremes_commission_categories', 0)
+            );
+    }
+
+    /**
+     * Véhicule volontairement MIXTE (livraison_vente ET livraison_logistique) : les processus
+     * réellement configurables (vente, logistique_transfert — cf.
+     * Settings\CommissionRegleController::processusCodesDisponibles(), distribution_client n'en
+     * fait plus partie depuis le 01/09/2026) sont donc tous applicables, et cette assertion teste
+     * bien la logique "à faire/fait" par CATÉGORIE/bareme, orthogonale à l'applicabilité par
+     * USAGE couverte par VehiculeProcessusApplicablesParUsageTest. distribution_client, même
+     * explicitement configuré ci-dessous avec un barème positif, ne doit JAMAIS apparaître dans
+     * statuts_partage_commission (incident fiche ALARBA du 31/08/2026, puis décision produit du
+     * 01/09/2026 qui rend ce processus legacy pour toute organisation, pas seulement Vente-only).
+     *
+     * @test
+     */
+    public function expose_le_statut_du_partage_pour_chaque_processus(): void
+    {
+        $vente = $this->activerV2();
+        // Processus legacy toujours créable en base (ex: import historique) mais jamais résolu
+        // par aucun appelant depuis le 01/09/2026 — configuré ici pour prouver qu'il n'apparaît
+        // jamais, même avec un barème positif qui aurait autrefois produit "à faire".
+        $distribution = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
+            'libelle' => 'Distribution client',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        $transfert = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            'libelle' => 'Transfert logistique',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+        $this->creerRegle($vente, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 250, $categorie->id);
+        $this->creerRegle($distribution, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300, $categorie->id);
+        $this->creerRegle($transfert, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 400, $categorie->id);
+
+        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vehicule->proprietaire_id,
+            'is_active' => true,
+        ]);
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id,
+            'processus_id' => $vente->id,
+            'categorie_id' => $categorie->id,
+            'livreur_id' => $livreur->id,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 250,
+            'effective_from' => now()->toDateString(),
+            'effective_to' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicule.equipe_membres.0.livreur_id', $livreur->id)
+                ->where("statuts_partage_commission.{$categorie->id}.vente", 'fait')
+                ->where("statuts_partage_commission.{$categorie->id}.logistique_transfert", 'a_faire')
+                // distribution_client n'est jamais dans codesApplicablesPourVehicule(), même
+                // configuré avec un barème positif ci-dessus : sa clé est absente, jamais "à
+                // faire" ni "non_requis".
+                ->missing("statuts_partage_commission.{$categorie->id}.distribution_client")
+                ->has('processus_options', 2)
             );
     }
 }

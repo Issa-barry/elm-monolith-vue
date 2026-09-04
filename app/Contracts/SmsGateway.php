@@ -18,12 +18,24 @@ namespace App\Contracts;
  * conteneur, sans jamais toucher `SmsOtpChannel`, `OtpService`, ou la
  * logique d'authentification.
  *
- * Aucune implémentation n'existe encore (aucun fournisseur SMS n'est
- * configuré aujourd'hui) — ce contrat est volontairement vide de toute
- * implémentation réelle, pour ne pas simuler une intégration qui n'existe
- * pas.
+ * `App\Services\Sms\NimbaSmsGateway` (Nimba SMS, cf. audit du 31/08/2026)
+ * implémente ce contrat — premier fournisseur SMS réellement câblé.
  */
 interface SmsGateway
 {
+    /**
+     * Le fournisseur a-t-il ses identifiants réellement renseignés ? Permet à
+     * `SmsOtpChannel::isAvailable()` — donc à
+     * `OtpChannelResolver::firstAvailableFor()` — de sauter le canal SMS
+     * plutôt que de le choisir puis échouer silencieusement à l'envoi (ex:
+     * canal `sms` déclaré dans `config('otp.channels')` mais variables
+     * d'environnement du fournisseur non renseignées).
+     */
+    public function isConfigured(): bool;
+
+    /**
+     * @throws \RuntimeException Fournisseur non configuré, réponse en échec,
+     *                           ou erreur réseau/timeout.
+     */
     public function send(string $phoneNumber, string $message): void;
 }

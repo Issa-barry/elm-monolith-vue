@@ -32,6 +32,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -163,6 +164,7 @@ class CommissionTriggerVenteTest extends TestCase
         if ($montantChauffeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
                 'montant_unitaire' => $montantChauffeur,
                 'effective_from' => now()->subDay(),
@@ -171,6 +173,7 @@ class CommissionTriggerVenteTest extends TestCase
         if ($montantConvoyeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
                 'montant_unitaire' => $montantConvoyeur,
                 'effective_from' => now()->subDay(),
@@ -213,6 +216,7 @@ class CommissionTriggerVenteTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => 300,
             'effective_from' => now()->subDay(),

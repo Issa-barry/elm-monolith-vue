@@ -43,9 +43,13 @@ test('search by name filters the list', async ({ page }) => {
         await expect(rows.nth(i)).toContainText(new RegExp(escapeRegExp(prenom), 'i'));
     }
 
-    // Recherche fictive – doit ne rien trouver
-    await search.fill('xxxxxxxxxxxxxxxx_nomquinexistepas');
-    await search.press('Enter');
+    // Recherche fictive – doit ne rien trouver. Re-récupéré (pas le même Locator
+    // réutilisé) : sur une page DataFilters trigger-only, le drawer Filtres se
+    // referme après le rechargement déclenché par la recherche précédente, et
+    // `.fill()` sans timeout dessus attendrait indéfiniment.
+    const search2 = await getVisibleSearchInput(page);
+    await search2.fill('xxxxxxxxxxxxxxxx_nomquinexistepas');
+    await search2.press('Enter');
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/aucun utilisateur trouv/i)).toBeVisible();
 });

@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers\Settings;
 
-use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
-use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
@@ -17,10 +15,11 @@ use App\Models\CommissionCibleType;
 use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
-use App\Models\Parametre;
 use App\Models\Prestataire;
 use App\Models\TypeVehicule;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -54,11 +53,55 @@ class CommissionRegleController extends Controller
         return to_route('settings.commissions.index');
     }
 
-    public function index(): Response
+    /**
+     * Whitelist des processus CONFIGURABLES/ROUTABLES pour toute NOUVELLE opération — source
+     * unique consommée par la validation `processus_code` (StoreCommissionConfigurationRequest,
+     * EquipeLivraisonController::rules()), les onglets Paramètres > Commissions et la fiche
+     * véhicule (VehiculeController::show()).
+     *
+     * CODE_DISTRIBUTION_CLIENT volontairement absent (décision produit du 02/09/2026) : processus
+     * métier réel et courant (chaque distribution génère toujours une CommissionEnveloppe qui LUI
+     * est rattachée, pour un reporting distinct de la vente), mais sans onglet de configuration
+     * dédié — tant qu'aucune CommissionRegle active ne lui est propre, son barème est résolu par
+     * repli automatique sur celui de CODE_LOGISTIQUE_TRANSFERT (cf.
+     * CommissionProcessusDefaults::processusResolutionBareme()). Le jour où le métier veut un
+     * barème distribution divergent, il suffit d'ajouter ce code ici et de le configurer — aucun
+     * changement de code de résolution nécessaire. Le REPORTING (App\Support\Commission\
+     * CommissionProcessusFilter, volontairement distinct de cette liste) continue de le distinguer
+     * dans tous les cas, configuré ou non.
+     *
+     * @return array<string>
+     */
+    public static function processusCodesDisponibles(): array
+    {
+        return [
+            CommissionProcessus::CODE_VENTE,
+            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+        ];
+    }
+
+    public static function processusLabel(string $code): string
+    {
+        return match ($code) {
+            CommissionProcessus::CODE_VENTE => 'Ventes',
+            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT => 'Transferts logistiques',
+            // Processus réel et courant (reporting), sans onglet de configuration dédié tant que
+            // son barème reste hérité de CODE_LOGISTIQUE_TRANSFERT — cf. processusCodesDisponibles().
+            CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distribution client',
+            default => $code,
+        };
+    }
+
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', CommissionRegle::class);
 
         $orgId = auth()->user()->organization_id;
+
+        $processusCode = $request->query('processus', CommissionProcessus::CODE_VENTE);
+        if (! in_array($processusCode, self::processusCodesDisponibles(), true)) {
+            $processusCode = CommissionProcessus::CODE_VENTE;
+        }
 
         $categories = Categorie::where('organization_id', $orgId)
             ->where('statut', 'actif')
@@ -75,7 +118,7 @@ class CommissionRegleController extends Controller
         // sur un GET) — seul store()/storeConfiguration() le crée, à l'enregistrement
         // du premier barème.
         $processus = CommissionProcessus::where('organization_id', $orgId)
-            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->where('code', $processusCode)
             ->first();
 
         $reglesActives = $processus
@@ -118,6 +161,11 @@ class CommissionRegleController extends Controller
             ->all();
 
         return Inertia::render('settings/CommissionRegles/Index', [
+            'processus_actif' => $processusCode,
+            'processus_options' => array_map(
+                fn (string $code) => ['value' => $code, 'label' => self::processusLabel($code)],
+                self::processusCodesDisponibles(),
+            ),
             'lignes' => $lignes,
             'categories' => $categories->map(fn (Categorie $categorie) => [
                 'value' => $categorie->id,
@@ -244,19 +292,12 @@ class CommissionRegleController extends Controller
 
         $orgId = auth()->user()->organization_id;
         $data = $request->validated();
+        $processusCode = $data['processus_code'];
         $today = Carbon::today()->toDateString();
         $hier = Carbon::parse($today)->subDay()->toDateString();
 
-        DB::transaction(function () use ($orgId, $data, $today, $hier): void {
-            $processus = CommissionProcessus::firstOrCreate(
-                ['organization_id' => $orgId, 'code' => CommissionProcessus::CODE_VENTE],
-                [
-                    'libelle' => 'Vente',
-                    'declencheur' => Parametre::getDeclencheurCommissionVente($orgId)->value,
-                    'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                    'statut' => CommissionActivationStatut::ACTIF->value,
-                ],
-            );
+        DB::transaction(function () use ($orgId, $processusCode, $data, $today, $hier): void {
+            $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
 
             $categorieIds = collect($data['lignes'])->pluck('categorie_id')->all();
 
@@ -284,7 +325,7 @@ class CommissionRegleController extends Controller
             }
         });
 
-        return to_route('settings.commissions.index')
+        return to_route('settings.commissions.index', ['processus' => $processusCode])
             ->with('success', 'Configuration des commissions enregistrée.');
     }
 
@@ -466,15 +507,7 @@ class CommissionRegleController extends Controller
         $orgId = auth()->user()->organization_id;
         $data = $request->validated();
 
-        $processus = CommissionProcessus::firstOrCreate(
-            ['organization_id' => $orgId, 'code' => CommissionProcessus::CODE_VENTE],
-            [
-                'libelle' => 'Vente',
-                'declencheur' => Parametre::getDeclencheurCommissionVente($orgId)->value,
-                'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                'statut' => CommissionActivationStatut::ACTIF->value,
-            ],
-        );
+        $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, CommissionProcessus::CODE_VENTE);
 
         $scopeType = $data['scope_type'];
         $scopeId = $scopeType === 'categorie' ? $data['categorie_id'] : null;

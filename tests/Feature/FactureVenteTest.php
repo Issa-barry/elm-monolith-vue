@@ -79,11 +79,35 @@ class FactureVenteTest extends TestCase
 
     public function test_index_accepts_periode_parameter(): void
     {
-        foreach (['today', 'week', 'month', 'all'] as $periode) {
+        // 'tout' est la valeur réellement envoyée par Factures/Index.vue (jamais 'all', cf.
+        // ce fichier) ; 'all' reste accepté ici pour ne pas casser un lien externe déjà
+        // partagé avec cette query string, mais n'est plus produit par l'UI.
+        foreach (['today', 'week', 'month', 'tout', 'all'] as $periode) {
             $this->actingAs($this->user)
                 ->get(route('factures.index', ['periode' => $periode]))
                 ->assertStatus(200);
         }
+    }
+
+    /**
+     * Régression du 01/09/2026 : Factures/Index.vue envoyait 'all' pour l'option "Tout", une
+     * valeur que DataFilters.vue::SENTINELS traite comme "aucune sélection" et retire
+     * silencieusement de la requête — le paramètre periode absent retombait alors sur le défaut
+     * 'month' du contrôleur, masquant toute facture d'un mois précédent sans que l'utilisateur
+     * s'en aperçoive (l'UI affichait pourtant "Tout" comme sélectionné). Le frontend envoie
+     * désormais 'tout', une valeur qui ne collisionne avec aucune sentinelle générique.
+     */
+    public function test_periode_tout_inclut_les_factures_dun_mois_precedent(): void
+    {
+        $this->makeFacture(['created_at' => now()->subMonthsNoOverflow(2)]);
+
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'month']))
+            ->assertInertia(fn ($page) => $page->has('factures', 0));
+
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'tout']))
+            ->assertInertia(fn ($page) => $page->has('factures', 1));
     }
 
     public function test_index_returns_statut_prop(): void
@@ -193,6 +217,27 @@ class FactureVenteTest extends TestCase
                 ->where('totaux.nb_impayees', 1)
                 ->where('totaux.nb_partielles', 1)
                 ->where('totaux.nb_payees', 1)
+            );
+    }
+
+    /**
+     * Correctif du 30/08/2026 : total/nb_total étaient recalculés côté Vue à partir d'une
+     * recherche locale (facturesFiltrees) — supprimée pour respecter le standard UI (aucun champ
+     * de recherche hors DataFilters). Ces deux valeurs sont désormais calculées ici, une seule
+     * fois, sur le même périmètre que les autres compteurs (exclut ANNULEE).
+     */
+    public function test_totaux_total_et_nb_total_excluent_les_annulees(): void
+    {
+        $this->makeFacture(['montant_net' => 10000, 'statut_facture' => 'impayee']);
+        $this->makeFacture(['montant_net' => 4000, 'statut_facture' => 'partiel']);
+        $this->makeFacture(['montant_net' => 5000, 'statut_facture' => 'payee']);
+        $this->makeFacture(['montant_net' => 2000, 'statut_facture' => 'annulee']);
+
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'all']))
+            ->assertInertia(fn ($page) => $page
+                ->where('totaux.nb_total', 3)
+                ->where('totaux.total', 19000)
             );
     }
 

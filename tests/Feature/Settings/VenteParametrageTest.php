@@ -70,6 +70,7 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
                 'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -110,6 +111,7 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
                 'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -136,6 +138,7 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
                 'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -220,6 +223,7 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'facture_encaissee',
                 'declencheur_commission_logistique' => 'chargement_valide',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -248,6 +252,7 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'valeur_invalide',
                 'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertSessionHasErrors('declencheur_commission_vente');
     }
@@ -266,7 +271,66 @@ class VenteParametrageTest extends TestCase
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
                 'declencheur_commission_logistique' => 'valeur_invalide',
+                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertSessionHasErrors('declencheur_commission_logistique');
+    }
+
+    public function test_edit_expose_le_montant_defaut_commission_logistique_par_pack(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/Ventes')
+                ->where('montant_defaut_commission_logistique_par_pack', 200) // défaut historique
+            );
+    }
+
+    public function test_update_persists_le_montant_defaut_commission_logistique_par_pack(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'facture_encaissee',
+                'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 350,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertEquals(
+            350,
+            Parametre::getMontantDefautCommissionLogistiquePack($user->organization_id),
+        );
+    }
+
+    public function test_update_rejette_un_montant_logistique_invalide(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'facture_encaissee',
+                'declencheur_commission_logistique' => 'reception_effectuee',
+                'montant_defaut_commission_logistique_par_pack' => 0,
+            ])
+            ->assertSessionHasErrors('montant_defaut_commission_logistique_par_pack');
     }
 }

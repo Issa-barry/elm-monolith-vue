@@ -54,28 +54,70 @@ jobs:
       - name: Run PHPUnit with coverage
         run: ./vendor/bin/phpunit --coverage-clover coverage/clover.xml
 
+      # continue-on-error : cette étape ne fait qu'archiver le rapport de coverage, elle
+      # n'a pas vocation à faire échouer le gate PHPUnit. Le backend d'upload d'artifacts
+      # de GitHub Actions a des pannes ponctuelles (timeout réseau sur CreateArtifact,
+      # cf. run #427 du 2026-09-01) sans rapport avec l'état des tests.
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: coverage
           path: coverage/clover.xml
           retention-days: 1
 
-  e2e:
-    name: E2E
+  # Fail-safe partagé par e2e-full et e2e-smoke : le E2E tourne par défaut, il n'est
+  # skippé que si TOUS les fichiers modifiés sont de la doc (README.md, docs/**, **/*.md).
+  # Dès qu'un seul fichier hors doc change (y compris .github/**), non_docs=true. Job à
+  # part (pas juste un step) car ces deux jobs doivent pouvoir sauter tout leur setup
+  # (checkout, composer, mysql...) sur une PR 100% doc, pas seulement leurs tests.
+  changes:
+    name: Detect non-doc changes
     runs-on: ubuntu-latest
-    # Re-repassé en smoke-only le 26/08/2026 : la suite complète (173 tests, 43 fichiers)
-    # dépasse maintenant systématiquement le timeout même remonté à 90 min (job tué par le
-    # timeout à ~1h30, jamais un vrai flake — cf. run annulé PR #411). workers=1 empêche
-    # de paralléliser pour compenser (session cookie partagée, cf. step "Run full E2E
-    # tests" dans git blame). Fix réel (sharding en jobs parallèles isolés, ou nettoyage
-    # de la suite pendant la refonte gérant/prestataire) remis à plus tard volontairement.
-    timeout-minutes: 20
+    outputs:
+      non_docs: ${{ steps.filter.outputs.non_docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            non_docs:
+              - '!README.md'
+              - '!docs/**'
+              - '!**/*.md'
+
+  e2e-full:
+    name: E2E full (shard ${{ matrix.shard }}/4)
+    needs: changes
+    # dev → pre-prod : suite complète, seule promotion qui la justifie (cf. e2e-smoke et
+    # le job absent sur pre-prod → production → main plus bas).
+    # Désactivé du 2026-09-01 au 2026-09-03 (`false &&` ci-devant) pour accélérer une MEP
+    # urgente, réactivé ensuite comme prévu — cf. commit qui a introduit ce commentaire.
+    if: github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
+    runs-on: ubuntu-latest
+    # Shardée le 31/08/2026 (remplace le mode smoke-only introduit le 26/08/2026) : la
+    # suite complète (173 tests, 43 fichiers) en --workers=1 dans UN SEUL job dépassait
+    # systématiquement le timeout même remonté à 90 min (job tué par le timeout à ~1h30,
+    # jamais un vrai flake — cf. run annulé PR #411, et historique complet dans git blame
+    # de ce fichier). workers=1 reste nécessaire *à l'intérieur* d'un job (tous les tests
+    # y partagent le même cookie de session issu de global-setup.ts : avec workers>1 un
+    # worker peut âger le flash Laravel d'un autre entre son POST et son GET) — mais rien
+    # n'empêche de répartir les fichiers sur plusieurs jobs matrix isolés (chacun son
+    # service MySQL, son serveur `php artisan serve --env=e2e`, son cookie de session),
+    # ce que `playwright test --shard` fait nativement. 4 shards : ~43 fichiers/job, large
+    # marge sous ce timeout au vu du temps par test observé lors de la réactivation.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # .env.e2e (chargé par `php artisan serve --env=e2e`, cf. playwright.config.ts) pointe
     # sur une vraie base MySQL isolée (elm_monolithe_e2e), pas sqlite — sans ce service le
     # serveur E2E n'a aucune base à joindre : soit 500 immédiat sur /login (connexion
     # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
-    # flow local `npm run e2e:db:reset` (voir package.json).
+    # flow local `npm run e2e:db:reset` (voir package.json). Un service par job de matrix :
+    # chaque shard a la sienne, aucun partage de données entre shards.
     services:
       mysql:
         image: mysql:8.0
@@ -162,10 +204,134 @@ jobs:
           VITE_SHOW_ENTITY_STATS_CARDS: 'true'
         run: npm run e2e:build
 
-      # Smoke uniquement pour l'instant (cf. step "Run smoke E2E tests" plus bas) — quelques
-      # tests, largement sous la barre des 20 min ; le budget large reste une marge de
-      # sécurité (setup PHP/Node/Playwright + build), pas un dimensionnement pour la suite
-      # complète (historique de cette dernière dans git blame si besoin de la restaurer).
+      # workers=1 : tous les tests d'un même job partagent le même cookie de session
+      # (chargé depuis .auth/user.json, cf. commentaire du job ci-dessus) — nécessaire
+      # même en étant shardé, chaque shard restant un job à lui seul avec son propre
+      # global-setup.ts.
+      - name: Run E2E shard
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+        run: npx playwright test --shard=${{ matrix.shard }}/4 --workers=1
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full-shard-${{ matrix.shard }}
+          path: playwright-report
+          retention-days: 7
+
+  # Nom de contexte stable pour la ruleset GitHub "Protection pre-prod" : un job matrix
+  # (e2e-full ci-dessus) n'expose PAS un statut par nom fixe (ce sont "E2E full (shard
+  # 1/4)" … "4/4)"), donc rien à référencer dans required_status_checks qui survive à
+  # un changement du nombre de shards. Piège déjà vécu le 2026-09-01 (PR #427) avec
+  # l'ancien check `E2E`, resté bloqué en "Waiting" indéfiniment après le passage au
+  # sharding — cf. mémoire e2e-full-disabled-mep. `if: always()` : ce job doit s'exécuter
+  # (et donc reporter un statut) même si un shard échoue ou si e2e-full est skip (PR
+  # 100% doc, ou base_ref != pre-prod) — sinon la ruleset resterait bloquée en "Waiting".
+  e2e-full-gate:
+    name: E2E full
+    needs: e2e-full
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifie le résultat agrégé des 4 shards
+        run: |
+          result="${{ needs.e2e-full.result }}"
+          echo "e2e-full result: $result"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            exit 1
+          fi
+
+  e2e-smoke:
+    name: E2E smoke
+    needs: changes
+    # pre-prod → production : smoke tests only (fast gate before deploy), pas la suite
+    # complète (déjà passée sur dev → pre-prod, cf. e2e-full ci-dessus).
+    # production → main : aucun E2E — main ne reçoit qu'un commit déjà déployé et déjà
+    # smoke-testé, PHPUnit (job `ci`) suffit ici (github.base_ref ne vaut alors ni
+    # 'pre-prod' ni 'production', donc ni e2e-full ni e2e-smoke ne tournent).
+    if: github.base_ref == 'production' && needs.changes.outputs.non_docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: elm_monolithe_e2e
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          tools: composer:v2
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      # Cache miss → télécharge le binaire ET installe les dépendances système (apt)
+      - name: Install Playwright browser + system deps (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Cache hit → binaire déjà restauré, on installe seulement les paquets système (rapide)
+      - name: Install Playwright system deps only (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Prepare Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --seed --force
+
+      - name: Prepare E2E database (.env.e2e)
+        run: |
+          php artisan config:clear
+          php artisan migrate:fresh --seed --env=e2e --force
+
+      - name: Build assets
+        env:
+          VITE_SHOW_ENTITY_STATS_CARDS: 'true'
+        run: npm run e2e:build
+
       - name: Run smoke E2E tests
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
@@ -175,6 +341,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ github.base_ref }}
+          name: playwright-report-smoke
           path: playwright-report
           retention-days: 7

@@ -126,21 +126,27 @@ class Produit extends Model
     }
 
     /**
-     * Vrai si au moins un couple variante × site de ce produit est actuellement en stock
-     * faible ou en rupture — délègue à StockStatutService (source unique de la règle, cf.
-     * son docblock) plutôt que de réimplémenter la comparaison qte/seuil ici. Nécessite
-     * $this chargé avec ['produitType', 'variantes.stocks'] pour éviter un N+1 ; sinon
-     * déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show d'un
-     * seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
+     * Vrai si au moins un couple variante × site de ce produit est actuellement EN ALERTE stock
+     * faible — délègue à StockStatutService (source unique de la règle, cf. son docblock)
+     * plutôt que de réimplémenter la comparaison qte/seuil ici. `statut` reste l'état physique
+     * réel (fonction pure) : ce booléen filtre en plus aux sites DISPONIBLES et avec ALERTE
+     * active — un site en stock faible réel mais non disponible ou sans alerte ne compte jamais
+     * (décision du 02/09/2026, disponibilité/alerte indépendantes du statut lui-même). Nécessite
+     * $this chargé avec ['produitType', 'variantes.stocks', 'seuilsAlerte'] pour éviter un
+     * N+1 ; sinon déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show
+     * d'un seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
      * calcule ceci autrement pour cette raison).
      */
     public function getIsLowStockAttribute(): bool
     {
         return app(StockStatutService::class)
             ->detailParVarianteEtSite($this)
-            ->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
+            ->contains(fn (array $d) => $d['disponible_sur_site'] && $d['alerte_active'] && $d['statut'] === StockStatut::STOCK_FAIBLE->value);
     }
 
+    /**
+     * Même filtre alerte/disponibilité que getIsLowStockAttribute() ci-dessus — cf. son docblock.
+     */
     public function getIsOutOfStockAttribute(): bool
     {
         if (! $this->produitType?->gere_stock) {
@@ -149,7 +155,7 @@ class Produit extends Model
 
         return app(StockStatutService::class)
             ->detailParVarianteEtSite($this)
-            ->contains(fn (array $d) => in_array($d['statut'], [StockStatut::RUPTURE->value, StockStatut::STOCK_NEGATIF->value], true));
+            ->contains(fn (array $d) => $d['disponible_sur_site'] && $d['alerte_active'] && in_array($d['statut'], [StockStatut::RUPTURE->value, StockStatut::STOCK_NEGATIF->value], true));
     }
 
     /**
@@ -218,6 +224,17 @@ class Produit extends Model
             'produit_id',
             'produit_variante_id'
         );
+    }
+
+    /**
+     * Seuils d'alerte de stock faible spécifiques par SITE — remplace l'ancien seuil unique
+     * seuil_alerte_stock (colonne conservée en base à titre historique, plus jamais lue ni
+     * écrite, cf. StockStatutService::seuilEffectifPourSite()). Absence de ligne pour un site =
+     * repli sur le seuil global de l'organisation.
+     */
+    public function seuilsAlerte(): HasMany
+    {
+        return $this->hasMany(ProduitSeuilAlerte::class);
     }
 
     public function organization(): BelongsTo

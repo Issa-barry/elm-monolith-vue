@@ -6,6 +6,7 @@ import type { FilterField } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -20,20 +21,37 @@ import type {
     PeriodeAffichee,
     StatutCommissionResolu,
 } from '@/types/commission-status';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     Building2,
+    CheckCircle2,
     ExternalLink,
     HandCoins,
     History,
     MoreHorizontal,
+    SlidersHorizontal,
+    Split,
     Truck,
     User,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import AjusterCommissionDialog from './partials/AjusterCommissionDialog.vue';
+
+interface CreeePart {
+    id: string;
+    montant: number;
+}
+
+interface MotifOption {
+    value: string;
+    label: string;
+}
 
 interface VehiculeInfo {
+    id: string | null;
     nom: string;
     immatriculation: string | null;
     type: string | null;
@@ -61,6 +79,10 @@ interface BeneficiaireRow extends StatutCommissionResolu {
     total_genere?: number;
     en_attente_periode?: number;
     payable?: number;
+    /** Parts encore CREEE de ce bénéficiaire — plan de travail des actions Ajuster/Valider. */
+    creee_parts: CreeePart[];
+    /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
+    processus_labels: string[];
 }
 
 interface PeriodeOption {
@@ -85,11 +107,14 @@ const props = defineProps<{
     search: string;
     filtre_statut: string;
     filtre_site_ids: string[];
+    filtre_processus: string[];
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
     periode_affichee: PeriodeAffichee | null;
     sites: { id: string; nom: string }[];
+    motifs: MotifOption[];
     can_payer: boolean;
 }>();
 
@@ -106,11 +131,18 @@ const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'processus',
+        label: 'Processus',
+        type: 'multi-select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
+    {
         key: 'statut',
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Partage à valider' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -131,6 +163,9 @@ const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
+    // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
+    // repli implicite sur 'vente'.
+    processus: props.filtre_processus ?? [],
 }));
 
 // Dialog paiement
@@ -194,6 +229,9 @@ function buildParams(): URLSearchParams {
         params.append('site_ids[]', id);
     }
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
+    for (const code of props.filtre_processus ?? []) {
+        params.append('processus[]', code);
+    }
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -244,12 +282,149 @@ const periodContextLabel = computed(() => {
     );
 });
 
-function statusValue(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'en_attente' : b.display_status;
+const confirm = useConfirm();
+const toast = useToast();
+const page = usePage();
+
+const selected = ref<Set<string>>(new Set());
+
+const selectableRows = computed(() =>
+    props.beneficiaires.filter((b) => b.creee_parts.length > 0),
+);
+
+const allSelected = computed(
+    () =>
+        selectableRows.value.length > 0 &&
+        selectableRows.value.every((b) =>
+            selected.value.has(b.beneficiaire_id),
+        ),
+);
+
+function toggleRow(b: BeneficiaireRow) {
+    const next = new Set(selected.value);
+    if (next.has(b.beneficiaire_id)) {
+        next.delete(b.beneficiaire_id);
+    } else {
+        next.add(b.beneficiaire_id);
+    }
+    selected.value = next;
 }
 
-function statusLabel(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'Partage à valider' : b.display_label;
+function toggleAll() {
+    if (allSelected.value) {
+        selected.value = new Set();
+        return;
+    }
+    selected.value = new Set(
+        selectableRows.value.map((b) => b.beneficiaire_id),
+    );
+}
+
+function flashToast(fallback: string) {
+    const flash = (page.props as any).flash;
+    toast.add({
+        severity: flash?.error ? 'warn' : 'success',
+        summary: flash?.error ? 'Action impossible' : 'Succès',
+        detail: flash?.error ?? flash?.success ?? fallback,
+        life: 5000,
+    });
+}
+
+function validerParts(parts: CreeePart[], label: string) {
+    router.post(
+        '/backoffice/comptabilite/commissions/ajustements/valider',
+        { parts: parts.map((p) => ({ type: 'vente', id: p.id })) },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                selected.value = new Set();
+                flashToast(label);
+            },
+        },
+    );
+}
+
+function validerRow(b: BeneficiaireRow) {
+    confirm.require({
+        message: `Valider la commission de ${b.beneficiaire_nom} (${fmt(b.en_attente_periode ?? 0)}) ?`,
+        header: 'Confirmer la validation',
+        acceptLabel: 'Valider',
+        rejectLabel: 'Annuler',
+        accept: () => validerParts(b.creee_parts, 'Commission validée.'),
+    });
+}
+
+function validerSelection() {
+    const rows = selectableRows.value.filter((b) =>
+        selected.value.has(b.beneficiaire_id),
+    );
+    if (rows.length === 0) return;
+
+    const parts = rows.flatMap((b) => b.creee_parts);
+    const total = rows.reduce((sum, b) => sum + (b.en_attente_periode ?? 0), 0);
+
+    confirm.require({
+        message: `Valider ${rows.length} commission(s) sélectionnée(s) (${fmt(total)}) ?`,
+        header: 'Confirmer la validation',
+        acceptLabel: 'Valider',
+        rejectLabel: 'Annuler',
+        accept: () =>
+            validerParts(parts, `${rows.length} commission(s) validée(s).`),
+    });
+}
+
+const showAjusterDialog = ref(false);
+const ajusterTarget = ref<BeneficiaireRow | null>(null);
+const ajusterProcessing = ref(false);
+const ajusterErrors = ref<Record<string, string>>({});
+
+function openAjuster(b: BeneficiaireRow) {
+    ajusterTarget.value = b;
+    ajusterErrors.value = {};
+    showAjusterDialog.value = true;
+}
+
+function submitAjuster(payload: {
+    montant: number;
+    motif: string;
+    commentaire: string | null;
+}) {
+    if (!ajusterTarget.value) return;
+    ajusterProcessing.value = true;
+    ajusterErrors.value = {};
+    router.patch(
+        '/backoffice/comptabilite/commissions/ajustements/ajuster',
+        {
+            parts: ajusterTarget.value.creee_parts.map((p) => ({
+                type: 'vente',
+                id: p.id,
+            })),
+            montant: payload.montant,
+            motif: payload.motif,
+            commentaire: payload.commentaire,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showAjusterDialog.value = false;
+                flashToast('Montant ajusté.');
+            },
+            onError: (e) => {
+                ajusterErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                ajusterProcessing.value = false;
+            },
+        },
+    );
+}
+
+function repartirUrl(b: BeneficiaireRow): string | null {
+    if (b.vehicules.length !== 1 || !b.vehicules[0].id) return null;
+    const params = props.selected_periode
+        ? `?periode=${encodeURIComponent(props.selected_periode)}`
+        : '';
+    return `/backoffice/comptabilite/commissions/vehicules/${b.vehicules[0].id}/repartir${params}`;
 }
 
 function fmt(val: number | null | undefined) {
@@ -293,17 +468,62 @@ function fmtTel(tel: string | null | undefined): string {
             :filter-fields="filterFields"
             :sites="sites"
             :summary="indexSummary"
+            :summary-label-overrides="{
+                netValidated: {
+                    label: 'Net à payer',
+                    ariaLabel: 'Définition du net à payer',
+                    tooltip:
+                        'Montant actuellement retenu après déduction des dépenses — inclut les commissions pas encore validées. La validation conditionne le paiement, pas cet affichage.',
+                },
+            }"
             table-title="Détail par livreur"
             :result-count="beneficiaires.length"
             @export-excel="exportExcel"
             @export-pdf="exportPdf"
         >
-            <table class="w-full min-w-[1460px] text-sm">
+            <template #after-header>
+                <div
+                    v-if="selected.size > 0"
+                    class="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5"
+                >
+                    <span class="text-sm font-medium">
+                        {{ selected.size }} sélectionné{{
+                            selected.size > 1 ? 's' : ''
+                        }}
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="selected = new Set()"
+                        >
+                            Annuler
+                        </Button>
+                        <Button size="sm" @click="validerSelection">
+                            <CheckCircle2 class="mr-1.5 h-4 w-4" />
+                            Valider la sélection
+                        </Button>
+                    </div>
+                </div>
+            </template>
+
+            <table class="w-full min-w-[1620px] text-sm">
                 <thead>
                     <tr class="border-b bg-muted/50">
                         <th
                             scope="col"
-                            class="sticky left-0 z-20 w-[240px] min-w-[240px] border-r bg-muted px-4 py-3 text-left font-semibold text-foreground/70"
+                            class="sticky left-0 z-20 w-10 bg-muted px-3 py-3"
+                        >
+                            <Checkbox
+                                :model-value="allSelected"
+                                :disabled="selectableRows.length === 0"
+                                aria-label="Tout sélectionner"
+                                @update:model-value="toggleAll"
+                            />
+                        </th>
+                        <th
+                            scope="col"
+                            class="sticky left-10 z-20 w-[240px] min-w-[240px] border-r bg-muted px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Livreur
                         </th>
@@ -321,6 +541,12 @@ function fmtTel(tel: string | null | undefined): string {
                         </th>
                         <th
                             scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Processus
+                        </th>
+                        <th
+                            scope="col"
                             title="Montant calculé avant validation de la direction"
                             class="px-4 py-3 text-right font-semibold text-foreground/70"
                         >
@@ -328,24 +554,24 @@ function fmtTel(tel: string | null | undefined): string {
                         </th>
                         <th
                             scope="col"
-                            title="Montant validé avant déduction des dépenses"
+                            title="Montant brut retenu, avant déduction des dépenses"
                             class="px-4 py-3 text-right font-semibold whitespace-nowrap text-foreground/70"
                         >
-                            Brut validé
+                            Brut
                         </th>
                         <th
                             scope="col"
-                            title="Dépenses déduites des commissions validées"
+                            title="Dépenses déduites du montant retenu"
                             class="px-4 py-3 text-right font-semibold text-foreground/70"
                         >
                             Dépenses
                         </th>
                         <th
                             scope="col"
-                            title="Montant validé après dépenses et ajustements"
+                            title="Montant actuellement retenu après dépenses et ajustements — indépendant de la validation de la période"
                             class="px-4 py-3 text-right font-semibold text-foreground/70"
                         >
-                            Net validé
+                            Net à payer
                         </th>
                         <th
                             scope="col"
@@ -373,6 +599,9 @@ function fmtTel(tel: string | null | undefined): string {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
+                    <!-- Ne force pas ?processus=vente : la fiche détail affiche par défaut la
+                         situation TOUS PROCESSUS confondus du bénéficiaire (décision produit du
+                         31/08/2026), même en arrivant depuis cet écran "Commission vente". -->
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
@@ -381,7 +610,18 @@ function fmtTel(tel: string | null | undefined): string {
                         class="group even:bg-muted/20"
                     >
                         <td
-                            class="sticky left-0 z-10 w-[240px] min-w-[240px] border-r bg-card px-4 py-3 group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
+                            class="sticky left-0 z-10 w-10 bg-card px-3 py-3 group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
+                            @click.stop
+                        >
+                            <Checkbox
+                                :model-value="selected.has(b.beneficiaire_id)"
+                                :disabled="b.creee_parts.length === 0"
+                                :aria-label="`Sélectionner ${b.beneficiaire_nom}`"
+                                @update:model-value="toggleRow(b)"
+                            />
+                        </td>
+                        <td
+                            class="sticky left-10 z-10 w-[240px] min-w-[240px] border-r bg-card px-4 py-3 group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
                         >
                             <div class="flex items-center gap-2.5">
                                 <User
@@ -445,6 +685,23 @@ function fmtTel(tel: string | null | undefined): string {
                                 >—</span
                             >
                         </td>
+                        <td class="px-4 py-3" @click.stop>
+                            <div
+                                v-if="b.processus_labels.length"
+                                class="flex flex-wrap gap-1"
+                            >
+                                <span
+                                    v-for="label in b.processus_labels"
+                                    :key="label"
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{ label }}
+                                </span>
+                            </div>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </td>
                         <td
                             class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
                         >
@@ -479,11 +736,22 @@ function fmtTel(tel: string | null | undefined): string {
                         >
                             {{ fmt(b.solde_restant) }}
                         </td>
-                        <td class="px-4 py-3">
-                            <StatusDot
-                                :status="statusValue(b)"
-                                :label="statusLabel(b)"
-                            />
+                        <td class="px-4 py-3" @click.stop>
+                            <div class="flex items-center gap-2">
+                                <StatusDot
+                                    :status="b.display_status"
+                                    :label="b.display_label"
+                                />
+                                <Button
+                                    v-if="b.creee_parts.length > 0"
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-6 px-2 text-xs"
+                                    @click="validerRow(b)"
+                                >
+                                    Valider
+                                </Button>
+                            </div>
                         </td>
                         <td
                             class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
@@ -516,6 +784,37 @@ function fmtTel(tel: string | null | undefined): string {
                                         <History class="mr-2 h-4 w-4" />
                                         Historique
                                     </DropdownMenuItem>
+                                    <template v-if="b.creee_parts.length > 0">
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="validerRow(b)"
+                                        >
+                                            <CheckCircle2
+                                                class="mr-2 h-4 w-4"
+                                            />
+                                            Valider
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAjuster(b)"
+                                        >
+                                            <SlidersHorizontal
+                                                class="mr-2 h-4 w-4"
+                                            />
+                                            Ajuster
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="repartirUrl(b)"
+                                            as-child
+                                            class="cursor-pointer"
+                                        >
+                                            <Link :href="repartirUrl(b)!">
+                                                <Split class="mr-2 h-4 w-4" />
+                                                Répartir
+                                            </Link>
+                                        </DropdownMenuItem>
+                                    </template>
                                     <template v-if="can_payer && b.can_pay">
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
@@ -554,6 +853,20 @@ function fmtTel(tel: string | null | undefined): string {
         auditable-type="App\Models\Livreur"
         :auditable-id="auditBenefId"
         module="commissions_vente"
+    />
+
+    <AjusterCommissionDialog
+        v-model:visible="showAjusterDialog"
+        :title="
+            ajusterTarget
+                ? `Ajuster — ${ajusterTarget.beneficiaire_nom}`
+                : 'Ajuster'
+        "
+        :montant-theorique="ajusterTarget?.en_attente_periode ?? 0"
+        :motifs="motifs"
+        :processing="ajusterProcessing"
+        :errors="ajusterErrors"
+        @submit="submitAjuster"
     />
 
     <Dialog

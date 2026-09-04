@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import CommissionMontantFixeEditor, {
-    type CommissionMontantFixeMembre,
-} from '@/components/commission/CommissionMontantFixeEditor.vue';
+import type { CommissionMontantFixeMembre } from '@/components/commission/CommissionMontantFixeEditor.vue';
 import { Button } from '@/components/ui/button';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
     ChevronLeft,
     ChevronRight,
+    CircleCheck,
+    Info,
     Plus,
     Trash2,
+    TriangleAlert,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -71,6 +73,12 @@ interface MembreLigne {
     montant_par_pack: number;
     ordre: number;
     _errors: Partial<Record<'role' | 'telephone', string>>;
+    // Résultat du contrôle live (verifierTelephone) pour la valeur ACTUELLE de telephone —
+    // undefined : jamais vérifié depuis la dernière modification, null : vérifié sans conflit,
+    // string : vérifié, message de conflit à afficher. Remis à undefined à chaque frappe
+    // (onPhoneInput) pour ne jamais garder un verdict obsolète.
+    _serverConflict?: string | null;
+    _phoneChecking?: boolean;
 }
 
 /** Barème Propriétaire ET Livraison résolus pour une
@@ -91,6 +99,11 @@ const props = defineProps<{
     equipe: EquipeExistante | null;
     proprietaires: ProprietaireOption[];
     baremesCommissionCategories: BaremeCommissionCategorie[];
+    // Processus actif de la page (Vente/Distribution client/Transfert logistique) — le
+    // partage saisi ici ne remplace jamais que CE processus (cf. syncPartagesCategorie()) ;
+    // changer d'onglet recharge la page avec les barèmes/partages du nouveau processus.
+    processusActif: string;
+    processusOptions: { value: string; label: string }[];
 }>();
 
 const emit = defineEmits<{
@@ -209,6 +222,9 @@ function addLigne() {
 
 function removeLigne(idx: number) {
     markChanged();
+    // Les index changent après le splice : toute vérification en attente porterait sur la
+    // mauvaise ligne, on annule tout plutôt que de tenter un réalignement.
+    Object.values(phoneCheckTimers).forEach((t) => clearTimeout(t));
     membres.value.splice(idx, 1);
     membres.value.forEach((m, i) => (m.ordre = i));
 }
@@ -240,7 +256,93 @@ function onPhoneInput(e: Event, idx: number) {
     const local = raw.slice(0, 9);
     membres.value[idx].telephone = local;
     (e.target as HTMLInputElement).value = local;
+
+    // Le numéro a changé : le dernier verdict serveur (le cas échéant) ne s'applique plus.
+    // _phoneChecking est aussi remis à false ici — une requête encore en vol pour l'ANCIENNE
+    // valeur se sait obsolète (garde phoneAtCallTime dans checkTelephoneConflict) et ne le
+    // remettra pas à true à sa résolution ; sans ce reset, raccourcir un numéro déjà à 9
+    // chiffres pendant une vérification en cours bloquerait "Suivant" indéfiniment.
+    membres.value[idx]._serverConflict = undefined;
+    membres.value[idx]._phoneChecking = false;
+    delete membres.value[idx]._errors.telephone;
+    scheduleTelephoneCheck(idx);
 }
+
+function onPhoneBlur(idx: number) {
+    clearTimeout(phoneCheckTimers[idx]);
+    void checkTelephoneConflict(idx);
+}
+
+// ── Contrôle live du téléphone (avant "Suivant") ───────────────────────────
+// Le conflit (numéro déjà affecté à un autre livreur/personne, cf.
+// EquipeLivraisonController::detecterConflitTelephone()) ne doit plus être découvert
+// seulement à la soumission finale (steps 2/3 déjà remplis) : on le vérifie au blur du
+// champ, avec un filet de sécurité (goToStep2) pour tout numéro jamais encore vérifié.
+const phoneCheckTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+
+function scheduleTelephoneCheck(idx: number) {
+    clearTimeout(phoneCheckTimers[idx]);
+    phoneCheckTimers[idx] = setTimeout(() => {
+        void checkTelephoneConflict(idx);
+    }, 600);
+}
+
+async function checkTelephoneConflict(idx: number): Promise<void> {
+    const m = membres.value[idx];
+    // Convoyeur sans numéro : rien à vérifier, le champ reste facultatif (cf.
+    // EquipeLivraisonController::rules()). Format incomplet : le contrôle local suffit.
+    if (!m || !/^\d{9}$/.test(m.telephone)) return;
+
+    const phoneAtCallTime = m.telephone;
+    membres.value[idx]._phoneChecking = true;
+
+    try {
+        const params = new URLSearchParams({
+            telephone: `${GUINEA_PREFIX}${phoneAtCallTime}`,
+        });
+        if (m.livreur_id) params.set('livreur_id', m.livreur_id);
+        if (props.equipe?.id) params.set('equipe_id', props.equipe.id);
+
+        const res = await fetch(
+            `/backoffice/equipes-livraison/verifier-telephone?${params.toString()}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            },
+        );
+
+        // Le numéro a changé pendant l'appel réseau : cette réponse est obsolète, on l'ignore
+        // pour ne jamais afficher un verdict qui ne correspond plus à la valeur affichée.
+        if (membres.value[idx]?.telephone !== phoneAtCallTime) return;
+
+        if (res.ok) {
+            const data = await res.json();
+            membres.value[idx]._serverConflict = data.conflict
+                ? ((data.message as string | null) ??
+                  'Ce numéro est déjà utilisé.')
+                : null;
+            if (data.conflict) {
+                membres.value[idx]._errors.telephone = membres.value[idx]
+                    ._serverConflict as string;
+            } else {
+                delete membres.value[idx]._errors.telephone;
+            }
+        }
+    } catch {
+        // Vérification live indisponible (réseau) : le garde-fou serveur final (submit())
+        // reste actif, jamais de blocage silencieux ici.
+    } finally {
+        if (membres.value[idx]?.telephone === phoneAtCallTime) {
+            membres.value[idx]._phoneChecking = false;
+        }
+    }
+}
+
+const hasPendingPhoneCheck = computed(() =>
+    membres.value.some((m) => m._phoneChecking),
+);
 
 function validateStep1(): boolean {
     const phones = new Set<string>();
@@ -252,12 +354,26 @@ function validateStep1(): boolean {
             m._errors.role = 'Rôle requis';
             valid = false;
         }
-        if (!m.telephone || !/^\d{9}$/.test(m.telephone)) {
+
+        // Téléphone obligatoire pour un chauffeur ; facultatif pour un convoyeur
+        // (cf. EquipeLivraisonController::rules() — incident Sentry PHP-LARAVEL-66).
+        if (!m.telephone) {
+            if (m.role === 'chauffeur') {
+                m._errors.telephone = '9 chiffres requis';
+                valid = false;
+            }
+        } else if (!/^\d{9}$/.test(m.telephone)) {
             m._errors.telephone = '9 chiffres requis';
             valid = false;
         } else if (phones.has(m.telephone)) {
             m._errors.telephone = 'Numéro déjà utilisé';
             valid = false;
+        } else if (m._serverConflict) {
+            // Conflit détecté par le contrôle live (checkTelephoneConflict) — doit lui aussi
+            // bloquer le passage à l'étape 2, pas seulement s'afficher.
+            m._errors.telephone = m._serverConflict;
+            valid = false;
+            phones.add(m.telephone);
         } else {
             phones.add(m.telephone);
         }
@@ -266,7 +382,19 @@ function validateStep1(): boolean {
     return valid && membres.value.length > 0;
 }
 
-function goToStep2() {
+async function goToStep2() {
+    // Filet de sécurité : force la vérification de tout numéro complet jamais encore
+    // contrôlé côté serveur (ex: l'utilisateur presse "Suivant" avant la fin du debounce
+    // du blur) — "Suivant" ne doit jamais s'appuyer sur un numéro non vérifié (cf. incident
+    // Sentry PHP-LARAVEL-66, réapparu en prod le 2026-09-02).
+    await Promise.all(
+        membres.value.map((m, i) =>
+            /^\d{9}$/.test(m.telephone) && m._serverConflict === undefined
+                ? checkTelephoneConflict(i)
+                : Promise.resolve(),
+        ),
+    );
+
     if (!validateStep1()) return;
     markChanged();
     initPartagesParCategorie();
@@ -335,6 +463,43 @@ function onPartageCategorieUpdate(
     };
 }
 
+function onMontantPartageChange(
+    categorieId: string,
+    membreId: string,
+    montant: number | null,
+) {
+    const parts = partagesParCategorie.value[categorieId] ?? [];
+    onPartageCategorieUpdate(
+        categorieId,
+        parts.map((part) =>
+            part.id === membreId
+                ? { ...part, montant_unitaire: montant ?? 0 }
+                : part,
+        ),
+    );
+}
+
+function totalPartageCategorie(categorieId: string): number {
+    return (partagesParCategorie.value[categorieId] ?? []).reduce(
+        (total, part) => total + (part.montant_unitaire || 0),
+        0,
+    );
+}
+
+function restePartageCategorie(categorieId: string, enveloppe: number): number {
+    return enveloppe - totalPartageCategorie(categorieId);
+}
+
+function etatPartageCategorie(
+    categorieId: string,
+    enveloppe: number,
+): 'reste' | 'depassement' | 'complet' {
+    const reste = restePartageCategorie(categorieId, enveloppe);
+    if (reste > 0) return 'reste';
+    if (reste < 0) return 'depassement';
+    return 'complet';
+}
+
 // ── Partage : validité ───────────────────────────────────────────────────
 
 // CHAQUE catégorie ayant un barème Livreur > 0 doit voir sa somme égaler
@@ -388,6 +553,7 @@ function formatGNF(val: number | null): string {
 
 function formatPhone(local: string): string {
     const d = local.replace(/\D/g, '');
+    if (!d) return '—';
     return `+224 ${d.slice(0, 3)} ${d.slice(3, 5)} ${d.slice(5, 7)} ${d.slice(7)}`;
 }
 
@@ -411,6 +577,9 @@ function buildPayload() {
         // Vehicule::proprietaire_id (cf. EquipeLivraisonController), pour ne jamais désynchroniser
         // l'équipe du propriétaire réel du véhicule.
         is_active: props.equipe?.is_active ?? true,
+        // Le partage saisi ne remplace que CE processus — jamais un fallback implicite vers
+        // vente (cf. EquipeLivraisonController::syncPartagesCategorie()).
+        processus_code: props.processusActif,
     };
 
     return {
@@ -418,7 +587,7 @@ function buildPayload() {
         membres: membres.value.map((m, i) => ({
             livreur_id: m.livreur_id ?? null,
             nom_complet: m.nom_complet.trim() || null,
-            telephone: `${GUINEA_PREFIX}${m.telephone}`,
+            telephone: m.telephone ? `${GUINEA_PREFIX}${m.telephone}` : null,
             role: m.role,
             ordre: i,
         })),
@@ -509,7 +678,7 @@ const hasStep1Errors = computed(() =>
         :visible="visible"
         modal
         :header="stepTitle"
-        :style="{ width: 'min(960px, 95vw)' }"
+        :style="{ width: 'min(1080px, 96vw)' }"
         :dismissable-mask="false"
         :closable="true"
         @update:visible="
@@ -556,6 +725,27 @@ const hasStep1Errors = computed(() =>
             </template>
         </div>
 
+        <div
+            v-if="step === 2"
+            class="mb-4 flex items-start gap-3 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3"
+        >
+            <Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+                <p class="text-sm font-semibold text-foreground">
+                    Répartition —
+                    {{
+                        processusOptions.find((o) => o.value === processusActif)
+                            ?.label ?? processusActif
+                    }}
+                </p>
+                <p class="mt-0.5 text-xs leading-5 text-muted-foreground">
+                    Attribuez entièrement l'enveloppe Livreur de chaque
+                    catégorie. Les autres processus conservent leur propre
+                    répartition.
+                </p>
+            </div>
+        </div>
+
         <!-- Erreurs serveur -->
         <div
             v-if="Object.keys(serverErrors).length > 0"
@@ -589,7 +779,13 @@ const hasStep1Errors = computed(() =>
                         >
                             <th class="w-36 px-3 py-2.5">Rôle *</th>
                             <th class="px-3 py-2.5">Nom complet ou surnom</th>
-                            <th class="w-52 px-3 py-2.5">Téléphone *</th>
+                            <th class="w-52 px-3 py-2.5">
+                                Téléphone
+                                <span
+                                    class="font-normal text-muted-foreground/70"
+                                    >(obligatoire pour un chauffeur)</span
+                                >
+                            </th>
                             <th class="w-10 px-3 py-2.5"></th>
                         </tr>
                     </thead>
@@ -658,16 +854,28 @@ const hasStep1Errors = computed(() =>
                                         inputmode="numeric"
                                         maxlength="9"
                                         :value="m.telephone"
-                                        placeholder="9 chiffres"
+                                        :placeholder="
+                                            m.role === 'convoyeur'
+                                                ? '9 chiffres (optionnel)'
+                                                : '9 chiffres'
+                                        "
                                         class="min-w-0 flex-1 bg-background px-2 text-sm outline-none placeholder:text-muted-foreground"
                                         :data-testid="`telephone-${i}`"
                                         @input="onPhoneInput($event, i)"
                                         @keydown="handlePhoneKeydown"
+                                        @blur="onPhoneBlur(i)"
                                     />
                                 </div>
                                 <p
-                                    v-if="m._errors.telephone"
+                                    v-if="m._phoneChecking"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Vérification…
+                                </p>
+                                <p
+                                    v-else-if="m._errors.telephone"
                                     class="mt-1 text-xs text-destructive"
+                                    :data-testid="`telephone-error-${i}`"
                                 >
                                     {{ m._errors.telephone }}
                                 </p>
@@ -694,7 +902,7 @@ const hasStep1Errors = computed(() =>
         </div>
 
         <!-- ── Étape 2 : Barèmes + partage livreurs PAR CATÉGORIE ──────────── -->
-        <div v-else-if="step === 2" class="space-y-5">
+        <div v-else-if="step === 2">
             <!-- Chaque catégorie a son propre barème Propriétaire ET Livraison
                  (Paramètres → Commissions) — jamais un montant global blended.
                  Le Propriétaire reste toujours informatif et non modifiable ici ;
@@ -709,57 +917,181 @@ const hasStep1Errors = computed(() =>
                 Commissions).
             </div>
 
-            <div
-                v-for="cat in baremesCommissionCategories"
-                :key="cat.categorie_id"
-                class="space-y-2"
-            >
-                <div class="rounded-lg border bg-muted/30 p-3">
-                    <p
-                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                    >
-                        {{ cat.categorie_nom }}
-                    </p>
-                    <p
-                        v-if="hasProprietaire"
-                        class="mt-1 text-sm font-semibold text-primary"
-                    >
-                        {{ formatGNF(cat.montant_proprietaire) }}
-                        <span class="font-normal text-muted-foreground"
-                            >/ unité — Propriétaire ({{
-                                proprietaireNom
-                            }})</span
+            <div v-else class="overflow-x-auto rounded-lg border bg-background">
+                <table class="w-full min-w-[760px] text-sm">
+                    <thead>
+                        <tr
+                            class="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground"
                         >
-                    </p>
-                    <p class="mt-1 text-sm font-semibold">
-                        {{ formatGNF(cat.montant_livraison) }}
-                        <span class="font-normal text-muted-foreground"
-                            >/ unité — Livreur</span
+                            <th class="w-[18%] px-4 py-3">Catégorie</th>
+                            <th class="w-[22%] px-4 py-3">Part propriétaire</th>
+                            <th class="w-[38%] px-4 py-3">
+                                Répartition par membre
+                            </th>
+                            <th class="w-[22%] px-4 py-3">Contrôle</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr
+                            v-for="cat in baremesCommissionCategories"
+                            :key="cat.categorie_id"
+                            class="align-top"
                         >
-                    </p>
-                    <p
-                        v-if="cat.montant_livraison <= 0"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Aucune répartition livreurs nécessaire pour cette
-                        catégorie.
-                    </p>
-                    <p v-else class="mt-2 text-sm font-medium">
-                        Commission Livreur à répartir :
-                        {{ formatGNF(cat.montant_livraison) }} / unité — la
-                        totalité de ce montant doit être attribuée aux membres.
-                    </p>
-                </div>
+                            <td class="px-4 py-4">
+                                <p class="font-semibold text-foreground">
+                                    {{ cat.categorie_nom }}
+                                </p>
+                            </td>
 
-                <CommissionMontantFixeEditor
-                    v-if="cat.montant_livraison > 0"
-                    :model-value="partagesParCategorie[cat.categorie_id] ?? []"
-                    :enveloppe-unitaire="cat.montant_livraison"
-                    @update:model-value="
-                        (list) =>
-                            onPartageCategorieUpdate(cat.categorie_id, list)
-                    "
-                />
+                            <td class="px-4 py-4">
+                                <template v-if="hasProprietaire">
+                                    <p class="font-semibold tabular-nums">
+                                        {{
+                                            formatGNF(cat.montant_proprietaire)
+                                        }}
+                                        / unité
+                                    </p>
+                                    <p
+                                        class="mt-1 truncate text-xs text-muted-foreground"
+                                    >
+                                        {{ proprietaireNom }}
+                                    </p>
+                                </template>
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
+                            </td>
+
+                            <td class="px-4 py-3">
+                                <p
+                                    v-if="cat.montant_livraison <= 0"
+                                    class="py-1 text-xs text-muted-foreground"
+                                >
+                                    Aucune répartition nécessaire
+                                </p>
+                                <div v-else class="space-y-2">
+                                    <div
+                                        v-for="m in partagesParCategorie[
+                                            cat.categorie_id
+                                        ] ?? []"
+                                        :key="m.id"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <span
+                                            class="min-w-0 flex-1 truncate text-xs font-medium"
+                                            :title="m.label"
+                                        >
+                                            {{ m.label }}
+                                        </span>
+                                        <InputNumber
+                                            :model-value="
+                                                m.montant_unitaire || null
+                                            "
+                                            placeholder="0"
+                                            :min="0"
+                                            :max-fraction-digits="0"
+                                            suffix=" GNF"
+                                            class="w-36 shrink-0"
+                                            :data-testid="`partage-livreur-montant-${m.id}`"
+                                            :input-style="{
+                                                textAlign: 'right',
+                                                width: '100%',
+                                                fontWeight: '600',
+                                            }"
+                                            @update:model-value="
+                                                onMontantPartageChange(
+                                                    cat.categorie_id,
+                                                    m.id,
+                                                    $event,
+                                                )
+                                            "
+                                        />
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td class="px-4 py-4">
+                                <template v-if="cat.montant_livraison > 0">
+                                    <p class="text-xs text-muted-foreground">
+                                        Attribué
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            formatGNF(
+                                                totalPartageCategorie(
+                                                    cat.categorie_id,
+                                                ),
+                                            )
+                                        }}
+                                        <span
+                                            class="font-normal text-muted-foreground"
+                                        >
+                                            /
+                                            {{
+                                                formatGNF(cat.montant_livraison)
+                                            }}
+                                        </span>
+                                    </p>
+                                    <p
+                                        class="mt-2 flex items-center gap-1.5 text-xs font-semibold"
+                                        :class="{
+                                            'text-emerald-600':
+                                                etatPartageCategorie(
+                                                    cat.categorie_id,
+                                                    cat.montant_livraison,
+                                                ) === 'complet',
+                                            'text-orange-600':
+                                                etatPartageCategorie(
+                                                    cat.categorie_id,
+                                                    cat.montant_livraison,
+                                                ) === 'reste',
+                                            'text-destructive':
+                                                etatPartageCategorie(
+                                                    cat.categorie_id,
+                                                    cat.montant_livraison,
+                                                ) === 'depassement',
+                                        }"
+                                        data-testid="partage-livreur-etat"
+                                    >
+                                        <CircleCheck
+                                            v-if="
+                                                etatPartageCategorie(
+                                                    cat.categorie_id,
+                                                    cat.montant_livraison,
+                                                ) === 'complet'
+                                            "
+                                            class="h-4 w-4 shrink-0"
+                                        />
+                                        <TriangleAlert
+                                            v-else
+                                            class="h-4 w-4 shrink-0"
+                                        />
+                                        <span>
+                                            {{
+                                                etatPartageCategorie(
+                                                    cat.categorie_id,
+                                                    cat.montant_livraison,
+                                                ) === 'complet'
+                                                    ? 'Répartition complète'
+                                                    : etatPartageCategorie(
+                                                            cat.categorie_id,
+                                                            cat.montant_livraison,
+                                                        ) === 'reste'
+                                                      ? `Reste ${formatGNF(restePartageCategorie(cat.categorie_id, cat.montant_livraison))}`
+                                                      : `Dépassement ${formatGNF(Math.abs(restePartageCategorie(cat.categorie_id, cat.montant_livraison)))}`
+                                            }}
+                                        </span>
+                                    </p>
+                                </template>
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -884,11 +1216,16 @@ const hasStep1Errors = computed(() =>
                     v-if="step === 1"
                     type="button"
                     size="sm"
-                    :disabled="membres.length === 0"
+                    :disabled="membres.length === 0 || hasPendingPhoneCheck"
                     @click="goToStep2"
                 >
-                    Suivant
-                    <ChevronRight class="ml-1 h-4 w-4" />
+                    <template v-if="hasPendingPhoneCheck">
+                        Vérification…
+                    </template>
+                    <template v-else>
+                        Suivant
+                        <ChevronRight class="ml-1 h-4 w-4" />
+                    </template>
                 </Button>
 
                 <Button

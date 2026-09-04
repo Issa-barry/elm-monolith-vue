@@ -64,6 +64,12 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface SiteOption {
+    id: string;
+    code: string;
+    label: string;
+}
+
 interface OptionInput {
     nom: string;
     valeurs: string[];
@@ -104,12 +110,22 @@ interface FormData {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    // Choix obligatoire, jamais de valeur implicite : l'utilisateur tranche explicitement
-    // s'il veut être alerté en cas de stock faible.
-    alerte_stock_active: boolean;
-    // null = hérite du seuil par défaut de l'organisation ; valeur = seuil spécifique à ce
-    // produit, appliqué à toutes ses variantes/sites (cf. StockStatutService).
-    seuil_alerte_stock: number | null;
+    // DISPONIBILITÉ — notion INDÉPENDANTE de l'alerte (cf. docblock StockStatutService côté
+    // serveur) : "tous" = ce produit est vendu/géré partout (défaut) ; "selection" = seulement
+    // sur les sites listés dans sites_disponibles. Un site non disponible n'a jamais de rupture
+    // "métier" à afficher, quel que soit son stock physique.
+    disponibilite_mode: 'tous' | 'selection';
+    sites_disponibles: string[];
+    // ALERTE — activation ET seuil configurés PAR SITE (remplace l'ancien choix global Oui/Non
+    // appliqué à tous les sites) — un site absent de ce tableau ou avec actif=false ne génère
+    // jamais de notification, quel que soit son stock (choix explicite requis site par site,
+    // jamais une case cochée automatiquement). Un site disponible mais sans alerte affiche quand
+    // même son état réel — le stock physique reste réel, jamais masqué par l'alerte. Seuil absent
+    // d'un site actif = hérite du seuil par défaut de l'organisation (cf. StockStatutService::
+    // seuilEffectifPourSite()). Toujours vide à la création (aucun site ne peut encore être
+    // configuré tant que le produit n'a pas d'id) ; peuplé par Edit.vue à partir des sites actifs
+    // de l'organisation.
+    seuils_site: { site_id: string; actif: boolean; seuil: number | null }[];
     description: string | null;
     // Tableau (même si un seul fichier ici) : le backend attend la clé "images[]"
     // (ProduitController::validerFormulaire()), partagée avec la galerie multi-photo.
@@ -134,9 +150,13 @@ const props = withDefaults(
         // ne gère que le produit simple (variante par défaut), pas l'ajout de déclinaisons après coup.
         allowDeclinaisons?: boolean;
         existingVariantes?: Variante[];
-        /** Seuil de stock faible par défaut de l'organisation (Paramètres) — affiché comme
-         * repère dans le choix "seuil par défaut / seuil spécifique" ci-dessous. */
+        /** Seuil de stock faible par défaut de l'organisation (Paramètres) — utilisé par tout
+         * site n'ayant pas de seuil spécifique ci-dessous. */
         seuilOrganisationDefaut?: number;
+        /** Sites ACTIFS de l'organisation, pour la section "Alerte de stock faible" par
+         * agence — absent/vide à la création (aucun produit id à rattacher), peuplé par
+         * Edit.vue. */
+        sites?: SiteOption[];
     }>(),
     {
         categories: () => [],
@@ -148,6 +168,7 @@ const props = withDefaults(
         allowDeclinaisons: false,
         existingVariantes: () => [],
         seuilOrganisationDefaut: 10,
+        sites: () => [],
     },
 );
 
@@ -308,19 +329,78 @@ const canSubmit = computed(
 
 defineExpose({ canSubmit });
 
-// ── Alerte de stock faible ──────────────────────────────────────────────────
-const seuilSpecifique = computed({
-    get: () => props.form.seuil_alerte_stock !== null,
-    set: (actif: boolean) => {
-        emit('update:form', {
-            ...props.form,
-            seuil_alerte_stock: actif
-                ? (props.form.seuil_alerte_stock ??
-                  props.seuilOrganisationDefaut)
-                : null,
-        });
-    },
-});
+// ── Disponibilité (indépendante de l'alerte, cf. FormData) ──────────────────
+function setDisponibiliteMode(mode: 'tous' | 'selection') {
+    emit('update:form', {
+        ...props.form,
+        disponibilite_mode: mode,
+        // Repartir d'une sélection vide en passant à "selection" : aucun site coché par
+        // défaut plutôt que de préremplir avec "tous", pour forcer un choix explicite.
+        sites_disponibles:
+            mode === 'selection' ? props.form.sites_disponibles : [],
+    });
+}
+
+function estSiteDisponible(siteId: string): boolean {
+    return props.form.sites_disponibles.includes(siteId);
+}
+
+function toggleSiteDisponible(siteId: string) {
+    const deja = estSiteDisponible(siteId);
+    emit('update:form', {
+        ...props.form,
+        sites_disponibles: deja
+            ? props.form.sites_disponibles.filter((id) => id !== siteId)
+            : [...props.form.sites_disponibles, siteId],
+    });
+}
+
+// Sites proposés à la section Alerte : uniquement ceux disponibles — inutile de surveiller un
+// site où ce produit n'est de toute façon pas vendu/géré (cf. StockStatutService::
+// disponiblePourSite(), le backend applique la même restriction indépendamment de ce filtre
+// d'affichage).
+const sitesDisponiblesPourAlerte = computed(() =>
+    props.form.disponibilite_mode === 'tous'
+        ? props.sites
+        : props.sites.filter((s) => estSiteDisponible(s.id)),
+);
+
+// ── Alerte de stock faible (activation + seuil par site) ────────────────────
+function actifPourSite(siteId: string): boolean {
+    return (
+        props.form.seuils_site.find((s) => s.site_id === siteId)?.actif ?? false
+    );
+}
+
+function seuilPourSite(siteId: string): number | null {
+    return (
+        props.form.seuils_site.find((s) => s.site_id === siteId)?.seuil ?? null
+    );
+}
+
+function majLignePourSite(
+    siteId: string,
+    patch: Partial<{ actif: boolean; seuil: number | null }>,
+) {
+    const existe = props.form.seuils_site.some((s) => s.site_id === siteId);
+    const seuils = existe
+        ? props.form.seuils_site.map((s) =>
+              s.site_id === siteId ? { ...s, ...patch } : s,
+          )
+        : [
+              ...props.form.seuils_site,
+              { site_id: siteId, actif: false, seuil: null, ...patch },
+          ];
+    emit('update:form', { ...props.form, seuils_site: seuils });
+}
+
+function setActifPourSite(siteId: string, actif: boolean) {
+    majLignePourSite(siteId, { actif });
+}
+
+function setSeuilPourSite(siteId: string, valeur: number | null) {
+    majLignePourSite(siteId, { seuil: valeur });
+}
 
 const previewUrl = ref<string | null>(null);
 
@@ -1239,6 +1319,80 @@ const depasseLimiteVariantes = computed(
             </div>
         </div>
 
+        <!-- Section : Disponibilité ──────────────────────────────────────── -->
+        <div
+            v-if="typeHasStock"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+        >
+            <h3
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Disponibilité
+            </h3>
+
+            <!-- "Ce produit est-il vendu/géré sur ce site ?" — notion INDÉPENDANTE de l'alerte
+                 ci-dessous (cf. StockStatutService::disponiblePourSite() côté serveur) : un site
+                 non disponible n'a jamais de rupture "métier" à afficher, quel que soit son
+                 stock physique. -->
+            <div class="space-y-4">
+                <template v-if="sites.length > 0">
+                    <div>
+                        <Label class="mb-2 block"
+                            >Où ce produit est-il disponible ?</Label
+                        >
+                        <div class="flex flex-wrap gap-4 sm:gap-6">
+                            <label
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <RadioButton
+                                    :model-value="form.disponibilite_mode"
+                                    value="tous"
+                                    @update:model-value="
+                                        setDisponibiliteMode('tous')
+                                    "
+                                />
+                                <span class="text-sm">Tous les sites</span>
+                            </label>
+                            <label
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <RadioButton
+                                    :model-value="form.disponibilite_mode"
+                                    value="selection"
+                                    @update:model-value="
+                                        setDisponibiliteMode('selection')
+                                    "
+                                />
+                                <span class="text-sm">Sites sélectionnés</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div
+                        v-if="form.disponibilite_mode === 'selection'"
+                        class="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border p-3"
+                    >
+                        <label
+                            v-for="site in sites"
+                            :key="site.id"
+                            class="flex cursor-pointer items-center gap-2"
+                        >
+                            <Checkbox
+                                :model-value="estSiteDisponible(site.id)"
+                                @update:model-value="
+                                    toggleSiteDisponible(site.id)
+                                "
+                            />
+                            <span class="text-sm">{{ site.label }}</span>
+                        </label>
+                    </div>
+                </template>
+                <p v-else class="text-xs text-muted-foreground">
+                    La disponibilité par agence se configure après la création
+                    du produit — par défaut, il sera disponible partout.
+                </p>
+            </div>
+        </div>
+
         <!-- Section : Stock ───────────────────────────────────────────────── -->
         <div
             v-if="typeHasStock"
@@ -1251,109 +1405,104 @@ const depasseLimiteVariantes = computed(
             </h3>
 
             <!-- L'état Disponible/Stock faible/Rupture est TOUJOURS calculé automatiquement
-                 (jamais saisi) — ce bloc ne configure que : voulez-vous être alerté, et à
-                 partir de quel seuil. -->
+                 (jamais saisi) et reste réel même sans alerte — ce bloc configure, PAR AGENCE
+                 DISPONIBLE (cf. section Disponibilité ci-dessus) : voulez-vous être notifié, et
+                 à partir de quel seuil. Aucune agence n'est surveillée par défaut, l'activation
+                 est un choix explicite par site (jamais une case cochée automatiquement). -->
             <div class="space-y-4">
-                <div>
-                    <Label class="mb-2 block"
-                        >Souhaitez-vous être alerté lorsque le stock devient
-                        faible ? <span class="text-destructive">*</span></Label
-                    >
-                    <div class="flex flex-wrap gap-4 sm:gap-6">
-                        <label class="flex cursor-pointer items-center gap-2">
-                            <RadioButton
-                                :model-value="form.alerte_stock_active"
-                                :value="true"
-                                @update:model-value="
-                                    $emit('update:form', {
-                                        ...form,
-                                        alerte_stock_active: true,
-                                    })
-                                "
-                            />
-                            <span class="text-sm">Oui</span>
-                        </label>
-                        <label class="flex cursor-pointer items-center gap-2">
-                            <RadioButton
-                                :model-value="form.alerte_stock_active"
-                                :value="false"
-                                @update:model-value="
-                                    $emit('update:form', {
-                                        ...form,
-                                        alerte_stock_active: false,
-                                        seuil_alerte_stock: null,
-                                    })
-                                "
-                            />
-                            <span class="text-sm">Non</span>
-                        </label>
-                    </div>
-                    <p
-                        v-if="errors.alerte_stock_active"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.alerte_stock_active }}
-                    </p>
-                </div>
-
-                <div
-                    v-if="form.alerte_stock_active"
-                    class="space-y-2 border-t pt-4"
-                >
-                    <Label class="block">Seuil d'alerte</Label>
-                    <label class="flex cursor-pointer items-center gap-2">
-                        <RadioButton
-                            :model-value="seuilSpecifique"
-                            :value="false"
-                            @update:model-value="seuilSpecifique = false"
-                        />
-                        <span class="text-sm"
-                            >Utiliser le seuil par défaut de l'organisation :
-                            {{ seuilOrganisationDefaut }} unités</span
-                        >
-                    </label>
-                    <label class="flex cursor-pointer items-center gap-2">
-                        <RadioButton
-                            :model-value="seuilSpecifique"
-                            :value="true"
-                            @update:model-value="seuilSpecifique = true"
-                        />
-                        <span class="text-sm"
-                            >Définir un seuil spécifique :</span
-                        >
-                        <InputNumber
-                            v-if="seuilSpecifique"
-                            :model-value="form.seuil_alerte_stock"
-                            @update:model-value="
-                                $emit('update:form', {
-                                    ...form,
-                                    seuil_alerte_stock: $event,
-                                })
-                            "
-                            :min="1"
-                            class="w-32"
-                            input-class="w-full"
-                        />
-                    </label>
+                <template v-if="sitesDisponiblesPourAlerte.length > 0">
                     <p class="text-xs text-muted-foreground">
-                        Le stock sera signalé comme faible lorsqu'une variante
-                        atteindra
-                        {{
-                            seuilSpecifique
-                                ? (form.seuil_alerte_stock ??
-                                  seuilOrganisationDefaut)
-                                : seuilOrganisationDefaut
-                        }}
-                        unités ou moins, sur un site donné — ce seuil s'applique
-                        à toutes les variantes de ce produit.
+                        Activez l'alerte agence par agence, parmi les agences où
+                        ce produit est disponible. Une agence non surveillée
+                        affiche toujours son stock réel, mais n'envoie aucune
+                        notification.
                     </p>
-                    <p
-                        v-if="errors.seuil_alerte_stock"
-                        class="text-xs text-destructive"
-                    >
-                        {{ errors.seuil_alerte_stock }}
-                    </p>
-                </div>
+                    <div class="divide-y rounded-lg border">
+                        <div
+                            v-for="site in sitesDisponiblesPourAlerte"
+                            :key="site.id"
+                            class="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_7rem_8rem] sm:items-center sm:gap-4"
+                        >
+                            <span class="min-w-0 text-sm font-medium">{{
+                                site.label
+                            }}</span>
+                            <div class="flex items-center gap-3 sm:gap-4">
+                                <div class="flex items-center gap-3">
+                                    <label
+                                        class="flex cursor-pointer items-center gap-1.5"
+                                    >
+                                        <RadioButton
+                                            :model-value="
+                                                actifPourSite(site.id)
+                                            "
+                                            :value="true"
+                                            @update:model-value="
+                                                setActifPourSite(site.id, true)
+                                            "
+                                        />
+                                        <span class="text-xs">Oui</span>
+                                    </label>
+                                    <label
+                                        class="flex cursor-pointer items-center gap-1.5"
+                                    >
+                                        <RadioButton
+                                            :model-value="
+                                                actifPourSite(site.id)
+                                            "
+                                            :value="false"
+                                            @update:model-value="
+                                                setActifPourSite(site.id, false)
+                                            "
+                                        />
+                                        <span class="text-xs">Non</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="flex min-h-10 items-center">
+                                <div
+                                    v-if="actifPourSite(site.id)"
+                                    class="flex flex-col gap-1"
+                                >
+                                    <InputNumber
+                                        :model-value="seuilPourSite(site.id)"
+                                        @update:model-value="
+                                            setSeuilPourSite(site.id, $event)
+                                        "
+                                        :min="1"
+                                        :placeholder="
+                                            String(seuilOrganisationDefaut)
+                                        "
+                                        class="w-28"
+                                        input-class="w-full text-right"
+                                    />
+                                    <span
+                                        v-if="seuilPourSite(site.id) === null"
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        Défaut : {{ seuilOrganisationDefaut }}
+                                    </span>
+                                </div>
+                                <span
+                                    v-else
+                                    class="text-[11px] leading-4 text-muted-foreground"
+                                >
+                                    Aucune alerte pour cette agence
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <p
+                    v-else-if="sites.length > 0"
+                    class="text-xs text-muted-foreground"
+                >
+                    Aucune agence disponible pour ce produit — configurez la
+                    disponibilité ci-dessus pour pouvoir activer une alerte.
+                </p>
+                <p v-else class="text-xs text-muted-foreground">
+                    L'alerte de stock faible se configure agence par agence,
+                    disponible après la création du produit.
+                </p>
             </div>
         </div>
 

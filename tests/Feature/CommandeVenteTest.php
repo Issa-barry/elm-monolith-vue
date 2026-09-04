@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ClientType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
 use App\Models\FactureVente;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
@@ -1145,9 +1149,14 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
-    // ── référence CMD-JJMMAA-XXX ─────────────────────────────────────────────
+    // ── référence PREFIXE-JJMMAA-XXX (VTE/DST/TRF, révisé le 31/08/2026) ─────
 
-    public function test_store_genere_reference_au_format_cmd(): void
+    /**
+     * Remplace l'ancien test_store_genere_reference_au_format_cmd : décision produit du
+     * 31/08/2026, le préfixe dépend désormais de nature_operation — vente_standard reçoit
+     * VTE- (jamais CMD-, réservé aux références déjà émises avant ce chantier).
+     */
+    public function test_store_genere_reference_au_format_vte_pour_vente_standard(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
@@ -1163,10 +1172,77 @@ class CommandeVenteTest extends TestCase
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
 
         $this->assertNotNull($commande);
-        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $commande->reference);
+        $this->assertMatchesRegularExpression('/^VTE-\d{6}-\d{3}$/', $commande->reference);
     }
 
-    public function test_references_incrementales_dans_le_mois(): void
+    /**
+     * distribution_client (client DISTRIBUTEUR + véhicule autorisé pour la logistique + livreur
+     * actif assigné) reçoit DST- — jamais VTE-, jamais le même compteur que la vente standard
+     * (séquences indépendantes par préfixe, cf. ReferenceNumeroService). Un véhicule vente-only
+     * (le défaut de makeContext()) ne suffit plus depuis le durcissement du 31/08/2026 de
+     * NatureOperation::deriverParDefaut() — cf. test_distribution_exige_vehicule_logistique_*
+     * ci-dessous pour la couverture de ce durcissement lui-même.
+     */
+    public function test_store_genere_reference_au_format_dst_pour_distribution_client(): void
+    {
+        ['produit' => $produit] = $this->makeContext($this->org);
+        $vehicule = $this->makeVehiculeLogistiqueAvecChauffeur();
+        $distributeur = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => ClientType::DISTRIBUTEUR->value,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'client_id' => $distributeur->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
+
+        $this->assertNotNull($commande);
+        $this->assertSame('distribution_client', $commande->nature_operation->value);
+        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
+        $this->assertMatchesRegularExpression('/^DST-\d{6}-\d{3}$/', $commande->reference);
+    }
+
+    /**
+     * Véhicule autorisé pour l'usage logistique (livraison_logistique = true), avec une équipe
+     * active et un chauffeur actif assigné — le seul type de véhicule qu'une distribution client
+     * peut légitimement utiliser depuis le 31/08/2026 (cf. CommandeVenteController::
+     * ensureNatureOperationCoherente()).
+     */
+    private function makeVehiculeLogistiqueAvecChauffeur(bool $livraisonVenteAussi = false): Vehicule
+    {
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'livraison_vente' => $livraisonVenteAussi,
+            'livraison_logistique' => true,
+            'is_active' => true,
+        ]);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Équipe Distribution Test',
+            'is_active' => true,
+        ]);
+        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+
+        return $vehicule->fresh();
+    }
+
+    /**
+     * Le compteur est désormais journalier et scopé par organisation + préfixe (cf.
+     * ReferenceNumeroService) — remplace l'ancien test_references_incrementales_dans_le_mois,
+     * dont le nom supposait à tort un compteur mensuel.
+     */
+    public function test_references_incrementales_dans_la_meme_journee_pour_le_meme_prefixe(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule, 'client' => $client] = $this->makeContext($this->org);
 
@@ -1189,6 +1265,8 @@ class CommandeVenteTest extends TestCase
 
         $this->assertStringEndsWith('-001', $commandes->first()->reference);
         $this->assertStringEndsWith('-002', $commandes->last()->reference);
+        $this->assertStringStartsWith('VTE-', $commandes->first()->reference);
+        $this->assertStringStartsWith('VTE-', $commandes->last()->reference);
     }
 
     public function test_valider_sets_a_charger_at_timestamp(): void

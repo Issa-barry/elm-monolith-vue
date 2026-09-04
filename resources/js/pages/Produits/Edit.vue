@@ -43,6 +43,12 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface SiteOption {
+    id: string;
+    code: string;
+    label: string;
+}
+
 interface VarianteOption {
     option: string;
     valeur: string;
@@ -80,8 +86,6 @@ interface ProduitData {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    alerte_stock_active: boolean;
-    seuil_alerte_stock: number | null;
     description: string | null;
     image_url: string | null;
     variantes_count: number;
@@ -96,6 +100,11 @@ const props = defineProps<{
     fournisseurs: FournisseurOption[];
     limites: Limites;
     seuilOrganisationDefaut: number;
+    sites: SiteOption[];
+    seuilsAlerteSite: Record<
+        string,
+        { disponible: boolean; actif: boolean; seuil: number | null }
+    >;
 }>();
 
 const showVarianteModal = ref(false);
@@ -128,6 +137,18 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.produit.nom, href: '#' },
 ];
 
+// Disponibilité — indépendante de l'alerte (cf. ProduitForm.vue) : mode "selection" dès qu'au
+// moins un site actif est explicitement marqué non disponible, "tous" sinon (comportement par
+// défaut, aucune restriction).
+const sitesNonDisponibles = props.sites.filter(
+    (s) => props.seuilsAlerteSite[s.id]?.disponible === false,
+);
+const disponibiliteModeInitial: 'tous' | 'selection' =
+    sitesNonDisponibles.length > 0 ? 'selection' : 'tous';
+const sitesDisponiblesInitial = props.sites
+    .filter((s) => props.seuilsAlerteSite[s.id]?.disponible !== false)
+    .map((s) => s.id);
+
 const form = useForm({
     nom: props.produit.nom,
     categorie_id: props.produit.categorie_id,
@@ -143,8 +164,13 @@ const form = useForm({
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
-    alerte_stock_active: props.produit.alerte_stock_active,
-    seuil_alerte_stock: props.produit.seuil_alerte_stock,
+    disponibilite_mode: disponibiliteModeInitial,
+    sites_disponibles: sitesDisponiblesInitial,
+    seuils_site: props.sites.map((s) => ({
+        site_id: s.id,
+        actif: props.seuilsAlerteSite[s.id]?.actif ?? false,
+        seuil: props.seuilsAlerteSite[s.id]?.seuil ?? null,
+    })),
     description: props.produit.description,
     images: [] as File[],
     options: [] as {
@@ -210,6 +236,7 @@ function submit() {
                 :fournisseurs="fournisseurs"
                 :limites="limites"
                 :seuil-organisation-defaut="seuilOrganisationDefaut"
+                :sites="sites"
                 :processing="form.processing"
                 :current-image-url="produit.image_url"
                 :current-sku="produit.sku"

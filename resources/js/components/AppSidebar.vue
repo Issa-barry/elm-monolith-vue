@@ -120,6 +120,10 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
+            {
+                title: 'Distribution',
+                href: '/backoffice/distributions',
+            },
         ];
         if (moduleActive('pdv')) {
             ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
@@ -128,12 +132,6 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Factures',
             href: '/backoffice/factures',
         });
-        if (moduleActive('cashback')) {
-            ventesSubItems.push({
-                title: 'Cashback',
-                href: '/backoffice/cashback',
-            });
-        }
         items.push({
             title: 'Ventes',
             href: '/backoffice/ventes',
@@ -269,6 +267,36 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('comptabilite.read', 'comptabilite')) {
+        const commissionsSousItems: NavItem[] = [
+            {
+                title: 'Ventes',
+                href: '/backoffice/comptabilite/commissions/vente',
+            },
+            {
+                title: 'Logistique',
+                href: '/backoffice/comptabilite/commissions/logistique',
+            },
+            {
+                title: 'Propriétaires',
+                href: '/backoffice/comptabilite/commissions/proprietaires',
+            },
+            {
+                title: 'Sites',
+                href: '/backoffice/comptabilite/commissions/sites',
+            },
+            {
+                title: 'Consultants',
+                href: '/backoffice/comptabilite/commissions/consultants',
+            },
+        ];
+
+        if (moduleActive('cashback')) {
+            commissionsSousItems.push({
+                title: 'Cashback clients',
+                href: '/backoffice/comptabilite/commissions/cashback',
+            });
+        }
+
         items.push({
             title: 'Comptabilité',
             href: '/backoffice/comptabilite/tresorerie/financement',
@@ -296,28 +324,7 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Commissions',
                     href: '/backoffice/comptabilite/commissions/vente',
-                    items: [
-                        {
-                            title: 'Ventes',
-                            href: '/backoffice/comptabilite/commissions/vente',
-                        },
-                        {
-                            title: 'Logistique',
-                            href: '/backoffice/comptabilite/commissions/logistique',
-                        },
-                        {
-                            title: 'Propriétaires',
-                            href: '/backoffice/comptabilite/commissions/proprietaires',
-                        },
-                        {
-                            title: 'Sites',
-                            href: '/backoffice/comptabilite/commissions/sites',
-                        },
-                        {
-                            title: 'Consultants',
-                            href: '/backoffice/comptabilite/commissions/consultants',
-                        },
-                    ],
+                    items: commissionsSousItems,
                 },
                 {
                     title: 'Périodes',

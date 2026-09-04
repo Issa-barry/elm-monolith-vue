@@ -13,8 +13,10 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
+use App\Services\ImportFlotte\Normalizers\CapaciteColonneResolver;
 use App\Services\ImportFlotte\Normalizers\CountryNormalizer;
 use App\Services\ImportFlotte\Normalizers\ImportTextNormalizer;
+use App\Services\ImportFlotte\Normalizers\ImportValeurNormalizer;
 use App\Services\ImportFlotte\Normalizers\PhoneNormalizer;
 use App\Services\ImportFlotte\Normalizers\ReferenceValueResolver;
 use App\Traits\PhoneHandlerTrait;
@@ -66,11 +68,11 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * véhicule déjà existant (immatriculation déjà en base), une colonne vide reprend la
  * valeur déjà enregistrée plutôt que de la remettre à "non" — un import ne doit jamais
  * effacer silencieusement un usage déjà configuré. Ceci dit, l'exécuteur
- * (ImportFlotteExecutor) ne réécrit de toute façon aucun champ d'un véhicule déjà
- * existant (sauf la capacité, seule exception délibérée — voir son docblock de classe) :
- * cette ligne ne sert alors que d'ancrage pour ses livreurs/son équipe, comme
- * documenté plus haut — le repli ci-dessus ne fait que garder l'aperçu cohérent avec ce
- * qui sera réellement appliqué.
+ * (ImportFlotteExecutor) ne réécrit de toute façon les champs d'un véhicule déjà
+ * existant que pour la capacité et le site (exceptions délibérées — voir son docblock de
+ * classe) : pour tout le reste (dont les usages), cette ligne ne sert que d'ancrage pour
+ * ses livreurs/son équipe, comme documenté plus haut — le repli ci-dessus ne fait que
+ * garder l'aperçu cohérent avec ce qui sera réellement appliqué.
  *
  * Capacité (colonnes dynamiques "capacite__<REFERENCE>", ex: "capacite__BOUTEILLE_DEAU") : une
  * valeur saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites,
@@ -295,7 +297,7 @@ class ImportFlotteParser
 
             $equipeExistante = EquipeLivraison::where('vehicule_id', $vehicule->id)->whereNull('deleted_at')->first();
 
-            [$livreurs, $erreurs, $normalisations] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
+            [$livreurs, $erreurs, $normalisations, $avertissements] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
 
             if (! empty($erreurs)) {
                 $groupes[] = [
@@ -305,7 +307,7 @@ class ImportFlotteParser
                     'statut' => 'erreur',
                     'erreurs' => $erreurs,
                     'normalisations' => $normalisations,
-                    'avertissements' => [],
+                    'avertissements' => $avertissements,
                 ];
 
                 continue;
@@ -320,7 +322,7 @@ class ImportFlotteParser
                 'statut' => 'valide',
                 'erreurs' => [],
                 'normalisations' => $normalisations,
-                'avertissements' => [],
+                'avertissements' => $avertissements,
                 'vehicule' => [
                     'existe' => true,
                     'id' => $vehicule->id,
@@ -586,51 +588,7 @@ class ImportFlotteParser
      */
     private function resoudreColonnesCapacite(array $entetes, string $orgId): array
     {
-        $prefixe = self::CAPACITE_COLONNE_PREFIXE;
-        $longueurPrefixe = mb_strlen($prefixe);
-
-        $colonnes = [];
-        $referencesVues = [];
-        $referencesEnDoublon = [];
-
-        foreach ($entetes as $entete) {
-            if (mb_strtolower(mb_substr($entete, 0, $longueurPrefixe)) !== $prefixe) {
-                continue;
-            }
-
-            $reference = mb_strtoupper(trim(mb_substr($entete, $longueurPrefixe)), 'UTF-8');
-            if ($reference === '') {
-                continue;
-            }
-
-            if (isset($referencesVues[$reference])) {
-                $referencesEnDoublon[$reference] = true;
-            }
-            $referencesVues[$reference] = true;
-
-            $colonnes[] = ['cle' => $entete, 'reference' => $reference];
-        }
-
-        if (! empty($referencesEnDoublon)) {
-            return [
-                'colonnes' => [],
-                'erreur_doublon' => 'Colonnes de capacité en doublon pour la référence '
-                    .implode(', ', array_map(fn ($r) => "\"{$r}\"", array_keys($referencesEnDoublon)))
-                    .' — une seule colonne "capacite__<REFERENCE>" par catégorie est autorisée.',
-            ];
-        }
-
-        $categoriesParReference = Categorie::where('organization_id', $orgId)
-            ->whereIn('reference', array_column($colonnes, 'reference'))
-            ->get()
-            ->keyBy('reference');
-
-        foreach ($colonnes as &$colonne) {
-            $colonne['categorie'] = $categoriesParReference->get($colonne['reference']);
-        }
-        unset($colonne);
-
-        return ['colonnes' => $colonnes, 'erreur_doublon' => null];
+        return CapaciteColonneResolver::resoudre($entetes, $orgId, self::CAPACITE_COLONNE_PREFIXE);
     }
 
     /**
@@ -924,9 +882,10 @@ class ImportFlotteParser
         // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
         // (voir construction de 'equipe' plus bas). Un véhicule existant sans
         // ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs, $avertissementsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
         $normalisations = array_merge($normalisations, $normalisationsLivreurs);
+        $avertissements = array_merge($avertissements, $avertissementsLivreurs);
 
         if (! empty($erreurs)) {
             return [
@@ -1056,18 +1015,33 @@ class ImportFlotteParser
      *                                                                                   ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
      *                                                                                   cf. livreursParImmatSansConflit) — remontées séparément par
      *                                                                                   groupesConflitLivreurMultiVehicules().
-     * @return array{0: array, 1: string[], 2: string[]}
+     * @return array{0: array, 1: string[], 2: string[], 3: string[]}
      */
     private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
     {
         $livreurs = [];
         $erreurs = [];
         $normalisations = [];
+        $avertissements = [];
         $telephonesVus = [];
 
         $membresExistants = $equipeExistante
             ? $equipeExistante->membres()->with('livreur')->get()->keyBy(fn ($m) => $m->livreur?->telephone)
             : collect();
+
+        // Livreurs déjà en base pour cette organisation, avec un vrai nom saisi (jamais les
+        // livreurs "sans nom", dont libelleAffichage() replierait sur un téléphone ou le
+        // libellé générique "Livreur" — comparer ces valeurs-là créerait des faux positifs).
+        // Chargé une seule fois pour tout le groupe (pas par ligne), même principe que
+        // $membresExistants — le nom, contrairement au téléphone, n'est JAMAIS une clé
+        // d'identité (cf. Personne::resoudreOuCreer()) : ce contrôle ne sert qu'à avertir
+        // l'utilisateur d'un doublon probable AVANT création, jamais à rapprocher/fusionner
+        // silencieusement deux livreurs.
+        $livreursNommesOrg = Livreur::where('organization_id', $orgId)
+            ->whereNull('deleted_at')
+            ->with('personne')
+            ->get()
+            ->filter(fn (Livreur $l) => $l->nom_complet || $l->personne?->nom || $l->personne?->prenom);
 
         foreach ($lignesGroupe as $ligneInfo) {
             $ligne = $ligneInfo['donnees'];
@@ -1144,6 +1118,32 @@ class ImportFlotteParser
                 }
             }
 
+            // Aucun livreur retrouvé par téléphone : avant de conclure "nouveau livreur", on
+            // vérifie que son nom ne désigne pas en réalité un livreur déjà en base (faute de
+            // frappe sur le téléphone, numéro corrigé, deuxième contact de la même personne...)
+            // — même mécanique "valeur proche, à confirmer" que pour l'immatriculation véhicule
+            // (cf. ReferenceValueResolver::suggestClosest() plus haut dans ce fichier), jamais
+            // une fusion automatique : le téléphone reste la seule vraie clé de rapprochement.
+            if (! $livreurExistant && $nomComplet !== '' && $livreursNommesOrg->isNotEmpty()) {
+                $label = fn (Livreur $l) => $l->libelleAffichage();
+
+                $doublonExact = ReferenceValueResolver::matchExact($nomComplet, $livreursNommesOrg, $label);
+                if ($doublonExact !== null) {
+                    $erreurs[] = "Ligne {$numero} : un livreur nommé \"{$doublonExact->libelleAffichage()}\" existe déjà (téléphone {$doublonExact->telephone}). Vérifiez qu'il ne s'agit pas de la même personne avant de continuer avec un numéro différent, ou corrigez le nom si c'est bien quelqu'un d'autre.";
+
+                    continue;
+                }
+
+                $procheNom = ReferenceValueResolver::suggestClosest($nomComplet, $livreursNommesOrg, $label);
+                if ($procheNom !== null) {
+                    $procheLivreur = $livreursNommesOrg->first(fn (Livreur $l) => $l->libelleAffichage() === $procheNom);
+                    $avertissements[] = "\"{$nomComplet}\" ressemble à un livreur déjà existant : \"{$procheNom}\" ({$procheLivreur->telephone}).";
+                    $erreurs[] = "Ligne {$numero} : nom proche d'un livreur existant : \"{$procheNom}\" (téléphone {$procheLivreur->telephone}). Vérifiez qu'il ne s'agit pas de la même personne avant de continuer, ou corrigez le nom si c'est bien quelqu'un d'autre.";
+
+                    continue;
+                }
+            }
+
             $livreurs[] = [
                 'existe' => (bool) $livreurExistant,
                 'id' => $livreurExistant?->id,
@@ -1157,7 +1157,7 @@ class ImportFlotteParser
             ];
         }
 
-        return [$livreurs, $erreurs, $normalisations];
+        return [$livreurs, $erreurs, $normalisations, $avertissements];
     }
 
     /**
@@ -1167,15 +1167,7 @@ class ImportFlotteParser
      */
     private function toCapaciteOrNull(mixed $valeur): array
     {
-        $brut = trim((string) ($valeur ?? ''));
-        if ($brut === '') {
-            return [null, null];
-        }
-        if (! is_numeric($brut) || (int) $brut != $brut || (int) $brut < 1 || (int) $brut > 99999) {
-            return [null, "\"{$brut}\" (entier entre 1 et 99999 attendu)."];
-        }
-
-        return [(int) $brut, null];
+        return ImportValeurNormalizer::toEntierOuNull($valeur);
     }
 
     private function normaliserImmatriculation(string $valeur): string
@@ -1195,39 +1187,6 @@ class ImportFlotteParser
      */
     private function toUsageBool(mixed $valeur, bool $valeurParDefaut): array
     {
-        if ($valeur === null || $valeur === '') {
-            return [$valeurParDefaut, null];
-        }
-
-        $bool = $this->toBool($valeur);
-        if ($bool === null) {
-            return [$valeurParDefaut, sprintf(
-                '"%s" non reconnu (attendu : oui/non, yes/no, 1/0, true/false).',
-                trim((string) $valeur)
-            )];
-        }
-
-        return [$bool, null];
-    }
-
-    private function toBool(mixed $valeur): ?bool
-    {
-        if ($valeur === null || $valeur === '') {
-            return null;
-        }
-        // PhpSpreadsheet peut retourner un booléen PHP natif pour une cellule Excel de
-        // type booléen (formatData désactivé ou cellule sans format d'affichage) — sans ce
-        // cas, (string) false ci-dessous donnerait "" et ferait passer un "non"/"faux"
-        // légitime pour une valeur non reconnue.
-        if (is_bool($valeur)) {
-            return $valeur;
-        }
-        $v = ImportTextNormalizer::normalize((string) $valeur);
-
-        return match ($v) {
-            'oui', 'true', '1', 'vrai', 'yes', 'x' => true,
-            'non', 'false', '0', 'faux', 'no' => false,
-            default => null,
-        };
+        return ImportValeurNormalizer::toBoolAvecDefaut($valeur, $valeurParDefaut);
     }
 }

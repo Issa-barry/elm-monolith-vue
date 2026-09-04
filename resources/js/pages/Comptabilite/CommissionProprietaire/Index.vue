@@ -58,6 +58,8 @@ interface BeneficiaireRow extends StatutCommissionResolu {
     total_genere: number;
     en_attente_periode?: number;
     payable?: number;
+    /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
+    processus_labels: string[];
 }
 
 interface PeriodeOption {
@@ -82,6 +84,8 @@ const props = defineProps<{
     filtre_telephone: string;
     filtre_statut: string;
     filtre_site_ids: string[];
+    filtre_processus: string[];
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
@@ -101,6 +105,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'processus',
+        label: 'Processus',
+        type: 'multi-select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
+    {
         key: 'nom',
         label: 'Nom complet',
         type: 'text' as const,
@@ -117,7 +128,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Créée — en attente de période' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -140,6 +151,9 @@ const currentFilters = computed(() => ({
     telephone: props.filtre_telephone ?? '',
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
+    // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
+    // repli implicite sur 'vente'.
+    processus: props.filtre_processus ?? [],
 }));
 
 // Dialog paiement
@@ -213,6 +227,9 @@ function buildParams(): URLSearchParams {
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (props.filtre_nom) params.set('nom', props.filtre_nom);
     if (props.filtre_telephone) params.set('telephone', props.filtre_telephone);
+    for (const code of props.filtre_processus ?? []) {
+        params.append('processus[]', code);
+    }
     return params;
 }
 
@@ -249,14 +266,6 @@ const indexSummary = computed<CommissionIndexSummary>(() => ({
     remaining: props.kpis.solde_total,
     paid: props.kpis.total_verse,
 }));
-
-function statusValue(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'en_attente' : b.display_status;
-}
-
-function statusLabel(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'Partage à valider' : b.display_label;
-}
 
 function fmt(val: number | null | undefined) {
     return (
@@ -305,7 +314,7 @@ function fmtTel(tel: string | null | undefined): string {
             @export-excel="exportExcel"
             @export-pdf="exportPdf"
         >
-            <table class="w-full min-w-[1580px] text-sm">
+            <table class="w-full min-w-[1740px] text-sm">
                 <thead>
                     <tr class="border-b bg-muted/50">
                         <th
@@ -325,6 +334,12 @@ function fmtTel(tel: string | null | undefined): string {
                             class="px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Agence
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Processus
                         </th>
                         <th
                             scope="col"
@@ -380,6 +395,9 @@ function fmtTel(tel: string | null | undefined): string {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
+                    <!-- Ne transmet jamais le(s) processus coché(s) sur l'Index : la fiche détail
+                         garde son propre filtre indépendant (même pattern que
+                         Comptabilite/CommissionVente/Index.vue). -->
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
@@ -441,6 +459,23 @@ function fmtTel(tel: string | null | undefined): string {
                                 >—</span
                             >
                         </td>
+                        <td class="px-4 py-3" @click.stop>
+                            <div
+                                v-if="b.processus_labels.length"
+                                class="flex flex-wrap gap-1"
+                            >
+                                <span
+                                    v-for="label in b.processus_labels"
+                                    :key="label"
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{ label }}
+                                </span>
+                            </div>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </td>
                         <td
                             class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
                         >
@@ -477,8 +512,8 @@ function fmtTel(tel: string | null | undefined): string {
                         </td>
                         <td class="px-4 py-3">
                             <StatusDot
-                                :status="statusValue(b)"
-                                :label="statusLabel(b)"
+                                :status="b.display_status"
+                                :label="b.display_label"
                             />
                         </td>
                         <td

@@ -32,6 +32,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
@@ -133,6 +134,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
             'part_pourcentage' => 0,
@@ -437,7 +439,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est CREEE doit rester visible.');
         $this->assertSame('creee', $beneficiaire['commission_status']);
-        $this->assertSame('creee', $beneficiaire['display_status']);
+        $this->assertSame('en_attente', $beneficiaire['display_status']);
         $this->assertFalse($beneficiaire['can_pay']);
         $this->assertSame(10_000.0, $beneficiaire['total_genere']);
         $this->assertSame(10_000.0, $beneficiaire['en_attente_periode']);
@@ -483,7 +485,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
                 ->where('commission_summary.total_genere', 10_000)
                 ->where('commission_summary.en_attente_periode', 10_000)
                 ->where('commission_summary.payable', 0)
-                ->where('commission_summary.net_a_payer', 0)
+                ->where('commission_summary.net_a_payer', 10_000)
                 ->where('payable', false)
             );
     }

@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
@@ -19,6 +20,7 @@ use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -82,6 +84,8 @@ class CommissionSiteController extends Controller
             'filtre_site_ids' => $meta['filtre_site_ids'],
             'filtre_categorie_id' => $meta['filtre_categorie_id'],
             'filtre_site_type' => $meta['filtre_site_type'],
+            'filtre_processus' => $meta['filtre_processus'],
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $meta['filtre_periode'],
             'periodes_disponibles' => $periodesDisponibles,
             'sites' => Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
@@ -108,13 +112,14 @@ class CommissionSiteController extends Controller
         $site = Site::find($siteId);
         $nom = $site?->nom ?? '—';
 
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source.vehicule'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.vehicule'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_SITE)
             ->where('beneficiaire_id', $siteId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->where('cible_type', CommissionCibleType::CODE_SITE))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $filters = CommissionDetailFilters::fromRequest($request);
         $periodeFilter = $filters['periode'];
@@ -264,6 +269,8 @@ class CommissionSiteController extends Controller
                 'site_ids' => [],
                 'periode_range' => $periodeRange,
             ],
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'can_payer' => false,
         ]);
     }
@@ -286,6 +293,10 @@ class CommissionSiteController extends Controller
         }
         $filtreCategorieId = $this->scalarInput($request, 'categorie_id');
         $filtreSiteType = $this->scalarInput($request, 'site_type');
+        // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
+        // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
+        // et CommissionProcessusFilter).
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $isAdmin = $user->isAdmin();
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
@@ -311,6 +322,8 @@ class CommissionSiteController extends Controller
         } elseif (! $isAdmin && ! empty($siteIds)) {
             $query->whereIn('beneficiaire_id', $siteIds);
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if ($filtreCategorieId !== '') {
             $query->whereHas('enveloppe.lignes', fn ($q) => $q->where('categorie_id_snapshot', $filtreCategorieId));
@@ -373,6 +386,9 @@ class CommissionSiteController extends Controller
                 'total_genere' => $buckets['total_genere'],
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
+                // Toujours exposé, même filtré sur un seul processus (décision produit du
+                // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
+                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 // Jamais payable depuis cet écran, cf. docblock de classe.
                 'can_pay' => false,
             ];
@@ -401,6 +417,7 @@ class CommissionSiteController extends Controller
             'filtre_site_ids' => $filtreSiteIds,
             'filtre_categorie_id' => $filtreCategorieId,
             'filtre_site_type' => $filtreSiteType,
+            'filtre_processus' => $filtreProcessus,
             'site_types' => $siteTypes,
         ]];
     }
@@ -408,7 +425,7 @@ class CommissionSiteController extends Controller
     private function statutLabel(string $statut): string
     {
         return match ($statut) {
-            StatutCommission::CREEE->value => 'Créée',
+            StatutCommission::CREEE->value => 'À valider',
             StatutCommission::IMPAYE->value => 'Impayé',
             StatutCommission::PARTIEL->value => 'Partiel',
             StatutCommission::PAYE->value => 'Payé',
