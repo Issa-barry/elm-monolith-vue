@@ -104,7 +104,13 @@ class CommissionVenteLivreurProcessusFilterTest extends TestCase
             );
     }
 
-    public function test_totaux_de_la_repartition_par_processus_sont_corrects_et_ne_perdent_aucune_commission(): void
+    /**
+     * Le bloc UI « Répartition par processus » (et sa prop `breakdown_par_processus`) a été
+     * retiré de la fiche le 04/09/2026 — redondant avec les KPI. La garantie métier qu'il
+     * vérifiait (aucune commission perdue entre les 3 processus) reste couverte ici via
+     * `commission_summary.total_genere` et l'origine de chaque ligne de `commission_details`.
+     */
+    public function test_le_total_genere_consolide_les_3_processus_sans_perte(): void
     {
         $livreur = $this->makeLivreur();
         $this->makePartPourProcessus($livreur->id, CommissionProcessus::CODE_VENTE, 600000);
@@ -116,17 +122,12 @@ class CommissionVenteLivreurProcessusFilterTest extends TestCase
             ->assertOk();
 
         $props = $response->viewData('page')['props'];
-        $breakdown = collect($props['breakdown_par_processus'])->keyBy('code');
 
-        $this->assertEquals(600000.0, (float) $breakdown[CommissionProcessus::CODE_VENTE]['total_genere']);
-        $this->assertEquals(250000.0, (float) $breakdown[CommissionProcessus::CODE_DISTRIBUTION_CLIENT]['total_genere']);
-        $this->assertEquals(100000.0, (float) $breakdown[CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]['total_genere']);
-
-        // La somme des 3 lignes doit reconstituer exactement le total consolidé affiché dans les
-        // KPI — aucune commission de l'un des 3 processus ne doit disparaître de la vue globale.
-        $sommeBreakdown = collect($breakdown)->sum('total_genere');
-        $this->assertEquals((float) $props['commission_summary']['total_genere'], $sommeBreakdown);
-        $this->assertEquals(950000.0, $sommeBreakdown);
+        // Le total consolidé doit reconstituer exactement la somme des 3 processus — aucune
+        // commission ne doit disparaître de la vue globale.
+        $sommeDetails = collect($props['commission_details'])->sum('montant');
+        $this->assertEquals((float) $props['commission_summary']['total_genere'], $sommeDetails);
+        $this->assertEquals(950000.0, $sommeDetails);
 
         // Chaque ligne du détail par commande porte son origine, jamais un montant sans indication.
         $origines = collect($props['commission_details'])->pluck('processus')->sort()->values()->all();
@@ -152,9 +153,6 @@ class CommissionVenteLivreurProcessusFilterTest extends TestCase
                 ->where('commission_summary.total_genere', fn ($v) => (float) $v === 600000.0)
                 ->has('commission_details', 1)
                 ->where('commission_details.0.processus', CommissionProcessus::CODE_VENTE)
-                // Un processus précis étant déjà sélectionné, la répartition redondante n'est pas
-                // affichée.
-                ->where('breakdown_par_processus', null)
             );
     }
 

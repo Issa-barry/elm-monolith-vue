@@ -17,6 +17,7 @@ use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\TransfertActiviteService;
+use App\Services\TransfertLogistiqueService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -333,6 +334,28 @@ class TransfertLogistiqueController extends Controller
         $this->ensurePartageLivraisonCategorieConfigure($data, $orgId);
 
         $transfert = DB::transaction(function () use ($data, $orgId) {
+            // Résoudre + dédoublonner les lignes AVANT toute création, pour vérifier le stock
+            // disponible du site source avant de committer quoi que ce soit — même pattern que
+            // CommandeVenteController::store() (buildLignesDataAndTotal() puis
+            // assertStockDisponiblePourLignes(), avant CommandeVente::create()).
+            $lignesData = [];
+            $seen = [];
+            foreach ($data['lignes'] as $ligne) {
+                $variante = $this->resolveVariante($ligne);
+                if (isset($seen[$variante->id])) {
+                    continue;
+                }
+                $seen[$variante->id] = true;
+
+                $lignesData[] = [
+                    'variante_id' => $variante->id,
+                    'quantite_demandee' => $ligne['quantite_demandee'],
+                    'notes' => $ligne['notes'] ?? null,
+                ];
+            }
+
+            $this->assertStockDisponiblePourLignes($data['site_source_id'], $lignesData);
+
             $transfert = TransfertLogistique::create([
                 'organization_id' => $orgId,
                 'site_source_id' => $data['site_source_id'],
@@ -344,20 +367,8 @@ class TransfertLogistiqueController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
 
-            // Lignes — dédoublonner sur variante_id
-            $seen = [];
-            foreach ($data['lignes'] as $ligne) {
-                $variante = $this->resolveVariante($ligne);
-                if (isset($seen[$variante->id])) {
-                    continue;
-                }
-                $seen[$variante->id] = true;
-
-                $transfert->lignes()->create([
-                    'variante_id' => $variante->id,
-                    'quantite_demandee' => $ligne['quantite_demandee'],
-                    'notes' => $ligne['notes'] ?? null,
-                ]);
+            foreach ($lignesData as $ligneDatum) {
+                $transfert->lignes()->create($ligneDatum);
             }
 
             return $transfert;
@@ -519,6 +530,27 @@ class TransfertLogistiqueController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         DB::transaction(function () use ($data, $transfert_logistique) {
+            // Résoudre + dédoublonner les lignes AVANT toute modification, pour vérifier le
+            // stock disponible du site source avant de committer quoi que ce soit — même
+            // pattern que store().
+            $lignesData = [];
+            $seen = [];
+            foreach ($data['lignes'] as $ligne) {
+                $variante = $this->resolveVariante($ligne);
+                if (isset($seen[$variante->id])) {
+                    continue;
+                }
+                $seen[$variante->id] = true;
+
+                $lignesData[] = [
+                    'variante_id' => $variante->id,
+                    'quantite_demandee' => $ligne['quantite_demandee'],
+                    'notes' => $ligne['notes'] ?? null,
+                ];
+            }
+
+            $this->assertStockDisponiblePourLignes($data['site_source_id'], $lignesData);
+
             $transfert_logistique->update([
                 'site_source_id' => $data['site_source_id'],
                 'site_destination_id' => $data['site_destination_id'],
@@ -532,19 +564,8 @@ class TransfertLogistiqueController extends Controller
             // Remplacer toutes les lignes
             $transfert_logistique->lignes()->delete();
 
-            $seen = [];
-            foreach ($data['lignes'] as $ligne) {
-                $variante = $this->resolveVariante($ligne);
-                if (isset($seen[$variante->id])) {
-                    continue;
-                }
-                $seen[$variante->id] = true;
-
-                $transfert_logistique->lignes()->create([
-                    'variante_id' => $variante->id,
-                    'quantite_demandee' => $ligne['quantite_demandee'],
-                    'notes' => $ligne['notes'] ?? null,
-                ]);
+            foreach ($lignesData as $ligneDatum) {
+                $transfert_logistique->lignes()->create($ligneDatum);
             }
         });
 
@@ -757,6 +778,35 @@ class TransfertLogistiqueController extends Controller
             $totalVerse > 0 => StatutCommission::PARTIEL,
             default => StatutCommission::IMPAYE,
         };
+    }
+
+    /**
+     * Contrôle de disponibilité au moment de CRÉER ou MODIFIER un transfert (04/09/2026) — avant
+     * ce correctif, un transfert pouvait être créé avec une quantité demandée supérieure au
+     * stock, le seul contrôle existant intervenait au chargement (cf. TransfertLogistiqueService::
+     * checkDisponibiliteStockSource()). Délègue entièrement à TransfertLogistiqueService::
+     * verifierDisponibiliteLignes() — jamais de logique dupliquée ici, ce contrôleur ne fait que
+     * traduire le résultat en ValidationException affichée dans le formulaire. $lignesData est le
+     * format déjà résolu (variante_id + quantite_demandee), jamais recalculé. Même mécanique que
+     * CommandeVenteController::assertStockDisponiblePourLignes() — clé d'erreur 'lignes' comprise.
+     *
+     * @param  array<int, array{variante_id: string, quantite_demandee: int}>  $lignesData
+     *
+     * @throws ValidationException si au moins une ligne dépasse le disponible
+     */
+    private function assertStockDisponiblePourLignes(string $siteSourceId, array $lignesData): void
+    {
+        $errors = [];
+
+        TransfertLogistiqueService::verifierDisponibiliteLignes(
+            $siteSourceId,
+            array_map(fn (array $l) => ['variante_id' => $l['variante_id'], 'quantite' => $l['quantite_demandee']], $lignesData),
+            $errors,
+        );
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages(['lignes' => $errors]);
+        }
     }
 
     /**

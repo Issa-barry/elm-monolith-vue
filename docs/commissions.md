@@ -394,9 +394,8 @@ trois processus peuvent produire des parts pour le même bénéficiaire).
 Le sélecteur Processus garde ses 3 options (Vente/Distribution client/Transfert logistique) même
 après COMM-005 : `distribution_client` y désigne un processus VIVANT (nouvelles commissions
 générées en continu, cf. COMM-005), pas seulement un solde historique — retirer une option
-casserait la réconciliation du total déjà généré
-(`Comptabilite\CommissionVenteController::breakdownParProcessus()`) en plus de masquer une
-activité réelle et courante.
+masquerait une activité réelle et courante, restée consolidable dans `commission_summary` et
+tracée par bénéficiaire via la colonne « Origine » de `commission_details`.
 
 ### Listes (Index) — revu le 02/09/2026 (incident : sélection multiple silencieusement réduite au premier processus)
 
@@ -450,9 +449,8 @@ Seule différence restante entre écrans (signalée, non corrigée le 02/09/2026
 chaque fiche diffère toujours —
 
 - `CommissionVenteController::showLivreur()` : défaut **Tous les processus**, sélecteur dédié sur
-  la fiche elle-même (`CommissionGlobalFilters.vue`), bloc `CommissionProcessusBreakdown` en vue
-  consolidée, colonne « Origine » sur `commission_details` (détail ci-dessous, inchangé depuis le
-  31/08/2026).
+  la fiche elle-même (`CommissionGlobalFilters.vue`), colonne « Origine » sur `commission_details`
+  (détail ci-dessous, inchangé depuis le 31/08/2026).
 - `CommissionSiteController::show()` / `CommissionProprietaireController::show()` /
   `CommissionConsultantController::show()` : défaut **Vente** (`CODE_VENTE`), sans sélecteur dédié
   pour changer cette vue depuis la fiche elle-même — un utilisateur souhaitant y voir une
@@ -465,11 +463,6 @@ Détail du comportement `showLivreur()` (inchangé depuis le 31/08/2026) :
 - Un sélecteur Processus est visible sur la fiche elle-même (`CommissionGlobalFilters.vue`, prop
   optionnelle `processusOptions` — n'affecte aucun autre écran qui ne la fournit pas), avec un
   choix « Tous les processus » en tête (`CommissionProcessusFilter::optionsAvecTous()`).
-- En vue « Tous les processus », un bloc `CommissionProcessusBreakdown` ventile le total généré par
-  processus (Vente / Distribution client / Transfert logistique), dont la somme reconstitue
-  exactement `commission_summary.total_genere` — jamais un quatrième nombre indépendant. Ce bloc
-  disparaît dès qu'un processus précis est sélectionné (redondant, tout y appartient déjà à ce seul
-  processus).
 - Chaque ligne du détail par commande (`commission_details`) porte son origine
   (`processus`/`processus_label`) — affichée par `CommissionDetailTable.vue` (colonne « Origine »,
   visible uniquement si au moins une ligne la fournit) : jamais de montants de processus différents

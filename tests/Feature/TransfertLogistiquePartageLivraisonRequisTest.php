@@ -20,6 +20,7 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -173,6 +174,20 @@ class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
         return $this->actingAs($this->user)->post('/backoffice/logistique', $payload);
     }
 
+    /**
+     * Depuis le correctif du 04/09/2026 (contrôle de disponibilité déplacé à la création), tout
+     * produit gere_stock=true (cas par défaut de makeProduit()) doit disposer d'un stock
+     * suffisant sur le site source pour que la création aboutisse — sans rapport avec le garde-fou
+     * de partage commission testé ici.
+     */
+    private function seedStock(Produit $produit, int $qte = 100): void
+    {
+        VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $produit->variantePrincipale()->first()->id, 'site_id' => $this->siteSource->id],
+            ['organization_id' => $this->org->id, 'qte_stock' => $qte],
+        );
+    }
+
     private function basePayload(Vehicule $vehicule, Produit $produit, int $qte = 10): array
     {
         return [
@@ -209,6 +224,7 @@ class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
         $this->creerRegleEquipeLivraison($processus, 200);
         $this->definirPartage($vehicule, $this->categorie);
         $produit = $this->makeProduit();
+        $this->seedStock($produit);
 
         $this->postLogistique($this->basePayload($vehicule, $produit))
             ->assertSessionDoesntHaveErrors();
@@ -222,6 +238,7 @@ class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
         $vehicule = $this->makeVehiculeAvecEquipe();
         // Aucune CommissionRegle equipe_livraison créée : enveloppe résolue = 0, rien à exiger.
         $produit = $this->makeProduit();
+        $this->seedStock($produit);
 
         $this->postLogistique($this->basePayload($vehicule, $produit))
             ->assertSessionDoesntHaveErrors();
