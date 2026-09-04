@@ -39,9 +39,10 @@ use Throwable;
 
 /**
  * Moteur unique de génération d'enveloppes de commission — vente (standard ou distribution
- * client), et transfert logistique pour les organisations migrées vers ce moteur générique (cf.
- * CommissionTriggerService::estMigreVersMoteurGenerique()). Chaque méthode publique ouvre sa
- * PROPRE transaction, isolée, et n'échoue jamais de façon à faire annuler l'opération appelante :
+ * client) et transfert logistique, pour toute organisation (moteur unique depuis le
+ * 03/09/2026, cf. CommissionTriggerService — la bascule par organisation a été retirée).
+ * Chaque méthode publique ouvre sa PROPRE transaction, isolée, et n'échoue jamais de façon à
+ * faire annuler l'opération appelante :
  * toute erreur est interceptée et tracée dans commission_generation_attempts, jamais relancée vers
  * l'appelant. Cette isolation rend l'appel sans risque même imbriqué dans la transaction métier
  * déclenchante (chargement, encaissement...) — appelé en tout dernier, une fois toutes les
@@ -59,17 +60,15 @@ class CommissionEnveloppeGenerator
      * Résout un CommissionRegle PAR_UNITE_VENDUE par ligne de commande
      * (variante > produit > catégorie exacte > globale, décision AMOA #3),
      * agrège en une seule enveloppe par cible (décision AMOA #6). Le processus
-     * (vente ou logistique_transfert) est déterminé par CommandeVente::nature_operation,
+     * (vente ou distribution_client) est déterminé par CommandeVente::nature_operation,
      * figé à la création de la commande — jamais recalculé ici.
      *
-     * Révisé le 01/09/2026 (décision produit) : une distribution client route désormais vers
-     * CODE_LOGISTIQUE_TRANSFERT, jamais vers un processus CODE_DISTRIBUTION_CLIENT dédié — le
-     * métier confirme que le barème logistique s'applique uniformément aux opérations de
-     * distribution ET de transfert interne, il n'y a plus de configuration séparée à maintenir.
-     * CODE_DISTRIBUTION_CLIENT reste défini (App\Models\CommissionProcessus) uniquement pour
-     * les CommissionEnveloppe/CommissionRegle/EquipeLivraisonPartageCategorie déjà générées avant
-     * cette date — jamais recalculées, jamais migrées, toujours lisibles telles quelles (cf.
-     * CommissionProcessusFilter, qui les garde distinctement filtrables en reporting).
+     * Révisé le 02/09/2026 (décision produit) : "processus métier" (identité de la commission,
+     * reporting, historique) et "barème" (montant réellement appliqué) sont deux notions
+     * distinctes — une distribution client reste taguée CODE_DISTRIBUTION_CLIENT (jamais
+     * silencieusement reclassée), mais tant qu'aucune CommissionRegle active ne lui est
+     * explicitement propre, le montant appliqué est celui de CODE_LOGISTIQUE_TRANSFERT (cf.
+     * CommissionProcessusDefaults::processusResolutionBareme(), source unique de ce repli).
      */
     public static function genererPourCommandeVente(
         CommandeVente $commande,
@@ -86,22 +85,23 @@ class CommissionEnveloppeGenerator
         }
 
         $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
             : CommissionProcessus::CODE_VENTE;
 
         $ctx = self::contexteDepuisCommandeVente($commande);
 
         self::executerAvecTentative(
             $ctx, $processusCode, $declenchePar, $declencheurUserId,
-            fn (CommissionProcessus $processus) => self::genererDepuisContexte($ctx, $processus),
+            fn (CommissionProcessus $identite) => self::genererDepuisContexte(
+                $ctx, $identite, CommissionProcessusDefaults::processusResolutionBareme($identite),
+            ),
         );
     }
 
     /**
-     * Génère la commission d'un transfert logistique via le moteur générique — uniquement pour
-     * les organisations ayant activé le processus logistique_transfert (cf.
-     * CommissionTriggerService::estMigreVersMoteurGenerique()) ; sinon l'ancien moteur
-     * (CommissionLogistiqueService) reste seul appelé. $champQuantite ('quantite_chargee' ou
+     * Génère la commission d'un transfert logistique via le moteur générique — le seul moteur
+     * de commission logistique depuis le 03/09/2026 (retrait de la bascule par organisation
+     * et de l'ancien CommissionLogistiqueService). $champQuantite ('quantite_chargee' ou
      * 'quantite_recue') est décidé par l'appelant selon le déclencheur configuré pour
      * l'organisation, jamais ici.
      */
@@ -115,7 +115,8 @@ class CommissionEnveloppeGenerator
 
         self::executerAvecTentative(
             $ctx, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $declenchePar, $declencheurUserId,
-            fn (CommissionProcessus $processus) => self::genererDepuisContexte($ctx, $processus),
+            // Jamais de repli pour un transfert : logistique_transfert est déjà son propre barème.
+            fn (CommissionProcessus $identite) => self::genererDepuisContexte($ctx, $identite, $identite),
         );
     }
 
@@ -381,7 +382,14 @@ class CommissionEnveloppeGenerator
 
     // ── Cœur générique : résolution de règles + agrégation par cible ─────────
 
-    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processus): void
+    /**
+     * $processusIdentite tague la CommissionEnveloppe créée (reporting/historique — jamais
+     * recalculé après coup) ; $processusBareme est celui dont les CommissionRegle/partages sont
+     * réellement lus pour calculer les montants — les deux diffèrent uniquement pour
+     * distribution_client tant qu'il n'a pas sa propre configuration (cf.
+     * CommissionProcessusDefaults::processusResolutionBareme()), identiques dans tous les autres cas.
+     */
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme): void
     {
         $vehicule = $ctx->vehicule;
         if (! $vehicule) {
@@ -420,7 +428,7 @@ class CommissionEnveloppeGenerator
             foreach ($cibles as $cibleCode) {
                 $regle = CommissionRegleResolver::resolve(
                     $ctx->organizationId,
-                    $processus->id,
+                    $processusBareme->id,
                     $cibleCode,
                     $variante?->id,
                     $produit?->id,
@@ -522,7 +530,7 @@ class CommissionEnveloppeGenerator
                     // grain plus fin.
                     $enveloppeUnitaire = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
                         $ctx->organizationId,
-                        $processus->id,
+                        $processusBareme->id,
                         $categorieId,
                         $vehicule->type_vehicule_id,
                         $earnedAt,
@@ -538,7 +546,7 @@ class CommissionEnveloppeGenerator
                     $quantiteCategorie = (int) $contribsCategorie->sum('quantite');
 
                     $partages = CommissionPartageLivraisonCategorieChecker::partagesActifs(
-                        $processus->id,
+                        $processusBareme->id,
                         $vehicule->equipe->id,
                         $categorieId,
                         $earnedAt,
@@ -693,7 +701,7 @@ class CommissionEnveloppeGenerator
                 'organization_id' => $ctx->organizationId,
                 'source_type' => $ctx->sourceType,
                 'source_id' => $ctx->sourceId,
-                'processus_id' => $processus->id,
+                'processus_id' => $processusIdentite->id,
                 'cible_type' => $e['cible_type'] ?? $cibleCode,
                 'cible_id' => $e['cible_id'],
                 'montant_total' => $e['montant'],

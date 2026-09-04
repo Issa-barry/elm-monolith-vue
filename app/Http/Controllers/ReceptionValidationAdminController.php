@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutTransfert;
+use App\Models\CommissionEnveloppe;
 use App\Models\TransfertLogistique;
 use App\Services\CommissionTriggerService;
 use App\Services\MouvementStockService;
@@ -24,20 +25,12 @@ class ReceptionValidationAdminController extends Controller
     {
         $this->authorize('validerReceptionAdmin', $transfert_logistique);
 
-        // Moteur générique (Paramètres > Commissions > Transferts logistiques) : le montant est
-        // désormais résolu par CommissionRegle, la saisie manuelle n'a plus de sens et n'est donc
-        // plus exigée. Ancien moteur (non migré) : comportement historique inchangé.
-        $migree = CommissionTriggerService::estMigreVersMoteurGenerique($transfert_logistique->organization_id);
-
         $data = $request->validate([
             'decision' => ['required', 'in:accord,refus,invalider'],
-            'montant_par_pack' => [$migree ? 'nullable' : 'required_if:decision,accord', 'nullable', 'integer', 'min:1'],
             'motif' => ['required_if:decision,refus', 'nullable', 'string', 'max:1000'],
         ], [
             'decision.required' => 'La décision est obligatoire.',
             'decision.in' => 'Décision invalide.',
-            'montant_par_pack.required_if' => 'Le montant par pack est obligatoire.',
-            'montant_par_pack.min' => 'Le montant par pack doit être supérieur à 0.',
             'motif.required_if' => 'Le motif de refus est obligatoire.',
         ]);
 
@@ -49,29 +42,25 @@ class ReceptionValidationAdminController extends Controller
                 'validation_motif' => null,
             ]);
 
-            $montantParPack = $migree || ! isset($data['montant_par_pack']) ? null : (float) $data['montant_par_pack'];
+            // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que si le
+            // paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement historique) —
+            // sous CHARGEMENT_VALIDE, la commission existe déjà depuis le départ du transfert
+            // (aucune régénération, cf. idempotence de CommissionEnveloppeGenerator). Montant
+            // toujours résolu par CommissionRegle (Paramètres > Commissions > Transferts
+            // logistiques), plus aucune saisie manuelle par transfert depuis le 03/09/2026.
+            CommissionTriggerService::onTransfertReceptionEffectuee($transfert_logistique);
 
-            try {
-                // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que
-                // si le paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement
-                // historique) — sous CHARGEMENT_VALIDE, la commission existe déjà depuis le
-                // départ du transfert et $commission vaut alors null (aucune régénération).
-                $commission = CommissionTriggerService::onTransfertReceptionEffectuee($transfert_logistique, $montantParPack);
+            $enveloppe = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+                ->where('source_id', $transfert_logistique->id)
+                ->first();
 
-                if ($commission) {
-                    TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord', [
-                        'commission_id' => $commission->id,
-                        'montant_total' => $commission->montant_total,
-                        'quantite_packs' => $commission->quantite_reference,
-                    ]);
-                } else {
-                    TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord');
-                }
-            } catch (\InvalidArgumentException $e) {
+            if ($enveloppe) {
+                TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord', [
+                    'commission_enveloppe_id' => $enveloppe->id,
+                    'montant_total' => $enveloppe->montant_total,
+                ]);
+            } else {
                 TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord');
-
-                return redirect()->route('logistique.show', $transfert_logistique)
-                    ->with('warning', 'Réception approuvée. '.$e->getMessage());
             }
 
             return redirect()->route('logistique.show', $transfert_logistique)

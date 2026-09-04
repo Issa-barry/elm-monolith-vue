@@ -286,7 +286,10 @@ class CommissionConsultantController extends Controller
             $filtrePeriode = '';
         }
         $filtreConsultantId = $this->scalarInput($request, 'consultant_id');
-        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
+        // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
+        // et CommissionProcessusFilter).
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $query = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
@@ -356,6 +359,9 @@ class CommissionConsultantController extends Controller
                 'total_genere' => $buckets['total_genere'],
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
+                // Toujours exposé, même filtré sur un seul processus (décision produit du
+                // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
+                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 // Jamais payable depuis cet écran, cf. docblock de classe.
                 'can_pay' => false,
             ];

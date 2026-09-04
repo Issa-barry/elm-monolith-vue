@@ -97,19 +97,31 @@ async function createVehiculeAvecEquipe(
     const phone0 = page.getByTestId('telephone-0');
     await phone0.click();
     await phone0.fill(membre.telephone);
+    await phone0.blur();
 
     // Pas de barème de commission configuré sur cette organisation (cf.
     // commentaire du test "créer une équipe..." plus bas) : les étapes
     // Répartition/Récapitulatif s'affichent vides, "Suivant" reste actif.
-    await dialog.getByRole('button', { name: /suivant/i }).click();
+    //
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()).
+    const suivantStep1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep1).toBeEnabled({ timeout: 10_000 });
+    await suivantStep1.click();
     await expect(
-        dialog.getByText(/répartition livreurs/i).first(),
+        dialog.getByText(/aucun barème de commission actif/i),
     ).toBeVisible({ timeout: 5_000 });
-    await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/récapitulatif/i).first()).toBeVisible({
-        timeout: 5_000,
+    const suivantStep2 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep2).toBeEnabled({ timeout: 5_000 });
+    await suivantStep2.click();
+    const enregistrerBtn = dialog.getByRole('button', {
+        name: /enregistrer l'équipe/i,
     });
-    await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
+    await expect(enregistrerBtn).toBeVisible({ timeout: 5_000 });
+    await enregistrerBtn.click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
 }
 
@@ -264,6 +276,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     const phone0 = page.getByTestId('telephone-0');
     await phone0.click();
     await phone0.fill('620111222');
+    await phone0.blur();
 
     // +224 affiché dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
@@ -283,7 +296,15 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     // commission-v2-full-chain.spec.ts, sur l'organisation dédiée "Eau La
     // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
     // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
-    await dialog.getByRole('button', { name: /suivant/i }).click();
+    //
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()).
+    const suivantStep1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantStep1).toBeEnabled({ timeout: 10_000 });
+    await suivantStep1.click();
     await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
         {
             timeout: 5_000,
@@ -558,10 +579,16 @@ test('étape 1 : conflit de téléphone avec un livreur d\'un AUTRE véhicule d�
     // Cœur de la demande : "Suivant" ne doit JAMAIS laisser passer à l'étape
     // "Répartition" tant que le conflit n'est pas résolu — réglé "en amont", pas
     // seulement découvert après un aller-retour complet du formulaire.
+    //
+    // "Répartition livreurs"/"Membres" sont aussi les libellés de navigation du
+    // stepper, toujours présents dans le DOM quel que soit l'étape active (cf.
+    // classe "hidden sm:inline" — visible dès le viewport par défaut des tests) :
+    // les utiliser pour vérifier qu'on N'A PAS avancé serait toujours faux. Le
+    // marqueur fiable est le maintien de l'erreur de conflit (donc de l'étape 1).
     await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/^membres$/i).first()).toBeVisible();
+    await expect(error0).toBeVisible();
     await expect(
-        dialog.getByText(/répartition livreurs/i),
+        dialog.getByText(/aucun barème de commission actif/i),
     ).not.toBeVisible({ timeout: 3_000 });
 
     // Corriger avec un numéro libre : le conflit disparaît et "Suivant" fonctionne.

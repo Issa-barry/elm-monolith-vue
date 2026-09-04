@@ -385,6 +385,7 @@ const hasActiveFilters = computed(
                         :options="field.options ?? []"
                         :placeholder="field.placeholder ?? field.label"
                         :disabled="field.disabled ?? false"
+                        :single-select="field.type === 'select'"
                     />
                     <Lock
                         v-if="field.disabled"
@@ -498,6 +499,7 @@ const hasActiveFilters = computed(
                                 :options="field.options ?? []"
                                 :placeholder="field.placeholder ?? 'Tous'"
                                 :disabled="field.disabled ?? false"
+                                :single-select="field.type === 'select'"
                             />
                         </div>
 

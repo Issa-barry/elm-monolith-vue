@@ -33,9 +33,9 @@ use Tests\TestCase;
 /**
  * Garde-fou préventif à la création d'un transfert logistique — symétrique à
  * CommandeVentePartageLivraisonRequisTest, cf. TransfertLogistiqueController::
- * ensurePartageLivraisonCategorieConfigure(). Ne s'applique qu'aux organisations déjà migrées
- * vers le moteur générique (processus logistique_transfert actif) — les autres restent sur
- * l'ancien CommissionLogistiqueService, qui n'a jamais utilisé de partage par catégorie.
+ * ensurePartageLivraisonCategorieConfigure(). S'applique à toute organisation depuis le
+ * 03/09/2026 (moteur générique devenu le seul moteur, retrait de la bascule par organisation
+ * estMigreVersMoteurGenerique() et de l'ancien CommissionLogistiqueService).
  */
 class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
 {
@@ -114,7 +114,8 @@ class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
         return $vehicule->fresh();
     }
 
-    /** Active le moteur générique — même mécanisme de bascule que CommissionTriggerService::estMigreVersMoteurGenerique(). */
+    /** Provisionne/active le processus logistique_transfert de l'organisation (auto-provisionné à
+     *  la volée par le moteur générique de toute façon — explicite ici pour les tests). */
     private function activerMoteurGenerique(): CommissionProcessus
     {
         return CommissionProcessus::create([
@@ -207,23 +208,6 @@ class TransfertLogistiquePartageLivraisonRequisTest extends TestCase
             ->where('code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)->firstOrFail();
         $this->creerRegleEquipeLivraison($processus, 200);
         $this->definirPartage($vehicule, $this->categorie);
-        $produit = $this->makeProduit();
-
-        $this->postLogistique($this->basePayload($vehicule, $produit))
-            ->assertSessionDoesntHaveErrors();
-
-        $this->assertDatabaseHas('transferts_logistiques', ['vehicule_id' => $vehicule->id]);
-    }
-
-    /**
-     * Organisation jamais migrée vers le moteur générique (aucun processus logistique_transfert
-     * actif) : reste sur l'ancien CommissionLogistiqueService, qui n'a jamais eu besoin de
-     * partage par catégorie — imposer ce garde-fou serait un frein injustifié.
-     */
-    public function test_store_autorise_sans_partage_si_organisation_non_migree(): void
-    {
-        $vehicule = $this->makeVehiculeAvecEquipe();
-        // Volontairement : ni processus logistique_transfert, ni régle, ni partage.
         $produit = $this->makeProduit();
 
         $this->postLogistique($this->basePayload($vehicule, $produit))

@@ -59,10 +59,17 @@ use Tests\TestCase;
  *  - idempotence de la génération (vente, distribution, transfert) ;
  *  - exclusivité mutuelle du moteur legacy et du moteur générique pour le transfert logistique ;
  *  - workflow CommandeVente pour distribution_client (hybride vente/logistique, réception avant
- *    LIVREE) — mais SA COMMISSION est routée sur CODE_LOGISTIQUE_TRANSFERT (décision produit du
- *    01/09/2026, révise ce fichier) : il n'existe plus que 2 processus réellement configurables
- *    (vente / logistique_transfert) ; CODE_DISTRIBUTION_CLIENT reste un code legacy, jamais
- *    reroutable, conservé uniquement pour les CommissionEnveloppe déjà générées avant cette date.
+ *    LIVREE).
+ *
+ * Décision produit du 02/09/2026 (révise ce fichier) : "processus métier" (identité, reporting)
+ * et "barème" (montant réellement appliqué) sont deux notions distinctes. Il existe 3 processus
+ * métier réels — vente, distribution_client, logistique_transfert — jamais fusionnés : chaque
+ * CommissionEnveloppe reste rattachée au processus de l'opération qui l'a générée. Seuls 2 sont
+ * configurables (Settings\CommissionRegleController::processusCodesDisponibles()) : tant que
+ * distribution_client n'a pas sa propre CommissionRegle active, son MONTANT est résolu par repli
+ * automatique sur celui de logistique_transfert (cf.
+ * CommissionProcessusDefaults::processusResolutionBareme()) — repli "tout ou rien" par
+ * organisation, jamais partiel.
  */
 class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
 {
@@ -264,25 +271,29 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
     // ── 1. Isolation vente / distribution (unifiée avec transfert logistique) ─
 
     /**
-     * Révisé le 01/09/2026 (décision produit) : distribution_client N'A PLUS son propre
-     * processus/barème — elle route désormais vers CODE_LOGISTIQUE_TRANSFERT, exactement comme
-     * un transfert interne. Ce test remplace l'ancien
-     * distribution_client_utilise_ses_propres_montants_isoles_de_vente(), dont la prémisse (un
-     * barème dédié à la distribution, isolé du transfert) est désormais fausse par décision
-     * produit explicite — seule l'isolation vis-à-vis de VENTE reste vraie et testée ici. Voir
+     * Décision produit du 02/09/2026 : distribution_client reste un processus RÉEL et distinct —
+     * chaque enveloppe générée pour une distribution lui est rattachée (identité/reporting),
+     * jamais silencieusement reclassée en logistique_transfert. Mais tant qu'aucune CommissionRegle
+     * active ne lui est propre, son MONTANT est résolu par repli automatique sur celui de
+     * logistique_transfert (cf. CommissionProcessusDefaults::processusResolutionBareme()). Ce test
+     * vérifie les deux à la fois : l'isolation du montant vis-à-vis de vente, et la conservation de
+     * l'identité distribution_client sur l'enveloppe malgré le barème hérité. Voir
      * distribution_et_transfert_partagent_le_meme_bareme_logistique_sans_double_commission()
-     * ci-dessous pour la preuve directe du partage avec un vrai transfert.
+     * ci-dessous pour la preuve directe du partage de barème avec un vrai transfert.
      */
     /** @test */
     public function distribution_client_utilise_le_bareme_logistique_isole_de_vente(): void
     {
         $vente = $this->processusPour(CommissionProcessus::CODE_VENTE);
         $logistique = $this->processusPour(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $distribution = $this->processusPour(CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
 
         $this->creerRegle($vente, CommissionCibleType::CODE_PROPRIETAIRE, 600);
         $this->creerRegle($vente, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
         $this->definirPartageCategorie($vente, [$this->livreur1->id => 180, $this->livreur2->id => 120]);
 
+        // Aucune CommissionRegle propre à distribution_client : son barème est donc entièrement
+        // hérité de logistique_transfert (repli "tout ou rien").
         $this->creerRegle($logistique, CommissionCibleType::CODE_PROPRIETAIRE, 900);
         $this->creerRegle($logistique, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 500);
         $this->definirPartageCategorie($logistique, [$this->livreur1->id => 300, $this->livreur2->id => 200]);
@@ -297,20 +308,22 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
 
         $this->assertSame(3000.0, (float) $enveloppeVenteProp->montant_total); // 600 × 5
         $this->assertSame(1500.0, (float) $enveloppeVenteLiv->montant_total); // 300 × 5
-        $this->assertSame(4500.0, (float) $enveloppeDistribProp->montant_total); // 900 × 5
-        $this->assertSame(2500.0, (float) $enveloppeDistribLiv->montant_total); // 500 × 5
+        $this->assertSame(4500.0, (float) $enveloppeDistribProp->montant_total); // 900 × 5, hérité de logistique
+        $this->assertSame(2500.0, (float) $enveloppeDistribLiv->montant_total); // 500 × 5, hérité de logistique
 
         $this->assertSame($vente->id, $enveloppeVenteProp->processus_id);
-        // La distribution est rattachée au processus LOGISTIQUE, jamais à un processus
-        // "distribution_client" dédié — c'est exactement le même $logistique->id qu'utiliserait
-        // un transfert logistique interne.
-        $this->assertSame($logistique->id, $enveloppeDistribProp->processus_id);
+        // L'enveloppe de distribution reste rattachée à SON PROPRE processus (identité/reporting),
+        // même si le montant provient du barème logistique par repli — jamais un simple alias de
+        // $logistique->id.
+        $this->assertSame($distribution->id, $enveloppeDistribProp->processus_id);
+        $this->assertSame($distribution->id, $enveloppeDistribLiv->processus_id);
     }
 
     /**
-     * Preuve directe de la décision produit du 01/09/2026 : un seul barème CODE_LOGISTIQUE_TRANSFERT
-     * sert à la fois une distribution client ET un transfert logistique — jamais de configuration
-     * séparée, jamais de double commission pour la même opération.
+     * Preuve directe de la décision produit du 02/09/2026 : un seul barème
+     * (CODE_LOGISTIQUE_TRANSFERT) sert à calculer le MONTANT d'une distribution client ET d'un
+     * transfert logistique — mais chaque opération reste rattachée à SON PROPRE processus
+     * d'identité, jamais fusionnés, et jamais de double commission pour la même opération.
      */
     /** @test */
     public function distribution_et_transfert_partagent_le_meme_bareme_logistique_sans_double_commission(): void
@@ -337,21 +350,13 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
             ->where('cible_type', CommissionCibleType::CODE_PROPRIETAIRE)
             ->firstOrFail();
 
-        // Même processus_id pour les deux — la preuve qu'il n'existe plus de configuration
-        // séparée "Distribution client".
-        $this->assertSame($logistique->id, $enveloppeDistribProp->processus_id);
-        $this->assertSame($logistique->id, $enveloppeTransfertProp->processus_id);
-        $this->assertSame(4500.0, (float) $enveloppeDistribProp->montant_total); // 900 × 5
+        // Processus d'identité toujours distincts — jamais fusionnés — même si le MONTANT provient
+        // du même barème logistique par repli.
+        $this->assertSame(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, $enveloppeDistribProp->processus->code);
+        $this->assertSame(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $enveloppeTransfertProp->processus->code);
+        $this->assertNotSame($enveloppeDistribProp->processus_id, $enveloppeTransfertProp->processus_id);
+        $this->assertSame(4500.0, (float) $enveloppeDistribProp->montant_total); // 900 × 5, barème hérité
         $this->assertSame(6300.0, (float) $enveloppeTransfertProp->montant_total); // 900 × 7
-
-        // Aucune commission "fantôme" sous l'ancien processus distribution_client, même s'il
-        // existe déjà pour l'organisation (provisionné à la volée par d'autres tests/imports).
-        $this->assertSame(
-            0,
-            CommissionEnveloppe::where('source_id', $commandeDistrib->id)
-                ->whereHas('processus', fn ($q) => $q->where('code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT))
-                ->count(),
-        );
 
         // Une seule enveloppe par cible pour la distribution — aucune double commission.
         $this->assertSame(1, CommissionEnveloppe::where('source_id', $commandeDistrib->id)->where('cible_type', CommissionCibleType::CODE_PROPRIETAIRE)->count());
@@ -408,12 +413,17 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
     /** @test */
     public function distribution_client_avec_bareme_mais_sans_partage_equipe_expose_a_regulariser_dans_le_show(): void
     {
-        $distribution = $this->processusPour(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
-        // Barème positif MAIS aucun definirPartageCategorie() pour ce processus.
-        $this->creerRegle($distribution, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 200);
+        $logistique = $this->processusPour(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $distribution = $this->processusPour(CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
+        // Barème positif sur logistique_transfert (hérité par distribution_client, faute de
+        // CommissionRegle propre) MAIS aucun definirPartageCategorie() pour ce processus.
+        $this->creerRegle($logistique, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 200);
 
         $commande = $this->creerCommande(NatureOperation::DISTRIBUTION_CLIENT, 5);
 
+        // La tentative reste tracée sous L'IDENTITÉ distribution_client (jamais
+        // logistique_transfert, même si c'est son barème qui a été consulté) — sinon
+        // getCommissionGenerationStatut() ne la retrouverait jamais pour cette commande.
         $this->assertDatabaseHas('commission_generation_attempts', [
             'source_type' => CommandeVente::class,
             'source_id' => $commande->id,
@@ -639,23 +649,32 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->assertSame($stockAvantReception, $stockApresReception);
     }
 
-    // ── 5/6. Transfert logistique : exclusivité mutuelle legacy / générique ──
+    // ── 5/6. Transfert logistique : moteur générique exclusif (legacy retiré le 03/09/2026) ──
 
+    /**
+     * Décision produit du 03/09/2026 : le moteur générique est le SEUL moteur de commission
+     * logistique — retrait de CommissionTriggerService::estMigreVersMoteurGenerique() et de
+     * l'ancien CommissionLogistiqueService, vérifié sans aucun solde `commission_logistique_parts`
+     * restant en production. Même sans qu'aucune CommissionRegle n'ait jamais été configurée pour
+     * logistique_transfert (absence de règle = 0 pour chaque cible, décision AMOA #4 — aucune
+     * cible ne se résout donc, aucune CommissionEnveloppe n'est créée), la table `commissions_logistiques`
+     * doit rester vide : aucun repli sur l'ancien moteur legacy ne doit jamais se produire.
+     */
     /** @test */
-    public function transfert_non_migre_utilise_uniquement_le_moteur_legacy(): void
+    public function transfert_najamais_de_repli_sur_le_legacy_meme_sans_regle_configuree(): void
     {
         Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
-        // Pas de règle logistique_transfert configurée => organisation non migrée.
+        // Volontairement : aucune CommissionRegle créée pour logistique_transfert.
 
         $transfert = $this->makeTransfert(qteChargee: 100);
         $this->actingAs($this->user);
         TransfertLogistiqueService::avancerStatut($transfert);
 
-        $this->assertDatabaseHas('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
+        $this->assertDatabaseMissing('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
         $this->assertSame(
             0,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count(),
-            'Une organisation non migrée ne doit jamais produire de CommissionEnveloppe pour un transfert.'
+            'Aucune cible ne peut se résoudre sans CommissionRegle (absence de règle = 0, décision AMOA #4) — aucune CommissionEnveloppe attendue, mais surtout aucun repli sur le legacy.'
         );
     }
 
@@ -688,6 +707,47 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
             1,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count()
         );
+    }
+
+    /**
+     * Régression du 02/09/2026 (incident production) : pour une organisation migrée, la
+     * commission d'un transfert n'est jamais écrite dans TransfertLogistique::commission
+     * (relation vers l'ancien CommissionLogistique, laissée volontairement intacte pour
+     * l'historique) — elle vit dans CommissionEnveloppe. Sans exposer cette information à la
+     * page Logistique/Show.vue, l'onglet "Commission logistique" affichait indéfiniment
+     * "en attente de validation admin" même après une génération réussie, avec le bouton
+     * "Générer commission" définitivement disparu (validation_reception déjà 'accord') — aucun
+     * moyen pour l'admin de voir que tout s'était bien passé.
+     */
+    /** @test */
+    public function le_show_expose_la_commission_generique_meme_quand_commission_legacy_reste_null(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+
+        $logistique = $this->processusPour(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $logistique->update(['statut' => CommissionActivationStatut::ACTIF->value]);
+        $this->creerRegle($logistique, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 200);
+        $this->definirPartageCategorie($logistique, [$this->livreur1->id => 120, $this->livreur2->id => 80]);
+
+        $transfert = $this->makeTransfert(qteChargee: 100);
+        $this->actingAs($this->user);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $transfert = $transfert->fresh();
+        $this->assertNull($transfert->commission, 'Le moteur générique n\'écrit jamais dans la relation legacy.');
+        $this->assertSame(
+            1,
+            CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count(),
+            'La commission générique doit pourtant avoir été générée.',
+        );
+
+        $this->actingAs($this->user)
+            ->get(route('logistique.show', $transfert))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transfert.commission', null)
+                ->where('transfert.commission_generique_genere', true)
+                ->where('transfert.commission_generique_montant_total', fn ($val) => (float) $val === 20000.0) // 100 × 200
+            );
     }
 
     /** @test */

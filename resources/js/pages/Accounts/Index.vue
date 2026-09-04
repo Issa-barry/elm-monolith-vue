@@ -8,16 +8,18 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     CheckCircle,
     CircleOff,
     MoreVertical,
+    Pencil,
     ShieldCheck,
     Users,
 } from 'lucide-vue-next';
@@ -407,6 +409,18 @@ function confirmToggle(a: Account) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <template v-if="data.type === 'agent'">
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/backoffice/users/${data.id}/edit`"
+                                                    class="flex w-full items-center gap-2"
+                                                >
+                                                    <Pencil class="h-4 w-4" />
+                                                    Modifier
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                        </template>
                                         <DropdownMenuItem
                                             class="cursor-pointer"
                                             :class="

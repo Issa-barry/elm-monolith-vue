@@ -76,7 +76,9 @@ export default async function globalSetup(config: FullConfig) {
 
 /**
  * Crée un transfert logistique via l'UI, l'amène jusqu'au statut RECEPTION
- * et génère la commission (montant_par_pack = 200 GNF, pré-rempli par défaut).
+ * et génère la commission (montant résolu par CommissionRegle — 200 GNF/pack
+ * pour les équipes de livraison, cf. EquipesLivraisonSeeder — plus aucune
+ * saisie manuelle depuis le 03/09/2026).
  * Retourne la référence du transfert (ex: "TRF-310826-001").
  */
 async function createTransfertAndGenerateCommission(
@@ -176,19 +178,14 @@ async function createTransfertAndGenerateCommission(
     await btnGenerer.waitFor({ state: 'visible', timeout: 20_000 });
     await btnGenerer.click();
 
-    // Étape 1 (review) : confirmer la réception
+    // Confirmer la réception : montant toujours résolu par CommissionRegle
+    // (Paramètres > Commissions > Transferts logistiques) depuis le 03/09/2026,
+    // plus de saisie manuelle ni d'étape "montant" intermédiaire.
     const btnOuiGenerer = page.getByRole('button', {
         name: /oui, générer la commission/i,
     });
     await btnOuiGenerer.waitFor({ state: 'visible', timeout: 10_000 });
     await btnOuiGenerer.click();
-
-    // Étape 2 (montant) : montant_par_pack pré-rempli à 200 GNF — confirmer directement
-    const btnConfirmer = page.getByRole('button', {
-        name: /confirmer et générer/i,
-    });
-    await btnConfirmer.waitFor({ state: 'visible', timeout: 10_000 });
-    await btnConfirmer.click();
 
     // Attendre que la commission soit générée (le bouton disparaît)
     await btnGenerer.waitFor({ state: 'hidden', timeout: 20_000 });
@@ -270,12 +267,15 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 
 /**
  * Paie intégralement la commission du livreur correspondant au regex, via sa fiche
- * de paiement (Comptabilité > Fiches). Le paiement DIRECT (page /logistique/commissions)
- * est désormais bloqué par PeriodePayabilityChecker::assertPartsNotClaimedByFiche dès
- * qu'une fiche existe pour la période du bénéficiaire — et valerPeriodeLivreurCourante
- * ci-dessus a déjà déclenché la génération automatique des fiches de tous les livreurs
- * de la période (PeriodeCalculatorService::creerFiche, appelé par le show() de la page
- * période). La fiche est donc le seul canal de paiement encore ouvert ici.
+ * de paiement (Comptabilité > Fiches). L'écran de paiement DIRECT dédié à la logistique
+ * (/backoffice/logistique/commissions) a été retiré le 04/09/2026 (moteur legacy
+ * CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026, cf.
+ * docs/commissions.md) ; même quand un canal direct existe encore ailleurs (Comptabilité >
+ * Commissions > Logistique), il reste bloqué par PeriodePayabilityChecker::
+ * assertPartsNotClaimedByFiche dès qu'une fiche existe pour la période du bénéficiaire — et
+ * validerPeriodeLivreurCourante ci-dessus a déjà déclenché la génération automatique des
+ * fiches de tous les livreurs de la période (PeriodeCalculatorService::creerFiche, appelé par
+ * le show() de la page période). La fiche est donc le seul canal de paiement ouvert ici.
  */
 async function payFullCommission(
     page: Page,

@@ -373,7 +373,11 @@ class UserController extends Controller
     {
         $this->authorize('update', $user);
 
-        $orgId = auth()->user()->organization_id;
+        // Org du compte CIBLE, pas de l'acteur : un super_admin édite depuis la console
+        // plateforme (/backoffice/comptes) des agents de n'importe quelle organisation,
+        // pas seulement la sienne — utiliser son propre organization_id renverrait la
+        // liste de sites de la MAUVAISE organisation.
+        $orgId = $user->organization_id;
         $defaultSite = $user->sites()->wherePivot('is_default', true)->first();
 
         return Inertia::render('Users/Edit', [
@@ -392,7 +396,7 @@ class UserController extends Controller
                 'matricule' => $user->matricule,
             ],
             'roles' => $this->getRoleOptions(),
-            'sites' => $this->getSiteOptions($orgId),
+            'sites' => $orgId ? $this->getSiteOptions($orgId) : [],
             'is_me' => $user->id === auth()->id(),
         ]);
     }
@@ -412,7 +416,11 @@ class UserController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
             'role' => ['required', Rule::in(self::STAFF_ROLES)],
-            'site_id' => 'required|exists:sites,id',
+            // Scopé à l'organisation du compte CIBLE (pas celle de l'acteur) : un super_admin
+            // peut désormais modifier un agent depuis la console plateforme /backoffice/comptes,
+            // qui liste des agents de toutes les organisations — sans ce scope, un site
+            // d'une autre organisation resterait accepté par `exists:sites,id` seul.
+            'site_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $user->organization_id)],
             'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
             'is_active' => 'boolean',
         ], [

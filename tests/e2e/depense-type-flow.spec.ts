@@ -16,11 +16,20 @@ test('accès depuis le sous-menu Dépenses et redirection de l’ancienne URL', 
     await page.goto('/backoffice/depenses');
     await expect(page).toHaveURL(/\/depenses$/);
 
-    // Le sous-menu Dépenses expose désormais Liste des dépenses + Types de dépense.
-    await page
-        .getByRole('button', { name: 'Dépenses', exact: true })
-        .click();
-    await page.getByRole('link', { name: 'Types de dépense' }).click();
+    // Le sous-menu Dépenses expose désormais Liste des dépenses + Types de dépense. Il est
+    // déjà déplié ici : NavMainItem.vue déplie automatiquement tout parent dont une route
+    // fille est active (cf. isParentActive/isMenuOpen), et /backoffice/depenses en fait
+    // partie — cliquer sur "Dépenses" le replierait plutôt que l'ouvrir. On ne clique donc
+    // que s'il est encore replié, pour rester robuste aux deux états.
+    const typesDeDepenseLink = page.getByRole('link', {
+        name: 'Types de dépense',
+    });
+    if (!(await typesDeDepenseLink.isVisible().catch(() => false))) {
+        await page
+            .getByRole('button', { name: 'Dépenses', exact: true })
+            .click();
+    }
+    await typesDeDepenseLink.click();
     await expect(page).toHaveURL(/\/backoffice\/depenses\/types$/, {
         timeout: 15_000,
     });
@@ -49,8 +58,11 @@ test('créer + vérifier + modifier + désactiver + supprimer un type de dépens
     // alphabétique par libellé côté backend), donc toujours visible en page 1
     // quel que soit le nombre de types déjà présents (seed par défaut inclus).
     await page.getByRole('button', { name: 'Nouveau type' }).click();
+    // Le titre d'un Dialog PrimeVue (prop `header`) est un <span>, jamais un heading
+    // ARIA — getByRole('heading', ...) ne matche donc jamais ici. On cible le dialog
+    // lui-même par son texte, comme partout ailleurs dans la suite (ex: stock-ajustement.spec.ts).
     await expect(
-        page.getByRole('heading', { name: 'Nouveau type de dépense' }),
+        page.locator('[role="dialog"]').filter({ hasText: 'Nouveau type de dépense' }),
     ).toBeVisible();
 
     await page.locator('#dt-libelle').fill(nom);
@@ -64,7 +76,7 @@ test('créer + vérifier + modifier + désactiver + supprimer un type de dépens
     // Modifier
     await row.getByTitle('Modifier').click();
     await expect(
-        page.getByRole('heading', { name: 'Modifier le type' }),
+        page.locator('[role="dialog"]').filter({ hasText: 'Modifier le type' }),
     ).toBeVisible();
     await page.locator('#dt-libelle').fill(nomModifie);
     await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
@@ -120,9 +132,12 @@ test('télécharger le modèle puis importer les types de dépense', async ({
 
     // Étape 1 : télécharger le modèle (déjà rempli d'exemples importables).
     await page.getByTestId('depense-types-import-trigger').click();
+    // <DropdownMenuItem as-child><a>...</a></DropdownMenuItem> (Index.vue) : le rôle
+    // "menuitem" du wrapper est fusionné sur le <a> enfant et prime sur son rôle
+    // implicite "link" — getByRole('link', ...) ne matcherait jamais cet élément.
     const [modeleDownload] = await Promise.all([
         page.waitForEvent('download'),
-        page.getByRole('link', { name: 'Télécharger le modèle' }).click(),
+        page.getByRole('menuitem', { name: 'Télécharger le modèle' }).click(),
     ]);
     const modelePath = await modeleDownload.path();
     expect(modelePath).not.toBeNull();
@@ -131,7 +146,9 @@ test('télécharger le modèle puis importer les types de dépense', async ({
     await page.getByTestId('depense-types-import-trigger').click();
     await page.getByTestId('depense-types-import-open').click();
     await expect(
-        page.getByRole('heading', { name: 'Importer des types de dépense' }),
+        page
+            .locator('[role="dialog"]')
+            .filter({ hasText: 'Importer des types de dépense' }),
     ).toBeVisible();
 
     await page.locator('input[type="file"]').setInputFiles(modelePath!);

@@ -220,7 +220,39 @@ class CommissionGenereeNotificationTest extends TestCase
         ]);
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreurUser->livreur->id, 'taux_commission' => 100]);
 
-        $produit = $this->makeProduitAvecVariante($org, ['nom' => 'Eau 19L '.uniqid()], ['prix_vente' => 5000]);
+        // Depuis la décision produit du 03/09/2026 (cf. CommissionTriggerService::onTransfertReceptionEffectuee),
+        // CommissionEnveloppeGenerator (moteur générique) est le SEUL moteur de commission
+        // logistique — `taux_commission` ci-dessus n'est plus lu pour le calcul. Il faut un
+        // CommissionRegle (cible équipe de livraison, à répartir) sur le processus
+        // logistique_transfert PLUS un partage par catégorie (EquipeLivraisonPartageCategorie),
+        // sans quoi le montant résout silencieusement à 0 (décision AMOA #4) — même schéma que
+        // database/seeders/EquipesLivraisonSeeder.php et le test vente ci-dessus.
+        $processusLogistique = CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $categorie = Categorie::create(['organization_id' => $org->id, 'nom' => 'Eau', 'statut' => 'actif']);
+
+        CommissionRegle::create([
+            'organization_id' => $org->id,
+            'processus_id' => $processusLogistique->id,
+            'libelle' => 'Équipe de livraison — Transfert logistique',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 300,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id,
+            'processus_id' => $processusLogistique->id,
+            'categorie_id' => $categorie->id,
+            'livreur_id' => $livreurUser->livreur->id,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 300,
+            'effective_from' => now()->subDay(),
+        ]);
+
+        $produit = $this->makeProduitAvecVariante($org, ['nom' => 'Eau 19L '.uniqid(), 'categorie_id' => $categorie->id], ['prix_vente' => 5000]);
         $variante = $produit->variantePrincipale()->first();
         $this->seedVarianteStockSuffisant($variante, $siteSource);
 

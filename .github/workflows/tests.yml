@@ -92,10 +92,9 @@ jobs:
     needs: changes
     # dev → pre-prod : suite complète, seule promotion qui la justifie (cf. e2e-smoke et
     # le job absent sur pre-prod → production → main plus bas).
-    # DÉSACTIVÉ TEMPORAIREMENT le 2026-09-01 pour accélérer une MEP urgente (dev → pre-prod
-    # passe alors sans E2E ; le garde-fou e2e-smoke reste actif sur pre-prod → production).
-    # Réactiver après la MEP en retirant le `false &&` ci-dessous.
-    if: false && github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
+    # Désactivé du 2026-09-01 au 2026-09-03 (`false &&` ci-devant) pour accélérer une MEP
+    # urgente, réactivé ensuite comme prévu — cf. commit qui a introduit ce commentaire.
+    if: github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
     runs-on: ubuntu-latest
     # Shardée le 31/08/2026 (remplace le mode smoke-only introduit le 26/08/2026) : la
     # suite complète (173 tests, 43 fichiers) en --workers=1 dans UN SEUL job dépassait
@@ -221,6 +220,28 @@ jobs:
           name: playwright-report-full-shard-${{ matrix.shard }}
           path: playwright-report
           retention-days: 7
+
+  # Nom de contexte stable pour la ruleset GitHub "Protection pre-prod" : un job matrix
+  # (e2e-full ci-dessus) n'expose PAS un statut par nom fixe (ce sont "E2E full (shard
+  # 1/4)" … "4/4)"), donc rien à référencer dans required_status_checks qui survive à
+  # un changement du nombre de shards. Piège déjà vécu le 2026-09-01 (PR #427) avec
+  # l'ancien check `E2E`, resté bloqué en "Waiting" indéfiniment après le passage au
+  # sharding — cf. mémoire e2e-full-disabled-mep. `if: always()` : ce job doit s'exécuter
+  # (et donc reporter un statut) même si un shard échoue ou si e2e-full est skip (PR
+  # 100% doc, ou base_ref != pre-prod) — sinon la ruleset resterait bloquée en "Waiting".
+  e2e-full-gate:
+    name: E2E full
+    needs: e2e-full
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifie le résultat agrégé des 4 shards
+        run: |
+          result="${{ needs.e2e-full.result }}"
+          echo "e2e-full result: $result"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            exit 1
+          fi
 
   e2e-smoke:
     name: E2E smoke

@@ -285,7 +285,33 @@ export async function login(page: Page): Promise<void> {
                 .getByRole('button', { name: /se connecter/i })
                 .first();
             await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-            await submitButton.click();
+
+            // Même piège que loginAsElmV2Demo() ci-dessus (cf. son commentaire) : un 429
+            // (throttle `login` de Fortify, 5/min par identifiant+IP) reste une page HTML
+            // brute jamais transformée en erreur Inertia, donc pas forcément détectable au
+            // seul texte de la page. On l'intercepte directement pour attendre
+            // `retry-after` avant de retenter — sans quoi les tentatives suivantes (sur ce
+            // numéro comme sur les autres, si le throttle est partagé par IP) ré-échouent
+            // immédiatement en boucle jusqu'à épuisement des 3 x N tentatives disponibles.
+            const [response] = await Promise.all([
+                page.waitForResponse(
+                    (r) =>
+                        r.url().includes('/login') &&
+                        r.request().method() === 'POST',
+                    { timeout: 15_000 },
+                ),
+                submitButton.click(),
+            ]);
+
+            if (response.status() === 429) {
+                const retryAfterSeconds =
+                    Number(response.headers()['retry-after']) || 60;
+                lastError = new Error(
+                    `Rate limited (429) on /login POST for ${phone}, waited ${retryAfterSeconds}s before retrying.`,
+                );
+                await page.waitForTimeout((retryAfterSeconds + 1) * 1000);
+                continue;
+            }
 
             try {
                 await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {

@@ -108,6 +108,22 @@ class TransfertLogistique extends Model
         return $this->belongsTo(Site::class, 'site_destination_id');
     }
 
+    /**
+     * Alias de siteSource() — jamais destination (même convention que
+     * CommissionOperationContext::contexteDepuisTransfertLogistique(), "le site cible toujours
+     * le site SOURCE du transfert"). Existe uniquement pour que les écrans de reporting
+     * Comptabilité (CommissionVenteController/CommissionSiteController/CommissionProprietaireController),
+     * qui eager-chargent `enveloppe.source.site` sur la relation polymorphe CommissionEnveloppe::source
+     * (CommandeVente OU TransfertLogistique), ne lèvent plus RelationNotFoundException dès qu'un
+     * TransfertLogistique apparaît dans le résultat (régression découverte le 02/09/2026 : jamais
+     * déclenchée avant faute de commission Livreur générique visible sur un transfert réel).
+     * CommandeVente::site() reste la relation "normale", inchangée.
+     */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class, 'site_source_id');
+    }
+
     public function vehicule(): BelongsTo
     {
         return $this->belongsTo(Vehicule::class);
