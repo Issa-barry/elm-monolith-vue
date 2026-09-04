@@ -2,14 +2,21 @@
 
 namespace App\Support\Commission;
 
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * Filtre optionnel par processus (vente/distribution_client/logistique_transfert) pour les écrans
  * de reporting Comptabilité qui interrogent CommissionEnveloppePart — jamais appliqué à la
  * machinerie de paiement/période (PeriodeCalculatorService, CommissionEnveloppePartAllocationService),
  * qui doit au contraire toujours unir tous les processus (cf. docs/commissions.md).
+ *
+ * Décision produit du 02/09/2026 : le filtre accepte UN ou PLUSIEURS codes à la fois (case à
+ * cocher multiple côté UI, jamais un simple menu déroulant) — plusieurs codes cochés s'unissent
+ * (whereIn), jamais une intersection. Aucune sélection = "Tous les processus" = valeur par défaut
+ * des écrans Index (plus jamais un repli silencieux sur "vente").
  *
  * Garde volontairement les 3 codes, y compris distribution_client, alors que
  * Settings\CommissionRegleController::processusCodesDisponibles() (routage/configuration de
@@ -64,16 +71,61 @@ class CommissionProcessusFilter
     }
 
     /**
-     * Applique le filtre sur une requête CommissionEnveloppePart si $processusCode est non vide —
-     * sans effet sinon (vue consolidée par défaut, cf. décision produit : "les vues comptables
-     * globales peuvent naturellement consolider plusieurs processus").
+     * Normalise une entrée de filtre "processus" — scalaire legacy (?processus=vente), tableau
+     * (?processus[]=vente&processus[]=logistique_transfert, cocher plusieurs cases = union) ou
+     * absent — en tableau de codes valides. Un code inconnu (jamais envoyé par l'UI, mais une
+     * requête forgée reste possible) est silencieusement filtré, jamais transmis tel quel à une
+     * requête SQL.
+     *
+     * @return array<int, string>
      */
-    public static function appliquer(Builder $query, ?string $processusCode): Builder
+    public static function normaliserCodes(array|string|null $input): array
     {
-        if (! $processusCode) {
+        $valides = collect(self::options())->pluck('value')->all();
+
+        return collect(is_array($input) ? $input : [$input])
+            ->filter(fn ($c) => is_string($c) && $c !== '')
+            ->unique()
+            ->filter(fn ($c) => in_array($c, $valides, true))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Applique le filtre sur une requête CommissionEnveloppePart si $processusCodes est non vide —
+     * sans effet sinon (vue consolidée par défaut, cf. décision produit : "les vues comptables
+     * globales peuvent naturellement consolider plusieurs processus"). Plusieurs codes s'unissent
+     * (whereIn, jamais une intersection) : cocher Vente + Transfert logistique doit montrer l'union
+     * des deux, jamais rien ou uniquement le premier (régression du 02/09/2026 :
+     * DataFilters.vue n'envoyait jusque-là que la première valeur cochée).
+     */
+    public static function appliquer(Builder $query, array|string|null $processusCodes): Builder
+    {
+        $codes = self::normaliserCodes($processusCodes);
+        if (empty($codes)) {
             return $query;
         }
 
-        return $query->whereHas('enveloppe.processus', fn ($q) => $q->where('code', $processusCode));
+        return $query->whereHas('enveloppe.processus', fn ($q) => $q->whereIn('code', $codes));
+    }
+
+    /**
+     * Libellés (ordre stable de options()) des processus réellement présents dans une collection
+     * de CommissionEnveloppePart — alimente la colonne "Processus" du détail par bénéficiaire,
+     * toujours affichée (décision produit du 02/09/2026) même quand un seul processus contribue,
+     * pour que la provenance reste visible sans devoir rouvrir le filtre.
+     *
+     * @param  Collection<int, CommissionEnveloppePart>  $parts
+     * @return array<int, string>
+     */
+    public static function labelsPresents(Collection $parts): array
+    {
+        $codesPresents = $parts->pluck('enveloppe.processus.code')->filter()->unique()->all();
+
+        return collect(self::options())
+            ->filter(fn (array $o) => in_array($o['value'], $codesPresents, true))
+            ->pluck('label')
+            ->values()
+            ->all();
     }
 }

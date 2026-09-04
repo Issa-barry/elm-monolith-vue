@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { login, randomDigits, registerCleanup } from './helpers';
+import {
+    login,
+    randomDigits,
+    registerCleanup,
+    selectOptionFromCombobox,
+} from './helpers';
 
 const PREFIX = 'E2ESTOCKCMD';
 
@@ -75,10 +80,24 @@ async function creerProduitAvecStock(
     await typeCombobox.click();
     await page.getByRole('option', { name: /fabricable/i }).click();
 
+    // Chaque champ InputNumber doit être "blurré" individuellement : PrimeVue InputNumber ne
+    // committe la valeur dans le v-model qu'au blur, jamais sur le simple événement "input" de
+    // .fill() (cf. produit-flow.spec.ts et stock-ajustement.spec.ts, même piège documenté).
     await page.locator('#prix_usine').fill('15000');
+    await page.locator('#prix_usine').blur();
     await page.locator('#prix_usine_tricycle').fill('15000');
+    await page.locator('#prix_usine_tricycle').blur();
     await page.locator('#prix_vente').fill('20000');
     await page.locator('#prix_vente').blur();
+
+    // Tarification par nature de client — obligatoire pour un produit fabricable (cf.
+    // ProduitService::raisonIncoherencePrix() côté serveur, seule source de vérité).
+    await page.locator('#prix_externe').fill('20000');
+    await page.locator('#prix_externe').blur();
+    await page.locator('#prix_revendeur').fill('18000');
+    await page.locator('#prix_revendeur').blur();
+    await page.locator('#prix_distributeur').fill('17000');
+    await page.locator('#prix_distributeur').blur();
 
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
     await expect(page).toHaveURL(/\/produits\/[^/]+$/, { timeout: 20_000 });
@@ -122,6 +141,16 @@ async function creerClientInApp(page: Page, nomComplet: string): Promise<void> {
         .first();
     await paysCombo.click();
     await page.getByRole('option', { name: /guin(?!.*bissau)/i }).click();
+
+    // Nature du client — défaut "Revendeur" depuis la migration
+    // migrate_client_type_standard_to_revendeur (28/08/2026) : ce type rend le cashback actif
+    // ET son montant par pack obligatoires (cf. ClientForm.vue::isRevendeur), ce dont ce test
+    // n'a rien à faire. "Externe" reste facultatif sur les deux, donc plus simple ici.
+    const natureCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .nth(1);
+    await selectOptionFromCombobox(page, natureCombo, /^externe$/i);
 
     await page.locator('#telephone').fill(randomDigits(9));
     await page
@@ -295,10 +324,23 @@ test.describe('Création de commande — contrôle du stock disponible', () => {
             .first();
         await typeCombobox.click();
         await page.getByRole('option', { name: /fabricable/i }).click();
+        // Chaque champ InputNumber doit être "blurré" individuellement : PrimeVue InputNumber
+        // ne committe la valeur dans le v-model qu'au blur, jamais sur le simple événement
+        // "input" de .fill() (cf. produit-flow.spec.ts, même piège documenté).
         await page.locator('#prix_usine').fill('15000');
+        await page.locator('#prix_usine').blur();
         await page.locator('#prix_usine_tricycle').fill('15000');
+        await page.locator('#prix_usine_tricycle').blur();
         await page.locator('#prix_vente').fill('20000');
         await page.locator('#prix_vente').blur();
+        // Tarification par nature de client — obligatoire pour un produit fabricable (cf.
+        // ProduitService::raisonIncoherencePrix() côté serveur, seule source de vérité).
+        await page.locator('#prix_externe').fill('20000');
+        await page.locator('#prix_externe').blur();
+        await page.locator('#prix_revendeur').fill('18000');
+        await page.locator('#prix_revendeur').blur();
+        await page.locator('#prix_distributeur').fill('17000');
+        await page.locator('#prix_distributeur').blur();
         await page.getByRole('button', { name: /^enregistrer$/i }).click();
         await expect(page).toHaveURL(/\/produits\/[^/]+$/, { timeout: 20_000 });
 

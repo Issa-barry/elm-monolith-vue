@@ -3,8 +3,10 @@
 namespace App\Services\Commission;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Parametre;
 use App\Models\Vehicule;
 use InvalidArgumentException;
@@ -91,5 +93,42 @@ class CommissionProcessusDefaults
             $codesDisponibles,
             fn (string $code) => self::estApplicablePourVehicule($code, $vehicule),
         ));
+    }
+
+    /**
+     * Décision produit du 02/09/2026 : "processus métier" (identité, reporting, historique) et
+     * "barème" (montant réellement appliqué) sont deux notions distinctes. `distribution_client`
+     * reste un processus réel — chaque distribution génère une CommissionEnveloppe qui LUI est
+     * rattachée, jamais silencieusement reclassée en `logistique_transfert` — mais il n'a pas
+     * d'onglet dédié dans Paramètres > Commissions
+     * (`Settings\CommissionRegleController::processusCodesDisponibles()` n'expose que Vente et
+     * Transfert logistique). Tant qu'aucune CommissionRegle active ne lui est explicitement
+     * propre, le calcul du montant retombe donc sur celui de `logistique_transfert` — un
+     * distributeur ELM est livré par la même flotte/équipe qu'un transfert interne, décision
+     * confirmée par le métier.
+     *
+     * Bascule "tout ou rien" par organisation, jamais cible par cible : dès qu'UNE seule
+     * CommissionRegle active existe pour `distribution_client`, il cesse immédiatement d'hériter
+     * de `logistique_transfert`, même pour les cibles où lui-même n'aurait rien configuré (évite
+     * un mélange confus "moitié barème propre, moitié hérité" difficile à auditer). Utilisée à la
+     * fois par la génération réelle (CommissionEnveloppeGenerator) et par le garde-fou préventif à
+     * la création (CommandeVenteController::ensurePartageLivraisonCategorieConfigure()), pour que
+     * les deux ne puissent jamais résoudre un barème différent pour la même commande.
+     */
+    public static function processusResolutionBareme(CommissionProcessus $identite): CommissionProcessus
+    {
+        if ($identite->code !== CommissionProcessus::CODE_DISTRIBUTION_CLIENT) {
+            return $identite;
+        }
+
+        $aSaPropreConfiguration = CommissionRegle::where('processus_id', $identite->id)
+            ->where('statut', CommissionRegleStatut::ACTIVE->value)
+            ->exists();
+
+        if ($aSaPropreConfiguration) {
+            return $identite;
+        }
+
+        return self::resoudreOuCreer($identite->organization_id, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
     }
 }

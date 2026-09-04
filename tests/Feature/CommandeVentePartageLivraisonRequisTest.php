@@ -187,10 +187,12 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     }
 
     // ── Processus distribution client ────────────────────────────────────────
-    // Révisé le 01/09/2026 : une distribution client route désormais vers
-    // CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT (jamais CODE_DISTRIBUTION_CLIENT, devenu
-    // legacy) — le barème/partage à satisfaire pour débloquer la création est donc le même que
-    // celui d'un transfert logistique, cf. CommandeVenteController::ensurePartageLivraisonCategorieConfigure().
+    // Décision produit du 02/09/2026 : une distribution client reste rattachée à SON PROPRE
+    // processus d'identité (CODE_DISTRIBUTION_CLIENT), mais tant qu'aucune CommissionRegle active
+    // ne lui est propre, le barème/partage à satisfaire pour débloquer la création est résolu par
+    // repli automatique sur celui de CODE_LOGISTIQUE_TRANSFERT — cf.
+    // CommissionProcessusDefaults::processusResolutionBareme() et
+    // CommandeVenteController::ensurePartageLivraisonCategorieConfigure().
 
     public function test_store_bloque_si_partage_manquant_pour_distribution_client(): void
     {
@@ -235,10 +237,10 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     /**
      * Régression directe de l'incident CMD-300826-007 : un partage configuré pour "vente" ne
      * couvre jamais une distribution — chaque processus a son propre partage (cf. migration du
-     * 30/08/2026, add_processus_id_to_equipe_livraison_partages_categorie_table). Depuis le
-     * 01/09/2026, "le processus d'une distribution" signifie CODE_LOGISTIQUE_TRANSFERT — la
-     * seconde règle créée ici est donc celle-là, plus CODE_DISTRIBUTION_CLIENT (qui ne bloque
-     * plus jamais rien, n'étant plus jamais résolu par aucun appelant).
+     * 30/08/2026, add_processus_id_to_equipe_livraison_partages_categorie_table). Le barème
+     * réellement consulté pour une distribution étant celui de CODE_LOGISTIQUE_TRANSFERT par repli
+     * (distribution_client n'a ici aucune CommissionRegle propre), la seconde règle créée ici est
+     * donc celle-là.
      */
     public function test_store_bloque_distribution_meme_si_seul_le_partage_vente_existe(): void
     {
@@ -260,16 +262,18 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     }
 
     /**
-     * Cœur de la décision produit du 01/09/2026 : le même partage/barème CODE_LOGISTIQUE_TRANSFERT
-     * débloque indifféremment une distribution client ET couvrirait un transfert logistique — il
-     * n'existe plus de configuration séparée "Distribution client" à maintenir en parallèle.
+     * Cœur de la décision produit du 02/09/2026 : le même partage/barème CODE_LOGISTIQUE_TRANSFERT
+     * débloque indifféremment une distribution client (par repli) ET couvrirait un transfert
+     * logistique — il n'existe pas de configuration séparée "Distribution client" à maintenir en
+     * parallèle tant que le métier n'en a pas besoin, sans empêcher la distribution de rester un
+     * processus distinct pour le reporting.
      */
     public function test_le_meme_partage_logistique_debloque_distribution_sans_configuration_separee(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
         // Un seul barème/partage configuré, sous le processus "Transferts logistiques" — jamais
-        // sous un processus "Distribution client" dédié, qui n'existe plus dans
+        // sous un processus "Distribution client" dédié, qui n'a pas d'onglet dans
         // Settings\CommissionRegleController::processusCodesDisponibles().
         $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 200);
         $this->definirPartage($vehicule, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $this->categorie);

@@ -316,16 +316,8 @@ const ajustements = props.mouvements.map((m) => ({
             <section
                 class="relative overflow-hidden rounded-xl border border-border/60 bg-muted/25 px-4 py-5 sm:rounded-2xl sm:px-8 sm:py-8 lg:min-h-[220px] lg:pr-[25rem]"
             >
-                <Link
-                    href="/backoffice/produits"
-                    class="hidden items-center gap-2 text-sm font-semibold transition-colors hover:text-primary sm:inline-flex"
-                >
-                    <ArrowLeft class="h-4 w-4" />
-                    Produit
-                </Link>
-
                 <h1
-                    class="max-w-3xl text-[1.75rem] leading-tight font-semibold tracking-tight sm:mt-7 sm:text-4xl"
+                    class="max-w-3xl text-[1.75rem] leading-tight font-semibold tracking-tight sm:text-4xl"
                 >
                     {{ produit.nom }}
                 </h1>
