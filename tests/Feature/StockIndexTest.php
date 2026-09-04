@@ -183,6 +183,50 @@ class StockIndexTest extends TestCase
             );
     }
 
+    /**
+     * Régression 04/09/2026 : le filtre "Disponible" plantait en SQLSTATE[HY093] (Invalid
+     * parameter number) — {$seuil} apparaît deux fois dans la même expression whereRaw
+     * ("(seuil <= 0 OR quantite > seuil)") donc deux `?` à lier, mais un seul binding était
+     * fourni. Couvre les deux branches du OR : un produit sans seuil configuré (seuil
+     * organisation par défaut) et un produit avec un stock strictement supérieur à son seuil.
+     */
+    public function test_le_filtre_disponible_ne_leve_pas_derreur_sql_et_retourne_les_lignes_attendues(): void
+    {
+        $produitSansSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible sans seuil configuré',
+        ], ['sku' => 'DISPO-SANS-SEUIL-001']);
+        // Sans ligne produit_seuils_alerte, le seuil effectif retombe sur le seuil organisation
+        // (10 par défaut, cf. Parametre::getSeuilStockFaible()) : le stock doit le dépasser pour
+        // tomber dans "Disponible" plutôt que "Stock faible".
+        $this->stock($produitSansSeuil->variantePrincipale()->first(), $this->siteA, 15);
+
+        $produitAvecSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible au-dessus du seuil',
+        ], ['sku' => 'DISPO-AVEC-SEUIL-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produitAvecSeuil->id,
+            'site_id' => $this->siteA->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 5,
+        ]);
+        $this->stock($produitAvecSeuil->variantePrincipale()->first(), $this->siteA, 20);
+
+        $produitRupture = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit en rupture',
+        ], ['sku' => 'DISPO-RUPTURE-001']);
+        $this->stock($produitRupture->variantePrincipale()->first(), $this->siteA, 0);
+
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['disponible'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 2)
+                ->where('stocks.data.0.produit_nom', 'Produit disponible au-dessus du seuil')
+                ->where('stocks.data.1.produit_nom', 'Produit disponible sans seuil configuré')
+            );
+    }
+
     public function test_les_filtres_site_recherche_categorie_et_statut_sont_appliques(): void
     {
         $categorie = Categorie::create([
