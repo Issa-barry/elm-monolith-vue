@@ -57,7 +57,7 @@ const noteClass = computed(() => {
 
 <template>
     <div
-        class="relative h-full overflow-hidden rounded-xl border bg-card p-5"
+        class="relative h-full overflow-hidden rounded-xl border bg-card p-4 sm:p-5"
         :class="[
             minHeightClass,
             isPrimaryWave
@@ -88,20 +88,26 @@ const noteClass = computed(() => {
         </svg>
 
         <div class="relative z-10 flex h-full flex-col" :class="alignClass">
-            <p class="text-sm" :class="titleClass">{{ item.title }}</p>
-            <p class="mt-2 text-2xl font-semibold" :class="valueClass">
+            <p class="text-xs sm:text-sm" :class="titleClass">
+                {{ item.title }}
+            </p>
+            <p
+                class="mt-1.5 text-xl font-semibold sm:mt-2 sm:text-2xl"
+                :class="valueClass"
+            >
                 {{ item.value }}
             </p>
 
-            <div class="mt-auto pt-1">
-                <p class="text-xs" :class="subtitleClass">
+            <div class="mt-auto pt-0.5 sm:pt-1">
+                <p class="text-[11px] sm:text-xs" :class="subtitleClass">
                     {{ item.subtitle || '\u00A0' }}
                 </p>
                 <p
-                    class="mt-1 text-xs"
-                    :class="item.note ? noteClass : 'text-transparent'"
+                    v-if="item.note"
+                    class="mt-1 text-[11px] sm:text-xs"
+                    :class="noteClass"
                 >
-                    {{ item.note || '\u00A0' }}
+                    {{ item.note }}
                 </p>
             </div>
         </div>

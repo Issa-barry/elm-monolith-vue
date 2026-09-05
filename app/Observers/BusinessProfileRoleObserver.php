@@ -34,6 +34,17 @@ use Spatie\Permission\Models\Role;
  * où une fonctionnalité de dé-rattachement existe, décider explicitement à ce
  * moment-là si le rôle doit être retiré (un compte peut légitimement garder un
  * historique de rôle après un dé-rattachement, à trancher métier par métier).
+ *
+ * PIÈGE CORRIGÉ (05/09/2026) : wasChanged('user_id') est FAUX quand user_id est
+ * déjà présent dans les attributs au moment du create() (rien à comparer à un
+ * "original" qui n'existait pas encore) — seul un update() ultérieur sur une
+ * instance existante déclenche wasChanged(). InstallationService::install() crée
+ * justement le Proprietaire interne avec user_id posé dès le create() : le rôle
+ * n'était donc jamais attribué au super_admin qui installe l'application, malgré
+ * cet observer déjà en place. wasRecentlyCreated couvre ce cas précis, en plus de
+ * wasChanged() qui reste nécessaire pour le rattachement a posteriori (le cas déjà
+ * couvert depuis le 26/08/2026, cf. RolesCoherenceCommand pour rattraper les
+ * comptes existants déjà affectés).
  */
 class BusinessProfileRoleObserver
 {
@@ -46,7 +57,13 @@ class BusinessProfileRoleObserver
 
     public function saved(Model $profile): void
     {
-        if (! $profile->wasChanged('user_id') || $profile->user_id === null) {
+        if ($profile->user_id === null) {
+            return;
+        }
+
+        $justLinked = $profile->wasRecentlyCreated || $profile->wasChanged('user_id');
+
+        if (! $justLinked) {
             return;
         }
 

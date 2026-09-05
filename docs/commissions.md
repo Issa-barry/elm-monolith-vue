@@ -516,3 +516,45 @@ Corrigé par `decrementerStockDirect()` (sortie physique immédiate via
 avant tout encaissement). Non lié à la distinction Vente/Distribution — un bug préexistant, corrigé
 dans ce même chantier à la demande explicite de l'utilisateur (voir tests
 `tests/Feature/CommandeVenteDirecteStockTest.php`).
+
+## Grossiste — commission consultant indépendante du mode de remise (05/09/2026)
+
+Cf. `docs/grossiste.md` pour la règle métier complète (nature client, tarification catégorie ×
+mode). Cette section couvre uniquement l'impact sur le moteur de commission.
+
+- **COMM-008** — Pour un client `ClientType::GROSSISTE`, deux logiques de commission sont
+  indépendantes l'une de l'autre :
+  - **Commission de transfert logistique** (cibles `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON`) —
+    dépend du mode de remise : **Livraison** (véhicule de flotte) → générée selon les règles
+    actuelles, comme n'importe quelle vente standard avec véhicule. **Enlèvement** (aucun véhicule,
+    le client retire lui-même) → jamais générée, il n'y a ni propriétaire ni équipe à commissionner.
+  - **Commission consultant** (cible `CODE_CONSULTANT`, indépendante de toute donnée de l'opération
+    par conception, cf. section « Consultant » plus haut) — générée si une règle active existe,
+    **que le Grossiste soit en Enlèvement ou en Livraison**. Une commande Grossiste + Enlèvement ne
+    doit jamais priver le consultant d'une commission à laquelle il a droit par ailleurs.
+- Avant ce correctif, `CommissionEnveloppeGenerator::genererPourCommandeVente()` retournait
+  immédiatement dès que `commission_eligible_snapshot` était faux (dérivé de l'absence de véhicule,
+  cf. `VehiculeCommandeContextResolver`) — un verrou global qui aurait aussi supprimé la commission
+  consultant. Correctif strictement scopé à Grossiste (`$estGrossisteSansVehicule` dans
+  `genererPourCommandeVente()`) : pour tout autre type de client (Externe/Revendeur/Distributeur),
+  l'absence de véhicule continue de bloquer **toutes** les cibles, comportement historique
+  inchangé — voir `tests/Feature/CommandeVenteGrossisteCommissionTest.php`, notamment le test de
+  non-régression sur un Externe en vente directe.
+- `genererDepuisContexte()` n'exige plus systématiquement un véhicule : les cibles
+  `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON` ne sont ajoutées à la liste des cibles que si un
+  véhicule est présent ; `CODE_SITE` (si site) et `CODE_CONSULTANT` (toujours) restent inconditionnelles,
+  cohérent avec leur conception déjà indépendante du véhicule.
+- **Déclenchement** — un Enlèvement passe par `CommandeVenteService::creerFactureDirecte()` (pas
+  d'étape de chargement). `CommissionTriggerService::onVenteDirecteFacturee()` (nouveau, appelé
+  depuis `creerFactureDirecte()`) déclenche la génération de commission pour ce chemin,
+  inconditionnellement (comme `onReceptionDistributionValidee()` pour la distribution client) —
+  sans effet pour tout client non-Grossiste (le garde-fou scopé ci-dessus s'applique toujours).
+- `CommandeVente::commissionsPretesPourCloture()` ne conclut plus "rien n'est dû" sur la seule
+  valeur de `commission_eligible_snapshot` : si des enveloppes existent réellement (cas Grossiste +
+  Enlèvement avec consultant généré), la clôture automatique attend leur paiement comme pour toute
+  commande éligible.
+- **Chantier 2 (non fait, décision explicite du 05/09/2026)** — généraliser l'éligibilité par
+  bénéficiaire (Propriétaire/Livreur/Consultant/Site indépendants) à tous les types de client serait
+  une refonte architecturale plus large, volontairement hors périmètre ici pour ne pas mélanger deux
+  changements dans une même livraison. Le correctif ci-dessus reste une exception ciblée, pas une
+  généralisation.

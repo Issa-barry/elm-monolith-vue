@@ -14,12 +14,22 @@ namespace App\Enums;
  * nature neuve, sans avantage automatique (ni cashback, ni dérogation, ni prix usine) sauf règle
  * explicite. Les trois natures ont chacune leur propre tarif sur les produits fabricables
  * (prix_externe/prix_revendeur/prix_distributeur, cf. PrixVenteNatureResolver).
+ *
+ * GROSSISTE (ajouté 05/09/2026) est une nature distincte, volontairement PAS un sous-type de
+ * DISTRIBUTEUR : achète en grande quantité, au choix Enlèvement (retrait usine, sans véhicule de
+ * flotte) ou Livraison (véhicule de flotte), décidé par commande via
+ * `CommandeVente::mode_remise_grossiste` — jamais une caractéristique fixe du client. Son tarif ne
+ * suit PAS le patron prix_externe/prix_revendeur/prix_distributeur (colonnes par variante) : il
+ * dépend de la catégorie commerciale du produit ET du mode de remise, résolu par
+ * `GrossisteTarifResolver` via la table `categorie_tarifs_grossiste` — jamais une colonne
+ * supplémentaire sur `produit_variantes`, cf. docs/grossiste.md.
  */
 enum ClientType: string
 {
     case EXTERNE = 'externe';
     case REVENDEUR = 'revendeur';
     case DISTRIBUTEUR = 'distributeur';
+    case GROSSISTE = 'grossiste';
 
     public function label(): string
     {
@@ -27,6 +37,7 @@ enum ClientType: string
             self::EXTERNE => 'Externe',
             self::REVENDEUR => 'Revendeur',
             self::DISTRIBUTEUR => 'Distributeur',
+            self::GROSSISTE => 'Grossiste',
         };
     }
 

@@ -7,7 +7,7 @@ import { Lock, Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const PAYS_OPTIONS = paysOptionsByName;
 
@@ -45,6 +45,9 @@ const props = withDefaults(
         processing: boolean;
         readonly?: boolean;
         types?: TypeOption[];
+        // Renseigné uniquement en édition — exclut le client courant de la vérification de
+        // doublon téléphone (sinon son propre numéro se signalerait lui-même).
+        clientId?: number;
     }>(),
     {
         readonly: false,
@@ -52,6 +55,7 @@ const props = withDefaults(
             { value: 'externe', label: 'Externe' },
             { value: 'revendeur', label: 'Revendeur' },
             { value: 'distributeur', label: 'Distributeur' },
+            { value: 'grossiste', label: 'Grossiste' },
         ],
     },
 );
@@ -157,6 +161,77 @@ function onTelephoneInput(value: string | null | undefined) {
     const digits = raw.slice(0, max);
     emit('update:form', { ...props.form, telephone: digits || null });
 }
+
+// ── Vérification live du téléphone, tous types de tiers (cf.
+// ClientController::verifierTelephone()/TelephoneOwnerLookupService) — même principe que
+// EquipeStepperModal.vue, mais deux niveaux de sévérité : un autre CLIENT reste bloquant (DANGER,
+// même règle que le contrôle serveur à la soumission), tout autre type (Fournisseur, Propriétaire,
+// Livreur...) est purement informatif (WARNING, cf. règle UI CLAUDE.md — partager un numéro entre
+// rôles différents est un cas légitime, jamais bloqué ici).
+interface TelephoneConflict {
+    blocking: boolean;
+    label: string;
+    nom: string;
+}
+
+const phoneConflict = ref<TelephoneConflict | null>(null);
+const phoneChecking = ref(false);
+let phoneCheckTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleTelephoneCheck() {
+    clearTimeout(phoneCheckTimer);
+    phoneConflict.value = null;
+
+    const digits = String(props.form.telephone ?? '');
+    if (digits.length < 4 || !props.form.code_phone_pays) return;
+
+    phoneCheckTimer = setTimeout(() => void checkTelephoneConflict(), 500);
+}
+
+async function checkTelephoneConflict(): Promise<void> {
+    const phoneAtCallTime = props.form.telephone;
+    phoneChecking.value = true;
+
+    try {
+        const params = new URLSearchParams({
+            telephone: String(phoneAtCallTime ?? ''),
+            code_phone_pays: props.form.code_phone_pays ?? '',
+        });
+        if (props.clientId) params.set('client_id', String(props.clientId));
+
+        const res = await fetch(
+            `/backoffice/clients/verifier-telephone?${params.toString()}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            },
+        );
+
+        // Le numéro a changé pendant l'appel réseau : réponse obsolète, on l'ignore.
+        if (props.form.telephone !== phoneAtCallTime) return;
+
+        if (res.ok) {
+            const data = await res.json();
+            phoneConflict.value = data.found
+                ? { blocking: data.blocking, label: data.label, nom: data.nom }
+                : null;
+        }
+    } catch {
+        // Vérification live indisponible (réseau) : le contrôle serveur à la soumission
+        // (ClientController::assertPhoneUniqueInOrg()) reste l'autorité finale.
+    } finally {
+        if (props.form.telephone === phoneAtCallTime) {
+            phoneChecking.value = false;
+        }
+    }
+}
+
+watch(
+    () => [props.form.telephone, props.form.code_phone_pays],
+    () => scheduleTelephoneCheck(),
+);
 
 function onSubmit() {
     if (isReadOnly.value) return;
@@ -364,6 +439,21 @@ function onSubmit() {
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.telephone }}
+                    </p>
+                    <p
+                        v-else-if="phoneConflict?.blocking"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        Ce numéro de téléphone est déjà utilisé par un autre
+                        client : {{ phoneConflict.nom }}.
+                    </p>
+                    <p
+                        v-else-if="phoneConflict"
+                        class="mt-1 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400"
+                    >
+                        Ce numéro est déjà associé à {{ phoneConflict.label }}
+                        « {{ phoneConflict.nom }} » dans votre organisation —
+                        vérifiez qu'il ne s'agit pas d'une erreur.
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">
                         Saisissez les chiffres sans indicatif

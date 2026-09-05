@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\CategorieTarifaireVehicule;
+use App\Enums\ClientType;
 use App\Enums\ModeTarification;
 use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
@@ -62,6 +63,17 @@ class PdvCheckoutService
             );
 
             $client = ! empty($data['client_id']) ? Client::query()->select(['id', 'type'])->find($data['client_id']) : null;
+
+            // Grossiste : tarification catégorie × mode (Enlèvement/Livraison), non pertinente au
+            // comptoir — jamais servi via PDV, cf. docs/grossiste.md. Décision de périmètre
+            // (05/09/2026) : passer par une commande de vente (CommandeVenteController), seul
+            // point d'entrée qui connaît le mode de remise.
+            if ($client?->type === ClientType::GROSSISTE) {
+                throw ValidationException::withMessages([
+                    'client_id' => 'Un client Grossiste ne peut pas être servi au comptoir — créez une commande de vente.',
+                ]);
+            }
+
             // Chargé une fois ici (organisation vérifiée) — sert à la fois à dériver
             // nature_operation (DISTRIBUTION_CLIENT exige livraison_logistique=true, jamais la
             // seule présence d'un véhicule, cf. NatureOperation::deriverParDefaut()) et à calculer

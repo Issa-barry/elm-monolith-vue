@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Services\Client\ClientIdentity;
 use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\QrPayloadResolver;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +20,7 @@ class MeController extends Controller
             .'client, jamais une égalité stricte. `context` est résolu exclusivement via '
             .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client.',
     )]
-    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver): JsonResponse
     {
         $user = $request->user();
         $identity = $identityResolver->resolve($user);
@@ -35,7 +35,11 @@ class MeController extends Controller
             // noms — cf. commentaire identique dans LoginController::userResource().
             'roles' => $user->getRoleNames()->map(fn (string $r): string => $r)->values()->all(),
             'is_active' => $user->is_active,
-            'qr_payload' => $this->resolveQrPayload($identity),
+            // Résolution centralisée dans QrPayloadResolver (cf. sa docblock) — avant
+            // extraction, cette méthode cherchait le proprietaire/livreur par téléphone
+            // SANS jamais tenter le user_id d'abord, et sans aucune restriction
+            // d'organisation ni de "profil non réclamé" (cf. audit backend du 26/08/2026).
+            'qr_payload' => $qrPayloadResolver->resolveForIdentity($identity),
             'context' => [
                 'organization_id' => $identity->organizationId,
                 'client_id' => $identity->client?->id,
@@ -43,27 +47,5 @@ class MeController extends Controller
                 'livreur_id' => $identity->livreur?->id,
             ],
         ]);
-    }
-
-    /**
-     * Avant ce correctif, cette méthode cherchait le proprietaire/livreur par
-     * télephone SANS jamais tenter le user_id d'abord, et sans aucune restriction
-     * d'organisation ni de "profil non réclamé" — un simple hasard de numéro de
-     * téléphone avec un profil d'une autre organisation suffisait à faire pointer
-     * qr_payload vers la fiche backoffice de quelqu'un d'autre (cf. audit backend du
-     * 26/08/2026). Utilise désormais le même résolveur, avec les mêmes garde-fous,
-     * que les autres endpoints Client\*.
-     */
-    private function resolveQrPayload(ClientIdentity $identity): ?string
-    {
-        if ($identity->proprietaire !== null) {
-            return route('proprietaires.show', $identity->proprietaire->id);
-        }
-
-        if ($identity->livreur !== null) {
-            return route('livreurs.show', $identity->livreur->id);
-        }
-
-        return null;
     }
 }

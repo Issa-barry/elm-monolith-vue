@@ -98,7 +98,13 @@ interface ProduitOption {
     prix_distributeur: number | null;
 }
 
-type PrixOrigine = 'usine' | 'vente' | 'externe' | 'revendeur' | 'distributeur';
+type PrixOrigine =
+    | 'usine'
+    | 'vente'
+    | 'externe'
+    | 'revendeur'
+    | 'distributeur'
+    | 'grossiste';
 
 const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     usine: 'Prix usine',
@@ -106,6 +112,7 @@ const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     externe: 'Prix externe',
     revendeur: 'Prix revendeur',
     distributeur: 'Prix distributeur',
+    grossiste: 'Prix grossiste',
 };
 
 interface CapaciteCategorie {
@@ -141,7 +148,8 @@ interface ClientOption {
     id: number;
     nom_complet: string;
     telephone: string | null;
-    type: 'externe' | 'revendeur' | 'distributeur';
+    type: 'externe' | 'revendeur' | 'distributeur' | 'grossiste';
+    type_label: string;
     vehicules: ClientVehiculeOption[];
 }
 
@@ -192,15 +200,14 @@ const form = useForm({
     nature_operation: 'vente_standard' as
         | 'vente_standard'
         | 'distribution_client',
+    // Pas de champ mode_remise_grossiste ici : depuis le 05/09/2026, le mode de remise Grossiste
+    // n'est plus saisi par l'utilisateur, il est dérivé côté serveur de vehicule_id (cf.
+    // CommandeVenteController::deriverModeRemiseGrossiste()) — voir le computed local
+    // `modeRemiseGrossiste` plus bas, purement un aperçu, jamais soumis.
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
     ] as LigneForm[],
 });
-
-// L'utilisateur peut surcharger la nature proposée par défaut (ex: distributeur venant
-// enlever lui-même sa commande) — dès qu'il touche le radio manuellement, la dérivation
-// automatique depuis client/véhicule s'arrête pour cette commande.
-const natureOperationModifieeManuellement = ref(false);
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
 const vehiculeSelected = ref<VehiculeOption | null>(null);
@@ -341,22 +348,23 @@ const { modeTarification, commissionEligible, natureOperationParDefaut } =
         () => form.client_id,
     );
 
-watch(
-    natureOperationParDefaut,
-    (valeur) => {
-        if (!natureOperationModifieeManuellement.value) {
-            form.nature_operation = valeur;
-        }
-    },
-    { immediate: true },
+// Purement informatif pour l'utilisateur (révision UX du 05/09/2026) : plus aucune
+// surcharge manuelle possible depuis ce formulaire, nature_operation reflète toujours
+// exactement natureOperationParDefaut (donc les règles métier existantes, jamais un choix
+// utilisateur) — voir le badge en lecture seule dans le template, à la place des anciens
+// boutons radio.
+watch(natureOperationParDefaut, (valeur) => (form.nature_operation = valeur), {
+    immediate: true,
+});
+
+const natureOperationLabel = computed(() =>
+    form.nature_operation === 'distribution_client' ? 'Distribution' : 'Vente',
 );
 
-function onNatureOperationChange(
-    valeur: 'vente_standard' | 'distribution_client',
-) {
-    form.nature_operation = valeur;
-    natureOperationModifieeManuellement.value = true;
-}
+// isGrossiste / modeRemiseGrossiste / grossisteTarifsClient sont déclarés plus bas, juste après
+// `clientSelected = ref(...)` — jamais ici : isGrossiste lit clientSelected.value, qui n'est pas
+// encore initialisé à ce point du fichier (TDZ garanti, cf. l'incident déjà documenté sur
+// vehiculesDisponibles/clientSelected plus bas dans ce même fichier).
 
 function produitPrixUsine(produitId: number | null): number {
     if (produitId === null) return 0;
@@ -378,14 +386,39 @@ function resoudrePrixLigne(ligne: LigneForm): {
 } {
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
 
+    // Grossiste : tarif catégorie × mode PROPRE À CE CLIENT (cf. GrossisteTarifResolver côté
+    // serveur, seule source de vérité — cette branche n'est qu'un aperçu, cf.
+    // grossisteTarifsClient ci-dessous). Le tarif spécial est une SURCHARGE facultative (révision
+    // du 05/09/2026) : sans catégorie sur le produit ou sans tarif configuré pour ce mode, repli
+    // sur le prix normal du produit — jamais un blocage.
+    if (isGrossiste.value && produit) {
+        const categorieId = produit.categorie_id;
+        const tarifSpecial =
+            categorieId !== null && categorieId !== undefined
+                ? grossisteTarifsClient.value[String(categorieId)]?.[
+                      modeRemiseGrossiste.value
+                  ]
+                : undefined;
+
+        return tarifSpecial !== undefined
+            ? { montant: tarifSpecial, origine: 'grossiste' }
+            : { montant: produit.prix_vente, origine: 'vente' };
+    }
+
     if (produit?.is_fabricable && clientSelected.value) {
-        const tarifsParNature: Record<ClientOption['type'], number | null> = {
+        const tarifsParNature: Record<
+            'externe' | 'revendeur' | 'distributeur',
+            number | null
+        > = {
             externe: produit.prix_externe,
             revendeur: produit.prix_revendeur,
             distributeur: produit.prix_distributeur,
         };
         const nature = clientSelected.value.type;
-        const tarif = tarifsParNature[nature];
+        // Grossiste déjà traité par la branche ci-dessus (toujours vraie avant celle-ci quand
+        // isGrossiste) — exclu ici uniquement pour satisfaire le typage strict de
+        // tarifsParNature, qui ne porte que les 3 natures historiques.
+        const tarif = nature === 'grossiste' ? null : tarifsParNature[nature];
         if (tarif !== null && tarif !== undefined) {
             return { montant: tarif, origine: nature };
         }
@@ -437,6 +470,10 @@ function ligneOrigineLabel(ligne: LigneForm): string {
  * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
  */
 function ligneUnitPriceEditable(ligne: LigneForm): boolean {
+    if (isGrossiste.value) {
+        return false;
+    }
+
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
     if (produit?.is_fabricable && clientSelected.value) {
         return false;
@@ -450,6 +487,66 @@ const clientSelected = ref<ClientOption | null>(null);
 const clientSuggests = ref<ClientOption[]>([]);
 const clientSolvabilite = ref<SolvabiliteResult | null>(null);
 const clientSolvabiliteLoading = ref(false);
+
+// ── Grossiste : mode de remise (Enlèvement/Livraison), par commande — jamais une
+// caractéristique du client (cf. docs/grossiste.md). Depuis le 05/09/2026, plus un choix
+// utilisateur indépendant : dérivé uniquement de la présence d'un véhicule (seule source de
+// vérité), exactement comme le calcule le serveur (cf. CommandeVenteController::
+// deriverModeRemiseGrossiste()) — jamais un second champ à renseigner. Placé ICI (après
+// clientSelected, jamais avant) : isGrossiste lit clientSelected.value, et le watch() ci-dessous
+// évalue sa source dès son appel — même TDZ que vehiculesDisponibles plus bas, cf. son commentaire.
+const isGrossiste = computed(() => clientSelected.value?.type === 'grossiste');
+
+const modeRemiseGrossiste = computed<'enlevement' | 'livraison'>(() =>
+    form.vehicule_id ? 'livraison' : 'enlevement',
+);
+
+// ── Tarifs Grossiste du client sélectionné — PROPRES À CE CLIENT (cf. docs/grossiste.md),
+// jamais une grille organisation : fetch live au choix d'un client Grossiste, plutôt qu'une
+// grille envoyée systématiquement au chargement de page (qui exposerait les tarifs négociés de
+// TOUS les Grossistes de l'organisation à chaque création de vente, y compris pour un autre
+// client). Simple aperçu : GrossisteTarifResolver recalcule et valide toujours côté serveur.
+const grossisteTarifsClient = ref<Record<string, Record<string, number>>>({});
+
+watch(
+    () => (isGrossiste.value ? form.client_id : null),
+    async (clientId) => {
+        grossisteTarifsClient.value = {};
+        if (!clientId) {
+            recomputeAllTotals();
+
+            return;
+        }
+
+        try {
+            const res = await fetch(
+                `/backoffice/clients/${clientId}/tarifs-grossiste`,
+                {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                },
+            );
+            if (res.ok) {
+                const data = (await res.json()) as {
+                    tarifs: { categorie_id: string; mode: string; prix: number }[];
+                };
+                const grille: Record<string, Record<string, number>> = {};
+                for (const t of data.tarifs) {
+                    grille[t.categorie_id] ??= {};
+                    grille[t.categorie_id][t.mode] = t.prix;
+                }
+                grossisteTarifsClient.value = grille;
+            }
+        } catch {
+            // Aperçu indisponible (réseau) : GrossisteTarifResolver reste l'autorité finale à la
+            // confirmation, jamais bloquant ici.
+        } finally {
+            recomputeAllTotals();
+        }
+    },
+);
 
 // Désélection automatique du véhicule dès qu'il quitte le pool proposé — couvre les deux sens :
 // passage à un client DISTRIBUTEUR alors qu'un véhicule vente-seulement était déjà choisi, ET
@@ -505,7 +602,7 @@ function onClientClear() {
 }
 
 function clientLabel(c: ClientOption): string {
-    return c.nom_complet;
+    return `${c.nom_complet} (${c.type_label})`;
 }
 
 // ── Solvabilité — dialog ──────────────────────────────────────────────────────
@@ -715,7 +812,7 @@ const isCommandeLogistique = computed(() => form.vehicule_id !== null);
 
 const confirmationNatureLabel = computed(() => {
     if (form.nature_operation === 'distribution_client') {
-        return 'Distribution client';
+        return 'Distribution';
     }
 
     return isCommandeLogistique.value
@@ -941,6 +1038,16 @@ function confirmerEtCreer() {
                             <!-- Blocages réels (rule 10 CLAUDE.md : DANGER/rouge réservé à une
                             opération effectivement empêchée) — jamais affichés ensemble, la liste
                             vide rendant le second message sans objet. -->
+                            <!-- Grossiste : statut du mode de remise, purement informatif, dérivé
+                            de la présence du véhicule (seule source de vérité, cf.
+                            docs/grossiste.md) — libellé volontairement réduit à un mot, sans
+                            phrase explicative (révision UX du 05/09/2026). -->
+                            <p
+                                v-else-if="isGrossiste"
+                                class="mt-1 text-xs font-medium text-muted-foreground"
+                            >
+                                {{ form.vehicule_id ? 'Livraison' : 'Enlèvement' }}
+                            </p>
                             <p
                                 v-else-if="
                                     clientSelected?.type === 'distributeur' &&
@@ -1329,6 +1436,12 @@ function confirmerEtCreer() {
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_complet }}
+                                            <span
+                                                class="font-normal text-muted-foreground"
+                                                >— {{
+                                                    option.type_label
+                                                }}</span
+                                            >
                                         </div>
                                         <div
                                             v-if="option.telephone"
@@ -1376,6 +1489,10 @@ function confirmerEtCreer() {
                                     show-clear
                                 />
                             </div>
+
+                            <!-- Grossiste : le mode de remise est déduit automatiquement du champ
+                            Véhicule ci-dessus (seule source de vérité, cf. docs/grossiste.md) —
+                            aucun champ supplémentaire à saisir ici. -->
 
                             <!-- Solvabilité client — c'est TOUJOURS le facteur de blocage dès
                             qu'un client est sélectionné (il porte la facture, cf.
@@ -1637,6 +1754,35 @@ function confirmerEtCreer() {
                     >
                         Sélectionnez au moins un véhicule ou un client.
                     </p>
+
+                    <!-- Nature du client / Nature de l'opération — TOUJOURS affichées, au même
+                    endroit et sous la même forme, quel que soit le client (révision UX du
+                    05/09/2026). Deux simples badges en lecture seule, jamais des boutons : ces
+                    valeurs sont déterminées par les règles métier existantes (client + véhicule,
+                    cf. natureOperationParDefaut), jamais par une action de l'utilisateur sur ce
+                    formulaire. -->
+                    <div class="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+                        <div>
+                            <Label class="mb-1.5 block text-sm">
+                                Nature de l'opération
+                            </Label>
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ natureOperationLabel }}
+                            </span>
+                        </div>
+                        <div v-if="clientSelected">
+                            <Label class="mb-1.5 block text-sm">
+                                Nature du client
+                            </Label>
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ clientSelected.type_label }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Lignes de commande -->
@@ -1661,77 +1807,6 @@ function confirmerEtCreer() {
                         <Lock class="h-3.5 w-3.5" />
                         Prix unitaire verrouille pour votre profil.
                     </p>
-
-                    <!-- Nature de l'opération — uniquement pertinent pour un client distributeur,
-                         pré-sélectionnée mais modifiable (ex: retrait sur site sans véhicule ELM) -->
-                    <div
-                        v-if="clientSelected?.type === 'distributeur'"
-                        class="mb-3 flex flex-wrap items-center gap-2 text-sm"
-                    >
-                        <span class="font-medium text-foreground"
-                            >Nature de l'opération</span
-                        >
-                        <div class="grid grid-cols-2 gap-2">
-                            <label
-                                class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors"
-                                :class="
-                                    form.nature_operation === 'vente_standard'
-                                        ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
-                                        : 'hover:bg-muted/40'
-                                "
-                            >
-                                <input
-                                    type="radio"
-                                    value="vente_standard"
-                                    :checked="
-                                        form.nature_operation ===
-                                        'vente_standard'
-                                    "
-                                    class="sr-only"
-                                    @change="
-                                        onNatureOperationChange(
-                                            'vente_standard',
-                                        )
-                                    "
-                                />
-                                Vente
-                            </label>
-                            <label
-                                v-tooltip.top="
-                                    form.vehicule_id === null
-                                        ? 'Nécessite un véhicule de livraison ELM.'
-                                        : null
-                                "
-                                class="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors"
-                                :class="[
-                                    form.vehicule_id === null
-                                        ? 'cursor-not-allowed opacity-50'
-                                        : 'cursor-pointer',
-                                    form.nature_operation ===
-                                    'distribution_client'
-                                        ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
-                                        : 'hover:bg-muted/40',
-                                ]"
-                            >
-                                <input
-                                    type="radio"
-                                    value="distribution_client"
-                                    :disabled="form.vehicule_id === null"
-                                    :checked="
-                                        form.nature_operation ===
-                                        'distribution_client'
-                                    "
-                                    class="sr-only"
-                                    @change="
-                                        onNatureOperationChange(
-                                            'distribution_client',
-                                        )
-                                    "
-                                />
-                                Distribution client
-                            </label>
-                        </div>
-                    </div>
 
                     <!-- Règle de tarification + capacité — affichées une seule fois -->
                     <div
