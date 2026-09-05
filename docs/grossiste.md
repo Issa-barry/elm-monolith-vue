@@ -158,14 +158,44 @@ une règle active existe. Détail complet, patch du moteur et tests dans `docs/c
   sans catégorie / tarif absent / tarif d'un autre client jamais réutilisé —, blocage marge
   uniquement si un tarif existe)
 - `tests/Feature/CategorieTarifGrossisteTest.php` (scopé client, isolation entre deux Grossistes)
-- `tests/Feature/CommandeVenteGrossisteCommissionTest.php` (règle COMM-008, non-régression Externe)
+- `tests/Feature/CommandeVenteGrossisteCommissionTest.php` (règle COMM-008 ; le test Externe couvre
+  désormais la généralisation COMM-009, cf. section ci-dessous)
 - `tests/Feature/CommandeVenteGrossisteModeEtFallbackTest.php` (bout-en-bout HTTP `ventes.store` :
   mode dérivé du véhicule dans les deux sens, `mode_remise_grossiste` soumis dans la requête sans
   effet, tarif spécial appliqué, repli prix normal, K2 ne récupère jamais le tarif de K1, tarif
   spécial Livraison avec véhicule)
 
-## Hors périmètre (Chantier 2, non fait)
+## Chantier 2A (fait le 05/09/2026) — généralisation de COMM-008
 
-Généraliser l'éligibilité par bénéficiaire (Propriétaire/Livreur/Consultant/Site indépendants) à
-tous les types de client — décision explicite du 05/09/2026 de ne pas mélanger cette refonte avec
-la livraison Grossiste. Le correctif COMM-008 reste une exception scopée à Grossiste + Enlèvement.
+L'éligibilité par bénéficiaire (Propriétaire/Livreur/Consultant/Site indépendants) a été
+généralisée à tous les types de client — voir COMM-009/COMM-010 dans `docs/commissions.md`. Le
+correctif COMM-008 ci-dessus n'est donc plus une exception scopée à Grossiste + Enlèvement : c'est
+désormais un cas particulier de la règle générale (`$estGrossisteSansVehicule` a été retiré de
+`CommissionEnveloppeGenerator::genererPourCommandeVente()`, son comportement est le cas général).
+Le chantier 2B (cadence de paiement par cible, ex: Livreur payable dès réception / Consultant
+payable après encaissement client) reste hors périmètre.
+
+## Chantier « Transfert grossiste » (fait le 05/09/2026) — nouveau processus de commission
+
+**Corrige un point de COMM-008/2A** : une livraison Grossiste (véhicule de flotte) n'utilise plus
+le barème Vente. Elle utilise désormais un processus de commission dédié et indépendant,
+`CommissionProcessus::CODE_TRANSFERT_GROSSISTE` — voir COMM-011/COMM-012 dans
+`docs/commissions.md` pour le détail technique complet (routage, garde-fou, UI, rétrocompatibilité).
+
+Résumé de la règle :
+
+- **Grossiste + Livraison** (véhicule de flotte, `mode_remise_grossiste = LIVRAISON`) →
+  `CODE_TRANSFERT_GROSSISTE` — un processus à part, jamais Vente ni Transfert logistique (ses
+  bénéficiaires diffèrent des deux, notamment le Site, commissionnable ici mais jamais sur un
+  transfert logistique interne). Applicable uniquement aux véhicules qui font de la logistique
+  (`livraison_logistique = true`) — même usage que Transfert logistique, jamais un usage propre.
+- **Grossiste + Enlèvement** (aucun véhicule) → reste sur `CODE_VENTE`, inchangé : Transfert
+  grossiste n'a de sens qu'avec un véhicule/une équipe de logistique, qu'un Enlèvement n'a
+  structurellement jamais.
+- Aucun repli automatique de barème (contrairement à `distribution_client`) : une organisation doit
+  configurer explicitement l'onglet « Transferts grossistes » (Paramètres > Commissions) — sans
+  quoi la création d'une commande Grossiste + Livraison est **bloquée** avec un message explicite,
+  jamais une commission silencieuse à 0.
+- Une équipe dont le véhicule fait de la logistique peut désormais avoir des montants fixes
+  différents pour Transfert logistique ET Transfert grossiste sur la même catégorie, simultanément
+  (même mécanique que Vente/Transfert logistique déjà en place, aucune migration nécessaire).

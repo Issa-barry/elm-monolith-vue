@@ -2,7 +2,6 @@
 
 namespace App\Services\Commission;
 
-use App\Enums\ClientType;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
@@ -76,30 +75,23 @@ class CommissionEnveloppeGenerator
         CommissionGenerationDeclenchePar $declenchePar = CommissionGenerationDeclenchePar::SYSTEME,
         ?string $declencheurUserId = null,
     ): void {
-        // Éligibilité aux commissions figée au moment de la commande
-        // (commission_eligible_snapshot, dérivée de Vehicule::livraison_vente) — notion
-        // indépendante du mode de tarification (prix_vente/prix_usine, cf. ModeTarification).
-        // Voir VehiculeCommandeContextResolver. Un véhicule non éligible ne doit jamais générer de
-        // commission PROPRIETAIRE/EQUIPE_LIVRAISON, quel que soit son état actuel.
+        // Chantier 2A (05/09/2026, généralisation de l'ancien correctif Grossiste) : il n'y a
+        // plus de verrou global ici. commission_eligible_snapshot (dérivé de
+        // Vehicule::livraison_vente/livraison_logistique, cf. VehiculeCommandeContextResolver)
+        // ne conditionne plus QUE les cibles PROPRIETAIRE/EQUIPE_LIVRAISON — transmis via
+        // CommissionOperationContext::$vehiculeEligibleCommission, lu uniquement dans
+        // genererDepuisContexte(). SITE et CONSULTANT sont désormais toujours évalués, pour
+        // tout type de client, avec ou sans véhicule — cf. docs/commissions.md.
         //
-        // Exception scopée, décision produit du 05/09/2026 (cf. docs/grossiste.md) : un Grossiste
-        // en Enlèvement (aucun véhicule ELM impliqué) reste commission_eligible_snapshot=false —
-        // à raison, aucune commission logistique ne lui est due — mais le CONSULTANT (et le SITE)
-        // sont des cibles indépendantes du véhicule (cf. CODE_CONSULTANT ci-dessous) et doivent
-        // tout de même être évalués. Scopé strictement à GROSSISTE : pour EXTERNE/REVENDEUR/
-        // DISTRIBUTEUR, le comportement historique (aucune commission sans véhicule, quelle que
-        // soit la cible) reste inchangé — ne pas généraliser sans une décision produit dédiée
-        // (chantier séparé d'éligibilité par bénéficiaire, cf. docs/grossiste.md).
-        $estGrossisteSansVehicule = ! $commande->vehicule_id
-            && $commande->client?->type === ClientType::GROSSISTE;
-
-        if (! $commande->commission_eligible_snapshot && ! $estGrossisteSansVehicule) {
-            return;
-        }
-
-        $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
-            : CommissionProcessus::CODE_VENTE;
+        // Identité du processus résolue par CommissionProcessusDefaults::identiteCodePourVente() —
+        // source UNIQUE partagée avec CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
+        // (chantier « Transfert grossiste », 05/09/2026, cf. docs/grossiste.md) : jamais un second
+        // calcul indépendant qui pourrait diverger.
+        $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
+            $commande->nature_operation,
+            $commande->client?->type,
+            $commande->mode_remise_grossiste,
+        );
 
         $ctx = self::contexteDepuisCommandeVente($commande);
 
@@ -159,6 +151,7 @@ class CommissionEnveloppeGenerator
             sourceLigneType: CommandeVenteLigne::class,
             quantiteField: $quantiteField,
             lignes: $commande->lignes,
+            vehiculeEligibleCommission: (bool) $commande->commission_eligible_snapshot,
         );
     }
 
@@ -184,6 +177,10 @@ class CommissionEnveloppeGenerator
             sourceLigneType: TransfertLigne::class,
             quantiteField: $champQuantite,
             lignes: $transfert->lignes,
+            // Toujours true : un TransfertLogistique exige structurellement un véhicule
+            // (contrairement à une CommandeVente) — aucun équivalent de
+            // commission_eligible_snapshot ici, comportement inchangé.
+            vehiculeEligibleCommission: true,
             notifSourceLabel: 'transfert_logistique',
             notifLibelleOperation: 'Le transfert logistique',
             notifVerbeEvenement: $verbeEvenement,
@@ -235,17 +232,7 @@ class CommissionEnveloppeGenerator
             }
 
             try {
-                DB::transaction(fn () => $generation($processus));
-
-                CommissionGenerationAttempt::create([
-                    'organization_id' => $ctx->organizationId,
-                    'source_type' => $ctx->sourceType,
-                    'source_id' => $ctx->sourceId,
-                    'processus_id' => $processus->id,
-                    'statut' => CommissionGenerationStatut::SUCCES->value,
-                    'declenchee_par' => $declenchePar->value,
-                    'created_by' => $declencheurUserId,
-                ]);
+                $erreursCibles = DB::transaction(fn () => $generation($processus));
 
                 // "Succès" ne veut pas dire "une commission a réellement été créée" :
                 // l'absence de barème actif pour une catégorie résout silencieusement à
@@ -259,12 +246,50 @@ class CommissionEnveloppeGenerator
                     ->where('source_id', $ctx->sourceId)
                     ->exists();
 
-                if (! $auMoinsUneEnveloppe) {
-                    self::alerterCommissionManquante($ctx, $declencheurUserId, null);
-                } else {
+                // Chantier 2A (05/09/2026, indépendance des cibles) : trois statuts possibles,
+                // jamais un simple binaire SUCCES/ERREUR — PARTIEL couvre "certaines cibles
+                // générées avec succès, au moins une autre à régulariser", sans plus jamais
+                // annuler les cibles correctement résolues (révise l'ancienne décision AMOA #4
+                // "tout-ou-rien", cf. genererDepuisContexte()).
+                $statut = match (true) {
+                    empty($erreursCibles) => CommissionGenerationStatut::SUCCES,
+                    $auMoinsUneEnveloppe => CommissionGenerationStatut::PARTIEL,
+                    default => CommissionGenerationStatut::ERREUR,
+                };
+
+                CommissionGenerationAttempt::create([
+                    'organization_id' => $ctx->organizationId,
+                    'source_type' => $ctx->sourceType,
+                    'source_id' => $ctx->sourceId,
+                    'processus_id' => $processus->id,
+                    'statut' => $statut->value,
+                    'motif_erreur' => empty($erreursCibles) ? null : implode(' | ', $erreursCibles),
+                    'detail_erreur' => empty($erreursCibles) ? null : ['erreurs' => $erreursCibles],
+                    'declenchee_par' => $declenchePar->value,
+                    'created_by' => $declencheurUserId,
+                ]);
+
+                // Les bénéficiaires connectés (propriétaire/livreur) sont notifiés de leur part
+                // dès qu'au moins une enveloppe existe — y compris en PARTIEL : une cible cassée
+                // ne doit jamais retarder la notification des cibles correctement résolues.
+                if ($auMoinsUneEnveloppe) {
                     self::notifierCommissionGeneree($ctx);
                 }
+
+                // Alerte régularisation : succès total mais 0 enveloppe (aucun barème nulle
+                // part, cas silencieux légitime), ou au moins une cible en erreur (PARTIEL/ERREUR).
+                if (! $auMoinsUneEnveloppe || ! empty($erreursCibles)) {
+                    self::alerterCommissionManquante(
+                        $ctx,
+                        $declencheurUserId,
+                        empty($erreursCibles) ? null : implode(' | ', $erreursCibles),
+                    );
+                }
             } catch (InvalidArgumentException $e) {
+                // Filet de sécurité pour une erreur métier vraiment imprévue : depuis le
+                // chantier 2A, genererDepuisContexte() ne lève plus cette exception pour les cas
+                // connus (cible dont le bénéficiaire est introuvable) — elle les retourne à la
+                // place, cf. ci-dessus.
                 Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
                     'source_type' => $ctx->sourceType,
                     'source_id' => $ctx->sourceId,
@@ -401,8 +426,18 @@ class CommissionEnveloppeGenerator
      * réellement lus pour calculer les montants — les deux diffèrent uniquement pour
      * distribution_client tant qu'il n'a pas sa propre configuration (cf.
      * CommissionProcessusDefaults::processusResolutionBareme()), identiques dans tous les autres cas.
+     *
+     * Retourne les messages des cibles dont le bénéficiaire n'a pas pu être résolu (liste vide
+     * si tout s'est bien passé), jamais levés en exception depuis le chantier 2A (05/09/2026,
+     * indépendance des cibles) : une cible cassée n'empêche plus la persistance des cibles
+     * correctement résolues de la même opération (cf. executerAvecTentative(), qui décide du
+     * statut SUCCES/PARTIEL/ERREUR à partir de ce retour). Révise l'ancienne décision AMOA #4
+     * (tout-ou-rien), désormais réservée au seul cas où AUCUNE cible n'a pu être générée, cf.
+     * docs/commissions.md.
+     *
+     * @return list<string>
      */
-    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme): void
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme): array
     {
         $vehicule = $ctx->vehicule;
 
@@ -410,12 +445,16 @@ class CommissionEnveloppeGenerator
         $lignes = $ctx->lignes;
 
         $cibles = [];
-        // PROPRIETAIRE/EQUIPE_LIVRAISON n'ont de sens qu'avec un véhicule (pas de propriétaire, pas
-        // d'équipe sans lui) — absent uniquement pour un Grossiste en Enlèvement (cf.
-        // genererPourCommandeVente(), seul appelant pouvant atteindre ce point sans véhicule ; un
-        // transfert logistique en a toujours un). Un véhicule présent mais non éligible/sans
-        // équipe reste géré plus bas (erreurs "à régulariser"), comportement inchangé.
-        if ($vehicule) {
+        // PROPRIETAIRE/EQUIPE_LIVRAISON n'ont de sens qu'avec un véhicule ELIGIBLE (chantier 2A,
+        // 05/09/2026) : $vehicule seul ne suffit pas — un véhicule peut être présent mais non
+        // autorisé pour l'usage réellement concerné par l'opération (ex: véhicule vente-only
+        // utilisé pour une distribution), auquel cas $ctx->vehiculeEligibleCommission est false
+        // (cf. VehiculeCommandeContextResolver). Absent pour toute commande sans véhicule, quel
+        // que soit le type de client (généralisation de l'ancienne exception Grossiste, cf.
+        // docs/commissions.md) — un transfert logistique a toujours vehiculeEligibleCommission
+        // true. Un véhicule éligible mais sans équipe reste géré plus bas (erreur "à
+        // régulariser"), comportement inchangé.
+        if ($vehicule && $ctx->vehiculeEligibleCommission) {
             $cibles[] = CommissionCibleType::CODE_PROPRIETAIRE;
             $cibles[] = CommissionCibleType::CODE_EQUIPE_LIVRAISON;
         }
@@ -476,9 +515,9 @@ class CommissionEnveloppeGenerator
             }
         }
 
-        // Tout-ou-rien : toutes les cibles collectives doivent être résolvables,
-        // sinon aucune enveloppe n'est créée pour l'opération (décision AMOA #4,
-        // cf. §D de la conception cible).
+        // Indépendance des cibles (chantier 2A, 05/09/2026 — révise l'ancienne décision AMOA #4
+        // "tout-ou-rien", cf. §D de la conception cible) : les erreurs collectées ci-dessous ne
+        // bloquent plus la persistance des cibles correctement résolues, cf. plus bas.
         $erreurs = [];
         $enveloppesACreer = [];
 
@@ -712,10 +751,9 @@ class CommissionEnveloppeGenerator
             }
         }
 
-        if (! empty($erreurs)) {
-            throw new InvalidArgumentException(implode(' | ', $erreurs));
-        }
-
+        // Persistance de toutes les cibles correctement résolues, qu'il y ait ou non des
+        // $erreurs par ailleurs (chantier 2A) — executerAvecTentative() décide du statut
+        // SUCCES/PARTIEL/ERREUR à partir du $erreurs retourné plus bas, jamais d'un rollback ici.
         foreach ($enveloppesACreer as $cibleCode => $e) {
             $enveloppe = CommissionEnveloppe::create([
                 'organization_id' => $ctx->organizationId,
@@ -757,5 +795,7 @@ class CommissionEnveloppeGenerator
                 ]);
             }
         }
+
+        return $erreurs;
     }
 }

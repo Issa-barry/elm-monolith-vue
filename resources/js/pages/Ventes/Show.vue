@@ -196,9 +196,10 @@ interface CommissionStatut {
 
 /** Statut de la DERNIÈRE tentative de génération de commission — distinct de
  * commission_statut (paiement de commissions déjà générées). Non-null
- * uniquement en cas d'échec ("à régulariser"), cf. CommandeVenteController. */
+ * uniquement en cas d'anomalie ("à régulariser" ou "partiellement générée",
+ * chantier 2A du 05/09/2026), cf. CommandeVenteController. */
 interface CommissionGenerationStatut {
-    value: 'erreur';
+    value: 'erreur' | 'partiel';
     label: string;
     motif: string | null;
 }
@@ -665,13 +666,22 @@ function connectorIsActive(idx: number): boolean {
 // L'étape "Commissions" doit rester visuellement en anomalie tant que la dernière tentative de
 // génération a échoué — jamais confondue avec "en cours" (bleu) ou "faite" (vert), cf. incident
 // CMD-230826-004 où cet état n'était visible nulle part.
+// PARTIEL (chantier 2A du 05/09/2026, indépendance des cibles) : une partie des commissions de
+// l'opération a bien été générée, seule une autre cible reste à régulariser — distingué de ERREUR
+// (rien n'a été généré) par une couleur WARNING (orange) plutôt que DANGER (rouge), cf. CLAUDE.md.
 const COMMISSIONS_STEP_IDX = 5;
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
 );
+const commissionsPartielles = computed(
+    () => props.commission_generation_statut?.value === 'partiel',
+);
+const commissionsAvecAnomalie = computed(
+    () => commissionsEnErreur.value || commissionsPartielles.value,
+);
 
 function stepLabel(idx: number, defaultLabel: string): string {
-    return idx === COMMISSIONS_STEP_IDX && commissionsEnErreur.value
+    return idx === COMMISSIONS_STEP_IDX && commissionsAvecAnomalie.value
         ? 'À régulariser'
         : defaultLabel;
 }
@@ -916,16 +926,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    idx === COMMISSIONS_STEP_IDX &&
-                                    commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX && commissionsEnErreur
                                         ? 'bg-red-500 text-white shadow-sm'
-                                        : stepState(idx) === 'done'
-                                          ? 'bg-emerald-500 text-white shadow-sm'
-                                          : '',
+                                        : idx === COMMISSIONS_STEP_IDX && commissionsPartielles
+                                          ? 'bg-orange-500 text-white shadow-sm'
+                                          : stepState(idx) === 'done'
+                                            ? 'bg-emerald-500 text-white shadow-sm'
+                                            : '',
                                     stepState(idx) === 'current' &&
                                     !(
                                         idx === COMMISSIONS_STEP_IDX &&
-                                        commissionsEnErreur
+                                        commissionsAvecAnomalie
                                     )
                                         ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
                                         : '',
@@ -939,16 +950,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <span
                                 :class="[
                                     'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    idx === COMMISSIONS_STEP_IDX &&
-                                    commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX && commissionsEnErreur
                                         ? 'text-red-600 dark:text-red-400'
-                                        : stepState(idx) === 'current'
-                                          ? 'text-blue-600 dark:text-blue-400'
-                                          : '',
+                                        : idx === COMMISSIONS_STEP_IDX && commissionsPartielles
+                                          ? 'text-orange-600 dark:text-orange-400'
+                                          : stepState(idx) === 'current'
+                                            ? 'text-blue-600 dark:text-blue-400'
+                                            : '',
                                     stepState(idx) === 'done' &&
                                     !(
                                         idx === COMMISSIONS_STEP_IDX &&
-                                        commissionsEnErreur
+                                        commissionsAvecAnomalie
                                     )
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : '',
@@ -974,18 +986,31 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 </div>
             </div>
 
-            <!-- Alerte persistante : commission "à régulariser" ──────────────── -->
-            <Alert v-if="commission_generation_statut" variant="destructive">
-                <AlertTriangle class="size-4" />
-                <AlertTitle>Commission à régulariser</AlertTitle>
+            <!-- Alerte persistante : commission "à régulariser" (rouge) ou "partielle" (orange, chantier 2A) -->
+            <Alert
+                v-if="commission_generation_statut"
+                :variant="commissionsEnErreur ? 'destructive' : 'default'"
+            >
+                <AlertTriangle
+                    :class="commissionsPartielles ? 'size-4 text-orange-500' : 'size-4'"
+                />
+                <AlertTitle>
+                    {{
+                        commissionsEnErreur
+                            ? 'Commission à régulariser'
+                            : 'Commission partiellement générée'
+                    }}
+                </AlertTitle>
                 <AlertDescription>
                     <p v-if="commission_generation_statut.motif">
                         {{ commission_generation_statut.motif }}
                     </p>
                     <p class="mt-1">
-                        Corrigez la configuration concernée puis relancez la
-                        génération — la commande reste payée mais ne peut pas se
-                        clôturer tant que ce n'est pas fait.
+                        {{
+                            commissionsEnErreur
+                                ? "Corrigez la configuration concernée puis relancez la génération — la commande reste payée mais ne peut pas se clôturer tant que ce n'est pas fait."
+                                : "Les cibles correctement configurées ont bien reçu leur commission. Corrigez la configuration de la cible restante puis relancez la génération pour compléter — la commande ne peut pas se clôturer tant que ce n'est pas fait."
+                        }}
                     </p>
                     <Button
                         type="button"

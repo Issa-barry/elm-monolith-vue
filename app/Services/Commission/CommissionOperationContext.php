@@ -33,6 +33,15 @@ final class CommissionOperationContext
         public readonly string $sourceLigneType,
         public readonly string $quantiteField,
         public readonly Collection $lignes,
+        // Éligibilité du véhicule pour les cibles PROPRIETAIRE/EQUIPE_LIVRAISON (chantier 2A,
+        // 05/09/2026) — distincte de la simple présence de $vehicule : un véhicule peut être
+        // présent mais non autorisé pour l'usage réellement concerné par l'opération (ex: véhicule
+        // vente-only utilisé pour une distribution, cf. VehiculeCommandeContextResolver). Pour une
+        // CommandeVente, reprend exactement commission_eligible_snapshot (figé à la création,
+        // jamais recalculé) ; toujours true pour un TransfertLogistique (véhicule structurellement
+        // obligatoire). Ne conditionne QUE Propriétaire/Équipe — SITE et CONSULTANT restent
+        // indépendants de ce champ, cf. genererDepuisContexte().
+        public readonly bool $vehiculeEligibleCommission = true,
         public readonly string $notifSourceLabel = 'commande_vente',
         public readonly string $notifLibelleOperation = 'La facture de la commande',
         public readonly string $notifVerbeEvenement = 'encaissée',

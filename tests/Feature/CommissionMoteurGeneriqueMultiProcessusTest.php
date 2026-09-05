@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ClientType;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMode;
@@ -9,6 +10,7 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\NatureOperation;
 use App\Enums\PrestataireType;
 use App\Enums\StatutCommandeVente;
@@ -16,6 +18,7 @@ use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Features\ModuleFeature;
 use App\Models\Categorie;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
@@ -780,5 +783,81 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         ]);
         // Le transfert lui-même n'est jamais bloqué par une commission manquante.
         $this->assertSame(StatutTransfert::TRANSIT, $transfert->fresh()->statut);
+    }
+
+    // ── 3. Coexistence Transfert logistique / Transfert grossiste sur la même équipe ─
+
+    /**
+     * Chantier « Transfert grossiste » (05/09/2026) : une même équipe/véhicule doit pouvoir avoir
+     * des montants fixes DIFFÉRENTS pour logistique_transfert et transfert_grossiste sur la même
+     * catégorie, simultanément — jamais un choix exclusif (cf.
+     * equipe_livraison_partages_categorie.processus_id, déjà générique, aucune migration
+     * nécessaire pour ce chantier). Génère un vrai transfert logistique ET une vraie vente
+     * Grossiste + Livraison sur le MÊME véhicule/équipe, et vérifie qu'aucun des deux barèmes ne
+     * contamine l'autre.
+     */
+    /** @test */
+    public function meme_equipe_transfert_logistique_et_transfert_grossiste_coexistent_avec_montants_distincts(): void
+    {
+        $logistique = $this->processusPour(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $grossiste = $this->processusPour(CommissionProcessus::CODE_TRANSFERT_GROSSISTE);
+
+        $this->creerRegle($logistique, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 200);
+        $this->creerRegle($grossiste, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
+        $this->definirPartageCategorie($logistique, [$this->livreur1->id => 120, $this->livreur2->id => 80]);
+        $this->definirPartageCategorie($grossiste, [$this->livreur1->id => 180, $this->livreur2->id => 120]);
+
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+
+        // Transfert logistique interne — 100 unités, barème 200/unité.
+        $transfert = $this->makeTransfert(qteChargee: 100);
+        $this->actingAs($this->user);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        // Vente Grossiste + Livraison sur le MÊME véhicule/équipe — 50 unités, barème 300/unité.
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => ClientType::GROSSISTE->value]);
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $this->vehicule->id,
+            'client_id' => $client->id,
+            'nature_operation' => NatureOperation::VENTE_STANDARD->value,
+            'mode_remise_grossiste' => ModeRemiseGrossiste::LIVRAISON->value,
+            'commission_eligible_snapshot' => true,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 50 * 2000,
+        ]);
+        $variante = $this->produit->variantePrincipale()->first();
+        $ligne = $commande->lignes()->create([
+            'variante_id' => $variante->id,
+            'quantite_demandee' => 50,
+            'prix_usine_snapshot' => (float) $variante->prix_usine,
+            'prix_vente_snapshot' => (float) $variante->prix_vente,
+            'total_ligne' => 50 * (float) $variante->prix_vente,
+        ]);
+        $this->seedVarianteStockSuffisant($variante, $this->site);
+        CommandeVenteService::confirmer($commande);
+        CommandeVenteService::demarrerChargement($commande->fresh());
+        CommandeVenteService::validerChargement($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_chargee' => 50, 'type_ecart' => 'conforme'],
+        ]);
+
+        // Transfert logistique : 100 × 200 = 20 000, tagué logistique_transfert.
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_type' => TransfertLogistique::class,
+            'source_id' => $transfert->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'processus_id' => $logistique->id,
+            'montant_total' => 20000,
+        ]);
+        // Vente Grossiste : 50 × 300 = 15 000, tagué transfert_grossiste — jamais mélangé au
+        // barème logistique (qui aurait donné à tort 50 × 200 = 10 000).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'processus_id' => $grossiste->id,
+            'montant_total' => 15000,
+        ]);
     }
 }
