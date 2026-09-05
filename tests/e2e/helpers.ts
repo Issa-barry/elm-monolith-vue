@@ -524,19 +524,43 @@ export async function selectOptionFromCombobox(
     let option = visibleOptions.first();
 
     if (optionName) {
-        const optionCount = await visibleOptions.count();
-        let matchedText: string | null = null;
+        // Re-scanné à chaque itération (jamais un seul scan suivi d'un Locator positionnel
+        // nth(i) ou d'un filter({hasText}) figé) : le panneau peut se re-rendre entre deux
+        // lectures (revalidation, re-tri, liste chargée en plusieurs vagues) — deux régressions
+        // CI vécues le 05/09/2026 avec des approches "capture une fois, relocalise plus tard" :
+        // un nth(i) devenu obsolète (nth(11) introuvable après un scan sur 12 options), puis un
+        // filter({hasText: texteBrutMultiLigne}) construit sur le texte capturé pendant LE scan
+        // précédent, qui ne retrouvait plus une option multi-lignes reformulée entretemps
+        // (global-setup.ts, sélecteur véhicule). Ici, `find()` relit le DOM en direct à chaque
+        // appel : la seule donnée qui traverse les itérations est `optionName` lui-même.
+        const wantedOption: string | RegExp = optionName;
+        const find = async (): Promise<Locator | null> => {
+            const count = await visibleOptions.count();
+            for (let i = 0; i < count; i++) {
+                const candidate = visibleOptions.nth(i);
+                const text = (await candidate.innerText().catch(() => '')).trim();
+                if (text && matchesOptionText(text, wantedOption)) {
+                    return candidate;
+                }
+            }
+            return null;
+        };
 
-        for (let i = 0; i < optionCount; i++) {
-            const candidate = visibleOptions.nth(i);
-            const text = (await candidate.innerText().catch(() => '')).trim();
-            if (text && matchesOptionText(text, optionName)) {
-                matchedText = text;
+        const deadline = Date.now() + 15_000;
+        let found: Locator | null = null;
+        do {
+            const candidate = await find();
+            // Revérifié immédiatement après le scan (pas seulement "trouvé pendant le scan") :
+            // confirmer la visibilité juste avant de sortir de la boucle réduit la fenêtre de
+            // péremption à la durée d'un seul aller-retour, au lieu de la durée du scan complet.
+            if (candidate && (await candidate.isVisible().catch(() => false))) {
+                found = candidate;
                 break;
             }
-        }
+            await page.waitForTimeout(200);
+        } while (Date.now() < deadline);
 
-        if (!matchedText) {
+        if (!found) {
             const preview = await visibleOptions
                 .allInnerTexts()
                 .then((items) => items.slice(0, 8).join(' | '))
@@ -546,17 +570,11 @@ export async function selectOptionFromCombobox(
             );
         }
 
-        // Relocalisé par texte, jamais par l'index nth(i) trouvé pendant le scan ci-dessus :
-        // ce scan enchaîne un innerText() par option (jusqu'à une douzaine), et le panneau peut
-        // se re-rendre pendant ce laps de temps (revalidation, re-tri) — un Locator positionnel
-        // capturé plus tôt pointe alors sur un élément détaché ou décalé. Un Locator basé sur
-        // hasText se réinterroge en direct sur le DOM à chaque assertion/action, donc résiste au
-        // re-rendu (flake CI confirmé le 05/09/2026 : nth(11) introuvable après un scan sur 12
-        // options, cf. trace Playwright — expect(option).toBeVisible() timeout 15000ms).
-        option = visibleOptions.filter({ hasText: matchedText }).first();
+        option = found;
+    } else {
+        await expect(option).toBeVisible({ timeout: 15_000 });
     }
 
-    await expect(option).toBeVisible({ timeout: 15_000 });
     await option.click({ timeout: 3_000 });
     // Wait for the listbox to close before returning, so the next combobox
     // interaction does not see stale options from this dropdown.
