@@ -525,18 +525,18 @@ export async function selectOptionFromCombobox(
 
     if (optionName) {
         const optionCount = await visibleOptions.count();
-        let selected: Locator | null = null;
+        let matchedText: string | null = null;
 
         for (let i = 0; i < optionCount; i++) {
             const candidate = visibleOptions.nth(i);
             const text = (await candidate.innerText().catch(() => '')).trim();
             if (text && matchesOptionText(text, optionName)) {
-                selected = candidate;
+                matchedText = text;
                 break;
             }
         }
 
-        if (!selected) {
+        if (!matchedText) {
             const preview = await visibleOptions
                 .allInnerTexts()
                 .then((items) => items.slice(0, 8).join(' | '))
@@ -546,7 +546,14 @@ export async function selectOptionFromCombobox(
             );
         }
 
-        option = selected;
+        // Relocalisé par texte, jamais par l'index nth(i) trouvé pendant le scan ci-dessus :
+        // ce scan enchaîne un innerText() par option (jusqu'à une douzaine), et le panneau peut
+        // se re-rendre pendant ce laps de temps (revalidation, re-tri) — un Locator positionnel
+        // capturé plus tôt pointe alors sur un élément détaché ou décalé. Un Locator basé sur
+        // hasText se réinterroge en direct sur le DOM à chaque assertion/action, donc résiste au
+        // re-rendu (flake CI confirmé le 05/09/2026 : nth(11) introuvable après un scan sur 12
+        // options, cf. trace Playwright — expect(option).toBeVisible() timeout 15000ms).
+        option = visibleOptions.filter({ hasText: matchedText }).first();
     }
 
     await expect(option).toBeVisible({ timeout: 15_000 });

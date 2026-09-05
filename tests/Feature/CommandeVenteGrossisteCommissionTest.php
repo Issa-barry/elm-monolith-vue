@@ -18,7 +18,6 @@ use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionConsultantAffectation;
-use App\Models\CommissionEnveloppe;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
