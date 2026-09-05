@@ -7,6 +7,7 @@ use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ClientType;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\NatureOperation;
@@ -32,6 +33,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\GrossisteTarifResolver;
 use App\Services\PrixUsineResolver;
 use App\Services\PrixVenteNatureResolver;
 use App\Services\SolvabiliteService;
@@ -403,7 +405,8 @@ class CommandeVenteController extends Controller
             $this->enforceImpayesBlocking($data, $orgId);
 
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $natureOperation);
-            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
+            $modeRemiseGrossiste = $this->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
+            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client, $modeRemiseGrossiste);
 
             $this->assertStockDisponiblePourLignes($orgId, $userSite->id, $lignesData);
 
@@ -417,6 +420,7 @@ class CommandeVenteController extends Controller
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
                 'nature_operation' => $natureOperation->value,
+                'mode_remise_grossiste' => $modeRemiseGrossiste?->value,
                 'created_by' => auth()->id(),
             ]);
 
@@ -530,6 +534,8 @@ class CommandeVenteController extends Controller
                 'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
                 'nature_operation' => $commande->nature_operation?->value,
                 'nature_operation_label' => $commande->nature_operation?->label(),
+                'mode_remise_grossiste' => $commande->mode_remise_grossiste?->value,
+                'mode_remise_grossiste_label' => $commande->mode_remise_grossiste?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -641,6 +647,7 @@ class CommandeVenteController extends Controller
                 'vehicule_id' => $vente->vehicule_id,
                 'client_id' => $vente->client_id,
                 'client_vehicule_id' => $vente->client_vehicule_id,
+                'mode_remise_grossiste' => $vente->mode_remise_grossiste?->value,
                 'lignes' => $vente->lignes->map(fn ($l) => [
                     // Bridge Phase 3 : le formulaire actuel ne sélectionne qu'un produit
                     // (pas de sélecteur de variante), on retrouve donc le produit parent.
@@ -684,7 +691,8 @@ class CommandeVenteController extends Controller
         $oldSnapshot = $this->commandeSnapshot($vente);
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $vente->nature_operation);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
+        $modeRemiseGrossiste = $this->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client, $modeRemiseGrossiste);
 
         // Le site ne change jamais lors d'une modification de brouillon (pas de champ site_id
         // dans commandeValidationRules()) : on contrôle donc contre le site déjà porté par la
@@ -698,6 +706,7 @@ class CommandeVenteController extends Controller
             'total_commande' => $totalCommande,
             'mode_tarification_snapshot' => $context->modeTarification->value,
             'commission_eligible_snapshot' => $context->commissionEligible,
+            'mode_remise_grossiste' => $modeRemiseGrossiste?->value,
         ]);
 
         $vente->lignes()->delete();
@@ -976,6 +985,10 @@ class CommandeVenteController extends Controller
             'vehicule_id' => 'nullable|exists:vehicules,id',
             'client_id' => 'nullable|exists:clients,id',
             'nature_operation' => ['nullable', Rule::in(NatureOperation::values())],
+            // mode_remise_grossiste n'est PLUS un champ soumis (décision produit du 05/09/2026,
+            // révision UX) : dérivé côté serveur depuis vehicule_id, cf. deriverModeRemiseGrossiste()
+            // — jamais une seconde information indépendante saisie par l'utilisateur, pour éviter
+            // toute incohérence Enlèvement+véhicule / Livraison+sans véhicule par construction.
             // Véhicule partenaire facultatif — jamais un substitut à vehicule_id (flotte gérée),
             // cf. ClientVehicle. Doit appartenir au client sélectionné.
             'client_vehicule_id' => [
@@ -1019,6 +1032,23 @@ class CommandeVenteController extends Controller
             'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
             'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
         ]);
+    }
+
+    /**
+     * mode_remise_grossiste est PAR COMMANDE, jamais une caractéristique du client (cf.
+     * docs/grossiste.md) — mais DEPUIS le 05/09/2026, plus une seconde information saisie par
+     * l'utilisateur : dérivée uniquement de la présence d'un véhicule, seule source de vérité.
+     * Véhicule sélectionné ⇒ Livraison, aucun véhicule ⇒ Enlèvement. Élimine par construction
+     * toute incohérence Enlèvement+véhicule / Livraison+sans véhicule — il n'existe plus de
+     * champ indépendant à valider. Null pour tout client non-Grossiste (notion sans objet).
+     */
+    private function deriverModeRemiseGrossiste(?string $vehiculeId, ?Client $client): ?ModeRemiseGrossiste
+    {
+        if ($client?->type !== ClientType::GROSSISTE) {
+            return null;
+        }
+
+        return $vehiculeId ? ModeRemiseGrossiste::LIVRAISON : ModeRemiseGrossiste::ENLEVEMENT;
     }
 
     /**
@@ -1259,7 +1289,7 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null): array
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null, ?ModeRemiseGrossiste $modeRemiseGrossiste = null): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -1268,6 +1298,34 @@ class CommandeVenteController extends Controller
             $variante = $this->resolveVariante($ligne);
             $produit = $variante->produit;
             $qte = (int) $ligne['qte'];
+
+            // Grossiste : tarif catégorie × mode × client (GrossisteTarifResolver), gouverne SEUL
+            // le total de la ligne — jamais PrixVenteNatureResolver/PrixUsineResolver/
+            // ModeTarification, qui ne s'appliquent pas à cette nature (cf. docs/grossiste.md).
+            // $modeRemiseGrossiste est dérivé plus haut (deriverModeRemiseGrossiste()) depuis
+            // vehicule_id, toujours non-null ici pour un client Grossiste. Le tarif spécial est une
+            // surcharge facultative : repli automatique sur prix_vente si absent (resolveOrigine()
+            // le reflète dans prix_origine_snapshot pour rester transparent à l'affichage).
+            if ($client?->type === ClientType::GROSSISTE && $modeRemiseGrossiste) {
+                $prixGrossiste = (float) GrossisteTarifResolver::resolve($variante, $modeRemiseGrossiste, $client);
+                $origineGrossiste = GrossisteTarifResolver::resolveOrigine($variante, $modeRemiseGrossiste, $client);
+                $totalLigneGrossiste = $qte * $prixGrossiste;
+
+                $lignesData[] = [
+                    'variante_id' => $variante->id,
+                    'quantite_demandee' => $qte,
+                    'prix_usine_snapshot' => $prixGrossiste,
+                    'prix_vente_snapshot' => $prixGrossiste,
+                    'prix_origine_snapshot' => $origineGrossiste->value,
+                    'total_ligne' => $totalLigneGrossiste,
+                    'libelle_snapshot' => $this->libelleSnapshot($produit, $variante),
+                ];
+
+                $totalCommande += $totalLigneGrossiste;
+
+                continue;
+            }
+
             // Fabricable + client : le prix par nature de client (Externe/Revendeur/
             // Distributeur) remplace le prix de vente saisi/existant — jamais l'inverse (cf.
             // enforcePrixVentePolicy() qui n'a alors plus rien à valider pour cette ligne) — et
@@ -1348,6 +1406,7 @@ class CommandeVenteController extends Controller
             'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
             'nature_operation' => $commande->nature_operation?->value,
+            'mode_remise_grossiste' => $commande->mode_remise_grossiste?->value,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'variante_id' => $l->variante_id,
@@ -1588,6 +1647,7 @@ class CommandeVenteController extends Controller
                 'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
                 'type' => $c->type->value,
+                'type_label' => $c->type->label(),
                 // Véhicules externes mémorisés — facultatifs, jamais un prérequis pour vendre
                 // à ce client (cf. ClientVehicle).
                 'vehicules' => $c->type === ClientType::EXTERNE

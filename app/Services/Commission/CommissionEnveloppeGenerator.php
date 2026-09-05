@@ -2,6 +2,7 @@
 
 namespace App\Services\Commission;
 
+use App\Enums\ClientType;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
@@ -78,9 +79,21 @@ class CommissionEnveloppeGenerator
         // Éligibilité aux commissions figée au moment de la commande
         // (commission_eligible_snapshot, dérivée de Vehicule::livraison_vente) — notion
         // indépendante du mode de tarification (prix_vente/prix_usine, cf. ModeTarification).
-        // Voir VehiculeCommandeContextResolver. Un véhicule non éligible ne doit jamais
-        // générer de commission, quel que soit son état actuel.
-        if (! $commande->commission_eligible_snapshot) {
+        // Voir VehiculeCommandeContextResolver. Un véhicule non éligible ne doit jamais générer de
+        // commission PROPRIETAIRE/EQUIPE_LIVRAISON, quel que soit son état actuel.
+        //
+        // Exception scopée, décision produit du 05/09/2026 (cf. docs/grossiste.md) : un Grossiste
+        // en Enlèvement (aucun véhicule ELM impliqué) reste commission_eligible_snapshot=false —
+        // à raison, aucune commission logistique ne lui est due — mais le CONSULTANT (et le SITE)
+        // sont des cibles indépendantes du véhicule (cf. CODE_CONSULTANT ci-dessous) et doivent
+        // tout de même être évalués. Scopé strictement à GROSSISTE : pour EXTERNE/REVENDEUR/
+        // DISTRIBUTEUR, le comportement historique (aucune commission sans véhicule, quelle que
+        // soit la cible) reste inchangé — ne pas généraliser sans une décision produit dédiée
+        // (chantier séparé d'éligibilité par bénéficiaire, cf. docs/grossiste.md).
+        $estGrossisteSansVehicule = ! $commande->vehicule_id
+            && $commande->client?->type === ClientType::GROSSISTE;
+
+        if (! $commande->commission_eligible_snapshot && ! $estGrossisteSansVehicule) {
             return;
         }
 
@@ -392,14 +405,20 @@ class CommissionEnveloppeGenerator
     private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme): void
     {
         $vehicule = $ctx->vehicule;
-        if (! $vehicule) {
-            throw new InvalidArgumentException("L'opération {$ctx->reference} ne possède pas de véhicule lié.");
-        }
 
         $earnedAt = $ctx->earnedAt;
         $lignes = $ctx->lignes;
 
-        $cibles = [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON];
+        $cibles = [];
+        // PROPRIETAIRE/EQUIPE_LIVRAISON n'ont de sens qu'avec un véhicule (pas de propriétaire, pas
+        // d'équipe sans lui) — absent uniquement pour un Grossiste en Enlèvement (cf.
+        // genererPourCommandeVente(), seul appelant pouvant atteindre ce point sans véhicule ; un
+        // transfert logistique en a toujours un). Un véhicule présent mais non éligible/sans
+        // équipe reste géré plus bas (erreurs "à régulariser"), comportement inchangé.
+        if ($vehicule) {
+            $cibles[] = CommissionCibleType::CODE_PROPRIETAIRE;
+            $cibles[] = CommissionCibleType::CODE_EQUIPE_LIVRAISON;
+        }
         // Site : cible directe supplémentaire, ancrée sur le site porté par le contexte (site de
         // l'opération pour une vente, site source explicite pour un transfert) — s'applique dès
         // qu'un site est présent (décision produit 2026-08-21 : jamais limité aux dépôts, jamais
@@ -413,7 +432,8 @@ class CommissionEnveloppeGenerator
         // de l'opération, seulement d'une désignation au niveau organisation (cf.
         // CommissionConsultantAffectation). Une organisation qui n'a jamais configuré de barème
         // consultant ne verra jamais cette cible produire de contribution (absence de règle = 0,
-        // décision AMOA #4) : aucun impact pour les organisations existantes.
+        // décision AMOA #4) : aucun impact pour les organisations existantes. Indépendante du
+        // véhicule (cf. décision produit du 05/09/2026, Grossiste + Enlèvement).
         $cibles[] = CommissionCibleType::CODE_CONSULTANT;
 
         /** @var array<string, array<int, array{ligne: Model, montant: float, regle: CommissionRegle}>> $lignesParCible */
@@ -434,7 +454,7 @@ class CommissionEnveloppeGenerator
                     $produit?->id,
                     $categorie?->id,
                     $earnedAt,
-                    $vehicule->type_vehicule_id,
+                    $vehicule?->type_vehicule_id,
                 );
 
                 // Absence de règle = 0 pour cette cible sur cette ligne, jamais une

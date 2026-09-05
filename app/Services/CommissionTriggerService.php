@@ -166,6 +166,29 @@ class CommissionTriggerService
     }
 
     /**
+     * Appelé à la création réelle d'une vente directe (cf.
+     * CommandeVenteService::creerFactureDirecte()), inconditionnel comme
+     * onReceptionDistributionValidee() — jamais conditionné à
+     * Parametre::getDeclencheurCommissionVente(), qui suppose une étape « chargement »
+     * inexistante sur ce chemin (pas de véhicule, décrément de stock immédiat). C'est le SEUL
+     * événement disponible pour une vente directe : sans lui, un Grossiste en Enlèvement (seul
+     * cas actuel où une vente directe peut générer une commission, cf.
+     * CommissionEnveloppeGenerator::genererPourCommandeVente()) ne déclencherait jamais sa
+     * commission consultant sous le déclencheur CHARGEMENT_VALIDE.
+     *
+     * Sans effet pour toute vente directe non-Grossiste (Externe) : commission_eligible_snapshot
+     * est déjà false et le client n'est pas GROSSISTE, donc genererPourCommandeVente() retourne
+     * immédiatement — aucun changement de comportement pour l'existant.
+     */
+    public static function onVenteDirecteFacturee(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
+    }
+
+    /**
      * Moteur unique de génération de commission de vente.
      *
      * CommissionEnveloppeGenerator::genererPourCommandeVente() ouvre sa PROPRE

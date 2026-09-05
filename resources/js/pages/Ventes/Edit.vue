@@ -11,7 +11,7 @@ import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ProduitOption {
@@ -28,7 +28,13 @@ interface ProduitOption {
     prix_distributeur: number | null;
 }
 
-type PrixOrigine = 'usine' | 'vente' | 'externe' | 'revendeur' | 'distributeur';
+type PrixOrigine =
+    | 'usine'
+    | 'vente'
+    | 'externe'
+    | 'revendeur'
+    | 'distributeur'
+    | 'grossiste';
 
 const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     usine: 'Prix usine',
@@ -36,6 +42,7 @@ const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     externe: 'Prix externe',
     revendeur: 'Prix revendeur',
     distributeur: 'Prix distributeur',
+    grossiste: 'Prix grossiste',
 };
 
 interface CapaciteCategorie {
@@ -61,7 +68,8 @@ interface ClientOption {
     id: number;
     nom_complet: string;
     telephone: string | null;
-    type: 'externe' | 'revendeur' | 'distributeur';
+    type: 'externe' | 'revendeur' | 'distributeur' | 'grossiste';
+    type_label: string;
     vehicules: ClientVehiculeOption[];
 }
 
@@ -135,6 +143,9 @@ const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
     client_id: props.commande.client_id as number | null,
     client_vehicule_id: props.commande.client_vehicule_id as number | null,
+    // Pas de champ mode_remise_grossiste : dérivé côté serveur de vehicule_id (cf.
+    // CommandeVenteController::deriverModeRemiseGrossiste()) — voir le computed local
+    // `modeRemiseGrossiste` plus bas, purement un aperçu, jamais soumis.
     lignes: props.commande.lignes.map((l) => ({
         produit_id: l.produit_id,
         qte: l.qte,
@@ -227,14 +238,38 @@ function resoudrePrixLigne(ligne: LigneForm): {
 } {
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
 
+    // Grossiste : tarif catégorie × mode PROPRE À CE CLIENT (cf. GrossisteTarifResolver côté
+    // serveur, seule source de vérité — cette branche n'est qu'un aperçu, cf.
+    // grossisteTarifsClient ci-dessous). Le tarif spécial est une SURCHARGE facultative
+    // (révision du 05/09/2026) : repli sur le prix normal du produit si absent.
+    if (isGrossiste.value && produit) {
+        const categorieId = produit.categorie_id;
+        const tarifSpecial =
+            categorieId !== null && categorieId !== undefined
+                ? grossisteTarifsClient.value[String(categorieId)]?.[
+                      modeRemiseGrossiste.value
+                  ]
+                : undefined;
+
+        return tarifSpecial !== undefined
+            ? { montant: tarifSpecial, origine: 'grossiste' }
+            : { montant: produit.prix_vente, origine: 'vente' };
+    }
+
     if (produit?.is_fabricable && clientSelected.value) {
-        const tarifsParNature: Record<ClientOption['type'], number | null> = {
+        const tarifsParNature: Record<
+            'externe' | 'revendeur' | 'distributeur',
+            number | null
+        > = {
             externe: produit.prix_externe,
             revendeur: produit.prix_revendeur,
             distributeur: produit.prix_distributeur,
         };
         const nature = clientSelected.value.type;
-        const tarif = tarifsParNature[nature];
+        // Grossiste déjà traité par la branche ci-dessus (toujours vraie avant celle-ci quand
+        // isGrossiste) — exclu ici uniquement pour satisfaire le typage strict de
+        // tarifsParNature, qui ne porte que les 3 natures historiques.
+        const tarif = nature === 'grossiste' ? null : tarifsParNature[nature];
         if (tarif !== null && tarif !== undefined) {
             return { montant: tarif, origine: nature };
         }
@@ -264,6 +299,10 @@ function ligneOrigineLabel(ligne: LigneForm): string {
  * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
  */
 function ligneUnitPriceEditable(ligne: LigneForm): boolean {
+    if (isGrossiste.value) {
+        return false;
+    }
+
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
     if (produit?.is_fabricable && clientSelected.value) {
         return false;
@@ -325,8 +364,64 @@ function onClientClear() {
 }
 
 function clientLabel(c: ClientOption): string {
-    return c.nom_complet;
+    return `${c.nom_complet} (${c.type_label})`;
 }
+
+// ── Grossiste : mode de remise (Enlèvement/Livraison), par commande — jamais une
+// caractéristique du client (cf. docs/grossiste.md). Depuis le 05/09/2026, plus un choix
+// utilisateur indépendant : dérivé uniquement de la présence d'un véhicule, exactement comme le
+// calcule le serveur (cf. CommandeVenteController::deriverModeRemiseGrossiste()).
+const isGrossiste = computed(() => clientSelected.value?.type === 'grossiste');
+
+const modeRemiseGrossiste = computed<'enlevement' | 'livraison'>(() =>
+    form.vehicule_id ? 'livraison' : 'enlevement',
+);
+
+// ── Tarifs Grossiste du client sélectionné — PROPRES À CE CLIENT (cf. docs/grossiste.md),
+// fetch live plutôt qu'une grille organisation envoyée à chaque chargement de page (cf.
+// Ventes/Create.vue, même raisonnement).
+const grossisteTarifsClient = ref<Record<string, Record<string, number>>>({});
+
+watch(
+    () => (isGrossiste.value ? form.client_id : null),
+    async (clientId) => {
+        grossisteTarifsClient.value = {};
+        if (!clientId) {
+            recomputeAllTotals();
+
+            return;
+        }
+
+        try {
+            const res = await fetch(
+                `/backoffice/clients/${clientId}/tarifs-grossiste`,
+                {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                },
+            );
+            if (res.ok) {
+                const data = (await res.json()) as {
+                    tarifs: { categorie_id: string; mode: string; prix: number }[];
+                };
+                const grille: Record<string, Record<string, number>> = {};
+                for (const t of data.tarifs) {
+                    grille[t.categorie_id] ??= {};
+                    grille[t.categorie_id][t.mode] = t.prix;
+                }
+                grossisteTarifsClient.value = grille;
+            }
+        } catch {
+            // Aperçu indisponible (réseau) : GrossisteTarifResolver reste l'autorité finale à la
+            // confirmation, jamais bloquant ici.
+        } finally {
+            recomputeAllTotals();
+        }
+    },
+    { immediate: true },
+);
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
 const produitOptions = computed(() =>
@@ -652,6 +747,16 @@ function submit() {
                             >
                                 {{ form.errors.vehicule_id }}
                             </p>
+                            <!-- Grossiste : statut du mode de remise, purement informatif, dérivé
+                            de la présence du véhicule (seule source de vérité, cf.
+                            docs/grossiste.md) — libellé volontairement réduit à un mot, sans
+                            phrase explicative (révision UX du 05/09/2026). -->
+                            <p
+                                v-else-if="isGrossiste"
+                                class="mt-1 text-xs font-medium text-muted-foreground"
+                            >
+                                {{ form.vehicule_id ? 'Livraison' : 'Enlèvement' }}
+                            </p>
                         </div>
 
                         <!-- Client -->
@@ -680,6 +785,12 @@ function submit() {
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_complet }}
+                                            <span
+                                                class="font-normal text-muted-foreground"
+                                                >— {{
+                                                    option.type_label
+                                                }}</span
+                                            >
                                         </div>
                                         <div
                                             v-if="option.telephone"
@@ -727,6 +838,10 @@ function submit() {
                                     show-clear
                                 />
                             </div>
+
+                            <!-- Grossiste : le mode de remise est déduit automatiquement du champ
+                            Véhicule ci-dessus (seule source de vérité, cf. docs/grossiste.md) —
+                            aucun champ supplémentaire à saisir ici. -->
                         </div>
                     </div>
 

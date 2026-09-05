@@ -69,6 +69,11 @@ class Client extends Model
         return $this->type === ClientType::REVENDEUR;
     }
 
+    public function isGrossiste(): bool
+    {
+        return $this->type === ClientType::GROSSISTE;
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
@@ -87,5 +92,11 @@ class Client extends Model
     public function cashbackTransactions(): HasMany
     {
         return $this->hasMany(CashbackTransaction::class);
+    }
+
+    /** Tarifs Grossiste (Enlèvement/Livraison par catégorie) propres à ce client — cf. docs/grossiste.md. */
+    public function tarifsGrossiste(): HasMany
+    {
+        return $this->hasMany(CategorieTarifGrossiste::class);
     }
 }

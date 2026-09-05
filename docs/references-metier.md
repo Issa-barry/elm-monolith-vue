@@ -64,7 +64,32 @@ PREFIXE-JJMMAA-NNN
   corrigée sur le scan mobile. Le risque de fuite de données est atténué par l'autorisation de la
   page de destination (`CommandeVentePolicy`/policy transfert, qui bloquent l'affichage
   cross-organisation), mais l'utilisateur peut être redirigé vers la mauvaise organisation avant
-  de se voir bloqué — candidat naturel à la même correction si demandée.
+  de se voir bloqué — candidat naturel à la même correction si demandée. Toujours vrai au
+  05/09/2026, non corrigé par le chantier scanner caméra ci-dessous (hors périmètre demandé).
+
+## Scan côté backoffice (web) — famille `Scan*Controller`
+
+Trois contrôleurs indépendants résolvent un texte/code scanné en URL de fiche
+backoffice, tous sous `Route::middleware(['auth'])`, appelés en JSON
+(`Accept: application/json`) par deux points d'entrée frontend qui partagent la même
+logique de reconnaissance (`resources/js/composables/scan/scanResolvers.ts`) :
+le scanner USB clavier (`useScanInterceptor`, actif sur tout le backoffice) et le
+scanner caméra (`ScannerModal.vue`, dashboard mobile uniquement, ajouté le
+05/09/2026, cf. `docs/scanner-dashboard-mobile.md`).
+
+| Route | Contrôleur | Entrée | Garde |
+|---|---|---|---|
+| `GET /scan/user/{userId}` | `ScanUserController` | ULID nu (QR propriétaire/livreur de l'app mobile) | `auth` seul |
+| `GET /scan/livraison/{reference}` | `ScanLivraisonController` | Référence `VT-`/`TR-` | `auth` seul — cf. gap ci-dessus |
+| `GET /scan/produit/{code}` | `ScanProduitController` | Code-barres ou SKU produit | `auth` **+ `produits.read`** (`ProduitPolicy::viewAny`) |
+
+`ScanProduitController` est le seul des trois à vérifier une permission explicite (en
+plus d'être scopé par `organization_id`, ce que les deux autres ne font pas encore) :
+un code-barres produit expose potentiellement des données commerciales via la fiche
+produit, contrairement à une simple redirection vers une fiche déjà protégée par sa
+propre policy. Recherche stricte (égalité, jamais `LIKE`) : `code_barres` d'abord
+(colonne unique par organisation), puis `sku` en repli — jamais une recherche partielle
+qui risquerait une correspondance ambiguë entre deux produits.
 
 ## Contrainte d'unicité — scopée par organisation (migration `scope_reference_unique_par_organisation`)
 

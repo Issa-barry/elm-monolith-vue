@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import IdentityQrBadge from '@/components/identity/IdentityQrBadge.vue';
+import ScannerModal from '@/components/scanner/ScannerModal.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { router, usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
@@ -7,7 +10,9 @@ import { computed, ref, watch } from 'vue';
 
 const vTooltip = Tooltip;
 const page = usePage();
-const props = defineProps<{ periode?: string }>();
+const props = defineProps<{ periode?: string; qrPayload?: string | null }>();
+
+const scannerVisible = ref(false);
 
 const periodOptions = [
     { label: "Aujourd'hui", value: 'aujourd_hui' },
@@ -65,6 +70,33 @@ const displaySite = computed(() => {
     return defaultSite.value.label;
 });
 
+const roleLabels: Record<string, string> = {
+    super_admin: 'Super administrateur',
+    admin_entreprise: 'Administrateur',
+    manager: 'Manager',
+    commerciale: 'Commercial',
+    comptable: 'Comptable',
+    client: 'Client',
+    proprietaire: 'Propriétaire',
+    livreur: 'Livreur',
+};
+
+const displayRole = computed(() => {
+    const role = page.props.auth.roles?.[0];
+    return role ? (roleLabels[role] ?? role) : null;
+});
+
+const identityMeta = computed(() =>
+    [
+        displayRole.value,
+        user.value?.telephone
+            ? formatPhoneDisplay(user.value.telephone)
+            : null,
+    ]
+        .filter(Boolean)
+        .join(' · '),
+);
+
 const initials = computed(() =>
     displayName.value
         .split(/\s+/)
@@ -77,51 +109,84 @@ const initials = computed(() =>
 
 <template>
     <div class="col-span-12">
-        <div class="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
-            <div class="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+        <div
+            class="flex w-full items-center gap-4 rounded-2xl border border-border bg-card p-3.5 sm:hidden"
+        >
+            <IdentityQrBadge
+                :qr-value="qrPayload"
+                :name="displayName"
+                :subtitle="displaySite"
+                :size="68"
+                show-caption
+            />
+
+            <div class="min-w-0 flex-1">
+                <h1 class="truncate text-base font-semibold tracking-tight">
+                    {{ displayName }}
+                </h1>
+                <p
+                    v-if="identityMeta"
+                    class="mt-0.5 truncate text-xs text-muted-foreground"
+                >
+                    {{ identityMeta }}
+                </p>
+                <p class="mt-0.5 truncate text-xs text-muted-foreground/80">
+                    {{ displaySite }}
+                </p>
+                <Button
+                    type="button"
+                    label="Scanner"
+                    icon="pi pi-camera"
+                    size="small"
+                    class="mt-2.5 !h-8 !px-3 !text-xs"
+                    @click="scannerVisible = true"
+                />
+            </div>
+        </div>
+
+        <div class="hidden items-center gap-6 sm:flex">
+            <div class="flex items-center gap-4">
                 <div
-                    class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground sm:h-16 sm:w-16 sm:text-xl"
+                    class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xl font-semibold text-primary-foreground"
                 >
                     {{ initials }}
                 </div>
-                <div class="flex flex-col items-center sm:items-start">
-                    <h1
-                        class="text-xl font-semibold tracking-tight sm:text-2xl"
-                    >
+                <div class="flex flex-col items-start">
+                    <h1 class="text-2xl font-semibold tracking-tight">
                         {{ displayName }}
                     </h1>
-                    <p
-                        class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm"
-                    >
+                    <p class="mt-1 text-sm text-muted-foreground">
                         {{ displaySite }}
                     </p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-1.5 sm:ml-auto sm:gap-2">
+            <div class="ml-auto flex items-center gap-2">
                 <Button
                     type="button"
                     v-tooltip.bottom="'Telecharger'"
                     icon="pi pi-download"
                     outlined
                     rounded
-                    class="!h-8 !w-8 sm:!h-10 sm:!w-10"
+                    class="!h-10 !w-10"
                 />
                 <Button
                     type="button"
                     v-tooltip.bottom="'Envoyer rapport'"
                     icon="pi pi-send"
                     rounded
-                    class="!h-8 !w-8 sm:!h-10 sm:!w-10"
+                    class="!h-10 !w-10"
                 />
                 <Select
                     v-model="selectedPeriod"
                     :options="periodOptions"
                     option-label="label"
-                    class="min-w-40 text-xs sm:min-w-56 sm:text-sm"
+                    class="min-w-56 text-sm"
                     @change="changePeriod"
                 />
             </div>
         </div>
     </div>
+
+    <ScannerModal v-model:visible="scannerVisible" />
 </template>
