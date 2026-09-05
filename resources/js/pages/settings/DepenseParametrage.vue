@@ -472,6 +472,7 @@ function saveDroits() {
                                                 <input
                                                     type="text"
                                                     inputmode="numeric"
+                                                    :aria-label="`Plafond de validation — ${roleLabel(entry.role_name)}`"
                                                     :value="
                                                         plafondDisplay[
                                                             entry.role_name
