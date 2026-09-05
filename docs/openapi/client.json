@@ -1121,7 +1121,8 @@
                                             "type": [
                                                 "string",
                                                 "null"
-                                            ]
+                                            ],
+                                            "description": "R\u00e9solution centralis\u00e9e dans QrPayloadResolver (cf. sa docblock) \u2014 avant\nextraction, cette m\u00e9thode cherchait le proprietaire/livreur par t\u00e9l\u00e9phone\nSANS jamais tenter le user_id d'abord, et sans aucune restriction\nd'organisation ni de \"profil non r\u00e9clam\u00e9\" (cf. audit backend du 26/08/2026)."
                                         },
                                         "context": {
                                             "type": "object",
