@@ -796,6 +796,13 @@ class DepenseController extends Controller
             return back()->withErrors(['statut' => 'Seules les dépenses soumises peuvent être validées.']);
         }
 
+        $droitValidation = $this->droitCreationDepense->droitValidationPour($user, $user->organization_id);
+        if (! $this->droitCreationDepense->peutValiderMontant($user, $droitValidation, (float) $depense->montant)) {
+            $plafondFmt = number_format((float) ($droitValidation?->plafond_validation ?? 0), 0, ',', "\u{202F}");
+
+            return back()->withErrors(['montant' => "Vous ne pouvez pas valider cette dépense. Le montant de votre autorisation est limité à {$plafondFmt} GNF."]);
+        }
+
         $depense->load('depenseType');
 
         $imputation = null;
@@ -1212,7 +1219,8 @@ class DepenseController extends Controller
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
             'validateur' => $d->validateur ? ['id' => $d->validateur->id, 'name' => $d->validateur->name] : null,
             'can_valider' => $user && $d->statut === StatutDepense::SOUMIS
-                && $this->droitCreationDepense->peutValiderSurSite($user, $droitValidation, $d->site_id),
+                && $this->droitCreationDepense->peutValiderSurSite($user, $droitValidation, $d->site_id)
+                && $this->droitCreationDepense->peutValiderMontant($user, $droitValidation, (float) $d->montant),
         ];
     }
 

@@ -9,6 +9,7 @@ import {
     ArrowLeft,
     History,
     Image,
+    Info,
     Layers,
     Package,
     Pencil,
@@ -169,6 +170,14 @@ interface VarianteStockEntry {
     qte_stock: number;
 }
 
+type ProductTab =
+    | 'stock-sites'
+    | 'stock-variantes'
+    | 'tarification'
+    | 'photos'
+    | 'variantes'
+    | 'informations';
+
 const props = defineProps<{
     produit: Produit;
     mouvements: StockMouvement[];
@@ -188,6 +197,61 @@ const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
+const activeProductTab = ref<ProductTab>(
+    props.produit.has_stock && props.produit.stocks_par_site.length > 0
+        ? 'stock-sites'
+        : props.produit.has_stock &&
+            props.produit.variantes.length > 1 &&
+            props.produit.variante_stocks_detail.length > 0
+          ? 'stock-variantes'
+          : 'tarification',
+);
+const productTabs = computed(() => {
+    const tabs = [];
+
+    if (props.produit.has_stock && props.produit.stocks_par_site.length > 0) {
+        tabs.push({
+            key: 'stock-sites' as const,
+            label: 'Stock agences',
+            icon: Package,
+        });
+    }
+
+    if (
+        props.produit.has_stock &&
+        props.produit.variantes.length > 1 &&
+        props.produit.variante_stocks_detail.length > 0
+    ) {
+        tabs.push({
+            key: 'stock-variantes' as const,
+            label: 'Stock variantes',
+            icon: Layers,
+        });
+    }
+
+    tabs.push({
+        key: 'tarification' as const,
+        label: 'Tarification',
+        icon: Tag,
+    });
+    tabs.push({ key: 'photos' as const, label: 'Photos', icon: Image });
+
+    if (props.produit.variantes.length > 1) {
+        tabs.push({
+            key: 'variantes' as const,
+            label: 'Variantes',
+            icon: Layers,
+        });
+    }
+
+    tabs.push({
+        key: 'informations' as const,
+        label: 'Informations',
+        icon: Info,
+    });
+
+    return tabs;
+});
 const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
 const prixAchatApplicable = computed(() => props.produit.achetable);
 const prixVenteApplicable = computed(() => props.produit.vendable);
@@ -492,12 +556,42 @@ const ajustements = props.mouvements.map((m) => ({
                 </aside>
 
                 <main class="order-last min-w-0 space-y-5 lg:order-first">
+                    <nav
+                        class="flex gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/30 p-1"
+                        role="tablist"
+                        aria-label="Sections de la fiche produit"
+                    >
+                        <button
+                            v-for="tab in productTabs"
+                            :id="`product-tab-${tab.key}`"
+                            :key="tab.key"
+                            type="button"
+                            role="tab"
+                            :aria-selected="activeProductTab === tab.key"
+                            :aria-controls="`product-panel-${tab.key}`"
+                            class="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors"
+                            :class="
+                                activeProductTab === tab.key
+                                    ? 'bg-background text-foreground'
+                                    : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+                            "
+                            @click="activeProductTab = tab.key"
+                        >
+                            <component :is="tab.icon" class="h-4 w-4" />
+                            {{ tab.label }}
+                        </button>
+                    </nav>
+
                     <!-- ─── Stock par agence ─── -->
                     <div
                         v-if="
+                            activeProductTab === 'stock-sites' &&
                             produit.has_stock &&
                             produit.stocks_par_site.length > 0
                         "
+                        id="product-panel-stock-sites"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-stock-sites"
                         class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <div
@@ -651,10 +745,14 @@ const ajustements = props.mouvements.map((m) => ({
                  trouve le problème plutôt que le seul agrégat par agence ci-dessus. -->
                     <div
                         v-if="
+                            activeProductTab === 'stock-variantes' &&
                             produit.has_stock &&
                             produit.variantes.length > 1 &&
                             produit.variante_stocks_detail.length > 0
                         "
+                        id="product-panel-stock-variantes"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-stock-variantes"
                         class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
@@ -732,6 +830,10 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Prix ─── -->
                     <div
+                        v-if="activeProductTab === 'tarification'"
+                        id="product-panel-tarification"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-tarification"
                         class="overflow-hidden rounded-xl border border-border/50 bg-muted/30 p-4 sm:rounded-2xl sm:p-6"
                     >
                         <h2
@@ -850,6 +952,10 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Photos ─── -->
                     <div
+                        v-if="activeProductTab === 'photos'"
+                        id="product-panel-photos"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-photos"
                         class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
@@ -867,7 +973,13 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Variantes ─── -->
                     <div
-                        v-if="produit.variantes.length > 1"
+                        v-if="
+                            activeProductTab === 'variantes' &&
+                            produit.variantes.length > 1
+                        "
+                        id="product-panel-variantes"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-variantes"
                         class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
@@ -898,6 +1010,10 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Informations complémentaires ─── -->
                     <div
+                        v-if="activeProductTab === 'informations'"
+                        id="product-panel-informations"
+                        role="tabpanel"
+                        aria-labelledby="product-tab-informations"
                         class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2 class="mb-5 text-sm font-semibold">

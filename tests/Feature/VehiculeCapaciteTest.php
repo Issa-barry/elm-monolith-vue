@@ -621,6 +621,10 @@ class VehiculeCapaciteTest extends TestCase
         $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 70]);
         $siteDestination = $this->makeSiteDestination($this->org);
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+        // Correctif du 04/09/2026 (TransfertLogistiqueService::verifierDisponibiliteLignes()
+        // désormais appelée dès store()) : un transfert exige un stock suffisant sur le site
+        // source pour être créé.
+        $this->seedVarianteStockSuffisant($produitSachet->variantePrincipale()->first(), $this->defaultSite);
 
         // Bien en dessous du plafond (70) — la logistique n'exige jamais un chargement complet,
         // contrairement à la vente (pas de paramètre équivalent).

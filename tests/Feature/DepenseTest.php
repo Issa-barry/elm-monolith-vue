@@ -7,6 +7,7 @@ use App\Enums\CategorieVehicule;
 use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
@@ -41,6 +42,20 @@ class DepenseTest extends TestCase
             'organization_id' => $this->org->id,
             'libelle' => 'Restauration',
             'code' => 'bouffe',
+        ]);
+
+        // Admin Entreprise ($this->user via initOrgAndUser) reste soumis au
+        // plafond de montant depuis le 04/09/2026 (cf.
+        // docs/depenses-validation.md, DEPVAL-001) — plafond très haut ici
+        // car ce fichier ne teste pas le plafond lui-même (cf.
+        // DepenseValidationTest pour les tests dédiés au plafond).
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 999_999_999,
         ]);
     }
 

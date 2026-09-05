@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
-    confirmAlertDialog,
     configurerBaremes,
     configurerPartageVehicule,
+    confirmAlertDialog,
     creerVenteEtEncaisser,
     montantPattern,
 } from './commission-v2-helpers';
@@ -35,9 +35,11 @@ async function amenerCommissionAValider(page: import('@playwright/test').Page) {
     await creerVenteEtEncaisser(page);
 
     await page.goto('/backoffice/comptabilite/commissions/vente');
+    // "Commissions des livreurs" depuis la fusion Vente/Logistique du 04/09/2026
+    // (cf. docblock de commission-detail-pages.spec.ts) — plus de mention "sur les ventes".
     await expect(
         page.getByRole('heading', {
-            name: /commissions des livreurs sur les ventes/i,
+            name: /^commissions des livreurs$/i,
         }),
     ).toBeVisible({ timeout: 15_000 });
 
@@ -57,7 +59,10 @@ test('Commissions > Ventes — valider directement une ligne "À valider" sans p
 }) => {
     const row = await amenerCommissionAValider(page);
 
-    const validerBtn = row.getByRole('button', { name: 'Valider', exact: true });
+    const validerBtn = row.getByRole('button', {
+        name: 'Valider',
+        exact: true,
+    });
     await expect(validerBtn).toBeVisible({ timeout: 10_000 });
     await validerBtn.click();
 
@@ -84,7 +89,9 @@ test('Commissions > Ventes — ajuster une commission (motif obligatoire, montan
     await row.locator('button').last().click();
     await page.getByRole('menuitem', { name: /^ajuster$/i }).click();
 
-    const dialog = page.locator('[role="dialog"]').filter({ hasText: /^ajuster/i });
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /^ajuster/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     await expect(

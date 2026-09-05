@@ -26,11 +26,25 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->org = Organization::factory()->create();
     }
 
+    /**
+     * Admin Entreprise : bypass RBAC/agences (isAdmin()) mais PAS le plafond
+     * de montant depuis le 04/09/2026 — cf. superAdminUser() pour le seul
+     * rôle réellement sans plafond (docs/depenses-validation.md, DEPVAL-001).
+     */
     private function adminUser(): User
     {
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('admin_entreprise');
+
+        return $user;
+    }
+
+    private function superAdminUser(): User
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('super_admin');
 
         return $user;
     }
@@ -213,9 +227,34 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── droitValidationPour ───────────────────────────────────────────────────
 
-    public function test_admin_droit_validation_pour_retourne_null(): void
+    public function test_super_admin_droit_validation_pour_retourne_null(): void
     {
+        $this->assertNull($this->service->droitValidationPour($this->superAdminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_sans_droit_configure_droit_validation_pour_retourne_null(): void
+    {
+        // Contrairement à super_admin, ce null ne signifie pas "bypass" mais
+        // "aucun plafond configuré" — traité comme deny-by-default ailleurs
+        // (cf. peutValiderMontant).
         $this->assertNull($this->service->droitValidationPour($this->adminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_avec_droit_configure_droit_validation_pour_retourne_le_droit(): void
+    {
+        $user = $this->adminUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $result = $this->service->droitValidationPour($user, $this->org->id);
+        $this->assertNotNull($result);
+        $this->assertEquals($droit->id, $result->id);
     }
 
     public function test_non_admin_sans_droit_validation_retourne_null(): void
@@ -358,5 +397,104 @@ class DroitCreationDepenseServiceTest extends TestCase
         ]);
 
         $this->assertFalse($this->service->peutValiderSurSite($user, $droit, $siteB->id));
+    }
+
+    // ── peutValiderMontant ────────────────────────────────────────────────────
+
+    public function test_super_admin_peut_valider_montant_retourne_toujours_true(): void
+    {
+        $this->assertTrue(
+            $this->service->peutValiderMontant($this->superAdminUser(), null, 50_000_000)
+        );
+    }
+
+    public function test_admin_entreprise_ne_bypasse_plus_le_plafond(): void
+    {
+        $user = $this->adminUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 500000));
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 500001));
+    }
+
+    public function test_admin_entreprise_sans_droit_ne_peut_rien_valider(): void
+    {
+        $this->assertFalse(
+            $this->service->peutValiderMontant($this->adminUser(), null, 1)
+        );
+    }
+
+    public function test_sans_droit_peut_valider_montant_retourne_false(): void
+    {
+        $this->assertFalse(
+            $this->service->peutValiderMontant($this->commercialeUser(), null, 1)
+        );
+    }
+
+    public function test_montant_egal_au_plafond_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 500000));
+    }
+
+    public function test_montant_sous_le_plafond_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 499999));
+    }
+
+    public function test_montant_au_dessus_du_plafond_retourne_false(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 500001));
+    }
+
+    public function test_plafond_non_configure_est_traite_comme_zero(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => null,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 1));
     }
 }

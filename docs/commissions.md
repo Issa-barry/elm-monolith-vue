@@ -213,14 +213,47 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   `commission_statut`/`commission_statut_label` qu'avant — aucun changement frontend nécessaire
   pour la liste, seule `Logistique/Show.vue` (stepper) a été mise à jour pour les consommer à la
   place de `commission?.statut_label`/`commission?.is_versee`.
-- **Point encore ouvert (hors périmètre du retrait ci-dessus, signalé mais non corrigé le
-  04/09/2026)** : l'onglet "Commission logistique" de `Logistique/Show.vue` (détail par
-  bénéficiaire — montants brut/frais/net/versé/restant, historique des versements) calcule
-  toujours `livreurParts`/`aggregateParts` depuis `transfert.commission?.parts`, donc reste vide
-  pour toute commission générée après le 03/09/2026 — seuls le badge et le libellé du stepper
-  ci-dessus ont été raccordés au nouveau moteur. La commission reste consultable en détail via
-  Commission vente (filtre Processus = Transfert logistique) ; ce point nécessite son propre
-  chantier de migration vers `CommissionEnveloppePart`.
+- **04/09/2026 — fermé** (fait suite au point ouvert ci-dessus) : l'onglet "Commission
+  logistique" de `Logistique/Show.vue` expose désormais un détail par livreur raccordé au moteur
+  générique — `TransfertLogistiqueController::mapCommissionLivreursGeneriques()` filtre les
+  `CommissionEnveloppePart` de toutes les enveloppes du transfert sur
+  `beneficiaire_type = CommissionEnveloppePart::TYPE_LIVREUR` (jamais propriétaire/site/consultant)
+  et expose `commission_generique_livreurs` (nom résolu via `Livreur::libelleAffichage()`,
+  `montant_unitaire` = `montant_unitaire_snapshot`, `montant` = `montant_a_payer`). Le tableau
+  affiché (Livreur / Part unitaire / Montant total gagné) est volontairement distinct du total
+  global `commission_generique_montant_total` (qui agrège TOUTES les cibles — propriétaire, site,
+  consultant, équipe de livraison) : les deux totaux sont étiquetés séparément dans la vue pour
+  qu'un écart entre eux (dû aux autres cibles) ne soit jamais interprété comme une incohérence de
+  calcul (cf. `mapCommissionLivreursGeneriques()`, docblock). Détail complet des autres
+  bénéficiaires toujours via Commissions des livreurs (filtre Processus = Transfert logistique)
+  pour la part livreur, ou en base pour les autres cibles — aucun écran dédié propriétaire/
+  site/consultant à ce jour. `livreurParts`/`aggregateParts` (legacy, `transfert.commission?.parts`)
+  restent en place uniquement pour l'historique pré-03/09/2026, inchangés.
+  - Limite assumée et documentée dans le code (pas corrigée, pas un bug) :
+    `montant_unitaire_snapshot` est un instantané de la DERNIÈRE catégorie de produit traitée par
+    `CommissionEnveloppeGenerator` pour ce livreur — si un transfert mélange plusieurs catégories
+    à part unitaire différente pour le même livreur, la « part unitaire » affichée ne représente
+    qu'une des catégories, jamais recalculée côté frontend (montant / quantité ne serait pas
+    fiable dans ce cas) ; le montant total, lui, reste exact car il vient de `montant_a_payer`.
+  - Testé par `CommissionTriggerLogistiqueTest::test_reception_effectuee_expose_le_detail_par_livreur_sur_la_page_transfert()`
+    (répartition 60/40 correcte, total livreurs = total enveloppe quand seule la cible équipe de
+    livraison est configurée) et
+    `::test_transfert_sans_bareme_livreur_expose_une_liste_livreurs_vide()` (commission générée
+    pour une autre cible, sans barème livreur → liste vide, jamais un bénéficiaire inventé).
+- **04/09/2026** — Le sous-menu `Comptabilité > Commissions > Logistique` a été retiré de la
+  navigation (`AppSidebar.vue`) : l'écran `Comptabilite\CommissionVenteController` (route
+  `commissions/vente`, inchangée) est renommé `Livreurs` dans le menu et devient le point d'entrée
+  unique pour consulter les commissions d'un livreur, tous processus confondus (Vente/Distribution
+  client/Transfert logistique, cf. section Reporting ci-dessous) — libellés alignés en conséquence
+  (`CommissionVente/Index.vue` : "Commissions des livreurs" ; `CommissionVente/Livreur/Show.vue` :
+  breadcrumb "Commissions des livreurs"). `Comptabilite\CommissionLogistiqueController` (écran
+  historique décrit ci-dessus) n'est pas modifié — routes, contrôleur et pages Vue inchangés,
+  tables toujours vérifiées à 0 ligne (`commission_logistique_parts`/`commissions_logistiques`/
+  `versements_commission_logistique`) — mais n'a plus aucun point d'entrée dans l'UI, exactement la
+  situation qui a justifié le retrait complet de `CommissionVehiculeController` le même jour
+  ci-dessus. Il reste donc, comme documenté plus haut, candidat à la PR de retrait séparée
+  (suppression contrôleur/routes/pages/tests) une fois cette absence de solde reconfirmée avant
+  suppression effective.
 
 ## Partage Livreur par processus (équipe véhicule)
 
@@ -394,9 +427,8 @@ trois processus peuvent produire des parts pour le même bénéficiaire).
 Le sélecteur Processus garde ses 3 options (Vente/Distribution client/Transfert logistique) même
 après COMM-005 : `distribution_client` y désigne un processus VIVANT (nouvelles commissions
 générées en continu, cf. COMM-005), pas seulement un solde historique — retirer une option
-casserait la réconciliation du total déjà généré
-(`Comptabilite\CommissionVenteController::breakdownParProcessus()`) en plus de masquer une
-activité réelle et courante.
+masquerait une activité réelle et courante, restée consolidable dans `commission_summary` et
+tracée par bénéficiaire via la colonne « Origine » de `commission_details`.
 
 ### Listes (Index) — revu le 02/09/2026 (incident : sélection multiple silencieusement réduite au premier processus)
 
@@ -450,9 +482,8 @@ Seule différence restante entre écrans (signalée, non corrigée le 02/09/2026
 chaque fiche diffère toujours —
 
 - `CommissionVenteController::showLivreur()` : défaut **Tous les processus**, sélecteur dédié sur
-  la fiche elle-même (`CommissionGlobalFilters.vue`), bloc `CommissionProcessusBreakdown` en vue
-  consolidée, colonne « Origine » sur `commission_details` (détail ci-dessous, inchangé depuis le
-  31/08/2026).
+  la fiche elle-même (`CommissionGlobalFilters.vue`), colonne « Origine » sur `commission_details`
+  (détail ci-dessous, inchangé depuis le 31/08/2026).
 - `CommissionSiteController::show()` / `CommissionProprietaireController::show()` /
   `CommissionConsultantController::show()` : défaut **Vente** (`CODE_VENTE`), sans sélecteur dédié
   pour changer cette vue depuis la fiche elle-même — un utilisateur souhaitant y voir une
@@ -465,11 +496,6 @@ Détail du comportement `showLivreur()` (inchangé depuis le 31/08/2026) :
 - Un sélecteur Processus est visible sur la fiche elle-même (`CommissionGlobalFilters.vue`, prop
   optionnelle `processusOptions` — n'affecte aucun autre écran qui ne la fournit pas), avec un
   choix « Tous les processus » en tête (`CommissionProcessusFilter::optionsAvecTous()`).
-- En vue « Tous les processus », un bloc `CommissionProcessusBreakdown` ventile le total généré par
-  processus (Vente / Distribution client / Transfert logistique), dont la somme reconstitue
-  exactement `commission_summary.total_genere` — jamais un quatrième nombre indépendant. Ce bloc
-  disparaît dès qu'un processus précis est sélectionné (redondant, tout y appartient déjà à ce seul
-  processus).
 - Chaque ligne du détail par commande (`commission_details`) porte son origine
   (`processus`/`processus_label`) — affichée par `CommissionDetailTable.vue` (colonne « Origine »,
   visible uniquement si au moins une ligne la fournit) : jamais de montants de processus différents

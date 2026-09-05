@@ -177,7 +177,7 @@ class StockController extends Controller
             StockStatut::DISPONIBLE->value => $query
                 ->whereRaw("{$disponible} = 1")
                 ->whereRaw("{$quantite} > 0")
-                ->whereRaw("({$seuil} <= 0 OR {$quantite} > {$seuil})", [$seuilOrganisation]),
+                ->whereRaw("({$seuil} <= 0 OR {$quantite} > {$seuil})", [$seuilOrganisation, $seuilOrganisation]),
             default => null,
         };
 

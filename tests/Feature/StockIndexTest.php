@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\StockStatut;
 use App\Models\Categorie;
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
@@ -180,6 +181,76 @@ class StockIndexTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->has('stocks.data', 1)
                 ->where('stocks.data.0.produit_nom', 'Produit disponible')
+            );
+    }
+
+    /**
+     * Garde-fou de couverture (régression 04/09/2026 : `stock_statut=disponible` — et
+     * `stock_negatif` — n'étaient exercés par AUCUN test avant ce correctif, seule branche du
+     * match() de stockQuery() jamais atteinte par la suite). Garantit que chaque valeur de
+     * l'enum reste au moins EXÉCUTÉE (colonnes/jointures valides, pas d'exception PHP). Ne
+     * détecte PAS un mismatch placeholders/bindings dans un whereRaw() : la suite tourne sur
+     * SQLite (phpunit.xml), qui — contrairement à MySQL/HY093 — complète silencieusement un `?`
+     * non lié par NULL au lieu de lever une erreur (vérifié empiriquement en rejouant ce test
+     * contre le bug d'origine : il passait toujours). Le seul test qui détecte réellement ce
+     * mismatch est celui ci-dessous, car il inclut un produit SANS ligne produit_seuils_alerte —
+     * c'est exactement ce cas qui fait basculer le `?` non lié sur NULL et fausse le résultat.
+     */
+    public function test_chaque_valeur_de_stock_statut_sexecute_sans_erreur_sql(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, [], ['sku' => 'SMOKE-STATUT-001']);
+        $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
+
+        foreach (StockStatut::cases() as $statut) {
+            $this->actingAs($this->admin)
+                ->get(route('produits.stock.index', ['stock_statut' => [$statut->value], 'site_ids' => [$this->siteA->id]]))
+                ->assertOk();
+        }
+    }
+
+    /**
+     * Régression 04/09/2026 (SQLSTATE[HY093] en production sur MySQL) : {$seuil} apparaît deux
+     * fois dans la même expression whereRaw ("(seuil <= 0 OR quantite > seuil)") donc deux `?` à
+     * lier, mais un seul binding était fourni. En local/CI (SQLite), ce mismatch ne lève PAS
+     * d'erreur — le `?` non lié est silencieusement traité comme NULL — d'où l'assertion sur les
+     * DONNÉES retournées plutôt que sur l'absence d'exception : `produitSansSeuil` (aucune ligne
+     * produit_seuils_alerte) est le cas précis où le `?` non lié fausse le résultat, car c'est le
+     * seul chemin qui dépend de la valeur de repli portée par ce second placeholder.
+     */
+    public function test_le_filtre_disponible_ne_leve_pas_derreur_sql_et_retourne_les_lignes_attendues(): void
+    {
+        $produitSansSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible sans seuil configuré',
+        ], ['sku' => 'DISPO-SANS-SEUIL-001']);
+        // Sans ligne produit_seuils_alerte, le seuil effectif retombe sur le seuil organisation
+        // (10 par défaut, cf. Parametre::getSeuilStockFaible()) : le stock doit le dépasser pour
+        // tomber dans "Disponible" plutôt que "Stock faible".
+        $this->stock($produitSansSeuil->variantePrincipale()->first(), $this->siteA, 15);
+
+        $produitAvecSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible au-dessus du seuil',
+        ], ['sku' => 'DISPO-AVEC-SEUIL-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produitAvecSeuil->id,
+            'site_id' => $this->siteA->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 5,
+        ]);
+        $this->stock($produitAvecSeuil->variantePrincipale()->first(), $this->siteA, 20);
+
+        $produitRupture = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit en rupture',
+        ], ['sku' => 'DISPO-RUPTURE-001']);
+        $this->stock($produitRupture->variantePrincipale()->first(), $this->siteA, 0);
+
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['disponible'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 2)
+                ->where('stocks.data.0.produit_nom', 'Produit disponible au-dessus du seuil')
+                ->where('stocks.data.1.produit_nom', 'Produit disponible sans seuil configuré')
             );
     }
 

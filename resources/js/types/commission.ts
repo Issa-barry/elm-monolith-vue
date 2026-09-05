@@ -61,13 +61,6 @@ export interface CommissionProcessusOption {
     label: string;
 }
 
-/** Répartition par processus affichée sur une fiche bénéficiaire en vue "Tous les processus". */
-export interface CommissionProcessusBreakdownRow {
-    code: string;
-    label: string;
-    total_genere: number;
-}
-
 export interface CommissionExpenseRow {
     id: string;
     date: string | null;
