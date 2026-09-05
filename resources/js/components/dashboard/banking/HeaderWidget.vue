@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import IdentityQrBadge from '@/components/identity/IdentityQrBadge.vue';
 import ScannerModal from '@/components/scanner/ScannerModal.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { router, usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
@@ -86,7 +87,14 @@ const displayRole = computed(() => {
 });
 
 const identityMeta = computed(() =>
-    [displayRole.value, user.value?.telephone].filter(Boolean).join(' · '),
+    [
+        displayRole.value,
+        user.value?.telephone
+            ? formatPhoneDisplay(user.value.telephone)
+            : null,
+    ]
+        .filter(Boolean)
+        .join(' · '),
 );
 
 const initials = computed(() =>
