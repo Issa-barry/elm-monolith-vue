@@ -83,6 +83,14 @@ pour Node 22 — ne pas les mettre à jour sans revalidation explicite).
   `organization_id` (gap déjà documenté le 31/08/2026, cf.
   `docs/references-metier.md`) — non corrigé ici, changement non demandé et sans
   rapport direct avec l'ajout du scanner caméra.
-- `useScanInterceptor`'s `LIVRAISON_REF_RE` (`/^(VT|TR)-/i`) ne reconnaît pas les
-  préfixes actuels `VTE-`/`DST-`/`TRF-` (seulement l'ancien `TR-`) — préexistant,
-  inchangé par ce chantier (déplacé tel quel vers `scanResolvers.ts`).
+
+**Corrigé le 06/09/2026** : `scanResolvers.ts`'s `LIVRAISON_REF_RE` ne
+reconnaissait que l'ancien préfixe `TR-` (et `VT-`, jamais utilisé en
+pratique), pas les préfixes actuels `VTE-`/`DST-`/`CMD-`/`TRF-` (cf.
+`NatureOperation::prefixeReference()` et
+`ScanCommandeController::COMMANDE_PREFIXES`/`TRANSFERT_PREFIXES`, seule autre
+source de vérité pour ces préfixes). Conséquence avant correctif : scanner
+(caméra ou douchette USB) une référence de vente/transfert au format actuel
+donnait systématiquement "Code non reconnu", sans même appeler le backend —
+`LIVRAISON_REF_RE` vaut désormais `/^(VTE|DST|CMD|TRF|TR)-/i`. Voir tests dans
+`resources/js/composables/scan/__tests__/scanResolvers.spec.ts`.

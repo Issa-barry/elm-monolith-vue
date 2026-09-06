@@ -83,8 +83,18 @@ export async function resolveUlidUrl(ulid: string): Promise<string | null> {
     return fetchScanUrl(`/scan/user/${ulid}`);
 }
 
-// Références de livraison : VT-xxxxx (commande vente) ou TR-xxxxx (transfert logistique)
-export const LIVRAISON_REF_RE = /^(VT|TR)-/i;
+// Références de livraison — mêmes préfixes que
+// ScanCommandeController::COMMANDE_PREFIXES / TRANSFERT_PREFIXES (API mobile,
+// seule autre source de vérité pour ces préfixes, jamais dupliquée avec une
+// liste différente) : VTE-/DST- (commande de vente, cf.
+// NatureOperation::prefixeReference(), depuis le chantier "références par
+// processus" du 31/08/2026), CMD- (référence de commande émise avant ce
+// chantier, jamais renommée), TRF- (transfert logistique) et TR- (référence
+// de transfert legacy). Avant ce correctif, seul TR- était reconnu ici : tout
+// scan d'une référence VTE-/DST-/CMD-/TRF- actuelle échouait avec "Code non
+// reconnu" (gap documenté dans docs/scanner-dashboard-mobile.md, non corrigé
+// jusqu'ici).
+export const LIVRAISON_REF_RE = /^(VTE|DST|CMD|TRF|TR)-/i;
 
 export async function resolveLivraisonUrl(ref: string): Promise<string | null> {
     return fetchScanUrl(`/scan/livraison/${encodeURIComponent(ref)}`);

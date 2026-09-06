@@ -20,7 +20,11 @@ cache uniquement une liste blanche explicite de fichiers statiques publics.
 | [resources/js/app.ts](../resources/js/app.ts) | Enregistrement conditionnel du service worker (jamais en dev/HMR) |
 | [vite.config.ts](../vite.config.ts) | Constantes `__PWA_ENABLED__` / `__PWA_BUILD_DIR__` injectées à la compilation |
 | [public/.htaccess](../public/.htaccess) | Force `Cache-Control: no-cache` sur `sw.js` (le CDN de production applique sinon un cache de 7 jours par défaut) |
-| [tests/e2e/pwa.spec.ts](../tests/e2e/pwa.spec.ts) | Tests dédiés (ne tournent pas dans la suite E2E par défaut, voir plus bas) |
+| [tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts) | Tests dédiés — dans un dossier séparé de `tests/e2e/`, jamais ramassés par la suite E2E par défaut (voir plus bas) |
+| [playwright.pwa.config.ts](../playwright.pwa.config.ts) | Config Playwright dédiée à ce fichier (`testDir` séparé), réutilise `playwright.config.ts` |
+| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, mobile/tablette) et résolution d'état du bandeau d'installation |
+| [resources/js/composables/usePwaInstall.ts](../resources/js/composables/usePwaInstall.ts) | Pont vers les API navigateur réelles (`beforeinstallprompt`, `appinstalled`, sessionStorage) |
+| [resources/js/components/PwaInstallPrompt.vue](../resources/js/components/PwaInstallPrompt.vue) | Bandeau "Installer ELM" + instructions iOS |
 
 ---
 
@@ -68,13 +72,52 @@ logique que `buildDirectory` déjà utilisée pour Wayfinder) et `__PWA_ENABLED_
   jamais dépendre d'un cache navigateur.
 - **Build E2E avec PWA active** (`npm run e2e:build:pwa`) : à utiliser
   explicitement pour tester le service worker lui-même (voir
-  [tests/e2e/pwa.spec.ts](../tests/e2e/pwa.spec.ts)).
+  [tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts)).
 
 `resources/js/app.ts` n'enregistre le service worker que si
 `import.meta.env.PROD` est vrai (donc jamais avec `npm run dev`/HMR) **et** que
 `__PWA_ENABLED__` est vrai. Le build (`build` vs `build-e2e`) est transmis au
 fichier statique `sw.js` via la query string d'enregistrement
 (`/sw.js?build=build-e2e`) puisque `sw.js` lui-même n'est pas compilé par Vite.
+
+## 3bis. UX d'installation (bandeau "Installer ELM")
+
+Même principe que `elm-vitrine-nuxt` (`composables/usePwaInstall.ts`,
+`config/pwaInstall.ts`, `components/PwaInstallButton.vue`), adapté en bandeau
+dismissible plutôt qu'un CTA de landing, et affiché sur les 3 layouts
+partagés : [AuthSimpleLayout.vue](../resources/js/layouts/auth/AuthSimpleLayout.vue)
+(connexion et pages invité), [AppSidebarLayout.vue](../resources/js/layouts/app/AppSidebarLayout.vue)
+(backoffice) et [ClientLayout.vue](../resources/js/layouts/ClientLayout.vue)
+(espace client) — jamais dupliqué page par page.
+
+- **Priorité mobile/tablette** (`isMobileOrTabletDevice` dans
+  `config/pwaInstall.ts`) : le bandeau ne s'affiche jamais sur desktop dans
+  cette V1, même si une invite native y serait techniquement disponible.
+- **Déjà installée** (`display: standalone`, y compris `navigator.standalone`
+  sur iOS) → bandeau masqué.
+- **Android/Chrome, desktop Chrome/Edge** : `beforeinstallprompt` est
+  intercepté (`preventDefault()`) pour piloter l'invite depuis CE bandeau ; le
+  clic déclenche `prompt()` sur l'événement capturé.
+- **iOS/iPadOS (Safari)** : `beforeinstallprompt` ne se déclenche jamais
+  (WebKit) — le clic ouvre une modale (PrimeVue `Dialog`) avec les 3 étapes
+  manuelles (Partager → Sur l'écran d'accueil → Ajouter). Aucune tentative de
+  déclencher automatiquement l'installation sur cette plateforme.
+- **Navigateur sans l'un ni l'autre chemin** (ex. Firefox desktop) → bandeau
+  masqué plutôt qu'un bouton qui échouerait silencieusement.
+- **« Plus tard »** : ferme le bandeau, persisté en `sessionStorage`
+  (`elm-pwa-install-dismissed`) pour ne pas le reproposer à chaque navigation
+  (chaque layout remonte le composant à la navigation, cf. absence de layout
+  Inertia persistant dans `app.ts`) — jamais caché de façon permanente,
+  réaffiché à la prochaine vraie visite (nouvelle session navigateur).
+  N'empêche jamais l'utilisation d'ELM.
+
+Vérifié manuellement (Playwright, UA iPhone + viewport mobile, contre
+`npm run dev`) : bandeau visible sur mobile, masqué sur desktop, clic iOS →
+modale d'instructions, "Plus tard" → masqué immédiatement et après reload.
+Le chemin `beforeinstallprompt` réel (Android/Chrome desktop) n'est pas
+automatisable de la même façon (nécessite les critères d'installabilité réels
+— HTTPS/manifest/service worker — absents en `npm run dev`) : à vérifier
+manuellement contre un build réel.
 
 ## 4. Stratégie de mise à jour
 
@@ -152,13 +195,28 @@ du fichier côté serveur** — ne jamais se contenter de supprimer `public/sw.j
 
 ## 7. Tests
 
-[tests/e2e/pwa.spec.ts](../tests/e2e/pwa.spec.ts) vérifie : validité du
+[tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts) vérifie : validité du
 manifest et accessibilité des icônes, enregistrement effectif du service
 worker, contenu de Cache Storage limité à la liste blanche, non-interception
-des navigations et des requêtes Inertia. Il ne tourne **pas** dans
-`npm run e2e` (PWA désactivée par défaut sur le build E2E, cf. section 3) —
-l'exécuter isolément :
+des navigations et des requêtes Inertia.
+
+**Incident CI du 06/09/2026** : ce fichier vivait initialement dans
+`tests/e2e/` (le `testDir` scanné par défaut par `npx playwright test`). La
+documentation affirmait qu'il "ne tourne pas dans la suite E2E par défaut",
+mais rien ne l'empêchait réellement d'être ramassé par les jobs `E2E full`/
+`E2E smoke` (`npx playwright test --shard=X/4`, aucun argument) — qui buildent
+avec `npm run e2e:build` (PWA désactivée). Résultat observé en CI : échecs
+intermittents plutôt qu'un skip propre. Corrigé en déplaçant le fichier dans
+`tests/e2e-pwa/` (hors du `testDir` par défaut) avec sa propre config
+[playwright.pwa.config.ts](../playwright.pwa.config.ts). Un `testIgnore` sur
+`playwright.config.ts` avait été envisagé d'abord puis écarté : vérifié qu'il
+bloque aussi bien la collecte par défaut qu'un chemin de fichier passé
+explicitement en argument — ce qui aurait rendu la commande ci-dessous
+impossible à exécuter.
+
+L'exécuter isolément (ces tests se connectent eux-mêmes, `E2E_SKIP_GLOBAL_SETUP=1`
+évite de rejouer le seed de commissions coûteux de `global-setup.ts`) :
 
 ```bash
-npm run e2e:db:reset && npm run e2e:build:pwa && npx playwright test tests/e2e/pwa.spec.ts
+npm run e2e:db:reset && npm run e2e:build:pwa && E2E_SKIP_GLOBAL_SETUP=1 npx playwright test --config=playwright.pwa.config.ts
 ```

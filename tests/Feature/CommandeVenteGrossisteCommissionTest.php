@@ -488,6 +488,119 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
     }
 
     /**
+     * Verrou de régression du 06/09/2026 (chantier « Réception Grossiste », demandé après revue du
+     * rapport) : garantit explicitement, pour Grossiste + Livraison, la même règle que celle déjà
+     * verrouillée pour distribution_client par
+     * CommissionMoteurGeneriqueMultiProcessusTest::distribution_client_ecart_de_reception_recalcule_la_facture_et_la_commission_sans_toucher_au_stock() —
+     * la commission TRANSFERT_GROSSISTE se calcule sur la quantité RÉCEPTIONNÉE
+     * (quantite_livree, réécrite par validerReception() avec la valeur "Reçue" du dialog, jamais
+     * la quantité chargée), cf. CommissionEnveloppeGenerator::contexteDepuisCommandeVente(). Les
+     * deux natures partagent le même code (CommandeVente::requiertReceptionExplicite()) : ce test
+     * ne corrige rien, il documente et verrouille un comportement déjà correct par construction.
+     */
+    public function test_grossiste_livraison_avec_ecart_de_reception_calcule_la_commission_sur_le_receptionne_jamais_le_charge(): void
+    {
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
+        $this->creerConsultantActifEtDesigne(montant: 50, processus: $this->processusGrossisteLivraison);
+        $vehicule = $this->makeVehiculeAvecEquipeEtPartage(
+            montantProprietaire: 800,
+            montantEquipe: 200,
+            montantSite: 200,
+            capacitePacks: 1000,
+            livraisonLogistique: true,
+        );
+
+        $produit = $this->makeProduit();
+        $variante = $produit->variantePrincipale()->first();
+        $this->seedVarianteStockSuffisant($variante, $this->site);
+
+        $client = $this->grossisteClient();
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'client_id' => $client->id,
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 600, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionDoesntHaveErrors()
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('client_id', $client->id)->latest()->firstOrFail();
+        $ligne = $commande->lignes()->firstOrFail();
+
+        CommandeVenteService::demarrerChargement($commande);
+        CommandeVenteService::validerChargement($commande->fresh(), [[
+            'id' => $ligne->id,
+            'quantite_chargee' => 600,
+            'type_ecart' => 'conforme',
+        ]]);
+
+        // Le Grossiste n'accepte que 580 des 600 unités chargées — 20 en écart (manquant).
+        CommandeVenteService::validerReception($commande->fresh(), [[
+            'id' => $ligne->id,
+            'quantite_livree' => 580,
+            'type_ecart_reception' => 'manquant',
+            'commentaire_ecart_reception' => '20 packs manquants à la livraison',
+        ]]);
+
+        $commande = $commande->fresh(['lignes']);
+
+        // La réception est bien validée, l'écart correctement enregistré.
+        $this->assertSame(StatutCommandeVente::LIVREE, $commande->statut);
+        $this->assertNotNull($commande->reception_validee_at);
+        $ligne = $commande->lignes->firstOrFail();
+        $this->assertSame(580, $ligne->quantite_livree);
+        $this->assertSame(600, $ligne->quantite_chargee);
+        $this->assertSame(-20, $ligne->ecart_livraison);
+        $this->assertSame('manquant', $ligne->type_ecart_reception->value);
+
+        // Commission calculée sur le RÉCEPTIONNÉ (580), jamais le CHARGÉ (600) — même règle que
+        // distribution_client, même code (CommissionEnveloppeGenerator::contexteDepuisCommandeVente()).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'processus_id' => $this->processusGrossisteLivraison->id,
+            'montant_total' => 464000, // 580 × 800 — PAS 600 × 800 = 480 000
+        ]);
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'processus_id' => $this->processusGrossisteLivraison->id,
+            'montant_total' => 116000, // 580 × 200 — PAS 600 × 200 = 120 000
+        ]);
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_SITE,
+            'processus_id' => $this->processusGrossisteLivraison->id,
+            'montant_total' => 116000, // 580 × 200
+        ]);
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'processus_id' => $this->processusGrossisteLivraison->id,
+            'montant_total' => 29000, // 580 × 50
+        ]);
+
+        // Le processus reste TRANSFERT_GROSSISTE — aucune commission VENTE ni TRANSFERT_LOGISTIQUE.
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'processus_id' => $this->processus->id, // $this->processus = CODE_VENTE
+        ]);
+        $logistique = CommissionProcessus::where('organization_id', $this->org->id)
+            ->where('code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+            ->first();
+        if ($logistique) {
+            $this->assertDatabaseMissing('commission_enveloppes', [
+                'source_id' => $commande->id,
+                'processus_id' => $logistique->id,
+            ]);
+        }
+    }
+
+    /**
      * Généralisation du 05/09/2026 (chantier 2A, indépendance des cibles) : un client Externe en
      * vente directe (sans véhicule) génère désormais sa commission Consultant si une règle active
      * et désignée existe — l'exception "consultant indépendant du véhicule" n'est plus scopée à
