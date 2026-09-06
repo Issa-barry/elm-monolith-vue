@@ -92,8 +92,7 @@ export function usePwaInstall() {
             return;
 
         const matchesStandaloneMedia =
-            window.matchMedia?.('(display-mode: standalone)').matches ??
-            false;
+            window.matchMedia?.('(display-mode: standalone)').matches ?? false;
         const iosNavigatorStandalone = (
             navigator as Navigator & { standalone?: boolean }
         ).standalone;

@@ -72,10 +72,13 @@ const { showBanner, showIosSheet, promptInstall, closeIosSheet, dismiss } =
         <div class="flex flex-col gap-4">
             <ol class="flex flex-col gap-3 text-sm">
                 <li class="flex items-center gap-3">
-                    <i class="pi pi-share-alt text-primary" aria-hidden="true" />
+                    <i
+                        class="pi pi-share-alt text-primary"
+                        aria-hidden="true"
+                    />
                     <span
-                        >Appuyez sur le bouton
-                        <strong>Partager</strong> de Safari.</span
+                        >Appuyez sur le bouton <strong>Partager</strong> de
+                        Safari.</span
                     >
                 </li>
                 <li class="flex items-center gap-3">

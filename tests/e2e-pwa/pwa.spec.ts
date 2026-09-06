@@ -1,16 +1,30 @@
 /**
  * PWA — service worker minimal (cf. docs/pwa.md).
  *
- * Ces tests ne tournent PAS dans la suite E2E par défaut : `npm run e2e:build`
- * désactive le service worker (PWA_FORCE_ENABLED absent, cf. vite.config.ts) pour
- * ne jamais faire dépendre le reste de la suite fonctionnelle d'un cache
- * navigateur. Pour les exécuter, construire l'app avec le service worker actif
- * puis lancer uniquement ce fichier :
+ * Dans tests/e2e-pwa/ (pas tests/e2e/) avec sa propre config
+ * (playwright.pwa.config.ts) : un `npx playwright test` sans argument (E2E
+ * full/smoke en CI, testDir = tests/e2e) ne le ramasse donc jamais — un
+ * `testIgnore` sur playwright.config.ts avait été envisagé puis écarté,
+ * vérifié qu'il bloque aussi bien un chemin de fichier passé explicitement en
+ * argument, ce qui aurait rendu ce fichier impossible à lancer du tout. Deux
+ * raisons cumulées justifient cette exclusion de la suite par défaut :
+ * - `npm run e2e:build` désactive le service worker par défaut
+ *   (PWA_FORCE_ENABLED absent, cf. vite.config.ts) — ces tests attendraient
+ *   `reg.active` indéfiniment (timeout, jamais un skip propre).
+ * - Même service worker actif, ses fetch d'installation partagent le même
+ *   `php artisan serve` mono-thread que tous les autres workers Playwright
+ *   du job — un run E2E complet en parallèle de ce fichier serait une source
+ *   de flakiness pour l'un comme pour l'autre.
  *
- *   npm run e2e:db:reset && npm run e2e:build:pwa && npx playwright test tests/e2e/pwa.spec.ts
+ * Pour les exécuter, construire l'app avec le service worker actif puis
+ * lancer cette config dédiée (E2E_SKIP_GLOBAL_SETUP=1 : ces tests se
+ * connectent eux-mêmes, inutile de rejouer le seed de commissions coûteux de
+ * global-setup.ts) :
+ *
+ *   npm run e2e:db:reset && npm run e2e:build:pwa && E2E_SKIP_GLOBAL_SETUP=1 npx playwright test --config=playwright.pwa.config.ts
  */
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { login } from '../e2e/helpers';
 
 test.use({ serviceWorkers: 'allow' });
 
@@ -38,15 +52,22 @@ test.describe('PWA — manifest et icônes', () => {
 
         for (const icon of manifest.icons) {
             const iconRes = await request.get(icon.src);
-            expect(iconRes.ok(), `icône introuvable : ${icon.src}`).toBeTruthy();
+            expect(
+                iconRes.ok(),
+                `icône introuvable : ${icon.src}`,
+            ).toBeTruthy();
         }
 
-        expect(manifest.icons.some((i: { purpose?: string }) => i.purpose === 'maskable')).toBeTruthy();
+        expect(
+            manifest.icons.some(
+                (i: { purpose?: string }) => i.purpose === 'maskable',
+            ),
+        ).toBeTruthy();
     });
 });
 
 test.describe('PWA — service worker', () => {
-    test('s\'enregistre et ne précache que des fichiers statiques autorisés', async ({
+    test("s'enregistre et ne précache que des fichiers statiques autorisés", async ({
         page,
     }) => {
         await login(page);
@@ -61,14 +82,25 @@ test.describe('PWA — service worker', () => {
             { timeout: 20_000 },
         );
 
-        // Laisse le temps à l'install (fetch + cache.put asynchrones) de finir.
+        // `reg.active` confirme que la promesse de `install` a résolu, mais
+        // pas que le cache contient déjà ses entrées au moment précis où ce
+        // test les lit (observé en CI, sous charge partagée avec un autre
+        // worker Playwright sur le même `php artisan serve` mono-thread :
+        // le nom du cache existe dès `caches.open()`, avant toute écriture —
+        // attendre seulement son existence peut donc lire un cache encore
+        // vide). On attend directement la condition qui nous intéresse
+        // réellement : au moins une entrée présente dans ce cache précis.
         await page.waitForFunction(
-            () =>
-                caches
-                    .keys()
-                    .then((names) => names.some((n) => n.startsWith('elm-pwa-'))),
+            async () => {
+                const names = await caches.keys();
+                const cacheName = names.find((n) => n.startsWith('elm-pwa-'));
+                if (!cacheName) return false;
+                const cache = await caches.open(cacheName);
+                const keys = await cache.keys();
+                return keys.length > 0;
+            },
             null,
-            { timeout: 20_000 },
+            { timeout: 30_000 },
         );
 
         const cachedPaths = await page.evaluate(async () => {
@@ -89,10 +121,22 @@ test.describe('PWA — service worker', () => {
                 p.startsWith('/build/assets/') ||
                 p.startsWith('/build-e2e/assets/');
 
-            expect(isStaticAllowlisted, `chemin en cache inattendu : ${p}`).toBeTruthy();
-            expect(p.startsWith('/backoffice'), `page métier en cache : ${p}`).toBeFalsy();
-            expect(p.startsWith('/client'), `page métier en cache : ${p}`).toBeFalsy();
-            expect(p.startsWith('/api/'), `réponse API en cache : ${p}`).toBeFalsy();
+            expect(
+                isStaticAllowlisted,
+                `chemin en cache inattendu : ${p}`,
+            ).toBeTruthy();
+            expect(
+                p.startsWith('/backoffice'),
+                `page métier en cache : ${p}`,
+            ).toBeFalsy();
+            expect(
+                p.startsWith('/client'),
+                `page métier en cache : ${p}`,
+            ).toBeFalsy();
+            expect(
+                p.startsWith('/api/'),
+                `réponse API en cache : ${p}`,
+            ).toBeFalsy();
         }
     });
 

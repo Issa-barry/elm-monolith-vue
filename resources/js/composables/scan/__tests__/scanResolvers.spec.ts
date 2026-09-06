@@ -110,12 +110,15 @@ describe('resolveQrText', () => {
 });
 
 describe('LIVRAISON_REF_RE', () => {
-    it.each(['VTE-060926-002', 'DST-060926-001', 'CMD-120825-045', 'TRF-060926-007', 'TR-12345-001'])(
-        'reconnaît le préfixe de "%s"',
-        (reference) => {
-            expect(LIVRAISON_REF_RE.test(reference)).toBe(true);
-        },
-    );
+    it.each([
+        'VTE-060926-002',
+        'DST-060926-001',
+        'CMD-120825-045',
+        'TRF-060926-007',
+        'TR-12345-001',
+    ])('reconnaît le préfixe de "%s"', (reference) => {
+        expect(LIVRAISON_REF_RE.test(reference)).toBe(true);
+    });
 
     it('ne reconnaît pas une référence sans préfixe de livraison connu', () => {
         expect(LIVRAISON_REF_RE.test('EAN1234567890')).toBe(false);

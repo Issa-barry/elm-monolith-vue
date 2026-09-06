@@ -31,7 +31,10 @@ export function resolvePwaInstallState(
     return 'hidden';
 }
 
-export function isIosDevice(userAgent: string, maxTouchPoints: number): boolean {
+export function isIosDevice(
+    userAgent: string,
+    maxTouchPoints: number,
+): boolean {
     if (/iPad|iPhone|iPod/i.test(userAgent)) return true;
     // iPadOS 13+ : Safari annonce un user-agent "Macintosh" (UA desktop),
     // seul le nombre de points tactiles le distingue d'un vrai Mac.
