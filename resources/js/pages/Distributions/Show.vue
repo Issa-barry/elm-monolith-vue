@@ -566,9 +566,12 @@ function printTicketCommande(): void {
 
 // ── Timeline de progression ────────────────────────────────────────────────────
 // distribution_client uniquement : une étape "Réception" s'intercale entre "Livraison en cours"
-// et "Facturation", reflet visuel de validerReceptionDistribution() — jamais un nouveau statut,
-// calculé ici à partir du statut courant et de reception_validee_at (une commande de distribution
-// exige toujours un véhicule, cf. COMM-003 : pas de variante "commande directe" sur cette page).
+// et "Facturation", reflet visuel de CommandeVenteService::validerReception() — jamais un
+// nouveau statut, calculé ici à partir du statut courant et de reception_validee_at (une
+// commande de distribution exige toujours un véhicule, cf. COMM-003 : pas de variante "commande
+// directe" sur cette page). Grossiste + Livraison partage désormais le même mécanisme de
+// réception (cf. docs/grossiste.md) mais reste affiché sur Ventes/Show.vue, jamais ici — cette
+// page reste scopée à distribution_client (cf. filtre nature_operation de distributions.index()).
 const STEPS = [
     { key: 'creee', shortLabel: 'Créée', icon: FileText },
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },

@@ -3,6 +3,7 @@ import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
@@ -75,6 +76,7 @@ const props = defineProps<{
 
 const { can } = usePermissions();
 const toast = useToast();
+useFlashToast();
 const activeTab = ref<'informations' | 'cashback' | 'tarification'>(
     'informations',
 );
@@ -197,6 +199,19 @@ function categorieNom(categorieId: string | null): string {
         props.tarifs_grossiste.categories.find((c) => c.id === categorieId)
             ?.nom ?? '—'
     );
+}
+
+// Libellé spécifique à CE tableau de prix — volontairement distinct du libellé générique de
+// App\Enums\ModeRemiseGrossiste (« Enlèvement »/« Livraison », qui décrit le MODE d'une commande,
+// pas un prix). Le mot « usine » est banni ici (cf. docs/grossiste.md : le retrait peut avoir
+// lieu à l'usine, au dépôt ou ailleurs — jamais uniquement en sortie d'usine).
+const PRIX_MODE_LABELS: Record<string, string> = {
+    enlevement: 'Prix enlèvement',
+    livraison: 'Prix livraison',
+};
+
+function prixModeLabel(mode: string): string {
+    return PRIX_MODE_LABELS[mode] ?? mode;
 }
 
 // Catégories déjà utilisées par une AUTRE ligne — jamais reproposées (même garde-fou que
@@ -944,59 +959,118 @@ function saveTarifs(): void {
                         >
                             Aucun tarif configuré pour ce client.
                         </div>
-                        <div
-                            v-else
-                            class="mt-5 overflow-x-auto rounded-lg border"
-                        >
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b bg-muted/40">
-                                        <th
-                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                        <template v-else>
+                            <!-- Desktop / tablette : tableau -->
+                            <div
+                                class="mt-5 hidden overflow-x-auto rounded-lg border sm:block"
+                            >
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="border-b bg-muted/40">
+                                            <th
+                                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Catégorie
+                                            </th>
+                                            <th
+                                                v-for="m in mode_remise_grossiste_options"
+                                                :key="m.value"
+                                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                {{ prixModeLabel(m.value) }}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr
+                                            v-for="(
+                                                ligne, index
+                                            ) in lignesAffichees"
+                                            :key="ligne.categorie_id ?? index"
                                         >
-                                            Catégorie
-                                        </th>
-                                        <th
-                                            v-for="m in mode_remise_grossiste_options"
-                                            :key="m.value"
-                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                        >
-                                            {{ m.label }}
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr
-                                        v-for="(
-                                            ligne, index
-                                        ) in lignesAffichees"
-                                        :key="ligne.categorie_id ?? index"
-                                    >
-                                        <td class="px-4 py-3 font-medium">
-                                            {{
-                                                categorieNom(ligne.categorie_id)
-                                            }}
-                                        </td>
-                                        <td class="px-4 py-3 tabular-nums">
-                                            {{
-                                                ligne.enlevement
-                                                    ? formatGNF(
-                                                          ligne.enlevement,
-                                                      )
-                                                    : 'Non configuré'
-                                            }}
-                                        </td>
-                                        <td class="px-4 py-3 tabular-nums">
-                                            {{
-                                                ligne.livraison
-                                                    ? formatGNF(ligne.livraison)
-                                                    : 'Non configuré'
-                                            }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                                            <td class="px-4 py-3 font-medium">
+                                                {{
+                                                    categorieNom(
+                                                        ligne.categorie_id,
+                                                    )
+                                                }}
+                                            </td>
+                                            <td class="px-4 py-3 tabular-nums">
+                                                {{
+                                                    ligne.enlevement
+                                                        ? formatGNF(
+                                                              ligne.enlevement,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </td>
+                                            <td class="px-4 py-3 tabular-nums">
+                                                {{
+                                                    ligne.livraison
+                                                        ? formatGNF(
+                                                              ligne.livraison,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile : cartes empilées, pas de scroll horizontal -->
+                            <div class="mt-5 space-y-2 sm:hidden">
+                                <div
+                                    v-for="(ligne, index) in lignesAffichees"
+                                    :key="ligne.categorie_id ?? index"
+                                    class="rounded-lg border p-3"
+                                >
+                                    <p class="text-sm font-medium">
+                                        {{ categorieNom(ligne.categorie_id) }}
+                                    </p>
+                                    <div class="mt-2 grid grid-cols-2 gap-3">
+                                        <div>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{
+                                                    prixModeLabel('enlevement')
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-0.5 text-sm font-medium tabular-nums"
+                                            >
+                                                {{
+                                                    ligne.enlevement
+                                                        ? formatGNF(
+                                                              ligne.enlevement,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{ prixModeLabel('livraison') }}
+                                            </p>
+                                            <p
+                                                class="mt-0.5 text-sm font-medium tabular-nums"
+                                            >
+                                                {{
+                                                    ligne.livraison
+                                                        ? formatGNF(
+                                                              ligne.livraison,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
                     </template>
 
                     <!-- Édition : lignes ajoutables, une catégorie sélectionnée à la fois (même
@@ -1009,65 +1083,71 @@ function saveTarifs(): void {
                             <div
                                 v-for="(ligne, index) in tarifsForm.lignes"
                                 :key="index"
-                                class="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start"
+                                class="rounded-lg border p-3"
                             >
-                                <div class="flex-1">
-                                    <Label class="mb-1.5 block text-xs"
-                                        >Catégorie</Label
-                                    >
-                                    <Dropdown
-                                        v-model="ligne.categorie_id"
-                                        :options="categoriesDisponibles(index)"
-                                        option-label="nom"
-                                        option-value="id"
-                                        placeholder="Choisir…"
-                                        class="w-full"
-                                    />
-                                </div>
-                                <div class="w-full sm:w-40">
-                                    <Label class="mb-1.5 block text-xs"
-                                        >Enlèvement usine</Label
-                                    >
-                                    <div class="flex items-center gap-1.5">
-                                        <InputNumber
-                                            v-model="ligne.enlevement"
-                                            :min="0"
-                                            :step="100"
-                                            class="w-full"
-                                        />
-                                        <span
-                                            class="shrink-0 text-xs text-muted-foreground"
-                                            >GNF</span
-                                        >
-                                    </div>
-                                </div>
-                                <div class="w-full sm:w-40">
-                                    <Label class="mb-1.5 block text-xs"
-                                        >Livraison</Label
-                                    >
-                                    <div class="flex items-center gap-1.5">
-                                        <InputNumber
-                                            v-model="ligne.livraison"
-                                            :min="0"
-                                            :step="100"
-                                            class="w-full"
-                                        />
-                                        <span
-                                            class="shrink-0 text-xs text-muted-foreground"
-                                            >GNF</span
-                                        >
-                                    </div>
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    class="mt-1 h-9 w-9 shrink-0 text-destructive sm:mt-6"
-                                    data-testid="tarifs-remove-ligne"
-                                    @click="removeLigne(index)"
+                                <div
+                                    class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem_9rem_auto] sm:items-start"
                                 >
-                                    <Trash2 class="h-4 w-4" />
-                                </Button>
+                                    <div>
+                                        <Label class="mb-1.5 block text-xs"
+                                            >Catégorie</Label
+                                        >
+                                        <Dropdown
+                                            v-model="ligne.categorie_id"
+                                            :options="
+                                                categoriesDisponibles(index)
+                                            "
+                                            option-label="nom"
+                                            option-value="id"
+                                            placeholder="Choisir…"
+                                            class="w-full"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label class="mb-1.5 block text-xs">{{
+                                            prixModeLabel('enlevement')
+                                        }}</Label>
+                                        <div class="flex items-center gap-1.5">
+                                            <InputNumber
+                                                v-model="ligne.enlevement"
+                                                :min="0"
+                                                :step="100"
+                                                class="w-full"
+                                            />
+                                            <span
+                                                class="shrink-0 text-xs text-muted-foreground"
+                                                >GNF</span
+                                            >
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label class="mb-1.5 block text-xs">{{
+                                            prixModeLabel('livraison')
+                                        }}</Label>
+                                        <div class="flex items-center gap-1.5">
+                                            <InputNumber
+                                                v-model="ligne.livraison"
+                                                :min="0"
+                                                :step="100"
+                                                class="w-full"
+                                            />
+                                            <span
+                                                class="shrink-0 text-xs text-muted-foreground"
+                                                >GNF</span
+                                            >
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-9 w-9 shrink-0 justify-self-end text-destructive sm:mt-6 sm:justify-self-auto"
+                                        data-testid="tarifs-remove-ligne"
+                                        @click="removeLigne(index)"
+                                    >
+                                        <Trash2 class="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 

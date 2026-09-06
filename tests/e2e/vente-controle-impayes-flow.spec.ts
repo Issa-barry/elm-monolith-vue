@@ -405,7 +405,8 @@ async function createClientInApp(
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, {
+    // La création redirige vers la fiche détail (Clients/Show.vue), pas vers l'édition.
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/, {
         timeout: 15_000,
     });
 }

@@ -601,7 +601,7 @@ class CommandeVenteController extends Controller
                 'can_confirmer' => $commande->isBrouillon() && $user->can('confirmer', $commande),
                 'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
                 'can_valider_chargement' => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
-                'can_valider_reception' => $commande->isLivraisonEnCours() && $user->can('validerReceptionDistribution', $commande),
+                'can_valider_reception' => $commande->isLivraisonEnCours() && $user->can('validerReception', $commande),
                 'can_annuler' => $commande->statut->isAnnulable()
                     && (! $facture || (float) $facture->montant_encaisse === 0.0)
                     && $user->can('annuler', $commande),

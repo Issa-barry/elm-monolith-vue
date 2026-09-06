@@ -10,11 +10,16 @@ const isE2E = process.env.APP_ENV === 'e2e';
 // explicitement via `npm run e2e:build:pwa` pour tester le PWA lui-même.
 const pwaEnabled = process.env.PWA_FORCE_ENABLED === '1' ? true : !isE2E;
 
+// VITE_LAN=1 expose le serveur dev sur le réseau local (test sur téléphone) ;
+// VITE_HMR_HOST fixe l'IP LAN à utiliser pour le websocket HMR (sinon injoignable
+// depuis un autre appareil). Comportement par défaut inchangé (127.0.0.1 partout).
+const lanMode = process.env.VITE_LAN === '1';
+
 export default defineConfig({
     server: {
-        host: '127.0.0.1',
+        host: lanMode ? '0.0.0.0' : '127.0.0.1',
         hmr: {
-            host: '127.0.0.1',
+            host: process.env.VITE_HMR_HOST || '127.0.0.1',
         },
     },
     define: {

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Spinner } from '@/components/ui/spinner';
+import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
 import {
     type CapaciteRow,
@@ -57,10 +58,7 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     capacites: CapaciteRow[];
 }>();
-const page = usePage();
-const flashSuccess = computed(
-    () => (page.props as { flash?: { success?: string } }).flash?.success,
-);
+useFlashToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -151,14 +149,6 @@ function submit() {
                         </p>
                     </div>
                 </div>
-            </div>
-
-            <div
-                v-if="flashSuccess"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
-            >
-                <CheckCircle class="h-4 w-4 shrink-0" />
-                {{ flashSuccess }}
             </div>
 
             <VehiculeForm

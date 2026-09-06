@@ -44,31 +44,37 @@ même principe de barème dynamique au transfert logistique interne.
   désélectionné automatiquement (`useDistributionVehiculePool.ts`) plutôt que laissé affiché mais
   invalide. `Ventes/Edit.vue` n'est pas concerné par ce chantier (source de véhicules inchangée).
 - **COMM-004** (révisée le 30/08/2026 — la version précédente de cette règle affirmait l'inverse :
-  workflow strictement identique entre les deux natures) — `distribution_client` est un hybride
-  vente/logistique : commercialement une vente à part entière (même `CommandeVente`/`FactureVente`,
-  même créance/paiement, indépendants de la logistique), mais logistiquement soumise à une
-  validation de réception explicite avant de passer LIVREE — mission de distribution non
-  considérée réalisée avant que le distributeur ait effectivement accepté la marchandise.
-  `vente_standard` reste inchangée : LIVREE toujours déclenché par le premier encaissement (cf.
+  workflow strictement identique entre les deux natures ; étendue le 06/09/2026 à Grossiste +
+  Livraison, cf. section « Réception Grossiste » plus bas — les méthodes citées ci-dessous ont été
+  renommées à cette occasion, `validerReceptionDistribution()` → `validerReception()`,
+  `onReceptionDistributionValidee()` → `onReceptionValidee()`) — `distribution_client` est un
+  hybride vente/logistique : commercialement une vente à part entière (même
+  `CommandeVente`/`FactureVente`, même créance/paiement, indépendants de la logistique), mais
+  logistiquement soumise à une validation de réception explicite avant de passer LIVREE — mission
+  de distribution non considérée réalisée avant que le distributeur ait effectivement accepté la
+  marchandise. `vente_standard` sans réception (classique, Grossiste + Enlèvement) reste inchangée :
+  LIVREE toujours déclenché par le premier encaissement (cf.
   `CommandeVenteService::passerEnLivree()`), jamais de validation de réception.
-  - Workflow distribution_client : … → LIVRAISON_EN_COURS → **validation de réception**
-    (`CommandeVenteService::validerReceptionDistribution()`, quantités par ligne dans
-    `quantite_livree` — colonne préexistante mais jamais écrite avant cette révision, déjà lue par
-    `CashbackService::quantiteEligible()`) → LIVREE. Un encaissement reçu avant la réception ne
-    déclenche jamais LIVREE pour cette nature (`EncaissementVenteController` le vérifie
-    explicitement) — statut et paiement sont deux axes indépendants pour la distribution,
-    contrairement à la vente standard où le premier encaissement fait les deux à la fois.
+  - Workflow avec réception explicite (cf. `CommandeVente::requiertReceptionExplicite()`) : … →
+    LIVRAISON_EN_COURS → **validation de réception** (`CommandeVenteService::validerReception()`,
+    quantités par ligne dans `quantite_livree` — colonne préexistante mais jamais écrite avant
+    cette révision, déjà lue par `CashbackService::quantiteEligible()`) → LIVREE. Un encaissement
+    reçu avant la réception ne déclenche jamais LIVREE pour ces commandes
+    (`EncaissementVenteController` le vérifie explicitement) — statut et paiement sont deux axes
+    indépendants pour elles, contrairement à la vente standard où le premier encaissement fait les
+    deux à la fois.
   - Écart de réception vs chargement : décision produit du 30/08/2026, la facture est
     **recalculée sur le réceptionné**, jamais figée au chargement — le client n'est jamais facturé
     au-delà de ce qu'il a accepté (garde-fou : refusé si le nouveau total tomberait sous ce qui est
     déjà encaissé). Contrairement à l'écart de chargement, un écart de réception ne réajuste
     **jamais** le stock physique — les unités refusées restent sorties du stock, leur sort
     physique est traité hors de ce système.
-  - Commission distribution_client : la validation de réception est son **unique** déclencheur,
-    jamais conditionné au paramètre organisation `Parametre::getDeclencheurCommissionVente()` (qui
-    ne régit plus que `vente_standard`) — calculée sur `quantite_livree`, jamais `quantite_chargee`
-    (cf. `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()`,
-    `CommissionTriggerService::onReceptionDistributionValidee()`).
+  - Commission d'une commande à réception explicite : la validation de réception est son
+    **unique** déclencheur, jamais conditionné au paramètre organisation
+    `Parametre::getDeclencheurCommissionVente()` (qui ne régit plus que les commandes sans
+    réception) — calculée sur `quantite_livree`, jamais `quantite_chargee` (cf.
+    `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()`,
+    `CommissionTriggerService::onReceptionValidee()`).
 - **COMM-005** (révisée le 02/09/2026 — la version précédente affirmait l'inverse : un processus
   `distribution_client` totalement fusionné avec `logistique_transfert`, plus jamais résolu) —
   Décision produit du 02/09/2026 : le processus MÉTIER d'une commande (identité, reporting,
