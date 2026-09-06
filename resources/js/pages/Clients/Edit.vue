@@ -274,6 +274,7 @@ function destroyVehicule(vehiculeId: number) {
                 :errors="form.errors"
                 :processing="form.processing"
                 :types="types"
+                :client-id="client.id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

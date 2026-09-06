@@ -129,6 +129,10 @@ interface Transfert {
     // TransfertLogistiqueController::mapTransfertDetail(), incident du 02/09/2026.
     commission_generique_genere: boolean;
     commission_generique_montant_total: number;
+    // Détail par livreur uniquement (jamais propriétaire/site/consultant, cf.
+    // TransfertLogistiqueController::mapCommissionLivreursGeneriques()) — son total ne
+    // correspond donc volontairement pas à commission_generique_montant_total ci-dessus.
+    commission_generique_livreurs: CommissionLivreurGenerique[];
     // Statut agrégé (impayé/partiel/payé) recalculé côté serveur depuis
     // CommissionEnveloppePart — alimente le libellé de l'étape "Commission" du stepper
     // ci-dessous. null tant qu'aucune part n'existe (commission pas encore générée).
@@ -140,6 +144,15 @@ interface Transfert {
     is_annule: boolean;
     is_editable: boolean;
     created_at: string;
+}
+
+interface CommissionLivreurGenerique {
+    id: string;
+    nom: string;
+    montant_unitaire: number;
+    montant: number;
+    statut_label: string;
+    statut_dot_class: string;
 }
 
 interface TypeEcartOption {
@@ -435,6 +448,15 @@ function aggregateParts(parts: CommissionPart[]) {
 
 const livreurTotals = computed(() => aggregateParts(livreurParts.value));
 const partLivreurTotal = computed(() => livreurTotals.value.net);
+
+// Moteur générique (seul moteur depuis le 03/09/2026) : détail par livreur affiché directement
+// dans l'onglet, distinct du total global (qui inclut aussi propriétaire/site/consultant).
+const livreurPartsGeneriques = computed(
+    () => props.transfert.commission_generique_livreurs ?? [],
+);
+const livreurGeneriqueTotal = computed(() =>
+    livreurPartsGeneriques.value.reduce((sum, p) => sum + p.montant, 0),
+);
 
 // ── Validation admin ──────────────────────────────────────────────────────────
 
@@ -1067,7 +1089,8 @@ function activiteDotClass(action: string): string {
                         <!-- ── Panneau validation admin (avant décision) ──── -->
                         <div
                             v-if="
-                                transfert.statut === 'reception' &&
+                                (transfert.statut === 'reception' ||
+                                    transfert.statut === 'cloture') &&
                                 !transfert.commission
                             "
                         >
@@ -1094,13 +1117,143 @@ function activiteDotClass(action: string): string {
                                             transfert.commission_generique_montant_total,
                                         )
                                     }}
-                                    au total, selon le barème configuré
-                                    (Paramètres > Commissions > Transferts
-                                    logistiques). Détail par bénéficiaire
-                                    disponible dans Comptabilité > Commissions
-                                    (filtre Processus = "Transferts
-                                    logistiques").
+                                    au total (tous bénéficiaires), selon le
+                                    barème configuré (Paramètres > Commissions >
+                                    Transferts logistiques).
                                 </p>
+
+                                <!-- Détail par livreur (moteur générique) -->
+                                <div
+                                    v-if="livreurPartsGeneriques.length > 0"
+                                    class="mt-3 overflow-hidden rounded-xl border bg-card shadow-sm"
+                                >
+                                    <div
+                                        class="flex items-center justify-between border-b px-4 py-2.5"
+                                    >
+                                        <h3
+                                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                        >
+                                            Détail par livreur
+                                        </h3>
+                                        <p
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Part livreurs (total) :
+                                            <span
+                                                class="font-semibold text-foreground"
+                                                >{{
+                                                    formatGNF(
+                                                        livreurGeneriqueTotal,
+                                                    )
+                                                }}</span
+                                            >
+                                        </p>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-sm">
+                                            <thead>
+                                                <tr
+                                                    class="border-b bg-muted/40"
+                                                >
+                                                    <th
+                                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                                    >
+                                                        Livreur
+                                                    </th>
+                                                    <th
+                                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                                    >
+                                                        Part unitaire
+                                                    </th>
+                                                    <th
+                                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                                    >
+                                                        Montant total gagné
+                                                    </th>
+                                                    <th
+                                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                                    >
+                                                        Statut
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y">
+                                                <tr
+                                                    v-for="livreurPart in livreurPartsGeneriques"
+                                                    :key="livreurPart.id"
+                                                    class="transition-colors hover:bg-muted/10"
+                                                >
+                                                    <td
+                                                        class="px-4 py-2.5 font-medium"
+                                                    >
+                                                        {{ livreurPart.nom }}
+                                                    </td>
+                                                    <td
+                                                        class="px-4 py-2.5 text-right text-muted-foreground tabular-nums"
+                                                    >
+                                                        {{
+                                                            formatGNF(
+                                                                livreurPart.montant_unitaire,
+                                                            )
+                                                        }}
+                                                    </td>
+                                                    <td
+                                                        class="px-4 py-2.5 text-right font-semibold tabular-nums"
+                                                    >
+                                                        {{
+                                                            formatGNF(
+                                                                livreurPart.montant,
+                                                            )
+                                                        }}
+                                                    </td>
+                                                    <td class="px-4 py-2.5">
+                                                        <StatusDot
+                                                            :dot-class="
+                                                                livreurPart.statut_dot_class
+                                                            "
+                                                            :label="
+                                                                livreurPart.statut_label
+                                                            "
+                                                            class="text-xs text-muted-foreground"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr
+                                                    class="border-t-2 bg-muted/20 text-sm font-semibold"
+                                                >
+                                                    <td
+                                                        colspan="2"
+                                                        class="px-4 py-2 text-xs font-bold text-muted-foreground uppercase"
+                                                    >
+                                                        Total
+                                                    </td>
+                                                    <td
+                                                        class="px-4 py-2 text-right tabular-nums"
+                                                    >
+                                                        {{
+                                                            formatGNF(
+                                                                livreurGeneriqueTotal,
+                                                            )
+                                                        }}
+                                                    </td>
+                                                    <td />
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div
+                                    v-else
+                                    class="mt-3 rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    Aucune commission livreur applicable à ce
+                                    transfert. Le détail complet (propriétaire,
+                                    site, consultant) reste disponible dans
+                                    Comptabilité > Commissions (filtre Processus
+                                    = "Transferts logistiques").
+                                </div>
                             </div>
 
                             <!-- Refus -->

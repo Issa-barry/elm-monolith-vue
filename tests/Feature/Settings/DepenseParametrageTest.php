@@ -100,6 +100,7 @@ class DepenseParametrageTest extends TestCase
                         ->has('peut_valider')
                         ->has('perimetre')
                         ->has('sites')
+                        ->has('plafond_validation')
                     )
                 )
             );
@@ -143,6 +144,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
+                        'plafond_validation' => 1000000,
                     ],
                 ],
             ])
@@ -153,6 +155,7 @@ class DepenseParametrageTest extends TestCase
             'role_name' => 'manager',
             'peut_valider' => true,
             'perimetre' => 'toutes_agences',
+            'plafond_validation' => 1000000,
         ]);
     }
 
@@ -168,6 +171,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => false,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
+                        'plafond_validation' => null,
                     ],
                 ],
             ])
@@ -177,6 +181,181 @@ class DepenseParametrageTest extends TestCase
             'organization_id' => $this->org->id,
             'role_name' => 'manager',
             'peut_valider' => false,
+        ]);
+    }
+
+    // ── plafond_validation ────────────────────────────────────────────────────
+
+    public function test_update_droits_rejette_peut_valider_true_sans_plafond(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'peut_valider' => true,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => null,
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors(['config.0.plafond_validation']);
+
+        $this->assertDatabaseMissing('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+        ]);
+    }
+
+    public function test_update_droits_rejette_plafond_negatif(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'peut_valider' => true,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => -1,
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors(['config.0.plafond_validation']);
+    }
+
+    public function test_update_droits_efface_le_plafond_quand_peut_valider_desactive(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'peut_valider' => false,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        // Un plafond résiduel côté client est ignoré : le
+                        // serveur force NULL dès que peut_valider est false.
+                        'plafond_validation' => 500000,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'peut_valider' => false,
+            'plafond_validation' => null,
+        ]);
+    }
+
+    // ── Admin Entreprise — plafond obligatoire malgré peut_valider forcé ────────
+    // Correction 04/09/2026 : Admin Entreprise garde son accès automatique
+    // (RBAC/agences) mais est désormais soumis au plafond de montant comme
+    // tout autre rôle. Sa case "Peut valider" reste verrouillée à true côté
+    // UI ; le backend force donc peut_valider=true pour sa ligne avant
+    // validation, indépendamment de ce que le client envoie, pour que le
+    // plafond lui soit imposé et que la ligne reste utilisable par
+    // droitValidationPour().
+
+    public function test_update_droits_sauvegarde_le_plafond_admin_entreprise(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'admin_entreprise',
+                        'peut_valider' => false, // ignoré, forcé à true côté serveur
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => 2000000,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'peut_valider' => true,
+            'plafond_validation' => 2000000,
+        ]);
+    }
+
+    public function test_update_droits_rejette_admin_entreprise_sans_plafond(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'admin_entreprise',
+                        'peut_valider' => false,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => null,
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors(['config.0.plafond_validation']);
+
+        $this->assertDatabaseMissing('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+        ]);
+    }
+
+    public function test_update_droits_modifie_un_plafond_existant(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'peut_valider' => true,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => 750000,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'plafond_validation' => 750000,
         ]);
     }
 
@@ -192,6 +371,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'son_agence',
                         'sites' => [],
+                        'plafond_validation' => 500000,
                     ],
                 ],
             ])
@@ -216,6 +396,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'agences_selectionnees',
                         'sites' => [$this->site->id],
+                        'plafond_validation' => 500000,
                     ],
                 ],
             ])
@@ -242,6 +423,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [$this->site->id], // ignoré car périmètre pas agences_selectionnees
+                        'plafond_validation' => 500000,
                     ],
                 ],
             ])
@@ -276,6 +458,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'son_agence',
                         'sites' => [],
+                        'plafond_validation' => 500000,
                     ],
                 ],
             ])
@@ -315,6 +498,7 @@ class DepenseParametrageTest extends TestCase
                         'peut_valider' => true,
                         'perimetre' => 'agences_selectionnees',
                         'sites' => [$autreSite->id],
+                        'plafond_validation' => 500000,
                     ],
                 ],
             ])

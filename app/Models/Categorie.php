@@ -120,13 +120,24 @@ class Categorie extends Model
         return $this->hasMany(VehiculeCapacite::class, 'categorie_id');
     }
 
+    /**
+     * Tarifs Grossiste (Enlèvement/Livraison) configurés pour cette catégorie — voir
+     * GrossisteTarifResolver. Même partage volontaire de la Categorie du catalogue que
+     * vehiculeCapacites() ci-dessus, pour un troisième usage indépendant.
+     */
+    public function tarifsGrossiste(): HasMany
+    {
+        return $this->hasMany(CategorieTarifGrossiste::class, 'categorie_id');
+    }
+
     // ── Accesseurs ────────────────────────────────────────────────────────────
 
     public function getIsUsedAttribute(): bool
     {
         return $this->produits()->exists()
             || $this->enfants()->exists()
-            || $this->vehiculeCapacites()->exists();
+            || $this->vehiculeCapacites()->exists()
+            || $this->tarifsGrossiste()->exists();
     }
 
     /**

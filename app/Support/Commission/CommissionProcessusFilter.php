@@ -8,21 +8,22 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Filtre optionnel par processus (vente/distribution_client/logistique_transfert) pour les écrans
- * de reporting Comptabilité qui interrogent CommissionEnveloppePart — jamais appliqué à la
- * machinerie de paiement/période (PeriodeCalculatorService, CommissionEnveloppePartAllocationService),
- * qui doit au contraire toujours unir tous les processus (cf. docs/commissions.md).
+ * Filtre optionnel par processus (vente/distribution_client/logistique_transfert/transfert_grossiste)
+ * pour les écrans de reporting Comptabilité qui interrogent CommissionEnveloppePart — jamais
+ * appliqué à la machinerie de paiement/période (PeriodeCalculatorService,
+ * CommissionEnveloppePartAllocationService), qui doit au contraire toujours unir tous les
+ * processus (cf. docs/commissions.md).
  *
  * Décision produit du 02/09/2026 : le filtre accepte UN ou PLUSIEURS codes à la fois (case à
  * cocher multiple côté UI, jamais un simple menu déroulant) — plusieurs codes cochés s'unissent
  * (whereIn), jamais une intersection. Aucune sélection = "Tous les processus" = valeur par défaut
  * des écrans Index (plus jamais un repli silencieux sur "vente").
  *
- * Garde volontairement les 3 codes, y compris distribution_client, alors que
+ * Garde volontairement les 4 codes, y compris distribution_client, alors que
  * Settings\CommissionRegleController::processusCodesDisponibles() (routage/configuration de
- * NOUVELLES opérations, depuis le 01/09/2026) n'en propose plus que 2 : ce filtre sert à
- * REPORTER des CommissionEnveloppe déjà générées, dont certaines restent historiquement
- * rattachées à distribution_client. Comptabilite\CommissionVenteController::breakdownParProcessus()
+ * NOUVELLES opérations) n'en propose que 3 (distribution_client absent, cf. son docblock) : ce
+ * filtre sert à REPORTER des CommissionEnveloppe déjà générées, dont certaines restent
+ * historiquement rattachées à distribution_client. Comptabilite\CommissionVenteController
  * répartit le total déjà généré sur exactement ces options — en retirer une ferait disparaître
  * silencieusement sa part du total affiché (aucune commission perdue en base, mais une
  * réconciliation visuellement fausse). Ne jamais aligner cette liste sur processusCodesDisponibles().
@@ -36,6 +37,7 @@ class CommissionProcessusFilter
             ['value' => CommissionProcessus::CODE_VENTE, 'label' => 'Vente'],
             ['value' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 'label' => 'Distribution client'],
             ['value' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 'label' => 'Transfert logistique'],
+            ['value' => CommissionProcessus::CODE_TRANSFERT_GROSSISTE, 'label' => 'Transfert grossiste'],
         ];
     }
 

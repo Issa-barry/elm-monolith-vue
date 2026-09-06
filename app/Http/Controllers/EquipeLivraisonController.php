@@ -571,7 +571,8 @@ class EquipeLivraisonController extends Controller
         // "Processus disponible" ≠ "processus obligatoire" (révisé le 31/08/2026) : un partage ne
         // peut être enregistré que pour un processus que l'USAGE du véhicule autorise réellement
         // (livraison_vente pour vente, livraison_logistique pour distribution_client/
-        // logistique_transfert) — jamais uniquement filtré côté UI, une requête forgée avec
+        // logistique_transfert/transfert_grossiste, ce dernier depuis le 05/09/2026 cf.
+        // docs/grossiste.md) — jamais uniquement filtré côté UI, une requête forgée avec
         // processus_code=logistique_transfert sur un véhicule Vente-only doit être rejetée ici même
         // (cf. CommissionProcessusDefaults::codesApplicablesPourVehicule(), source unique partagée
         // avec VehiculeController). Si le véhicule n'est pas encore résolu (vehicule_id invalide),
@@ -583,7 +584,7 @@ class EquipeLivraisonController extends Controller
 
         return [
             'is_active' => 'boolean',
-            // Détermine quel partage (vente / logistique_transfert, cf.
+            // Détermine quel partage (vente / logistique_transfert / transfert_grossiste, cf.
             // CommissionRegleController::processusCodesDisponibles() — distribution_client n'est
             // plus un processus configurable depuis le 01/09/2026) cette soumission remplace —
             // jamais un fallback implicite vers vente. Chaque processus a ses propres montants
@@ -1126,7 +1127,7 @@ class EquipeLivraisonController extends Controller
     private function messages(): array
     {
         return [
-            'processus_code.required' => 'Le processus (Vente / Distribution client / Transfert logistique) est obligatoire.',
+            'processus_code.required' => 'Le processus (Vente / Transfert logistique / Transfert grossiste) est obligatoire.',
             'processus_code.in' => "Ce processus n'est pas applicable aux usages de ce véhicule.",
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
             'vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',

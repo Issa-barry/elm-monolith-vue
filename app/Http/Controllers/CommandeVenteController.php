@@ -7,6 +7,8 @@ use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ClientType;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
+use App\Enums\CommissionRegleStatut;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\NatureOperation;
@@ -20,6 +22,7 @@ use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
@@ -32,6 +35,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\GrossisteTarifResolver;
 use App\Services\PrixUsineResolver;
 use App\Services\PrixVenteNatureResolver;
 use App\Services\SolvabiliteService;
@@ -381,13 +385,19 @@ class CommandeVenteController extends Controller
         // trois requêtes/dérivations séparées comme avant le 31/08/2026.
         $vehiculePourValidation = $this->resolveVehiculeAvecEquipe($data['vehicule_id'] ?? null, $orgId);
         $natureOperation = $this->resoudreNatureOperation($data, $client, $vehiculePourValidation);
+        // Calculé une seule fois ici (pur, sans effet de bord) — réutilisé par le garde-fou
+        // préventif de partage commission ci-dessous ET par la persistance dans la transaction,
+        // jamais un second appel qui pourrait diverger (même principe que resoudreNatureOperation()).
+        $modeRemiseGrossiste = $this->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
 
         $this->ensureNatureOperationCoherente($natureOperation, $data['vehicule_id'] ?? null, $vehiculePourValidation);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null, $client);
-        $this->ensurePartageLivraisonCategorieConfigure($natureOperation, $vehiculePourValidation, $data['lignes'] ?? []);
+        $this->ensurePartageLivraisonCategorieConfigure(
+            $natureOperation, $vehiculePourValidation, $data['lignes'] ?? [], $client?->type, $modeRemiseGrossiste,
+        );
 
-        $commande = DB::transaction(function () use ($data, $orgId, $userSite, $client, $natureOperation) {
+        $commande = DB::transaction(function () use ($data, $orgId, $userSite, $client, $natureOperation, $modeRemiseGrossiste) {
             // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
             // requêtes concurrentes pour le même véhicule (double clic, deux utilisateurs)
             // passeraient toutes les deux enforceImpayesBlocking() avant qu'aucune des deux
@@ -403,7 +413,7 @@ class CommandeVenteController extends Controller
             $this->enforceImpayesBlocking($data, $orgId);
 
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $natureOperation);
-            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
+            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client, $modeRemiseGrossiste);
 
             $this->assertStockDisponiblePourLignes($orgId, $userSite->id, $lignesData);
 
@@ -417,6 +427,7 @@ class CommandeVenteController extends Controller
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
                 'nature_operation' => $natureOperation->value,
+                'mode_remise_grossiste' => $modeRemiseGrossiste?->value,
                 'created_by' => auth()->id(),
             ]);
 
@@ -530,6 +541,8 @@ class CommandeVenteController extends Controller
                 'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
                 'nature_operation' => $commande->nature_operation?->value,
                 'nature_operation_label' => $commande->nature_operation?->label(),
+                'mode_remise_grossiste' => $commande->mode_remise_grossiste?->value,
+                'mode_remise_grossiste_label' => $commande->mode_remise_grossiste?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -641,6 +654,7 @@ class CommandeVenteController extends Controller
                 'vehicule_id' => $vente->vehicule_id,
                 'client_id' => $vente->client_id,
                 'client_vehicule_id' => $vente->client_vehicule_id,
+                'mode_remise_grossiste' => $vente->mode_remise_grossiste?->value,
                 'lignes' => $vente->lignes->map(fn ($l) => [
                     // Bridge Phase 3 : le formulaire actuel ne sélectionne qu'un produit
                     // (pas de sélecteur de variante), on retrouve donc le produit parent.
@@ -678,13 +692,25 @@ class CommandeVenteController extends Controller
         $this->ensureNatureOperationCoherente($vente->nature_operation, $data['vehicule_id'] ?? null, $vehiculePourValidation);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $client = $this->resolveClientForTarification($data['client_id'] ?? null);
+        // Calculé ici (pur, sans effet de bord) — réutilisé par le garde-fou préventif de partage
+        // commission ci-dessous ET par la persistance plus bas, jamais un second appel qui
+        // pourrait diverger (même principe que store()).
+        $modeRemiseGrossiste = $this->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
         $this->enforcePrixVentePolicy($data, $vente, $client);
+        // Rejoue le même garde-fou qu'à la création (05/09/2026, chantier « Transfert grossiste »)
+        // — sans cet appel, éditer un brouillon Enlèvement en lui affectant un véhicule (le faisant
+        // ainsi basculer en Livraison) contournait entièrement la vérification de partage équipe et
+        // de barème Transfert grossiste appliquée par store() : la commande n'est jamais recréée,
+        // seulement modifiée, donc jamais revalidée sans cet appel explicite.
+        $this->ensurePartageLivraisonCategorieConfigure(
+            $vente->nature_operation, $vehiculePourValidation, $data['lignes'] ?? [], $client?->type, $modeRemiseGrossiste,
+        );
 
         $vente->load(['lignes.variante.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $vente->nature_operation);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client, $modeRemiseGrossiste);
 
         // Le site ne change jamais lors d'une modification de brouillon (pas de champ site_id
         // dans commandeValidationRules()) : on contrôle donc contre le site déjà porté par la
@@ -698,6 +724,7 @@ class CommandeVenteController extends Controller
             'total_commande' => $totalCommande,
             'mode_tarification_snapshot' => $context->modeTarification->value,
             'commission_eligible_snapshot' => $context->commissionEligible,
+            'mode_remise_grossiste' => $modeRemiseGrossiste?->value,
         ]);
 
         $vente->lignes()->delete();
@@ -851,17 +878,22 @@ class CommandeVenteController extends Controller
      * Statut de la DERNIÈRE tentative de génération de commission (distinct de
      * commission_statut, qui ne reflète que le paiement de commissions déjà
      * générées avec succès) — retourne null tant que rien n'est en anomalie :
-     * pas éligible, aucune tentative encore, ou dernière tentative réussie.
-     * Ne remonte que le cas ERREUR ("à régulariser"), seul cas nécessitant une
-     * alerte visible (cf. incident CMD-230826-004, où cet état n'était visible
-     * nulle part dans l'UI faute d'être exposé ici).
+     * aucune tentative encore, ou dernière tentative pleinement réussie (SUCCES).
+     * Remonte ERREUR ("à régulariser", aucune cible générée) et PARTIEL
+     * ("partiellement générée", au moins une cible générée mais une autre à
+     * régulariser — chantier 2A du 05/09/2026, indépendance des cibles), les
+     * deux seuls cas nécessitant une alerte visible (cf. incident CMD-230826-004,
+     * où cet état n'était visible nulle part dans l'UI faute d'être exposé ici).
+     *
+     * Ne filtre plus sur commission_eligible_snapshot (retiré le 05/09/2026,
+     * chantier 2A) : ce champ ne conditionne plus que les cibles PROPRIETAIRE/
+     * EQUIPE_LIVRAISON (cf. CommissionEnveloppeGenerator) — une commande sans
+     * véhicule peut désormais avoir une tentative réelle (SITE/CONSULTANT) à
+     * exposer ici. Sans effet pour une commande n'ayant jamais atteint de
+     * déclencheur : $derniere reste simplement null ci-dessous.
      */
     private function getCommissionGenerationStatut(CommandeVente $commande): ?array
     {
-        if (! $commande->commission_eligible_snapshot) {
-            return null;
-        }
-
         // Route par nature_operation — jamais un CODE_VENTE codé en dur (correctif du
         // 30/08/2026 : une commande distribution_client ne remontait jamais son état "à
         // régulariser", puisque sa CommissionGenerationAttempt est rattachée au processus
@@ -887,12 +919,12 @@ class CommandeVenteController extends Controller
             ->latest('created_at')
             ->first();
 
-        if (! $derniere || $derniere->statut !== CommissionGenerationStatut::ERREUR) {
+        if (! $derniere || ! in_array($derniere->statut, [CommissionGenerationStatut::ERREUR, CommissionGenerationStatut::PARTIEL], true)) {
             return null;
         }
 
         return [
-            'value' => 'erreur',
+            'value' => $derniere->statut->value,
             'label' => $derniere->statut->label(),
             'motif' => $derniere->motif_erreur,
         ];
@@ -924,11 +956,28 @@ class CommandeVenteController extends Controller
             ]);
         }
 
+        if ($statut !== null && $statut['value'] === 'partiel') {
+            return redirect()->route('ventes.show', $commande_vente)->withErrors([
+                'commissions' => "Certaines cibles restent à régulariser : {$statut['motif']}",
+            ]);
+        }
+
         return redirect()->route('ventes.show', $commande_vente)->with('success', 'Commissions générées avec succès.');
     }
 
     private function mapCommandeForIndex(CommandeVente $c, mixed $user): array
     {
+        // Identité de processus de commission (Vente / Distribution client / Transfert grossiste),
+        // calculée via la même source unique que la génération réelle (cf.
+        // CommissionEnveloppeGenerator::genererPourCommandeVente()) — jamais lue depuis les
+        // CommissionEnveloppe déjà générées, pour rester affichée même avant tout déclenchement
+        // (commande en brouillon ou à charger).
+        $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
+            $c->nature_operation ?? NatureOperation::VENTE_STANDARD,
+            $c->client?->type,
+            $c->mode_remise_grossiste,
+        );
+
         return [
             'id' => $c->id,
             'reference' => $c->reference,
@@ -936,6 +985,8 @@ class CommandeVenteController extends Controller
             'statut_label' => $c->statut_label,
             'statut_color' => $c->statut?->color(),
             'nature_operation' => $c->nature_operation?->value,
+            'processus_code' => $processusCode,
+            'processus_label' => CommissionProcessusDefaults::libelle($processusCode),
             'total_commande' => (float) $c->total_commande,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
@@ -976,6 +1027,10 @@ class CommandeVenteController extends Controller
             'vehicule_id' => 'nullable|exists:vehicules,id',
             'client_id' => 'nullable|exists:clients,id',
             'nature_operation' => ['nullable', Rule::in(NatureOperation::values())],
+            // mode_remise_grossiste n'est PLUS un champ soumis (décision produit du 05/09/2026,
+            // révision UX) : dérivé côté serveur depuis vehicule_id, cf. deriverModeRemiseGrossiste()
+            // — jamais une seconde information indépendante saisie par l'utilisateur, pour éviter
+            // toute incohérence Enlèvement+véhicule / Livraison+sans véhicule par construction.
             // Véhicule partenaire facultatif — jamais un substitut à vehicule_id (flotte gérée),
             // cf. ClientVehicle. Doit appartenir au client sélectionné.
             'client_vehicule_id' => [
@@ -1019,6 +1074,23 @@ class CommandeVenteController extends Controller
             'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
             'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
         ]);
+    }
+
+    /**
+     * mode_remise_grossiste est PAR COMMANDE, jamais une caractéristique du client (cf.
+     * docs/grossiste.md) — mais DEPUIS le 05/09/2026, plus une seconde information saisie par
+     * l'utilisateur : dérivée uniquement de la présence d'un véhicule, seule source de vérité.
+     * Véhicule sélectionné ⇒ Livraison, aucun véhicule ⇒ Enlèvement. Élimine par construction
+     * toute incohérence Enlèvement+véhicule / Livraison+sans véhicule — il n'existe plus de
+     * champ indépendant à valider. Null pour tout client non-Grossiste (notion sans objet).
+     */
+    private function deriverModeRemiseGrossiste(?string $vehiculeId, ?Client $client): ?ModeRemiseGrossiste
+    {
+        if ($client?->type !== ClientType::GROSSISTE) {
+            return null;
+        }
+
+        return $vehiculeId ? ModeRemiseGrossiste::LIVRAISON : ModeRemiseGrossiste::ENLEVEMENT;
     }
 
     /**
@@ -1134,45 +1206,67 @@ class CommandeVenteController extends Controller
      * incident CMD-300826-007, 30/08/2026). La configuration de partage peut encore changer entre
      * cette création et la génération réelle — ce contrôle réduit le risque, il ne l'élimine pas.
      *
-     * Hors périmètre volontairement : véhicule sans équipe de livraison du tout (erreur distincte,
-     * déjà portée par le générateur) et véhicule non éligible pour l'usage réellement concerné
-     * (commission_eligible_snapshot resterait false, la génération ne tente jamais de résoudre le
-     * partage Livreur pour ce véhicule) — la vérification d'usage autorisé (livraison_vente pour
-     * une vente, livraison_logistique pour une distribution, révisé le 31/08/2026) reflète
+     * Hors périmètre volontairement : véhicule sans équipe de livraison du tout pour la cible
+     * Livreur (erreur distincte, déjà portée par le générateur — sauf pour Transfert grossiste,
+     * dont l'absence TOTALE de barème est vérifiée indépendamment de l'équipe, cf.
+     * ensureTransfertGrossisteBaremeConfigure()) et véhicule non éligible pour l'usage réellement
+     * concerné (commission_eligible_snapshot resterait false, la génération ne tente jamais de
+     * résoudre le partage Livreur pour ce véhicule) — la vérification d'usage autorisé reflète
      * exactement celle de VehiculeCommandeContextResolver::resolve().
      *
      * $vehicule et $natureOperation doivent être ceux déjà résolus par resolveVehiculeAvecEquipe()/
      * resoudreNatureOperation() — jamais un second calcul indépendant qui pourrait diverger.
+     * $clientType/$modeRemiseGrossiste sont nécessaires depuis le 05/09/2026 (chantier « Transfert
+     * grossiste ») pour résoudre la même identité de processus que le générateur réel, cf.
+     * CommissionProcessusDefaults::identiteCodePourVente().
      */
-    private function ensurePartageLivraisonCategorieConfigure(NatureOperation $natureOperation, ?Vehicule $vehicule, array $lignes): void
-    {
-        if (! $vehicule || ! $vehicule->equipe) {
+    private function ensurePartageLivraisonCategorieConfigure(
+        NatureOperation $natureOperation,
+        ?Vehicule $vehicule,
+        array $lignes,
+        ?ClientType $clientType = null,
+        ?ModeRemiseGrossiste $modeRemiseGrossiste = null,
+    ): void {
+        if (! $vehicule) {
             return;
         }
 
-        $usageAutorise = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
-            ? (bool) $vehicule->livraison_logistique
-            : (bool) ($vehicule->livraison_vente ?? true);
+        // Résolution IDENTIQUE à celle du générateur réel (CommissionEnveloppeGenerator::
+        // genererPourCommandeVente()) — jamais un second calcul indépendant qui pourrait diverger.
+        $identiteCode = CommissionProcessusDefaults::identiteCodePourVente($natureOperation, $clientType, $modeRemiseGrossiste);
 
+        $usageAutorise = CommissionProcessusDefaults::estApplicablePourVehicule($identiteCode, $vehicule);
         if (! $usageAutorise) {
             return;
         }
 
-        // L'identité (distribution_client/vente) reste toujours celle de la commande — c'est elle
-        // qui sera écrite sur la CommissionEnveloppe générée. Le garde-fou doit en revanche vérifier
-        // le barème RÉELLEMENT consommé par le générateur, qui peut différer de l'identité (cf.
-        // CommissionProcessusDefaults::processusResolutionBareme(), décision produit du 02/09/2026 :
-        // distribution_client retombe sur le barème de logistique_transfert tant qu'il n'a pas sa
-        // propre CommissionRegle active). Sans cette résolution identique à celle du générateur
-        // (CommissionEnveloppeGenerator::genererPourCommandeVente()), ce contrôle préventif pourrait
-        // valider un partage qui ne sera jamais celui réellement consommé, ou en exiger un que le
-        // générateur ne lira jamais.
         $organizationId = auth()->user()->organization_id;
-        $identiteCode = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
-            : CommissionProcessus::CODE_VENTE;
+        // L'identité (distribution_client/vente/transfert_grossiste) reste toujours celle de la
+        // commande — c'est elle qui sera écrite sur la CommissionEnveloppe générée. Le garde-fou
+        // doit en revanche vérifier le barème RÉELLEMENT consommé par le générateur, qui peut
+        // différer de l'identité (cf. CommissionProcessusDefaults::processusResolutionBareme(),
+        // décision produit du 02/09/2026 : distribution_client retombe sur le barème de
+        // logistique_transfert tant qu'il n'a pas sa propre CommissionRegle active —
+        // transfert_grossiste n'a en revanche AUCUN repli, cf. ci-dessous). Sans cette résolution
+        // identique à celle du générateur, ce contrôle préventif pourrait valider un partage qui ne
+        // sera jamais celui réellement consommé, ou en exiger un que le générateur ne lira jamais.
         $processusIdentite = CommissionProcessusDefaults::resoudreOuCreer($organizationId, $identiteCode);
         $processusBareme = CommissionProcessusDefaults::processusResolutionBareme($processusIdentite);
+
+        // Transfert grossiste : décision produit du 05/09/2026 (cf. docs/grossiste.md) — jamais de
+        // repli de barème (contrairement à distribution_client). Sans ce contrôle, une organisation
+        // n'ayant configuré AUCUNE CommissionRegle pour ce processus verrait une livraison Grossiste
+        // générer silencieusement 0 commission sur TOUTES les cibles (Propriétaire/Livreur/Site/
+        // Consultant), y compris celles qui ne dépendent pas d'une équipe. Vérifié indépendamment
+        // de la présence d'une équipe (contrairement au reste de cette méthode) pour couvrir aussi
+        // ce cas.
+        if ($identiteCode === CommissionProcessus::CODE_TRANSFERT_GROSSISTE) {
+            $this->ensureTransfertGrossisteBaremeConfigure($organizationId, $processusBareme);
+        }
+
+        if (! $vehicule->equipe) {
+            return;
+        }
 
         $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($lignes);
 
@@ -1193,9 +1287,43 @@ class CommandeVenteController extends Controller
             'vehicule_id' => sprintf(
                 'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « %s » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
                 $vehicule->nom_vehicule,
-                $natureOperation->label(),
+                $processusIdentite->libelle,
                 $manquantes->pluck('nom')->implode(', '),
             ),
+        ]);
+    }
+
+    /**
+     * Garde-fou préventif spécifique à Transfert grossiste (décision produit du 05/09/2026, cf.
+     * docs/grossiste.md) — contrairement à distribution_client, ce processus n'a AUCUN repli
+     * automatique de barème (CommissionProcessusDefaults::processusResolutionBareme() ne le
+     * concerne pas) : une organisation n'ayant configuré AUCUNE CommissionRegle active pour ce
+     * processus verrait sinon une livraison Grossiste générer silencieusement 0 commission sur
+     * toutes les cibles (décision AMOA #4, techniquement correcte mais dangereuse pour un flux
+     * récurrent et non un cas isolé). Bloque donc explicitement, avec un message actionnable,
+     * plutôt que de laisser passer silencieusement.
+     *
+     * Volontairement un contrôle "au moins une règle existe pour ce processus" — jamais un contrôle
+     * par catégorie/cible : l'indépendance des cibles (chantier 2A) reste entière, un barème
+     * PARTIELLEMENT configuré (ex: Site seul) ne bloque jamais — seule l'ABSENCE TOTALE de
+     * configuration est un blocage, exactement le scénario "personne n'a encore ouvert l'onglet
+     * Transferts grossistes dans Paramètres > Commissions".
+     */
+    private function ensureTransfertGrossisteBaremeConfigure(string $organizationId, CommissionProcessus $processusBareme): void
+    {
+        $configure = CommissionRegle::where('organization_id', $organizationId)
+            ->where('processus_id', $processusBareme->id)
+            ->where('statut', CommissionRegleStatut::ACTIVE->value)
+            ->exists();
+
+        if ($configure) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'vehicule_id' => 'Aucun barème « Transfert grossiste » n\'est configuré pour votre organisation. '
+                .'Configurez les commissions dans Paramètres > Commissions (onglet Transferts grossistes) '
+                .'avant de valider une livraison Grossiste.',
         ]);
     }
 
@@ -1259,7 +1387,7 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null): array
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null, ?ModeRemiseGrossiste $modeRemiseGrossiste = null): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -1268,6 +1396,34 @@ class CommandeVenteController extends Controller
             $variante = $this->resolveVariante($ligne);
             $produit = $variante->produit;
             $qte = (int) $ligne['qte'];
+
+            // Grossiste : tarif catégorie × mode × client (GrossisteTarifResolver), gouverne SEUL
+            // le total de la ligne — jamais PrixVenteNatureResolver/PrixUsineResolver/
+            // ModeTarification, qui ne s'appliquent pas à cette nature (cf. docs/grossiste.md).
+            // $modeRemiseGrossiste est dérivé plus haut (deriverModeRemiseGrossiste()) depuis
+            // vehicule_id, toujours non-null ici pour un client Grossiste. Le tarif spécial est une
+            // surcharge facultative : repli automatique sur prix_vente si absent (resolveOrigine()
+            // le reflète dans prix_origine_snapshot pour rester transparent à l'affichage).
+            if ($client?->type === ClientType::GROSSISTE && $modeRemiseGrossiste) {
+                $prixGrossiste = (float) GrossisteTarifResolver::resolve($variante, $modeRemiseGrossiste, $client);
+                $origineGrossiste = GrossisteTarifResolver::resolveOrigine($variante, $modeRemiseGrossiste, $client);
+                $totalLigneGrossiste = $qte * $prixGrossiste;
+
+                $lignesData[] = [
+                    'variante_id' => $variante->id,
+                    'quantite_demandee' => $qte,
+                    'prix_usine_snapshot' => $prixGrossiste,
+                    'prix_vente_snapshot' => $prixGrossiste,
+                    'prix_origine_snapshot' => $origineGrossiste->value,
+                    'total_ligne' => $totalLigneGrossiste,
+                    'libelle_snapshot' => $this->libelleSnapshot($produit, $variante),
+                ];
+
+                $totalCommande += $totalLigneGrossiste;
+
+                continue;
+            }
+
             // Fabricable + client : le prix par nature de client (Externe/Revendeur/
             // Distributeur) remplace le prix de vente saisi/existant — jamais l'inverse (cf.
             // enforcePrixVentePolicy() qui n'a alors plus rien à valider pour cette ligne) — et
@@ -1348,6 +1504,7 @@ class CommandeVenteController extends Controller
             'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
             'nature_operation' => $commande->nature_operation?->value,
+            'mode_remise_grossiste' => $commande->mode_remise_grossiste?->value,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'variante_id' => $l->variante_id,
@@ -1588,6 +1745,7 @@ class CommandeVenteController extends Controller
                 'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
                 'type' => $c->type->value,
+                'type_label' => $c->type->label(),
                 // Véhicules externes mémorisés — facultatifs, jamais un prérequis pour vendre
                 // à ce client (cf. ClientVehicle).
                 'vehicules' => $c->type === ClientType::EXTERNE

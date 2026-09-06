@@ -14,6 +14,7 @@ use App\Models\CompteMapping;
 use App\Models\Contrat;
 use App\Models\Depense;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\FactureVente;
 use App\Models\Livreur;
@@ -43,6 +44,19 @@ class ComptabilisationBloquanteTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['comptabilite.payer', 'depenses.valider', 'rh-paie.pay']);
+
+        // Admin Entreprise ($this->user) reste soumis au plafond de montant
+        // depuis le 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001).
+        // Plafond très haut ici : test_validation_depense_echoue_si_comptabilisation_impossible
+        // doit échouer à cause du mapping comptable cassé, pas d'un plafond.
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 999_999_999,
+        ]);
     }
 
     private function casserMapping(string $evenement): void

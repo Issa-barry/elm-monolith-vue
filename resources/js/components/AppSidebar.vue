@@ -269,12 +269,8 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('comptabilite.read', 'comptabilite')) {
         const commissionsSousItems: NavItem[] = [
             {
-                title: 'Ventes',
+                title: 'Livreurs',
                 href: '/backoffice/comptabilite/commissions/vente',
-            },
-            {
-                title: 'Logistique',
-                href: '/backoffice/comptabilite/commissions/logistique',
             },
             {
                 title: 'Propriétaires',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CommissionGenerationStatut;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
@@ -34,6 +35,7 @@ class CommandeVente extends Model
         'mode_tarification_snapshot',
         'commission_eligible_snapshot',
         'nature_operation',
+        'mode_remise_grossiste',
         'statut',
         'motif_annulation',
         'annulee_at',
@@ -59,6 +61,7 @@ class CommandeVente extends Model
             'mode_tarification_snapshot' => ModeTarification::class,
             'commission_eligible_snapshot' => 'boolean',
             'nature_operation' => NatureOperation::class,
+            'mode_remise_grossiste' => ModeRemiseGrossiste::class,
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
             'a_charger_at' => 'datetime',
@@ -260,8 +263,12 @@ class CommandeVente extends Model
 
     private function commissionsPretesPourCloture(): bool
     {
-        if (! $this->commission_eligible_snapshot) {
-            // Véhicule non éligible aux commissions : rien n'est dû, clôture légitime.
+        // Grossiste + Enlèvement (pas de véhicule) reste commission_eligible_snapshot=false —
+        // cette valeur ne reflète que l'éligibilité véhicule (propriétaire/équipe), jamais celle
+        // du consultant/site qui en sont indépendants (cf. CommissionEnveloppeGenerator). Ne
+        // conclure "rien n'est dû" que si AUCUNE enveloppe n'a effectivement été générée, sinon
+        // une commission consultant légitime pourrait être clôturée sans avoir été vérifiée/payée.
+        if (! $this->commission_eligible_snapshot && ! $this->commissions()->exists()) {
             return true;
         }
 

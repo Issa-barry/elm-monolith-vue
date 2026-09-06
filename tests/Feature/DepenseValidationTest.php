@@ -17,7 +17,11 @@ use Tests\TestCase;
 
 /**
  * Tests du workflow de validation des dépenses :
- * - DepensePolicy::valider (bypass admin, RBAC, DroitCreationDepense périmètre)
+ * - DepensePolicy::valider (bypass RBAC/agences — Super Admin ET Admin
+ *   Entreprise, cf. isAdmin())
+ * - Plafond de montant, contrôlé séparément dans DepenseController::valider()
+ *   (Super Admin seul reste sans plafond — Admin Entreprise y est soumis
+ *   comme tout autre rôle, cf. section dédiée plus bas)
  * - can_valider par ligne dans l'index
  * - Rejet du validateur d'une autre org
  */
@@ -57,7 +61,7 @@ class DepenseValidationTest extends TestCase
             'organization_id' => $this->org->id,
         ]);
 
-        foreach (['admin_entreprise', 'manager'] as $role) {
+        foreach (['super_admin', 'admin_entreprise', 'manager'] as $role) {
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }
         foreach (['depenses.read', 'depenses.create', 'depenses.update'] as $perm) {
@@ -65,6 +69,12 @@ class DepenseValidationTest extends TestCase
         }
     }
 
+    /**
+     * Admin Entreprise : accès automatique pour le RBAC/périmètre d'agences,
+     * mais soumis au plafond de montant comme un rôle normal depuis le
+     * 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001) — contrairement
+     * à Super Admin, cf. superAdminUser().
+     */
     private function adminUser(?Site $site = null): User
     {
         $user = User::factory()->create(['organization_id' => $this->org->id]);
@@ -73,6 +83,38 @@ class DepenseValidationTest extends TestCase
         $user->sites()->attach(($site ?? $this->siteA)->id, ['role' => 'employe', 'is_default' => true]);
 
         return $user;
+    }
+
+    /**
+     * Seul rôle réellement sans plafond de montant (bypass total, aucune
+     * ligne DroitCreationDepense requise) — cf. DroitCreationDepenseService.
+     */
+    private function superAdminUser(?Site $site = null): User
+    {
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('super_admin');
+        $user->givePermissionTo(['depenses.read', 'depenses.create', 'depenses.update']);
+        $user->sites()->attach(($site ?? $this->siteA)->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
+    }
+
+    /**
+     * plafond_validation par défaut volontairement très haut : ces tests
+     * couvrent le périmètre d'agences (bypass automatique inchangé pour ce
+     * rôle), pas le plafond de montant (cf. section « Plafond de validation »
+     * plus bas pour les tests dédiés au plafond d'Admin Entreprise).
+     */
+    private function droitValiderAdminEntreprise(?float $plafond = 999_999_999): DroitCreationDepense
+    {
+        return DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => $plafond,
+        ]);
     }
 
     private function managerUser(?Site $site = null): User
@@ -94,7 +136,12 @@ class DepenseValidationTest extends TestCase
         ]);
     }
 
-    private function droitValider(string $perimetre, array $sites = []): DroitCreationDepense
+    /**
+     * plafond_validation par défaut volontairement très haut : ces tests
+     * couvrent le périmètre d'agences, pas le plafond de montant (cf. section
+     * dédiée « Plafond de validation » plus bas).
+     */
+    private function droitValider(string $perimetre, array $sites = [], ?float $plafond = 999_999_999): DroitCreationDepense
     {
         return DroitCreationDepense::create([
             'organization_id' => $this->org->id,
@@ -102,6 +149,7 @@ class DepenseValidationTest extends TestCase
             'perimetre' => $perimetre,
             'sites' => $perimetre === 'agences_selectionnees' ? $sites : null,
             'peut_valider' => true,
+            'plafond_validation' => $plafond,
         ]);
     }
 
@@ -110,6 +158,7 @@ class DepenseValidationTest extends TestCase
     public function test_admin_peut_valider_depense_sur_son_site(): void
     {
         $admin = $this->adminUser($this->siteA);
+        $this->droitValiderAdminEntreprise();
         $depense = $this->depenseSoumise($this->siteA);
 
         $this->actingAs($admin)
@@ -126,6 +175,7 @@ class DepenseValidationTest extends TestCase
     {
         // Admin attaché à siteA, dépense sur siteB → doit quand même valider
         $admin = $this->adminUser($this->siteA);
+        $this->droitValiderAdminEntreprise();
         $depense = $this->depenseSoumise($this->siteB);
 
         $this->actingAs($admin)
@@ -295,6 +345,7 @@ class DepenseValidationTest extends TestCase
     public function test_index_can_valider_true_pour_admin_sur_depense_soumise(): void
     {
         $admin = $this->adminUser($this->siteA);
+        $this->droitValiderAdminEntreprise();
         $this->depenseSoumise($this->siteB); // site différent
 
         $this->actingAs($admin)
@@ -335,5 +386,195 @@ class DepenseValidationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('depenses.data.0.can_valider', false)
             );
+    }
+
+    // ── Plafond de validation ─────────────────────────────────────────────────
+
+    private function depenseSoumiseMontant(float $montant, ?Site $site = null): Depense
+    {
+        return Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'depense_type_id' => $this->type->id,
+            'site_id' => ($site ?? $this->siteA)->id,
+            'montant' => $montant,
+        ]);
+    }
+
+    public function test_manager_peut_valider_montant_egal_au_plafond(): void
+    {
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: 500000);
+        $depense = $this->depenseSoumiseMontant(500000);
+
+        $this->actingAs($manager)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+    }
+
+    public function test_manager_peut_valider_montant_sous_le_plafond(): void
+    {
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: 500000);
+        $depense = $this->depenseSoumiseMontant(499999);
+
+        $this->actingAs($manager)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+    }
+
+    public function test_manager_ne_peut_pas_valider_montant_au_dessus_du_plafond(): void
+    {
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: 500000);
+        $depense = $this->depenseSoumiseMontant(500001);
+
+        $this->actingAs($manager)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionHasErrors(['montant']);
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::SOUMIS->value,
+        ]);
+    }
+
+    public function test_manager_avec_plafond_non_configure_ne_peut_rien_valider(): void
+    {
+        // peut_valider=true mais plafond_validation NULL → deny-by-default,
+        // jamais interprété comme illimité.
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: null);
+        $depense = $this->depenseSoumiseMontant(1);
+
+        $this->actingAs($manager)
+            ->patch(route('depenses.valider', $depense))
+            ->assertSessionHasErrors(['montant']);
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::SOUMIS->value,
+        ]);
+    }
+
+    public function test_manager_peut_toujours_rejeter_une_depense_au_dessus_de_son_plafond(): void
+    {
+        // Le plafond bloque l'approbation, pas le rejet : un validateur doit
+        // pouvoir renvoyer une dépense trop élevée pour lui sans escalade.
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: 500000);
+        $depense = $this->depenseSoumiseMontant(500001);
+
+        $this->actingAs($manager)
+            ->patch(route('depenses.rejeter', $depense), [
+                'motif_rejet' => 'Non conforme',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::REJETE->value,
+        ]);
+    }
+
+    public function test_super_admin_peut_valider_montant_depassant_tous_les_plafonds(): void
+    {
+        // Aucune ligne DroitCreationDepense pour super_admin : bypass total,
+        // pas seulement "plafond élevé".
+        $superAdmin = $this->superAdminUser($this->siteA);
+        $depense = $this->depenseSoumiseMontant(50_000_000);
+
+        $this->actingAs($superAdmin)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+    }
+
+    public function test_index_can_valider_false_quand_montant_depasse_le_plafond(): void
+    {
+        $manager = $this->managerUser($this->siteA);
+        $this->droitValider('toutes_agences', plafond: 500000);
+        $this->depenseSoumiseMontant(500001);
+
+        $this->actingAs($manager)
+            ->get(route('depenses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.data.0.can_valider', false)
+            );
+    }
+
+    // ── Plafond de validation — Admin Entreprise ────────────────────────────────
+    // Correction 04/09/2026 : seul Super Admin reste sans plafond. Admin
+    // Entreprise garde son accès automatique (RBAC + agences) mais doit
+    // désormais respecter un plafond de montant comme n'importe quel rôle.
+
+    public function test_admin_entreprise_peut_valider_montant_egal_a_son_plafond(): void
+    {
+        $admin = $this->adminUser($this->siteA);
+        $this->droitValiderAdminEntreprise(500000);
+        $depense = $this->depenseSoumiseMontant(500000);
+
+        $this->actingAs($admin)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+    }
+
+    public function test_admin_entreprise_ne_peut_pas_valider_montant_au_dessus_de_son_plafond(): void
+    {
+        $admin = $this->adminUser($this->siteA);
+        $this->droitValiderAdminEntreprise(500000);
+        $depense = $this->depenseSoumiseMontant(500001);
+
+        $this->actingAs($admin)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionHasErrors(['montant']);
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::SOUMIS->value,
+        ]);
+    }
+
+    public function test_admin_entreprise_sans_plafond_configure_ne_peut_rien_valider(): void
+    {
+        // Aucune ligne DroitCreationDepense du tout pour admin_entreprise →
+        // deny-by-default (0), plus de bypass isAdmin() sur le montant.
+        $admin = $this->adminUser($this->siteA);
+        $depense = $this->depenseSoumiseMontant(1);
+
+        $this->actingAs($admin)
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect()
+            ->assertSessionHasErrors(['montant']);
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::SOUMIS->value,
+        ]);
     }
 }

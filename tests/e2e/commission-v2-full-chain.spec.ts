@@ -1,9 +1,9 @@
 import { expect, type Page, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-    confirmAlertDialog,
     configurerBaremes,
     configurerPartageVehicule,
+    confirmAlertDialog,
     creerVenteEtEncaisser,
 } from './commission-v2-helpers';
 import { loginAsElmV2Demo, selectOptionFromCombobox } from './helpers';
@@ -43,9 +43,11 @@ test.beforeEach(async ({ page }) => {
 /** Confirme (au niveau UI) que la commission générée est bien visible sur Commission vente. */
 async function verifierCommissionVisible(page: Page): Promise<void> {
     await page.goto('/backoffice/comptabilite/commissions/vente');
+    // "Commissions des livreurs" depuis la fusion Vente/Logistique du 04/09/2026
+    // (cf. docblock de commission-detail-pages.spec.ts) — plus de mention "sur les ventes".
     await expect(
         page.getByRole('heading', {
-            name: /commissions des livreurs sur les ventes/i,
+            name: /^commissions des livreurs$/i,
         }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/chauffeur v2 demo/i).first()).toBeVisible({

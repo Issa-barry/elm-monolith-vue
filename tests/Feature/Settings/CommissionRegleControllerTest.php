@@ -70,9 +70,12 @@ class CommissionRegleControllerTest extends TestCase
             ->get('/settings/commissions')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->has('processus_options', 2)
+                // 3 depuis le 05/09/2026 (transfert_grossiste ajouté, cf. docs/grossiste.md) —
+                // distribution_client reste absent, sans onglet dédié.
+                ->has('processus_options', 3)
                 ->where('processus_options.0.value', CommissionProcessus::CODE_VENTE)
                 ->where('processus_options.1.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+                ->where('processus_options.2.value', CommissionProcessus::CODE_TRANSFERT_GROSSISTE)
             );
     }
 

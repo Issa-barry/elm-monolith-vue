@@ -213,24 +213,58 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   `commission_statut`/`commission_statut_label` qu'avant — aucun changement frontend nécessaire
   pour la liste, seule `Logistique/Show.vue` (stepper) a été mise à jour pour les consommer à la
   place de `commission?.statut_label`/`commission?.is_versee`.
-- **Point encore ouvert (hors périmètre du retrait ci-dessus, signalé mais non corrigé le
-  04/09/2026)** : l'onglet "Commission logistique" de `Logistique/Show.vue` (détail par
-  bénéficiaire — montants brut/frais/net/versé/restant, historique des versements) calcule
-  toujours `livreurParts`/`aggregateParts` depuis `transfert.commission?.parts`, donc reste vide
-  pour toute commission générée après le 03/09/2026 — seuls le badge et le libellé du stepper
-  ci-dessus ont été raccordés au nouveau moteur. La commission reste consultable en détail via
-  Commission vente (filtre Processus = Transfert logistique) ; ce point nécessite son propre
-  chantier de migration vers `CommissionEnveloppePart`.
+- **04/09/2026 — fermé** (fait suite au point ouvert ci-dessus) : l'onglet "Commission
+  logistique" de `Logistique/Show.vue` expose désormais un détail par livreur raccordé au moteur
+  générique — `TransfertLogistiqueController::mapCommissionLivreursGeneriques()` filtre les
+  `CommissionEnveloppePart` de toutes les enveloppes du transfert sur
+  `beneficiaire_type = CommissionEnveloppePart::TYPE_LIVREUR` (jamais propriétaire/site/consultant)
+  et expose `commission_generique_livreurs` (nom résolu via `Livreur::libelleAffichage()`,
+  `montant_unitaire` = `montant_unitaire_snapshot`, `montant` = `montant_a_payer`). Le tableau
+  affiché (Livreur / Part unitaire / Montant total gagné) est volontairement distinct du total
+  global `commission_generique_montant_total` (qui agrège TOUTES les cibles — propriétaire, site,
+  consultant, équipe de livraison) : les deux totaux sont étiquetés séparément dans la vue pour
+  qu'un écart entre eux (dû aux autres cibles) ne soit jamais interprété comme une incohérence de
+  calcul (cf. `mapCommissionLivreursGeneriques()`, docblock). Détail complet des autres
+  bénéficiaires toujours via Commissions des livreurs (filtre Processus = Transfert logistique)
+  pour la part livreur, ou en base pour les autres cibles — aucun écran dédié propriétaire/
+  site/consultant à ce jour. `livreurParts`/`aggregateParts` (legacy, `transfert.commission?.parts`)
+  restent en place uniquement pour l'historique pré-03/09/2026, inchangés.
+  - Limite assumée et documentée dans le code (pas corrigée, pas un bug) :
+    `montant_unitaire_snapshot` est un instantané de la DERNIÈRE catégorie de produit traitée par
+    `CommissionEnveloppeGenerator` pour ce livreur — si un transfert mélange plusieurs catégories
+    à part unitaire différente pour le même livreur, la « part unitaire » affichée ne représente
+    qu'une des catégories, jamais recalculée côté frontend (montant / quantité ne serait pas
+    fiable dans ce cas) ; le montant total, lui, reste exact car il vient de `montant_a_payer`.
+  - Testé par `CommissionTriggerLogistiqueTest::test_reception_effectuee_expose_le_detail_par_livreur_sur_la_page_transfert()`
+    (répartition 60/40 correcte, total livreurs = total enveloppe quand seule la cible équipe de
+    livraison est configurée) et
+    `::test_transfert_sans_bareme_livreur_expose_une_liste_livreurs_vide()` (commission générée
+    pour une autre cible, sans barème livreur → liste vide, jamais un bénéficiaire inventé).
+- **04/09/2026** — Le sous-menu `Comptabilité > Commissions > Logistique` a été retiré de la
+  navigation (`AppSidebar.vue`) : l'écran `Comptabilite\CommissionVenteController` (route
+  `commissions/vente`, inchangée) est renommé `Livreurs` dans le menu et devient le point d'entrée
+  unique pour consulter les commissions d'un livreur, tous processus confondus (Vente/Distribution
+  client/Transfert logistique, cf. section Reporting ci-dessous) — libellés alignés en conséquence
+  (`CommissionVente/Index.vue` : "Commissions des livreurs" ; `CommissionVente/Livreur/Show.vue` :
+  breadcrumb "Commissions des livreurs"). `Comptabilite\CommissionLogistiqueController` (écran
+  historique décrit ci-dessus) n'est pas modifié — routes, contrôleur et pages Vue inchangés,
+  tables toujours vérifiées à 0 ligne (`commission_logistique_parts`/`commissions_logistiques`/
+  `versements_commission_logistique`) — mais n'a plus aucun point d'entrée dans l'UI, exactement la
+  situation qui a justifié le retrait complet de `CommissionVehiculeController` le même jour
+  ci-dessus. Il reste donc, comme documenté plus haut, candidat à la PR de retrait séparée
+  (suppression contrôleur/routes/pages/tests) une fois cette absence de solde reconfirmée avant
+  suppression effective.
 
 ## Partage Livreur par processus (équipe véhicule)
 
 - Clé métier : `organisation + equipe + categorie + processus + livreur` — un même équipage peut
-  avoir des montants fixes différents en Vente et en Transfert logistique sur la même catégorie
-  (2 processus configurables, cf. COMM-005). `distribution_client` n'a pas de partage propre tant
-  qu'il n'a pas sa propre configuration : le partage effectivement consulté pour une distribution
-  est alors celui de `logistique_transfert`, par le même mécanisme de repli que le barème
-  (`CommissionProcessusDefaults::processusResolutionBareme()`).
-- `EquipeLivraisonController::store()`/`update()` exigent `processus_code` (whitelist des 2 codes
+  avoir des montants fixes différents en Vente, Transfert logistique ET Transfert grossiste sur la
+  même catégorie (3 processus configurables depuis le 05/09/2026, cf. COMM-005 et COMM-011).
+  `distribution_client` n'a pas de partage propre tant qu'il n'a pas sa propre configuration : le
+  partage effectivement consulté pour une distribution est alors celui de `logistique_transfert`,
+  par le même mécanisme de repli que le barème (`CommissionProcessusDefaults::processusResolutionBareme()`)
+  — `transfert_grossiste`, lui, n'a JAMAIS ce repli (cf. COMM-012).
+- `EquipeLivraisonController::store()`/`update()` exigent `processus_code` (whitelist des 3 codes
   configurables, `Settings\CommissionRegleController::processusCodesDisponibles()`) — aucun repli
   implicite à la saisie. `CommissionProcessus::CODE_DISTRIBUTION_CLIENT` est explicitement refusé
   comme valeur de `processus_code` ici (pas d'onglet de configuration dédié), quel que soit l'usage
@@ -240,9 +274,11 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
 - **« Processus disponible » ≠ « processus obligatoire »** (révisé le 31/08/2026, incident : la
   fiche d'un Tricycle Vente-only affichait Distribution client comme « à faire », alors qu'aucune
   donnée métier ne l'autorise à exercer ce processus). Les processus pertinents pour un véhicule
-  dépendent de ses usages : `vente` ↔ `livraison_vente = true` ; `logistique_transfert` ↔
-  `livraison_logistique = true` (source unique : `CommissionProcessusDefaults::codesApplicablesPourVehicule()`)
-  — un véhicule expose donc au maximum 2 onglets, jamais 3.
+  dépendent de ses usages : `vente` ↔ `livraison_vente = true` ; `logistique_transfert` ET
+  `transfert_grossiste` (depuis le 05/09/2026) ↔ `livraison_logistique = true`, TOUJOURS
+  simultanément, jamais un choix exclusif (source unique :
+  `CommissionProcessusDefaults::codesApplicablesPourVehicule()`) — un véhicule expose donc au
+  maximum 3 onglets (1 pour Vente + 2 pour la logistique), jamais 4.
   - `EquipeLivraisonController::rules()` restreint le whitelist `processus_code` à ce sous-ensemble
     — une requête forgée avec un `processus_code` non applicable à l'usage du véhicule est rejetée
     (422), jamais uniquement filtrée côté UI.
@@ -254,7 +290,7 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
     jamais un partage déjà enregistré pour un processus redevenu/devenu non applicable — la ligne
     reste en base, simplement non affichée/non exigée tant que l'usage correspondant est désactivé.
 - `Settings\CommissionRegleController` (Paramètres > Commissions, écran de configuration globale
-  de l'organisation) n'est PAS concerné par ce filtrage par USAGE véhicule : ses 2 onglets restent
+  de l'organisation) n'est PAS concerné par ce filtrage par USAGE véhicule : ses 3 onglets restent
   toujours tous visibles, un barème pouvant légitimement être préparé pour un processus avant même
   qu'un véhicule compatible existe.
 - `Vehicules/Show.vue` / `EquipeStepperModal.vue` (configuration) portent un sélecteur
@@ -394,9 +430,8 @@ trois processus peuvent produire des parts pour le même bénéficiaire).
 Le sélecteur Processus garde ses 3 options (Vente/Distribution client/Transfert logistique) même
 après COMM-005 : `distribution_client` y désigne un processus VIVANT (nouvelles commissions
 générées en continu, cf. COMM-005), pas seulement un solde historique — retirer une option
-casserait la réconciliation du total déjà généré
-(`Comptabilite\CommissionVenteController::breakdownParProcessus()`) en plus de masquer une
-activité réelle et courante.
+masquerait une activité réelle et courante, restée consolidable dans `commission_summary` et
+tracée par bénéficiaire via la colonne « Origine » de `commission_details`.
 
 ### Listes (Index) — revu le 02/09/2026 (incident : sélection multiple silencieusement réduite au premier processus)
 
@@ -450,9 +485,8 @@ Seule différence restante entre écrans (signalée, non corrigée le 02/09/2026
 chaque fiche diffère toujours —
 
 - `CommissionVenteController::showLivreur()` : défaut **Tous les processus**, sélecteur dédié sur
-  la fiche elle-même (`CommissionGlobalFilters.vue`), bloc `CommissionProcessusBreakdown` en vue
-  consolidée, colonne « Origine » sur `commission_details` (détail ci-dessous, inchangé depuis le
-  31/08/2026).
+  la fiche elle-même (`CommissionGlobalFilters.vue`), colonne « Origine » sur `commission_details`
+  (détail ci-dessous, inchangé depuis le 31/08/2026).
 - `CommissionSiteController::show()` / `CommissionProprietaireController::show()` /
   `CommissionConsultantController::show()` : défaut **Vente** (`CODE_VENTE`), sans sélecteur dédié
   pour changer cette vue depuis la fiche elle-même — un utilisateur souhaitant y voir une
@@ -465,11 +499,6 @@ Détail du comportement `showLivreur()` (inchangé depuis le 31/08/2026) :
 - Un sélecteur Processus est visible sur la fiche elle-même (`CommissionGlobalFilters.vue`, prop
   optionnelle `processusOptions` — n'affecte aucun autre écran qui ne la fournit pas), avec un
   choix « Tous les processus » en tête (`CommissionProcessusFilter::optionsAvecTous()`).
-- En vue « Tous les processus », un bloc `CommissionProcessusBreakdown` ventile le total généré par
-  processus (Vente / Distribution client / Transfert logistique), dont la somme reconstitue
-  exactement `commission_summary.total_genere` — jamais un quatrième nombre indépendant. Ce bloc
-  disparaît dès qu'un processus précis est sélectionné (redondant, tout y appartient déjà à ce seul
-  processus).
 - Chaque ligne du détail par commande (`commission_details`) porte son origine
   (`processus`/`processus_label`) — affichée par `CommissionDetailTable.vue` (colonne « Origine »,
   visible uniquement si au moins une ligne la fournit) : jamais de montants de processus différents
@@ -490,3 +519,165 @@ Corrigé par `decrementerStockDirect()` (sortie physique immédiate via
 avant tout encaissement). Non lié à la distinction Vente/Distribution — un bug préexistant, corrigé
 dans ce même chantier à la demande explicite de l'utilisateur (voir tests
 `tests/Feature/CommandeVenteDirecteStockTest.php`).
+
+## Grossiste — commission consultant indépendante du mode de remise (05/09/2026)
+
+Cf. `docs/grossiste.md` pour la règle métier complète (nature client, tarification catégorie ×
+mode). Cette section couvre uniquement l'impact sur le moteur de commission.
+
+- **COMM-008** (revue le 05/09/2026 par COMM-011, cf. section « Transfert grossiste » plus bas —
+  le point ci-dessous sur la Livraison est OBSOLÈTE, conservé pour l'historique de la décision
+  initiale, ne plus s'y fier) — Pour un client `ClientType::GROSSISTE`, deux logiques de commission
+  sont indépendantes l'une de l'autre :
+  - **Commission de transfert logistique** (cibles `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON`) —
+    dépend du mode de remise : **Livraison** (véhicule de flotte) → ~~générée selon les règles
+    actuelles, comme n'importe quelle vente standard avec véhicule~~ générée sous un processus
+    dédié `CODE_TRANSFERT_GROSSISTE`, jamais le barème Vente (cf. COMM-011). **Enlèvement** (aucun
+    véhicule, le client retire lui-même) → jamais générée, il n'y a ni propriétaire ni équipe à
+    commissionner — ce point-là reste inchangé.
+  - **Commission consultant** (cible `CODE_CONSULTANT`, indépendante de toute donnée de l'opération
+    par conception, cf. section « Consultant » plus haut) — générée si une règle active existe,
+    **que le Grossiste soit en Enlèvement ou en Livraison**. Une commande Grossiste + Enlèvement ne
+    doit jamais priver le consultant d'une commission à laquelle il a droit par ailleurs.
+- Avant ce correctif, `CommissionEnveloppeGenerator::genererPourCommandeVente()` retournait
+  immédiatement dès que `commission_eligible_snapshot` était faux (dérivé de l'absence de véhicule,
+  cf. `VehiculeCommandeContextResolver`) — un verrou global qui aurait aussi supprimé la commission
+  consultant. Correctif strictement scopé à Grossiste (`$estGrossisteSansVehicule` dans
+  `genererPourCommandeVente()`) : pour tout autre type de client (Externe/Revendeur/Distributeur),
+  l'absence de véhicule continue de bloquer **toutes** les cibles, comportement historique
+  inchangé — voir `tests/Feature/CommandeVenteGrossisteCommissionTest.php`, notamment le test de
+  non-régression sur un Externe en vente directe.
+- `genererDepuisContexte()` n'exige plus systématiquement un véhicule : les cibles
+  `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON` ne sont ajoutées à la liste des cibles que si un
+  véhicule est présent ; `CODE_SITE` (si site) et `CODE_CONSULTANT` (toujours) restent inconditionnelles,
+  cohérent avec leur conception déjà indépendante du véhicule.
+- **Déclenchement** — un Enlèvement passe par `CommandeVenteService::creerFactureDirecte()` (pas
+  d'étape de chargement). `CommissionTriggerService::onVenteDirecteFacturee()` (nouveau, appelé
+  depuis `creerFactureDirecte()`) déclenche la génération de commission pour ce chemin,
+  inconditionnellement (comme `onReceptionDistributionValidee()` pour la distribution client) —
+  sans effet pour tout client non-Grossiste (le garde-fou scopé ci-dessus s'applique toujours).
+- `CommandeVente::commissionsPretesPourCloture()` ne conclut plus "rien n'est dû" sur la seule
+  valeur de `commission_eligible_snapshot` : si des enveloppes existent réellement (cas Grossiste +
+  Enlèvement avec consultant généré), la clôture automatique attend leur paiement comme pour toute
+  commande éligible.
+- **Chantier 2A (fait le 05/09/2026)** — voir section « Indépendance des cibles de commission »
+  ci-dessous : le correctif Grossiste ci-dessus a été généralisé à tous les types de client.
+  L'exception `$estGrossisteSansVehicule` n'existe plus dans le code — son comportement est
+  désormais le cas général.
+
+## Indépendance des cibles de commission (chantier 2A, 05/09/2026)
+
+Généralise le correctif Grossiste ci-dessus (COMM-008) à tous les types de client, et révise deux
+décisions AMOA antérieures au chantier Grossiste.
+
+- **COMM-009** — Le véhicule n'est plus un verrou global de la génération de commission. Il ne
+  conditionne que les cibles qui en dépendent structurellement :
+  - `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON` exigent un véhicule **éligible** pour l'usage
+    réellement concerné par l'opération (`CommissionOperationContext::$vehiculeEligibleCommission`,
+    alimenté par `commission_eligible_snapshot` pour une `CommandeVente` — champ inchangé,
+    toujours dérivé de `Vehicule::livraison_vente`/`livraison_logistique` via
+    `VehiculeCommandeContextResolver`, mais dont le RÔLE est désormais scopé à ces deux seules
+    cibles, plus jamais un verrou d'entrée global). Toujours `true` pour un `TransfertLogistique`
+    (véhicule structurellement obligatoire, comportement inchangé).
+  - `CODE_SITE` (si un site est présent) et `CODE_CONSULTANT` (toujours candidate) restent
+    inconditionnelles, pour **tout** type de client — l'ancienne exception scopée à
+    `ClientType::GROSSISTE` (`$estGrossisteSansVehicule` dans
+    `CommissionEnveloppeGenerator::genererPourCommandeVente()`) a été retirée : son comportement
+    est désormais le cas général, plus une exception ponctuelle. Une commande Externe/Revendeur/
+    Distributeur sans véhicule peut donc désormais générer une commission Consultant/Site si sa
+    propre règle est active et résolvable — changement de comportement assumé (auparavant : aucune
+    commission, quelle que soit la cible, cf. `tests/Feature/CommandeVenteGrossisteCommissionTest.php`
+    avant révision). PROPRIETAIRE/EQUIPE_LIVRAISON restent structurellement impossibles sans
+    véhicule, pour n'importe quel type de client — ce garde-fou est inchangé.
+- **COMM-010** (révise l'ancienne décision AMOA #4 « tout-ou-rien ») — Une cible dont le
+  bénéficiaire n'a pas pu être résolu (consultant non désigné/inactif, véhicule sans propriétaire,
+  équipe sans partage configuré) n'annule plus les cibles correctement résolues de la même
+  opération. `CommissionEnveloppeGenerator::genererDepuisContexte()` ne lève plus d'exception pour
+  ces cas connus — elle retourne la liste des messages d'erreur par cible, persistée
+  indépendamment de la réussite des autres cibles. Exemple : Propriétaire et Livreur correctement
+  configurés + Consultant orphelin ⇒ Propriétaire et Livreur reçoivent leur enveloppe, Consultant
+  reste absent et marqué à régulariser — jamais l'inverse (tout annulé faute du seul Consultant).
+  - Nouveau statut `CommissionGenerationStatut::PARTIEL` (`app/Enums/CommissionGenerationStatut.php`)
+    — ajout purement additif sur la colonne `commission_generation_attempts.statut` (varchar déjà
+    existant), **aucune migration nécessaire**. Une tentative devient `PARTIEL` quand au moins une
+    cible a réussi et au moins une autre a échoué ; `ERREUR` reste réservé au cas où AUCUNE cible
+    n'a pu être générée ; `SUCCES` couvre à la fois « tout généré » et « aucun barème nulle part »
+    (silence légitime, décision AMOA #4 inchangée sur ce point précis).
+  - `CommandeVenteController::getCommissionGenerationStatut()` expose désormais `ERREUR` et
+    `PARTIEL` (plus seulement `ERREUR`) et ne filtre plus sur `commission_eligible_snapshot` — une
+    commande sans véhicule peut avoir une vraie tentative à exposer. `relancerCommissions()`
+    distingue les deux dans le message flash.
+  - `commissions:auditer-ventes` (`CommissionsAuditerVentesCommand`) ne filtre plus sur
+    `commission_eligible_snapshot = true` : une commande sans véhicule ayant atteint son
+    déclencheur (facture directe créée) est désormais auditée au même titre qu'une commande avec
+    véhicule — sinon l'angle mort qui existait pour Grossiste + Enlèvement avant COMM-009 se serait
+    simplement généralisé à tout client sans véhicule.
+  - Restitution visuelle (`Ventes/Show.vue`, `Distributions/Show.vue`) : `PARTIEL` est affiché en
+    orange (`StatusDot`, `STATUS_COLOR_MAP['partiel']` déjà existant) et l'alerte persistante de la
+    fiche n'utilise le variant `destructive` (rouge) que pour `ERREUR` — `PARTIEL` reste un variant
+    neutre avec un accent orange, conformément à la sémantique WARNING/DANGER du projet (une
+    commande PARTIEL a bien des commissions payables, ce n'est jamais une opération bloquée).
+- **Hors périmètre de ce chantier (2B, à faire)** — le cycle de vie post-génération (quand une
+  commission `CREEE` devient payable) reste uniforme pour tous les bénéficiaires
+  (`CommissionAdjustmentService::activerCommissionsCreees()`, à la validation de la période) : ce
+  chantier ne touche ni `PaiementPeriode`, ni `PaiementFiche`, ni les règles d'encaissement client.
+  Une éventuelle règle « Livreur payable dès réception, Consultant payable après encaissement
+  client » resterait à concevoir séparément.
+
+## Transfert grossiste — troisième processus de commission (05/09/2026)
+
+Corrige COMM-008 : un Grossiste livré par un véhicule de flotte n'est PAS un « transfert
+logistique » — `TransfertLogistique` reste une entité séparée, réservée aux mouvements de stock
+internes usine → dépôt, qui ne porte jamais de client ni de facture (COMM-006, inchangé). Une
+livraison Grossiste reste une `CommandeVente` de bout en bout ; c'est uniquement le PROCESSUS DE
+COMMISSION qui change.
+
+- **COMM-011** — `CommissionProcessus::CODE_TRANSFERT_GROSSISTE` (`transfert_grossiste`) est un
+  processus indépendant, ni Vente ni Transfert logistique — ses bénéficiaires diffèrent des deux
+  (notamment `CODE_SITE`, jamais commissionné sur un transfert logistique interne, cf. barème
+  configuré pour ce processus). Routage (`CommissionProcessusDefaults::identiteCodePourVente()`,
+  source unique partagée par `CommissionEnveloppeGenerator::genererPourCommandeVente()` ET
+  `CommandeVenteController::ensurePartageLivraisonCategorieConfigure()`) :
+  - `nature_operation = distribution_client` → `CODE_DISTRIBUTION_CLIENT`, priorité, inchangé.
+  - `client.type = GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` → `CODE_TRANSFERT_GROSSISTE`.
+  - **Grossiste + Enlèvement reste sur `CODE_VENTE`**, décision produit explicite du 05/09/2026 :
+    Transfert grossiste ne s'applique qu'aux véhicules qui font de la logistique — un Enlèvement
+    n'a structurellement aucun véhicule/équipe, la question ne se pose donc pas. Ne pas généraliser.
+  - Tout le reste (Externe/Revendeur/Distributeur, avec ou sans véhicule) → `CODE_VENTE`, inchangé.
+  - Usage véhicule requis pour ce processus : `livraison_logistique` (comme
+    `logistique_transfert`/`distribution_client`, jamais `livraison_vente`) — un véhicule qui fait
+    de la logistique expose donc **simultanément** les onglets « Transferts logistiques » ET
+    « Transferts grossistes » (jamais un choix exclusif), et son équipe peut avoir des montants
+    fixes différents pour chacun sur la même catégorie (`equipe_livraison_partages_categorie.processus_id`,
+    mécanique déjà générique, aucune migration nécessaire).
+- **COMM-012** — Contrairement à `distribution_client`, `transfert_grossiste` n'a **aucun repli de
+  barème** (`CommissionProcessusDefaults::processusResolutionBareme()` ne le concerne pas — décision
+  produit explicite : les bénéficiaires étant différents de `logistique_transfert`, hériter de son
+  barème serait incorrect, pas seulement provisoire). Pour éviter qu'une organisation n'ayant encore
+  rien configuré ne voie sa première livraison Grossiste générer silencieusement 0 commission sur
+  toutes les cibles, `CommandeVenteController::ensureTransfertGrossisteBaremeConfigure()` **bloque
+  la création** de la commande (`ValidationException` sur `vehicule_id`) tant qu'aucune
+  `CommissionRegle` active n'existe pour ce processus — contrôle volontairement grossier (« au
+  moins une règle existe-t-elle ? »), jamais un contrôle par catégorie/cible : un barème
+  PARTIELLEMENT configuré (ex : Site seul) ne bloque jamais, cohérent avec l'indépendance des
+  cibles (chantier 2A). S'applique à `store()` **et** `update()` (corrigé le 05/09/2026 : sans
+  l'appel dans `update()`, éditer un brouillon Grossiste + Enlèvement en lui affectant un véhicule
+  — le faisant basculer en Livraison — contournait entièrement ce garde-fou, la commande n'étant
+  jamais recréée) — `update()` recalcule désormais `mode_remise_grossiste` avant d'appeler le même
+  `ensurePartageLivraisonCategorieConfigure()` que `store()`, exactement la même résolution
+  d'identité (`CommissionProcessusDefaults::identiteCodePourVente()`).
+- Onglet dédié dans Paramètres > Commissions (`Settings\CommissionRegleController::processusCodesDisponibles()`,
+  libellé « Transferts grossistes ») — contrairement à `distribution_client`, cet onglet est
+  indispensable dès la création du processus (pas d'ajout différé possible, faute de repli).
+- Reporting (`App\Support\Commission\CommissionProcessusFilter`) : 4ᵉ option ajoutée, même
+  mécanique que les 3 existantes (filtre multi-sélection, jamais un repli implicite sur Vente).
+- **Rétrocompatibilité** : aucune migration de données. Les commandes déjà générées avant ce
+  chantier restent taguées `vente` (jamais recalculées) ; seules les nouvelles ventes Grossiste +
+  Livraison, à partir du déploiement, utilisent le nouveau processus — ce qui implique qu'une
+  organisation doit configurer l'onglet « Transferts grossistes » AVANT sa prochaine livraison
+  Grossiste, sous peine d'être bloquée par COMM-012 (comportement voulu, pas un bug).
+- Tests : `tests/Feature/CommandeVenteGrossisteCommissionTest.php` (routage vers le nouveau
+  processus, non-régression Enlèvement/Externe, garde-fou bloquant/débloquant),
+  `tests/Feature/VehiculeProcessusApplicablesParUsageTest.php` et
+  `tests/Feature/VehiculeBaremesCommissionCategoriesTest.php` (un véhicule logistique expose
+  désormais 2 ou 3 onglets processus, plus jamais 1 ou 2 comme avant ce chantier).

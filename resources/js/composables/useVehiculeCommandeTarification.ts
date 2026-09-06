@@ -14,7 +14,7 @@ import { computed, type ComputedRef } from 'vue';
 
 export interface ClientTarificationOption {
     id: number;
-    type?: 'externe' | 'revendeur' | 'distributeur';
+    type?: 'externe' | 'revendeur' | 'distributeur' | 'grossiste';
 }
 
 export function useVehiculeCommandeTarification<T extends { id: number }>(

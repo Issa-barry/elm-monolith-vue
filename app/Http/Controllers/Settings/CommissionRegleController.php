@@ -70,6 +70,11 @@ class CommissionRegleController extends Controller
      * CommissionProcessusFilter, volontairement distinct de cette liste) continue de le distinguer
      * dans tous les cas, configuré ou non.
      *
+     * CODE_TRANSFERT_GROSSISTE présent depuis le 05/09/2026 (cf. docs/grossiste.md) : contrairement
+     * à distribution_client, ce processus N'A PAS de repli de barème — son onglet de configuration
+     * est donc indispensable dès sa création (sans lui, aucun moyen pour l'organisation de le
+     * paramétrer), pas un ajout facultatif différé.
+     *
      * @return array<string>
      */
     public static function processusCodesDisponibles(): array
@@ -77,6 +82,7 @@ class CommissionRegleController extends Controller
         return [
             CommissionProcessus::CODE_VENTE,
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            CommissionProcessus::CODE_TRANSFERT_GROSSISTE,
         ];
     }
 
@@ -85,6 +91,7 @@ class CommissionRegleController extends Controller
         return match ($code) {
             CommissionProcessus::CODE_VENTE => 'Ventes',
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT => 'Transferts logistiques',
+            CommissionProcessus::CODE_TRANSFERT_GROSSISTE => 'Transferts grossistes',
             // Processus réel et courant (reporting), sans onglet de configuration dédié tant que
             // son barème reste hérité de CODE_LOGISTIQUE_TRANSFERT — cf. processusCodesDisponibles().
             CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distribution client',

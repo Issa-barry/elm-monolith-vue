@@ -7,7 +7,6 @@ import CommissionGlobalFilters from '@/components/commission/CommissionGlobalFil
 import CommissionHistoryTable from '@/components/commission/CommissionHistoryTable.vue';
 import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
-import CommissionProcessusBreakdown from '@/components/commission/CommissionProcessusBreakdown.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
 import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import { useCommissionActiveFiltersSummary } from '@/composables/useCommissionActiveFiltersSummary';
@@ -21,7 +20,6 @@ import type {
     CommissionExpenseRow,
     CommissionGlobalFiltersValue,
     CommissionPaymentRow,
-    CommissionProcessusBreakdownRow,
     CommissionProcessusOption,
     CommissionSummary,
     CommissionVehiculeInfo,
@@ -51,14 +49,13 @@ const props = defineProps<{
     payable: boolean;
     filtre_processus: string;
     processus_options: CommissionProcessusOption[];
-    breakdown_par_processus: CommissionProcessusBreakdownRow[] | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptabilité' },
     {
-        title: 'Commission vente',
+        title: 'Commissions des livreurs',
         href: '/backoffice/comptabilite/commissions/vente',
     },
     { title: props.livreur.nom, href: '' },
@@ -106,7 +103,7 @@ const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
 </script>
 
 <template>
-    <Head :title="`Commission vente — ${livreur.nom}`" />
+    <Head :title="`Commission livreur — ${livreur.nom}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
             <CommissionDetailHeader
@@ -127,11 +124,6 @@ const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
             <PeriodeStatusBanner :periode="periode_affichee" />
 
             <CommissionSummaryCards :summary="commission_summary" />
-
-            <CommissionProcessusBreakdown
-                v-if="breakdown_par_processus"
-                :rows="breakdown_par_processus"
-            />
 
             <CommissionGlobalFilters
                 :filters="filters"

@@ -52,11 +52,18 @@ class DroitCreationDepenseService
 
     /**
      * Retourne la ligne DroitCreationDepense de validation pour l'utilisateur,
-     * ou null si admin (bypass) ou aucun droit.
+     * ou null si Super Admin (seul bypass total restant) ou aucun droit.
+     *
+     * Admin Entreprise n'est PAS bypassé ici (contrairement au reste du
+     * service) : il reste soumis au plafond de validation comme n'importe
+     * quel rôle — décision produit du 04/09/2026, cf. docs/depenses-validation.md
+     * (DEPVAL-001). Son accès reste automatique pour le périmètre d'agences
+     * (peutValiderSurSite() garde son bypass isAdmin()), seul le montant
+     * distingue désormais Super Admin d'Admin Entreprise.
      */
     public function droitValidationPour(User $user, string $orgId): ?DroitCreationDepense
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return null;
         }
 
@@ -86,6 +93,25 @@ class DroitCreationDepenseService
         }
 
         return in_array($siteId, $droit->sites ?? [], true);
+    }
+
+    /**
+     * L'utilisateur peut-il valider une dépense de ce montant ?
+     * Seul Super Admin est illimité — Admin Entreprise doit avoir un droit
+     * avec plafond comme tout autre rôle (cf. droitValidationPour()). Sans
+     * droit, refusé. Un plafond non configuré (NULL) vaut 0 — deny-by-default,
+     * jamais interprété comme "illimité".
+     */
+    public function peutValiderMontant(User $user, ?DroitCreationDepense $droit, float $montant): bool
+    {
+        if ($user->hasRole('super_admin')) {
+            return true;
+        }
+        if (! $droit) {
+            return false;
+        }
+
+        return $montant <= (float) ($droit->plafond_validation ?? 0);
     }
 
     /**
