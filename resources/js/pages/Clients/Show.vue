@@ -1083,12 +1083,14 @@ function saveTarifs(): void {
                             <div
                                 v-for="(ligne, index) in tarifsForm.lignes"
                                 :key="index"
-                                class="rounded-lg border p-3"
+                                class="@container rounded-lg border p-3"
                             >
                                 <div
-                                    class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem_9rem_auto] sm:items-start"
+                                    class="grid grid-cols-1 items-start gap-4 @sm:grid-cols-2 @2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
                                 >
-                                    <div>
+                                    <div
+                                        class="min-w-0 @sm:col-span-2 @2xl:col-span-1"
+                                    >
                                         <Label class="mb-1.5 block text-xs"
                                             >Catégorie</Label
                                         >
@@ -1100,19 +1102,22 @@ function saveTarifs(): void {
                                             option-label="nom"
                                             option-value="id"
                                             placeholder="Choisir…"
-                                            class="w-full"
+                                            class="w-full min-w-0"
                                         />
                                     </div>
-                                    <div>
+                                    <div class="min-w-0">
                                         <Label class="mb-1.5 block text-xs">{{
                                             prixModeLabel('enlevement')
                                         }}</Label>
-                                        <div class="flex items-center gap-1.5">
+                                        <div
+                                            class="flex min-w-0 items-center gap-2"
+                                        >
                                             <InputNumber
                                                 v-model="ligne.enlevement"
                                                 :min="0"
                                                 :step="100"
-                                                class="w-full"
+                                                class="min-w-0 flex-1"
+                                                input-class="w-full min-w-0"
                                             />
                                             <span
                                                 class="shrink-0 text-xs text-muted-foreground"
@@ -1120,16 +1125,19 @@ function saveTarifs(): void {
                                             >
                                         </div>
                                     </div>
-                                    <div>
+                                    <div class="min-w-0">
                                         <Label class="mb-1.5 block text-xs">{{
                                             prixModeLabel('livraison')
                                         }}</Label>
-                                        <div class="flex items-center gap-1.5">
+                                        <div
+                                            class="flex min-w-0 items-center gap-2"
+                                        >
                                             <InputNumber
                                                 v-model="ligne.livraison"
                                                 :min="0"
                                                 :step="100"
-                                                class="w-full"
+                                                class="min-w-0 flex-1"
+                                                input-class="w-full min-w-0"
                                             />
                                             <span
                                                 class="shrink-0 text-xs text-muted-foreground"
@@ -1141,7 +1149,7 @@ function saveTarifs(): void {
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        class="h-9 w-9 shrink-0 justify-self-end text-destructive sm:mt-6 sm:justify-self-auto"
+                                        class="h-9 w-9 shrink-0 justify-self-end text-destructive @sm:col-span-2 @2xl:col-span-1 @2xl:mt-6"
                                         data-testid="tarifs-remove-ligne"
                                         @click="removeLigne(index)"
                                     >

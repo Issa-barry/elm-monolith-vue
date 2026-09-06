@@ -1042,20 +1042,10 @@ function confirmerEtCreer() {
                             <!-- Blocages réels (rule 10 CLAUDE.md : DANGER/rouge réservé à une
                             opération effectivement empêchée) — jamais affichés ensemble, la liste
                             vide rendant le second message sans objet. -->
-                            <!-- Grossiste : statut du mode de remise, purement informatif, dérivé
-                            de la présence du véhicule (seule source de vérité, cf.
-                            docs/grossiste.md) — libellé volontairement réduit à un mot, sans
-                            phrase explicative (révision UX du 05/09/2026). -->
-                            <p
-                                v-else-if="isGrossiste"
-                                class="mt-1 text-xs font-medium text-muted-foreground"
-                            >
-                                {{
-                                    form.vehicule_id
-                                        ? 'Livraison'
-                                        : 'Enlèvement'
-                                }}
-                            </p>
+                            <!-- Le mode de remise Grossiste (Enlèvement/Livraison) n'est plus
+                            affiché ici sous le véhicule (révision du 06/09/2026) — il a son propre
+                            badge « Mode » dans le bloc Nature de l'opération/Client ci-dessous,
+                            au même niveau visuel que les autres informations de synthèse. -->
                             <p
                                 v-else-if="
                                     clientSelected?.type === 'distributeur' &&
@@ -1761,12 +1751,16 @@ function confirmerEtCreer() {
                         Sélectionnez au moins un véhicule ou un client.
                     </p>
 
-                    <!-- Nature du client / Nature de l'opération — TOUJOURS affichées, au même
-                    endroit et sous la même forme, quel que soit le client (révision UX du
-                    05/09/2026). Deux simples badges en lecture seule, jamais des boutons : ces
-                    valeurs sont déterminées par les règles métier existantes (client + véhicule,
-                    cf. natureOperationParDefaut), jamais par une action de l'utilisateur sur ce
-                    formulaire. -->
+                    <!-- Nature de l'opération / Mode — TOUJOURS au même endroit et sous la même
+                    forme (révision UX du 05/09/2026, révisée le 06/09/2026 : la nature du client
+                    est retirée d'ici, déjà affichée entre parenthèses dans le sélecteur Client
+                    ci-dessus pour toutes les natures — l'afficher une seconde fois ici était
+                    redondant). « Mode » (Enlèvement/Livraison) la remplace, Grossiste uniquement —
+                    seul type de client concerné par ce champ (cf. docs/grossiste.md) — et n'est
+                    plus affiché sous le champ Véhicule. Deux simples badges en lecture seule,
+                    jamais des boutons : ces valeurs sont déterminées par les règles métier
+                    existantes (client + véhicule, cf. natureOperationParDefaut), jamais par une
+                    action de l'utilisateur sur ce formulaire. -->
                     <div class="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
                         <div>
                             <Label class="mb-1.5 block text-sm">
@@ -1778,14 +1772,16 @@ function confirmerEtCreer() {
                                 {{ natureOperationLabel }}
                             </span>
                         </div>
-                        <div v-if="clientSelected">
-                            <Label class="mb-1.5 block text-sm">
-                                Nature du client
-                            </Label>
+                        <div v-if="isGrossiste">
+                            <Label class="mb-1.5 block text-sm"> Mode </Label>
                             <span
                                 class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
                             >
-                                {{ clientSelected.type_label }}
+                                {{
+                                    form.vehicule_id
+                                        ? 'Livraison'
+                                        : 'Enlèvement'
+                                }}
                             </span>
                         </div>
                     </div>

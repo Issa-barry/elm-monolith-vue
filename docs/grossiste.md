@@ -54,11 +54,21 @@ rendu **impossible par construction** — il n'y a plus de second champ à faire
 Aucun champ de mode générique n'a été introduit pour les autres natures de client : c'est un champ
 strictement scopé à Grossiste, pour ne pas élargir la surface de changement au-delà du besoin.
 
-**Révision UX du 05/09/2026 (troisième révision, même jour)** : sous le champ véhicule, l'aperçu
-n'affiche plus qu'un seul mot — « Enlèvement » ou « Livraison » — sans phrase explicative. L'ancien
-libellé « Enlèvement usine — le client retire lui-même la marchandise... » est retiré : le terme
-« Enlèvement » reste volontairement générique (le retrait peut avoir lieu à l'usine, au dépôt ou
-sur un autre point), pas seulement en sortie d'usine.
+**Révision UX du 05/09/2026 (troisième révision, même jour)** : l'aperçu n'affiche plus qu'un seul
+mot — « Enlèvement » ou « Livraison » — sans phrase explicative. L'ancien libellé « Enlèvement
+usine — le client retire lui-même la marchandise... » est retiré : le terme « Enlèvement » reste
+volontairement générique (le retrait peut avoir lieu à l'usine, au dépôt ou sur un autre point),
+pas seulement en sortie d'usine.
+
+**Révision UX du 06/09/2026** : ce mot n'est plus affiché sous le champ véhicule, mais dans un
+badge dédié « Mode », au même niveau que le badge « Nature de l'opération » déjà existant sur
+`Ventes/Create.vue` — jamais sous le véhicule, qui n'est qu'une des deux sources d'info de ce
+badge (l'autre étant le type de client). Le badge « Nature du client », lui, est retiré de ce même
+bloc (redondant : la nature du client est déjà affichée entre parenthèses dans le sélecteur Client
+depuis la révision du 05/09/2026 ci-dessus, pour toutes les natures) — le badge « Mode » ne le
+remplace donc que pour Grossiste, seul type de client concerné par ce champ ; les autres natures de
+client n'ont plus de second badge à côté de « Nature de l'opération ». `Ventes/Edit.vue` n'a pas ce
+bloc de badges et n'est donc pas concerné par ce changement.
 
 ## Tarification — catégorie × mode × CLIENT
 
