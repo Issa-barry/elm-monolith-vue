@@ -8,16 +8,14 @@ use App\Models\Categorie;
 use App\Models\CategorieTarifGrossiste;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
-use App\Models\Site;
-use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
@@ -31,13 +29,7 @@ use Tests\TestCase;
  */
 class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
 {
-    use HasAdminSetup, HasProduitVariante, RefreshDatabase;
-
-    private User $user;
-
-    private Organization $org;
-
-    private Site $site;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Categorie $categorie;
 
@@ -45,23 +37,28 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
     {
         parent::setUp();
 
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
-
-        $this->site = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Site Principal',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-        $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->categorie = Categorie::create([
             'organization_id' => $this->org->id,
             'nom' => 'Bouteille d\'eau',
             'statut' => 'actif',
         ]);
+    }
+
+    /**
+     * Factorise le triplet post ventes.store() → assertRedirect() → fetch de la commande créée,
+     * répété par la quasi-totalité des tests de ce fichier (déclencheur de duplication SonarCloud
+     * avec CommandeVenteNaturePricingTest, même pattern côté back-office).
+     */
+    private function posterVenteEtRecupererCommande(string $clientId, array $overrides = []): CommandeVente
+    {
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), array_merge(['client_id' => $clientId], $overrides))
+            ->assertRedirect();
+
+        return CommandeVente::where('client_id', $clientId)->latest()->firstOrFail();
     }
 
     private function makeGrossiste(): Client
@@ -101,16 +98,9 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
         $produit = $this->makeProduit();
         $client = $this->makeGrossiste();
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000]],
+        ]);
         $this->assertSame('enlevement', $commande->mode_remise_grossiste->value);
         $this->assertNull($commande->vehicule_id);
     }
@@ -121,17 +111,10 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
         $client = $this->makeGrossiste();
         $vehicule = $this->makeVehicule();
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'vehicule_id' => $vehicule->id,
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000]],
+        ]);
         $this->assertSame('livraison', $commande->mode_remise_grossiste->value);
         $this->assertSame($vehicule->id, $commande->vehicule_id);
     }
@@ -143,17 +126,10 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
         $produit = $this->makeProduit();
         $client = $this->makeGrossiste();
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'mode_remise_grossiste' => 'livraison',
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'mode_remise_grossiste' => 'livraison',
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000]],
+        ]);
         $this->assertSame('enlevement', $commande->mode_remise_grossiste->value);
     }
 
@@ -171,16 +147,9 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
             'prix' => 18200,
         ]);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000]],
+        ]);
         $this->assertEquals(36400.0, (float) $commande->total_commande); // 2 × 18200
         $this->assertSame('grossiste', $commande->lignes->first()->prix_origine_snapshot->value);
     }
@@ -190,16 +159,9 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
         $produit = $this->makeProduit(); // prix_vente = 20000, aucun tarif Grossiste configuré
         $client = $this->makeGrossiste();
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000]],
+        ]);
         $this->assertEquals(40000.0, (float) $commande->total_commande); // 2 × 20000 (prix normal)
         $this->assertSame('vente', $commande->lignes->first()->prix_origine_snapshot->value);
     }
@@ -217,16 +179,9 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
             'prix' => 18500,
         ]);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $k2->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $k2->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($k2->id, [
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 20000]],
+        ]);
         $this->assertEquals(20000.0, (float) $commande->total_commande); // prix normal, jamais 18500
     }
 
@@ -243,17 +198,10 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
             'prix' => 18500,
         ]);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, [
+            'vehicule_id' => $vehicule->id,
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 20000]],
+        ]);
         $this->assertSame('livraison', $commande->mode_remise_grossiste->value);
         $this->assertEquals(37000.0, (float) $commande->total_commande); // 2 × 18500
     }

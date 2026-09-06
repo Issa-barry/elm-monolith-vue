@@ -11,13 +11,11 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\ModeRemiseGrossiste;
 use App\Enums\NatureOperation;
-use App\Enums\PrestataireType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
-use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -25,7 +23,6 @@ use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Parametre;
-use App\Models\Personne;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
@@ -35,6 +32,7 @@ use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCommissionVenteFixtures;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -59,7 +57,7 @@ use Tests\TestCase;
  */
 class CommandeVenteGrossisteCommissionTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCommissionVenteFixtures, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $site;
 
@@ -79,29 +77,9 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         // Livraison (cf. CommissionTriggerVenteTest, même convention).
         Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
 
-        $this->site = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Dépôt Test',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-        $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => false]);
-
-        $this->categorie = Categorie::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Bouteille d\'eau',
-            'statut' => 'actif',
-        ]);
-
-        $this->processus = CommissionProcessus::firstOrCreate(
-            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
-            [
-                'libelle' => 'Vente',
-                'declencheur' => 'chargement_valide',
-                'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                'statut' => CommissionActivationStatut::ACTIF->value,
-            ],
-        );
+        $this->site = $this->creerSiteDepotTest();
+        $this->categorie = $this->creerCategorieBouteilleTest();
+        $this->processus = $this->creerProcessusVenteTest('chargement_valide');
 
         $this->processusGrossisteLivraison = CommissionProcessus::firstOrCreate(
             ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_TRANSFERT_GROSSISTE],
@@ -148,22 +126,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'statut' => 'active',
         ]);
 
-        $personne = Personne::create(['organization_id' => $this->org->id, 'nom' => 'Diallo', 'prenom' => 'Abdoulaye']);
-        $consultant = Prestataire::create([
-            'organization_id' => $this->org->id,
-            'personne_id' => $personne->id,
-            'type' => PrestataireType::CONSULTANT->value,
-            'is_active' => true,
-        ]);
-
-        CommissionConsultantAffectation::create([
-            'organization_id' => $this->org->id,
-            'prestataire_id' => $consultant->id,
-            'effective_from' => now()->subDay()->toDateString(),
-            'statut' => 'active',
-        ]);
-
-        return $consultant;
+        return $this->creerConsultantDesigneTest();
     }
 
     /**
@@ -171,11 +134,10 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
      * réellement consulté pour un Grossiste + Livraison (cf. CommissionProcessusDefaults::
      * identiteCodePourVente()). CODE_PROPRIETAIRE et CODE_EQUIPE_LIVRAISON exigent chacun une
      * CommissionRegle propre pour entrer dans $lignesParCible (cf. CommissionEnveloppeGenerator::
-     * genererDepuisContexte() — absence de règle = 0 pour CETTE cible, jamais une erreur) : le
-     * montant de la règle équipe devient l'« enveloppe unitaire » ensuite répartie entre livreurs
-     * via EquipeLivraisonPartageCategorie (montants fixes, jamais un pourcentage).
+     * genererDepuisContexte() — absence de règle = 0 pour CETTE cible, jamais une erreur). Le
+     * barème Site est optionnel (null = pas de règle Site pour ce scénario).
      */
-    private function makeVehiculeAvecEquipeEtPartage(): Vehicule
+    private function creerBaremeTransfertGrossiste(float $proprietaire, float $equipe, ?float $site = null): void
     {
         CommissionRegle::create([
             'organization_id' => $this->org->id,
@@ -185,7 +147,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
             'mode' => CommissionMode::DIRECT->value,
             'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => 350,
+            'montant' => $proprietaire,
             'effective_from' => now()->subDay()->toDateString(),
             'statut' => 'active',
         ]);
@@ -197,16 +159,46 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
             'mode' => CommissionMode::A_REPARTIR->value,
             'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => 300,
+            'montant' => $equipe,
             'effective_from' => now()->subDay()->toDateString(),
             'statut' => 'active',
         ]);
+        if ($site !== null) {
+            CommissionRegle::create([
+                'organization_id' => $this->org->id,
+                'processus_id' => $this->processusGrossisteLivraison->id,
+                'libelle' => 'Site — Global',
+                'scope_type' => CommissionScopeType::GLOBAL->value,
+                'cible_type' => CommissionCibleType::CODE_SITE,
+                'mode' => CommissionMode::DIRECT->value,
+                'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+                'montant' => $site,
+                'effective_from' => now()->subDay()->toDateString(),
+                'statut' => 'active',
+            ]);
+        }
+    }
+
+    /**
+     * Le montant de la règle équipe devient l'« enveloppe unitaire » ensuite répartie entre
+     * livreurs via EquipeLivraisonPartageCategorie (montants fixes, jamais un pourcentage) — d'où
+     * la reprise du même $montantEquipe pour le barème et pour le partage.
+     */
+    private function makeVehiculeAvecEquipeEtPartage(
+        float $montantProprietaire = 350,
+        float $montantEquipe = 300,
+        ?float $montantSite = null,
+        int $capacitePacks = 100,
+        bool $livraisonLogistique = false,
+    ): Vehicule {
+        $this->creerBaremeTransfertGrossiste($montantProprietaire, $montantEquipe, $montantSite);
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 100,
+            'capacite_packs' => $capacitePacks,
+            'livraison_logistique' => $livraisonLogistique,
         ]);
 
         $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
@@ -224,11 +216,21 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'processus_id' => $this->processusGrossisteLivraison->id,
             'livreur_id' => $chauffeur->id,
             'part_pourcentage' => 0,
-            'montant_unitaire' => 300,
+            'montant_unitaire' => $montantEquipe,
             'effective_from' => now()->subDay(),
         ]);
 
         return $vehicule->fresh();
+    }
+
+    private function creerVehiculeLivraisonLogistique(int $capacitePacks = 100): Vehicule
+    {
+        return Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
+            'capacite_packs' => $capacitePacks,
+            'livraison_logistique' => true,
+        ]);
     }
 
     private function makeProduit(): Produit
@@ -384,68 +386,14 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
     {
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
-        CommissionRegle::create([
-            'organization_id' => $this->org->id,
-            'processus_id' => $this->processusGrossisteLivraison->id,
-            'libelle' => 'Propriétaire — Global',
-            'scope_type' => CommissionScopeType::GLOBAL->value,
-            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
-            'mode' => CommissionMode::DIRECT->value,
-            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => 800,
-            'effective_from' => now()->subDay()->toDateString(),
-            'statut' => 'active',
-        ]);
-        CommissionRegle::create([
-            'organization_id' => $this->org->id,
-            'processus_id' => $this->processusGrossisteLivraison->id,
-            'libelle' => 'Livreur — Global',
-            'scope_type' => CommissionScopeType::GLOBAL->value,
-            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-            'mode' => CommissionMode::A_REPARTIR->value,
-            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => 200,
-            'effective_from' => now()->subDay()->toDateString(),
-            'statut' => 'active',
-        ]);
-        CommissionRegle::create([
-            'organization_id' => $this->org->id,
-            'processus_id' => $this->processusGrossisteLivraison->id,
-            'libelle' => 'Site — Global',
-            'scope_type' => CommissionScopeType::GLOBAL->value,
-            'cible_type' => CommissionCibleType::CODE_SITE,
-            'mode' => CommissionMode::DIRECT->value,
-            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => 200,
-            'effective_from' => now()->subDay()->toDateString(),
-            'statut' => 'active',
-        ]);
         $this->creerConsultantActifEtDesigne(montant: 50, processus: $this->processusGrossisteLivraison);
-
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 1000,
-            'livraison_logistique' => true,
-        ]);
-        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'nom' => 'Équipe Test',
-            'is_active' => true,
-        ]);
-        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
-        EquipeLivraisonPartageCategorie::create([
-            'equipe_id' => $equipe->id,
-            'categorie_id' => $this->categorie->id,
-            'processus_id' => $this->processusGrossisteLivraison->id,
-            'livreur_id' => $chauffeur->id,
-            'part_pourcentage' => 0,
-            'montant_unitaire' => 200,
-            'effective_from' => now()->subDay(),
-        ]);
+        $vehicule = $this->makeVehiculeAvecEquipeEtPartage(
+            montantProprietaire: 800,
+            montantEquipe: 200,
+            montantSite: 200,
+            capacitePacks: 1000,
+            livraisonLogistique: true,
+        );
 
         $produit = $this->makeProduit();
         $variante = $produit->variantePrincipale()->first();
@@ -577,12 +525,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
         // $this->processusGrossisteLivraison existe (créé en setUp()) mais SANS AUCUNE
         // CommissionRegle active — exactement l'état d'une organisation qui vient de migrer.
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
-            'capacite_packs' => 100,
-            'livraison_logistique' => true,
-        ]);
+        $vehicule = $this->creerVehiculeLivraisonLogistique();
         $produit = $this->makeProduit();
         $variante = $produit->variantePrincipale()->first();
         $this->seedVarianteStockSuffisant($variante, $this->site);
@@ -618,12 +561,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'statut' => 'active',
         ]);
 
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
-            'capacite_packs' => 100,
-            'livraison_logistique' => true,
-        ]);
+        $vehicule = $this->creerVehiculeLivraisonLogistique();
         $produit = $this->makeProduit();
         $variante = $produit->variantePrincipale()->first();
         $this->seedVarianteStockSuffisant($variante, $this->site);
@@ -682,12 +620,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
 
         // $this->processusGrossisteLivraison existe (créé en setUp()) mais SANS AUCUNE
         // CommissionRegle active — exactement le même état que le test de création équivalent.
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
-            'capacite_packs' => 100,
-            'livraison_logistique' => true,
-        ]);
+        $vehicule = $this->creerVehiculeLivraisonLogistique();
 
         $this->actingAs($this->user)
             ->put(route('ventes.update', $commande), [

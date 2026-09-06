@@ -10,7 +10,9 @@ describe('resolveInternalUrl', () => {
     });
 
     it("ne fabrique jamais de navigation vers l'hôte scanné — seul le chemin est repris, sur l'origine du navigateur", () => {
-        const url = resolveInternalUrl('https://attaquant-externe.example/phishing');
+        const url = resolveInternalUrl(
+            'https://attaquant-externe.example/phishing',
+        );
         // Le host scanné ("attaquant-externe.example") est ignoré : seule l'origine
         // réellement affichée par le navigateur est utilisée, jamais une URL externe
         // arbitraire ouverte automatiquement.

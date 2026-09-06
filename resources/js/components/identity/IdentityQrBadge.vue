@@ -48,7 +48,7 @@ watch(() => props.qrValue, generate);
         <button
             v-if="hasQr"
             type="button"
-            class="flex items-center justify-center overflow-hidden rounded-lg border border-border bg-white p-1 transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            class="flex items-center justify-center overflow-hidden rounded-lg border border-border bg-white p-1 transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
             :style="{ width: `${size}px`, height: `${size}px` }"
             aria-haspopup="dialog"
             aria-label="Agrandir mon QR code"
@@ -70,7 +70,7 @@ watch(() => props.qrValue, generate);
         </div>
         <span
             v-if="showCaption && hasQr"
-            class="text-[10px] font-medium leading-none text-primary"
+            class="text-[10px] leading-none font-medium text-primary"
         >
             Agrandir
         </span>

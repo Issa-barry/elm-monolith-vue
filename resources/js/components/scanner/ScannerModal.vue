@@ -3,7 +3,10 @@
 // référence livraison) et codes-barres produit (EAN-8/13, UPC-A/E, Code128), via ZXing.
 // Réutilise les mêmes résolveurs que le scanner USB clavier (useScanInterceptor), cf.
 // resources/js/composables/scan/scanResolvers.ts — même sécurité, même comportement.
-import { resolveBarcodeText, resolveQrText } from '@/composables/scan/scanResolvers';
+import {
+    resolveBarcodeText,
+    resolveQrText,
+} from '@/composables/scan/scanResolvers';
 import { router } from '@inertiajs/vue3';
 import type { IScannerControls } from '@zxing/browser';
 import Dialog from 'primevue/dialog';
@@ -36,12 +39,14 @@ async function startCamera() {
 
     if (!window.isSecureContext) {
         status.value = 'error';
-        errorMessage.value = 'Le scan caméra nécessite une connexion sécurisée (HTTPS).';
+        errorMessage.value =
+            'Le scan caméra nécessite une connexion sécurisée (HTTPS).';
         return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
         status.value = 'error';
-        errorMessage.value = 'Caméra indisponible sur cet appareil ou ce navigateur.';
+        errorMessage.value =
+            'Caméra indisponible sur cet appareil ou ce navigateur.';
         return;
     }
 
@@ -51,11 +56,13 @@ async function startCamera() {
     try {
         // ZXing est chargé uniquement après l'ouverture du scanner afin de ne
         // pas alourdir le chargement initial du dashboard mobile.
-        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
-            await Promise.all([
-                import('@zxing/browser'),
-                import('@zxing/library'),
-            ]);
+        const [
+            { BrowserMultiFormatReader },
+            { BarcodeFormat, DecodeHintType },
+        ] = await Promise.all([
+            import('@zxing/browser'),
+            import('@zxing/library'),
+        ]);
 
         if (!visible.value || activation !== cameraActivation) return;
 
@@ -90,14 +97,18 @@ async function startCamera() {
         ]);
         const reader = new BrowserMultiFormatReader(hints);
 
-        controls = await reader.decodeFromStream(stream, videoRef.value, (result) => {
-            if (processing || !result) return;
-            processing = true;
-            void handleResult(
-                result.getText(),
-                barcodeFormats.has(result.getBarcodeFormat()),
-            );
-        });
+        controls = await reader.decodeFromStream(
+            stream,
+            videoRef.value,
+            (result) => {
+                if (processing || !result) return;
+                processing = true;
+                void handleResult(
+                    result.getText(),
+                    barcodeFormats.has(result.getBarcodeFormat()),
+                );
+            },
+        );
         status.value = 'scanning';
     } catch (e) {
         stopCamera();
@@ -164,7 +175,9 @@ onBeforeUnmount(stopCamera);
                 {{ errorMessage }}
             </div>
 
-            <div class="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
+            <div
+                class="relative aspect-square w-full overflow-hidden rounded-lg bg-black"
+            >
                 <video
                     ref="videoRef"
                     class="h-full w-full object-cover"

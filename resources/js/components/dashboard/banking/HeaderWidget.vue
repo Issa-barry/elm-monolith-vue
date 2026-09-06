@@ -89,9 +89,7 @@ const displayRole = computed(() => {
 const identityMeta = computed(() =>
     [
         displayRole.value,
-        user.value?.telephone
-            ? formatPhoneDisplay(user.value.telephone)
-            : null,
+        user.value?.telephone ? formatPhoneDisplay(user.value.telephone) : null,
     ]
         .filter(Boolean)
         .join(' · '),

@@ -926,9 +926,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    idx === COMMISSIONS_STEP_IDX && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'bg-red-500 text-white shadow-sm'
-                                        : idx === COMMISSIONS_STEP_IDX && commissionsPartielles
+                                        : idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsPartielles
                                           ? 'bg-orange-500 text-white shadow-sm'
                                           : stepState(idx) === 'done'
                                             ? 'bg-emerald-500 text-white shadow-sm'
@@ -950,9 +952,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <span
                                 :class="[
                                     'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    idx === COMMISSIONS_STEP_IDX && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'text-red-600 dark:text-red-400'
-                                        : idx === COMMISSIONS_STEP_IDX && commissionsPartielles
+                                        : idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsPartielles
                                           ? 'text-orange-600 dark:text-orange-400'
                                           : stepState(idx) === 'current'
                                             ? 'text-blue-600 dark:text-blue-400'
@@ -992,7 +996,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 :variant="commissionsEnErreur ? 'destructive' : 'default'"
             >
                 <AlertTriangle
-                    :class="commissionsPartielles ? 'size-4 text-orange-500' : 'size-4'"
+                    :class="
+                        commissionsPartielles
+                            ? 'size-4 text-orange-500'
+                            : 'size-4'
+                    "
                 />
                 <AlertTitle>
                     {{

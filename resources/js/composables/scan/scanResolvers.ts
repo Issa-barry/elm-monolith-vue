@@ -114,13 +114,17 @@ export async function resolveQrText(raw: string): Promise<ScanResolution> {
     const ulidCandidate = isUlid(decoded) ? decoded : isUlid(raw) ? raw : null;
     if (ulidCandidate) {
         const resolved = await resolveUlidUrl(ulidCandidate);
-        return resolved ? { status: 'resolved', url: resolved } : { status: 'not_found' };
+        return resolved
+            ? { status: 'resolved', url: resolved }
+            : { status: 'not_found' };
     }
 
     // On teste raw (avant décodage AZERTY) car le tiret '-' est converti en '6' par decode()
     if (LIVRAISON_REF_RE.test(raw)) {
         const resolved = await resolveLivraisonUrl(raw);
-        return resolved ? { status: 'resolved', url: resolved } : { status: 'not_found' };
+        return resolved
+            ? { status: 'resolved', url: resolved }
+            : { status: 'not_found' };
     }
 
     return { status: 'unrecognized' };
@@ -130,7 +134,11 @@ export async function resolveQrText(raw: string): Promise<ScanResolution> {
  * Résolution d'un code-barres produit (EAN/UPC/Code128) — la symbologie est déjà
  * connue côté appelant (ZXing la fournit), donc pas de détection de motif ici.
  */
-export async function resolveBarcodeText(code: string): Promise<ScanResolution> {
+export async function resolveBarcodeText(
+    code: string,
+): Promise<ScanResolution> {
     const resolved = await resolveProduitUrl(code);
-    return resolved ? { status: 'resolved', url: resolved } : { status: 'not_found' };
+    return resolved
+        ? { status: 'resolved', url: resolved }
+        : { status: 'not_found' };
 }

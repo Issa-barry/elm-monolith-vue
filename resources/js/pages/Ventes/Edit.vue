@@ -404,7 +404,11 @@ watch(
             );
             if (res.ok) {
                 const data = (await res.json()) as {
-                    tarifs: { categorie_id: string; mode: string; prix: number }[];
+                    tarifs: {
+                        categorie_id: string;
+                        mode: string;
+                        prix: number;
+                    }[];
                 };
                 const grille: Record<string, Record<string, number>> = {};
                 for (const t of data.tarifs) {
@@ -755,7 +759,11 @@ function submit() {
                                 v-else-if="isGrossiste"
                                 class="mt-1 text-xs font-medium text-muted-foreground"
                             >
-                                {{ form.vehicule_id ? 'Livraison' : 'Enlèvement' }}
+                                {{
+                                    form.vehicule_id
+                                        ? 'Livraison'
+                                        : 'Enlèvement'
+                                }}
                             </p>
                         </div>
 
@@ -787,9 +795,7 @@ function submit() {
                                             {{ option.nom_complet }}
                                             <span
                                                 class="font-normal text-muted-foreground"
-                                                >— {{
-                                                    option.type_label
-                                                }}</span
+                                                >— {{ option.type_label }}</span
                                             >
                                         </div>
                                         <div

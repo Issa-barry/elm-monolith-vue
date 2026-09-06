@@ -3,27 +3,22 @@
 namespace Tests\Feature;
 
 use App\Enums\ClientType;
-use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionScopeType;
-use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\NatureOperation;
-use App\Enums\PrestataireType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
-use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
-use App\Models\Personne;
-use App\Models\Prestataire;
 use App\Models\Site;
 use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCommissionVenteFixtures;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -35,7 +30,7 @@ use Tests\TestCase;
  */
 class CommissionsAuditerVentesCommandTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCommissionVenteFixtures, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $site;
 
@@ -48,29 +43,9 @@ class CommissionsAuditerVentesCommandTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
 
-        $this->site = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Dépôt Test',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-        $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => false]);
-
-        $this->categorie = Categorie::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Bouteille d\'eau',
-            'statut' => 'actif',
-        ]);
-
-        $this->processus = CommissionProcessus::firstOrCreate(
-            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
-            [
-                'libelle' => 'Vente',
-                'declencheur' => 'facture_encaissee',
-                'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                'statut' => CommissionActivationStatut::ACTIF->value,
-            ],
-        );
+        $this->site = $this->creerSiteDepotTest();
+        $this->categorie = $this->creerCategorieBouteilleTest();
+        $this->processus = $this->creerProcessusVenteTest('facture_encaissee');
     }
 
     private function creerCommandeSansVehicule(): CommandeVente
@@ -160,19 +135,7 @@ class CommissionsAuditerVentesCommandTest extends TestCase
             'statut' => 'active',
         ]);
 
-        $personne = Personne::create(['organization_id' => $this->org->id, 'nom' => 'Diallo', 'prenom' => 'Abdoulaye']);
-        $consultant = Prestataire::create([
-            'organization_id' => $this->org->id,
-            'personne_id' => $personne->id,
-            'type' => PrestataireType::CONSULTANT->value,
-            'is_active' => true,
-        ]);
-        CommissionConsultantAffectation::create([
-            'organization_id' => $this->org->id,
-            'prestataire_id' => $consultant->id,
-            'effective_from' => now()->subDay()->toDateString(),
-            'statut' => 'active',
-        ]);
+        $this->creerConsultantDesigneTest();
 
         $commande = $this->creerCommandeSansVehicule();
 

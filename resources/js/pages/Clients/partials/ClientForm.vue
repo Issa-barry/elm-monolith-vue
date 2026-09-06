@@ -451,8 +451,8 @@ function onSubmit() {
                         v-else-if="phoneConflict"
                         class="mt-1 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400"
                     >
-                        Ce numéro est déjà associé à {{ phoneConflict.label }}
-                        « {{ phoneConflict.nom }} » dans votre organisation —
+                        Ce numéro est déjà associé à {{ phoneConflict.label }} «
+                        {{ phoneConflict.nom }} » dans votre organisation —
                         vérifiez qu'il ne s'agit pas d'une erreur.
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">

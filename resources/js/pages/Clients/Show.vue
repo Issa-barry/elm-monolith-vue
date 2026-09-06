@@ -179,6 +179,13 @@ function buildLignesDepuisTarifs(): TarifLigne[] {
 const isEditingTarifs = ref(false);
 const tarifsForm = useForm({ lignes: buildLignesDepuisTarifs() });
 
+// Cast déporté ici (plutôt qu'inline dans le template) : `Record<string, string>` dans un
+// mustache `{{ }}` fait planter le parseur Vue de Prettier (générique confondu avec une balise),
+// cf. https://github.com/prettier/prettier/issues (parse error sur `as Record<...>` en template).
+const tarifsErreur = computed(
+    () => (tarifsForm.errors as Record<string, string>).tarifs,
+);
+
 // Lignes affichées en lecture seule — celles déjà éditées si l'utilisateur est en cours
 // d'édition, sinon reconstruites depuis les tarifs enregistrés.
 const lignesAffichees = computed(() =>
@@ -237,8 +244,11 @@ function saveTarifs(): void {
             tarifs: data.lignes.flatMap((l) => {
                 if (!l.categorie_id) return [];
 
-                const t: { categorie_id: string; mode: string; prix: number }[] =
-                    [];
+                const t: {
+                    categorie_id: string;
+                    mode: string;
+                    prix: number;
+                }[] = [];
                 if (l.enlevement !== null && l.enlevement > 0) {
                     t.push({
                         categorie_id: l.categorie_id,
@@ -910,10 +920,10 @@ function saveTarifs(): void {
                     </div>
 
                     <p
-                        v-if="(tarifsForm.errors as Record<string, string>).tarifs"
+                        v-if="tarifsErreur"
                         class="mt-3 text-xs text-destructive"
                     >
-                        {{ (tarifsForm.errors as Record<string, string>).tarifs }}
+                        {{ tarifsErreur }}
                     </p>
 
                     <div
@@ -921,8 +931,8 @@ function saveTarifs(): void {
                         class="mt-5 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
                     >
                         Aucune catégorie de produit n'existe encore. Créez-en
-                        une dans Produits &gt; Catégories avant de configurer
-                        un tarif Grossiste.
+                        une dans Produits &gt; Catégories avant de configurer un
+                        tarif Grossiste.
                     </div>
 
                     <!-- Lecture seule : une ligne par catégorie déjà configurée, jamais toutes
@@ -934,7 +944,10 @@ function saveTarifs(): void {
                         >
                             Aucun tarif configuré pour ce client.
                         </div>
-                        <div v-else class="mt-5 overflow-x-auto rounded-lg border">
+                        <div
+                            v-else
+                            class="mt-5 overflow-x-auto rounded-lg border"
+                        >
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b bg-muted/40">
@@ -954,16 +967,22 @@ function saveTarifs(): void {
                                 </thead>
                                 <tbody class="divide-y">
                                     <tr
-                                        v-for="(ligne, index) in lignesAffichees"
+                                        v-for="(
+                                            ligne, index
+                                        ) in lignesAffichees"
                                         :key="ligne.categorie_id ?? index"
                                     >
                                         <td class="px-4 py-3 font-medium">
-                                            {{ categorieNom(ligne.categorie_id) }}
+                                            {{
+                                                categorieNom(ligne.categorie_id)
+                                            }}
                                         </td>
                                         <td class="px-4 py-3 tabular-nums">
                                             {{
                                                 ligne.enlevement
-                                                    ? formatGNF(ligne.enlevement)
+                                                    ? formatGNF(
+                                                          ligne.enlevement,
+                                                      )
                                                     : 'Non configuré'
                                             }}
                                         </td>
