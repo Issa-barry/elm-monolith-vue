@@ -24,3 +24,9 @@ declare module 'vue' {
         $headManager: ReturnType<typeof createHeadManager>;
     }
 }
+
+// Constantes injectées à la compilation par le bloc `define` de vite.config.ts
+// (PWA — cf. docs/pwa.md) : remplacées littéralement dans le bundle, jamais
+// lues à l'exécution comme de vraies variables.
+declare const __PWA_ENABLED__: boolean;
+declare const __PWA_BUILD_DIR__: string;
