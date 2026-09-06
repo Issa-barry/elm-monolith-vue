@@ -21,6 +21,9 @@ cache uniquement une liste blanche explicite de fichiers statiques publics.
 | [vite.config.ts](../vite.config.ts) | Constantes `__PWA_ENABLED__` / `__PWA_BUILD_DIR__` injectées à la compilation |
 | [public/.htaccess](../public/.htaccess) | Force `Cache-Control: no-cache` sur `sw.js` (le CDN de production applique sinon un cache de 7 jours par défaut) |
 | [tests/e2e/pwa.spec.ts](../tests/e2e/pwa.spec.ts) | Tests dédiés (ne tournent pas dans la suite E2E par défaut, voir plus bas) |
+| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, mobile/tablette) et résolution d'état du bandeau d'installation |
+| [resources/js/composables/usePwaInstall.ts](../resources/js/composables/usePwaInstall.ts) | Pont vers les API navigateur réelles (`beforeinstallprompt`, `appinstalled`, sessionStorage) |
+| [resources/js/components/PwaInstallPrompt.vue](../resources/js/components/PwaInstallPrompt.vue) | Bandeau "Installer ELM" + instructions iOS |
 
 ---
 
@@ -75,6 +78,45 @@ logique que `buildDirectory` déjà utilisée pour Wayfinder) et `__PWA_ENABLED_
 `__PWA_ENABLED__` est vrai. Le build (`build` vs `build-e2e`) est transmis au
 fichier statique `sw.js` via la query string d'enregistrement
 (`/sw.js?build=build-e2e`) puisque `sw.js` lui-même n'est pas compilé par Vite.
+
+## 3bis. UX d'installation (bandeau "Installer ELM")
+
+Même principe que `elm-vitrine-nuxt` (`composables/usePwaInstall.ts`,
+`config/pwaInstall.ts`, `components/PwaInstallButton.vue`), adapté en bandeau
+dismissible plutôt qu'un CTA de landing, et affiché sur les 3 layouts
+partagés : [AuthSimpleLayout.vue](../resources/js/layouts/auth/AuthSimpleLayout.vue)
+(connexion et pages invité), [AppSidebarLayout.vue](../resources/js/layouts/app/AppSidebarLayout.vue)
+(backoffice) et [ClientLayout.vue](../resources/js/layouts/ClientLayout.vue)
+(espace client) — jamais dupliqué page par page.
+
+- **Priorité mobile/tablette** (`isMobileOrTabletDevice` dans
+  `config/pwaInstall.ts`) : le bandeau ne s'affiche jamais sur desktop dans
+  cette V1, même si une invite native y serait techniquement disponible.
+- **Déjà installée** (`display: standalone`, y compris `navigator.standalone`
+  sur iOS) → bandeau masqué.
+- **Android/Chrome, desktop Chrome/Edge** : `beforeinstallprompt` est
+  intercepté (`preventDefault()`) pour piloter l'invite depuis CE bandeau ; le
+  clic déclenche `prompt()` sur l'événement capturé.
+- **iOS/iPadOS (Safari)** : `beforeinstallprompt` ne se déclenche jamais
+  (WebKit) — le clic ouvre une modale (PrimeVue `Dialog`) avec les 3 étapes
+  manuelles (Partager → Sur l'écran d'accueil → Ajouter). Aucune tentative de
+  déclencher automatiquement l'installation sur cette plateforme.
+- **Navigateur sans l'un ni l'autre chemin** (ex. Firefox desktop) → bandeau
+  masqué plutôt qu'un bouton qui échouerait silencieusement.
+- **« Plus tard »** : ferme le bandeau, persisté en `sessionStorage`
+  (`elm-pwa-install-dismissed`) pour ne pas le reproposer à chaque navigation
+  (chaque layout remonte le composant à la navigation, cf. absence de layout
+  Inertia persistant dans `app.ts`) — jamais caché de façon permanente,
+  réaffiché à la prochaine vraie visite (nouvelle session navigateur).
+  N'empêche jamais l'utilisation d'ELM.
+
+Vérifié manuellement (Playwright, UA iPhone + viewport mobile, contre
+`npm run dev`) : bandeau visible sur mobile, masqué sur desktop, clic iOS →
+modale d'instructions, "Plus tard" → masqué immédiatement et après reload.
+Le chemin `beforeinstallprompt` réel (Android/Chrome desktop) n'est pas
+automatisable de la même façon (nécessite les critères d'installabilité réels
+— HTTPS/manifest/service worker — absents en `npm run dev`) : à vérifier
+manuellement contre un build réel.
 
 ## 4. Stratégie de mise à jour
 
