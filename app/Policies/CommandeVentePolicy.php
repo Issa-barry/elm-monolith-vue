@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\NatureOperation;
 use App\Models\CommandeVente;
 use App\Models\User;
 
@@ -61,18 +60,20 @@ class CommandeVentePolicy
     }
 
     /**
-     * Valider la réception (LIVRAISON_EN_COURS → LIVREE) — distribution_client uniquement, cf.
-     * CommandeVenteService::validerReceptionDistribution(). Même niveau de permission que les
-     * autres transitions du workflow (ventes.update), pas un accès élevé distinct : contrairement
-     * au transfert logistique, il n'y a pas ici de partie tierce (usine) à faire arbitrer par un
-     * admin — c'est ELM elle-même qui constate la réception chez son propre distributeur.
+     * Valider la réception (LIVRAISON_EN_COURS → LIVREE) — réservée aux commandes nécessitant une
+     * réception explicite (cf. CommandeVente::requiertReceptionExplicite() : distribution_client,
+     * et depuis le 06/09/2026 Grossiste + Livraison, cf. docs/grossiste.md). Même niveau de
+     * permission que les autres transitions du workflow (ventes.update), pas un accès élevé
+     * distinct : contrairement au transfert logistique, il n'y a pas ici de partie tierce (usine)
+     * à faire arbitrer par un admin — c'est ELM elle-même qui constate la réception chez son
+     * propre client.
      */
-    public function validerReceptionDistribution(User $user, CommandeVente $commande): bool
+    public function validerReception(User $user, CommandeVente $commande): bool
     {
         return $user->can('ventes.update')
             && $this->sameOrganization($user, $commande)
             && $commande->isLivraisonEnCours()
-            && $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT;
+            && $commande->requiertReceptionExplicite();
     }
 
     /** Avancer d'une étape — agrège les quatre transitions ci-dessus */
@@ -86,7 +87,7 @@ class CommandeVentePolicy
             default => $this->confirmer($user, $commande)
                        || $this->demarrerChargement($user, $commande)
                        || $this->validerChargement($user, $commande)
-                       || $this->validerReceptionDistribution($user, $commande),
+                       || $this->validerReception($user, $commande),
         };
     }
 

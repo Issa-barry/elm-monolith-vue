@@ -4,12 +4,27 @@ import vue from '@vitejs/plugin-vue';
 import laravel from 'laravel-vite-plugin';
 import { defineConfig } from 'vite';
 
+const isE2E = process.env.APP_ENV === 'e2e';
+// La suite E2E fonctionnelle ne doit pas être perturbée par un service worker
+// (cf. docs/pwa.md) : désactivé par défaut sur le build e2e, réactivable
+// explicitement via `npm run e2e:build:pwa` pour tester le PWA lui-même.
+const pwaEnabled = process.env.PWA_FORCE_ENABLED === '1' ? true : !isE2E;
+
+// VITE_LAN=1 expose le serveur dev sur le réseau local (test sur téléphone) ;
+// VITE_HMR_HOST fixe l'IP LAN à utiliser pour le websocket HMR (sinon injoignable
+// depuis un autre appareil). Comportement par défaut inchangé (127.0.0.1 partout).
+const lanMode = process.env.VITE_LAN === '1';
+
 export default defineConfig({
     server: {
-        host: '127.0.0.1',
+        host: lanMode ? '0.0.0.0' : '127.0.0.1',
         hmr: {
-            host: '127.0.0.1',
+            host: process.env.VITE_HMR_HOST || '127.0.0.1',
         },
+    },
+    define: {
+        __PWA_ENABLED__: JSON.stringify(pwaEnabled),
+        __PWA_BUILD_DIR__: JSON.stringify(isE2E ? 'build-e2e' : 'build'),
     },
     plugins: [
         laravel({

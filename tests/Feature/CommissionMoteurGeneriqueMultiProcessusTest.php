@@ -231,10 +231,10 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         // distribution_client (décision produit du 30/08/2026, révise COMM-004) : hybride
         // vente/logistique — la mission n'est considérée réalisée, et la commission générée,
         // qu'à la validation de réception, jamais au chargement (cf.
-        // CommandeVenteService::validerReceptionDistribution()). vente_standard s'arrête ici, sa
+        // CommandeVenteService::validerReception()). vente_standard s'arrête ici, sa
         // commission naît au chargement (déclencheur CHARGEMENT_VALIDE de ce test).
         if ($nature === NatureOperation::DISTRIBUTION_CLIENT) {
-            CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+            CommandeVenteService::validerReception($commande->fresh(), [
                 ['id' => $ligne->id, 'quantite_livree' => $qte, 'type_ecart_reception' => 'conforme'],
             ]);
         }
@@ -583,7 +583,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->assertSame(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut, 'Un encaissement seul ne doit jamais faire passer une distribution en LIVREE.');
 
         // La validation de réception, elle, fait enfin naître la commission et passe en LIVREE.
-        CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+        CommandeVenteService::validerReception($commande->fresh(), [
             ['id' => $ligne->id, 'quantite_livree' => 5, 'type_ecart_reception' => 'conforme'],
         ]);
 
@@ -628,7 +628,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
             ->value('qte_stock');
 
         // Le distributeur n'accepte que 8 sur les 10 chargés.
-        CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+        CommandeVenteService::validerReception($commande->fresh(), [
             ['id' => $ligne->id, 'quantite_livree' => 8, 'type_ecart_reception' => 'manquant'],
         ]);
 
@@ -840,6 +840,13 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         CommandeVenteService::demarrerChargement($commande->fresh());
         CommandeVenteService::validerChargement($commande->fresh(), [
             ['id' => $ligne->id, 'quantite_chargee' => 50, 'type_ecart' => 'conforme'],
+        ]);
+        // Grossiste + Livraison exige une réception explicite depuis le 06/09/2026 (cf.
+        // docs/grossiste.md, chantier « Réception Grossiste ») : sa commission ne naît plus au
+        // chargement mais à la validation de réception, cf.
+        // CommandeVenteService::requiertReceptionExplicite()/validerReception().
+        CommandeVenteService::validerReception($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_livree' => 50, 'type_ecart_reception' => 'conforme'],
         ]);
 
         // Transfert logistique : 100 × 200 = 20 000, tagué logistique_transfert.

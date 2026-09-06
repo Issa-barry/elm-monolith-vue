@@ -3,13 +3,14 @@ import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ArrowLeftRight,
@@ -27,7 +28,6 @@ import {
     Users,
 } from 'lucide-vue-next';
 import SelectButton from 'primevue/selectbutton';
-import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -186,8 +186,8 @@ function libelleColonnePartage(processusCode: string): string {
 }
 
 const { can } = usePermissions();
-const page = usePage();
 const toast = useToast();
+useFlashToast();
 
 const STATUTS_EDITABLES = ['brouillon', 'rejete', 'annule'];
 
@@ -213,10 +213,6 @@ function ouvrirTransfert(livreurId: string | null) {
     livreurATransferer.value = livreurId;
     showTransfertDialog.value = true;
 }
-const flashSuccess = computed(
-    () => (page.props as { flash?: { success?: string } }).flash?.success,
-);
-
 const processusActifLabel = computed(
     () =>
         props.processus_options.find(
@@ -323,15 +319,6 @@ function formatGNF(val: number): string {
         </div>
 
         <div class="w-full space-y-6 p-4 sm:p-6">
-            <!-- Flash success -->
-            <div
-                v-if="flashSuccess"
-                class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
-            >
-                <CheckCircle class="h-4 w-4 shrink-0" />
-                {{ flashSuccess }}
-            </div>
-
             <!-- Header desktop -->
             <DetailHeader
                 eyebrow="Véhicule"
@@ -1109,8 +1096,6 @@ function formatGNF(val: number): string {
             </div>
         </div>
     </AppLayout>
-
-    <Toast group="top" position="top-right" />
 
     <EquipeStepperModal
         v-model:visible="showStepperModal"

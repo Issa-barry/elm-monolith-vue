@@ -6,7 +6,6 @@ use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionUniteCalcul;
-use App\Enums\NatureOperation;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
@@ -131,11 +130,14 @@ class CommissionEnveloppeGenerator
     {
         $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
 
-        // distribution_client se calcule sur les quantités réellement RÉCEPTIONNÉES
-        // (quantite_livree), jamais chargées — la validation de réception est son unique
-        // déclencheur (cf. CommissionTriggerService::onReceptionDistributionValidee()), décision
-        // produit du 30/08/2026 qui révise COMM-004. vente_standard reste inchangée.
-        $quantiteField = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+        // Une commande à réception explicite (cf. CommandeVente::requiertReceptionExplicite() :
+        // distribution_client, Grossiste + Livraison depuis le 06/09/2026) se calcule sur les
+        // quantités réellement RÉCEPTIONNÉES (quantite_livree), jamais chargées — la validation
+        // de réception est son unique déclencheur (cf.
+        // CommissionTriggerService::onReceptionValidee()), décision produit du 30/08/2026 qui
+        // révise COMM-004. Les autres commandes (chargement = seul jalon disponible) restent
+        // inchangées.
+        $quantiteField = $commande->requiertReceptionExplicite()
             ? 'quantite_livree'
             : 'quantite_chargee';
 

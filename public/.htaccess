@@ -1,5 +1,17 @@
 <IfModule mod_headers.c>
     Header unset X-Powered-By
+
+    # PWA (cf. docs/pwa.md) : le CDN de production (hCDN) applique par défaut
+    # un cache long (constaté : Cache-Control public, max-age=604800) sur les
+    # fichiers statiques par extension, sans que .htaccess ne le demande. Pour
+    # le fichier d'enregistrement du service worker, un cache long retarderait
+    # la détection des mises à jour bien au-delà des 24h déjà imposées par les
+    # navigateurs pour ce fichier précis. On force donc une revalidation à
+    # chaque requête (no-cache : autorise le cache mais impose la
+    # revalidation via ETag/Last-Modified, ne supprime pas le cache).
+    <FilesMatch "^sw\.js$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
 </IfModule>
 
 <IfModule mod_rewrite.c>

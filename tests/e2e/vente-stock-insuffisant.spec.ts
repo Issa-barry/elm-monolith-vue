@@ -157,7 +157,8 @@ async function creerClientInApp(page: Page, nomComplet: string): Promise<void> {
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, {
+    // La création redirige vers la fiche détail (Clients/Show.vue), pas vers l'édition.
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/, {
         timeout: 15_000,
     });
 }
@@ -195,9 +196,15 @@ async function remplirPremiereLigne(
     // affichage de sa valeur sélectionnée (p-dropdown-label), ce qui décale silencieusement
     // tout index plat et faisait passer la quantité voulue dans le mauvais champ (24/08/2026).
     const row = page.locator('#vente-form table tbody tr').first();
-    const produitDropdown = row.locator('td').nth(0).locator('.p-dropdown, .p-select').first();
+    const produitDropdown = row
+        .locator('td')
+        .nth(0)
+        .locator('.p-dropdown, .p-select')
+        .first();
     await produitDropdown.click();
-    const filterInput = page.locator('.p-dropdown-filter, .p-select-filter').first();
+    const filterInput = page
+        .locator('.p-dropdown-filter, .p-select-filter')
+        .first();
     if (await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await filterInput.fill(produitNom);
     }
@@ -356,15 +363,21 @@ test.describe('Création de commande — contrôle du stock disponible', () => {
         const filterInput = page
             .locator('.p-dropdown-filter, .p-select-filter')
             .first();
-        if (await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        if (
+            await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)
+        ) {
             await filterInput.fill(PREFIX);
         }
 
         await expect(
-            page.locator('[role="option"]:visible', { hasText: produitAvecStock }),
+            page.locator('[role="option"]:visible', {
+                hasText: produitAvecStock,
+            }),
         ).toBeVisible({ timeout: 10_000 });
         await expect(
-            page.locator('[role="option"]:visible', { hasText: produitSansStock }),
+            page.locator('[role="option"]:visible', {
+                hasText: produitSansStock,
+            }),
         ).toHaveCount(0);
     });
 });

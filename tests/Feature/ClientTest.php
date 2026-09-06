@@ -65,7 +65,7 @@ class ClientTest extends TestCase
 
     // ── store ─────────────────────────────────────────────────────────────────
 
-    public function test_store_creates_client_and_redirects_to_edit(): void
+    public function test_store_creates_client_and_redirects_to_show(): void
     {
         $response = $this->actingAs($this->user)
             ->post(route('clients.store'), [
@@ -79,7 +79,7 @@ class ClientTest extends TestCase
             ->where('nom_complet', 'Aissatou Diallo')
             ->firstOrFail();
 
-        $response->assertRedirect(route('clients.edit', $client));
+        $response->assertRedirect(route('clients.show', $client));
 
         $this->assertDatabaseHas('clients', [
             'nom_complet' => 'Aissatou Diallo',
@@ -882,7 +882,7 @@ class ClientTest extends TestCase
                 'code_pays' => 'GN',
                 'ville' => 'Conakry',
             ])
-            ->assertRedirect(); // redirige vers edit du nouveau client
+            ->assertRedirect(); // redirige vers la fiche détail du nouveau client
 
         $this->assertDatabaseHas('clients', [
             'nom_complet' => 'Mariama Sylla',

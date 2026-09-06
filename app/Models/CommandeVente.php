@@ -208,6 +208,22 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::CLOTUREE;
     }
 
+    /**
+     * Source de vérité unique de « cette commande a besoin d'une validation de réception
+     * explicite avant de passer en LIVREE » — jusqu'au 06/09/2026 réservé à distribution_client
+     * (cf. docs/commissions.md COMM-004) ; étendu ce jour-là à Grossiste + Livraison (cf.
+     * docs/grossiste.md, chantier « Réception Grossiste ») : une livraison Grossiste doit elle
+     * aussi être réceptionnée par le client avant clôture, la facture au Grossiste restant
+     * indépendante de la réception (montant recalculé sur le réceptionné, jamais au-delà). Une
+     * vente standard sans véhicule (Enlèvement, Externe/Revendeur…) n'a jamais de véhicule à
+     * réceptionner et reste donc toujours false.
+     */
+    public function requiertReceptionExplicite(): bool
+    {
+        return $this->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            || $this->mode_remise_grossiste === ModeRemiseGrossiste::LIVRAISON;
+    }
+
     public function isAnnulee(): bool
     {
         return $this->statut === StatutCommandeVente::ANNULEE;

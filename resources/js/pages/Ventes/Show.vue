@@ -25,6 +25,7 @@ import {
     HandCoins,
     MoreVertical,
     Package,
+    PackageCheck,
     PackageOpen,
     Pencil,
     Printer,
@@ -39,6 +40,7 @@ import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
+import ReceptionDialog from './partials/ReceptionDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -88,10 +90,15 @@ interface LigneCommande {
     produit_nom: string | null;
     quantite_demandee: number;
     quantite_chargee: number | null;
+    quantite_livree: number | null;
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
+    type_ecart_reception: string | null;
+    type_ecart_reception_label: string | null;
+    commentaire_ecart_reception: string | null;
     ecart_chargement: number | null;
+    ecart_livraison: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
     // null pour les commandes créées avant la tarification par nature de client (backfillées en
@@ -155,6 +162,8 @@ interface CommandeData {
     total_commande: number;
     mode_tarification_snapshot: string | null;
     mode_tarification_label: string | null;
+    mode_remise_grossiste: string | null;
+    mode_remise_grossiste_label: string | null;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -169,6 +178,7 @@ interface CommandeData {
     chargement_demarre_at: string | null;
     chargement_valide_at: string | null;
     livree_at: string | null;
+    reception_validee_at: string | null;
     closed_at: string | null;
     is_brouillon: boolean;
     is_a_charger: boolean;
@@ -182,6 +192,7 @@ interface CommandeData {
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
     can_valider_chargement: boolean;
+    can_valider_reception: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
     created_at: string;
@@ -389,6 +400,7 @@ const TYPES_ECART = [
 
 // ── Actions de transition ─────────────────────────────────────────────────────
 const actionProcessing = ref(false);
+const receptionDialogVisible = ref(false);
 
 function confirmer() {
     if (actionProcessing.value) return;
@@ -560,8 +572,14 @@ function submitEncaisser() {
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
+// Colonnes "Reçue"/Écart/Motif — Grossiste + Livraison uniquement (cf. requiertReception ci-
+// dessus), même triplet que Distributions/Show.vue, affiché dès que le chargement est connu
+// (mêmes conditions que showChargeeCol : jamais avant, la réception suit toujours le chargement).
+const showRecueCol = computed(
+    () => showChargeeCol.value && requiertReception.value,
+);
 const chargeeEtEcartColspan = computed(
-    () => 2 + (showChargeeCol.value ? 3 : 0) + 1,
+    () => 2 + (showChargeeCol.value ? 3 : 0) + (showRecueCol.value ? 3 : 0) + 1,
 );
 
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
@@ -615,35 +633,71 @@ function printTicketCommande(): void {
 }
 
 // ── Timeline de progression ────────────────────────────────────────────────────
-const STEPS = [
-    { key: 'creee', shortLabel: 'Créée', icon: FileText },
-    { key: 'a_charger', shortLabel: 'À charger', icon: Package },
-    { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
-    { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
-    { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
-    { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
-    { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
-];
+// Grossiste + Livraison (depuis le 06/09/2026, cf. docs/grossiste.md, chantier « Réception
+// Grossiste ») exige désormais une réception explicite avant LIVREE, comme distribution_client
+// (cf. Distributions/Show.vue) — une étape "Réception" s'intercale donc entre "Livraison en
+// cours" et "Facturation" pour ce cas précis, jamais pour une vente classique ni un Enlèvement
+// (mode_remise_grossiste n'est jamais 'livraison' pour ces deux derniers).
+const requiertReception = computed(
+    () => props.commande.mode_remise_grossiste === 'livraison',
+);
+
+const STEPS = computed(() => {
+    const steps = [
+        { key: 'creee', shortLabel: 'Créée', icon: FileText },
+        { key: 'a_charger', shortLabel: 'À charger', icon: Package },
+        {
+            key: 'chargement',
+            shortLabel: 'Chargement en cours',
+            icon: PackageOpen,
+        },
+        { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    ];
+    if (requiertReception.value) {
+        steps.push({
+            key: 'reception',
+            shortLabel: 'Réception',
+            icon: PackageCheck,
+        });
+    }
+    steps.push(
+        { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
+        { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
+        { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
+    );
+
+    return steps;
+});
+
+// Position de "Facturation" dans STEPS — décalée d'un cran quand l'étape Réception est insérée.
+const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
+const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
 
 const currentStepIdx = computed(() => {
     if (props.commande.is_annulee) return -1;
     if (isCommandeDirecte.value) {
-        if (props.commande.is_cloturee) return 6;
-        if (props.facture?.statut === 'payee') return 5;
-        return 4;
+        if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
+        if (props.facture?.statut === 'payee')
+            return FACTURATION_STEP_IDX.value + 1;
+        return FACTURATION_STEP_IDX.value;
     }
     if (props.commande.is_livree) {
-        return props.facture?.statut === 'payee' ? 5 : 4;
+        return props.facture?.statut === 'payee'
+            ? FACTURATION_STEP_IDX.value + 1
+            : FACTURATION_STEP_IDX.value;
     }
     const map: Record<string, number> = {
         brouillon: 0,
         a_charger: 1,
         chargement_en_cours: 2,
-        livraison_en_cours: 3,
-        facturation: 4,
-        cloturee: 6,
+        // Pour Grossiste + Livraison, le chargement est déjà validé dès ce statut : l'étape
+        // actionnable courante est la Réception (4), pas "Livraison en cours" (3, déjà franchie) —
+        // même convention que Distributions/Show.vue.
+        livraison_en_cours: requiertReception.value ? 4 : 3,
+        facturation: FACTURATION_STEP_IDX.value,
+        cloturee: CLOTUREE_STEP_IDX.value,
     };
     return map[props.commande.statut] ?? 0;
 });
@@ -669,7 +723,7 @@ function connectorIsActive(idx: number): boolean {
 // PARTIEL (chantier 2A du 05/09/2026, indépendance des cibles) : une partie des commissions de
 // l'opération a bien été générée, seule une autre cible reste à régulariser — distingué de ERREUR
 // (rien n'a été généré) par une couleur WARNING (orange) plutôt que DANGER (rouge), cf. CLAUDE.md.
-const COMMISSIONS_STEP_IDX = 5;
+const COMMISSIONS_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 1);
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
 );
@@ -681,7 +735,7 @@ const commissionsAvecAnomalie = computed(
 );
 
 function stepLabel(idx: number, defaultLabel: string): string {
-    return idx === COMMISSIONS_STEP_IDX && commissionsAvecAnomalie.value
+    return idx === COMMISSIONS_STEP_IDX.value && commissionsAvecAnomalie.value
         ? 'À régulariser'
         : defaultLabel;
 }
@@ -717,6 +771,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_confirmer ||
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
+                        commande.can_valider_reception ||
                         commande.can_annuler
                     "
                     class="absolute right-4"
@@ -774,13 +829,22 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider le chargement
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider_reception"
+                                class="cursor-pointer text-teal-600 focus:text-teal-600"
+                                @click="receptionDialogVisible = true"
+                            >
+                                <PackageCheck class="h-4 w-4" />
+                                Valider la réception
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
                                     (commande.can_modifier ||
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
-                                        commande.can_valider_chargement)
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception)
                                 "
                             />
                             <DropdownMenuItem
@@ -885,6 +949,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
                         Valider le chargement
+                    </Button>
+
+                    <!-- Valider la réception (livraison_en_cours, Grossiste + Livraison) -->
+                    <Button
+                        v-if="commande.can_valider_reception"
+                        size="sm"
+                        class="bg-teal-600 text-white hover:bg-teal-700"
+                        @click="receptionDialogVisible = true"
+                    >
+                        <PackageCheck class="mr-2 h-4 w-4" />
+                        Valider la réception
                     </Button>
 
                     <!-- Annuler -->
@@ -1291,6 +1366,26 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         Motif d'écart
                                     </th>
                                     <th
+                                        v-if="showRecueCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Reçue
+                                    </th>
+                                    <th
+                                        v-if="showRecueCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 70px"
+                                    >
+                                        Écart
+                                    </th>
+                                    <th
+                                        v-if="showRecueCol"
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Motif d'écart
+                                    </th>
+                                    <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 150px"
                                     >
@@ -1352,6 +1447,50 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             class="mt-0.5 text-xs text-muted-foreground"
                                         >
                                             {{ ligne.commentaire_ecart }}
+                                        </p>
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
+                                        {{ ligne.quantite_livree ?? '—' }}
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                        :class="
+                                            ecartClass(ligne.ecart_livraison)
+                                        "
+                                    >
+                                        {{ ecartLabel(ligne.ecart_livraison) }}
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-sm"
+                                    >
+                                        <span
+                                            v-if="
+                                                ligne.type_ecart_reception_label
+                                            "
+                                            class="text-foreground"
+                                            >{{
+                                                ligne.type_ecart_reception_label
+                                            }}</span
+                                        >
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                        <p
+                                            v-if="
+                                                ligne.commentaire_ecart_reception
+                                            "
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                ligne.commentaire_ecart_reception
+                                            }}
                                         </p>
                                     </td>
                                     <td
@@ -2175,6 +2314,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
         <!-- Dialog Chargement -->
         <ChargementDialog
             v-model:visible="chargementDialogVisible"
+            :commande-id="commande.id"
+            :lignes="commande.lignes"
+            :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Réception (Grossiste + Livraison uniquement, cf. requiertReception) -->
+        <ReceptionDialog
+            v-model:visible="receptionDialogVisible"
             :commande-id="commande.id"
             :lignes="commande.lignes"
             :types-ecart="TYPES_ECART"

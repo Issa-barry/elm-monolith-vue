@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Enums\ClientType;
 use App\Enums\ModeTarification;
-use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -44,14 +43,18 @@ class CommandeVenteService
     }
 
     /**
-     * Workflow vente_standard : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS
-     * → LIVREE (1er encaissement, cf. passerEnLivree()) → CLOTUREE.
+     * Workflow standard (pas de réception explicite requise, cf.
+     * CommandeVente::requiertReceptionExplicite()) : BROUILLON → A_CHARGER →
+     * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE (1er encaissement, cf.
+     * passerEnLivree()) → CLOTUREE.
      *
-     * Workflow distribution_client (décision produit du 30/08/2026, révise COMM-004) : même
-     * tronc commun jusqu'à LIVRAISON_EN_COURS, puis une étape logistique supplémentaire —
-     * LIVRAISON_EN_COURS → LIVREE exige désormais une validation de réception explicite (cf.
-     * validerReceptionDistribution()), jamais l'encaissement. Commercialement inchangé : même
-     * CommandeVente/FactureVente, même créance/paiement, indépendants de la réception.
+     * Workflow avec réception explicite — distribution_client (décision produit du 30/08/2026,
+     * révise COMM-004) et, depuis le 06/09/2026, Grossiste + Livraison (cf. docs/grossiste.md,
+     * chantier « Réception Grossiste ») : même tronc commun jusqu'à LIVRAISON_EN_COURS, puis une
+     * étape logistique supplémentaire — LIVRAISON_EN_COURS → LIVREE exige une validation de
+     * réception explicite (cf. validerReception()), jamais l'encaissement. Commercialement
+     * inchangé : même CommandeVente/FactureVente, même créance/paiement, indépendants de la
+     * réception.
      *
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
      *
@@ -63,7 +66,7 @@ class CommandeVenteService
             StatutCommandeVente::BROUILLON => self::confirmer($commande),
             StatutCommandeVente::A_CHARGER => self::demarrerChargement($commande),
             StatutCommandeVente::CHARGEMENT_EN_COURS => self::validerChargement($commande, $lignesData),
-            StatutCommandeVente::LIVRAISON_EN_COURS => self::validerReceptionDistribution($commande, $lignesData),
+            StatutCommandeVente::LIVRAISON_EN_COURS => self::validerReception($commande, $lignesData),
             default => abort(422, 'Impossible d\'avancer depuis ce statut.'),
         };
 
@@ -318,10 +321,10 @@ class CommandeVenteService
      * (déclencheur par défaut), c'est ici que la commission naît, en statut
      * CREEE — elle ne devient payable qu'à la validation de la période de
      * paiement qui la couvre (cf. CommissionTriggerService::onChargementValide(),
-     * CommissionAdjustmentService::activerCommissionsCreees()). Pour distribution_client,
-     * onChargementValide() est désormais un no-op (décision produit du 30/08/2026) : sa
-     * commission naît exclusivement à la validation de réception, cf.
-     * validerReceptionDistribution().
+     * CommissionAdjustmentService::activerCommissionsCreees()). Pour une commande à réception
+     * explicite (cf. CommandeVente::requiertReceptionExplicite() : distribution_client, Grossiste
+     * + Livraison), onChargementValide() est un no-op : sa commission naît exclusivement à la
+     * validation de réception, cf. validerReception().
      *
      * @param  array<array{id: string, quantite_chargee?: int|null, type_ecart?: string|null, commentaire_ecart?: string|null}>  $lignesData
      */
@@ -404,28 +407,31 @@ class CommandeVenteService
     }
 
     /**
-     * LIVRAISON_EN_COURS → LIVREE, réservée à distribution_client (décision produit du
-     * 30/08/2026, révise COMM-004 : distribution devient un hybride vente/logistique — la vente
-     * standard continue de passer en LIVREE automatiquement au premier encaissement, cf.
-     * passerEnLivree()). Enregistre les quantités réellement réceptionnées par le distributeur
-     * (quantite_livree, écart éventuel vs quantite_chargee), recalcule la facture sur la base du
-     * réceptionné — le client n'est jamais facturé au-delà de ce qu'il a accepté (décision
-     * produit) — puis déclenche la commission de distribution, dont la réception validée est
-     * désormais l'UNIQUE déclencheur (cf. CommissionTriggerService::onReceptionDistributionValidee(),
-     * jamais conditionné au paramètre organisation qui ne régit plus que vente_standard).
+     * LIVRAISON_EN_COURS → LIVREE, réservée aux commandes nécessitant une réception explicite
+     * (cf. CommandeVente::requiertReceptionExplicite() : distribution_client depuis le
+     * 30/08/2026 — décision produit révisant COMM-004, distribution devient un hybride
+     * vente/logistique — puis Grossiste + Livraison depuis le 06/09/2026, cf. docs/grossiste.md,
+     * chantier « Réception Grossiste »). Les autres commandes (vente standard sans réception,
+     * Grossiste + Enlèvement compris) continuent de passer en LIVREE automatiquement au premier
+     * encaissement, cf. passerEnLivree(). Enregistre les quantités réellement réceptionnées par
+     * le client (quantite_livree, écart éventuel vs quantite_chargee), recalcule la facture sur
+     * la base du réceptionné — le client n'est jamais facturé au-delà de ce qu'il a accepté
+     * (décision produit) — puis déclenche la commission associée, dont la réception validée est
+     * désormais l'UNIQUE déclencheur (cf. CommissionTriggerService::onReceptionValidee(), jamais
+     * conditionné au paramètre organisation qui ne régit plus que les commandes sans réception).
      *
      * Un écart de réception ne réajuste jamais le stock physique (décision produit du
-     * 30/08/2026) : les unités refusées par le distributeur restent sorties du stock, déjà
-     * décrémenté au chargement — leur sort physique est traité hors de ce système.
+     * 30/08/2026) : les unités refusées par le client restent sorties du stock, déjà décrémenté
+     * au chargement — leur sort physique est traité hors de ce système.
      *
      * @param  array<array{id: string, quantite_livree?: int|null, type_ecart_reception?: string|null, commentaire_ecart_reception?: string|null}>  $lignesData
      */
-    public static function validerReceptionDistribution(CommandeVente $commande, array $lignesData = []): void
+    public static function validerReception(CommandeVente $commande, array $lignesData = []): void
     {
         abort_if(
-            $commande->nature_operation !== NatureOperation::DISTRIBUTION_CLIENT,
+            ! $commande->requiertReceptionExplicite(),
             422,
-            'Cette étape ne s\'applique qu\'aux commandes de distribution.'
+            'Cette étape ne s\'applique qu\'aux commandes nécessitant une validation de réception (distribution ou Grossiste livré).'
         );
         abort_if(! $commande->isLivraisonEnCours(), 422, 'La commande doit être en livraison.');
 
@@ -439,7 +445,7 @@ class CommandeVenteService
                 'reception_validee_at' => now(),
             ]);
 
-            CommissionTriggerService::onReceptionDistributionValidee($commande->fresh());
+            CommissionTriggerService::onReceptionValidee($commande->fresh());
         });
     }
 
@@ -480,9 +486,10 @@ class CommandeVenteService
 
         // Garde-fou : un encaissement (total ou partiel) a pu avoir lieu AVANT la validation de
         // réception — l'ordre inverse du cas nominal (« réception aujourd'hui, paiement la
-        // semaine prochaine ») reste possible puisqu'une facture de distribution est encaissable
-        // dès LIVRAISON_EN_COURS, comme toute vente. Un écart de réception ne doit jamais faire
-        // repasser la facture sous ce qui a déjà été réellement encaissé.
+        // semaine prochaine ») reste possible puisqu'une facture d'une commande à réception
+        // explicite (distribution, Grossiste livré) est encaissable dès LIVRAISON_EN_COURS,
+        // comme toute vente. Un écart de réception ne doit jamais faire repasser la facture sous
+        // ce qui a déjà été réellement encaissé.
         $commande->load('lignes', 'facture');
         $nouveauTotal = (float) $commande->lignes->sum('total_ligne');
         $montantEncaisse = (float) ($commande->facture?->montant_encaisse ?? 0);
@@ -500,7 +507,7 @@ class CommandeVenteService
 
     /**
      * Recalcule le total de la commande à partir des lignes (quantités réellement chargées, ou
-     * réceptionnées pour distribution_client depuis validerReceptionDistribution()) et répercute
+     * réceptionnées — commandes à réception explicite — depuis validerReception()) et répercute
      * le nouveau montant sur la facture associée si elle existe.
      */
     private static function recalculerTotaux(CommandeVente $commande): void
