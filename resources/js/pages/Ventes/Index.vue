@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import NatureOperationBadge from '@/components/commande-vente/NatureOperationBadge.vue';
+import ProcessusBadge from '@/components/commande-vente/ProcessusBadge.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -53,6 +53,8 @@ interface Commande {
     statut: string;
     statut_label: string;
     nature_operation: 'vente_standard' | 'distribution_client';
+    processus_code: string;
+    processus_label: string;
     total_commande: number;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
@@ -577,8 +579,9 @@ function confirmDelete(c: Commande) {
                                 :status="c.statut"
                                 :label="c.statut_label"
                             />
-                            <NatureOperationBadge
-                                :nature="c.nature_operation"
+                            <ProcessusBadge
+                                :processus="c.processus_code"
+                                :label="c.processus_label"
                             />
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
@@ -878,6 +881,21 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Processus -->
+                    <Column
+                        field="processus_label"
+                        header="Processus"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <ProcessusBadge
+                                :processus="data.processus_code"
+                                :label="data.processus_label"
+                            />
+                        </template>
+                    </Column>
+
                     <!-- Statut commande -->
                     <Column
                         field="statut"
@@ -886,15 +904,10 @@ function confirmDelete(c: Commande) {
                         style="width: 130px"
                     >
                         <template #body="{ data }">
-                            <div class="flex flex-col items-start gap-1">
-                                <StatusDot
-                                    :status="data.statut"
-                                    :label="data.statut_label"
-                                />
-                                <NatureOperationBadge
-                                    :nature="data.nature_operation"
-                                />
-                            </div>
+                            <StatusDot
+                                :status="data.statut"
+                                :label="data.statut_label"
+                            />
                         </template>
                     </Column>
 

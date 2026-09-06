@@ -78,6 +78,17 @@ class Personne extends Model
         return $this->hasOne(Livreur::class);
     }
 
+    /** Fournisseur/Prestataire cas personne physique (l'autre cas référence EntrepriseTierce). */
+    public function fournisseur(): HasOne
+    {
+        return $this->hasOne(Fournisseur::class);
+    }
+
+    public function prestataire(): HasOne
+    {
+        return $this->hasOne(Prestataire::class);
+    }
+
     public function piecesIdentite(): MorphMany
     {
         return $this->morphMany(PieceIdentite::class, 'identifiable');

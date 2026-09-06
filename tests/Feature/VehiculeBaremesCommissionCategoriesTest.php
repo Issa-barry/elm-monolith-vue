@@ -287,11 +287,21 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
                 ->where('vehicule.equipe_membres.0.livreur_id', $livreur->id)
                 ->where("statuts_partage_commission.{$categorie->id}.vente", 'fait')
                 ->where("statuts_partage_commission.{$categorie->id}.logistique_transfert", 'a_faire')
+                // transfert_grossiste (chantier 05/09/2026) : applicable à ce véhicule mixte (même
+                // usage que logistique_transfert), mais AUCUNE CommissionRegle configurée ici pour
+                // AUCUNE catégorie — baremesCommissionParCategorie() ne renvoie donc aucune ligne
+                // pour ce processus, la clé est absente (jamais "à faire" ni "non_requis", qui
+                // supposeraient une catégorie effectivement résolue) — même absence que
+                // distribution_client ci-dessous, pour une raison différente (lui est hors
+                // codesApplicables ; transfert_grossiste y est mais n'a aucun bareme catégorie).
+                // Voir CommandeVenteController::ensureTransfertGrossisteBaremeConfigure() pour le
+                // garde-fou distinct qui, lui, bloque la CRÉATION d'une commande Grossiste dans ce cas.
+                ->missing("statuts_partage_commission.{$categorie->id}.transfert_grossiste")
                 // distribution_client n'est jamais dans codesApplicablesPourVehicule(), même
                 // configuré avec un barème positif ci-dessus : sa clé est absente, jamais "à
                 // faire" ni "non_requis".
                 ->missing("statuts_partage_commission.{$categorie->id}.distribution_client")
-                ->has('processus_options', 2)
+                ->has('processus_options', 3)
             );
     }
 }

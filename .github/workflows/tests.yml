@@ -305,11 +305,19 @@ jobs:
       # Base dédiée à `php artisan serve --env=e2e` (cf. .env.e2e) — le service
       # mysql ci-dessus est vide au démarrage à part la DB elm_monolithe_e2e créée
       # par MYSQL_DATABASE ; il faut encore la migrer/seeder avant que Playwright
-      # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local.
+      # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local — y compris
+      # le seeder ElmV2DemoSeeder (organisation "Eau La Maman V2 Demo", cf. son commentaire),
+      # absent du DatabaseSeeder par défaut et donc jamais rejoué par --seed seul. Sans cette
+      # 2e commande, le compte +224600000201 (loginAsElmV2Demo(), tests/e2e/helpers.ts)
+      # n'existe pas en CI : les 9 specs commission-*/commissions/* qui l'utilisent échouent
+      # systématiquement sur "Numéro de téléphone ou mot de passe incorrect" (confirmé en CI
+      # le 05/09/2026, run #1128 — ce step divergeait du script local depuis l'introduction du
+      # seeder le 20/08/2026, jamais répercuté ici).
       - name: Prepare E2E database (.env.e2e)
         run: |
           php artisan config:clear
           php artisan migrate:fresh --seed --env=e2e --force
+          php artisan db:seed --class=ElmV2DemoSeeder --env=e2e --force
 
       # APP_ENV=e2e (pas juste VITE_*) : les actions Wayfinder générées pendant ce build
       # (resources/js/actions/**) embarquent une URL absolue lue depuis config('app.url'),

@@ -98,7 +98,9 @@ class CommissionVenteLivreurProcessusFilterTest extends TestCase
                 ->where('filtre_processus', '')
                 ->where('commission_summary.total_genere', fn ($v) => (float) $v === 950000.0)
                 ->has('commission_details', 3)
-                ->has('processus_options', 4)
+                // 5 = "Tous les processus" + les 4 codes réels (transfert_grossiste ajouté le
+                // 05/09/2026, cf. App\Support\Commission\CommissionProcessusFilter::options()).
+                ->has('processus_options', 5)
                 ->where('processus_options.0.value', '')
                 ->where('processus_options.0.label', 'Tous les processus')
             );

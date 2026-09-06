@@ -10,6 +10,7 @@ use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
 use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\CategorieController;
+use App\Http\Controllers\CategorieTarifGrossisteController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClientVehicleController;
@@ -65,6 +66,7 @@ use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ScanLivraisonController;
+use App\Http\Controllers\ScanProduitController;
 use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SiteImportController;
@@ -186,11 +188,22 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');
 
         // Clients
+        // Déclarée avant Route::resource() : sinon "verifier-telephone" serait interprété comme
+        // le paramètre {client} de la route GET clients/{client} (show), même raison que
+        // categories/options avant produits/{produit} plus bas dans ce fichier.
+        Route::get('clients/verifier-telephone', [ClientController::class, 'verifierTelephone'])
+            ->name('clients.verifier-telephone');
         Route::resource('clients', ClientController::class);
         Route::patch('clients/{client}/cashback', [ClientController::class, 'updateCashback'])
             ->name('clients.cashback.update');
         Route::patch('clients/{client}/derogation-impayes', [ClientController::class, 'updateDerogation'])
             ->name('clients.derogation-impayes.update');
+        // Tarifs Grossiste — propres à ce client (cf. CategorieTarifGrossisteController), jamais
+        // une page d'administration globale.
+        Route::get('clients/{client}/tarifs-grossiste', [CategorieTarifGrossisteController::class, 'forClient'])
+            ->name('clients.tarifs-grossiste.show');
+        Route::put('clients/{client}/tarifs-grossiste', [CategorieTarifGrossisteController::class, 'update'])
+            ->name('clients.tarifs-grossiste.update');
         // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
         Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
             ->name('clients.vehicules.store');
@@ -740,6 +753,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('scan/user/{userId}', ScanUserController::class)->name('scan.user');
     // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
     Route::get('scan/livraison/{reference}', ScanLivraisonController::class)->name('scan.livraison');
+    // Résolution code-barres/SKU produit → URL fiche (scanner caméra du dashboard mobile) —
+    // gardée par produits.read en interne (ProduitPolicy), contrairement aux deux routes
+    // ci-dessus qui ne gardent rien ici (la protection vient de la page de destination).
+    Route::get('scan/produit/{code}', ScanProduitController::class)->name('scan.produit');
 });
 
 // Support de test E2E uniquement — la route n'existe même pas hors APP_ENV=e2e

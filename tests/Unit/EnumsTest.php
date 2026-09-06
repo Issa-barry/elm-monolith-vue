@@ -2,8 +2,11 @@
 
 namespace Tests\Unit;
 
+use App\Enums\ClientType;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\PackingStatut;
 use App\Enums\PrestataireType;
+use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\SiteRole;
 use App\Enums\SiteStatut;
@@ -286,5 +289,61 @@ class EnumsTest extends TestCase
         $type = new ProduitType(['vendable' => true, 'achetable' => false]);
         $this->assertTrue($type->isVendable());
         $this->assertFalse($type->isAchetable());
+    }
+
+    // ── ClientType ────────────────────────────────────────────────────────────
+
+    public function test_client_type_labels(): void
+    {
+        $this->assertSame('Externe', ClientType::EXTERNE->label());
+        $this->assertSame('Revendeur', ClientType::REVENDEUR->label());
+        $this->assertSame('Distributeur', ClientType::DISTRIBUTEUR->label());
+        $this->assertSame('Grossiste', ClientType::GROSSISTE->label());
+    }
+
+    public function test_client_type_values(): void
+    {
+        $values = ClientType::values();
+        $this->assertCount(4, $values);
+        $this->assertContains('externe', $values);
+        $this->assertContains('revendeur', $values);
+        $this->assertContains('distributeur', $values);
+        $this->assertContains('grossiste', $values);
+    }
+
+    public function test_client_type_options_returns_all_cases(): void
+    {
+        $options = ClientType::options();
+        $this->assertCount(4, $options);
+        $grossiste = collect($options)->firstWhere('value', 'grossiste');
+        $this->assertSame('Grossiste', $grossiste['label']);
+    }
+
+    // ── ModeRemiseGrossiste ───────────────────────────────────────────────────
+
+    public function test_mode_remise_grossiste_labels(): void
+    {
+        $this->assertSame('Enlèvement usine', ModeRemiseGrossiste::ENLEVEMENT->label());
+        $this->assertSame('Livraison', ModeRemiseGrossiste::LIVRAISON->label());
+    }
+
+    public function test_mode_remise_grossiste_values(): void
+    {
+        $this->assertSame(['enlevement', 'livraison'], ModeRemiseGrossiste::values());
+    }
+
+    public function test_mode_remise_grossiste_options_returns_all_cases(): void
+    {
+        $options = ModeRemiseGrossiste::options();
+        $this->assertCount(2, $options);
+        $this->assertSame('enlevement', $options[0]['value']);
+        $this->assertSame('livraison', $options[1]['value']);
+    }
+
+    // ── PrixOrigine::GROSSISTE ────────────────────────────────────────────────
+
+    public function test_prix_origine_grossiste_label(): void
+    {
+        $this->assertSame('Prix grossiste', PrixOrigine::GROSSISTE->label());
     }
 }

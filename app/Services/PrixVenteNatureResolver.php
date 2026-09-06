@@ -18,6 +18,13 @@ use App\Models\ProduitVariante;
  *
  * NULL sur le tarif spécifique (prix_externe/prix_revendeur/prix_distributeur) → repli sur
  * prix_vente, jamais confondu avec 0 (un tarif à 0 GNF explicitement enregistré est respecté).
+ *
+ * GROSSISTE n'a PAS de tarif dans ce resolver (pas de colonne prix_grossiste sur la variante) :
+ * son prix dépend de la catégorie du produit et du mode de remise de la commande, jamais de la
+ * variante seule — cf. GrossisteTarifResolver, seul point d'entrée pour cette nature.
+ * CommandeVenteController::buildLignesDataAndTotal()/PdvCheckoutService n'appellent jamais ce
+ * resolver pour un client Grossiste ; le bras ci-dessous n'existe que pour l'exhaustivité du match
+ * PHP et retombe sur le prix de vente par défaut si jamais atteint par erreur.
  */
 class PrixVenteNatureResolver
 {
@@ -40,6 +47,7 @@ class PrixVenteNatureResolver
             ClientType::EXTERNE => $variante->prix_externe,
             ClientType::REVENDEUR => $variante->prix_revendeur,
             ClientType::DISTRIBUTEUR => $variante->prix_distributeur,
+            ClientType::GROSSISTE => null,
         };
 
         return $tarifNature !== null ? (int) $tarifNature : $prixVenteDefaut;
@@ -62,6 +70,7 @@ class PrixVenteNatureResolver
             ClientType::EXTERNE => $variante->prix_externe,
             ClientType::REVENDEUR => $variante->prix_revendeur,
             ClientType::DISTRIBUTEUR => $variante->prix_distributeur,
+            ClientType::GROSSISTE => null,
         };
 
         if ($tarifNature === null) {
@@ -72,6 +81,7 @@ class PrixVenteNatureResolver
             ClientType::EXTERNE => PrixOrigine::EXTERNE,
             ClientType::REVENDEUR => PrixOrigine::REVENDEUR,
             ClientType::DISTRIBUTEUR => PrixOrigine::DISTRIBUTEUR,
+            ClientType::GROSSISTE => PrixOrigine::GROSSISTE,
         };
     }
 }

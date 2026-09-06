@@ -4,15 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Site;
-use App\Models\User;
 use App\Models\VarianteStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
@@ -24,11 +23,7 @@ use Tests\TestCase;
  */
 class CommandeVenteNaturePricingTest extends TestCase
 {
-    use HasAdminSetup, HasProduitVariante, RefreshDatabase;
-
-    private User $user;
-
-    private Organization $org;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $site;
 
@@ -36,17 +31,10 @@ class CommandeVenteNaturePricingTest extends TestCase
     {
         parent::setUp();
 
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
-        $this->site = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Site Principal',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-        $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+        $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
     }
 
     private function makeFabricable(array $varianteOverrides = []): Produit
@@ -64,6 +52,25 @@ class CommandeVenteNaturePricingTest extends TestCase
         );
     }
 
+    /**
+     * Factorise le triplet post ventes.store() → assertRedirect() → fetch de la commande créée,
+     * commun aux tests back-office ci-dessous (déclencheur de duplication SonarCloud avec
+     * CommandeVenteGrossisteModeEtFallbackTest, même pattern côté back-office).
+     */
+    private function posterVenteEtRecupererCommande(string $clientId, int $qte, string $produitId, float $prixVente = 22000): CommandeVente
+    {
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'client_id' => $clientId,
+                'lignes' => [
+                    ['produit_id' => $produitId, 'qte' => $qte, 'prix_vente' => $prixVente],
+                ],
+            ])
+            ->assertRedirect();
+
+        return CommandeVente::where('client_id', $clientId)->latest()->firstOrFail();
+    }
+
     // ── Back-office (CommandeVenteController::store()) ───────────────────────────
 
     public function test_store_facture_un_client_revendeur_au_prix_revendeur(): void
@@ -71,16 +78,7 @@ class CommandeVenteNaturePricingTest extends TestCase
         $produit = $this->makeFabricable();
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'revendeur']);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 22000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, 3, $produit->id);
         $this->assertEquals(60000.0, (float) $commande->total_commande); // 3 × 20000
         $this->assertEquals(20000.0, (float) $commande->lignes->first()->prix_vente_snapshot);
         $this->assertSame('revendeur', $commande->lignes->first()->prix_origine_snapshot->value);
@@ -91,16 +89,7 @@ class CommandeVenteNaturePricingTest extends TestCase
         $produit = $this->makeFabricable();
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 22000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, 2, $produit->id);
         $this->assertEquals(37000.0, (float) $commande->total_commande); // 2 × 18500
         $this->assertSame('distributeur', $commande->lignes->first()->prix_origine_snapshot->value);
     }
@@ -110,16 +99,7 @@ class CommandeVenteNaturePricingTest extends TestCase
         $produit = $this->makeFabricable(['prix_distributeur' => null]);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 22000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, 1, $produit->id);
         $this->assertEquals(22000.0, (float) $commande->total_commande);
         $this->assertSame('vente', $commande->lignes->first()->prix_origine_snapshot->value);
     }
@@ -134,16 +114,7 @@ class CommandeVenteNaturePricingTest extends TestCase
         );
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'revendeur']);
 
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'client_id' => $client->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 10000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $commande = $this->posterVenteEtRecupererCommande($client->id, 2, $produit->id, prixVente: 10000);
         $this->assertEquals(20000.0, (float) $commande->total_commande);
         $this->assertSame('vente', $commande->lignes->first()->prix_origine_snapshot->value);
     }

@@ -3,14 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ClientType;
+use App\Enums\ModeRemiseGrossiste;
 use App\Features\ModuleFeature;
 use App\Models\CashbackSolde;
+use App\Models\CategorieTarifGrossiste;
 use App\Models\Client;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Services\CashbackEligibiliteService;
 use App\Services\DerogationImpayesService;
+use App\Services\TelephoneOwnerLookupService;
 use App\Traits\PhoneHandlerTrait;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -173,6 +177,11 @@ class ClientController extends Controller
             'types' => ClientType::options(),
             'cashback_solde' => $cashbackSolde,
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($client->organization_id),
+            // Tarifs propres à CE client — pas une grille organisation (cf. docs/grossiste.md).
+            // Envoyée pour tout client (tableau vide/inutilisé hors Grossiste) plutôt que de
+            // conditionner l'appel : la page décide déjà d'afficher ou non l'onglet.
+            'tarifs_grossiste' => CategorieTarifGrossiste::gridForClient($client->organization_id, $client->id),
+            'mode_remise_grossiste_options' => ModeRemiseGrossiste::options(),
         ]);
     }
 
@@ -371,17 +380,51 @@ class ClientController extends Controller
 
     private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void
     {
-        $exists = Client::where('organization_id', $orgId)
+        $autreClient = Client::where('organization_id', $orgId)
             ->where('telephone', $phone)
             ->whereNull('deleted_at')
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
-            ->exists();
+            ->first();
 
-        if ($exists) {
+        if ($autreClient) {
             throw ValidationException::withMessages([
-                'telephone' => 'Ce numéro de téléphone est déjà utilisé par un autre client.',
+                'telephone' => "Ce numéro de téléphone est déjà utilisé par un autre client : {$autreClient->nom_complet}.",
             ]);
         }
+    }
+
+    /**
+     * Vérification live d'un numéro pendant la saisie (avant soumission), tous types de tiers
+     * confondus — cf. TelephoneOwnerLookupService. `blocking` distingue les deux cas :
+     *  - un autre CLIENT avec ce numéro reste bloquant (même règle stricte qu'
+     *    assertPhoneUniqueInOrg(), qui reste l'autorité finale à la soumission) ;
+     *  - tout autre type (Fournisseur, Propriétaire, Livreur...) est purement informatif —
+     *    partager un numéro entre rôles différents est un cas légitime dans ce projet (cf.
+     *    docblock du service), jamais bloqué ici.
+     */
+    public function verifierTelephone(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($user->can('clients.create') || $user->can('clients.update'), 403);
+
+        $data = $request->validate([
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
+            'code_phone_pays' => ['nullable', 'string'],
+            'client_id' => ['nullable', 'string'],
+        ]);
+
+        $telephoneComplet = $this->buildInternationalPhone($data['telephone'], $data['code_phone_pays'] ?? null);
+        $resultat = $telephoneComplet
+            ? TelephoneOwnerLookupService::find($user->organization_id, $telephoneComplet, $data['client_id'] ?? null)
+            : null;
+
+        return response()->json([
+            'found' => $resultat !== null,
+            'blocking' => ($resultat['type'] ?? null) === 'client',
+            'type' => $resultat['type'] ?? null,
+            'label' => $resultat['label'] ?? null,
+            'nom' => $resultat['nom'] ?? null,
+        ]);
     }
 
     private function assertEmailUniqueInOrg(string $email, string $orgId, ?string $ignoreId = null): void

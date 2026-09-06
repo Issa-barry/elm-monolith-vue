@@ -37,6 +37,19 @@ class CommissionProcessus extends Model
 
     public const CODE_LOGISTIQUE_TRANSFERT = 'logistique_transfert';
 
+    /**
+     * Décision produit du 05/09/2026 (cf. docs/grossiste.md) : un Grossiste livré par un véhicule
+     * de flotte (mode_remise_grossiste = LIVRAISON) n'utilise ni CODE_VENTE ni
+     * CODE_LOGISTIQUE_TRANSFERT — ses bénéficiaires diffèrent des deux (notamment CODE_SITE,
+     * jamais commissionné sur un transfert logistique interne, mais qui doit pouvoir l'être pour
+     * une livraison Grossiste). Processus indépendant, AUCUN repli de barème (contrairement à
+     * CODE_DISTRIBUTION_CLIENT) : `CommissionProcessusDefaults::processusResolutionBareme()` ne le
+     * concerne pas, son barème doit être configuré explicitement (cf.
+     * CommandeVenteController::ensureTransfertGrossisteBaremeConfigure(), garde-fou préventif à la
+     * création). Un Grossiste en Enlèvement (aucun véhicule) reste sur CODE_VENTE, inchangé.
+     */
+    public const CODE_TRANSFERT_GROSSISTE = 'transfert_grossiste';
+
     protected $table = 'commission_processus';
 
     protected $fillable = [

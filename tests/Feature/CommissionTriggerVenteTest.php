@@ -425,7 +425,7 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
-    public function test_vehicule_sans_equipe_ne_genere_aucune_commission_et_ne_bloque_pas(): void
+    public function test_vehicule_sans_equipe_ne_genere_pas_la_commission_equipe_mais_ne_prive_pas_le_proprietaire(): void
     {
         $this->ensureBareme($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -440,11 +440,17 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        // Tout-ou-rien sur l'ensemble des cibles de la commande (cf.
-        // CommissionEnveloppeGenerator::genererParReglesDansTransaction()) : la cible
-        // équipe_livraison échoue faute d'équipe, donc même la cible propriétaire
-        // (pourtant valide) n'est pas créée.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026 — révise l'ancienne décision AMOA #4
+        // "tout-ou-rien") : la cible équipe_livraison échoue faute d'équipe, mais la cible
+        // propriétaire, pourtant valide, reçoit malgré tout son enveloppe.
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
     }
 
     // ── Répartition d'équipe invalide : jamais bloquant pour l'opération commerciale ──
@@ -485,11 +491,20 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        // Tout-ou-rien : la cible propriétaire (valide) n'est pas non plus créée.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026) : la cible propriétaire, valide,
+        // reçoit malgré tout son enveloppe — seule la cible livraison échoue (statut PARTIEL,
+        // pas ERREUR, puisqu'une cible a bien été générée).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
         $this->assertDatabaseHas('commission_generation_attempts', [
             'source_id' => $commande->id,
-            'statut' => 'erreur',
+            'statut' => 'partiel',
         ]);
     }
 

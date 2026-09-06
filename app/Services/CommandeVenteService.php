@@ -233,6 +233,11 @@ class CommandeVenteService
             ]);
 
             self::comptabiliserVenteFacturee($facture);
+            // Sans effet pour l'immense majorité des ventes directes (Externe) : voir le
+            // docblock de CommissionTriggerService::onVenteDirecteFacturee(). Nécessaire pour
+            // qu'un Grossiste en Enlèvement génère sa commission consultant (cf.
+            // docs/grossiste.md) — ce chemin n'a pas d'étape de chargement à déclencher.
+            CommissionTriggerService::onVenteDirecteFacturee($commande->fresh());
         });
     }
 

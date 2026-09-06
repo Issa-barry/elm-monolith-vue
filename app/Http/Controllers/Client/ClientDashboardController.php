@@ -16,6 +16,7 @@ use App\Models\Vehicule;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\Data\VehiculeEarningsRow;
+use App\Services\Client\QrPayloadResolver;
 use App\Services\Client\VehicleProposalService;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
@@ -34,20 +35,15 @@ class ClientDashboardController extends Controller
         private readonly ClientIdentityResolver $identityResolver,
         private readonly ClientEarningsService $earningsService,
         private readonly VehicleProposalService $proposalService,
+        private readonly QrPayloadResolver $qrPayloadResolver,
     ) {}
 
     protected function resolveQrPayload(User $user): string
     {
-        [, , $proprietaire, $livreur] = $this->resolveActorContext($user);
-
-        if ($proprietaire) {
-            return route('proprietaires.show', $proprietaire->id);
-        }
-        if ($livreur) {
-            return route('livreurs.show', $livreur->id);
-        }
-
-        return route('dashboard');
+        // Repli vers le dashboard (jamais null) : cet endpoint génère une image QR
+        // toujours affichable, contrairement à MeController::qr_payload qui expose
+        // explicitement `null` à un frontend capable d'afficher un état "indisponible".
+        return $this->qrPayloadResolver->resolveForUser($user) ?? route('dashboard');
     }
 
     public function qrCode(Request $request): HttpResponse

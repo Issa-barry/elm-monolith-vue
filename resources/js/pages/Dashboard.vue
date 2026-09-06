@@ -58,6 +58,7 @@ defineProps<{
     ca_par_type_vehicule: TypeVehiculeData[];
     ca_par_produit: ProduitData[];
     periode: string;
+    qr_payload: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -73,7 +74,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
-            <HeaderWidget :periode="periode" />
+            <HeaderWidget :periode="periode" :qr-payload="qr_payload" />
 
             <div class="mt-4">
                 <StatsBankingWidget :stats="stats_factures" />

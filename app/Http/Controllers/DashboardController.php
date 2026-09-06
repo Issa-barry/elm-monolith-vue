@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
+use App\Services\Client\QrPayloadResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,8 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    public function __construct(private readonly QrPayloadResolver $qrPayloadResolver) {}
+
     private function dateRangeForPeriode(string $periode): array
     {
         $now = Carbon::now();
@@ -209,6 +212,11 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'periode' => $periode,
+            // QR remplaçant les initiales sur mobile (cf. HeaderWidget.vue) — même
+            // résolveur que l'espace client/l'API mobile (App\Services\Client\
+            // QrPayloadResolver), `null` si l'utilisateur n'a aucun profil
+            // propriétaire/livreur réellement rattaché (staff pur).
+            'qr_payload' => $this->qrPayloadResolver->resolveForUser($request->user()),
             'stats_factures' => [
                 'total_count' => (int) $row->total_count,
                 'total_montant' => (float) $row->total_montant,

@@ -11,6 +11,7 @@ export type ClientTypePourPool =
     | 'externe'
     | 'revendeur'
     | 'distributeur'
+    | 'grossiste'
     | undefined
     | null;
 
