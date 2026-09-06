@@ -138,9 +138,9 @@ function submit(): void {
         @hide="dialogErrors = []"
     >
         <p class="mb-4 text-sm text-muted-foreground">
-            Renseignez les quantités effectivement acceptées par le distributeur
-            et les écarts constatés. La facture sera recalculée sur la base de
-            ces quantités — le client n'est jamais facturé au-delà de ce qu'il a
+            Renseignez les quantités effectivement acceptées par le client et
+            les écarts constatés. La facture sera recalculée sur la base de ces
+            quantités — le client n'est jamais facturé au-delà de ce qu'il a
             accepté.
         </p>
         <div

@@ -315,7 +315,13 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         ]);
     }
 
-    public function test_grossiste_livraison_genere_la_commission_transfert_grossiste_et_consultant_jamais_vente(): void
+    /**
+     * Révisé le 06/09/2026 (chantier « Réception Grossiste », cf. docs/grossiste.md) : Grossiste +
+     * Livraison exige désormais une réception explicite avant LIVREE, comme distribution_client —
+     * sa commission ne naît donc plus au chargement mais à la validation de réception (cf.
+     * CommandeVente::requiertReceptionExplicite(), CommissionTriggerService::onReceptionValidee()).
+     */
+    public function test_grossiste_livraison_genere_la_commission_transfert_grossiste_et_consultant_jamais_vente_a_la_reception(): void
     {
         $this->creerConsultantActifEtDesigne(montant: 200, processus: $this->processusGrossisteLivraison);
         $vehicule = $this->makeVehiculeAvecEquipeEtPartage();
@@ -351,6 +357,16 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'type_ecart' => 'conforme',
         ]]);
 
+        // Le chargement seul ne génère plus aucune commission — la réception n'a pas encore eu
+        // lieu (contrairement au comportement d'avant le 06/09/2026).
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+
+        CommandeVenteService::validerReception($commande->fresh(), [[
+            'id' => $ligne->id,
+            'quantite_livree' => 2,
+            'type_ecart_reception' => 'conforme',
+        ]]);
+
         // Les 3 cibles sont bien générées ET rattachées au processus TRANSFERT_GROSSISTE — jamais
         // Vente (chantier « Transfert grossiste », 05/09/2026, cf. docs/grossiste.md).
         $this->assertDatabaseHas('commission_enveloppes', [
@@ -378,9 +394,11 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
      * Vérification ciblée du 05/09/2026 : reproduit exactement le scénario ayant révélé le bug
      * initial (VTE-050926-002 — 600 unités facturées à tort selon le barème Ventes à 950 GNF/unité)
      * en repartant du parcours réel de bout en bout (store() HTTP → confirmer() →
-     * demarrerChargement() → validerChargement()), avec cette fois le barème Transfert grossiste
-     * réellement configuré sur les 4 cibles. Les 4 montants doivent tomber exactement juste, et
-     * aucune commission ne doit jamais utiliser le barème Vente (950 GNF/unité).
+     * demarrerChargement() → validerChargement() → validerReception(), cette dernière étape ajoutée
+     * le 06/09/2026 — cf. docs/grossiste.md, chantier « Réception Grossiste »), avec cette fois le
+     * barème Transfert grossiste réellement configuré sur les 4 cibles. Les 4 montants doivent
+     * tomber exactement juste, et aucune commission ne doit jamais utiliser le barème Vente
+     * (950 GNF/unité).
      */
     public function test_parcours_reel_grossiste_livraison_600_unites_genere_exactement_les_4_montants_attendus(): void
     {
@@ -425,6 +443,16 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'id' => $ligne->id,
             'quantite_chargee' => 600,
             'type_ecart' => 'conforme',
+        ]]);
+
+        // Le chargement seul ne suffit plus (cf. CommandeVente::requiertReceptionExplicite()) —
+        // la commission ne naît qu'à la réception validée par le Grossiste.
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+
+        CommandeVenteService::validerReception($commande->fresh(), [[
+            'id' => $ligne->id,
+            'quantite_livree' => 600,
+            'type_ecart_reception' => 'conforme',
         ]]);
 
         $this->assertDatabaseHas('commission_enveloppes', [

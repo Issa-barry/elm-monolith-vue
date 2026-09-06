@@ -21,9 +21,10 @@ class CommandeVenteStatutController extends Controller
     /**
      * Avancer d'une étape dans le workflow :
      *   BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS
-     * Pour distribution_client uniquement, une étape supplémentaire est possible depuis
-     * LIVRAISON_EN_COURS : la validation de réception (→ LIVREE), cf.
-     * CommandeVenteService::validerReceptionDistribution().
+     * Pour les commandes à réception explicite uniquement (cf.
+     * CommandeVente::requiertReceptionExplicite() : distribution_client, Grossiste + Livraison),
+     * une étape supplémentaire est possible depuis LIVRAISON_EN_COURS : la validation de
+     * réception (→ LIVREE), cf. CommandeVenteService::validerReception().
      */
     public function avancer(Request $request, CommandeVente $commande_vente): RedirectResponse
     {
@@ -35,8 +36,8 @@ class CommandeVenteStatutController extends Controller
             'lignes.*.quantite_chargee' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'lignes.*.type_ecart' => ['sometimes', 'nullable', 'string'],
             'lignes.*.commentaire_ecart' => ['sometimes', 'nullable', 'string', 'max:500'],
-            // Validation de réception (distribution_client uniquement, cf.
-            // CommandeVenteService::validerReceptionDistribution()).
+            // Validation de réception (commandes à réception explicite uniquement, cf.
+            // CommandeVenteService::validerReception()).
             'lignes.*.quantite_livree' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'lignes.*.type_ecart_reception' => ['sometimes', 'nullable', 'string'],
             'lignes.*.commentaire_ecart_reception' => ['sometimes', 'nullable', 'string', 'max:500'],

@@ -117,6 +117,13 @@ sert aussi l'aperçu live sur `Ventes/Create.vue`/`Edit.vue`, fetché uniquement
 Grossiste — jamais une grille envoyée à toute création de vente, qui exposerait les tarifs négociés
 de tous les Grossistes de l'organisation même pour une commande destinée à un autre client.
 
+**Révision UX du 06/09/2026** : dans ce tableau de prix (lecture et édition), les deux colonnes
+sont libellées **« Prix enlèvement »** / **« Prix livraison »** — un libellé local à
+`Clients/Show.vue` (`prixModeLabel()`), volontairement distinct de `ModeRemiseGrossiste::label()`
+(« Enlèvement » / « Livraison ») qui décrit le **mode** d'une commande, pas un prix. Le mot
+« usine » (ancien libellé `Enlèvement usine` hérité de l'énum) n'est plus affiché ici, cohérent
+avec la révision UX du 05/09/2026 ci-dessus qui l'avait déjà banni de l'aperçu Vente.
+
 **Révision UX du 05/09/2026 (troisième révision, même jour)** : le sélecteur Client de
 `Ventes/Create.vue`/`Edit.vue` affiche désormais la nature du client à côté de son nom — dans le
 champ une fois sélectionné (`K2 (Grossiste)`) et dans chaque ligne de la liste déroulante
@@ -199,3 +206,65 @@ Résumé de la règle :
 - Une équipe dont le véhicule fait de la logistique peut désormais avoir des montants fixes
   différents pour Transfert logistique ET Transfert grossiste sur la même catégorie, simultanément
   (même mécanique que Vente/Transfert logistique déjà en place, aucune migration nécessaire).
+
+## Chantier « Réception Grossiste » (fait le 06/09/2026) — cycle de vie, pas seulement commission
+
+**Corrige un point resté ouvert par le chantier « Transfert grossiste »** : ce dernier ne touchait
+QUE le processus de commission — la commande elle-même continuait de suivre le workflow d'une
+vente classique, passant en LIVREE **automatiquement au premier encaissement**
+(`CommandeVenteService::passerEnLivree()`), exactement comme n'importe quelle vente sans réception.
+Or une livraison Grossiste transporte une marchandise qui doit être acceptée par le client avant
+que la mission logistique soit considérée réalisée — même logique métier que `distribution_client`
+(COMM-004), qui avait déjà ce garde-fou depuis le 30/08/2026.
+
+Diagnostic vérifié avant implémentation (deux affirmations relayées, une seule confirmée) :
+- ✅ **Confirmé** : Grossiste + Livraison n'avait aucune étape de réception — `FactureVente` était
+  déjà correcte (voir point suivant), mais le statut de la commande passait en LIVREE sans qu'aucun
+  écart de quantité ne soit jamais recueilli, contrairement à `distribution_client`.
+- ❌ **Infirmé** : la crainte que la facture puisse être associée au livreur plutôt qu'au Grossiste
+  était sans fondement dans cette base de code — `FactureVente` n'a pas de colonne `client_id` ;
+  son client est toujours résolu via `commande_vente_id → CommandeVente::client_id`, un champ
+  structurellement indépendant de `vehicule_id`/l'équipe de livraison. Aucun changement nécessaire
+  sur ce point.
+
+Décision produit du 06/09/2026 (ne modifie PAS COMM-005 : `nature_operation` reste `VENTE_STANDARD`
+pour un Grossiste, livré ou non — la fusion identitaire Grossiste/Distributeur reste refusée,
+seul le MÉCANISME de réception est désormais partagé) :
+
+- `App\Models\CommandeVente::requiertReceptionExplicite(): bool` — nouvelle source de vérité
+  unique remplaçant partout l'ancien test `nature_operation === DISTRIBUTION_CLIENT` :
+  `nature_operation === DISTRIBUTION_CLIENT || mode_remise_grossiste === LIVRAISON`. Utilisée par
+  `CommandeVenteService` (guard de `validerReception()`, ex-`validerReceptionDistribution()`, et
+  garde-fou anti-auto-LIVREE dans `EncaissementVenteController`), `CommandeVentePolicy` (méthode
+  renommée `validerReception()`), `CommissionTriggerService` (`onChargementValide()`/
+  `onFactureVenteEncaissee()`/`onFactureVenteEncaissementRetire()` deviennent des no-op pour ces
+  commandes) et `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()` (calcule désormais
+  sur `quantite_livree`, jamais `quantite_chargee`, pour toute commande à réception explicite).
+- **Conséquence sur le déclenchement de la commission Transfert grossiste** (chantier précédent,
+  même jour) : elle ne naît plus au chargement mais à la validation de réception —
+  `CommissionTriggerService::onReceptionValidee()` (ex-`onReceptionDistributionValidee()`, renommé
+  car partagé désormais). Décision produit explicite, tranchée en faveur de la cohérence avec
+  `distribution_client` plutôt que de garder le comportement du chantier précédent.
+- **Frontend** : `resources/js/pages/Ventes/partials/ReceptionDialog.vue` (déjà écrit pour
+  Distribution, jamais branché sur Ventes/Show.vue) est réutilisé tel quel — seul son texte
+  d'introduction a été généralisé (« le client » plutôt que « le distributeur »). `Ventes/Show.vue`
+  gagne une étape « Réception » dans sa timeline, un bouton « Valider la réception » (desktop +
+  menu mobile) et les colonnes Reçue/Écart/Motif dans le tableau des lignes — tous conditionnés à
+  `commande.mode_remise_grossiste === 'livraison'` (`requiertReception`, calculé côté Vue), jamais
+  affichés pour une vente classique ni un Grossiste + Enlèvement. `Distributions/Show.vue` reste
+  inchangé (page scopée à `distribution_client`, le nouveau cas Grossiste s'affiche sur
+  `Ventes/Show.vue`, jamais ici — cf. le routage déjà existant de `CommandeVenteController::show()`
+  sur `nature_operation`).
+- **Backend déjà générique, aucune duplication** : `CommandeVenteController::show()` alimentait
+  déjà `Ventes/Show`/`Distributions/Show` avec exactement le même payload (`mode_remise_grossiste`,
+  `reception_validee_at`, `can_valider_reception`, lignes avec `quantite_livree`/
+  `type_ecart_reception`/`ecart_livraison`) — seul le composant Vue rendu diffère. Aucune
+  modification backend de mapping n'a été nécessaire pour exposer la réception à `Ventes/Show.vue`.
+- **Rétrocompatibilité** : aucune migration de données. Une commande Grossiste + Livraison déjà en
+  LIVRAISON_EN_COURS au moment du déploiement suit désormais le nouveau chemin (réception
+  obligatoire) dès son prochain encaissement/action — pas de bascule silencieuse d'un historique
+  déjà clôturé, qui reste inchangé.
+- Tests : `tests/Feature/CommandeVenteGrossisteCommissionTest.php` (le chargement seul ne génère
+  plus de commission, la réception devient l'étape requise, montants exacts vérifiés après
+  réception), `tests/Feature/CommissionMoteurGeneriqueMultiProcessusTest.php` (coexistence Transfert
+  logistique/Transfert grossiste sur la même équipe, mise à jour pour inclure la réception).

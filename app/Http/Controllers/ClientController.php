@@ -116,7 +116,7 @@ class ClientController extends Controller
 
         $client = Client::create([...$data, 'organization_id' => $orgId]);
 
-        return redirect()->route('clients.edit', $client)
+        return redirect()->route('clients.show', $client)
             ->with('success', 'Client créé avec succès.');
     }
 
