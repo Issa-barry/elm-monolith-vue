@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\MessageChannel;
 use App\Enums\MessageDirection;
 use App\Enums\MessageLogStatus;
-use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Models\MessageLog;
 use App\Models\Organization;
@@ -46,7 +46,7 @@ class CommunicationControllerTest extends TestCase
     {
         return MessageLog::create(array_merge([
             'organization_id' => $org->id,
-            'channel' => OtpChannel::SMS,
+            'channel' => MessageChannel::SMS,
             'direction' => MessageDirection::OUTBOUND,
             'purpose' => OtpPurpose::LOGIN,
             'provider' => 'nimba',

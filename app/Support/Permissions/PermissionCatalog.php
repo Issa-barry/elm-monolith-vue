@@ -60,6 +60,7 @@ final class PermissionCatalog
         'imports-produits.create' => 'Import produits — lancer un import',
         'imports-produits.read' => 'Import produits — consulter les imports',
         'communications.read' => 'Communications — consulter le journal des messages (SMS/WhatsApp)',
+        'communications.manage' => 'Communications — configurer les règles de notification (SMS/WhatsApp)',
         'pieces-identite.download' => "Pièces d'identité — télécharger",
         'pieces-identite.valider' => "Pièces d'identité — valider",
         'pieces-identite.rejeter' => "Pièces d'identité — rejeter",

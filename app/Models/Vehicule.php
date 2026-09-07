@@ -28,6 +28,7 @@ class Vehicule extends Model
         'derogation_impayes_autorisee',
         'seuil_derogation_impayes',
         'proprietaire_id',
+        'parrain_id',
         'categorie',
         'livraison_vente',
         'livraison_logistique',
@@ -146,6 +147,16 @@ class Vehicule extends Model
     public function proprietaire(): BelongsTo
     {
         return $this->belongsTo(Proprietaire::class);
+    }
+
+    /**
+     * Parrain (phase 1, sans commission ni historique — cf. docs/parrainage-vehicule.md) :
+     * pointeur simple, remplacé sans trace du précédent en cas de changement, sur le même
+     * modèle que proprietaire().
+     */
+    public function parrain(): BelongsTo
+    {
+        return $this->belongsTo(Parrain::class);
     }
 
     public function equipe(): HasOne

@@ -76,6 +76,17 @@ class VehiculeController extends Controller
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
+            // Parrainage (phase 1, sans commission ni historique — cf.
+            // docs/parrainage-vehicule.md). code_pays exposé (contrairement à proprietaire_*)
+            // car édité en place depuis cette fiche, pas via une page dédiée avec splitPhone().
+            'parrain_id' => $v->parrain_id,
+            'parrain_nom_complet' => $v->parrain?->nom_complet,
+            'parrain_telephone' => $v->parrain?->telephone,
+            'parrain_code_phone_pays' => $v->parrain?->code_phone_pays,
+            'parrain_code_pays' => $v->parrain?->code_pays,
+            'parrain_pays' => $v->parrain?->pays,
+            'parrain_ville' => $v->parrain?->ville,
+            'parrain_adresse' => $v->parrain?->adresse,
             'equipe_id' => $equipe?->id,
             'equipe_nom' => $equipe ? $v->nom_vehicule : null,
             'livreur_principal_nom' => $membres->first()
@@ -155,7 +166,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.categorie'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -337,7 +348,7 @@ class VehiculeController extends Controller
             $processusCode = $codesApplicables[0];
         }
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -515,7 +526,7 @@ class VehiculeController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'capacites']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),

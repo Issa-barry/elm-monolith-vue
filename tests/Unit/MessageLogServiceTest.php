@@ -30,7 +30,7 @@ class MessageLogServiceTest extends TestCase
         $this->assertSame('pending', $log->status->value);
         $this->assertSame('sms', $log->channel->value);
         $this->assertSame('outbound', $log->direction->value);
-        $this->assertSame('login', $log->purpose->value);
+        $this->assertSame('login', $log->purpose);
         $this->assertSame('nimba', $log->provider);
         $this->assertNull($log->provider_message_id);
         $this->assertNull($log->messageable_type);

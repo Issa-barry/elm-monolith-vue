@@ -172,7 +172,7 @@ class OtpLoginNimbaSmsTest extends TestCase
         $this->assertSame($user->organization_id, $log->organization_id);
         $this->assertSame('sms', $log->channel->value);
         $this->assertSame('sent', $log->status->value);
-        $this->assertSame('login', $log->purpose->value);
+        $this->assertSame('login', $log->purpose);
         $this->assertSame('nimba-abc', $log->provider_message_id);
     }
 }

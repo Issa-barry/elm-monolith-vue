@@ -68,6 +68,11 @@ class Personne extends Model
         return $this->hasOne(Proprietaire::class);
     }
 
+    public function parrain(): HasOne
+    {
+        return $this->hasOne(Parrain::class);
+    }
+
     public function employe(): HasOne
     {
         return $this->hasOne(Employe::class);

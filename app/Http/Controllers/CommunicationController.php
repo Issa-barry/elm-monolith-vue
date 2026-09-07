@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MessageChannel;
 use App\Enums\MessageDirection;
 use App\Enums\MessageLogStatus;
-use App\Enums\OtpChannel;
 use App\Models\MessageLog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -12,9 +12,11 @@ use Inertia\Response;
 
 /**
  * Écran de monitoring des envois SMS/WhatsApp (cf. rapport monitoring
- * Communications, 07/09/2026) — consultation seule, jamais de contenu de
- * message ni de code OTP exposé (cf. App\Models\MessageLog). P1 : uniquement
- * les SMS OTP réellement transportés via Nimba (cf. App\Jobs\SendSmsOtpJob).
+ * Communications, 07/09/2026, et rapport notifications de commande,
+ * 07/09/2026) — consultation seule, jamais de contenu de message ni de code
+ * OTP exposé (cf. App\Models\MessageLog). Alimenté par l'OTP
+ * (App\Jobs\SendSmsOtpJob) ET les notifications transactionnelles
+ * (App\Jobs\SendTransactionalCommunicationJob).
  */
 class CommunicationController extends Controller
 {
@@ -70,8 +72,8 @@ class CommunicationController extends Controller
         return Inertia::render('Communications/Index', [
             'logs' => $logs->through(fn (MessageLog $log) => self::transform($log)),
             'filters' => compact('channel', 'direction', 'status', 'search', 'dateDebut', 'dateFin'),
-            'channels' => collect(OtpChannel::cases())
-                ->map(fn (OtpChannel $c) => ['value' => $c->value, 'label' => ucfirst($c->value)])
+            'channels' => collect(MessageChannel::cases())
+                ->map(fn (MessageChannel $c) => ['value' => $c->value, 'label' => $c->label()])
                 ->values(),
             'directions' => collect(MessageDirection::cases())
                 ->map(fn (MessageDirection $d) => ['value' => $d->value, 'label' => $d->label()])
@@ -87,11 +89,13 @@ class CommunicationController extends Controller
         return [
             'id' => $log->id,
             'channel' => $log->channel->value,
-            'channel_label' => ucfirst($log->channel->value),
+            'channel_label' => $log->channel->label(),
             'direction' => $log->direction->value,
             'direction_label' => $log->direction->label(),
-            'purpose' => $log->purpose?->value,
+            'purpose' => $log->purpose,
             'purpose_label' => self::purposeLabel($log),
+            'recipient_type' => $log->recipient_type?->value,
+            'recipient_type_label' => $log->recipient_type?->label(),
             'provider' => $log->provider,
             'provider_message_id' => $log->provider_message_id,
             'masked_recipient' => $log->masked_recipient,
@@ -108,12 +112,15 @@ class CommunicationController extends Controller
 
     private static function purposeLabel(MessageLog $log): string
     {
-        return match ($log->purpose?->value) {
+        return match ($log->purpose) {
             'login' => 'Connexion',
             'phone_verification' => 'Vérification téléphone',
             'password_reset' => 'Réinitialisation mot de passe',
             'email_verification' => 'Vérification email',
             'invitation' => 'Invitation',
+            'commande_confirmee' => 'Commande confirmée',
+            'chargement_valide' => 'Chargement validé',
+            'transfert_cree' => 'Transfert créé',
             default => '—',
         };
     }

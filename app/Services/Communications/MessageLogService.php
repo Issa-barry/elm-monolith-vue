@@ -2,27 +2,37 @@
 
 namespace App\Services\Communications;
 
+use App\Enums\CommunicationEvent;
+use App\Enums\CommunicationRecipientType;
+use App\Enums\MessageChannel;
 use App\Enums\MessageDirection;
 use App\Enums\MessageLogStatus;
-use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Models\MessageLog;
 use App\Models\Personne;
 use App\Models\UserAuthIdentity;
 use App\Services\Otp\OtpDestinationMasker;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Journalise le transport des SMS OTP (cf. rapport monitoring Communications,
- * 07/09/2026) — purement transversal : n'intervient jamais dans la
- * génération/validation/expiration du code (App\Services\OtpService en reste
- * l'unique source de vérité). Appelé uniquement depuis App\Jobs\SendSmsOtpJob,
- * jamais depuis App\Services\Otp\Channels\SmsOtpChannel (qui reste de la pure
- * plomberie de résolution de canal, sans connaissance du monitoring).
+ * Journalise le transport des messages SMS/WhatsApp (cf. rapport monitoring
+ * Communications, 07/09/2026, et rapport notifications de commande,
+ * 07/09/2026) — purement transversal, DEUX origines distinctes dont la
+ * logique métier ne doit jamais se mélanger (cf. docblock App\Models\MessageLog) :
  *
- * Ne journalise QUE le canal SMS/Nimba réellement câblé aujourd'hui — aucun
- * flux WhatsApp ni message entrant n'est simulé (cf. rapport, point 11).
+ * - OTP (`logSmsOtpAttempt()`) : n'intervient jamais dans la génération/
+ *   validation/expiration du code (App\Services\OtpService en reste l'unique
+ *   source de vérité). Appelé uniquement depuis App\Jobs\SendSmsOtpJob, jamais
+ *   depuis App\Services\Otp\Channels\SmsOtpChannel (pure plomberie de
+ *   résolution de canal, sans connaissance du monitoring).
+ * - Notifications transactionnelles (`logTransactionalAttempt()`) : n'intervient
+ *   jamais dans la résolution des règles (App\Services\Communications\
+ *   CommunicationRuleResolver en reste l'unique source de vérité) ni dans la
+ *   construction du texte du message (App\Services\Communications\
+ *   TransactionalMessageBuilder). Appelé uniquement depuis
+ *   App\Jobs\SendTransactionalCommunicationJob.
  */
 class MessageLogService
 {
@@ -50,19 +60,52 @@ class MessageLogService
 
         return MessageLog::create([
             'organization_id' => $organizationId,
-            'channel' => OtpChannel::SMS,
+            'channel' => MessageChannel::SMS,
             'direction' => MessageDirection::OUTBOUND,
-            'purpose' => $purpose,
+            'purpose' => $purpose->value,
             'provider' => 'nimba',
-            'masked_recipient' => $this->masker->mask(OtpChannel::SMS, $phoneNumber),
+            'masked_recipient' => $this->masker->maskPhone($phoneNumber),
             'status' => MessageLogStatus::PENDING,
         ]);
     }
 
     /**
-     * `$providerMessageId` : identifiant Nimba de l'envoi, si le fournisseur
-     * en a renvoyé un (cf. App\Contracts\SmsGateway::send()) — `null` sinon,
-     * jamais une valeur inventée.
+     * Crée l'entrée `pending` d'une notification transactionnelle (commande
+     * confirmée, chargement validé, transfert créé...) — `organization_id` et
+     * `messageable` sont toujours connus (contrairement à l'OTP) : ils
+     * viennent directement de la CommandeVente/TransfertLogistique à
+     * l'origine de la notification, jamais résolus par recherche du numéro.
+     */
+    public function logTransactionalAttempt(
+        string $organizationId,
+        MessageChannel $channel,
+        string $recipientPhone,
+        CommunicationEvent $event,
+        CommunicationRecipientType $recipientType,
+        ?Model $messageable,
+    ): MessageLog {
+        return MessageLog::create([
+            'organization_id' => $organizationId,
+            'channel' => $channel,
+            'direction' => MessageDirection::OUTBOUND,
+            'purpose' => $event->value,
+            'recipient_type' => $recipientType,
+            'provider' => match ($channel) {
+                MessageChannel::SMS => 'nimba',
+                MessageChannel::WHATSAPP => 'whatsapp',
+            },
+            'masked_recipient' => $this->masker->maskPhone($recipientPhone),
+            'status' => MessageLogStatus::PENDING,
+            'messageable_type' => $messageable?->getMorphClass(),
+            'messageable_id' => $messageable?->getKey(),
+        ]);
+    }
+
+    /**
+     * `$providerMessageId` : identifiant fournisseur de l'envoi, si le
+     * fournisseur en a renvoyé un (cf. App\Contracts\SmsGateway::send() /
+     * App\Contracts\WhatsAppGateway::send()) — `null` sinon, jamais une valeur
+     * inventée.
      */
     public function markSent(MessageLog $log, ?string $providerMessageId): void
     {

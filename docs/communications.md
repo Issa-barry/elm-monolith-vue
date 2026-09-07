@@ -1,28 +1,33 @@
-# Monitoring des communications (SMS/WhatsApp) — P1
+# Monitoring des communications (SMS/WhatsApp)
 
 Journal de monitoring des envois SMS/WhatsApp (`message_logs`) — un écran de consultation,
-**pas** un second système OTP. Livré en **P1** le 07/09/2026 : journalisation du flux réellement
-existant aujourd'hui (SMS OTP via Nimba). Les webhooks de statut de livraison (P2) et un flux
-WhatsApp réel restent hors périmètre tant qu'ils n'existent pas concrètement dans l'application.
+**pas** un second système OTP ni un second système de notifications métier. Livré en **P1** le
+07/09/2026 (SMS OTP via Nimba uniquement) puis étendu le 07/09/2026 (même jour, chantier
+notifications de commande) aux notifications transactionnelles SMS/WhatsApp — cf.
+[`notifications-transactionnelles.md`](notifications-transactionnelles.md) pour ce second chantier
+(moteur de règles, déclencheurs Ventes/Logistique). Les webhooks de statut de livraison (P2) et un
+fournisseur WhatsApp réel restent hors périmètre tant qu'ils n'existent pas concrètement.
 
 ## Périmètre réel — ce qui est journalisé et ce qui ne l'est pas
 
 - **SMS OTP sortant via Nimba** — login, vérification téléphone, réinitialisation mot de passe
-  (cf. [`config/otp.php`](../config/otp.php) `purpose_channels`). C'est le **seul** flux
-  réellement câblé aujourd'hui.
-- **WhatsApp** — `App\Enums\OtpChannel::WHATSAPP` existe déjà, mais aucun fournisseur n'est câblé
-  (cf. [`OtpDestinationMasker`](../app/Services/Otp/OtpDestinationMasker.php)). Rien n'est simulé :
-  le jour où un fournisseur WhatsApp est réellement branché, il alimentera `message_logs` par le
-  même mécanisme, sans changement de schéma.
+  (cf. [`config/otp.php`](../config/otp.php) `purpose_channels`).
+- **Notifications transactionnelles SMS sortant via Nimba** (depuis le 07/09/2026) — commande
+  confirmée, chargement validé, transfert créé — cf.
+  [`notifications-transactionnelles.md`](notifications-transactionnelles.md). C'est le **seul**
+  autre flux réellement câblé aujourd'hui, en plus de l'OTP.
+- **WhatsApp** — `App\Enums\MessageChannel::WHATSAPP` existe (OTP et transactionnel), mais aucun
+  fournisseur n'est câblé (`App\Services\Communications\NullWhatsAppGateway`,
+  `isConfigured() === false` en permanence). Rien n'est simulé : le jour où un fournisseur WhatsApp
+  est réellement branché, il alimentera `message_logs` par le même mécanisme, sans changement de
+  schéma.
 - **Messages entrants** — ELM ne reçoit aujourd'hui aucun SMS/WhatsApp entrant. `direction`
   existe dans le schéma (et dans le filtre de l'écran) uniquement pour ne pas avoir à revenir sur
-  la table le jour où un flux entrant sera réellement câblé — toutes les lignes P1 sont
+  la table le jour où un flux entrant sera réellement câblé — toutes les lignes restent
   `outbound`.
-- **SMS/notifications hors OTP** (confirmation de commande, livraison...) — n'existent pas dans
-  ELM aujourd'hui. Rien n'est journalisé pour ce cas, car rien n'est envoyé.
 - **`App\Services\Notification\NotificationDispatcher`** (notifications in-app + Expo push + Web
   Push) est un système **différent**, sans lien avec ce module — il ne passe par aucun canal
-  SMS/WhatsApp.
+  SMS/WhatsApp et n'écrit jamais dans `message_logs`.
 
 ## Règle de sécurité — jamais de contenu, jamais de code OTP
 
@@ -118,22 +123,25 @@ pour le détail complet des colonnes.
 
 | Champ | Rôle |
 |---|---|
-| `organization_id` | Nullable — cf. section précédente. |
-| `channel` | `App\Enums\OtpChannel` (sms/whatsapp/email) — réutilisé, aucun nouvel enum canal. |
-| `direction` | `App\Enums\MessageDirection` — `outbound` uniquement en P1. |
-| `purpose` | `App\Enums\OtpPurpose` — jamais le contenu du message. |
-| `provider` | `nimba` aujourd'hui — simple chaîne, un seul fournisseur réellement câblé. |
-| `provider_message_id` | Renvoyé par `SmsGateway::send()` si le fournisseur en fournit un — jamais inventé. |
+| `organization_id` | Nullable — cf. section précédente (OTP uniquement ; toujours renseigné pour le transactionnel, résolu depuis la CommandeVente/TransfertLogistique). |
+| `channel` | `App\Enums\MessageChannel` (sms/whatsapp) — générique, réutilisé par l'OTP ET le transactionnel. `App\Enums\OtpChannel` (sms/whatsapp/email) reste réservé à la résolution de canal OTP, jamais utilisé pour cette colonne depuis le 07/09/2026 (cf. notifications-transactionnelles.md, section MessageChannel). |
+| `direction` | `App\Enums\MessageDirection` — `outbound` uniquement. |
+| `purpose` | Chaîne simple (pas de cast enum, volontairement — cf. docblock `App\Models\MessageLog`) : une valeur `App\Enums\OtpPurpose` pour l'OTP, une valeur `App\Enums\CommunicationEvent` pour le transactionnel. Jamais le contenu du message. |
+| `recipient_type` | `App\Enums\CommunicationRecipientType`, nullable — `null` pour l'OTP, `livreur`/`client` pour le transactionnel. |
+| `provider` | `nimba` (SMS) — simple chaîne, un seul fournisseur réellement câblé. |
+| `provider_message_id` | Renvoyé par `SmsGateway::send()`/`WhatsAppGateway::send()` si le fournisseur en fournit un — jamais inventé. |
 | `masked_recipient` | Cf. COMM-002 — jamais le numéro complet. |
 | `status` | `App\Enums\MessageLogStatus` — cf. COMM-004. |
 | `provider_status` / `error_code` / `error_message` | Cf. COMM-005 — `error_message` déjà rédigé en amont, jamais le message SMS ni un secret. |
-| `messageable_type` / `messageable_id` | Morph nullable — reste `null` en P1 (aucune entité métier naturelle à ce niveau du flux OTP, cf. rapport). |
+| `messageable_type` / `messageable_id` | Morph nullable — `null` pour l'OTP (aucune entité métier naturelle à ce niveau du flux), la CommandeVente/TransfertLogistique concernée pour le transactionnel. |
 
 ## Écran back-office
 
 `GET /backoffice/communications` (`CommunicationController::index`) — liste + filtres
 (`DataFilters.vue` : Statut, Canal, Sens, Destinataire, Période), statut affiché via
-`StatusDot.vue`. Volontairement simple pour ce P1 : pas de KPI ni de dashboard (P3).
+`StatusDot.vue`. Affiche indifféremment les lignes OTP et transactionnelles (mêmes colonnes,
+`purpose_label`/`recipient_type_label` distinguent les deux). Volontairement simple : pas de KPI
+ni de dashboard (P3).
 `hide-agence-selector` : cette donnée n'a pas de dimension site (l'OTP n'est jamais rattaché à un
 site), le filtre Agence de `DataFilters.vue` ne s'applique donc pas ici.
 
