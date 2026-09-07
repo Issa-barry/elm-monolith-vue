@@ -3,13 +3,16 @@
 namespace Tests\Feature\Comptabilite;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutTransfert;
 use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
+use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use Carbon\CarbonInterface;
@@ -141,6 +144,77 @@ class CommissionProprietaireVehiculesTest extends TestCase
         $this->assertNotContains($ancien->id, $vehicules->pluck('id'));
         $this->assertNotContains($autreAgence->id, $vehicules->pluck('id'));
         $this->assertNotContains($sansVente->id, $vehicules->pluck('id'));
+    }
+
+    /**
+     * Régression Sentry (preprod, 06/09/2026) : même bug que sur CommissionVenteController —
+     * CommissionEnveloppe::source est polymorphe (CommandeVente OU TransfertLogistique), et le
+     * filtre `site_ids` interrogeait la colonne `site_id` brute du modèle source via
+     * `whereHas('enveloppe.source', ...)`, absente de TransfertLogistique (qui n'expose que
+     * site_source_id/site_destination_id). Sur MySQL (preprod) ça lève "Unknown column 'site_id'" ;
+     * sur SQLite (suite de tests), la colonne manquante est résolue silencieusement à NULL, donc le
+     * filtre n'exclut jamais avec une erreur — il exclut silencieusement TOUTE commission issue
+     * d'un transfert, sans planter. D'où l'assertion sur le contenu réel (le propriétaire doit
+     * apparaître avec son véhicule), pas seulement sur le code HTTP. Corrigé en passant par la
+     * relation `site()` (alias polymorphisme-safe déjà utilisé par TransfertLogistique).
+     */
+    public function test_index_avec_site_ids_inclut_une_commission_issue_dun_transfert_logistique(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($this->org, $proprietaire, $this->sitePrincipal, 'Camion transfert');
+        $siteDestination = Site::factory()->create(['organization_id' => $this->org->id]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'is_active' => true,
+        ]);
+        $transfert = TransfertLogistique::create([
+            'organization_id' => $this->org->id,
+            'site_source_id' => $this->sitePrincipal->id,
+            'site_destination_id' => $siteDestination->id,
+            'vehicule_id' => $vehicule->id,
+            'equipe_livraison_id' => $equipe->id,
+            'statut' => StatutTransfert::RECEPTION,
+            'created_by' => $this->user->id,
+        ]);
+        $processusTransfert = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT],
+            ['libelle' => 'Transfert logistique', 'declencheur' => 'reception_effectuee', 'strategie_ancrage_site' => 'source', 'statut' => 'actif'],
+        );
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => TransfertLogistique::class,
+            'source_id' => $transfert->id,
+            'processus_id' => $processusTransfert->id,
+            'cible_type' => 'proprietaire',
+            'cible_id' => $proprietaire->id,
+            'montant_total' => 5000,
+            'earned_at' => now()->toDateString(),
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $enveloppe->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('comptabilite.commissions.proprietaires.index', [
+            'site_ids' => [$this->sitePrincipal->id],
+        ]))->assertOk();
+
+        $row = $this->rowFor($response, $proprietaire);
+        $this->assertNotEmpty($row, 'Le propriétaire doit apparaître : le transfert a bien lieu sur le site filtré (site_source_id).');
+        $this->assertEqualsWithDelta(5000.0, (float) $row['total_genere'], 0.01);
+        $this->assertContains($vehicule->id, collect($row['vehicules'])->pluck('id')->all());
+
+        $exportContent = $this->actingAs($this->user)->get(route('comptabilite.commissions.proprietaires.excel', [
+            'site_ids' => [$this->sitePrincipal->id],
+        ]))->assertOk()->streamedContent();
+        $this->assertStringContainsString($this->sitePrincipal->nom, $exportContent, 'La ligne export du propriétaire (agence issue du transfert) doit être présente.');
     }
 
     public function test_liste_supporte_un_grand_nombre_de_vehicules_contributeurs(): void

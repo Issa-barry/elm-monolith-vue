@@ -687,3 +687,68 @@ COMMISSION qui change.
   `tests/Feature/VehiculeProcessusApplicablesParUsageTest.php` et
   `tests/Feature/VehiculeBaremesCommissionCategoriesTest.php` (un véhicule logistique expose
   désormais 2 ou 3 onglets processus, plus jamais 1 ou 2 comme avant ce chantier).
+
+## Accès en lecture aux écrans Commissions — permission dédiée (corrigé le 07/09/2026)
+
+Incident production/preprod (Sentry) : le rôle Commercial avait la permission `commissions.read`
+cochée dans la matrice `/backoffice/roles`, mais tous les contrôleurs Commission (Vente/Livreurs,
+Propriétaires, Sites, Consultants, Logistique) ne vérifiaient que `comptabilite.read` — une
+permission différente et plus large (couvre aussi Dépenses, Trésorerie, Salaires, Journal
+financier), jamais accordée au rôle Commercial. Résultat : 403 systématique quelle que soit la
+combinaison Lire/Créer/Modifier/Supprimer cochée sur « Commissions » dans la matrice, la ligne
+étant de fait vestigiale (aucune vérification nulle part dans le code).
+
+- **Règle actuelle** : l'accès en LECTURE à un écran Commission (Index/Show/Export) est accordé si
+  l'utilisateur a `comptabilite.read` **OU** `commissions.read` — centralisé dans
+  `User::canReadCommissions()`, utilisé par les 5 contrôleurs concernés. Les deux permissions
+  restent indépendantes : un rôle avec seulement `commissions.read` voit les écrans Commissions
+  mais pas Dépenses/Trésorerie/Salaires/Journal financier (toujours exclusivement sous
+  `comptabilite.read`).
+- Les actions d'ÉCRITURE ne changent pas : payer une commission reste sous `comptabilite.payer`
+  (jamais `commissions.read`), et l'export Sites/Consultants exige toujours en plus
+  `commissions.exporter`.
+- `/commissions/cashback` avait un problème différent, découvert au même moment : sa policy
+  (`CashbackTransactionPolicy::viewAny()`) ignorait totalement les permissions Spatie et
+  vérifiait une liste de rôles codée en dur (`super_admin`, `admin_entreprise`, `manager`,
+  `comptable`) — seule policy du projet à ne pas suivre la convention `can('<resource>.read')`.
+  Corrigée pour vérifier `cashback.read`, alignée sur toutes les autres policies `viewAny()`.
+- Tests : `tests/Feature/Comptabilite/CommissionsReadPermissionTest.php`.
+
+## Approbation admin de la réception — rendue optionnelle (ajouté le 07/09/2026)
+
+Jusqu'ici, sous le déclencheur `RECEPTION_EFFECTUEE` (défaut, cf. COMM-007), l'approbation admin
+d'une réception (`validation_reception = accord`) était **systématiquement obligatoire** avant que
+`CommissionTriggerService::onTransfertReceptionEffectuee()` ne soit invoqué — aucun moyen de s'en
+passer. Une organisation peut désormais désactiver ce contrôle si elle ne le juge pas nécessaire.
+
+- **Nouveau paramètre** : `Parametre::isApprobationReceptionLogistiqueObligatoire($orgId)` (clé
+  `logistique_approbation_reception_obligatoire`, booléen). **Défaut `true`** — comportement
+  historique inchangé pour toute organisation n'ayant jamais explicitement configuré ce paramètre.
+  Réglable depuis **`Paramètres > Logistique`** (`LogistiqueParametrageController`, page dédiée —
+  pas `Settings\CommissionRegleController`, qui ne gère que les barèmes). Ce paramètre vit aux
+  côtés de `declencheur_commission_logistique` et `montant_defaut_commission_logistique_par_pack`,
+  déplacés le même jour depuis `Paramètres > Ventes` (`VenteParametrageController`) où ils avaient
+  atterri par réutilisation de contrôleur plutôt que par cohérence métier — ce sont des réglages
+  logistiques, pas des réglages de vente. Les clés `Parametre` et leurs valeurs ne changent pas,
+  seul l'écran d'édition change.
+- **Si `true` (défaut)** : rien ne change — un administrateur (`super_admin`/`admin_entreprise`)
+  doit toujours cliquer explicitement « Approuver la réception » (`ReceptionValidationAdminController`
+  / `Api\Backoffice\Logistique\ValidationAdminController::handleAccord()`).
+- **Si `false`** : `TransfertLogistiqueService::avancerStatut()` — point d'entrée UNIQUE des
+  transitions de statut, partagé par le contrôleur web (`TransfertStatutController`) et l'API
+  mobile (`Api\Backoffice\Logistique\ValiderReceptionController`) — auto-approuve la réception dès
+  la transition TRANSIT → RECEPTION : `validation_reception` passe directement à `'accord'`
+  (`validated_by` laissé `null` pour distinguer cette auto-approbation d'une décision humaine) et
+  `CommissionTriggerService::onTransfertReceptionEffectuee()` est invoqué immédiatement, dans la
+  même transaction que l'entrée de stock destination. Le bouton « Approuver la réception »
+  disparaît alors de lui-même côté UI (condition déjà existante :
+  `transfert.validation_reception !== 'accord'`), sans changement de `Logistique/Show.vue`.
+- **Sans effet sous `CHARGEMENT_VALIDE`** : `onTransfertReceptionEffectuee()` y reste un no-op (la
+  commission est déjà née au départ) — ce paramètre ne fait que sauter l'étape manuelle
+  d'approbation, il ne modifie jamais QUAND ni QUOI la commission calcule (aucune règle de calcul
+  touchée).
+- **Idempotence inchangée** : que l'accord soit automatique ou manuel, la génération reste portée
+  par `CommissionEnveloppeGenerator` (contrainte unique sur `source_id` + vérification d'existence)
+  — un accord manuel rejoué après une auto-approbation ne crée jamais de seconde enveloppe.
+- Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Approbation admin
+  optionnelle »), `tests/Feature/Settings/VenteParametrageTest.php` (persistance du paramètre).

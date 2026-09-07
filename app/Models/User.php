@@ -297,6 +297,21 @@ class User extends Authenticatable
         return $this->hasAnyRole(['super_admin', 'admin_entreprise']);
     }
 
+    /**
+     * Accès en lecture aux écrans Commissions (vente/livreurs, propriétaires, sites,
+     * consultants, logistique). `commissions.read` est la permission dédiée de la matrice de
+     * rôles ; `comptabilite.read`, plus large (dépenses/trésorerie/salaires/journal financier
+     * inclus), continue aussi de donner accès pour ne rien changer aux rôles existants
+     * (comptable, admin_entreprise, super_admin) qui l'ont déjà. Centralisé ici pour que chaque
+     * contrôleur Commission vérifie la même règle sans la dupliquer — cf. régression Sentry du
+     * 07/09/2026 (rôle Commerciale avec "Commissions: Lire" coché mais toujours 403, faute
+     * qu'aucun contrôleur ne testait jamais `commissions.read`).
+     */
+    public function canReadCommissions(): bool
+    {
+        return $this->can('comptabilite.read') || $this->can('commissions.read');
+    }
+
     public function isPendingValidation(): bool
     {
         return $this->status === self::STATUS_PENDING_VALIDATION;

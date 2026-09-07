@@ -58,7 +58,7 @@ class CommissionConsultantController extends Controller
 
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         [$list, $meta] = $this->resolveBeneficiaires($request);
         $orgId = auth()->user()->organization_id;
@@ -104,7 +104,7 @@ class CommissionConsultantController extends Controller
      */
     public function show(Request $request, string $consultantId): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $orgId = auth()->user()->organization_id;
 
@@ -445,7 +445,7 @@ class CommissionConsultantController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
         abort_unless(auth()->user()->can('commissions.exporter'), 403);
 
         [$rows] = $this->resolveBeneficiaires($request);
@@ -475,7 +475,7 @@ class CommissionConsultantController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
         abort_unless(auth()->user()->can('commissions.exporter'), 403);
 
         [$rows] = $this->resolveBeneficiaires($request);
