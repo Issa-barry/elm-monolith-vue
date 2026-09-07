@@ -107,6 +107,14 @@ class Parametre extends Model
      * sous CHARGEMENT_VALIDE : onTransfertReceptionEffectuee() y est déjà un no-op, la commission
      * étant née au départ — cf. COMM-007. N'a jamais été configurable avant le 07/09/2026 :
      * l'approbation admin était systématiquement obligatoire, ce qui reste le défaut (true).
+     *
+     * Depuis le 07/09/2026, ce paramètre n'est plus que le DÉFAUT organisation : un site peut
+     * s'en écarter via sa propre colonne `sites.approbation_reception_logistique_obligatoire`
+     * (dérogation explicite, résolue par le SITE DESTINATION du transfert — cf.
+     * Site::approbationReceptionObligatoireEffective(),
+     * TransfertLogistiqueService::approbationReceptionObligatoire()). Cette méthode
+     * (`Parametre::isApprobationReceptionLogistiqueObligatoire()`) reste le SEUL point lu quand
+     * aucun site n'a de dérogation configurée pour lui.
      */
     public const CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE = 'logistique_approbation_reception_obligatoire';
 

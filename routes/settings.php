@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/logistique', [LogistiqueParametrageController::class, 'edit'])->name('settings.logistique.edit');
     Route::put('settings/logistique', [LogistiqueParametrageController::class, 'update'])->name('settings.logistique.update');
+    Route::patch('settings/logistique/sites/{site}', [LogistiqueParametrageController::class, 'updateSite'])->name('settings.logistique.sites.update');
 
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
     Route::get('settings/commissions/configuration', [CommissionRegleController::class, 'redirectConfiguration']);

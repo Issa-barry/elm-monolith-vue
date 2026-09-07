@@ -760,4 +760,48 @@ passer. Une organisation peut désormais désactiver ce contrôle si elle ne le 
   par `CommissionEnveloppeGenerator` (contrainte unique sur `source_id` + vérification d'existence)
   — un accord manuel rejoué après une auto-approbation ne crée jamais de seconde enveloppe.
 - Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Approbation admin
-  optionnelle »), `tests/Feature/Settings/VenteParametrageTest.php` (persistance du paramètre).
+  optionnelle »), `tests/Feature/Settings/LogistiqueParametrageTest.php` (persistance du
+  paramètre — déplacé de `VenteParametrageTest.php` avec le contrôleur le même jour).
+
+## Approbation admin de la réception — dérogation par site (ajouté le 07/09/2026, même jour)
+
+`Parametre::isApprobationReceptionLogistiqueObligatoire()` (ci-dessus) n'est plus qu'un DÉFAUT
+organisation : un site peut désormais s'en écarter individuellement.
+
+- **Nouvelle colonne** : `sites.approbation_reception_logistique_obligatoire` (booléen NULLABLE,
+  migration `2026_09_07_150000_add_approbation_reception_logistique_to_sites_table`). `null` =
+  aucune dérogation, hérite du réglage organisation ; `true`/`false` = dérogation explicite de CE
+  site. Même architecture que `Vehicule::derogation_impayes_autorisee`/`seuil_derogation_impayes`
+  et son symétrique `Client` (cf. `SolvabiliteService::resoudrePlafondVehicule()`/
+  `resoudrePlafondClient()`), mais SANS second flag "dérogation activée" à côté : un booléen
+  nullable n'a pas l'ambiguïté d'un entier (`0` vs "jamais configuré"), `null` suffit seul à
+  distinguer les deux cas.
+- **Résolution** : `Site::approbationReceptionObligatoireEffective()` — dérogation du site si non
+  null, sinon `Parametre::isApprobationReceptionLogistiqueObligatoire()`. Le site déterminant est
+  le **SITE DESTINATION** du transfert (`TransfertLogistique::site_destination_id`) — c'est là que
+  la réception a physiquement lieu, cohérent avec `TransfertLogistiqueService::
+  approbationReceptionObligatoire()`, seul point d'appel (même hook, même transition TRANSIT →
+  RECEPTION que ci-dessus — aucun second point de lecture ajouté).
+- **UX** : tableau récapitulatif dans `Paramètres > Logistique` (carte « Dérogation par site »,
+  `resources/js/pages/settings/Logistique.vue`) — un menu déroulant par site (Hérite / Obligatoire
+  / Non requise), chaque ligne s'enregistrant indépendamment (`PATCH settings/logistique/sites/
+  {site}`, `LogistiqueParametrageController::updateSite()`). Choisi plutôt qu'un champ sur la
+  fiche Site (`SiteController`, pattern véhicule/client) : le nombre de sites d'une organisation
+  reste en pratique bien plus restreint que son nombre de véhicules/clients, une vue d'ensemble
+  éditable en un seul écran est donc plus praticable ici qu'une dérogation configurée site par
+  site sur des fiches séparées.
+- **Isolation multi-tenant** : `updateSite()` vérifie explicitement `site->organization_id ===
+  auth()->user()->organization_id` avant toute écriture — `{site}` est lié par route sans scope
+  organisation implicite (contrairement à `update()`, qui n'agit que sur l'organisation de
+  l'acteur courant).
+- **Non-rétroactivité inchangée** : la dérogation du site, comme le paramètre organisation, n'est
+  lue qu'au moment de la transition TRANSIT → RECEPTION — la modifier après coup n'a jamais
+  d'effet sur un transfert déjà réceptionné en attente d'approbation (le bouton « Approuver la
+  réception » reste disponible pour lui, exactement comme pour un changement du paramètre
+  organisation).
+- Sites d'une organisation n'ayant jamais configuré de dérogation : colonne `null` pour tous
+  (migration additive, aucun backfill) — comportement strictement identique à avant cette
+  fonctionnalité.
+- Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Dérogation par site »),
+  `tests/Feature/Settings/LogistiqueParametrageTest.php` (exposition des sites, `updateSite()`,
+  isolation multi-tenant).

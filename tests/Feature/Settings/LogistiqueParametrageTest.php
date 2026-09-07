@@ -4,6 +4,7 @@ namespace Tests\Feature\Settings;
 
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -165,6 +166,88 @@ class LogistiqueParametrageTest extends TestCase
             ->where('organization_id', $user->organization_id)
             ->where('cle', 'ventes_montant_defaut_commission_logistique_par_pack')
             ->exists());
+    }
+
+    public function test_edit_expose_les_sites_de_lorganisation_avec_leur_derogation(): void
+    {
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        $site = Site::factory()->create(['organization_id' => $user->organization_id, 'nom' => 'Kouria']);
+        $site->update(['approbation_reception_logistique_obligatoire' => false]);
+
+        // Site d'une AUTRE organisation : ne doit jamais apparaître dans la liste.
+        Site::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('settings.logistique.edit'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/Logistique')
+                ->has('sites', 1)
+                ->where('sites.0.id', $site->id)
+                ->where('sites.0.approbation_reception_logistique_obligatoire', false)
+            );
+    }
+
+    public function test_update_site_persiste_la_derogation(): void
+    {
+        $user = $this->createAuthorizedUser('parametres.update');
+        $site = Site::factory()->create(['organization_id' => $user->organization_id]);
+
+        $this->actingAs($user)
+            ->patch(route('settings.logistique.sites.update', $site), [
+                'approbation_reception_logistique_obligatoire' => false,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertFalse($site->fresh()->approbation_reception_logistique_obligatoire);
+    }
+
+    public function test_update_site_accepte_null_pour_revenir_a_lheritage(): void
+    {
+        $user = $this->createAuthorizedUser('parametres.update');
+        $site = Site::factory()->create([
+            'organization_id' => $user->organization_id,
+            'approbation_reception_logistique_obligatoire' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('settings.logistique.sites.update', $site), [
+                'approbation_reception_logistique_obligatoire' => null,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertNull($site->fresh()->approbation_reception_logistique_obligatoire);
+    }
+
+    /** Isolation multi-tenant : un site d'une autre organisation ne doit jamais être modifiable. */
+    public function test_update_site_refuse_un_site_dune_autre_organisation(): void
+    {
+        $user = $this->createAuthorizedUser('parametres.update');
+        $siteAutreOrg = Site::factory()->create();
+
+        $this->actingAs($user)
+            ->patch(route('settings.logistique.sites.update', $siteAutreOrg), [
+                'approbation_reception_logistique_obligatoire' => false,
+            ])
+            ->assertForbidden();
+
+        $this->assertNull($siteAutreOrg->fresh()->approbation_reception_logistique_obligatoire);
+    }
+
+    public function test_update_site_refuse_sans_permission_parametres_update(): void
+    {
+        $organization = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $organization->id]);
+        $site = Site::factory()->create(['organization_id' => $organization->id]);
+
+        $this->actingAs($user)
+            ->patch(route('settings.logistique.sites.update', $site), [
+                'approbation_reception_logistique_obligatoire' => false,
+            ])
+            ->assertForbidden();
     }
 
     public function test_edit_refuse_sans_permission_parametres_read(): void
