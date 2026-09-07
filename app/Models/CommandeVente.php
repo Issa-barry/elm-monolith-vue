@@ -178,6 +178,12 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::BROUILLON;
     }
 
+    /** Source de vérité unique pour « cette commande peut être modifiée » — cf. StatutCommandeVente::isEditable() */
+    public function isEditable(): bool
+    {
+        return $this->statut->isEditable();
+    }
+
     public function isACharger(): bool
     {
         return $this->statut === StatutCommandeVente::A_CHARGER;

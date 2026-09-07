@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -297,6 +298,21 @@ class User extends Authenticatable
         return $this->hasAnyRole(['super_admin', 'admin_entreprise']);
     }
 
+    /**
+     * Accès en lecture aux écrans Commissions (vente/livreurs, propriétaires, sites,
+     * consultants, logistique). `commissions.read` est la permission dédiée de la matrice de
+     * rôles ; `comptabilite.read`, plus large (dépenses/trésorerie/salaires/journal financier
+     * inclus), continue aussi de donner accès pour ne rien changer aux rôles existants
+     * (comptable, admin_entreprise, super_admin) qui l'ont déjà. Centralisé ici pour que chaque
+     * contrôleur Commission vérifie la même règle sans la dupliquer — cf. régression Sentry du
+     * 07/09/2026 (rôle Commerciale avec "Commissions: Lire" coché mais toujours 403, faute
+     * qu'aucun contrôleur ne testait jamais `commissions.read`).
+     */
+    public function canReadCommissions(): bool
+    {
+        return $this->can('comptabilite.read') || $this->can('commissions.read');
+    }
+
     public function isPendingValidation(): bool
     {
         return $this->status === self::STATUS_PENDING_VALIDATION;
@@ -344,42 +360,9 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = [
-            'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
-            'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
-            'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
-            'logistique', 'transferts', 'receptions',
-            'depenses', 'comptabilite', 'journal-financier',
-            'rh-employes', 'rh-contrats', 'rh-paie',
-            'users',
-            'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
-        ];
-        $actions = ['create', 'read', 'update', 'delete'];
-
         $map = [];
-        foreach ($resources as $resource) {
-            foreach ($actions as $action) {
-                $key = "{$resource}.{$action}";
-                $map[$key] = $this->isSuperAdmin() || $this->can($key);
-            }
-        }
-
-        // Permissions standalone hors matrice CRUD
-        $standalone = [
-            'logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update',
-            'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer',
-            'depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler',
-            'produits.ajuster_stock',
-            'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement', 'ventes.valider_chargement',
-            'factures.encaisser', 'factures.annuler',
-            'commissions.payer', 'commissions.cloturer', 'commissions.exporter',
-            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
-            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
-            'imports-flotte.create', 'imports-flotte.read',
-            'imports-produits.create', 'imports-produits.read',
-        ];
-        foreach ($standalone as $perm) {
-            $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
+        foreach (PermissionCatalog::allPermissionNames() as $key) {
+            $map[$key] = $this->isSuperAdmin() || $this->can($key);
         }
 
         return $map;

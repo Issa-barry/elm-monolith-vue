@@ -132,4 +132,32 @@ class UserControllerPrivilegeEscalationTest extends TestCase
 
         $this->assertTrue($target->fresh()->hasRole('admin_entreprise'));
     }
+
+    /**
+     * Verrou ajouté le 2026-09-06 : UserPolicy::update() n'exige que `users.update` (+ même
+     * organisation) — un rôle métier ordinaire habilité à cette seule permission (ex. profil RH
+     * pouvant éditer des fiches employé) ne doit pas pouvoir s'auto-élever en admin_entreprise
+     * via ce formulaire, faute de quoi la gestion des rôles ne serait plus réservée à
+     * canManageRoles() comme RoleController le garantit par ailleurs.
+     */
+    public function test_non_admin_with_only_users_update_cannot_self_assign_admin_entreprise(): void
+    {
+        $org = Organization::factory()->create();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'users.update', 'guard_name' => 'web']);
+
+        $rhUser = User::factory()->create(['organization_id' => $org->id]);
+        $rhUser->assignRole('manager');
+        $rhUser->givePermissionTo('users.update');
+        $this->attachSite($org, $rhUser);
+
+        $this->actingAs($rhUser)->put("/backoffice/users/{$rhUser->id}", [
+            'prenom' => $rhUser->prenom, 'nom' => $rhUser->nom, 'email' => null,
+            'telephone' => $rhUser->telephone, 'role' => 'admin_entreprise', 'site_id' => $rhUser->sites()->first()->id,
+            'password' => '', 'password_confirmation' => '',
+        ])->assertForbidden();
+
+        $this->assertFalse($rhUser->fresh()->hasRole('admin_entreprise'));
+    }
 }

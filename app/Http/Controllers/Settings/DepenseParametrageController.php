@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\DroitCreationDepense;
 use App\Models\Site;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,10 +14,15 @@ use Inertia\Response;
 use Spatie\Permission\Models\Role;
 
 /**
- * Validation des dépenses — droits de validation par rôle uniquement. La
- * classification des types de dépense a déménagé dans le module Dépenses
- * (cf. App\Http\Controllers\DepenseTypeController), cette page ne garde que
- * les règles/droits de validation (décision produit 2026-08-24).
+ * Droits de création ET de validation des dépenses, par rôle. La classification des types de
+ * dépense a déménagé dans le module Dépenses (cf. App\Http\Controllers\DepenseTypeController),
+ * cette page ne garde que les droits (décision produit 2026-08-24).
+ *
+ * `is_actif` (droit de CRÉER une dépense) a été ajouté le 2026-09-06 : jusque-là cette colonne
+ * n'était écrite par aucun code applicatif — seule la validation (`peut_valider`) était
+ * configurable ici, alors que `DroitCreationDepenseService::peutCreer()`/`peutCreerSurSite()`
+ * en dépendent depuis toujours. Elle partage `perimetre`/`sites` avec la validation (une seule
+ * notion de périmètre d'agences par rôle, cf. peutCreerSurSite()/peutValiderSurSite()).
  */
 class DepenseParametrageController extends Controller
 {
@@ -26,7 +32,10 @@ class DepenseParametrageController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $roles = Role::orderBy('name')->get(['id', 'name']);
+        // Scopé à l'organisation courante (rôles système partagés ∪ rôles propres à cette
+        // organisation) — Role::orderBy('name')->get() sans filtre exposait ici les rôles
+        // personnalisés de TOUTES les organisations de la plateforme (cf. audit § sécurité).
+        $roles = RoleVisibility::query($orgId)->orderBy('name')->get(['id', 'name']);
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
 
         $droits = DroitCreationDepense::where('organization_id', $orgId)
@@ -35,6 +44,7 @@ class DepenseParametrageController extends Controller
 
         $config = $roles->map(fn (Role $role) => [
             'role_name' => $role->name,
+            'is_actif' => (bool) ($droits->get($role->name)?->is_actif ?? false),
             'peut_valider' => (bool) ($droits->get($role->name)?->peut_valider ?? false),
             'perimetre' => $droits->get($role->name)?->perimetre ?? 'toutes_agences',
             'sites' => $droits->get($role->name)?->sites ?? [],
@@ -56,32 +66,21 @@ class DepenseParametrageController extends Controller
         $orgId = auth()->user()->organization_id;
         $siteIds = Site::where('organization_id', $orgId)->pluck('id')->all();
 
-        // Admin Entreprise garde un accès automatique (permission de validation,
-        // périmètre d'agences — cf. DroitCreationDepenseService::peutValiderSurSite())
-        // mais est désormais soumis au plafond de montant comme n'importe quel
-        // rôle (seul Super Admin reste illimité, décision produit 04/09/2026,
-        // cf. docs/depenses-validation.md). On force donc peut_valider=true pour
-        // sa ligne avant validation, indépendamment de ce qu'envoie le
-        // frontend, pour que le plafond lui soit imposé comme obligatoire
-        // ci-dessous et que la ligne reste trouvable par droitValidationPour().
-        $config = $request->input('config', []);
-        foreach ($config as $i => $item) {
-            if (($item['role_name'] ?? null) === 'admin_entreprise') {
-                $config[$i]['peut_valider'] = true;
-            }
-        }
-        $request->merge(['config' => $config]);
-
+        // Admin Entreprise n'a plus aucun accès automatique depuis le 2026-09-06 : le forçage
+        // de peut_valider=true qui vivait ici rendait la case cochée par l'admin sans effet
+        // réel (cf. audit rôles/permissions § "contournement automatique") — DroitCreationDepenseService
+        // ne le bypasse plus nulle part (seul Super Admin reste illimité), donc sa ligne est
+        // désormais traitée exactement comme celle de n'importe quel autre rôle ci-dessous.
         $validated = $request->validate([
             'config' => ['array'],
             'config.*.role_name' => ['required', 'string'],
+            'config.*.is_actif' => ['required', 'boolean'],
             'config.*.peut_valider' => ['required', 'boolean'],
             'config.*.perimetre' => ['required', Rule::in(['toutes_agences', 'son_agence', 'agences_selectionnees'])],
             'config.*.sites' => ['array'],
             'config.*.sites.*' => ['string', Rule::in($siteIds)],
-            // Obligatoire dès que peut_valider est actif (donc toujours pour
-            // Admin Entreprise, cf. coercition ci-dessus). Super Admin et les
-            // rôles sans droit de validation restent sans plafond (null).
+            // Obligatoire dès que peut_valider est actif. Super Admin et les rôles sans droit de
+            // validation restent sans plafond (null).
             'config.*.plafond_validation' => ['nullable', 'numeric', 'min:0', 'required_if:config.*.peut_valider,true'],
         ], [
             'config.*.plafond_validation.required_if' => 'Le plafond de validation est obligatoire pour un rôle autorisé à valider.',
@@ -95,6 +94,7 @@ class DepenseParametrageController extends Controller
             DroitCreationDepense::updateOrCreate(
                 ['organization_id' => $orgId, 'role_name' => $item['role_name']],
                 [
+                    'is_actif' => $item['is_actif'],
                     'perimetre' => $item['perimetre'],
                     'sites' => $sites,
                     'peut_valider' => $item['peut_valider'],

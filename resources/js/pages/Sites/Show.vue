@@ -130,7 +130,7 @@ const props = defineProps<{
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-const { can } = usePermissions();
+const { can, roleLabel: labelForRole } = usePermissions();
 const toast = useToast();
 const confirm = useConfirm();
 const page = usePage();
@@ -189,14 +189,6 @@ const FLAG_CODES: Record<string, string> = {
     Inde: 'in',
 };
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-};
-
 const ROLE_COLORS: Record<string, string> = {
     super_admin:
         'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
@@ -220,7 +212,7 @@ function mapsUrl(lat: number, lng: number) {
 }
 
 function roleLabel(role: string | null) {
-    return role ? (ROLE_LABELS[role] ?? role) : '—';
+    return role ? labelForRole(role) : '—';
 }
 
 function roleColor(role: string | null) {

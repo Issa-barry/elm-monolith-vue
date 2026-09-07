@@ -29,6 +29,24 @@ class CommandeVentePolicy
             && $this->sameOrganization($user, $commande);
     }
 
+    /**
+     * Modifier le CONTENU de la commande (lignes, quantités...) — jamais après le démarrage du
+     * chargement (règle actuelle : "modifiable uniquement en BROUILLON", cf.
+     * StatutCommandeVente::isEditable()). Ability distincte de update() ci-dessus, qui reste
+     * permission+organisation seule : `can_encaisser` et relancerCommissions() (cf.
+     * CommandeVenteController) s'exercent volontairement sur des commandes déjà sorties de
+     * BROUILLON et continuent donc de s'appuyer sur `update()` telle quelle. Avant cette
+     * méthode, `isEditable()` n'était vérifié qu'à la main dans le contrôleur (abort_if séparé
+     * + recalcul du flag `can_modifier` dupliqué à 2 endroits) — jamais dans la Policy
+     * elle-même, donc absent de tout futur appelant qui autoriserait via `update()` seule.
+     */
+    public function modifierContenu(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.update')
+            && $this->sameOrganization($user, $commande)
+            && $commande->isEditable();
+    }
+
     public function delete(User $user, CommandeVente $commande): bool
     {
         return $user->can('ventes.delete')

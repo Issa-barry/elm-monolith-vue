@@ -13,6 +13,7 @@ use App\Models\UserAuthIdentity;
 use App\Services\AuditLogService;
 use App\Services\MatriculeService;
 use App\Services\Rh\AccountValidationService;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -50,11 +51,33 @@ class UserController extends Controller
 
     public const ADMIN_ROLES = ['super_admin', 'admin_entreprise'];
 
-    private function getRoleOptions(): Collection
+    /**
+     * Rôles STAFF assignables dans une organisation — système (organization_id null) ∪ propres
+     * à cette organisation, jamais ceux d'une autre organisation ni les rôles externes
+     * (client/proprietaire/livreur, gérés par un autre flux — cf. User::EXTERNAL_ROLES).
+     * `super_admin` n'apparaît que si l'acteur l'est déjà lui-même (jamais un mapping
+     * automatique, jamais une élévation de privilège via cet écran, cf.
+     * assertNoPrivilegeEscalation()). Remplace l'ancienne liste figée STAFF_ROLES (5 noms
+     * techniques) : un rôle personnalisé créé via RoleController est désormais proposable ici
+     * comme n'importe quel autre rôle — seule et unique méthode de scoping des deux écrans qui
+     * en avaient chacun une copie légèrement différente (Users/Create-Edit et validation de
+     * compte), factorisée ici pour ne plus jamais diverger.
+     */
+    private function assignableStaffRoles(?string $orgId, bool $actorIsSuperAdmin): Collection
     {
-        return Role::whereIn('name', self::STAFF_ROLES)
-            ->get(['id', 'name'])
-            ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
+        return RoleVisibility::query($orgId)
+            ->whereNotIn('name', User::EXTERNAL_ROLES)
+            ->when(! $actorIsSuperAdmin, fn ($q) => $q->where('name', '!=', 'super_admin'))
+            ->orderBy('label')
+            ->get(['id', 'name', 'label']);
+    }
+
+    /** Users/Create-Edit attend le NOM technique (assignRole()/syncRoles() par nom). */
+    private function getRoleOptions(?string $orgId, bool $actorIsSuperAdmin): Collection
+    {
+        return $this->assignableStaffRoles($orgId, $actorIsSuperAdmin)
+            ->map(fn (Role $r) => ['value' => $r->name, 'label' => $r->label ?? $r->name])
+            ->values();
     }
 
     private function getSiteOptions(string $orgId): Collection
@@ -65,21 +88,26 @@ class UserController extends Controller
             ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
     }
 
-    /**
-     * Profils d'accès proposables à la VALIDATION de compte (écran distinct de Users/Create-Edit,
-     * qui reste sur STAFF_ROLES ci-dessus, hors périmètre) — tous les rôles visibles de
-     * l'organisation (système ∪ org, même règle que RoleController::visibleRoles()), jamais ceux
-     * d'une autre organisation. `super_admin` n'apparaît que si l'acteur l'est déjà lui-même
-     * (jamais un mapping automatique, jamais une élévation de privilège via cet écran).
-     */
+    /** Écran de VALIDATION de compte : attend l'ID (AccountValidationService résout par id). */
     private function validationRoleOptions(?string $orgId, bool $actorIsSuperAdmin): Collection
     {
-        return Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
-            ->when(! $actorIsSuperAdmin, fn ($q) => $q->where('name', '!=', 'super_admin'))
-            ->orderBy('label')
-            ->get(['id', 'label', 'name'])
+        return $this->assignableStaffRoles($orgId, $actorIsSuperAdmin)
             ->map(fn (Role $r) => ['value' => $r->id, 'label' => $r->label ?? $r->name])
             ->values();
+    }
+
+    /**
+     * Règle de validation du champ `role` de Users/Create-Edit — miroir exact du scoping de
+     * assignableStaffRoles() (même organisation ∪ système, jamais un rôle externe) : un rôle
+     * posté directement en HTTP (hors du <select>) doit être rejeté par les mêmes règles que
+     * celles qui décident de ce qui est proposé, jamais une liste séparée qui pourrait diverger.
+     */
+    private function assignableRoleRule(?string $orgId)
+    {
+        return Rule::exists('roles', 'name')->where(function ($query) use ($orgId) {
+            $query->where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
+                ->whereNotIn('name', User::EXTERNAL_ROLES);
+        });
     }
 
     private function resolvePays(?string $codePays): array
@@ -183,7 +211,11 @@ class UserController extends Controller
             'sites' => fn ($q) => $q->wherePivot('is_default', true)->select('sites.id', 'sites.nom', 'sites.code')->limit(1),
         ])
             ->where('organization_id', $orgId)
-            ->whereHas('roles', fn ($q) => $q->whereIn('name', self::STAFF_ROLES))
+            // "Staff" = porte un rôle qui n'est pas un rôle externe (même définition que
+            // User::hasBackofficeAccess()) — remplace whereIn(STAFF_ROLES), qui excluait
+            // silencieusement de cette liste tout utilisateur affecté à un rôle personnalisé
+            // créé via RoleController (cf. refonte rôles/personnalisés assignables).
+            ->whereHas('roles', fn ($q) => $q->whereNotIn('name', User::EXTERNAL_ROLES))
             ->get()
             ->sortBy('nom')
             ->map(function (User $u) {
@@ -243,13 +275,9 @@ class UserController extends Controller
                 : [],
             'type_employe_options' => TypeEmploye::options(),
             'statut_employe_options' => StatutEmploye::options(),
-            // Remplace les dictionnaires ROLE_LABELS figés côté Vue : un rôle personnalisé
-            // d'organisation (créé via RoleController) a désormais un label lisible dans la
-            // colonne "Rôle" de cette liste, pas seulement les 5 rôles historiques.
-            'role_labels' => $orgId
-                ? Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
-                    ->pluck('label', 'name')
-                : [],
+            // Le libellé de rôle (colonne "Rôle" de cette liste, via <RoleBadges>) vient
+            // désormais de auth.role_labels (partagé globalement par HandleInertiaRequests,
+            // même scope organisation ∪ système) — plus besoin d'une prop dédiée ici.
         ];
     }
 
@@ -257,10 +285,11 @@ class UserController extends Controller
     {
         $this->authorize('create', User::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
 
         return Inertia::render('Users/Create', [
-            'roles' => $this->getRoleOptions(),
+            'roles' => $this->getRoleOptions($orgId, $user->isSuperAdmin()),
             'sites' => $this->getSiteOptions($orgId),
         ]);
     }
@@ -280,17 +309,27 @@ class UserController extends Controller
     }
 
     /**
-     * Élévation de privilège corrigée le 2026-08-21 : `role` n'était validé que contre
-     * STAFF_ROLES (qui inclut `super_admin`), sans jamais vérifier que l'ACTEUR l'est lui-même —
-     * n'importe quel utilisateur autorisé à modifier des comptes pouvait donc s'attribuer ou
-     * attribuer `super_admin` à un tiers. `admin_entreprise` reste attribuable par tout
-     * `admin_entreprise` (cohérent avec RoleController::canManageRoles()) — seul `super_admin`
-     * est concerné, mirroring exact de la garde AccountValidationService::resoudreRole().
+     * Élévation de privilège corrigée le 2026-08-21 pour `super_admin` : `role` n'était validé
+     * que contre STAFF_ROLES (qui inclut `super_admin`), sans jamais vérifier que l'ACTEUR l'est
+     * lui-même — n'importe quel utilisateur autorisé à modifier des comptes pouvait donc
+     * s'attribuer ou attribuer `super_admin` à un tiers.
+     *
+     * Étendue le 2026-09-06 à `admin_entreprise` : `UserPolicy::update()` n'exige que la
+     * permission `users.update` (+ même organisation) — un rôle personnalisé ne détenant que
+     * cette permission (ex. un profil RH habilité à éditer des fiches) pouvait donc, via ce même
+     * formulaire, s'auto-attribuer ou attribuer à un tiers `admin_entreprise`, sans jamais passer
+     * par RoleController::canManageRoles() qui réserve pourtant la gestion des rôles à ce même
+     * groupe. `isAdmin()` (super_admin OU admin_entreprise) est donc désormais requis pour
+     * attribuer `admin_entreprise`, mirroring exact de canManageRoles().
      */
     private function assertNoPrivilegeEscalation(string $role): void
     {
         if ($role === 'super_admin' && ! auth()->user()->isSuperAdmin()) {
             abort(403, 'Seul un super_admin peut attribuer ce rôle.');
+        }
+
+        if ($role === 'admin_entreprise' && ! auth()->user()->isAdmin()) {
+            abort(403, 'Seul un administrateur peut attribuer ce rôle.');
         }
     }
 
@@ -327,7 +366,7 @@ class UserController extends Controller
             'code_pays' => ['nullable', Rule::in(array_keys(USER_PAYS))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
-            'role' => ['required', Rule::in(self::STAFF_ROLES)],
+            'role' => ['required', $this->assignableRoleRule($orgId)],
             'site_id' => 'required|exists:sites,id',
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
             'is_active' => 'boolean',
@@ -337,7 +376,7 @@ class UserController extends Controller
             'email.email' => "L'adresse e-mail est invalide.",
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'role.required' => 'Le rôle est obligatoire.',
-            'role.in' => 'Rôle invalide.',
+            'role.exists' => 'Rôle invalide.',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Site invalide.',
             'password.required' => 'Le mot de passe est obligatoire.',
@@ -395,7 +434,7 @@ class UserController extends Controller
                 'is_active' => $user->is_active,
                 'matricule' => $user->matricule,
             ],
-            'roles' => $this->getRoleOptions(),
+            'roles' => $this->getRoleOptions($orgId, auth()->user()->isSuperAdmin()),
             'sites' => $orgId ? $this->getSiteOptions($orgId) : [],
             'is_me' => $user->id === auth()->id(),
         ]);
@@ -415,7 +454,9 @@ class UserController extends Controller
             'code_pays' => ['nullable', Rule::in(array_keys(USER_PAYS))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
-            'role' => ['required', Rule::in(self::STAFF_ROLES)],
+            // Scopé à l'organisation du compte CIBLE (pas celle de l'acteur), même raison que
+            // site_id ci-dessous.
+            'role' => ['required', $this->assignableRoleRule($user->organization_id)],
             // Scopé à l'organisation du compte CIBLE (pas celle de l'acteur) : un super_admin
             // peut désormais modifier un agent depuis la console plateforme /backoffice/comptes,
             // qui liste des agents de toutes les organisations — sans ce scope, un site
@@ -429,6 +470,7 @@ class UserController extends Controller
             'email.email' => "L'adresse e-mail est invalide.",
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'role.required' => 'Le rôle est obligatoire.',
+            'role.exists' => 'Rôle invalide.',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Site invalide.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',

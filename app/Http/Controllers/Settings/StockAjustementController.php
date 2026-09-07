@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DroitAjustementStock;
 use App\Models\Parametre;
 use App\Models\Site;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -21,7 +22,10 @@ class StockAjustementController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $roles = Role::orderBy('name')->get(['id', 'name']);
+        // Scopé à l'organisation courante — Role::orderBy('name')->get() sans filtre exposait
+        // ici les rôles personnalisés de TOUTES les organisations de la plateforme (même
+        // correction que RoleController::visibleRoles(), cf. audit rôles/permissions).
+        $roles = RoleVisibility::query($orgId)->orderBy('name')->get(['id', 'name']);
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
 
         $droits = DroitAjustementStock::where('organization_id', $orgId)

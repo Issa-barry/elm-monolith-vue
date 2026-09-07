@@ -63,7 +63,7 @@ class CommissionVenteController extends Controller
      */
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -109,9 +109,14 @@ class CommissionVenteController extends Controller
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if ($isAdmin && ! empty($filtreSiteIds)) {
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+            // enveloppe.source est polymorphe (CommandeVente OU TransfertLogistique) : les deux
+            // tables n'ont pas de colonne `site_id` commune (TransfertLogistique n'a que
+            // site_source_id/site_destination_id). On passe par la relation `site()`, alias
+            // polymorphisme-safe déjà utilisé par l'eager-load ci-dessus et par
+            // CommissionSiteController — jamais par le nom de colonne brut du modèle source.
+            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $filtreSiteIds));
         } elseif (! $isAdmin && ! empty($siteIds)) {
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $siteIds));
+            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $siteIds));
         }
 
         $allParts = $query->get();
@@ -318,7 +323,7 @@ class CommissionVenteController extends Controller
 
     public function showLivreur(Request $request, string $livreurId): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $orgId = auth()->user()->organization_id;
 
@@ -664,7 +669,7 @@ class CommissionVenteController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -716,7 +721,7 @@ class CommissionVenteController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -778,7 +783,9 @@ class CommissionVenteController extends Controller
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if (! empty($filtreSiteIds)) {
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+            // Cf. commentaire équivalent dans index() : passer par `site()`, pas par la colonne
+            // `site_id` brute, absente de TransfertLogistique.
+            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $filtreSiteIds));
         }
 
         return $query->get();

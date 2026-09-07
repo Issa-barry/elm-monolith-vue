@@ -143,7 +143,15 @@ class RoleTest extends TestCase
 
     // ── update : permissions ─────────────────────────────────────────────────
 
-    public function test_update_syncs_permissions_for_admin_entreprise(): void
+    /**
+     * Un rôle système (organization_id null, partagé par toutes les organisations) n'est
+     * plus modifiable par un admin_entreprise depuis le 2026-09-06 : avant cette règle, ce test
+     * ciblait le rôle partagé `commerciale` — modifier ses permissions depuis UNE organisation
+     * changeait silencieusement le comportement de `commerciale` pour TOUTES les autres (cf.
+     * plan de refonte rôles/permissions, § "rôles système partagés"). Le rôle testé ici est donc
+     * désormais un rôle métier propre à CETTE organisation.
+     */
+    public function test_update_syncs_permissions_for_an_organization_role(): void
     {
         $org = Organization::factory()->create();
         $user = $this->userWithPermission($org);
@@ -151,7 +159,7 @@ class RoleTest extends TestCase
         Permission::firstOrCreate(['name' => 'clients.read', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'clients.create', 'guard_name' => 'web']);
 
-        $role = Role::firstOrCreate(['name' => 'commerciale', 'guard_name' => 'web']);
+        $role = Role::create(['name' => 'chef_agence', 'label' => 'Chef agence', 'guard_name' => 'web', 'organization_id' => $org->id]);
 
         $this->actingAs($user)
             ->put(route('roles.update', $role), [
@@ -161,6 +169,28 @@ class RoleTest extends TestCase
 
         $this->assertTrue($role->fresh()->hasPermissionTo('clients.read'));
         $this->assertTrue($role->fresh()->hasPermissionTo('clients.create'));
+    }
+
+    /**
+     * Verrou central de la refonte rôles/permissions (2026-09-06) : un rôle système partagé
+     * (organization_id null, hors `super_admin` qui a déjà son propre mécanisme de protection)
+     * ne peut plus être modifié que par un super_admin — sinon un admin_entreprise d'une
+     * organisation quelconque pourrait changer les permissions de `commerciale`/`manager`/
+     * `comptable`/`admin_entreprise` utilisées par TOUTES les autres organisations.
+     */
+    public function test_update_refuses_permission_sync_on_a_system_role_for_non_super_admin(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+
+        Permission::firstOrCreate(['name' => 'clients.read', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'commerciale', 'guard_name' => 'web']);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), ['permissions' => ['clients.read']])
+            ->assertStatus(403);
+
+        $this->assertFalse($role->fresh()->hasPermissionTo('clients.read'));
     }
 
     public function test_update_returns_403_if_not_admin_entreprise(): void
@@ -255,13 +285,16 @@ class RoleTest extends TestCase
         $this->assertSame('SA', $role->fresh()->code);
     }
 
-    // ── update : admin_entreprise n'est plus un rôle système protégé ─────────
+    // ── update : admin_entreprise n'est pas "protégé" comme super_admin (son label/code ne
+    // sont jamais interdits par la validation), mais reste un rôle SYSTÈME partagé — verrouillé
+    // en écriture pour tout acteur non super_admin depuis le 2026-09-06 (cf. tests ci-dessous).
+    // Un rôle métier propre à l'organisation, lui, reste entièrement libre. ─────────────────
 
-    public function test_update_allows_changing_label_and_code_of_admin_entreprise(): void
+    public function test_update_allows_changing_label_and_code_of_an_organization_role(): void
     {
         $org = Organization::factory()->create();
         $user = $this->userWithPermission($org);
-        $role = Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $role = Role::create(['name' => 'direction_generale', 'label' => 'Direction', 'guard_name' => 'web', 'organization_id' => $org->id]);
 
         $this->actingAs($user)
             ->put(route('roles.update', $role), [
@@ -275,7 +308,46 @@ class RoleTest extends TestCase
         $this->assertSame('Direction générale', $role->label);
         $this->assertSame('DG', $role->code);
         // Le nom technique Spatie, lui, ne change jamais après création (cf. RoleController).
-        $this->assertSame('admin_entreprise', $role->name);
+        $this->assertSame('direction_generale', $role->name);
+    }
+
+    public function test_update_refuses_changing_admin_entreprise_system_role_for_non_super_admin(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        // userWithPermission() a déjà créé ce rôle (sans label) pour y affecter $user : on force
+        // ici un label connu pour vérifier ensuite qu'il reste bien inchangé.
+        $role = Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $role->update(['label' => 'Administrateur entreprise']);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), ['label' => 'Direction générale', 'permissions' => []])
+            ->assertStatus(403);
+
+        $this->assertSame('Administrateur entreprise', $role->fresh()->label);
+    }
+
+    public function test_super_admin_can_change_label_and_code_of_admin_entreprise_system_role(): void
+    {
+        $org = Organization::factory()->create();
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('super_admin');
+        $this->attachSite($org, $user);
+
+        $role = Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web'], ['label' => 'Administrateur entreprise']);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), [
+                'label' => 'Direction générale',
+                'code' => 'DG',
+                'permissions' => [],
+            ])
+            ->assertRedirect();
+
+        $role->refresh();
+        $this->assertSame('Direction générale', $role->label);
+        $this->assertSame('DG', $role->code);
     }
 
     // ── store : génération du nom technique ──────────────────────────────────

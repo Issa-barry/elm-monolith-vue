@@ -56,20 +56,10 @@ const emit = defineEmits<{
     'clear-error': [field: string];
 }>();
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-};
-
-const roleOptions = computed(() =>
-    props.roles.map((r) => ({
-        value: r.value,
-        label: ROLE_LABELS[r.value] ?? r.value,
-    })),
-);
+// Le libellé vient directement du backend (roles.label, cf. UserController::getRoleOptions())
+// — un rôle personnalisé d'organisation a désormais un libellé lisible ici comme n'importe quel
+// autre rôle, plus seulement les 5 rôles historiques d'un dictionnaire figé côté Vue.
+const roleOptions = computed(() => props.roles);
 
 const selectedCountry = computed(
     () =>

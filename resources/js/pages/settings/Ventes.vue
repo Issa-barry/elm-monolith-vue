@@ -35,10 +35,7 @@ const props = defineProps<{
     controle_impayes_actif: boolean;
     seuil_impayes_max: number;
     declencheur_commission_vente: string;
-    declencheur_commission_logistique: string;
-    montant_defaut_commission_logistique_par_pack: number;
     declencheurs_commission_vente_options: DeclencheurOption[];
-    declencheurs_commission_logistique_options: DeclencheurOption[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -63,15 +60,28 @@ const form = useForm({
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
     declencheur_commission_vente: props.declencheur_commission_vente,
-    declencheur_commission_logistique: props.declencheur_commission_logistique,
-    montant_defaut_commission_logistique_par_pack:
-        props.montant_defaut_commission_logistique_par_pack,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
 
 function roleEnabled(roleName: string, field: EditableRoleField): boolean {
     return form[field].includes(roleName);
+}
+
+/**
+ * `role.locked` ne veut plus seulement dire "super_admin, toujours vrai" : un rôle système
+ * (manager/commerciale/comptable/admin_entreprise) verrouillé pour cet acteur peut très bien
+ * valoir false — afficher son état réel (`can_update_quantite`/`can_update_prix_unitaire`)
+ * plutôt que de forcer "activé" comme le faisait l'ancien `role.locked || roleEnabled(...)`.
+ */
+function isRoleFieldOn(role: RoleQuantite, field: EditableRoleField): boolean {
+    if (role.locked) {
+        return field === 'quantity_edit_role_names'
+            ? role.can_update_quantite
+            : role.can_update_prix_unitaire;
+    }
+
+    return roleEnabled(role.name, field);
 }
 
 function toggleRole(role: RoleQuantite, field: EditableRoleField) {
@@ -130,40 +140,6 @@ function onSeuilFocus() {
 function onSeuilBlur() {
     seuilDisplay.value = formatSeuil(form.seuil_impayes_max);
 }
-
-// ── Formatage montant par defaut commission logistique ───────────────────────
-const montantLogistiqueDisplay = ref(
-    formatSeuil(props.montant_defaut_commission_logistique_par_pack),
-);
-
-watch(
-    () => form.montant_defaut_commission_logistique_par_pack,
-    (val) => {
-        if (document.activeElement?.id !== 'montant-logistique-input') {
-            montantLogistiqueDisplay.value = formatSeuil(val);
-        }
-    },
-);
-
-function onMontantLogistiqueInput(e: Event) {
-    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
-    form.montant_defaut_commission_logistique_par_pack = raw
-        ? parseInt(raw, 10)
-        : 0;
-}
-
-function onMontantLogistiqueFocus() {
-    montantLogistiqueDisplay.value =
-        form.montant_defaut_commission_logistique_par_pack > 0
-            ? String(form.montant_defaut_commission_logistique_par_pack)
-            : '';
-}
-
-function onMontantLogistiqueBlur() {
-    montantLogistiqueDisplay.value = formatSeuil(
-        form.montant_defaut_commission_logistique_par_pack,
-    );
-}
 </script>
 
 <template>
@@ -206,18 +182,16 @@ function onMontantLogistiqueBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                         ? 'bg-primary'
@@ -230,9 +204,8 @@ function onMontantLogistiqueBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'quantity_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -273,20 +246,12 @@ function onMontantLogistiqueBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                         ? 'bg-primary'
                                         : 'bg-input'
                                 "
@@ -297,9 +262,8 @@ function onMontantLogistiqueBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'price_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -406,73 +370,6 @@ function onMontantLogistiqueBlur() {
                                 />
                                 <span class="text-sm">{{ option.label }}</span>
                             </label>
-                        </div>
-                    </div>
-
-                    <div class="space-y-2 border-t px-5 py-4">
-                        <p class="text-sm font-medium text-foreground">
-                            Commission logistique — générer la commission
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            Ce paramètre détermine à quel moment la commission
-                            logistique devient générable.
-                        </p>
-                        <div
-                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
-                        >
-                            <label
-                                v-for="option in declencheurs_commission_logistique_options"
-                                :key="`logistique-${option.value}`"
-                                class="flex cursor-pointer items-center gap-2"
-                            >
-                                <RadioButton
-                                    :model-value="
-                                        form.declencheur_commission_logistique
-                                    "
-                                    :value="option.value"
-                                    :disabled="form.processing"
-                                    @update:model-value="
-                                        form.declencheur_commission_logistique =
-                                            option.value
-                                    "
-                                />
-                                <span class="text-sm">{{ option.label }}</span>
-                            </label>
-                        </div>
-
-                        <div
-                            class="mt-4 flex items-center justify-between gap-4 border-t pt-4"
-                        >
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-medium text-foreground">
-                                    Montant par defaut (GNF / pack)
-                                </p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                    Utilise quand la commission logistique est
-                                    generee automatiquement, sans saisie
-                                    manuelle. Sans effet sur la validation admin
-                                    d'une reception, qui demande toujours un
-                                    montant explicite.
-                                </p>
-                            </div>
-                            <div class="relative">
-                                <input
-                                    id="montant-logistique-input"
-                                    type="text"
-                                    inputmode="numeric"
-                                    :value="montantLogistiqueDisplay"
-                                    placeholder="200"
-                                    :disabled="form.processing"
-                                    class="w-40 rounded-md border bg-background py-2 pr-14 pl-3 text-right text-lg font-bold tabular-nums shadow-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                    @input="onMontantLogistiqueInput"
-                                    @focus="onMontantLogistiqueFocus"
-                                    @blur="onMontantLogistiqueBlur"
-                                />
-                                <span
-                                    class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-muted-foreground"
-                                    >GNF</span
-                                >
-                            </div>
                         </div>
                     </div>
                 </div>

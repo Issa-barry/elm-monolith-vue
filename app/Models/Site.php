@@ -24,6 +24,7 @@ class Site extends Model
         'type',
         'statut',
         'is_siege_principal',
+        'approbation_reception_logistique_obligatoire',
         'localisation',
         'pays',
         'ville',
@@ -42,6 +43,7 @@ class Site extends Model
             'type' => SiteType::class,
             'statut' => SiteStatut::class,
             'is_siege_principal' => 'boolean',
+            'approbation_reception_logistique_obligatoire' => 'boolean',
         ];
     }
 
@@ -185,5 +187,19 @@ class Site extends Model
     public function isActive(): bool
     {
         return $this->statut === SiteStatut::ACTIVE;
+    }
+
+    /**
+     * Réglage effectif d'approbation admin de la réception logistique pour CE site — dérogation
+     * du site si explicitement configurée (true/false), sinon repli sur le réglage organisation
+     * (cf. Parametre::isApprobationReceptionLogistiqueObligatoire()). Même principe que
+     * SolvabiliteService::resoudrePlafondVehicule()/resoudrePlafondClient(), sans second flag
+     * "dérogation activée" : `null` sur la colonne suffit à distinguer "pas configuré" de
+     * true/false, contrairement à un seuil entier (0 y serait ambigu).
+     */
+    public function approbationReceptionObligatoireEffective(): bool
+    {
+        return $this->approbation_reception_logistique_obligatoire
+            ?? Parametre::isApprobationReceptionLogistiqueObligatoire($this->organization_id);
     }
 }

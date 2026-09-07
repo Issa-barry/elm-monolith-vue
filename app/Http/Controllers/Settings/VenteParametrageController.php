@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Settings;
 
-use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
 use App\Http\Controllers\Controller;
 use App\Models\Parametre;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -25,22 +25,28 @@ class VenteParametrageController extends Controller
     {
         abort_if(! auth()->user()->can('parametres.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $this->ensureSalesPermissionsExist();
 
-        $roles = Role::query()
+        // Scopé à l'organisation courante (rôles système partagés ∪ rôles propres à cette
+        // organisation) — un `Role::query()->get()` sans ce filtre exposait les rôles
+        // personnalisés de TOUTES les organisations de la plateforme (cf. audit § sécurité).
+        $roles = RoleVisibility::query($orgId)
             ->orderBy('name')
             ->get()
             ->map(fn (Role $role) => [
                 'name' => $role->name,
-                'label' => $this->roleLabel($role->name),
+                'label' => $role->label ?? $role->name,
                 'can_update_quantite' => $role->name === 'super_admin'
                     ? true
                     : $role->hasPermissionTo(self::QUANTITY_UPDATE_PERMISSION),
                 'can_update_prix_unitaire' => $role->name === 'super_admin'
                     ? true
                     : $role->hasPermissionTo(self::UNIT_PRICE_UPDATE_PERMISSION),
-                'locked' => $role->name === 'super_admin',
+                // Rôle système (partagé par toutes les organisations) non modifiable par un
+                // acteur qui n'est pas lui-même super_admin — cf. RoleVisibility::isWritableBy().
+                'locked' => ! RoleVisibility::isWritableBy($role, $orgId, $user->isSuperAdmin()),
             ])
             ->values();
 
@@ -50,16 +56,14 @@ class VenteParametrageController extends Controller
             'controle_impayes_actif' => Parametre::isVentesControleImpayesActif($orgId),
             'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
             'declencheur_commission_vente' => Parametre::getDeclencheurCommissionVente($orgId)->value,
-            'declencheur_commission_logistique' => Parametre::getDeclencheurCommissionLogistique($orgId)->value,
-            'montant_defaut_commission_logistique_par_pack' => Parametre::getMontantDefautCommissionLogistiquePack($orgId),
             'declencheurs_commission_vente_options' => DeclencheurCommissionVente::options(),
-            'declencheurs_commission_logistique_options' => DeclencheurCommissionLogistique::options(),
         ]);
     }
 
     public function update(Request $request): RedirectResponse
     {
-        abort_if(! auth()->user()->can('parametres.update'), 403);
+        $user = auth()->user();
+        abort_if(! $user->can('parametres.update'), 403);
 
         $this->ensureSalesPermissionsExist();
 
@@ -72,8 +76,6 @@ class VenteParametrageController extends Controller
             'controle_impayes_actif' => ['required', 'boolean'],
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
             'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
-            'declencheur_commission_logistique' => ['required', Rule::in(array_column(DeclencheurCommissionLogistique::cases(), 'value'))],
-            'montant_defaut_commission_logistique_par_pack' => ['required', 'integer', 'min:1'],
         ]);
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
@@ -83,7 +85,17 @@ class VenteParametrageController extends Controller
             ->values()
             ->all();
 
-        $roles = Role::query()->whereNotIn('name', ['super_admin'])->get();
+        $orgId = $user->organization_id;
+
+        // Scopé + restreint à ce qui est réellement modifiable par cet acteur : un rôle
+        // système (organization_id null) reste visible dans la liste (cf. edit()) mais son
+        // état de case à cocher ne doit jamais être mutable depuis l'écran de paramétrage
+        // d'une organisation — sinon toggle une organisation A modifierait silencieusement le
+        // rôle partagé de l'organisation B (cf. audit § fuite cross-tenant en écriture).
+        $roles = RoleVisibility::query($orgId)
+            ->whereNotIn('name', ['super_admin'])
+            ->get()
+            ->filter(fn (Role $role) => RoleVisibility::isWritableBy($role, $orgId, $user->isSuperAdmin()));
 
         foreach ($roles as $role) {
             if (in_array($role->name, $enabledQuantityRoleNames, true)) {
@@ -99,8 +111,6 @@ class VenteParametrageController extends Controller
             }
         }
 
-        $orgId = auth()->user()->organization_id;
-
         Parametre::setVentesAutorisationSaisieDessousQteMax($orgId, (bool) $validated['autoriser_saisie_dessous_qte_max']);
 
         Parametre::setVentesControleImpayes(
@@ -113,32 +123,11 @@ class VenteParametrageController extends Controller
             $orgId,
             DeclencheurCommissionVente::from($validated['declencheur_commission_vente']),
         );
-        Parametre::setDeclencheurCommissionLogistique(
-            $orgId,
-            DeclencheurCommissionLogistique::from($validated['declencheur_commission_logistique']),
-        );
-        Parametre::setMontantDefautCommissionLogistiquePack(
-            $orgId,
-            (int) $validated['montant_defaut_commission_logistique_par_pack'],
-        );
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
         Parametre::clearCache($orgId);
 
         return back()->with('success', 'Parametrage ventes mis a jour.');
-    }
-
-    private function roleLabel(string $roleName): string
-    {
-        return match ($roleName) {
-            'super_admin' => 'Super admin',
-            'admin_entreprise' => 'Admin entreprise',
-            'manager' => 'Manager',
-            'commerciale' => 'Commercial',
-            'comptable' => 'Comptable',
-            'client' => 'Client',
-            default => ucfirst(str_replace('_', ' ', $roleName)),
-        };
     }
 
     private function ensureSalesPermissionsExist(): void

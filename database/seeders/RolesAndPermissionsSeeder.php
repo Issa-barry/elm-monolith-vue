@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -9,27 +10,6 @@ use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
-    private const RESOURCES = [
-        // Personnes
-        'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
-        // Véhicules & logistique terrain
-        'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
-        // Commerce
-        'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
-        // Opérations
-        'logistique', 'transferts', 'receptions',
-        // Finances
-        'depenses', 'comptabilite', 'journal-financier', 'tresorerie',
-        // RH
-        'rh-employes', 'rh-contrats', 'rh-paie',
-        // Administration
-        'users',
-        // Paramètres
-        'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
-    ];
-
-    private const ACTIONS = ['create', 'read', 'update', 'delete'];
-
     /**
      * Ne crée JAMAIS de compte de démo, ni d'organisation — sécurité indépendante d'APP_ENV,
      * garantie par le fait que ce seeder ne touche plus qu'à des données globales (permissions,
@@ -60,65 +40,11 @@ class RolesAndPermissionsSeeder extends Seeder
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         // ── 1. Permissions ────────────────────────────────────────────────────
-        foreach (self::RESOURCES as $resource) {
-            foreach (self::ACTIONS as $action) {
-                Permission::firstOrCreate(['name' => "{$resource}.{$action}"]);
-            }
+        // Source de vérité unique : App\Support\Permissions\PermissionCatalog (CRUD +
+        // standalone) — ne plus lister les permissions à la main ici, cf. sa docblock.
+        foreach (PermissionCatalog::allPermissionNames() as $name) {
+            Permission::firstOrCreate(['name' => $name]);
         }
-
-        // Permissions standalone (hors matrice CRUD standard)
-        // — Existantes —
-        Permission::firstOrCreate(['name' => 'logistique.commission.verser']);
-        Permission::firstOrCreate(['name' => 'ventes.qte.update']);
-        Permission::firstOrCreate(['name' => 'ventes.prix.update']);
-        Permission::firstOrCreate(['name' => 'rh-paie.validate']);
-        Permission::firstOrCreate(['name' => 'rh-paie.pay']);
-        Permission::firstOrCreate(['name' => 'rh-paie.close']);
-        // — Import flotte (propriétaires + véhicules + livreurs) —
-        Permission::firstOrCreate(['name' => 'imports-flotte.create']);
-        Permission::firstOrCreate(['name' => 'imports-flotte.read']);
-        // — Import véhicules (mise à jour en masse — site, capacités, usages ; jamais de création) —
-        Permission::firstOrCreate(['name' => 'imports-vehicules-maj.create']);
-        Permission::firstOrCreate(['name' => 'imports-vehicules-maj.read']);
-        // — Import produits (création + mise à jour en masse) —
-        Permission::firstOrCreate(['name' => 'imports-produits.create']);
-        Permission::firstOrCreate(['name' => 'imports-produits.read']);
-        // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
-        Permission::firstOrCreate(['name' => 'pieces-identite.download']);
-        Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
-        Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
-        Permission::firstOrCreate(['name' => 'comptabilite.payer']);
-        // — Trésorerie (mouvements de fonds agence <-> siège) —
-        Permission::firstOrCreate(['name' => 'tresorerie.envoyer']);
-        Permission::firstOrCreate(['name' => 'tresorerie.recevoir']);
-        Permission::firstOrCreate(['name' => 'tresorerie.annuler']);
-        Permission::firstOrCreate(['name' => 'tresorerie.rejeter']);
-        Permission::firstOrCreate(['name' => 'tresorerie.confirmer_retour']);
-        Permission::firstOrCreate(['name' => 'tresorerie.gerer_soldes_ouverture']);
-        Permission::firstOrCreate(['name' => 'tresorerie.exporter']);
-        // — Dépenses (workflow) —
-        Permission::firstOrCreate(['name' => 'depenses.soumettre']);
-        Permission::firstOrCreate(['name' => 'depenses.valider']);
-        Permission::firstOrCreate(['name' => 'depenses.rejeter']);
-        Permission::firstOrCreate(['name' => 'depenses.annuler']);
-        // — Produits —
-        Permission::firstOrCreate(['name' => 'produits.ajuster_stock']);
-        // — Ventes (workflow) —
-        Permission::firstOrCreate(['name' => 'ventes.confirmer']);
-        Permission::firstOrCreate(['name' => 'ventes.annuler']);
-        Permission::firstOrCreate(['name' => 'ventes.demarrer_chargement']);
-        Permission::firstOrCreate(['name' => 'ventes.valider_chargement']);
-        // — Factures —
-        Permission::firstOrCreate(['name' => 'factures.encaisser']);
-        Permission::firstOrCreate(['name' => 'factures.annuler']);
-        // — Commissions / Salaires —
-        Permission::firstOrCreate(['name' => 'commissions.payer']);
-        Permission::firstOrCreate(['name' => 'commissions.cloturer']);
-        Permission::firstOrCreate(['name' => 'commissions.exporter']);
-        // — Logistique (workflow) —
-        Permission::firstOrCreate(['name' => 'logistique.valider_chargement']);
-        Permission::firstOrCreate(['name' => 'logistique.valider_reception']);
-        Permission::firstOrCreate(['name' => 'logistique.cloturer']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         // Rôles système (organization_id NULL, partagés par toutes les organisations) — seul

@@ -719,7 +719,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
      * l'historique) — elle vit dans CommissionEnveloppe. Sans exposer cette information à la
      * page Logistique/Show.vue, l'onglet "Commission logistique" affichait indéfiniment
      * "en attente de validation admin" même après une génération réussie, avec le bouton
-     * "Générer commission" définitivement disparu (validation_reception déjà 'accord') — aucun
+     * "Approuver la réception" définitivement disparu (validation_reception déjà 'accord') — aucun
      * moyen pour l'admin de voir que tout s'était bien passé.
      */
     /** @test */

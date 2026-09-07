@@ -13,6 +13,17 @@ export function usePermissions() {
 
     const permissions = computed(() => page.props.auth?.permissions ?? {});
     const roles = computed(() => page.props.auth?.roles ?? []);
+    const roleLabels = computed(() => page.props.auth?.role_labels ?? {});
+
+    /**
+     * Libellé humain d'un rôle (role.label côté backend) — remplace les dictionnaires
+     * ROLE_LABELS locaux qui existaient dans chaque page consommant un rôle (cf.
+     * Auth.role_labels). Fallback sur le nom technique si absent (rôle externe non exposé par
+     * HandleInertiaRequests::roleLabels(), ou libellé jamais renseigné).
+     */
+    function roleLabel(role: AppRole): string {
+        return roleLabels.value[role] ?? role;
+    }
 
     /** Vérifie une permission précise, ex: can('clients.read') */
     function can(permission: PermissionKey): boolean {
@@ -53,5 +64,7 @@ export function usePermissions() {
         canOnResource,
         permissions,
         roles,
+        roleLabels,
+        roleLabel,
     };
 }

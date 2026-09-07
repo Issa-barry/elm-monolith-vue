@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
@@ -53,6 +54,17 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->admin->assignRole('admin_entreprise');
         $this->admin->givePermissionTo('produits.read');
         $this->admin->sites()->attach($this->siteA->id, ['role' => 'employe', 'is_default' => true]);
+
+        // Depuis le 2026-09-06, admin_entreprise ne bypasse plus DroitAjustementStockService —
+        // reproduit ici le provisioning de continuité qu'InstallationService::install() pose
+        // désormais pour toute organisation réelle (cf. sa docblock de classe).
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
     }
 
     private function makeSite(string $nom): Site
