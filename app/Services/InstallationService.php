@@ -8,6 +8,8 @@ use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Models\AppInstallation;
+use App\Models\DroitAjustementStock;
+use App\Models\DroitCreationDepense;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\Proprietaire;
@@ -403,6 +405,32 @@ class InstallationService
             // soit le domaine, contrairement aux catégories qui, elles, sont propres au métier.
             OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
             TypeVehiculesSeeder::seedPourOrganisation($org->id);
+
+            // Droit de création + validation des dépenses par défaut pour admin_entreprise —
+            // depuis le 2026-09-06, DroitCreationDepenseService ne bypasse plus ce rôle nulle
+            // part (seul Super Admin reste illimité, cf. sa docblock de classe) : sans cette
+            // ligne, une organisation fraîche démarrerait avec un admin_entreprise incapable de
+            // créer ou valider la moindre dépense tant que personne n'aurait visité
+            // /settings/depenses. Plafond volontairement laissé à NULL (traité comme 0 GNF,
+            // deny-by-default, cf. DroitCreationDepenseService::peutValiderMontant()) : à
+            // configurer explicitement, comme pour tout rôle nouvellement actif.
+            DroitCreationDepense::create([
+                'organization_id' => $org->id,
+                'role_name' => 'admin_entreprise',
+                'perimetre' => 'toutes_agences',
+                'is_actif' => true,
+                'peut_valider' => true,
+            ]);
+
+            // Même besoin de continuité pour l'ajustement manuel de stock — DroitAjustementStockService
+            // ne bypasse plus admin_entreprise nulle part depuis le 2026-09-06 (cf. sa docblock).
+            DroitAjustementStock::create([
+                'organization_id' => $org->id,
+                'role_name' => 'admin_entreprise',
+                'perimetre' => 'toutes_agences',
+                'peut_augmenter' => true,
+                'peut_diminuer' => true,
+            ]);
 
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —

@@ -1,5 +1,7 @@
 ﻿<script setup lang="ts">
+import MobileVenteList from '@/components/commande-vente/MobileVenteList.vue';
 import ProcessusBadge from '@/components/commande-vente/ProcessusBadge.vue';
+import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -17,11 +19,12 @@ import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { KpiWidgetItem } from '@/types/kpi-widgets';
+import type { VenteMobile } from '@/types/vente-mobile';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
-    ChevronRight,
     CircleAlert,
     HandCoins,
     History,
@@ -47,26 +50,10 @@ import { computed, onMounted, ref } from 'vue';
 const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Commande {
-    id: number;
-    reference: string;
-    statut: string;
-    statut_label: string;
+interface Commande extends VenteMobile {
     nature_operation: 'vente_standard' | 'distribution_client';
     processus_code: string;
-    processus_label: string;
-    total_commande: number;
-    vehicule_nom: string | null;
-    vehicule_immatriculation: string | null;
-    chauffeur_nom: string | null;
-    client_nom: string | null;
-    client_telephone: string | null;
-    site_nom: string | null;
     facture_id: number | null;
-    facture_statut: string | null;
-    facture_statut_label: string | null;
-    facture_montant_encaisse: number | null;
-    facture_montant_restant: number | null;
     encaissements: {
         id: number;
         montant: number;
@@ -75,7 +62,6 @@ interface Commande {
         mode_paiement_label: string;
         created_by: string | null;
     }[];
-    created_at: string;
     is_annulee: boolean;
     is_brouillon: boolean;
     can_modifier: boolean;
@@ -186,6 +172,28 @@ const filtresStatutCommission = [
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
 const mobileSearch = ref('');
+
+const mobileKpiItems = computed<KpiWidgetItem[]>(() => [
+    {
+        id: 'ventes-total',
+        title: 'Total',
+        value: formatGNF(props.totaux.total_montant),
+        subtitle: `${props.totaux.nb_total} commande${props.totaux.nb_total > 1 ? 's' : ''}`,
+        valueClass: 'text-foreground tabular-nums',
+    },
+    {
+        id: 'ventes-restant',
+        title: 'Restant à encaisser',
+        value: formatGNF(props.totaux.total_a_encaisser),
+        valueClass: 'text-foreground tabular-nums',
+    },
+    {
+        id: 'ventes-paye',
+        title: 'Déjà payé',
+        value: formatGNF(props.totaux.deja_paye),
+        valueClass: 'text-foreground tabular-nums',
+    },
+]);
 
 const filterFields: FilterField[] = [
     {
@@ -433,7 +441,7 @@ function confirmDelete(c: Commande) {
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
-        <div class="flex flex-col sm:hidden">
+        <div class="flex min-w-0 flex-1 flex-col bg-muted/20 sm:hidden">
             <!-- Sticky header -->
             <div
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
@@ -491,32 +499,12 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- KPI cards -->
-            <div class="grid grid-cols-3 gap-3 p-4">
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.total_montant) }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ totaux.nb_total }} commande{{
-                            totaux.nb_total > 1 ? 's' : ''
-                        }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">
-                        Restant à encaisser
-                    </p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.total_a_encaisser) }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Déjà payé</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.deja_paye) }}
-                    </p>
-                </div>
+            <div class="relative min-w-0 p-4">
+                <KpiCardsResponsive
+                    :items="mobileKpiItems"
+                    breakpoint="sm"
+                    mobile-slide-width-class="w-full min-w-full max-w-full"
+                />
             </div>
 
             <!-- Search + Filtres -->
@@ -544,56 +532,10 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Card list -->
-            <div class="divide-y">
-                <Link
-                    v-for="c in mobileFiltered"
-                    :key="c.id"
-                    :href="`/backoffice/ventes/${c.id}`"
-                    class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
-                >
-                    <div class="min-w-0 flex-1">
-                        <p
-                            class="font-mono text-sm font-semibold tracking-wide text-primary"
-                        >
-                            {{ c.reference }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ c.vehicule_nom ?? c.client_nom ?? '—' }}
-                        </p>
-                        <p class="mt-1 text-sm font-medium tabular-nums">
-                            {{ formatGNF(c.total_commande) }}
-                        </p>
-                        <p
-                            v-if="
-                                c.facture_montant_restant !== null &&
-                                c.facture_montant_restant > 0
-                            "
-                            class="text-xs font-semibold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
-                            Restant : {{ formatGNF(c.facture_montant_restant) }}
-                        </p>
-                    </div>
-                    <div class="flex shrink-0 items-center gap-2">
-                        <div class="flex flex-col items-end gap-1.5">
-                            <StatusDot
-                                :status="c.statut"
-                                :label="c.statut_label"
-                            />
-                            <ProcessusBadge
-                                :processus="c.processus_code"
-                                :label="c.processus_label"
-                            />
-                            <span
-                                class="text-xs text-muted-foreground tabular-nums"
-                                >{{ c.created_at }}</span
-                            >
-                        </div>
-                        <ChevronRight
-                            class="h-4 w-4 shrink-0 text-muted-foreground/50"
-                        />
-                    </div>
-                </Link>
-            </div>
+            <MobileVenteList
+                v-if="mobileFiltered.length"
+                :commandes="mobileFiltered"
+            />
 
             <!-- Empty state -->
             <div

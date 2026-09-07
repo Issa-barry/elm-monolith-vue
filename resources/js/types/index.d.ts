@@ -43,15 +43,14 @@ export type StandalonePermission =
     | 'imports-vehicules-maj.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
-export type AppRole =
-    | 'super_admin'
-    | 'admin_entreprise'
-    | 'manager'
-    | 'commerciale'
-    | 'comptable'
-    | 'client'
-    | 'proprietaire'
-    | 'livreur';
+/**
+ * Nom technique d'un rôle — chaîne libre, pas une union fermée : depuis la refonte
+ * rôles/permissions du 2026-09-06, une organisation peut créer des rôles personnalisés
+ * (cf. /backoffice/roles), donc `roles`/`role_labels` (Auth ci-dessous) ne se limitent plus aux
+ * 8 rôles historiques. Utiliser `roleLabel()` (composables/usePermissions.ts) pour son libellé
+ * humain plutôt qu'un dictionnaire local — cf. Auth.role_labels.
+ */
+export type AppRole = string;
 
 export interface AuthSite {
     id: number;
@@ -66,6 +65,13 @@ export interface Auth {
     user: User;
     permissions: PermissionsMap;
     roles: AppRole[];
+    /**
+     * Libellé humain de chaque rôle visible par l'organisation courante, par nom technique
+     * (cf. HandleInertiaRequests::roleLabels()) — source unique remplaçant les dictionnaires
+     * ROLE_LABELS locaux ; utiliser `roleLabel()` (usePermissions.ts) plutôt que d'y accéder
+     * directement, pour bénéficier du fallback sur le nom technique.
+     */
+    role_labels: Record<string, string>;
     default_site: AuthSite | null;
 }
 

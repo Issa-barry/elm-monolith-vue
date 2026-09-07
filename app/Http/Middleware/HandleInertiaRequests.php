@@ -11,6 +11,7 @@ use App\Services\ModuleService;
 use App\Services\StockStatutService;
 use App\Services\ThemePolicyService;
 use App\Support\AppVersion;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -225,6 +226,25 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 
+    /**
+     * Libellé humain de chaque rôle visible par l'organisation courante (système ∪ propres à
+     * l'organisation), par nom technique. Remplace les dictionnaires ROLE_LABELS figés
+     * individuellement dans RoleBadges.vue/UserInfo.vue/HeaderWidget.vue/UserForm.vue/
+     * Profile.vue/ProduitParametrage.vue/DepenseParametrage.vue/Sites/Show.vue/
+     * client/Dashboard.vue (2026-09-06) — un rôle personnalisé d'organisation ou un libellé
+     * modifié depuis /backoffice/roles est désormais reflété partout via cette seule source,
+     * jamais recopié localement.
+     */
+    private function roleLabels(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        return RoleVisibility::query($user->organization_id)->pluck('label', 'name')->all();
+    }
+
     private function defaultSite(Request $request): ?array
     {
         $user = $request->user();
@@ -276,6 +296,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $this->authUserPayload($request),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
+                'role_labels' => $this->roleLabels($request),
                 'default_site' => $this->defaultSite($request),
                 'user_sites' => $this->userSites($request),
             ],

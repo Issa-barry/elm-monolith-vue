@@ -597,7 +597,7 @@ class CommandeVenteController extends Controller
                 'is_facturation' => $commande->isFacturation(),
                 'is_cloturee' => $commande->isCloturee(),
                 'is_annulee' => $commande->isAnnulee(),
-                'can_modifier' => $commande->isBrouillon() && $user->can('update', $commande),
+                'can_modifier' => $user->can('modifierContenu', $commande),
                 'can_confirmer' => $commande->isBrouillon() && $user->can('confirmer', $commande),
                 'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
                 'can_valider_chargement' => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
@@ -641,8 +641,7 @@ class CommandeVenteController extends Controller
 
     public function edit(CommandeVente $vente): Response
     {
-        $this->authorize('update', $vente);
-        abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
+        $this->authorize('modifierContenu', $vente);
 
         $orgId = auth()->user()->organization_id;
         $vente->load(['lignes.variante']);
@@ -677,8 +676,7 @@ class CommandeVenteController extends Controller
 
     public function update(Request $request, CommandeVente $vente): RedirectResponse
     {
-        $this->authorize('update', $vente);
-        abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
+        $this->authorize('modifierContenu', $vente);
 
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
@@ -990,6 +988,7 @@ class CommandeVenteController extends Controller
             'total_commande' => (float) $c->total_commande,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
+            'vehicule_photo_url' => $c->vehicule?->photo_url,
             'chauffeur_nom' => $c->vehicule?->equipe?->livreurs
                 ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur')
                 ?->nom_complet,
@@ -1013,7 +1012,7 @@ class CommandeVenteController extends Controller
             'is_annulee' => $c->isAnnulee(),
             'is_brouillon' => $c->isBrouillon(),
             'is_facturation' => $c->isFacturation(),
-            'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
+            'can_modifier' => $user->can('modifierContenu', $c),
             'can_confirmer' => $c->isBrouillon() && $user->can('confirmer', $c),
             'can_annuler' => $c->statut->isAnnulable()
                 && (! $c->facture || (float) $c->facture->montant_encaisse === 0.0)

@@ -144,6 +144,30 @@ class UserControllerTest extends TestCase
         $this->assertNotContains($userOtherOrg->id, $ids);
     }
 
+    /**
+     * indexProps() filtrait auparavant sur whereIn('name', STAFF_ROLES) — un utilisateur
+     * affecté à un rôle personnalisé d'organisation (désormais assignable, cf. tests store()
+     * ci-dessus) disparaissait donc silencieusement de la liste. Le filtre "staff" est
+     * maintenant "n'importe quel rôle qui n'est pas un rôle externe", même définition que
+     * User::hasBackofficeAccess().
+     */
+    public function test_index_includes_a_user_with_a_custom_organization_role(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+
+        $customRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $org->id]);
+        $userWithCustomRole = User::factory()->create(['organization_id' => $org->id]);
+        $userWithCustomRole->assignRole($customRole);
+
+        $response = $this->actingAs($admin)->get(route('users.index'));
+
+        $response->assertStatus(200);
+        $ids = array_column($response->original->getData()['page']['props']['users'], 'id');
+
+        $this->assertContains($userWithCustomRole->id, $ids);
+    }
+
     // ── create ────────────────────────────────────────────────────────────────
 
     public function test_create_returns_200_for_super_admin(): void
@@ -242,6 +266,48 @@ class UserControllerTest extends TestCase
         $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
         $this->assertNotNull($created);
         $this->assertTrue($created->hasRole('manager'));
+    }
+
+    /**
+     * Verrou central de la refonte "rôles personnalisés réellement affectables" (2026-09-06) :
+     * avant cette règle, `Rule::in(STAFF_ROLES)` rejetait tout rôle créé via le CRUD
+     * self-service (RoleController) — un rôle personnalisé d'organisation, correctement scopé
+     * à celle-ci, doit désormais être assignable comme n'importe quel rôle historique.
+     */
+    public function test_store_assigns_a_custom_organization_role_to_user(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $customRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $org->id]);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['role' => $customRole->name, 'site_id' => $site->id]))
+            ->assertRedirect();
+
+        $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
+        $this->assertNotNull($created);
+        $this->assertTrue($created->hasRole('chef_agence'));
+    }
+
+    /**
+     * Isolation organisationnelle : un rôle personnalisé de l'organisation B ne doit jamais être
+     * assignable par l'organisation A, y compris en POSTant directement le nom technique (le
+     * <select> ne le proposerait déjà pas, mais la validation serveur doit le refuser aussi).
+     */
+    public function test_store_refuses_a_custom_role_from_another_organization(): void
+    {
+        $org = Organization::factory()->create();
+        $otherOrg = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $otherOrgRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $otherOrg->id]);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['role' => $otherOrgRole->name, 'site_id' => $site->id]))
+            ->assertSessionHasErrors('role');
+
+        $this->assertNull(User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first());
     }
 
     public function test_store_attaches_site_to_user(): void

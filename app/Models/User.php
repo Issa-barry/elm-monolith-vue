@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -359,42 +360,9 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = [
-            'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
-            'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
-            'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
-            'logistique', 'transferts', 'receptions',
-            'depenses', 'comptabilite', 'journal-financier',
-            'rh-employes', 'rh-contrats', 'rh-paie',
-            'users',
-            'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
-        ];
-        $actions = ['create', 'read', 'update', 'delete'];
-
         $map = [];
-        foreach ($resources as $resource) {
-            foreach ($actions as $action) {
-                $key = "{$resource}.{$action}";
-                $map[$key] = $this->isSuperAdmin() || $this->can($key);
-            }
-        }
-
-        // Permissions standalone hors matrice CRUD
-        $standalone = [
-            'logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update',
-            'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer',
-            'depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler',
-            'produits.ajuster_stock',
-            'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement', 'ventes.valider_chargement',
-            'factures.encaisser', 'factures.annuler',
-            'commissions.payer', 'commissions.cloturer', 'commissions.exporter',
-            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
-            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
-            'imports-flotte.create', 'imports-flotte.read',
-            'imports-produits.create', 'imports-produits.read',
-        ];
-        foreach ($standalone as $perm) {
-            $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
+        foreach (PermissionCatalog::allPermissionNames() as $key) {
+            $map[$key] = $this->isSuperAdmin() || $this->can($key);
         }
 
         return $map;

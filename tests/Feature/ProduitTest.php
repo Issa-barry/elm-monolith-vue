@@ -32,6 +32,19 @@ class ProduitTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+
+        // $this->user est admin_entreprise (via makeUserWithPermissions) — depuis le 2026-09-06,
+        // DroitAjustementStockService ne le bypasse plus (cf. sa docblock de classe) : cette
+        // ligne reproduit le provisioning de continuité qu'InstallationService::install() pose
+        // désormais pour toute organisation réelle, pour ne pas casser tous les tests
+        // d'ajustement de stock qui s'appuient sur ce compte par défaut.
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
     }
 
     /** Résout l'id du type par défaut (code stable) pour une organisation — la provisionne

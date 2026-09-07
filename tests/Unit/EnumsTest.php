@@ -173,6 +173,18 @@ class EnumsTest extends TestCase
         }
     }
 
+    public function test_statut_commande_vente_is_editable_uniquement_en_brouillon(): void
+    {
+        $this->assertTrue(StatutCommandeVente::BROUILLON->isEditable());
+
+        foreach (StatutCommandeVente::cases() as $statut) {
+            if ($statut === StatutCommandeVente::BROUILLON) {
+                continue;
+            }
+            $this->assertFalse($statut->isEditable(), "{$statut->value} ne devrait pas être modifiable");
+        }
+    }
+
     // ── StatutFactureVente ────────────────────────────────────────────────────
 
     public function test_statut_facture_vente_labels(): void

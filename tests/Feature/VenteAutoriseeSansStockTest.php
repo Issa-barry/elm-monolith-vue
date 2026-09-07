@@ -7,6 +7,7 @@ use App\Enums\StatutTransfert;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\DroitAjustementStock;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -329,6 +330,19 @@ class VenteAutoriseeSansStockTest extends TestCase
     {
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
         $this->seedStock(100);
+
+        // $this->user est admin_entreprise (via HasAdminSetup::makeUserWithPermissions) — depuis
+        // le 2026-09-06, DroitAjustementStockService ne le bypasse plus (cf. sa docblock de
+        // classe) : ce test porte sur la validation de quantité, pas sur les droits, donc on lui
+        // donne ici le droit de continuité qu'InstallationService::install() provisionne
+        // désormais par défaut, pour isoler ce qui est réellement testé.
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $this->produit), [

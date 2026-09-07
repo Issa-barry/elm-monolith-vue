@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -40,26 +41,17 @@ const props = defineProps<{
     autorise_vente_stock_negatif: boolean;
 }>();
 
-const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
+// Seul Super Admin reste sans configuration : accès illimité, jamais de ligne
+// DroitAjustementStock à saisir. Admin Entreprise n'a plus aucun accès automatique depuis le
+// 2026-09-06 (avant cette date, DroitAjustementStockService bypassait isAdmin() — donc les deux
+// rôles — sur ses 5 méthodes) : c'est désormais un rôle configurable comme les autres.
+const UNLIMITED_ROLES = new Set(['super_admin']);
 
-function isAdminRole(name: string): boolean {
-    return ADMIN_ROLES.has(name);
+function isUnlimitedRole(name: string): boolean {
+    return UNLIMITED_ROLES.has(name);
 }
 
-const roleLabels: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin_entreprise: 'Admin Entreprise',
-    manager: 'Manager',
-    commerciale: 'Commerciale',
-    comptable: 'Comptable',
-    livreur: 'Livreur',
-    proprietaire: 'Propriétaire',
-    client: 'Client',
-};
-
-function roleLabel(name: string): string {
-    return roleLabels[name] ?? name;
-}
+const { roleLabel } = usePermissions();
 
 const ACTIONS = ['peut_augmenter', 'peut_diminuer'] as const;
 type Action = (typeof ACTIONS)[number];
@@ -80,7 +72,7 @@ const form = ref<RoleConfig[]>(
 );
 
 const nonAdminRows = computed(() =>
-    form.value.filter((r) => !isAdminRole(r.role_name)),
+    form.value.filter((r) => !isUnlimitedRole(r.role_name)),
 );
 
 function isChecked(entry: RoleConfig, action: Action): boolean {
@@ -424,7 +416,7 @@ function saveVente() {
                                     <tr
                                         class="border-b transition-colors"
                                         :class="
-                                            isAdminRole(entry.role_name)
+                                            isUnlimitedRole(entry.role_name)
                                                 ? 'bg-muted/10'
                                                 : 'hover:bg-muted/20'
                                         "
@@ -437,7 +429,7 @@ function saveVente() {
                                                 <div
                                                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
                                                     :class="
-                                                        isAdminRole(
+                                                        isUnlimitedRole(
                                                             entry.role_name,
                                                         )
                                                             ? 'bg-blue-50 dark:bg-blue-950/40'
@@ -446,7 +438,7 @@ function saveVente() {
                                                 >
                                                     <Shield
                                                         v-if="
-                                                            isAdminRole(
+                                                            isUnlimitedRole(
                                                                 entry.role_name,
                                                             )
                                                         "
@@ -468,7 +460,7 @@ function saveVente() {
                                                     >
                                                     <p
                                                         v-if="
-                                                            isAdminRole(
+                                                            isUnlimitedRole(
                                                                 entry.role_name,
                                                             )
                                                         "
@@ -486,7 +478,7 @@ function saveVente() {
                                             <div class="flex justify-center">
                                                 <div
                                                     v-if="
-                                                        isAdminRole(
+                                                        isUnlimitedRole(
                                                             entry.role_name,
                                                         )
                                                     "
@@ -525,7 +517,7 @@ function saveVente() {
                                             <div class="flex justify-center">
                                                 <div
                                                     v-if="
-                                                        isAdminRole(
+                                                        isUnlimitedRole(
                                                             entry.role_name,
                                                         )
                                                     "
@@ -563,7 +555,7 @@ function saveVente() {
                                         <td class="px-6 py-4">
                                             <div
                                                 v-if="
-                                                    isAdminRole(entry.role_name)
+                                                    isUnlimitedRole(entry.role_name)
                                                 "
                                                 class="text-xs text-muted-foreground italic"
                                             >
@@ -609,7 +601,7 @@ function saveVente() {
                                     <!-- Sous-ligne portée (expandable) -->
                                     <tr
                                         v-if="
-                                            !isAdminRole(entry.role_name) &&
+                                            !isUnlimitedRole(entry.role_name) &&
                                             hasAnyAction(entry) &&
                                             isPorteeExpanded(entry.role_name)
                                         "

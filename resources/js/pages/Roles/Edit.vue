@@ -31,12 +31,14 @@ interface RoleData {
     is_system: boolean;
     permissions: string[];
     users_count: number;
+    can_write: boolean;
 }
 
 const props = defineProps<{
     role: RoleData;
     resources: string[];
     actions: string[];
+    standalone: Record<string, string>;
 }>();
 
 const toast = useToast();
@@ -47,15 +49,21 @@ const resourceLabels: Record<string, string> = {
     prestataires: 'Prestataires',
     livreurs: 'Livreurs',
     proprietaires: 'Propriétaires',
+    'pieces-identite': "Pièces d'identité",
     // Véhicules & terrain
     vehicules: 'Véhicules',
+    'type-vehicules': 'Types de véhicule',
     'equipes-livraison': 'Équipes livraison',
     sites: 'Sites',
     // Commerce
     produits: 'Produits',
+    categories: 'Catégories',
+    options: 'Options',
+    'type-produits': 'Types de produit',
     packings: 'Packings',
     ventes: 'Ventes',
     achats: 'Achats',
+    fournisseurs: 'Fournisseurs',
     factures: 'Factures',
     commissions: 'Commissions',
     cashback: 'Cashback',
@@ -68,6 +76,7 @@ const resourceLabels: Record<string, string> = {
     depenses: 'Dépenses',
     comptabilite: 'Comptabilité',
     'journal-financier': 'Journal financier',
+    tresorerie: 'Trésorerie',
     // RH
     'rh-employes': 'RH — Employés',
     'rh-contrats': 'RH — Contrats',
@@ -83,6 +92,20 @@ const resourceLabels: Record<string, string> = {
     'modules-metier': 'Modules métier',
 };
 
+const standaloneKeys = computed(() => Object.keys(props.standalone ?? {}));
+
+function toggleStandalone(key: string) {
+    if (readOnly.value) return;
+    const next = new Set(activePermissions.value);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    activePermissions.value = next;
+}
+
+function isStandaloneChecked(key: string): boolean {
+    return activePermissions.value.has(key);
+}
+
 const actionLabels: Record<string, { label: string; color: string }> = {
     create: { label: 'Créer', color: 'text-emerald-600 dark:text-emerald-400' },
     read: { label: 'Lire', color: 'text-blue-600 dark:text-blue-400' },
@@ -92,12 +115,24 @@ const actionLabels: Record<string, { label: string; color: string }> = {
 
 const isSuperAdmin = computed(() => props.role.name === 'super_admin');
 
+/**
+ * Distinct de isSuperAdmin : un rôle système NON protégé (manager, commerciale, comptable,
+ * admin_entreprise — partagé par toutes les organisations) reste en lecture seule pour un
+ * acteur qui n'est pas lui-même super_admin (cf. RoleController::canManageRole()) — une
+ * organisation ne doit plus pouvoir changer le comportement d'un rôle utilisé par d'autres
+ * organisations, elle crée son propre rôle via ce même écran à la place.
+ */
+const readOnly = computed(() => isSuperAdmin.value || !props.role.can_write);
+
 const activePermissions = ref<Set<string>>(
     new Set(
         isSuperAdmin.value
-            ? props.resources.flatMap((r) =>
-                  props.actions.map((a) => `${r}.${a}`),
-              )
+            ? [
+                  ...props.resources.flatMap((r) =>
+                      props.actions.map((a) => `${r}.${a}`),
+                  ),
+                  ...standaloneKeys.value,
+              ]
             : props.role.permissions,
     ),
 );
@@ -118,7 +153,7 @@ function isChecked(resource: string, action: string): boolean {
 }
 
 function toggle(resource: string, action: string) {
-    if (isSuperAdmin.value) return;
+    if (readOnly.value) return;
     const key = permKey(resource, action);
     const next = new Set(activePermissions.value);
     if (next.has(key)) next.delete(key);
@@ -136,7 +171,7 @@ function columnState(action: string): ColState {
 }
 
 function toggleColumn(action: string) {
-    if (isSuperAdmin.value) return;
+    if (readOnly.value) return;
     const state = columnState(action);
     const next = new Set(activePermissions.value);
     props.resources.forEach((r) => {
@@ -155,7 +190,7 @@ function rowState(resource: string): ColState {
 }
 
 function toggleRow(resource: string) {
-    if (isSuperAdmin.value) return;
+    if (readOnly.value) return;
     const state = rowState(resource);
     const next = new Set(activePermissions.value);
     props.actions.forEach((a) => {
@@ -168,10 +203,12 @@ function toggleRow(resource: string) {
 
 const totalChecked = computed(() => activePermissions.value.size);
 const totalPossible = computed(
-    () => props.resources.length * props.actions.length,
+    () => props.resources.length * props.actions.length + standaloneKeys.value.length,
 );
 
 function save() {
+    if (readOnly.value) return;
+
     saving.value = true;
     identityErrors.value = {};
 
@@ -295,7 +332,7 @@ const breadcrumbs: BreadcrumbItem[] = [
             <div
                 class="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:p-6"
             >
-                <template v-if="!isSuperAdmin">
+                <template v-if="!readOnly">
                     <div class="w-full sm:max-w-xs">
                         <Label for="role-label" class="mb-1.5 block text-xs"
                             >Nom du rôle</Label
@@ -334,9 +371,17 @@ const breadcrumbs: BreadcrumbItem[] = [
                         </p>
                     </div>
                 </template>
-                <p v-else class="text-xs text-muted-foreground italic">
+                <p
+                    v-else-if="isSuperAdmin"
+                    class="text-xs text-muted-foreground italic"
+                >
                     Rôle système — ni le nom ni le trinôme ne peuvent être
                     modifiés.
+                </p>
+                <p v-else class="text-xs text-muted-foreground italic">
+                    Rôle système partagé par toutes les organisations — seul
+                    un super administrateur peut le modifier. Créez votre
+                    propre rôle si vous voulez un profil sur mesure.
                 </p>
             </div>
 
@@ -358,7 +403,12 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Sauvegardé
                             </span>
                         </transition>
-                        <Button size="sm" :disabled="saving" @click="save">
+                        <Button
+                            v-if="!readOnly"
+                            size="sm"
+                            :disabled="saving"
+                            @click="save"
+                        >
                             <Save class="mr-2 h-4 w-4" />
                             {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
                         </Button>
@@ -399,7 +449,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         <button
                                             class="group flex h-7 w-7 items-center justify-center rounded-md border-2 transition-all"
                                             :class="[
-                                                isSuperAdmin
+                                                readOnly
                                                     ? 'cursor-default border-muted opacity-60'
                                                     : 'cursor-pointer hover:border-primary/60',
                                                 columnState(action) === 'none'
@@ -409,7 +459,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                       ? 'border-primary bg-primary text-primary-foreground'
                                                       : 'border-primary/60 bg-primary/10',
                                             ]"
-                                            :disabled="isSuperAdmin"
+                                            :disabled="readOnly"
                                             :title="`Tout ${columnState(action) === 'all' ? 'désactiver' : 'activer'} — ${actionLabels[action]?.label}`"
                                             @click="toggleColumn(action)"
                                         >
@@ -449,7 +499,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         <button
                                             class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all"
                                             :class="[
-                                                isSuperAdmin
+                                                readOnly
                                                     ? 'cursor-default opacity-60'
                                                     : 'cursor-pointer',
                                                 rowState(resource) === 'none'
@@ -459,7 +509,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                       ? 'border-primary bg-primary text-primary-foreground'
                                                       : 'border-primary/60 bg-primary/10 hover:border-primary',
                                             ]"
-                                            :disabled="isSuperAdmin"
+                                            :disabled="readOnly"
                                             :title="`${rowState(resource) === 'all' ? 'Tout retirer' : 'Tout accorder'} — ${resourceLabels[resource] ?? resource}`"
                                             @click="toggleRow(resource)"
                                         >
@@ -494,14 +544,14 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         <button
                                             class="flex h-5 w-5 items-center justify-center rounded border-2 transition-all"
                                             :class="[
-                                                isSuperAdmin
+                                                readOnly
                                                     ? 'cursor-default opacity-70'
                                                     : 'cursor-pointer',
                                                 isChecked(resource, action)
                                                     ? 'border-primary bg-primary text-primary-foreground'
                                                     : 'border-border bg-background hover:border-primary/60',
                                             ]"
-                                            :disabled="isSuperAdmin"
+                                            :disabled="readOnly"
                                             @click="toggle(resource, action)"
                                         >
                                             <Check
@@ -550,6 +600,53 @@ const breadcrumbs: BreadcrumbItem[] = [
                         Les permissions du Super Admin sont gérées
                         automatiquement.
                     </p>
+                </div>
+            </div>
+
+            <!-- Permissions standalone (hors matrice CRUD) -->
+            <div
+                v-if="standaloneKeys.length > 0"
+                class="overflow-hidden rounded-xl border bg-card shadow-sm"
+            >
+                <div class="border-b bg-muted/30 px-6 py-3">
+                    <p class="text-sm font-medium">
+                        Permissions spécifiques (hors matrice)
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        Actions de workflow qui ne rentrent pas dans le
+                        schéma créer/lire/modifier/supprimer.
+                    </p>
+                </div>
+                <div
+                    class="grid grid-cols-1 gap-x-6 gap-y-3 p-6 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                    <label
+                        v-for="key in standaloneKeys"
+                        :key="key"
+                        class="flex items-start gap-2"
+                        :class="readOnly ? '' : 'cursor-pointer'"
+                    >
+                        <button
+                            type="button"
+                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-all"
+                            :class="[
+                                readOnly
+                                    ? 'cursor-default opacity-70'
+                                    : 'cursor-pointer',
+                                isStandaloneChecked(key)
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-border bg-background hover:border-primary/60',
+                            ]"
+                            :disabled="readOnly"
+                            @click="toggleStandalone(key)"
+                        >
+                            <Check
+                                v-if="isStandaloneChecked(key)"
+                                class="h-3 w-3"
+                            />
+                        </button>
+                        <span class="text-sm">{{ standalone[key] }}</span>
+                    </label>
                 </div>
             </div>
         </div>

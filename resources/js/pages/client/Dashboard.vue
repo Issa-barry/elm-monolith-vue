@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import MobileVehiculeBalancesList from '@/components/client/MobileVehiculeBalancesList.vue';
 import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import ClientLayout from '@/layouts/ClientLayout.vue';
 import type {
     DashboardFiltersPayload,
@@ -37,14 +38,7 @@ const userFullName = computed(() => {
 });
 const userPhone = computed(() => user.value?.telephone?.trim() || '-');
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur entreprise',
-    manager: 'Manager',
-    commerciale: 'Commercial',
-    comptable: 'Comptable',
-    client: 'Client',
-};
+const { roleLabel } = usePermissions();
 
 const userRoleLabel = computed(() => {
     const firstRole = (page.props.auth.roles as string[])?.[0];
@@ -52,7 +46,7 @@ const userRoleLabel = computed(() => {
         return 'Partenaire';
     }
 
-    return ROLE_LABELS[firstRole] ?? firstRole.replaceAll('_', ' ');
+    return roleLabel(firstRole);
 });
 
 const periodOptions: Array<{

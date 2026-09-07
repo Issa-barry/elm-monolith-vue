@@ -9,9 +9,11 @@ use Illuminate\Support\Facades\Schema;
  * `depenses`). NULL = aucun plafond configuré, ce qui est traité comme
  * "0 GNF" (deny-by-default, cf. peutValiderMontant()) tant que peut_valider
  * est actif — jamais interprété comme "illimité" pour éviter qu'une ligne mal
- * configurée n'ouvre un accès sans limite. Super Admin et Admin Entreprise
- * restent en dehors de ce mécanisme (bypass isAdmin(), non concernés par
- * cette table).
+ * configurée n'ouvre un accès sans limite. Seul Super Admin reste en dehors de
+ * ce mécanisme (bypass hasRole('super_admin')) : Admin Entreprise y est
+ * soumis comme n'importe quel rôle depuis cette même date (DEPVAL-001), et
+ * depuis le 2026-09-06 sur l'ensemble de DroitCreationDepenseService (plus
+ * seulement le plafond) — cf. sa docblock de classe.
  */
 return new class extends Migration
 {

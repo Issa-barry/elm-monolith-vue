@@ -1,27 +1,20 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import { Shield } from 'lucide-vue-next';
 
 const props = defineProps<{
     roles: string[];
+    /**
+     * Optionnel : à fournir explicitement seulement quand le périmètre de libellés diffère de
+     * celui de l'organisation courante (ex: Accounts/Index.vue, vue plateforme multi-organisations
+     * pour un super_admin — cf. AccountController::index()). Sinon, retombe sur
+     * `auth.role_labels` (org courante), lui-même déjà scopé correctement pour l'immense
+     * majorité des écrans (ex: Users/Index.vue).
+     */
     roleLabels?: Record<string, string>;
 }>();
 
-/**
- * Labels/couleurs par défaut pour les rôles historiques — utilisés en secours
- * quand `roleLabels` (fourni par le backend, cf. UserController::indexProps)
- * ne connaît pas encore le rôle (rôle système avant migration des labels, ou
- * rôle externe comme `client`/`proprietaire`/`livreur`).
- */
-const FALLBACK_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-    client: 'Client',
-    proprietaire: 'Propriétaire',
-    livreur: 'Livreur',
-};
+const { roleLabel: globalRoleLabel } = usePermissions();
 
 const ROLE_COLORS: Record<string, string> = {
     super_admin:
@@ -37,7 +30,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 function roleLabel(role: string) {
-    return props.roleLabels?.[role] ?? FALLBACK_LABELS[role] ?? role;
+    return props.roleLabels?.[role] ?? globalRoleLabel(role);
 }
 
 function roleColor(role: string) {

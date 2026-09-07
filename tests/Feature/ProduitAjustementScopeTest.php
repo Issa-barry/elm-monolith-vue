@@ -96,8 +96,17 @@ class ProduitAjustementScopeTest extends TestCase
 
     // ── API : accès / blocage ─────────────────────────────────────────────────
 
-    public function test_admin_peut_ajuster_stock_sans_droit_configure(): void
+    /**
+     * Depuis le 2026-09-06, admin_entreprise ne bypasse plus DroitAjustementStockService — il a
+     * besoin d'une ligne DroitAjustementStock comme n'importe quel rôle. C'est exactement ce que
+     * InstallationService::install() (et la migration de backfill pour les organisations
+     * existantes) provisionne par défaut pour toute organisation réelle : ce test reproduit donc
+     * cette continuité plutôt que de tester un bypass qui n'existe plus.
+     */
+    public function test_admin_avec_droit_configure_peut_ajuster_stock(): void
     {
+        $this->droitToutes(role: 'admin_entreprise');
+
         $this->actingAs($this->adminUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
@@ -105,6 +114,17 @@ class ProduitAjustementScopeTest extends TestCase
                 'motif_type' => 'correction_stock',
             ])
             ->assertRedirect();
+    }
+
+    public function test_admin_sans_droit_configure_recoit_403(): void
+    {
+        $this->actingAs($this->adminUser())
+            ->post(route('produits.ajuster-stock', $this->produit), [
+                'site_id' => $this->site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertForbidden();
     }
 
     public function test_manager_sans_droit_recoit_403(): void
@@ -220,8 +240,11 @@ class ProduitAjustementScopeTest extends TestCase
             );
     }
 
-    public function test_admin_recoit_can_ajuster_true_sur_la_page_index(): void
+    /** Cf. test_admin_avec_droit_configure_peut_ajuster_stock — même besoin de continuité. */
+    public function test_admin_avec_droit_configure_recoit_can_ajuster_true_sur_la_page_index(): void
     {
+        $this->droitToutes(role: 'admin_entreprise');
+
         $this->actingAs($this->adminUser())
             ->get(route('produits.index'))
             ->assertInertia(fn ($page) => $page
@@ -272,7 +295,17 @@ class ProduitAjustementScopeTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_manager_sur_site_non_dans_perimetre_recoit_can_ajuster_false(): void
+    /**
+     * `can_ajuster_stock`/`can_augmenter_stock`/`can_diminuer_stock` sont des capacités
+     * GÉNÉRALES ("ce rôle a-t-il un droit actif quelque part dans l'organisation"), jamais
+     * spécifiques au site par défaut de l'acteur (décision 2026-09-07, cf. docblock de
+     * DroitAjustementStockService) — `sites_autorises` porte seul l'information de périmètre :
+     * le manager a bien un droit (augmenter uniquement, sur Dabompa), donc `can_ajuster_stock`
+     * et `can_augmenter_stock` sont vrais et `sites_autorises` liste Dabompa, même si son propre
+     * site par défaut (Lansanaya) n'y figure pas. Toute tentative d'ajustement effective SUR
+     * Lansanaya reste refusée (cf. test_manager_sur_site_non_dans_perimetre_recoit_403).
+     */
+    public function test_manager_avec_perimetre_ailleurs_voit_son_vrai_perimetre_dans_les_props(): void
     {
         $siteAutorise = Site::create([
             'organization_id' => $this->org->id,
@@ -294,10 +327,11 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->get(route('produits.index'))
             ->assertInertia(fn ($page) => $page
-                ->where('can_ajuster_stock', false)
-                ->where('can_augmenter_stock', false)
+                ->where('can_ajuster_stock', true)
+                ->where('can_augmenter_stock', true)
                 ->where('can_diminuer_stock', false)
-                ->where('sites_autorises', [])
+                ->has('sites_autorises', 1)
+                ->where('sites_autorises.0.id', $siteAutorise->id)
             );
     }
 
