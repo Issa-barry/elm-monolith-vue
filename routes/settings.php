@@ -3,6 +3,7 @@
 use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
+use App\Http\Controllers\Settings\LogistiqueParametrageController;
 use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\OrganisationController;
 use App\Http\Controllers\Settings\ParametreController;
@@ -51,6 +52,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
     Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
+
+    Route::get('settings/logistique', [LogistiqueParametrageController::class, 'edit'])->name('settings.logistique.edit');
+    Route::put('settings/logistique', [LogistiqueParametrageController::class, 'update'])->name('settings.logistique.update');
 
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
     Route::get('settings/commissions/configuration', [CommissionRegleController::class, 'redirectConfiguration']);

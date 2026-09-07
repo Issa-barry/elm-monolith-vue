@@ -634,7 +634,7 @@ function activiteDotClass(action: string): string {
                         @click="showValidationCommissionDialog = true"
                     >
                         <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
-                        Générer commission
+                        Approuver la réception
                     </Button>
 
                     <Link
@@ -1287,8 +1287,9 @@ function activiteDotClass(action: string): string {
                                     v-if="can_valider_reception_admin"
                                     class="mt-2 text-xs text-muted-foreground"
                                 >
-                                    Vous pouvez cliquer "D'accord" pour
-                                    approuver et générer la commission.
+                                    Vous pouvez cliquer sur "Approuver la
+                                    réception" pour valider et générer la
+                                    commission.
                                 </p>
                             </div>
 
@@ -1645,11 +1646,12 @@ function activiteDotClass(action: string): string {
             :types-ecart="types_ecart"
         />
 
-        <!-- ══ Dialog : Générer commission (validation admin) ══════════════ -->
+        <!-- ══ Dialog : Approuver la réception (validation admin, génère la
+        commission automatiquement en cas d'accord) ══════════════ -->
         <Dialog
             v-model:visible="showValidationCommissionDialog"
             modal
-            header="Valider la réception"
+            header="Approuver la réception"
             :style="{ width: 'min(700px, 94vw)' }"
             :draggable="false"
         >
@@ -1733,8 +1735,8 @@ function activiteDotClass(action: string): string {
                     />
                     {{
                         validationProcessing
-                            ? 'Génération…'
-                            : 'Oui, générer la commission'
+                            ? 'Validation…'
+                            : 'Oui, approuver'
                     }}
                 </Button>
             </template>

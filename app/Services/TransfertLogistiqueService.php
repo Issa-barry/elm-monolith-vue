@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\StatutTransfert;
+use App\Models\Parametre;
 use App\Models\ProduitVariante;
 use App\Models\TransfertLogistique;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,26 @@ class TransfertLogistiqueService
             // Entrée stock destination : marchandises reçues (RECEPTION)
             if ($suivant === StatutTransfert::RECEPTION) {
                 MouvementStockService::enregistrerEntreeDestination($transfert);
+
+                // Approbation admin non requise (paramètre organisation, défaut = requise,
+                // cf. Parametre::isApprobationReceptionLogistiqueObligatoire()) : la réception
+                // vaut directement accord, sans clic manuel "Approuver la réception".
+                // validated_by reste null pour distinguer cette auto-approbation d'une décision
+                // humaine. Le déclenchement réel de la commission suit ensuite exactement la
+                // même règle que l'accord manuel (cf. CommissionTriggerService::
+                // onTransfertReceptionEffectuee(), no-op sous CHARGEMENT_VALIDE puisque la
+                // commission existe déjà depuis le départ).
+                if (! Parametre::isApprobationReceptionLogistiqueObligatoire($transfert->organization_id)) {
+                    $transfert->update([
+                        'validation_reception' => 'accord',
+                        'validated_by' => null,
+                        'validated_at' => now(),
+                    ]);
+
+                    CommissionTriggerService::onTransfertReceptionEffectuee($transfert);
+
+                    TransfertActiviteService::log($transfert, 'validation_admin_auto');
+                }
             }
         });
 

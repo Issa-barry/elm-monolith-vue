@@ -726,11 +726,20 @@ passer. Une organisation peut désormais désactiver ce contrôle si elle ne le 
   historique inchangé pour toute organisation n'ayant jamais explicitement configuré ce paramètre.
   Réglable depuis **`Paramètres > Logistique`** (`LogistiqueParametrageController`, page dédiée —
   pas `Settings\CommissionRegleController`, qui ne gère que les barèmes). Ce paramètre vit aux
-  côtés de `declencheur_commission_logistique` et `montant_defaut_commission_logistique_par_pack`,
-  déplacés le même jour depuis `Paramètres > Ventes` (`VenteParametrageController`) où ils avaient
-  atterri par réutilisation de contrôleur plutôt que par cohérence métier — ce sont des réglages
-  logistiques, pas des réglages de vente. Les clés `Parametre` et leurs valeurs ne changent pas,
-  seul l'écran d'édition change.
+  côtés de `declencheur_commission_logistique`, déplacé le même jour depuis `Paramètres > Ventes`
+  (`VenteParametrageController`) où il avait atterri par réutilisation de contrôleur plutôt que
+  par cohérence métier — ce sont des réglages logistiques, pas des réglages de vente. La clé
+  `Parametre` et sa valeur ne changent pas, seul l'écran d'édition change.
+- **Retiré le même jour** : `montant_defaut_commission_logistique_par_pack`
+  (`Parametre::getMontantDefautCommissionLogistiquePack()`/`setMontantDefautCommissionLogistiquePack()`,
+  clé `ventes_montant_defaut_commission_logistique_par_pack`) était exposé dans ce même écran
+  mais n'était lu par AUCUN code de génération depuis le retrait de `CommissionLogistiqueService`
+  (COMM-007) — un vestige suggérant une seconde source de vérité du montant, jamais réellement
+  consommée. Supprimé entièrement (constante, accesseurs, exposition Settings, UI) : `Paramètres >
+  Commissions > Transferts logistiques` (`CommissionRegleController`) reste la SEULE source de
+  vérité du montant/partage d'une commission logistique. Une organisation ayant déjà enregistré
+  une valeur pour cette clé garde sa ligne `parametres` orpheline en base (jamais nettoyée
+  automatiquement, aucune donnée métier n'en dépendait).
 - **Si `true` (défaut)** : rien ne change — un administrateur (`super_admin`/`admin_entreprise`)
   doit toujours cliquer explicitement « Approuver la réception » (`ReceptionValidationAdminController`
   / `Api\Backoffice\Logistique\ValidationAdminController::handleAccord()`).

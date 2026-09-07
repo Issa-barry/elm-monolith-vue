@@ -54,7 +54,58 @@ class VenteParametrageTest extends TestCase
             );
     }
 
+    /**
+     * `commerciale`/`manager` sont des rôles système partagés par toutes les organisations
+     * (organization_id null) — ce test cible donc désormais un rôle métier propre à
+     * l'organisation pour vérifier le mécanisme de sélection, plutôt qu'un rôle système (cf.
+     * test_update_does_not_change_permissions_of_a_system_role_for_non_super_admin ci-dessous
+     * pour la garantie inverse).
+     */
     public function test_update_applies_unit_price_permission_by_role_selection(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+        Permission::findOrCreate('parametres.read', 'web');
+        $user->givePermissionTo('parametres.read');
+
+        // Créées explicitement ici (état "déjà déployé") pour ne pas dépendre du bootstrap
+        // ponctuel ensureSalesPermissionsExist() (qui n'accorde par défaut qu'à la première
+        // création de ces permissions, jamais ensuite) — état réaliste d'une organisation qui
+        // n'en est pas à sa toute première configuration.
+        Permission::findOrCreate('ventes.prix.update', 'web');
+        Permission::findOrCreate('ventes.qte.update', 'web');
+
+        $orgRole = Role::create(['name' => 'chef_agence', 'label' => 'Chef agence', 'guard_name' => 'web', 'organization_id' => $user->organization_id]);
+        $managerRole = Role::query()->where('name', 'manager')->firstOrFail();
+        $managerHadPermissionBefore = $managerRole->hasPermissionTo('ventes.prix.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [$orgRole->name],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertTrue($orgRole->fresh()->hasPermissionTo('ventes.prix.update'));
+        // 'manager' est un rôle système (partagé, non sélectionné ici) : son état ne doit pas
+        // bouger, quel qu'il soit — ni forcé à false (ancien comportement, désormais dangereux
+        // en cross-tenant) ni affecté par la sélection d'un autre rôle.
+        $this->assertSame($managerHadPermissionBefore, $managerRole->fresh()->hasPermissionTo('ventes.prix.update'));
+    }
+
+    /**
+     * Verrou central de la refonte rôles/permissions (2026-09-06) : `commerciale` est un rôle
+     * système partagé par TOUTES les organisations — avant ce verrou, cocher "Commerciale"
+     * depuis l'écran de paramétrage ventes d'UNE organisation modifiait silencieusement le
+     * comportement de `commerciale` pour toutes les autres. Un admin_entreprise ne peut donc
+     * plus faire varier ses permissions depuis cet écran ; seul un super_admin le peut.
+     */
+    public function test_update_does_not_change_permissions_of_a_system_role_for_non_super_admin(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
@@ -69,17 +120,12 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
 
         $commercialeRole = Role::query()->where('name', 'commerciale')->firstOrFail();
-        $managerRole = Role::query()->where('name', 'manager')->firstOrFail();
-
-        $this->assertTrue($commercialeRole->hasPermissionTo('ventes.prix.update'));
-        $this->assertFalse($managerRole->hasPermissionTo('ventes.prix.update'));
+        $this->assertFalse($commercialeRole->hasPermissionTo('ventes.prix.update'));
     }
 
     public function test_edit_exposes_autoriser_saisie_dessous_qte_max_prop(): void
@@ -110,8 +156,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -137,8 +181,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -165,8 +207,8 @@ class VenteParametrageTest extends TestCase
     /**
      * Aucun Parametre::set... appelé : ces valeurs sont les défauts d'une organisation neuve
      * (décision produit du 18/08/2026) — commission vente à l'encaissement de la facture,
-     * commission logistique à la réception (comportement historique, inchangé), contrôle des
-     * impayés actif avec seuil 0.
+     * contrôle des impayés actif avec seuil 0. Le déclencheur logistique a son propre défaut,
+     * couvert par LogistiqueParametrageTest (page déplacée le 07/09/2026).
      */
     public function test_edit_exposes_les_nouveaux_defauts_dune_organisation_neuve(): void
     {
@@ -179,7 +221,6 @@ class VenteParametrageTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/Ventes')
                 ->where('declencheur_commission_vente', 'facture_encaissee')
-                ->where('declencheur_commission_logistique', 'reception_effectuee')
                 ->where('controle_impayes_actif', true)
                 ->where('seuil_impayes_max', 0)
             );
@@ -209,7 +250,7 @@ class VenteParametrageTest extends TestCase
             );
     }
 
-    public function test_update_persists_declencheurs_commission(): void
+    public function test_update_persists_declencheur_commission_vente(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
@@ -222,8 +263,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'facture_encaissee',
-                'declencheur_commission_logistique' => 'chargement_valide',
-                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -231,10 +270,6 @@ class VenteParametrageTest extends TestCase
         $this->assertEquals(
             'facture_encaissee',
             Parametre::getDeclencheurCommissionVente($user->organization_id)->value,
-        );
-        $this->assertEquals(
-            'chargement_valide',
-            Parametre::getDeclencheurCommissionLogistique($user->organization_id)->value,
         );
     }
 
@@ -251,86 +286,7 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'valeur_invalide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 200,
             ])
             ->assertSessionHasErrors('declencheur_commission_vente');
-    }
-
-    public function test_update_rejette_une_valeur_de_declencheur_logistique_invalide(): void
-    {
-        $this->createRoles();
-        $user = $this->createAuthorizedUser('parametres.update');
-
-        $this->actingAs($user)
-            ->put(route('settings.ventes.update'), [
-                'quantity_edit_role_names' => [],
-                'price_edit_role_names' => [],
-                'autoriser_saisie_dessous_qte_max' => true,
-                'controle_impayes_actif' => false,
-                'seuil_impayes_max' => 0,
-                'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'valeur_invalide',
-                'montant_defaut_commission_logistique_par_pack' => 200,
-            ])
-            ->assertSessionHasErrors('declencheur_commission_logistique');
-    }
-
-    public function test_edit_expose_le_montant_defaut_commission_logistique_par_pack(): void
-    {
-        $this->createRoles();
-        $user = $this->createAuthorizedUser('parametres.read');
-
-        $this->actingAs($user)
-            ->get(route('settings.ventes.edit'))
-            ->assertStatus(200)
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/Ventes')
-                ->where('montant_defaut_commission_logistique_par_pack', 200) // défaut historique
-            );
-    }
-
-    public function test_update_persists_le_montant_defaut_commission_logistique_par_pack(): void
-    {
-        $this->createRoles();
-        $user = $this->createAuthorizedUser('parametres.update');
-
-        $this->actingAs($user)
-            ->put(route('settings.ventes.update'), [
-                'quantity_edit_role_names' => [],
-                'price_edit_role_names' => [],
-                'autoriser_saisie_dessous_qte_max' => true,
-                'controle_impayes_actif' => false,
-                'seuil_impayes_max' => 0,
-                'declencheur_commission_vente' => 'facture_encaissee',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 350,
-            ])
-            ->assertRedirect()
-            ->assertSessionHas('success');
-
-        $this->assertEquals(
-            350,
-            Parametre::getMontantDefautCommissionLogistiquePack($user->organization_id),
-        );
-    }
-
-    public function test_update_rejette_un_montant_logistique_invalide(): void
-    {
-        $this->createRoles();
-        $user = $this->createAuthorizedUser('parametres.update');
-
-        $this->actingAs($user)
-            ->put(route('settings.ventes.update'), [
-                'quantity_edit_role_names' => [],
-                'price_edit_role_names' => [],
-                'autoriser_saisie_dessous_qte_max' => true,
-                'controle_impayes_actif' => false,
-                'seuil_impayes_max' => 0,
-                'declencheur_commission_vente' => 'facture_encaissee',
-                'declencheur_commission_logistique' => 'reception_effectuee',
-                'montant_defaut_commission_logistique_par_pack' => 0,
-            ])
-            ->assertSessionHasErrors('montant_defaut_commission_logistique_par_pack');
     }
 }

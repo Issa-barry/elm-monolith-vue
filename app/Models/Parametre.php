@@ -99,14 +99,16 @@ class Parametre extends Model
     public const CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE = 'ventes_declencheur_commission_logistique';
 
     /**
-     * Montant GNF/pack utilisé quand la commission logistique est générée sans saisie
-     * explicite (CommissionLogistiqueService::genererAutomatique()/genererDepuisChargement()).
-     * Remplace l'ancienne valeur codée en dur (200 FG) — 200 reste la valeur par défaut d'une
-     * organisation n'ayant jamais explicitement configuré ce paramètre, pour ne rien changer au
-     * comportement historique. Sans effet sur la saisie manuelle admin à la réception
-     * (ReceptionValidationAdminController), qui continue d'exiger un montant à chaque transfert.
+     * Sous déclencheur RECEPTION_EFFECTUEE : gouverne si l'admin doit explicitement cliquer
+     * "Approuver la réception" avant que CommissionTriggerService::onTransfertReceptionEffectuee()
+     * ne soit invoqué, ou si TransfertLogistiqueService::avancerStatut() l'invoque lui-même dès
+     * que le transfert atteint RECEPTION (validation_reception mis à 'accord' automatiquement,
+     * validated_by null pour distinguer une auto-approbation d'une décision humaine). Sans effet
+     * sous CHARGEMENT_VALIDE : onTransfertReceptionEffectuee() y est déjà un no-op, la commission
+     * étant née au départ — cf. COMM-007. N'a jamais été configurable avant le 07/09/2026 :
+     * l'approbation admin était systématiquement obligatoire, ce qui reste le défaut (true).
      */
-    public const CLE_MONTANT_DEFAUT_COMMISSION_LOGISTIQUE_PAR_PACK = 'ventes_montant_defaut_commission_logistique_par_pack';
+    public const CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE = 'logistique_approbation_reception_obligatoire';
 
     public const CLE_MAX_PHOTOS_PRODUIT = 'max_photos_produit';
 
@@ -194,7 +196,7 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_STOCK_NEGATIF,
             self::CLE_DECLENCHEUR_COMMISSION_VENTE,
             self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE,
-            self::CLE_MONTANT_DEFAUT_COMMISSION_LOGISTIQUE_PAR_PACK,
+            self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE,
             self::CLE_MAX_PHOTOS_PRODUIT,
             self::CLE_MAX_OPTIONS_PRODUIT,
             self::CLE_MAX_VALEURS_OPTION,
@@ -390,23 +392,28 @@ class Parametre extends Model
         Cache::forget(self::cacheKey($orgId, self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE));
     }
 
-    public static function getMontantDefautCommissionLogistiquePack(string $orgId): int
+    /**
+     * Défaut OUI (true) : comportement historique — l'approbation admin de la réception reste
+     * toujours obligatoire pour une organisation n'ayant jamais explicitement configuré ce
+     * paramètre (cf. set() ci-dessous, qui écrit une ligne réelle en base).
+     */
+    public static function isApprobationReceptionLogistiqueObligatoire(string $orgId): bool
     {
-        return (int) self::get($orgId, self::CLE_MONTANT_DEFAUT_COMMISSION_LOGISTIQUE_PAR_PACK, 200);
+        return (bool) self::get($orgId, self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE, true);
     }
 
-    public static function setMontantDefautCommissionLogistiquePack(string $orgId, int $montant): void
+    public static function setApprobationReceptionLogistiqueObligatoire(string $orgId, bool $valeur): void
     {
         static::updateOrCreate(
-            ['organization_id' => $orgId, 'cle' => self::CLE_MONTANT_DEFAUT_COMMISSION_LOGISTIQUE_PAR_PACK],
+            ['organization_id' => $orgId, 'cle' => self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE],
             [
-                'valeur' => (string) $montant,
-                'type' => self::TYPE_INTEGER,
+                'valeur' => $valeur ? '1' : '0',
+                'type' => self::TYPE_BOOLEAN,
                 'groupe' => self::GROUPE_VENTES,
-                'description' => 'Montant par defaut (GNF/pack) de la commission logistique generee automatiquement',
+                'description' => 'Exiger une approbation admin de la réception avant de générer la commission logistique (sous déclencheur RECEPTION_EFFECTUEE)',
             ],
         );
-        Cache::forget(self::cacheKey($orgId, self::CLE_MONTANT_DEFAUT_COMMISSION_LOGISTIQUE_PAR_PACK));
+        Cache::forget(self::cacheKey($orgId, self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE));
     }
 
     public static function getMaxPhotosProduit(string $orgId): int
