@@ -17,6 +17,7 @@ use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
+use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -439,6 +440,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
                 ->name('sites.import.confirmer');
         });
+
+        // ── Communications — monitoring SMS/WhatsApp (cf. rapport 07/09/2026, P1) ──
+        Route::get('communications', [CommunicationController::class, 'index'])->name('communications.index');
 
         // ── Comptes — point d'entrée unique de navigation pour la gestion des comptes ──────
         // (super_admin : console plateforme multi-organisation ; autres : délègue à la liste

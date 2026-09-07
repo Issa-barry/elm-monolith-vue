@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\Auth;
 
 use App\Mail\OtpCodeMail;
+use App\Models\MessageLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -151,5 +152,27 @@ class OtpLoginNimbaSmsTest extends TestCase
             ->assertJson(['sent' => true, 'channel' => 'sms']);
 
         Mail::assertNothingSent();
+    }
+
+    /**
+     * Journal de monitoring (cf. App\Services\Communications\MessageLogService)
+     * — bout-en-bout via le vrai contrôleur : `organization_id` est résolu par
+     * recherche du compte, jamais forcé.
+     */
+    public function test_request_by_sms_creates_a_message_log_scoped_to_the_users_organization(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['message_id' => 'nimba-abc'], 200)]);
+        $user = $this->makeUnverifiedUser('+224620000805', 'client5@example.com');
+
+        $this->postJson(route('api.auth.otp-login.request'), ['telephone' => '+224620000805'])
+            ->assertOk();
+
+        $log = MessageLog::sole();
+        $this->assertSame($user->organization_id, $log->organization_id);
+        $this->assertSame('sms', $log->channel->value);
+        $this->assertSame('sent', $log->status->value);
+        $this->assertSame('login', $log->purpose->value);
+        $this->assertSame('nimba-abc', $log->provider_message_id);
     }
 }

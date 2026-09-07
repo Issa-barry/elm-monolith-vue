@@ -23,6 +23,7 @@ import {
     Contact,
     Layers,
     LayoutGrid,
+    MessageSquare,
     Package,
     PackageCheck,
     Receipt,
@@ -361,6 +362,14 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Comptes',
             href: '/backoffice/comptes',
             icon: UsersRound,
+            group: 'Organisation',
+        });
+
+    if (can('communications.read'))
+        items.push({
+            title: 'Communications',
+            href: '/backoffice/communications',
+            icon: MessageSquare,
             group: 'Organisation',
         });
 
