@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { usePermissions } from '@/composables/usePermissions';
 import { useInitials } from '@/composables/useInitials';
+import { usePermissions } from '@/composables/usePermissions';
 import type { AppPageProps, User } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';

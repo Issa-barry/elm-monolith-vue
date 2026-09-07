@@ -165,9 +165,7 @@ function onSiteChange(site: SiteRow, e: Event) {
                                 "
                             />
                             <div>
-                                <p
-                                    class="text-sm font-medium text-foreground"
-                                >
+                                <p class="text-sm font-medium text-foreground">
                                     {{ option.label }}
                                 </p>
                                 <p class="text-xs text-muted-foreground">
@@ -192,9 +190,7 @@ function onSiteChange(site: SiteRow, e: Event) {
                     <div class="px-5 py-4">
                         <div class="flex items-center justify-between gap-4">
                             <div class="min-w-0 flex-1">
-                                <p
-                                    class="text-sm font-medium text-foreground"
-                                >
+                                <p class="text-sm font-medium text-foreground">
                                     Une approbation administrative est-elle
                                     obligatoire ?
                                 </p>
@@ -212,8 +208,7 @@ function onSiteChange(site: SiteRow, e: Event) {
                                                 : 'Désactivée'
                                         }}</span
                                     >
-                                    <span
-                                        class="text-xs text-muted-foreground"
+                                    <span class="text-xs text-muted-foreground"
                                         >— règle par défaut de
                                         l'organisation</span
                                     >
@@ -258,20 +253,19 @@ function onSiteChange(site: SiteRow, e: Event) {
                                 "
                             >
                                 Un administrateur doit approuver chaque
-                                réception avant que la commission logistique
-                                ne soit générée.
+                                réception avant que la commission logistique ne
+                                soit générée.
                             </template>
                             <template v-else>
-                                Les réceptions sont approuvées
-                                automatiquement dès qu'elles sont
-                                enregistrées : la commission logistique part
-                                aussitôt, sans intervention d'un
+                                Les réceptions sont approuvées automatiquement
+                                dès qu'elles sont enregistrées : la commission
+                                logistique part aussitôt, sans intervention d'un
                                 administrateur.
                             </template>
-                            Sans effet si le déclencheur ci-dessus est réglé
-                            sur « à la validation du chargement » : la
-                            commission naît alors déjà au départ du
-                            transfert, avant même la réception.
+                            Sans effet si le déclencheur ci-dessus est réglé sur
+                            « à la validation du chargement » : la commission
+                            naît alors déjà au départ du transfert, avant même
+                            la réception.
                         </p>
                     </div>
                 </div>
@@ -297,8 +291,8 @@ function onSiteChange(site: SiteRow, e: Event) {
                                         ? 'approbation activée'
                                         : 'approbation désactivée'
                                 }}</span
-                            >). Vous pouvez définir une règle différente pour
-                            un site en particulier — la règle appliquée à un
+                            >). Vous pouvez définir une règle différente pour un
+                            site en particulier — la règle appliquée à un
                             transfert est celle de son site
                             <span class="font-medium text-foreground"
                                 >destination</span
@@ -306,9 +300,9 @@ function onSiteChange(site: SiteRow, e: Event) {
                         </p>
                         <p class="text-xs text-muted-foreground">
                             Changer la règle d'un site n'affecte jamais un
-                            transfert déjà réceptionné en attente
-                            d'approbation — seules les prochaines réceptions
-                            suivent la nouvelle règle.
+                            transfert déjà réceptionné en attente d'approbation
+                            — seules les prochaines réceptions suivent la
+                            nouvelle règle.
                         </p>
                     </div>
 

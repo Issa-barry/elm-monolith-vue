@@ -1734,9 +1734,7 @@ function activiteDotClass(action: string): string {
                         class="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
                     />
                     {{
-                        validationProcessing
-                            ? 'Validation…'
-                            : 'Oui, approuver'
+                        validationProcessing ? 'Validation…' : 'Oui, approuver'
                     }}
                 </Button>
             </template>

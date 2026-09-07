@@ -488,7 +488,9 @@ function saveDroits() {
                                                             ? 'border-primary bg-primary text-primary-foreground'
                                                             : 'border-border bg-background hover:border-primary/60'
                                                     "
-                                                    @click="toggleCreation(entry)"
+                                                    @click="
+                                                        toggleCreation(entry)
+                                                    "
                                                 >
                                                     <Check
                                                         v-if="entry.is_actif"
@@ -631,9 +633,7 @@ function saveDroits() {
                                     <!-- Sous-ligne portée -->
                                     <tr
                                         v-if="
-                                            !isUnlimitedRole(
-                                                entry.role_name,
-                                            ) &&
+                                            !isUnlimitedRole(entry.role_name) &&
                                             (entry.peut_valider ||
                                                 entry.is_actif) &&
                                             isPorteeExpanded(entry.role_name)

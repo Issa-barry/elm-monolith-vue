@@ -203,7 +203,9 @@ function toggleRow(resource: string) {
 
 const totalChecked = computed(() => activePermissions.value.size);
 const totalPossible = computed(
-    () => props.resources.length * props.actions.length + standaloneKeys.value.length,
+    () =>
+        props.resources.length * props.actions.length +
+        standaloneKeys.value.length,
 );
 
 function save() {
@@ -379,9 +381,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                     modifiés.
                 </p>
                 <p v-else class="text-xs text-muted-foreground italic">
-                    Rôle système partagé par toutes les organisations — seul
-                    un super administrateur peut le modifier. Créez votre
-                    propre rôle si vous voulez un profil sur mesure.
+                    Rôle système partagé par toutes les organisations — seul un
+                    super administrateur peut le modifier. Créez votre propre
+                    rôle si vous voulez un profil sur mesure.
                 </p>
             </div>
 
@@ -613,8 +615,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                         Permissions spécifiques (hors matrice)
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Actions de workflow qui ne rentrent pas dans le
-                        schéma créer/lire/modifier/supprimer.
+                        Actions de workflow qui ne rentrent pas dans le schéma
+                        créer/lire/modifier/supprimer.
                     </p>
                 </div>
                 <div

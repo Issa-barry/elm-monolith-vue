@@ -555,7 +555,9 @@ function saveVente() {
                                         <td class="px-6 py-4">
                                             <div
                                                 v-if="
-                                                    isUnlimitedRole(entry.role_name)
+                                                    isUnlimitedRole(
+                                                        entry.role_name,
+                                                    )
                                                 "
                                                 class="text-xs text-muted-foreground italic"
                                             >
