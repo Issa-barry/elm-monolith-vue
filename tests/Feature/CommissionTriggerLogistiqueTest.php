@@ -31,6 +31,7 @@ use App\Models\Vehicule;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -506,6 +507,35 @@ class CommissionTriggerLogistiqueTest extends TestCase
             1,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfertA->id)->count(),
         );
+    }
+
+    /**
+     * Preuve directe côté page (pas seulement côté modèle) que le bouton "Approuver la
+     * réception" de Logistique/Show.vue reste disponible pour un transfert déjà en attente
+     * après un changement de paramètre : son v-if (cf. resources/js/pages/Logistique/Show.vue)
+     * ne lit QUE `can_valider_reception_admin`, `transfert.statut` et
+     * `transfert.validation_reception` — jamais le paramètre organisation, qui n'est même pas
+     * transmis à cette page (TransfertLogistiqueController::show()).
+     */
+    public function test_le_bouton_approuver_reste_disponible_pour_un_transfert_deja_en_attente_apres_changement_de_parametre(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfertA = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfertA = TransfertLogistiqueService::avancerStatut($transfertA);
+
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+
+        $this->actingAs($this->admin)
+            ->get(route('logistique.show', $transfertA))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Logistique/Show')
+                ->where('can_valider_reception_admin', true)
+                ->where('transfert.statut', 'reception')
+                ->where('transfert.validation_reception', null)
+            );
     }
 
     // ── Statut de naissance ──────────────────────────────────────────────────
