@@ -97,6 +97,7 @@ class DepenseParametrageTest extends TestCase
                 ->has('config', fn (Assert $config) => $config
                     ->each(fn (Assert $row) => $row
                         ->has('role_name')
+                        ->has('is_actif')
                         ->has('peut_valider')
                         ->has('perimetre')
                         ->has('sites')
@@ -117,6 +118,27 @@ class DepenseParametrageTest extends TestCase
                 ->has('sites', 1)
                 ->where('sites.0.id', $this->site->id)
             );
+    }
+
+    /**
+     * Verrou de la refonte rôles/permissions (2026-09-06) : `Role::orderBy('name')->get()` sans
+     * filtre exposait ici les rôles personnalisés de TOUTES les organisations de la plateforme —
+     * un rôle propre à une autre organisation ne doit jamais apparaître dans cet écran.
+     */
+    public function test_edit_config_nexpose_pas_un_role_dune_autre_organisation(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $autreOrg = Organization::factory()->create();
+        Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $autreOrg->id]);
+
+        $response = $this->actingAs($user)
+            ->get(route('settings.depenses'))
+            ->assertOk();
+
+        $roleNames = array_column($response->original->getData()['page']['props']['config'], 'role_name');
+
+        $this->assertNotContains('chef_agence', $roleNames);
     }
 
     // ── updateDroits ──────────────────────────────────────────────────────────
@@ -141,6 +163,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -168,6 +191,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => false,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -195,6 +219,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -219,6 +244,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -247,6 +273,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => false,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -266,16 +293,14 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    // ── Admin Entreprise — plafond obligatoire malgré peut_valider forcé ────────
-    // Correction 04/09/2026 : Admin Entreprise garde son accès automatique
-    // (RBAC/agences) mais est désormais soumis au plafond de montant comme
-    // tout autre rôle. Sa case "Peut valider" reste verrouillée à true côté
-    // UI ; le backend force donc peut_valider=true pour sa ligne avant
-    // validation, indépendamment de ce que le client envoie, pour que le
-    // plafond lui soit imposé et que la ligne reste utilisable par
-    // droitValidationPour().
+    // ── Admin Entreprise — rôle configurable comme les autres (2026-09-06) ──────
+    // Avant cette date, la case "Peut valider" d'Admin Entreprise était verrouillée à true côté
+    // UI et le backend forçait peut_valider=true pour sa ligne avant validation, indépendamment
+    // de ce qu'envoyait le client — la case cochée par l'admin n'avait donc aucun effet réel
+    // (cf. audit rôles/permissions § "contournement automatique"). Ce forçage a été supprimé :
+    // sa ligne est désormais traitée exactement comme celle de n'importe quel autre rôle.
 
-    public function test_update_droits_sauvegarde_le_plafond_admin_entreprise(): void
+    public function test_update_droits_respecte_peut_valider_false_pour_admin_entreprise(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -284,7 +309,36 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'admin_entreprise',
-                        'peut_valider' => false, // ignoré, forcé à true côté serveur
+                        'is_actif' => false,
+                        'peut_valider' => false,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => null,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        // N'est plus forcé à true : la case décochée par l'admin est réellement respectée.
+        $this->assertDatabaseHas('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'peut_valider' => false,
+            'plafond_validation' => null,
+        ]);
+    }
+
+    public function test_update_droits_sauvegarde_le_plafond_admin_entreprise_quand_peut_valider_est_actif(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'admin_entreprise',
+                        'is_actif' => true,
+                        'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
                         'plafond_validation' => 2000000,
@@ -301,7 +355,7 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    public function test_update_droits_rejette_admin_entreprise_sans_plafond(): void
+    public function test_update_droits_rejette_admin_entreprise_sans_plafond_si_peut_valider_actif(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -310,7 +364,8 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'admin_entreprise',
-                        'peut_valider' => false,
+                        'is_actif' => false,
+                        'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
                         'plafond_validation' => null,
@@ -323,6 +378,53 @@ class DepenseParametrageTest extends TestCase
             'organization_id' => $this->org->id,
             'role_name' => 'admin_entreprise',
         ]);
+    }
+
+    // ── is_actif (droit de créer une dépense, ajouté le 2026-09-06) ─────────────
+
+    public function test_update_droits_sauvegarde_is_actif_true(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'is_actif' => true,
+                        'peut_valider' => false,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => null,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('droit_creation_depenses', [
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'is_actif' => true,
+        ]);
+    }
+
+    public function test_update_droits_rejette_config_sans_is_actif(): void
+    {
+        $user = $this->adminWith('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.depenses.droits'), [
+                'config' => [
+                    [
+                        'role_name' => 'manager',
+                        'peut_valider' => false,
+                        'perimetre' => 'toutes_agences',
+                        'sites' => [],
+                        'plafond_validation' => null,
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors(['config.0.is_actif']);
     }
 
     public function test_update_droits_modifie_un_plafond_existant(): void
@@ -343,6 +445,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [],
@@ -368,6 +471,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'son_agence',
                         'sites' => [],
@@ -393,6 +497,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'agences_selectionnees',
                         'sites' => [$this->site->id],
@@ -420,6 +525,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'toutes_agences',
                         'sites' => [$this->site->id], // ignoré car périmètre pas agences_selectionnees
@@ -455,6 +561,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'son_agence',
                         'sites' => [],
@@ -495,6 +602,7 @@ class DepenseParametrageTest extends TestCase
                 'config' => [
                     [
                         'role_name' => 'manager',
+                        'is_actif' => false,
                         'peut_valider' => true,
                         'perimetre' => 'agences_selectionnees',
                         'sites' => [$autreSite->id],

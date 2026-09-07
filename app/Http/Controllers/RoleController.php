@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\RoleNamingService;
+use App\Support\Permissions\PermissionCatalog;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -28,27 +30,6 @@ use Spatie\Permission\PermissionRegistrar;
  */
 class RoleController extends Controller
 {
-    private const RESOURCES = [
-        // Personnes
-        'clients', 'prestataires', 'livreurs', 'proprietaires',
-        // Véhicules & terrain
-        'vehicules', 'equipes-livraison', 'sites',
-        // Commerce
-        'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
-        // Opérations
-        'logistique', 'transferts', 'receptions',
-        // Finances
-        'depenses', 'comptabilite', 'journal-financier',
-        // RH
-        'rh-employes', 'rh-contrats', 'rh-paie',
-        // Administration
-        'users',
-        // Paramètres
-        'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
-    ];
-
-    private const ACTIONS = ['create', 'read', 'update', 'delete'];
-
     public function __construct(private readonly RoleNamingService $naming) {}
 
     public function index(): Response
@@ -71,7 +52,7 @@ class RoleController extends Controller
 
         return Inertia::render('Roles/Index', [
             'roles' => $roles,
-            'totalPerms' => count(self::RESOURCES) * count(self::ACTIONS),
+            'totalPerms' => PermissionCatalog::totalCount(),
         ]);
     }
 
@@ -142,8 +123,8 @@ class RoleController extends Controller
         $user = auth()->user();
         $isSuperAdmin = $user->isSuperAdmin();
         $resources = $isSuperAdmin
-            ? self::RESOURCES
-            : array_values(array_filter(self::RESOURCES, fn ($r) => $r !== 'users'));
+            ? PermissionCatalog::RESOURCES
+            : array_values(array_filter(PermissionCatalog::RESOURCES, fn ($r) => $r !== 'users'));
 
         return Inertia::render('Roles/Edit', [
             'role' => [
@@ -154,9 +135,11 @@ class RoleController extends Controller
                 'is_system' => $this->isProtected($role),
                 'permissions' => $role->permissions->pluck('name')->values(),
                 'users_count' => $role->users()->count(),
+                'can_write' => $this->canManageRole($role),
             ],
             'resources' => $resources,
-            'actions' => self::ACTIONS,
+            'actions' => PermissionCatalog::ACTIONS,
+            'standalone' => PermissionCatalog::STANDALONE,
         ]);
     }
 
@@ -164,7 +147,7 @@ class RoleController extends Controller
     {
         $user = auth()->user();
 
-        abort_unless($this->canManageRoles(), 403);
+        abort_unless($this->canManageRole($role), 403);
         $this->authorizeSameOrganization($role);
 
         $protected = $this->isProtected($role);
@@ -207,19 +190,10 @@ class RoleController extends Controller
             'permissions.*' => 'string|exists:permissions,name',
         ])['permissions'] ?? [];
 
-        // Permissions hors matrice CRUD (workflow, standalone) → préservées telles quelles,
-        // car l'UI ne les affiche pas et syncPermissions les effacerait sinon.
-        $crudKeys = collect(self::RESOURCES)
-            ->flatMap(fn ($r) => collect(self::ACTIONS)->map(fn ($a) => "{$r}.{$a}"))
-            ->all();
-
-        $nonCrudFromRole = $role->permissions()
-            ->pluck('name')
-            ->reject(fn ($p) => in_array($p, $crudKeys, true))
-            ->values()
-            ->toArray();
-
-        // admin_entreprise ne peut pas toucher les permissions users.* (cachées de l'UI)
+        // admin_entreprise ne peut pas toucher les permissions users.* (cachées de l'UI, cf.
+        // ressource 'users' filtrée dans edit()) → préservées telles quelles depuis le rôle,
+        // le reste (matrice CRUD + standalone) vient intégralement du formulaire désormais que
+        // PermissionCatalog::STANDALONE est, lui aussi, éditable dans la matrice.
         if (! $user->isSuperAdmin()) {
             $usersFromRole = $role->permissions()
                 ->pluck('name')
@@ -231,7 +205,7 @@ class RoleController extends Controller
             $permissions = array_merge($permissions, $usersFromRole);
         }
 
-        $role->syncPermissions(array_merge($permissions, $nonCrudFromRole));
+        $role->syncPermissions($permissions);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
@@ -245,7 +219,7 @@ class RoleController extends Controller
      */
     public function destroy(Role $role): RedirectResponse
     {
-        abort_unless($this->canManageRoles(), 403);
+        abort_unless($this->canManageRole($role), 403);
         $this->authorizeSameOrganization($role);
 
         if ($this->isProtected($role)) {
@@ -279,25 +253,19 @@ class RoleController extends Controller
      */
     private function visibleRoles()
     {
-        $orgId = auth()->user()->organization_id;
-
-        return Role::where(function ($q) use ($orgId) {
-            $q->whereNull('organization_id')->orWhere('organization_id', $orgId);
-        });
+        return RoleVisibility::query(auth()->user()->organization_id);
     }
 
     /**
-     * Un rôle système (organization_id null) est visible/éditable par tous les admins ; un rôle
-     * métier n'appartient qu'à sa propre organisation — jamais accessible à une autre, même en
-     * lecture, pour ne jamais laisser fuiter la matrice de permissions d'une organisation vers
-     * une autre (cf. migration add_code_and_is_system_to_roles_table).
+     * Un rôle système (organization_id null) reste visible en LECTURE par tous les admins ; un
+     * rôle métier n'appartient qu'à sa propre organisation — jamais accessible à une autre, même
+     * en lecture, pour ne jamais laisser fuiter la matrice de permissions d'une organisation vers
+     * une autre (cf. migration add_code_and_is_system_to_roles_table). La restriction d'ÉCRITURE
+     * sur un rôle système est portée séparément par canManageRole() ci-dessous.
      */
     private function authorizeSameOrganization(Role $role): void
     {
-        abort_if(
-            $role->organization_id !== null && $role->organization_id !== auth()->user()->organization_id,
-            403
-        );
+        abort_if(! RoleVisibility::belongsToOrganization($role, auth()->user()->organization_id), 403);
     }
 
     private function canManageRoles(): bool
@@ -305,5 +273,33 @@ class RoleController extends Controller
         $user = auth()->user();
 
         return $user && ($user->isSuperAdmin() || $user->hasRole('admin_entreprise'));
+    }
+
+    /**
+     * Un rôle système (organization_id null, partagé par TOUTES les organisations) ne peut plus
+     * être modifié/supprimé que par un super_admin plateforme — décision produit actée le
+     * 2026-09-06 : avant ce garde-fou, n'importe quel admin_entreprise pouvait changer les
+     * permissions de `manager`/`commerciale`/`comptable`/`admin_entreprise`, affectant du même
+     * coup toutes les AUTRES organisations qui utilisent ce même rôle partagé. Une organisation
+     * qui veut un rôle sur mesure crée désormais SON PROPRE rôle via ce même CRUD (organization_id
+     * renseigné) — canManageRoles() seul continue de s'appliquer à ces rôles-là.
+     */
+    private function canManageRole(Role $role): bool
+    {
+        if (! $this->canManageRoles()) {
+            return false;
+        }
+
+        // Le rôle protégé (super_admin) garde son propre mécanisme, plus strict et à messages
+        // conviviaux (isProtected() dans update()/destroy() — jamais un simple 403) : ne pas le
+        // court-circuiter ici, sous peine de casser ces réponses pour un admin_entreprise qui
+        // n'a de toute façon aucune prise sur ses permissions (gérées par Gate::before).
+        if ($this->isProtected($role)) {
+            return true;
+        }
+
+        $user = auth()->user();
+
+        return RoleVisibility::isWritableBy($role, $user->organization_id, $user->isSuperAdmin());
     }
 }

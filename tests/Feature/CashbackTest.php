@@ -19,6 +19,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
@@ -105,6 +106,12 @@ class CashbackTest extends TestCase
         Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole($role);
+        // CashbackTransactionPolicy::viewAny() est passée à can('cashback.read') le 07/09/2026
+        // (alignée sur la convention viewAny() du reste des policies) — ce helper ne construisant
+        // qu'un rôle vide (pas via RolesAndPermissionsSeeder), il faut lui donner explicitement la
+        // permission pour continuer à représenter un compte staff normal.
+        Permission::firstOrCreate(['name' => 'cashback.read', 'guard_name' => 'web']);
+        $user->givePermissionTo('cashback.read');
 
         $site = Site::create([
             'organization_id' => $org->id,

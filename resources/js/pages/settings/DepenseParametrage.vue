@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -25,6 +26,7 @@ interface SiteItem {
 
 interface RoleConfig {
     role_name: string;
+    is_actif: boolean;
     peut_valider: boolean;
     perimetre: 'toutes_agences' | 'son_agence' | 'agences_selectionnees';
     sites: string[];
@@ -40,44 +42,36 @@ const toast = useToast();
 
 // ── Droits de validation ──────────────────────────────────────────────────────
 
-const ADMIN_ROLES = ['super_admin', 'admin_entreprise'];
-// Seul Super Admin reste sans plafond de montant. Admin Entreprise garde son
-// accès automatique (permission + agences, cf. ADMIN_ROLES ci-dessus) mais
-// doit désormais configurer un plafond comme n'importe quel rôle actif —
-// décision produit 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001).
+// Seul Super Admin reste sans configuration : accès illimité, jamais de ligne
+// DroitCreationDepense à saisir. Admin Entreprise n'a plus aucun accès automatique depuis le
+// 2026-09-06 (avant cette date, son "peut valider" était forcé à vrai côté serveur quoi que
+// l'admin coche ici, et son périmètre d'agences restait figé sur "Toutes les agences" sans
+// jamais pouvoir être restreint) — c'est désormais un rôle configurable comme les autres.
 const UNLIMITED_ROLES = ['super_admin'];
 
 const droitsForm = ref<RoleConfig[]>(
     props.config.map((c) => ({ ...c, sites: [...c.sites] })),
 );
 
-const roleLabels: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin_entreprise: 'Admin Entreprise',
-    manager: 'Manager',
-    commerciale: 'Commerciale',
-    comptable: 'Comptable',
-    livreur: 'Livreur',
-    proprietaire: 'Propriétaire',
-    client: 'Client',
-};
-
-function roleLabel(name: string): string {
-    return roleLabels[name] ?? name;
-}
-
-function isAdminRole(roleName: string): boolean {
-    return ADMIN_ROLES.includes(roleName);
-}
+const { roleLabel } = usePermissions();
 
 function isUnlimitedRole(roleName: string): boolean {
     return UNLIMITED_ROLES.includes(roleName);
 }
 
 const nonAdminRows = () =>
-    droitsForm.value.filter((r) => !isAdminRole(r.role_name));
+    droitsForm.value.filter((r) => !isUnlimitedRole(r.role_name));
 
 type ColState = 'all' | 'partial' | 'none';
+
+// Périmètre (perimetre/sites) partagé entre création et validation (cf.
+// DroitCreationDepenseService::peutCreerSurSite()/peutValiderSurSite(), une seule notion de
+// périmètre d'agences par rôle) — jamais réinitialisé tant que l'un des deux droits reste actif.
+function clearPerimetreIfBothDisabled(entry: RoleConfig) {
+    if (!entry.is_actif && !entry.peut_valider) {
+        entry.sites = [];
+    }
+}
 
 function columnState(): ColState {
     const rows = nonAdminRows();
@@ -95,20 +89,44 @@ function toggleColumn() {
         )!;
         real.peut_valider = state !== 'all';
         if (state === 'all') {
-            real.sites = [];
             real.plafond_validation = null;
             plafondDisplay.value[real.role_name] = '';
         }
+        clearPerimetreIfBothDisabled(real);
     });
 }
 
 function toggle(entry: RoleConfig) {
     entry.peut_valider = !entry.peut_valider;
     if (!entry.peut_valider) {
-        entry.sites = [];
         entry.plafond_validation = null;
         plafondDisplay.value[entry.role_name] = '';
     }
+    clearPerimetreIfBothDisabled(entry);
+}
+
+function columnStateCreation(): ColState {
+    const rows = nonAdminRows();
+    const checked = rows.filter((r) => r.is_actif).length;
+    if (checked === 0) return 'none';
+    if (checked === rows.length) return 'all';
+    return 'partial';
+}
+
+function toggleColumnCreation() {
+    const state = columnStateCreation();
+    nonAdminRows().forEach((entry) => {
+        const real = droitsForm.value.find(
+            (r) => r.role_name === entry.role_name,
+        )!;
+        real.is_actif = state !== 'all';
+        clearPerimetreIfBothDisabled(real);
+    });
+}
+
+function toggleCreation(entry: RoleConfig) {
+    entry.is_actif = !entry.is_actif;
+    clearPerimetreIfBothDisabled(entry);
 }
 
 // ── Plafond de validation ─────────────────────────────────────────────────────
@@ -228,7 +246,7 @@ function saveDroits() {
             <div class="space-y-6">
                 <HeadingSmall
                     title="Validation des dépenses"
-                    description="Qui peut valider les dépenses, et sur quel périmètre d'agences."
+                    description="Qui peut créer et valider les dépenses, et sur quel périmètre d'agences."
                 />
 
                 <div
@@ -279,6 +297,49 @@ function saveDroits() {
                                             class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                             >Rôle</span
                                         >
+                                    </th>
+                                    <th
+                                        class="px-8 py-4 text-center"
+                                        style="width: 160px"
+                                    >
+                                        <div
+                                            class="flex flex-col items-center gap-2"
+                                        >
+                                            <span
+                                                class="text-xs font-semibold tracking-wider text-emerald-600 uppercase dark:text-emerald-400"
+                                                >Peut créer</span
+                                            >
+                                            <button
+                                                type="button"
+                                                class="flex h-7 w-7 items-center justify-center rounded-md border-2 transition-all"
+                                                :class="
+                                                    columnStateCreation() ===
+                                                    'none'
+                                                        ? 'border-border bg-background hover:border-primary/60'
+                                                        : columnStateCreation() ===
+                                                            'all'
+                                                          ? 'border-primary bg-primary text-primary-foreground'
+                                                          : 'border-primary/60 bg-primary/10'
+                                                "
+                                                :title="`Tout ${columnStateCreation() === 'all' ? 'désactiver' : 'activer'}`"
+                                                @click="toggleColumnCreation()"
+                                            >
+                                                <Check
+                                                    v-if="
+                                                        columnStateCreation() ===
+                                                        'all'
+                                                    "
+                                                    class="h-4 w-4"
+                                                />
+                                                <Minus
+                                                    v-else-if="
+                                                        columnStateCreation() ===
+                                                        'partial'
+                                                    "
+                                                    class="h-4 w-4 text-primary"
+                                                />
+                                            </button>
+                                        </div>
                                     </th>
                                     <th
                                         class="px-8 py-4 text-center"
@@ -349,7 +410,7 @@ function saveDroits() {
                                     <tr
                                         class="border-b transition-colors"
                                         :class="
-                                            isAdminRole(entry.role_name)
+                                            isUnlimitedRole(entry.role_name)
                                                 ? 'bg-muted/10'
                                                 : 'hover:bg-muted/20'
                                         "
@@ -362,7 +423,7 @@ function saveDroits() {
                                                 <div
                                                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
                                                     :class="
-                                                        isAdminRole(
+                                                        isUnlimitedRole(
                                                             entry.role_name,
                                                         )
                                                             ? 'bg-blue-50 dark:bg-blue-950/40'
@@ -371,7 +432,7 @@ function saveDroits() {
                                                 >
                                                     <Shield
                                                         v-if="
-                                                            isAdminRole(
+                                                            isUnlimitedRole(
                                                                 entry.role_name,
                                                             )
                                                         "
@@ -402,19 +463,40 @@ function saveDroits() {
                                                         Accès complet
                                                         automatique
                                                     </p>
-                                                    <p
-                                                        v-else-if="
-                                                            isAdminRole(
-                                                                entry.role_name,
-                                                            )
-                                                        "
-                                                        class="text-xs text-muted-foreground"
-                                                    >
-                                                        Accès automatique,
-                                                        plafond de validation
-                                                        applicable
-                                                    </p>
                                                 </div>
+                                            </div>
+                                        </td>
+                                        <!-- Peut créer -->
+                                        <td class="px-8 py-4 text-center">
+                                            <div class="flex justify-center">
+                                                <div
+                                                    v-if="
+                                                        isUnlimitedRole(
+                                                            entry.role_name,
+                                                        )
+                                                    "
+                                                    class="flex h-5 w-5 items-center justify-center rounded border-2 border-primary bg-primary text-primary-foreground opacity-60"
+                                                >
+                                                    <Check class="h-3 w-3" />
+                                                </div>
+                                                <button
+                                                    v-else
+                                                    type="button"
+                                                    class="flex h-5 w-5 items-center justify-center rounded border-2 transition-all"
+                                                    :class="
+                                                        entry.is_actif
+                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                            : 'border-border bg-background hover:border-primary/60'
+                                                    "
+                                                    @click="
+                                                        toggleCreation(entry)
+                                                    "
+                                                >
+                                                    <Check
+                                                        v-if="entry.is_actif"
+                                                        class="h-3 w-3"
+                                                    />
+                                                </button>
                                             </div>
                                         </td>
                                         <!-- Peut valider -->
@@ -422,7 +504,7 @@ function saveDroits() {
                                             <div class="flex justify-center">
                                                 <div
                                                     v-if="
-                                                        isAdminRole(
+                                                        isUnlimitedRole(
                                                             entry.role_name,
                                                         )
                                                     "
@@ -463,10 +545,7 @@ function saveDroits() {
                                                 Sans limite
                                             </div>
                                             <div
-                                                v-else-if="
-                                                    entry.peut_valider ||
-                                                    isAdminRole(entry.role_name)
-                                                "
+                                                v-else-if="entry.peut_valider"
                                                 class="relative w-40"
                                             >
                                                 <input
@@ -506,14 +585,19 @@ function saveDroits() {
                                         <td class="px-6 py-4">
                                             <div
                                                 v-if="
-                                                    isAdminRole(entry.role_name)
+                                                    isUnlimitedRole(
+                                                        entry.role_name,
+                                                    )
                                                 "
                                                 class="text-xs text-muted-foreground italic"
                                             >
                                                 Toutes les agences
                                             </div>
                                             <button
-                                                v-else-if="entry.peut_valider"
+                                                v-else-if="
+                                                    entry.peut_valider ||
+                                                    entry.is_actif
+                                                "
                                                 type="button"
                                                 class="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                                                 @click="
@@ -549,8 +633,9 @@ function saveDroits() {
                                     <!-- Sous-ligne portée -->
                                     <tr
                                         v-if="
-                                            !isAdminRole(entry.role_name) &&
-                                            entry.peut_valider &&
+                                            !isUnlimitedRole(entry.role_name) &&
+                                            (entry.peut_valider ||
+                                                entry.is_actif) &&
                                             isPorteeExpanded(entry.role_name)
                                         "
                                         :key="entry.role_name + '-portee'"

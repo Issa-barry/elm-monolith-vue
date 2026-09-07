@@ -124,13 +124,18 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
             timeout: 20_000,
         });
 
+        // Les 2 options du déclencheur "commission de vente" (jamais "à la réception" — ce
+        // libellé appartient au déclencheur "commission logistique", paramétrable depuis son
+        // propre écran Paramètres > Logistique depuis que celui-ci a été séparé de cette page
+        // (auparavant réunis ici par réutilisation de contrôleur, cf. docs/commissions.md).
         await expect(page.locator('body')).toContainText(
             /l'encaissement de la facture/i,
             { timeout: 10_000 },
         );
-        await expect(page.locator('body')).toContainText(/à la réception/i, {
-            timeout: 10_000,
-        });
+        await expect(page.locator('body')).toContainText(
+            /à la validation du chargement/i,
+            { timeout: 10_000 },
+        );
     });
 
     test('le seuil configuré est persisté après rechargement', async ({

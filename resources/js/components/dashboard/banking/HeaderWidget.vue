@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import IdentityQrBadge from '@/components/identity/IdentityQrBadge.vue';
 import ScannerModal from '@/components/scanner/ScannerModal.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { router, usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
@@ -70,20 +71,11 @@ const displaySite = computed(() => {
     return defaultSite.value.label;
 });
 
-const roleLabels: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial',
-    comptable: 'Comptable',
-    client: 'Client',
-    proprietaire: 'Propriétaire',
-    livreur: 'Livreur',
-};
+const { roleLabel } = usePermissions();
 
 const displayRole = computed(() => {
     const role = page.props.auth.roles?.[0];
-    return role ? (roleLabels[role] ?? role) : null;
+    return role ? roleLabel(role) : null;
 });
 
 const identityMeta = computed(() =>

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -69,15 +70,22 @@ class UserTest extends TestCase
 
     // ── permissionsMap ────────────────────────────────────────────────────────
 
-    public function test_permissions_map_returns_179_keys(): void
+    /**
+     * 179 était le compte de l'ANCIENNE liste locale de permissionsMap() (37 ressources — sans
+     * `tresorerie`, oublié — × 4 actions + 31 standalone sur les 40 réellement seedées). Depuis
+     * la refonte du 2026-09-06, permissionsMap() consomme PermissionCatalog — la même source de
+     * vérité que RoleController et le seeder — et couvre donc les 38 ressources × 4 actions + 40
+     * permissions standalone réellement définies = 192 (cf. audit § "totalPerms").
+     */
+    public function test_permissions_map_returns_192_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $map = $user->permissionsMap();
 
-        // 37 resources × 4 actions + 31 standalone = 179
-        $this->assertCount(179, $map);
+        $this->assertCount(PermissionCatalog::totalCount(), $map);
+        $this->assertCount(192, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

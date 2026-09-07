@@ -11,11 +11,13 @@ class DroitCreationDepenseService
 {
     /**
      * L'utilisateur peut-il créer des dépenses ?
-     * Admin = toujours autorisé.
+     * Seul Super Admin est bypassé — admin_entreprise doit avoir une ligne DroitCreationDepense
+     * comme n'importe quel rôle depuis le 2026-09-06 (cf. docblock de classe et
+     * peutValiderMontant()/droitValidationPour(), déjà sur ce modèle depuis le 04/09/2026).
      */
     public function peutCreer(User $user, string $orgId): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return true;
         }
 
@@ -27,10 +29,11 @@ class DroitCreationDepenseService
 
     /**
      * L'utilisateur peut-il créer une dépense sur ce site précis ?
+     * Seul Super Admin est bypassé (cf. peutCreer()).
      */
     public function peutCreerSurSite(User $user, string $orgId, string $siteId): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return true;
         }
 
@@ -54,12 +57,13 @@ class DroitCreationDepenseService
      * Retourne la ligne DroitCreationDepense de validation pour l'utilisateur,
      * ou null si Super Admin (seul bypass total restant) ou aucun droit.
      *
-     * Admin Entreprise n'est PAS bypassé ici (contrairement au reste du
-     * service) : il reste soumis au plafond de validation comme n'importe
-     * quel rôle — décision produit du 04/09/2026, cf. docs/depenses-validation.md
-     * (DEPVAL-001). Son accès reste automatique pour le périmètre d'agences
-     * (peutValiderSurSite() garde son bypass isAdmin()), seul le montant
-     * distingue désormais Super Admin d'Admin Entreprise.
+     * Admin Entreprise n'est bypassé nulle part dans ce service depuis le 2026-09-06 (avant
+     * cette date, seul le plafond de validation lui était déjà appliqué — décision produit du
+     * 04/09/2026, cf. docs/depenses-validation.md, DEPVAL-001 — mais peutCreer/peutCreerSurSite/
+     * peutValider/peutValiderSurSite/sitesAutorises le bypassaient encore, rendant la
+     * configuration de DroitCreationDepense sans effet réel pour ce rôle). Il doit désormais
+     * avoir une ligne DroitCreationDepense comme n'importe quel rôle, sur toute la surface du
+     * service — seul Super Admin reste réellement illimité.
      */
     public function droitValidationPour(User $user, string $orgId): ?DroitCreationDepense
     {
@@ -75,11 +79,13 @@ class DroitCreationDepenseService
 
     /**
      * L'utilisateur peut-il valider la dépense d'un site donné ?
-     * Utilise un droit pré-chargé pour éviter les requêtes N+1.
+     * Utilise un droit pré-chargé pour éviter les requêtes N+1. Seul Super Admin est bypassé
+     * (cf. peutCreer()) — admin_entreprise doit désormais avoir un périmètre d'agences
+     * configuré comme n'importe quel rôle.
      */
     public function peutValiderSurSite(User $user, ?DroitCreationDepense $droit, ?string $siteId): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return true;
         }
         if (! $droit) {
@@ -116,11 +122,11 @@ class DroitCreationDepenseService
 
     /**
      * L'utilisateur peut-il valider des dépenses ?
-     * Admin = toujours autorisé.
+     * Seul Super Admin est bypassé (cf. peutCreer()).
      */
     public function peutValider(User $user, string $orgId): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return true;
         }
 
@@ -132,13 +138,13 @@ class DroitCreationDepenseService
 
     /**
      * Retourne les sites autorisés pour la création de dépenses.
-     * null = toutes les agences.
+     * null = toutes les agences. Seul Super Admin est bypassé (cf. peutCreer()).
      *
      * @return Collection<int, Site>|null
      */
     public function sitesAutorises(User $user, string $orgId): ?Collection
     {
-        if ($user->isAdmin()) {
+        if ($user->hasRole('super_admin')) {
             return null;
         }
 

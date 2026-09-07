@@ -31,6 +31,7 @@ use App\Models\Vehicule;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -238,6 +239,38 @@ class CommissionTriggerLogistiqueTest extends TestCase
         return "/backoffice/logistique/{$t->id}/validation-reception";
     }
 
+    /**
+     * Transfert en TRANSIT dont les lignes ont déjà leur quantité reçue + type d'écart
+     * renseignés (pré-condition de checkReception()) — permet d'exercer réellement
+     * TransfertLogistiqueService::avancerStatut() sur la transition TRANSIT → RECEPTION,
+     * contrairement à makeTransfertEnReception() qui crée directement en RECEPTION et ne
+     * déclenche donc jamais le hook d'auto-approbation qui vit dans cette transition.
+     */
+    private function makeTransfertEnTransitPourReception(int $qteChargee = 100, int $qteRecue = 100, ?Site $siteDestination = null): TransfertLogistique
+    {
+        $transfert = TransfertLogistique::create([
+            'organization_id' => $this->org->id,
+            'site_source_id' => $this->siteSrc->id,
+            'site_destination_id' => ($siteDestination ?? $this->siteDest)->id,
+            'vehicule_id' => $this->vehicule->id,
+            'equipe_livraison_id' => $this->equipe->id,
+            'statut' => StatutTransfert::TRANSIT,
+            'date_depart_reelle' => now()->toDateString(),
+            'created_by' => $this->admin->id,
+        ]);
+
+        TransfertLigne::create([
+            'transfert_logistique_id' => $transfert->id,
+            'variante_id' => $this->produit->variantePrincipale()->first()->id,
+            'quantite_demandee' => $qteChargee,
+            'quantite_chargee' => $qteChargee,
+            'quantite_recue' => $qteRecue,
+            'ecart_type' => TypeEcartLogistique::CONFORME->value,
+        ]);
+
+        return $transfert;
+    }
+
     // ── CHARGEMENT_VALIDE ────────────────────────────────────────────────────
 
     public function test_chargement_valide_genere_la_commission_sur_quantite_chargee(): void
@@ -344,6 +377,269 @@ class CommissionTriggerLogistiqueTest extends TestCase
             1,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count()
         );
+    }
+
+    // ── Approbation admin optionnelle (Parametre::isApprobationReceptionLogistiqueObligatoire) ──
+
+    public function test_approbation_obligatoire_par_defaut_aucune_commission_a_la_seule_reception(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->assertEquals(StatutTransfert::RECEPTION, $transfert->statut);
+        $this->assertNull($transfert->validation_reception);
+        $this->assertNull($this->enveloppePour($transfert));
+    }
+
+    public function test_approbation_non_requise_genere_la_commission_directement_a_la_reception(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->assertEquals(StatutTransfert::RECEPTION, $transfert->statut);
+        $this->assertEquals('accord', $transfert->validation_reception);
+        $this->assertNull($transfert->validated_by, 'Auto-approbation : pas de décision humaine, contrairement à un accord manuel.');
+
+        $enveloppe = $this->enveloppePour($transfert);
+        $this->assertNotNull($enveloppe);
+        $this->assertEquals(20000.0, (float) $enveloppe->montant_total);
+    }
+
+    /** Le bouton "Approuver la réception" disparaît côté UI une fois validation_reception=accord,
+     *  mais un appel direct au endpoint doit rester sans danger si jamais rejoué. */
+    public function test_approbation_non_requise_reste_idempotente_si_un_accord_est_quand_meme_rejoue(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $this->assertEquals(
+            1,
+            CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count(),
+        );
+    }
+
+    /** Sous CHARGEMENT_VALIDE la commission naît déjà au départ — désactiver l'approbation ne
+     *  doit jamais en générer une seconde à la réception (onTransfertReceptionEffectuee() reste
+     *  un no-op quel que soit ce paramètre). */
+    public function test_approbation_non_requise_sans_effet_sous_chargement_valide(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert); // CHARGEMENT → TRANSIT : génère
+
+        $transfert->lignes()->first()->update(['quantite_recue' => 100, 'ecart_type' => TypeEcartLogistique::CONFORME->value]);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert->fresh()); // TRANSIT → RECEPTION
+
+        $this->assertEquals('accord', $transfert->validation_reception);
+        $this->assertEquals(
+            1,
+            CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count(),
+            "Une seule commission, née au chargement — l'auto-approbation à la réception ne doit jamais en générer une seconde.",
+        );
+    }
+
+    /**
+     * Le hook d'auto-approbation vit UNIQUEMENT dans la transition TRANSIT → RECEPTION
+     * (avancerStatut()) — il ne s'exécute qu'une fois, au moment de cette transition, jamais de
+     * façon récurrente. Changer le paramètre organisation après coup ne doit donc jamais rejouer
+     * ni corriger rétroactivement un transfert déjà en RECEPTION : le paramètre gouverne le
+     * comportement AU MOMENT de la réception, pas un état courant réévalué en continu.
+     */
+    public function test_changer_le_parametre_napprouve_jamais_retroactivement_un_transfert_deja_en_attente(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        // Approbation obligatoire (défaut) au moment de la réception du transfert A.
+        $transfertA = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfertA = TransfertLogistiqueService::avancerStatut($transfertA);
+
+        $this->assertNull($transfertA->validation_reception, 'Transfert A doit rester en attente.');
+        $this->assertNull($this->enveloppePour($transfertA));
+
+        // L'organisation désactive ensuite l'approbation obligatoire.
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+
+        // Transfert A ne doit JAMAIS être rattrapé rétroactivement par ce changement — aucun
+        // job ne le rejoue, son état reste celui figé au moment de sa propre réception.
+        $transfertA = $transfertA->fresh();
+        $this->assertNull($transfertA->validation_reception, 'Le changement de paramètre ne doit pas approuver rétroactivement un transfert déjà en attente.');
+        $this->assertNull($this->enveloppePour($transfertA), 'Aucune commission ne doit apparaître pour A tant qu\'aucune décision admin explicite n\'a eu lieu.');
+
+        // Un NOUVEAU transfert (B), réceptionné après le changement, suit lui le nouveau réglage.
+        $transfertB = $this->makeTransfertEnTransitPourReception(qteRecue: 50);
+        $transfertB = TransfertLogistiqueService::avancerStatut($transfertB);
+
+        $this->assertEquals('accord', $transfertB->validation_reception);
+        $this->assertNotNull($this->enveloppePour($transfertB));
+
+        // Transfert A reste approuvable manuellement à tout moment (le paramètre ne retire
+        // aucune capacité admin, il ne fait que sauter l'étape quand elle n'est plus désirée) —
+        // et cette approbation manuelle tardive ne doit générer qu'UNE seule commission pour A.
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfertA), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $this->assertEquals(
+            1,
+            CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfertA->id)->count(),
+        );
+    }
+
+    /**
+     * Preuve directe côté page (pas seulement côté modèle) que le bouton "Approuver la
+     * réception" de Logistique/Show.vue reste disponible pour un transfert déjà en attente
+     * après un changement de paramètre : son v-if (cf. resources/js/pages/Logistique/Show.vue)
+     * ne lit QUE `can_valider_reception_admin`, `transfert.statut` et
+     * `transfert.validation_reception` — jamais le paramètre organisation, qui n'est même pas
+     * transmis à cette page (TransfertLogistiqueController::show()).
+     */
+    public function test_le_bouton_approuver_reste_disponible_pour_un_transfert_deja_en_attente_apres_changement_de_parametre(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfertA = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfertA = TransfertLogistiqueService::avancerStatut($transfertA);
+
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+
+        $this->actingAs($this->admin)
+            ->get(route('logistique.show', $transfertA))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Logistique/Show')
+                ->where('can_valider_reception_admin', true)
+                ->where('transfert.statut', 'reception')
+                ->where('transfert.validation_reception', null)
+            );
+    }
+
+    // ── Dérogation par site (Site::approbationReceptionObligatoireEffective()) ──
+
+    public function test_derogation_site_destination_a_priorite_sur_le_parametre_organisation(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, true);
+        $this->configurerBareme(montantParPack: 200);
+
+        $this->siteDest->update(['approbation_reception_logistique_obligatoire' => false]);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->assertEquals('accord', $transfert->validation_reception, 'La dérogation du site destination (false) doit primer sur le paramètre organisation (true).');
+        $this->assertNotNull($this->enveloppePour($transfert));
+    }
+
+    public function test_derogation_site_destination_impose_lapprobation_meme_si_lorganisation_ne_lexige_pas(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+        $this->configurerBareme(montantParPack: 200);
+
+        $this->siteDest->update(['approbation_reception_logistique_obligatoire' => true]);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->assertNull($transfert->validation_reception, 'La dérogation du site destination (true) doit primer sur le paramètre organisation (false).');
+        $this->assertNull($this->enveloppePour($transfert));
+    }
+
+    public function test_site_sans_derogation_herite_du_parametre_organisation(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, false);
+        $this->configurerBareme(montantParPack: 200);
+
+        // approbation_reception_logistique_obligatoire du site reste null (défaut) — jamais touché.
+        $this->assertNull($this->siteDest->fresh()->approbation_reception_logistique_obligatoire);
+
+        $transfert = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfert = TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->assertEquals('accord', $transfert->validation_reception);
+        $this->assertNotNull($this->enveloppePour($transfert));
+    }
+
+    /** Deux transferts simultanés vers deux sites différents suivent chacun leur propre règle. */
+    public function test_deux_sites_destination_differents_appliquent_chacun_leur_propre_regle(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, true);
+        $this->configurerBareme(montantParPack: 200);
+
+        $siteDest2 = $this->makeSite('Site Destination 2');
+        $siteDest2->update(['approbation_reception_logistique_obligatoire' => false]);
+        // $this->siteDest reste sur le défaut organisation (true), aucune dérogation.
+
+        $this->actingAs($this->admin);
+
+        $transfertVersSiteDest = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $transfertVersSiteDest = TransfertLogistiqueService::avancerStatut($transfertVersSiteDest);
+
+        $transfertVersSiteDest2 = $this->makeTransfertEnTransitPourReception(qteRecue: 100, siteDestination: $siteDest2);
+        $transfertVersSiteDest2 = TransfertLogistiqueService::avancerStatut($transfertVersSiteDest2);
+
+        $this->assertNull($transfertVersSiteDest->validation_reception, 'Site sans dérogation : hérite du défaut organisation (obligatoire).');
+        $this->assertEquals('accord', $transfertVersSiteDest2->validation_reception, 'Site dérogataire : approbation non requise.');
+    }
+
+    /**
+     * Symétrique de test_changer_le_parametre_napprouve_jamais_retroactivement... mais pour une
+     * dérogation de SITE plutôt que le paramètre organisation : même garantie, même raison (le
+     * hook ne s'exécute qu'une fois, à la transition TRANSIT → RECEPTION).
+     */
+    public function test_changer_la_derogation_dun_site_napprouve_jamais_retroactivement_un_transfert_deja_en_attente(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        Parametre::setApprobationReceptionLogistiqueObligatoire($this->org->id, true);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfertA = $this->makeTransfertEnTransitPourReception(qteRecue: 100);
+        $this->actingAs($this->admin);
+        $transfertA = TransfertLogistiqueService::avancerStatut($transfertA);
+
+        $this->assertNull($transfertA->validation_reception);
+
+        // Le site destination désactive ensuite l'approbation.
+        $this->siteDest->update(['approbation_reception_logistique_obligatoire' => false]);
+
+        $transfertA = $transfertA->fresh();
+        $this->assertNull($transfertA->validation_reception, 'Le changement de dérogation du site ne doit pas approuver rétroactivement un transfert déjà en attente.');
+        $this->assertNull($this->enveloppePour($transfertA));
+
+        $transfertB = $this->makeTransfertEnTransitPourReception(qteRecue: 50);
+        $transfertB = TransfertLogistiqueService::avancerStatut($transfertB);
+
+        $this->assertEquals('accord', $transfertB->validation_reception, 'Un nouveau transfert vers ce site suit la nouvelle dérogation.');
     }
 
     // ── Statut de naissance ──────────────────────────────────────────────────

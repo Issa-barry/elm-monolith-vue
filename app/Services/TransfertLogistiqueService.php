@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\StatutTransfert;
+use App\Models\Parametre;
 use App\Models\ProduitVariante;
 use App\Models\TransfertLogistique;
 use Illuminate\Support\Facades\DB;
@@ -59,10 +60,45 @@ class TransfertLogistiqueService
             // Entrée stock destination : marchandises reçues (RECEPTION)
             if ($suivant === StatutTransfert::RECEPTION) {
                 MouvementStockService::enregistrerEntreeDestination($transfert);
+
+                // Approbation admin non requise (réglage du SITE DESTINATION si dérogation
+                // explicite, sinon repli sur le paramètre organisation — défaut = requise, cf.
+                // Site::approbationReceptionObligatoireEffective()) : la réception vaut
+                // directement accord, sans clic manuel "Approuver la réception". validated_by
+                // reste null pour distinguer cette auto-approbation d'une décision humaine. Le
+                // déclenchement réel de la commission suit ensuite exactement la même règle que
+                // l'accord manuel (cf. CommissionTriggerService::onTransfertReceptionEffectuee(),
+                // no-op sous CHARGEMENT_VALIDE puisque la commission existe déjà depuis le départ).
+                if (! self::approbationReceptionObligatoire($transfert)) {
+                    $transfert->update([
+                        'validation_reception' => 'accord',
+                        'validated_by' => null,
+                        'validated_at' => now(),
+                    ]);
+
+                    CommissionTriggerService::onTransfertReceptionEffectuee($transfert);
+
+                    TransfertActiviteService::log($transfert, 'validation_admin_auto');
+                }
             }
         });
 
         return $transfert->fresh();
+    }
+
+    /**
+     * Résout si l'approbation admin de la réception est obligatoire pour CE transfert —
+     * dérogation du site destination si explicitement configurée, sinon repli sur le paramètre
+     * organisation (cf. Site::approbationReceptionObligatoireEffective()). `?? Parametre::...`
+     * en filet de sécurité pur (site_destination_id ne devrait jamais être null à ce stade du
+     * workflow, cf. checkChargement()), jamais un cas réellement atteint en pratique.
+     */
+    private static function approbationReceptionObligatoire(TransfertLogistique $transfert): bool
+    {
+        $transfert->loadMissing('siteDestination');
+
+        return $transfert->siteDestination?->approbationReceptionObligatoireEffective()
+            ?? Parametre::isApprobationReceptionLogistiqueObligatoire($transfert->organization_id);
     }
 
     /**

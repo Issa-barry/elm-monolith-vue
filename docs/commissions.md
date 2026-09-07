@@ -687,3 +687,121 @@ COMMISSION qui change.
   `tests/Feature/VehiculeProcessusApplicablesParUsageTest.php` et
   `tests/Feature/VehiculeBaremesCommissionCategoriesTest.php` (un véhicule logistique expose
   désormais 2 ou 3 onglets processus, plus jamais 1 ou 2 comme avant ce chantier).
+
+## Accès en lecture aux écrans Commissions — permission dédiée (corrigé le 07/09/2026)
+
+Incident production/preprod (Sentry) : le rôle Commercial avait la permission `commissions.read`
+cochée dans la matrice `/backoffice/roles`, mais tous les contrôleurs Commission (Vente/Livreurs,
+Propriétaires, Sites, Consultants, Logistique) ne vérifiaient que `comptabilite.read` — une
+permission différente et plus large (couvre aussi Dépenses, Trésorerie, Salaires, Journal
+financier), jamais accordée au rôle Commercial. Résultat : 403 systématique quelle que soit la
+combinaison Lire/Créer/Modifier/Supprimer cochée sur « Commissions » dans la matrice, la ligne
+étant de fait vestigiale (aucune vérification nulle part dans le code).
+
+- **Règle actuelle** : l'accès en LECTURE à un écran Commission (Index/Show/Export) est accordé si
+  l'utilisateur a `comptabilite.read` **OU** `commissions.read` — centralisé dans
+  `User::canReadCommissions()`, utilisé par les 5 contrôleurs concernés. Les deux permissions
+  restent indépendantes : un rôle avec seulement `commissions.read` voit les écrans Commissions
+  mais pas Dépenses/Trésorerie/Salaires/Journal financier (toujours exclusivement sous
+  `comptabilite.read`).
+- Les actions d'ÉCRITURE ne changent pas : payer une commission reste sous `comptabilite.payer`
+  (jamais `commissions.read`), et l'export Sites/Consultants exige toujours en plus
+  `commissions.exporter`.
+- `/commissions/cashback` avait un problème différent, découvert au même moment : sa policy
+  (`CashbackTransactionPolicy::viewAny()`) ignorait totalement les permissions Spatie et
+  vérifiait une liste de rôles codée en dur (`super_admin`, `admin_entreprise`, `manager`,
+  `comptable`) — seule policy du projet à ne pas suivre la convention `can('<resource>.read')`.
+  Corrigée pour vérifier `cashback.read`, alignée sur toutes les autres policies `viewAny()`.
+- Tests : `tests/Feature/Comptabilite/CommissionsReadPermissionTest.php`.
+
+## Approbation admin de la réception — rendue optionnelle (ajouté le 07/09/2026)
+
+Jusqu'ici, sous le déclencheur `RECEPTION_EFFECTUEE` (défaut, cf. COMM-007), l'approbation admin
+d'une réception (`validation_reception = accord`) était **systématiquement obligatoire** avant que
+`CommissionTriggerService::onTransfertReceptionEffectuee()` ne soit invoqué — aucun moyen de s'en
+passer. Une organisation peut désormais désactiver ce contrôle si elle ne le juge pas nécessaire.
+
+- **Nouveau paramètre** : `Parametre::isApprobationReceptionLogistiqueObligatoire($orgId)` (clé
+  `logistique_approbation_reception_obligatoire`, booléen). **Défaut `true`** — comportement
+  historique inchangé pour toute organisation n'ayant jamais explicitement configuré ce paramètre.
+  Réglable depuis **`Paramètres > Logistique`** (`LogistiqueParametrageController`, page dédiée —
+  pas `Settings\CommissionRegleController`, qui ne gère que les barèmes). Ce paramètre vit aux
+  côtés de `declencheur_commission_logistique`, déplacé le même jour depuis `Paramètres > Ventes`
+  (`VenteParametrageController`) où il avait atterri par réutilisation de contrôleur plutôt que
+  par cohérence métier — ce sont des réglages logistiques, pas des réglages de vente. La clé
+  `Parametre` et sa valeur ne changent pas, seul l'écran d'édition change.
+- **Retiré le même jour** : `montant_defaut_commission_logistique_par_pack`
+  (`Parametre::getMontantDefautCommissionLogistiquePack()`/`setMontantDefautCommissionLogistiquePack()`,
+  clé `ventes_montant_defaut_commission_logistique_par_pack`) était exposé dans ce même écran
+  mais n'était lu par AUCUN code de génération depuis le retrait de `CommissionLogistiqueService`
+  (COMM-007) — un vestige suggérant une seconde source de vérité du montant, jamais réellement
+  consommée. Supprimé entièrement (constante, accesseurs, exposition Settings, UI) : `Paramètres >
+  Commissions > Transferts logistiques` (`CommissionRegleController`) reste la SEULE source de
+  vérité du montant/partage d'une commission logistique. Une organisation ayant déjà enregistré
+  une valeur pour cette clé garde sa ligne `parametres` orpheline en base (jamais nettoyée
+  automatiquement, aucune donnée métier n'en dépendait).
+- **Si `true` (défaut)** : rien ne change — un administrateur (`super_admin`/`admin_entreprise`)
+  doit toujours cliquer explicitement « Approuver la réception » (`ReceptionValidationAdminController`
+  / `Api\Backoffice\Logistique\ValidationAdminController::handleAccord()`).
+- **Si `false`** : `TransfertLogistiqueService::avancerStatut()` — point d'entrée UNIQUE des
+  transitions de statut, partagé par le contrôleur web (`TransfertStatutController`) et l'API
+  mobile (`Api\Backoffice\Logistique\ValiderReceptionController`) — auto-approuve la réception dès
+  la transition TRANSIT → RECEPTION : `validation_reception` passe directement à `'accord'`
+  (`validated_by` laissé `null` pour distinguer cette auto-approbation d'une décision humaine) et
+  `CommissionTriggerService::onTransfertReceptionEffectuee()` est invoqué immédiatement, dans la
+  même transaction que l'entrée de stock destination. Le bouton « Approuver la réception »
+  disparaît alors de lui-même côté UI (condition déjà existante :
+  `transfert.validation_reception !== 'accord'`), sans changement de `Logistique/Show.vue`.
+- **Sans effet sous `CHARGEMENT_VALIDE`** : `onTransfertReceptionEffectuee()` y reste un no-op (la
+  commission est déjà née au départ) — ce paramètre ne fait que sauter l'étape manuelle
+  d'approbation, il ne modifie jamais QUAND ni QUOI la commission calcule (aucune règle de calcul
+  touchée).
+- **Idempotence inchangée** : que l'accord soit automatique ou manuel, la génération reste portée
+  par `CommissionEnveloppeGenerator` (contrainte unique sur `source_id` + vérification d'existence)
+  — un accord manuel rejoué après une auto-approbation ne crée jamais de seconde enveloppe.
+- Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Approbation admin
+  optionnelle »), `tests/Feature/Settings/LogistiqueParametrageTest.php` (persistance du
+  paramètre — déplacé de `VenteParametrageTest.php` avec le contrôleur le même jour).
+
+## Approbation admin de la réception — dérogation par site (ajouté le 07/09/2026, même jour)
+
+`Parametre::isApprobationReceptionLogistiqueObligatoire()` (ci-dessus) n'est plus qu'un DÉFAUT
+organisation : un site peut désormais s'en écarter individuellement.
+
+- **Nouvelle colonne** : `sites.approbation_reception_logistique_obligatoire` (booléen NULLABLE,
+  migration `2026_09_07_150000_add_approbation_reception_logistique_to_sites_table`). `null` =
+  aucune dérogation, hérite du réglage organisation ; `true`/`false` = dérogation explicite de CE
+  site. Même architecture que `Vehicule::derogation_impayes_autorisee`/`seuil_derogation_impayes`
+  et son symétrique `Client` (cf. `SolvabiliteService::resoudrePlafondVehicule()`/
+  `resoudrePlafondClient()`), mais SANS second flag "dérogation activée" à côté : un booléen
+  nullable n'a pas l'ambiguïté d'un entier (`0` vs "jamais configuré"), `null` suffit seul à
+  distinguer les deux cas.
+- **Résolution** : `Site::approbationReceptionObligatoireEffective()` — dérogation du site si non
+  null, sinon `Parametre::isApprobationReceptionLogistiqueObligatoire()`. Le site déterminant est
+  le **SITE DESTINATION** du transfert (`TransfertLogistique::site_destination_id`) — c'est là que
+  la réception a physiquement lieu, cohérent avec `TransfertLogistiqueService::
+  approbationReceptionObligatoire()`, seul point d'appel (même hook, même transition TRANSIT →
+  RECEPTION que ci-dessus — aucun second point de lecture ajouté).
+- **UX** : tableau récapitulatif dans `Paramètres > Logistique` (carte « Dérogation par site »,
+  `resources/js/pages/settings/Logistique.vue`) — un menu déroulant par site (Hérite / Obligatoire
+  / Non requise), chaque ligne s'enregistrant indépendamment (`PATCH settings/logistique/sites/
+  {site}`, `LogistiqueParametrageController::updateSite()`). Choisi plutôt qu'un champ sur la
+  fiche Site (`SiteController`, pattern véhicule/client) : le nombre de sites d'une organisation
+  reste en pratique bien plus restreint que son nombre de véhicules/clients, une vue d'ensemble
+  éditable en un seul écran est donc plus praticable ici qu'une dérogation configurée site par
+  site sur des fiches séparées.
+- **Isolation multi-tenant** : `updateSite()` vérifie explicitement `site->organization_id ===
+  auth()->user()->organization_id` avant toute écriture — `{site}` est lié par route sans scope
+  organisation implicite (contrairement à `update()`, qui n'agit que sur l'organisation de
+  l'acteur courant).
+- **Non-rétroactivité inchangée** : la dérogation du site, comme le paramètre organisation, n'est
+  lue qu'au moment de la transition TRANSIT → RECEPTION — la modifier après coup n'a jamais
+  d'effet sur un transfert déjà réceptionné en attente d'approbation (le bouton « Approuver la
+  réception » reste disponible pour lui, exactement comme pour un changement du paramètre
+  organisation).
+- Sites d'une organisation n'ayant jamais configuré de dérogation : colonne `null` pour tous
+  (migration additive, aucun backfill) — comportement strictement identique à avant cette
+  fonctionnalité.
+- Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Dérogation par site »),
+  `tests/Feature/Settings/LogistiqueParametrageTest.php` (exposition des sites, `updateSite()`,
+  isolation multi-tenant).

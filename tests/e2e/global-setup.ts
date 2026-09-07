@@ -171,9 +171,9 @@ async function createTransfertAndGenerateCommission(
     await btnValiderReception.waitFor({ state: 'visible', timeout: 10_000 });
     await btnValiderReception.click();
 
-    // ── Réception → Commission générée ────────────────────────────────────────
+    // ── Réception → Commission générée (approbation admin) ─────────────────────
     const btnGenerer = page.getByRole('button', {
-        name: /générer commission/i,
+        name: /approuver la réception/i,
     });
     await btnGenerer.waitFor({ state: 'visible', timeout: 20_000 });
     await btnGenerer.click();
@@ -182,7 +182,7 @@ async function createTransfertAndGenerateCommission(
     // (Paramètres > Commissions > Transferts logistiques) depuis le 03/09/2026,
     // plus de saisie manuelle ni d'étape "montant" intermédiaire.
     const btnOuiGenerer = page.getByRole('button', {
-        name: /oui, générer la commission/i,
+        name: /oui, approuver/i,
     });
     await btnOuiGenerer.waitFor({ state: 'visible', timeout: 10_000 });
     await btnOuiGenerer.click();

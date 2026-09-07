@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useInitials } from '@/composables/useInitials';
-import type { AppPageProps, AppRole, User } from '@/types';
+import { usePermissions } from '@/composables/usePermissions';
+import type { AppPageProps, User } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -16,17 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const { getInitials } = useInitials();
 const page = usePage<AppPageProps>();
-
-const ROLE_LABELS: Record<AppRole, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur entreprise',
-    manager: 'Manager',
-    commerciale: 'Commercial',
-    comptable: 'Comptable',
-    client: 'Client',
-    proprietaire: 'Propriétaire',
-    livreur: 'Livreur',
-};
+const { roleLabel: labelForRole } = usePermissions();
 
 const showAvatar = computed(
     () => props.user.avatar && props.user.avatar !== '',
@@ -34,7 +25,7 @@ const showAvatar = computed(
 
 const roleLabel = computed(() => {
     const firstRole = page.props.auth.roles?.[0];
-    return firstRole ? (ROLE_LABELS[firstRole] ?? firstRole) : 'Aucun role';
+    return firstRole ? labelForRole(firstRole) : 'Aucun role';
 });
 
 const subtitle = computed(() => {
