@@ -16,11 +16,13 @@ use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
+use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -881,6 +883,36 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('ventes.show', $commande))
             ->assertStatus(403);
+    }
+
+    /**
+     * Régression : Gate::before (AuthServiceProvider) bypasse toutes les Policies pour
+     * super_admin, donc $user->can('validerReception', ...) seul renvoie systématiquement true
+     * pour ce rôle — indépendamment de CommandeVente::requiertReceptionExplicite(). Sans le
+     * garde-fou explicite dans CommandeVenteController::show(), un super_admin voyait le bouton
+     * « Valider la réception » sur une vente standard en LIVRAISON_EN_COURS (qui doit passer en
+     * LIVREE via le premier encaissement, cf. EncaissementVenteController::passerEnLivree()) et
+     * se heurtait au 422 de CommandeVenteService::validerReception().
+     */
+    public function test_can_valider_reception_is_false_for_super_admin_on_vente_standard_en_livraison(): void
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+        ]);
+        $this->assertFalse($commande->requiertReceptionExplicite());
+
+        $this->actingAs($superAdmin)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.can_valider_reception', false)
+            );
     }
 
     // ── valider : BROUILLON → A_CHARGER ──────────────────────────────────────

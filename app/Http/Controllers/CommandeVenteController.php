@@ -597,11 +597,20 @@ class CommandeVenteController extends Controller
                 'is_facturation' => $commande->isFacturation(),
                 'is_cloturee' => $commande->isCloturee(),
                 'is_annulee' => $commande->isAnnulee(),
-                'can_modifier' => $user->can('modifierContenu', $commande),
+                // Même garde-fou que can_valider_reception ci-dessous : Gate::before bypasse
+                // modifierContenu() (donc isEditable()) pour super_admin, ce flag doit rester
+                // explicite pour ne pas afficher "Modifier" passé le brouillon.
+                'can_modifier' => $commande->isEditable() && $user->can('modifierContenu', $commande),
                 'can_confirmer' => $commande->isBrouillon() && $user->can('confirmer', $commande),
                 'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
                 'can_valider_chargement' => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
-                'can_valider_reception' => $commande->isLivraisonEnCours() && $user->can('validerReception', $commande),
+                // Condition métier explicite en plus de $user->can() : le Gate::before
+                // (AuthServiceProvider) bypasse toutes les Policies pour super_admin, donc
+                // $user->can('validerReception', ...) seul ignorerait requiertReceptionExplicite()
+                // et afficherait ce bouton à un super_admin même sur une vente standard.
+                'can_valider_reception' => $commande->isLivraisonEnCours()
+                    && $commande->requiertReceptionExplicite()
+                    && $user->can('validerReception', $commande),
                 'can_annuler' => $commande->statut->isAnnulable()
                     && (! $facture || (float) $facture->montant_encaisse === 0.0)
                     && $user->can('annuler', $commande),
@@ -642,6 +651,10 @@ class CommandeVenteController extends Controller
     public function edit(CommandeVente $vente): Response
     {
         $this->authorize('modifierContenu', $vente);
+        // Garde-fou explicite en plus de authorize() : Gate::before (AuthServiceProvider)
+        // bypasse modifierContenu() — donc isEditable() — pour super_admin, qui verrait sinon le
+        // formulaire d'édition sur une commande déjà sortie de BROUILLON.
+        abort_if(! $vente->isEditable(), 403, 'Cette commande ne peut plus être modifiée après le brouillon.');
 
         $orgId = auth()->user()->organization_id;
         $vente->load(['lignes.variante']);
@@ -677,6 +690,10 @@ class CommandeVenteController extends Controller
     public function update(Request $request, CommandeVente $vente): RedirectResponse
     {
         $this->authorize('modifierContenu', $vente);
+        // Même garde-fou que edit() ci-dessus : sans lui, un super_admin pourrait réécrire les
+        // lignes/total d'une commande déjà chargée/livrée/facturée via un appel API direct, en
+        // s'appuyant uniquement sur le bypass Gate::before — jamais couvert par authorize() seul.
+        abort_if(! $vente->isEditable(), 403, 'Cette commande ne peut plus être modifiée après le brouillon.');
 
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
