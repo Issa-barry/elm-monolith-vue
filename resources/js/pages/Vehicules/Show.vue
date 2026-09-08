@@ -1083,7 +1083,10 @@ function formatGNF(val: number): string {
                     </div>
 
                     <div v-else class="rounded-lg border bg-background p-4">
-                        <p class="text-sm font-medium" data-testid="parrain-nom">
+                        <p
+                            class="text-sm font-medium"
+                            data-testid="parrain-nom"
+                        >
                             {{ vehicule.parrain_nom_complet }}
                         </p>
                         <p
@@ -1093,7 +1096,9 @@ function formatGNF(val: number): string {
                             {{ formatPhoneDisplay(vehicule.parrain_telephone) }}
                         </p>
                         <p
-                            v-if="vehicule.parrain_ville || vehicule.parrain_pays"
+                            v-if="
+                                vehicule.parrain_ville || vehicule.parrain_pays
+                            "
                             class="mt-0.5 text-xs text-muted-foreground"
                         >
                             {{

@@ -31,7 +31,9 @@ function toggle() {
         >
             <span
                 class="pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform"
-                :class="modelValue && available ? 'translate-x-4' : 'translate-x-0'"
+                :class="
+                    modelValue && available ? 'translate-x-4' : 'translate-x-0'
+                "
             />
         </button>
         <span

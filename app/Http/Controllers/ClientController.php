@@ -10,6 +10,7 @@ use App\Models\CategorieTarifGrossiste;
 use App\Models\Client;
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Models\Personne;
 use App\Services\CashbackEligibiliteService;
 use App\Services\DerogationImpayesService;
 use App\Services\TelephoneOwnerLookupService;
@@ -114,7 +115,24 @@ class ClientController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $orgId);
         }
 
-        $client = Client::create([...$data, 'organization_id' => $orgId]);
+        // Client est un rôle porté par Personne, comme Proprietaire/Fournisseur/Livreur — cf.
+        // docs/identite-client-personne.md. Réutilise l'identité existante si ce téléphone
+        // correspond déjà à une Personne (un autre rôle, ou un client précédemment archivé) :
+        // jamais de doublon d'identité. assertPhoneUniqueInOrg() ci-dessus garantit déjà
+        // qu'aucun AUTRE client actif ne porte ce téléphone, donc la Personne trouvée ici ne
+        // peut jamais déjà appartenir à un client concurrent.
+        $personne = Personne::resoudreOuCreer($orgId, [
+            'nom_complet' => $data['nom_complet'],
+            'telephone' => $data['telephone'],
+            'email' => $data['email'] ?? null,
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'] ?? null,
+            'adresse' => $data['adresse'] ?? null,
+        ]);
+
+        $client = Client::create([...$data, 'organization_id' => $orgId, 'personne_id' => $personne->id]);
 
         return redirect()->route('clients.show', $client)
             ->with('success', 'Client créé avec succès.');
@@ -295,6 +313,35 @@ class ClientController extends Controller
 
         if (! empty($data['email'])) {
             $this->assertEmailUniqueInOrg($data['email'], $client->organization_id, $client->id);
+        }
+
+        $identitePersonne = [
+            'nom_complet' => $data['nom_complet'],
+            'telephone' => $data['telephone'],
+            'email' => $data['email'] ?? null,
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'] ?? null,
+            'adresse' => $data['adresse'] ?? null,
+        ];
+
+        if ($client->personne_id) {
+            // Édite l'identité déjà rattachée EN PLACE, jamais de re-résolution par téléphone
+            // (même principe que ProprietaireController::update()) : éditer un client ne doit
+            // jamais le rattacher silencieusement à une autre Personne existante. La garde
+            // ci-dessous protège la contrainte unique (organization_id, telephone_normalise) —
+            // sans elle, un nouveau téléphone déjà porté par une AUTRE Personne (un autre rôle)
+            // heurterait une exception SQL brute au lieu d'un message de validation clair.
+            Personne::assertTelephoneDisponible($client->organization_id, $data['telephone'], $client->personne_id);
+            $client->personne->update([
+                ...$identitePersonne,
+                'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
+            ]);
+        } else {
+            // Filet de sécurité : ne devrait plus se produire une fois le backfill exécuté,
+            // mais garantit qu'aucun client ne reste sans Personne après une modification.
+            $data['personne_id'] = Personne::resoudreOuCreer($client->organization_id, $identitePersonne)->id;
         }
 
         $client->update($data);

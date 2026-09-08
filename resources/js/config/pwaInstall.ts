@@ -1,4 +1,4 @@
-// Installation PWA (bandeau "Installer ELM", post-connexion) — même
+// Garde-fou d'accès mobile PWA (cf. docs/pwa.md § Garde-fou mobile) — même
 // principe que elm-vitrine-nuxt/config/pwaInstall.ts : logique pure ici
 // (testable sans DOM), accès navigateur réels dans
 // composables/usePwaInstall.ts.
@@ -48,17 +48,28 @@ export function isStandaloneDisplay(
     return matchesStandaloneMedia || iosNavigatorStandalone === true;
 }
 
-// Priorité UX demandée : le bandeau d'installation ne s'affiche que sur
-// téléphone/tablette, jamais sur desktop (ordinateur de bureau au clavier),
-// même si une invite native y est techniquement disponible. Basé sur le même
-// principe UA que isIosDevice, complété par le nombre de points tactiles et
-// la largeur d'écran pour couvrir Android/tablettes génériques.
-export function isMobileOrTabletDevice(
+// Garde-fou d'accès (docs/pwa.md § Garde-fou mobile) : SEUL le téléphone est
+// concerné — la tablette garde le comportement web normal, comme le desktop.
+// Distinction volontairement plus stricte que l'ancien isMobileOrTabletDevice
+// (mobile+tablette confondus, qui ne servait qu'à un bandeau suggestif non
+// bloquant) : bloquer une tablette par erreur casserait un usage légitime,
+// jamais acceptable pour un vrai garde-fou.
+//
+// iPad : toujours exclu, y compris le déguisement UA "Macintosh" d'iPadOS
+// 13+ (seul le tactile le distingue d'un vrai Mac, même heuristique que
+// isIosDevice mais inversée ici). Android : la convention UA place "Mobile"
+// uniquement sur téléphone (absent sur tablette) — signal déjà utilisé par
+// les sites pour adapter leur layout par défaut, réutilisé ici tel quel. UA
+// inconnu (OS mobile atypique, navigateur exotique) : repli sur un seuil de
+// largeur d'écran typique d'un téléphone plutôt qu'une tablette.
+export function isPhoneDevice(
     userAgent: string,
     maxTouchPoints: number,
     viewportWidth: number,
 ): boolean {
-    if (/Android|iPhone|iPad|iPod/i.test(userAgent)) return true;
-    if (/Macintosh/i.test(userAgent) && maxTouchPoints > 1) return true;
-    return maxTouchPoints > 1 && viewportWidth <= 1024;
+    if (/iPhone|iPod/i.test(userAgent)) return true;
+    if (/iPad/i.test(userAgent)) return false;
+    if (/Macintosh/i.test(userAgent) && maxTouchPoints > 1) return false;
+    if (/Android/i.test(userAgent)) return /Mobile/i.test(userAgent);
+    return maxTouchPoints > 1 && viewportWidth <= 480;
 }

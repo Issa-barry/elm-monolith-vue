@@ -10,7 +10,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Rattachement d'un parrain (Personne) à un véhicule — phase 1 uniquement : pas de commission,
@@ -38,6 +37,15 @@ class ParrainController extends Controller
         ]);
 
         $data = $this->resolveCountryData($data);
+
+        // Le champ de saisie du frontend n'envoie jamais que des chiffres locaux, mais
+        // l'endpoint reste tolérant à un numéro déjà saisi avec son indicatif (« +224... » ou
+        // « +224 666 17 70 01 ») — extrait via splitPhone() (déjà utilisé ailleurs pour
+        // pré-remplir un formulaire d'édition), jamais une deuxième logique de normalisation :
+        // ces formats doivent tous résoudre vers le même telephone_normalise.
+        [$localDigits] = $this->splitPhone($data['telephone'], $data['code_phone_pays'] ?? null, $data['code_pays'], $data['pays'] ?? null);
+        $data['telephone'] = $localDigits ?? $data['telephone'];
+
         $this->validateLocalPhoneLength($data);
 
         $international = $this->buildInternationalPhone($data['telephone'], $data['code_phone_pays'] ?? null);
@@ -146,7 +154,7 @@ class ParrainController extends Controller
         $this->validateLocalPhoneLength($data);
         $data = $this->normalizePersonData($data);
 
-        $this->assertPhoneUniqueInOrg($data['telephone'], $vehicule->organization_id, $parrain->personne_id);
+        Personne::assertTelephoneDisponible($vehicule->organization_id, $data['telephone'], $parrain->personne_id);
 
         $parrain->personne->update([
             'nom_complet' => $data['nom_complet'],
@@ -161,25 +169,6 @@ class ParrainController extends Controller
 
         return redirect()->route('vehicules.show', $vehicule)
             ->with('success', 'Parrain mis à jour avec succès.');
-    }
-
-    /**
-     * Empêche qu'une modification en place fasse silencieusement collisionner ce parrain avec
-     * une autre Personne déjà existante (contrainte unique personnes.telephone_normalise) — un
-     * message de validation clair plutôt qu'une exception SQL brute.
-     */
-    private function assertPhoneUniqueInOrg(string $telephone, string $orgId, string $ignorePersonneId): void
-    {
-        $exists = Personne::where('organization_id', $orgId)
-            ->where('telephone_normalise', Personne::normaliserTelephone($telephone))
-            ->where('id', '!=', $ignorePersonneId)
-            ->exists();
-
-        if ($exists) {
-            throw ValidationException::withMessages([
-                'telephone' => 'Ce numéro de téléphone est déjà utilisé par une autre personne. Recherchez-la plutôt que de créer un doublon.',
-            ]);
-        }
     }
 
     private function validationMessages(): array

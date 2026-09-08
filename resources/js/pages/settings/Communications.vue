@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import CommunicationChannelToggle from '@/components/settings/CommunicationChannelToggle.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import CommunicationChannelToggle from '@/components/settings/CommunicationChannelToggle.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -189,7 +189,9 @@ function submit() {
                             <p class="text-sm font-medium text-foreground">
                                 Commande confirmée
                             </p>
-                            <p class="mt-0.5 mb-3 text-xs text-muted-foreground">
+                            <p
+                                class="mt-0.5 mb-3 text-xs text-muted-foreground"
+                            >
                                 Envoyé au livreur assigné dès que la commande
                                 passe de brouillon à confirmée.
                             </p>
@@ -199,16 +201,16 @@ function submit() {
                                 >
                                 <CommunicationChannelToggle
                                     v-model="
-                                        state.ventes.commande_confirmee
-                                            .livreur.sms
+                                        state.ventes.commande_confirmee.livreur
+                                            .sms
                                     "
                                     label="SMS"
                                     :available="channel_availability.sms"
                                 />
                                 <CommunicationChannelToggle
                                     v-model="
-                                        state.ventes.commande_confirmee
-                                            .livreur.whatsapp
+                                        state.ventes.commande_confirmee.livreur
+                                            .whatsapp
                                     "
                                     label="WhatsApp"
                                     :available="channel_availability.whatsapp"
@@ -220,14 +222,14 @@ function submit() {
                             <p class="text-sm font-medium text-foreground">
                                 Chargement validé
                             </p>
-                            <p class="mt-0.5 mb-3 text-xs text-muted-foreground">
+                            <p
+                                class="mt-0.5 mb-3 text-xs text-muted-foreground"
+                            >
                                 Envoyé au livreur et/ou au client dès que le
                                 chargement de la commande est validé.
                             </p>
 
-                            <div
-                                class="flex flex-wrap items-center gap-4 pl-2"
-                            >
+                            <div class="flex flex-wrap items-center gap-4 pl-2">
                                 <span class="text-xs text-muted-foreground"
                                     >Livreur</span
                                 >
@@ -307,7 +309,9 @@ function submit() {
                             <p class="text-sm font-medium text-foreground">
                                 Transfert créé
                             </p>
-                            <p class="mt-0.5 mb-3 text-xs text-muted-foreground">
+                            <p
+                                class="mt-0.5 mb-3 text-xs text-muted-foreground"
+                            >
                                 Envoyé au livreur dès la création du transfert
                                 avec une équipe assignée.
                             </p>
@@ -317,16 +321,16 @@ function submit() {
                                 >
                                 <CommunicationChannelToggle
                                     v-model="
-                                        state.logistique.transfert_cree
-                                            .livreur.sms
+                                        state.logistique.transfert_cree.livreur
+                                            .sms
                                     "
                                     label="SMS"
                                     :available="channel_availability.sms"
                                 />
                                 <CommunicationChannelToggle
                                     v-model="
-                                        state.logistique.transfert_cree
-                                            .livreur.whatsapp
+                                        state.logistique.transfert_cree.livreur
+                                            .whatsapp
                                     "
                                     label="WhatsApp"
                                     :available="channel_availability.whatsapp"
@@ -338,7 +342,9 @@ function submit() {
                             <p class="text-sm font-medium text-foreground">
                                 Chargement validé
                             </p>
-                            <p class="mt-0.5 mb-3 text-xs text-muted-foreground">
+                            <p
+                                class="mt-0.5 mb-3 text-xs text-muted-foreground"
+                            >
                                 Envoyé au livreur dès que le chargement du
                                 transfert est validé.
                             </p>

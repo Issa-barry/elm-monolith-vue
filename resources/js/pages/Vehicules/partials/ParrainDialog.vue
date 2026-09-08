@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { formatPhoneDisplay } from '@/lib/utils';
 import { paysOptionsByCode } from '@/lib/pays';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { useForm } from '@inertiajs/vue3';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -236,8 +236,7 @@ async function rechercher() {
         personneTrouvee.value = body.found ? body.personne : null;
         step.value = 'resultat';
     } catch {
-        searchError.value =
-            'Impossible de vérifier ce numéro pour le moment.';
+        searchError.value = 'Impossible de vérifier ce numéro pour le moment.';
     } finally {
         searching.value = false;
     }
@@ -397,9 +396,7 @@ function onHide() {
                     <p class="text-sm font-semibold">
                         {{ personneTrouvee.nom_complet }}
                     </p>
-                    <p
-                        class="mt-0.5 font-mono text-xs text-muted-foreground"
-                    >
+                    <p class="mt-0.5 font-mono text-xs text-muted-foreground">
                         {{ formatPhoneDisplay(personneTrouvee.telephone) }}
                     </p>
                     <p
@@ -451,8 +448,7 @@ function onHide() {
 
             <div class="space-y-1.5">
                 <Label for="parrain-creation-nom"
-                    >Nom complet
-                    <span class="text-destructive">*</span></Label
+                    >Nom complet <span class="text-destructive">*</span></Label
                 >
                 <InputText
                     id="parrain-creation-nom"
@@ -499,8 +495,7 @@ function onHide() {
         <div v-else-if="step === 'edition'" class="space-y-4">
             <div class="space-y-1.5">
                 <Label for="parrain-edition-nom"
-                    >Nom complet
-                    <span class="text-destructive">*</span></Label
+                    >Nom complet <span class="text-destructive">*</span></Label
                 >
                 <InputText
                     id="parrain-edition-nom"

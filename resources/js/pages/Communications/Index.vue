@@ -135,7 +135,9 @@ function openDetail(log: MessageLogRow) {
                         Communications
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ logs.total }} message{{ logs.total !== 1 ? 's' : '' }}
+                        {{ logs.total }} message{{
+                            logs.total !== 1 ? 's' : ''
+                        }}
                         — journal des envois SMS/WhatsApp
                     </p>
                 </div>
