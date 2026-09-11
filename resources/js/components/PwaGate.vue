@@ -54,10 +54,9 @@ const { showGate, state, fallbackReady, promptInstall, continueInBrowser } =
 
             <template v-else>
                 <p class="text-sm text-muted-foreground">
-                    Votre navigateur ne permet pas l'installation
-                    automatique. Ouvrez ce lien dans Chrome ou Safari, ou
-                    utilisez le menu de votre navigateur pour ajouter ELM à
-                    l'écran d'accueil.
+                    Votre navigateur ne permet pas l'installation automatique.
+                    Ouvrez ce lien dans Chrome ou Safari, ou utilisez le menu de
+                    votre navigateur pour ajouter ELM à l'écran d'accueil.
                 </p>
             </template>
         </div>
@@ -77,19 +76,20 @@ const { showGate, state, fallbackReady, promptInstall, continueInBrowser } =
             class="flex w-full max-w-xs flex-col gap-3 rounded-xl border bg-card p-4 text-left text-sm"
         >
             <li class="flex items-center gap-3">
-                <Share class="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <Share
+                    class="size-4 shrink-0 text-primary"
+                    aria-hidden="true"
+                />
                 <span
                     >Appuyez sur le bouton <strong>Partager</strong> de
                     Safari.</span
                 >
             </li>
             <li class="flex items-center gap-3">
-                <i
-                    class="pi pi-plus-circle text-primary"
-                    aria-hidden="true"
-                />
+                <i class="pi pi-plus-circle text-primary" aria-hidden="true" />
                 <span
-                    >Choisissez <strong>« Sur l'écran d'accueil »</strong>.</span
+                    >Choisissez
+                    <strong>« Sur l'écran d'accueil »</strong>.</span
                 >
             </li>
             <li class="flex items-center gap-3">

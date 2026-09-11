@@ -66,8 +66,11 @@ test('parrainage véhicule : création (téléphone inconnu) puis réutilisation
 
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
     await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain);
+    // Le numéro est affiché groupé par formatPhoneDisplay (ex. règle Guinée [3,2,2,2]),
+    // qui peut insérer une espace au milieu des 4 derniers chiffres : on tolère cette espace.
+    const dernierChiffres = telephoneParrain.slice(-4);
     await expect(page.getByTestId('parrain-telephone')).toContainText(
-        telephoneParrain.slice(-4),
+        new RegExp(`${dernierChiffres.slice(0, 2)}\\s?${dernierChiffres.slice(2)}`),
     );
 
     // ── Véhicule B : même téléphone → doit retrouver le parrain A, pas en créer un second ──

@@ -77,11 +77,11 @@ describe('isPhoneDevice', () => {
         ).toBe(false);
     });
 
-    it('repli sur la largeur d\'écran pour un UA inconnu tactile étroit', () => {
+    it("repli sur la largeur d'écran pour un UA inconnu tactile étroit", () => {
         expect(isPhoneDevice('Mozilla/5.0 (Unknown OS)', 5, 360)).toBe(true);
     });
 
-    it('repli sur la largeur d\'écran pour un UA inconnu tactile large (tablette)', () => {
+    it("repli sur la largeur d'écran pour un UA inconnu tactile large (tablette)", () => {
         expect(isPhoneDevice('Mozilla/5.0 (Unknown OS)', 5, 900)).toBe(false);
     });
 });
@@ -127,7 +127,7 @@ describe('resolvePwaInstallState', () => {
         ).toBe('hidden');
     });
 
-    it('priorise l\'invite native dès qu\'elle est capturée', () => {
+    it("priorise l'invite native dès qu'elle est capturée", () => {
         expect(
             resolvePwaInstallState({
                 isStandalone: false,
@@ -137,7 +137,7 @@ describe('resolvePwaInstallState', () => {
         ).toBe('native_prompt');
     });
 
-    it('retombe sur les instructions iOS en l\'absence d\'invite native', () => {
+    it("retombe sur les instructions iOS en l'absence d'invite native", () => {
         expect(
             resolvePwaInstallState({
                 isStandalone: false,
