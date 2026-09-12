@@ -22,9 +22,9 @@ cache uniquement une liste blanche explicite de fichiers statiques publics.
 | [public/.htaccess](../public/.htaccess) | Force `Cache-Control: no-cache` sur `sw.js` (le CDN de production applique sinon un cache de 7 jours par défaut) |
 | [tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts) | Tests dédiés — dans un dossier séparé de `tests/e2e/`, jamais ramassés par la suite E2E par défaut (voir plus bas) |
 | [playwright.pwa.config.ts](../playwright.pwa.config.ts) | Config Playwright dédiée à ce fichier (`testDir` séparé), réutilise `playwright.config.ts` |
-| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, mobile/tablette) et résolution d'état du bandeau d'installation |
+| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, téléphone vs tablette) et résolution d'état du garde-fou |
 | [resources/js/composables/usePwaInstall.ts](../resources/js/composables/usePwaInstall.ts) | Pont vers les API navigateur réelles (`beforeinstallprompt`, `appinstalled`, sessionStorage) |
-| [resources/js/components/PwaInstallPrompt.vue](../resources/js/components/PwaInstallPrompt.vue) | Bandeau "Installer ELM" + instructions iOS |
+| [resources/js/components/PwaGate.vue](../resources/js/components/PwaGate.vue) | Garde-fou plein écran "Installer ELM" (téléphone uniquement) + instructions iOS — cf. §3bis |
 
 ---
 
@@ -80,44 +80,78 @@ logique que `buildDirectory` déjà utilisée pour Wayfinder) et `__PWA_ENABLED_
 fichier statique `sw.js` via la query string d'enregistrement
 (`/sw.js?build=build-e2e`) puisque `sw.js` lui-même n'est pas compilé par Vite.
 
-## 3bis. UX d'installation (bandeau "Installer ELM")
+## 3bis. Garde-fou mobile (écran "Installer ELM" plein écran)
 
-Même principe que `elm-vitrine-nuxt` (`composables/usePwaInstall.ts`,
-`config/pwaInstall.ts`, `components/PwaInstallButton.vue`), adapté en bandeau
-dismissible plutôt qu'un CTA de landing, et affiché sur les 3 layouts
-partagés : [AuthSimpleLayout.vue](../resources/js/layouts/auth/AuthSimpleLayout.vue)
-(connexion et pages invité), [AppSidebarLayout.vue](../resources/js/layouts/app/AppSidebarLayout.vue)
+**Changement du 08/09/2026** — remplace l'ancien bandeau dismissible : sur
+téléphone, le navigateur (Safari/Chrome mobile) ne doit plus jamais afficher
+l'interface ELM normale (connexion, back-office, espace client). Il devient un
+simple point d'entrée vers l'installation ; l'interface métier n'est
+accessible qu'une fois ELM ouvert en PWA installée (`display: standalone`).
+**Tablette et desktop : comportement web normal inchangé**, jamais concernés
+par ce garde-fou.
+
+Composants : `resources/js/config/pwaInstall.ts` (logique pure, testable sans
+DOM — `resources/js/config/__tests__/pwaInstall.spec.ts`),
+`resources/js/composables/usePwaInstall.ts` (pont vers les API navigateur
+réelles), `resources/js/components/PwaGate.vue` (écran plein écran), monté à
+l'identique sur les 3 layouts partagés :
+[AuthSimpleLayout.vue](../resources/js/layouts/auth/AuthSimpleLayout.vue)
+(connexion et pages invité),
+[AppSidebarLayout.vue](../resources/js/layouts/app/AppSidebarLayout.vue)
 (backoffice) et [ClientLayout.vue](../resources/js/layouts/ClientLayout.vue)
-(espace client) — jamais dupliqué page par page.
+(espace client) — jamais dupliqué page par page. Monté en overlay plein écran
+(`z-index` maximal, au-dessus des dialogues PrimeVue) plutôt qu'en
+restructurant le `slot` de chaque layout : le contenu de la page continue de
+se monter derrière, mais reste entièrement masqué et inatteignable tant que
+le garde-fou est actif.
 
-- **Priorité mobile/tablette** (`isMobileOrTabletDevice` dans
-  `config/pwaInstall.ts`) : le bandeau ne s'affiche jamais sur desktop dans
-  cette V1, même si une invite native y serait techniquement disponible.
+- **Téléphone uniquement** (`isPhoneDevice` dans `config/pwaInstall.ts`,
+  distinct de l'ancien `isMobileOrTabletDevice` qui mélangeait tablette et
+  téléphone) : iPad toujours exclu (y compris le déguisement UA "Macintosh"
+  d'iPadOS 13+), Android distingué via le token UA `Mobile` (absent sur
+  tablette), repli sur un seuil de largeur d'écran pour un UA inconnu.
 - **Déjà installée** (`display: standalone`, y compris `navigator.standalone`
-  sur iOS) → bandeau masqué.
-- **Android/Chrome, desktop Chrome/Edge** : `beforeinstallprompt` est
-  intercepté (`preventDefault()`) pour piloter l'invite depuis CE bandeau ; le
-  clic déclenche `prompt()` sur l'événement capturé.
+  sur iOS) → garde-fou masqué, interface normale.
+- **Android/Chrome** : `beforeinstallprompt` est intercepté
+  (`preventDefault()`) pour piloter l'invite depuis cet écran ; le clic
+  déclenche `prompt()` sur l'événement capturé. Après installation
+  (`appinstalled`), le garde-fou se lève automatiquement dans le même onglet.
 - **iOS/iPadOS (Safari)** : `beforeinstallprompt` ne se déclenche jamais
-  (WebKit) — le clic ouvre une modale (PrimeVue `Dialog`) avec les 3 étapes
-  manuelles (Partager → Sur l'écran d'accueil → Ajouter). Aucune tentative de
-  déclencher automatiquement l'installation sur cette plateforme.
-- **Navigateur sans l'un ni l'autre chemin** (ex. Firefox desktop) → bandeau
-  masqué plutôt qu'un bouton qui échouerait silencieusement.
-- **« Plus tard »** : ferme le bandeau, persisté en `sessionStorage`
-  (`elm-pwa-install-dismissed`) pour ne pas le reproposer à chaque navigation
-  (chaque layout remonte le composant à la navigation, cf. absence de layout
-  Inertia persistant dans `app.ts`) — jamais caché de façon permanente,
-  réaffiché à la prochaine vraie visite (nouvelle session navigateur).
-  N'empêche jamais l'utilisation d'ELM.
+  (WebKit) — les 3 étapes manuelles (Partager → Sur l'écran d'accueil →
+  Ajouter) sont affichées directement dans l'écran, jamais de tentative de
+  déclenchement automatique. Aucun moyen de détecter la fin de l'ajout depuis
+  cet onglet Safari (limite de la plateforme, pas de l'implémentation) :
+  l'utilisateur doit rouvrir ELM depuis l'icône ajoutée à son écran d'accueil.
+- **Navigateur téléphone sans aucun chemin détecté** (ni
+  `beforeinstallprompt`, ni iOS — ex. Firefox Android, webview in-app
+  WhatsApp/Facebook) : seul cas où un contournement existe
+  (`continueInBrowser()`, persisté en `sessionStorage` sous
+  `elm-pwa-gate-unsupported-bypass`), pour éviter un verrouillage total sans
+  issue. Volontairement retardé de 1,2 s après le montage
+  (`UNSUPPORTED_FALLBACK_DELAY_MS`) : `beforeinstallprompt` peut se
+  déclencher avec un léger retard sur un téléphone qui supporte réellement
+  l'installation, et ce contournement ne doit jamais être proposé à tort dans
+  ce cas. **Jamais disponible** pour les deux chemins réellement actionnables
+  (Android avec invite native, iOS) — ces deux cas bloquent sans échappatoire.
+
+Ce garde-fou remplace la garantie précédente ("n'empêche jamais l'utilisation
+d'ELM") **uniquement sur téléphone** — décision explicite, cf. discussion
+produit du 08/09/2026 : l'objectif devient justement d'empêcher l'usage du
+site web normal sur téléphone pour pousser vers l'app installée. Limite de
+plateforme à connaître : un lien scanné (QR d'un ticket, lien partagé) ouvre
+toujours d'abord le navigateur, jamais directement la PWA déjà installée —
+iOS n'offre aucun mécanisme pour qu'un lien externe ouvre une PWA installée
+comme le ferait une vraie app native. Le garde-fou s'affiche donc à chaque
+fois dans ce cas, jusqu'à ce que l'utilisateur relance ELM depuis son écran
+d'accueil.
 
 Vérifié manuellement (Playwright, UA iPhone + viewport mobile, contre
-`npm run dev`) : bandeau visible sur mobile, masqué sur desktop, clic iOS →
-modale d'instructions, "Plus tard" → masqué immédiatement et après reload.
-Le chemin `beforeinstallprompt` réel (Android/Chrome desktop) n'est pas
-automatisable de la même façon (nécessite les critères d'installabilité réels
-— HTTPS/manifest/service worker — absents en `npm run dev`) : à vérifier
-manuellement contre un build réel.
+`npm run dev`) : écran visible sur téléphone (interface normale invisible
+derrière), absent sur tablette (UA iPad) et desktop, clic Android → invite
+native, iOS → instructions inline. Le chemin `beforeinstallprompt` réel
+(Android/Chrome) n'est pas automatisable de la même façon (nécessite les
+critères d'installabilité réels — HTTPS/manifest/service worker — absents en
+`npm run dev`) : à vérifier manuellement contre un build réel.
 
 ## 4. Stratégie de mise à jour
 

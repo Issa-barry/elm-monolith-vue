@@ -17,6 +17,7 @@ class Client extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        'personne_id',
         'nom',
         'prenom',
         'nom_complet',
@@ -82,6 +83,16 @@ class Client extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Résolution/dédoublonnage d'identité uniquement (cf. docs/identite-client-personne.md) —
+     * Client garde ses propres colonnes (nom_complet, telephone...) comme source des
+     * affichages existants, jamais remplacées silencieusement par celles de Personne.
+     */
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
     }
 
     public function vehicules(): HasMany

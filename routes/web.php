@@ -17,6 +17,7 @@ use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
+use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -56,6 +57,7 @@ use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
+use App\Http\Controllers\ParrainController;
 use App\Http\Controllers\PdvController;
 use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
@@ -305,6 +307,11 @@ Route::prefix('backoffice')->group(function () {
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
+            // Parrainage (phase 1, cf. docs/parrainage-vehicule.md) : protégé par les mêmes
+            // permissions que le véhicule (vehicules.update), pas de permission dédiée.
+            Route::get('vehicules/{vehicule}/parrain/rechercher', [ParrainController::class, 'rechercherTelephone'])->name('vehicules.parrain.rechercher');
+            Route::post('vehicules/{vehicule}/parrain', [ParrainController::class, 'store'])->name('vehicules.parrain.store');
+            Route::put('vehicules/{vehicule}/parrain', [ParrainController::class, 'update'])->name('vehicules.parrain.update');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');
@@ -439,6 +446,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
                 ->name('sites.import.confirmer');
         });
+
+        // ── Communications — monitoring SMS/WhatsApp (cf. rapport 07/09/2026, P1) ──
+        Route::get('communications', [CommunicationController::class, 'index'])->name('communications.index');
 
         // ── Comptes — point d'entrée unique de navigation pour la gestion des comptes ──────
         // (super_admin : console plateforme multi-organisation ; autres : délègue à la liste

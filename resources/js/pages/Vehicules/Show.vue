@@ -8,6 +8,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
+import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -25,6 +26,7 @@ import {
     Settings,
     ShoppingCart,
     TriangleAlert,
+    UserRound,
     Users,
 } from 'lucide-vue-next';
 import SelectButton from 'primevue/selectbutton';
@@ -107,6 +109,15 @@ interface VehiculeData {
     proprietaire_nom_affichage: string | null;
     proprietaire_est_entreprise: boolean;
     proprietaire_telephone: string | null;
+    // Parrainage (phase 1, sans commission ni historique — cf. docs/parrainage-vehicule.md).
+    parrain_id: string | null;
+    parrain_nom_complet: string | null;
+    parrain_telephone: string | null;
+    parrain_code_phone_pays: string | null;
+    parrain_code_pays: string | null;
+    parrain_pays: string | null;
+    parrain_ville: string | null;
+    parrain_adresse: string | null;
     equipe_id: string | null;
     equipe_membres: EquipeMembre[];
     livraison_vente: boolean;
@@ -251,7 +262,22 @@ function partsCommissionMembre(livreurId: string | null) {
     });
 }
 
-const activeTab = ref<'informations' | 'equipe' | 'depenses'>('informations');
+const activeTab = ref<'informations' | 'equipe' | 'parrain' | 'depenses'>(
+    'informations',
+);
+
+const showParrainDialog = ref(false);
+const parrainDialogMode = ref<'ajouter' | 'modifier'>('ajouter');
+
+function ouvrirAjoutParrain() {
+    parrainDialogMode.value = 'ajouter';
+    showParrainDialog.value = true;
+}
+
+function ouvrirModifierParrain() {
+    parrainDialogMode.value = 'modifier';
+    showParrainDialog.value = true;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -415,6 +441,22 @@ function formatGNF(val: number): string {
                             "
                         >
                             {{ vehicule.equipe_membres.length }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="parrain-tab-btn"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'parrain'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'parrain'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <UserRound class="h-4 w-4" />
+                            Parrain
                         </span>
                     </button>
                     <button
@@ -1009,6 +1051,86 @@ function formatGNF(val: number): string {
                     </div>
                 </div>
 
+                <!-- Parrain tab (phase 1 : pas de commission ni d'historique — cf.
+                docs/parrainage-vehicule.md) -->
+                <div
+                    v-else-if="activeTab === 'parrain'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
+                    <h2
+                        class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Parrain
+                    </h2>
+
+                    <div
+                        v-if="!vehicule.parrain_id"
+                        class="rounded-lg border border-dashed py-10 text-center"
+                    >
+                        <p class="text-sm text-muted-foreground">
+                            Aucun parrain associé à ce véhicule.
+                        </p>
+                        <Button
+                            v-if="can('vehicules.update')"
+                            data-testid="ajouter-parrain-btn"
+                            size="sm"
+                            class="mt-4"
+                            @click="ouvrirAjoutParrain"
+                        >
+                            <Plus class="mr-1.5 h-4 w-4" />
+                            Ajouter un parrain
+                        </Button>
+                    </div>
+
+                    <div v-else class="rounded-lg border bg-background p-4">
+                        <p
+                            class="text-sm font-medium"
+                            data-testid="parrain-nom"
+                        >
+                            {{ vehicule.parrain_nom_complet }}
+                        </p>
+                        <p
+                            class="mt-0.5 font-mono text-xs text-muted-foreground"
+                            data-testid="parrain-telephone"
+                        >
+                            {{ formatPhoneDisplay(vehicule.parrain_telephone) }}
+                        </p>
+                        <p
+                            v-if="
+                                vehicule.parrain_ville || vehicule.parrain_pays
+                            "
+                            class="mt-0.5 text-xs text-muted-foreground"
+                        >
+                            {{
+                                [vehicule.parrain_ville, vehicule.parrain_pays]
+                                    .filter(Boolean)
+                                    .join(' · ')
+                            }}
+                        </p>
+                        <div
+                            v-if="can('vehicules.update')"
+                            class="mt-4 flex gap-2"
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid="modifier-parrain-btn"
+                                @click="ouvrirModifierParrain"
+                            >
+                                Modifier
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid="changer-parrain-btn"
+                                @click="ouvrirAjoutParrain"
+                            >
+                                Changer de parrain
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Dépenses tab -->
                 <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
                     <div
@@ -1120,5 +1242,24 @@ function formatGNF(val: number): string {
         v-if="livreurATransferer"
         v-model:visible="showTransfertDialog"
         :livreur-id="livreurATransferer"
+    />
+
+    <ParrainDialog
+        v-model:visible="showParrainDialog"
+        :vehicule-id="vehicule.id"
+        :mode="parrainDialogMode"
+        :parrain-actuel="
+            vehicule.parrain_id
+                ? {
+                      nom_complet: vehicule.parrain_nom_complet,
+                      telephone: vehicule.parrain_telephone,
+                      code_pays: vehicule.parrain_code_pays,
+                      code_phone_pays: vehicule.parrain_code_phone_pays,
+                      ville: vehicule.parrain_ville,
+                      pays: vehicule.parrain_pays,
+                      adresse: vehicule.parrain_adresse,
+                  }
+                : null
+        "
     />
 </template>

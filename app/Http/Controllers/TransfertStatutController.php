@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutTransfert;
+use App\Jobs\NotifierChargementValideTransfertJob;
 use App\Models\TransfertLogistique;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
@@ -87,6 +88,14 @@ class TransfertStatutController extends Controller
             default => 'statut_change',
         };
         TransfertActiviteService::log($transfert_logistique, $action);
+
+        // Notifications transactionnelles SMS/WhatsApp (cf. rapport
+        // notifications de commande, 07/09/2026) — même point métier exact que
+        // l'activité `chargement_valide` ci-dessus. Livreur uniquement (aucun
+        // client sur un transfert logistique), cf. docblock du job.
+        if ($action === 'chargement_valide') {
+            NotifierChargementValideTransfertJob::dispatch($transfert_logistique->id, $transfert_logistique->reference);
+        }
 
         return redirect()->route('logistique.show', $transfert_logistique)
             ->with('success', 'Statut mis à jour.');

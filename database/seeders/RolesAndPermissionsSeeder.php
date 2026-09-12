@@ -133,6 +133,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
             // Administration
             'users.create',             'users.read',             'users.update',
+            'communications.read',      'communications.manage',
             // Paramètres
             'parametres.read',          'parametres.update',
             'parametres-produits.read', 'parametres-produits.update',
@@ -193,6 +194,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',
             // Administration
             'users.read',
+            'communications.read',
             // Paramètres
             'parametres.read',
             'parametres-produits.read',

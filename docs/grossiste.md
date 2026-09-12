@@ -270,6 +270,15 @@ seul le MÉCANISME de réception est désormais partagé) :
   `reception_validee_at`, `can_valider_reception`, lignes avec `quantite_livree`/
   `type_ecart_reception`/`ecart_livraison`) — seul le composant Vue rendu diffère. Aucune
   modification backend de mapping n'a été nécessaire pour exposer la réception à `Ventes/Show.vue`.
+- **Correctif du 08/09/2026** : `can_valider_reception` était calculé uniquement via
+  `$user->can('validerReception', $commande)`. Le `Gate::before` global (`AuthServiceProvider`)
+  court-circuite toutes les Policies pour `super_admin`, donc ce flag devenait `true` pour
+  n'importe quelle vente en LIVRAISON_EN_COURS vue par un super_admin, y compris une vente
+  standard n'ayant jamais besoin de réception — le bouton « Valider la réception » s'affichait à
+  tort et l'action échouait avec un 422 (`CommandeVenteService::validerReception()`). Le flag
+  inclut désormais explicitement `$commande->requiertReceptionExplicite()`, comme le fait déjà
+  `EncaissementVenteController` pour l'auto-transition LIVREE. Aucune règle métier changée, juste
+  l'exposition UI qui respecte enfin la règle pour tous les rôles.
 - **Rétrocompatibilité** : aucune migration de données. Une commande Grossiste + Livraison déjà en
   LIVRAISON_EN_COURS au moment du déploiement suit désormais le nouveau chemin (réception
   obligatoire) dès son prochain encaissement/action — pas de bascule silencieuse d'un historique

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutCommandeVente;
+use App\Jobs\NotifierChargementValideCommandeVenteJob;
 use App\Models\CommandeVente;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
@@ -60,6 +61,16 @@ class CommandeVenteStatutController extends Controller
         };
 
         CommandeVenteActiviteService::log($commande_vente, $action);
+
+        // Notifications transactionnelles SMS/WhatsApp (cf. rapport
+        // notifications de commande, 07/09/2026) — même point métier exact
+        // que l'activité `chargement_valide` ci-dessus, jamais un déclencheur
+        // séparé. Le job décide lui-même s'il y a réellement un livreur/client
+        // à notifier et si une règle est active — ne bloque jamais cette
+        // réponse (queued).
+        if ($action === 'chargement_valide') {
+            NotifierChargementValideCommandeVenteJob::dispatch($commande_vente->id, $commande_vente->reference);
+        }
 
         return redirect()->route('ventes.show', $commande_vente)
             ->with('success', 'Statut mis à jour.');

@@ -2,11 +2,18 @@
 
 namespace Tests\Feature\Jobs;
 
+use App\Contracts\SmsGateway;
+use App\Enums\CommunicationEvent;
+use App\Enums\CommunicationModule;
+use App\Enums\CommunicationRecipientType;
+use App\Enums\MessageChannel;
 use App\Enums\StatutCommandeVente;
 use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\CommandeVente;
+use App\Models\CommunicationRule;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
+use App\Models\MessageLog;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\Vehicule;
@@ -82,7 +89,7 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
         $org = Organization::factory()->create();
         [$commande, $livreurUser, $proprietaireUser] = $this->makeCommandeAvecEquipe($org);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
 
         Notification::assertSentTo($livreurUser, CommandeValideeNotification::class);
         Notification::assertNotSentTo($proprietaireUser, CommandeValideeNotification::class);
@@ -98,7 +105,7 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
         $org = Organization::factory()->create();
         [$commande, $livreurUser] = $this->makeCommandeAvecEquipe($org, livreurPrefs: ['livraisons' => false]);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
 
         Notification::assertNotSentTo($livreurUser, CommandeValideeNotification::class);
         Http::assertNothingSent();
@@ -113,7 +120,7 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
         $org = Organization::factory()->create();
         [$commande, $livreurUser] = $this->makeCommandeAvecEquipe($org, livreurPrefs: ['activite' => false]);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
 
         Notification::assertNotSentTo($livreurUser, CommandeValideeNotification::class);
     }
@@ -130,7 +137,7 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
             'statut' => StatutCommandeVente::BROUILLON->value,
         ]);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
 
         Notification::assertNothingSent();
         Http::assertNothingSent();
@@ -140,4 +147,79 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
     // fois pour un même envoi) est couverte directement et unitairement par
     // NotificationDispatcherTest — equipe_livreurs a une contrainte UNIQUE sur
     // livreur_id qui empêche de reproduire un doublon de pivot ici.
+
+    // ── Notifications transactionnelles SMS/WhatsApp (07/09/2026) ──────────────
+
+    public function test_also_sends_a_transactional_sms_to_the_livreur_when_the_rule_is_enabled(): void
+    {
+        Notification::fake();
+        Http::fake(['*' => Http::response(['data' => []], 200)]);
+        $gateway = new class implements SmsGateway
+        {
+            public array $sentTo = [];
+
+            public function isConfigured(): bool
+            {
+                return true;
+            }
+
+            public function send(string $phoneNumber, string $message): ?string
+            {
+                $this->sentTo[] = $phoneNumber;
+
+                return 'fake-id';
+            }
+        };
+        $this->app->instance(SmsGateway::class, $gateway);
+
+        $org = Organization::factory()->create();
+        CommunicationRule::create([
+            'organization_id' => $org->id,
+            'module' => CommunicationModule::VENTES,
+            'event' => CommunicationEvent::COMMANDE_CONFIRMEE,
+            'recipient_type' => CommunicationRecipientType::LIVREUR,
+            'client_type' => null,
+            'channel' => MessageChannel::SMS,
+            'enabled' => true,
+        ]);
+        [$commande, $livreurUser] = $this->makeCommandeAvecEquipe($org);
+
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
+
+        $this->assertSame([$livreurUser->telephone], $gateway->sentTo);
+        $log = MessageLog::sole();
+        $this->assertSame('commande_confirmee', $log->purpose);
+        $this->assertSame($commande->getMorphClass(), $log->messageable_type);
+    }
+
+    public function test_does_not_send_a_transactional_sms_when_no_rule_is_configured(): void
+    {
+        Notification::fake();
+        Http::fake(['*' => Http::response(['data' => []], 200)]);
+        $gateway = new class implements SmsGateway
+        {
+            public array $sentTo = [];
+
+            public function isConfigured(): bool
+            {
+                return true;
+            }
+
+            public function send(string $phoneNumber, string $message): ?string
+            {
+                $this->sentTo[] = $phoneNumber;
+
+                return 'fake-id';
+            }
+        };
+        $this->app->instance(SmsGateway::class, $gateway);
+
+        $org = Organization::factory()->create();
+        [$commande] = $this->makeCommandeAvecEquipe($org);
+
+        app()->call([new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference), 'handle']);
+
+        $this->assertEmpty($gateway->sentTo);
+        $this->assertSame(0, MessageLog::count());
+    }
 }

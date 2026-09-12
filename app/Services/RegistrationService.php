@@ -206,6 +206,15 @@ class RegistrationService
         if ($client) {
             $client->update(['user_id' => $user->id]);
 
+            // Client est un rôle porté par Personne (cf. docs/identite-client-personne.md) : si
+            // ce client a déjà sa propre Personne (créé/backfillé côté back-office), le compte
+            // doit s'y rattacher — même logique que les branches livreur/proprietaire
+            // ci-dessous — plutôt que de garder la Personne "à la volée" créée en tête de
+            // register(), qui deviendrait une identité fantôme dupliquée pour la même personne.
+            if ($client->personne_id) {
+                $this->rattacherMemePersonne($user, $client->personne, $client->organization_id);
+            }
+
             return;
         }
 
@@ -260,11 +269,18 @@ class RegistrationService
             ->first();
 
         if ($existing) {
-            $existing->update(['user_id' => $user->id]);
+            // $user->personne_id est déjà celui du rôle (livreur/proprietaire) rattaché juste
+            // au-dessus par rattacherMemePersonne() — même Personne pour ce client compagnon,
+            // jamais une identité distincte pour la même personne physique.
+            $existing->update([
+                'user_id' => $user->id,
+                'personne_id' => $existing->personne_id ?? $user->personne_id,
+            ]);
         } else {
             Client::create([
                 'organization_id' => $organizationId,
                 'user_id' => $user->id,
+                'personne_id' => $user->personne_id,
                 'nom' => $user->nom,
                 'prenom' => $user->prenom,
                 'telephone' => $phone,

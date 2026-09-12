@@ -35,6 +35,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     envoye: 'bg-blue-500',
     calculee: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
+    // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
+    // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
+    // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
+    sent: 'bg-blue-500',
 
     // Gris — brouillon / créé / pas commencé / neutralisé
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
@@ -58,6 +62,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
     erreur: 'bg-red-500',
+    // MessageLog.status — cf. commentaire "sent" plus haut.
+    failed: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
@@ -66,6 +72,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    // MessageLog.status — cf. commentaire "sent" ci-dessus.
+    pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',

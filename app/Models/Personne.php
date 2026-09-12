@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Identité civile centrale d'une personne physique au sein d'une organisation. Une même
@@ -66,6 +67,24 @@ class Personne extends Model
     public function proprietaire(): HasOne
     {
         return $this->hasOne(Proprietaire::class);
+    }
+
+    public function parrain(): HasOne
+    {
+        return $this->hasOne(Parrain::class);
+    }
+
+    /**
+     * Un client garde ses propres colonnes d'identité (nom_complet, telephone...) pour tous
+     * les affichages existants — personne_id ne sert qu'à la résolution/dédoublonnage
+     * d'identité entre rôles (cf. docs/identite-client-personne.md), jamais à leur
+     * remplacement. Garanti au plus un Client par Personne par organisation par
+     * ClientController::assertPhoneUniqueInOrg() (jamais deux clients avec le même
+     * téléphone dans une organisation).
+     */
+    public function client(): HasOne
+    {
+        return $this->hasOne(Client::class);
     }
 
     public function employe(): HasOne
@@ -137,5 +156,28 @@ class Personne extends Model
     public static function normaliserTelephone(string $telephone): string
     {
         return preg_replace('/\D+/', '', $telephone) ?? '';
+    }
+
+    /**
+     * Garde à appeler avant de modifier EN PLACE le téléphone d'une Personne déjà résolue
+     * (jamais avant resoudreOuCreer(), qui gère différemment la recherche : trouver-ou-créer,
+     * pas bloquer). Centralise la vérification utilisée par tout contrôleur qui édite
+     * l'identité d'un rôle déjà rattaché (Parrain, Client...) — sans elle, un nouveau
+     * téléphone qui collisionne avec une autre Personne de l'organisation heurterait
+     * silencieusement la contrainte unique (organization_id, telephone_normalise) avec une
+     * exception SQL brute plutôt qu'un message de validation clair.
+     */
+    public static function assertTelephoneDisponible(string $organizationId, string $telephone, string $ignorePersonneId): void
+    {
+        $existe = static::where('organization_id', $organizationId)
+            ->where('telephone_normalise', static::normaliserTelephone($telephone))
+            ->where('id', '!=', $ignorePersonneId)
+            ->exists();
+
+        if ($existe) {
+            throw ValidationException::withMessages([
+                'telephone' => 'Ce numéro de téléphone est déjà utilisé par une autre personne.',
+            ]);
+        }
     }
 }

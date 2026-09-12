@@ -34,8 +34,16 @@ interface SmsGateway
     public function isConfigured(): bool;
 
     /**
+     * @return string|null Identifiant fournisseur de l'envoi (ex: `message_id`
+     *                     Nimba), si le fournisseur en renvoie un — `null`
+     *                     sinon. Utilisé uniquement pour le monitoring (cf.
+     *                     App\Services\Communications\MessageLogService),
+     *                     jamais par la logique OTP elle-même.
+     *
      * @throws \RuntimeException Fournisseur non configuré, réponse en échec,
-     *                           ou erreur réseau/timeout.
+     *                           ou erreur réseau/timeout — le code de
+     *                           l'exception porte le statut HTTP fournisseur
+     *                           quand il est disponible (0 sinon).
      */
-    public function send(string $phoneNumber, string $message): void;
+    public function send(string $phoneNumber, string $message): ?string;
 }

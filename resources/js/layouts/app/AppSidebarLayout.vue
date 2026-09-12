@@ -3,7 +3,7 @@ import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
-import PwaInstallPrompt from '@/components/PwaInstallPrompt.vue';
+import PwaGate from '@/components/PwaGate.vue';
 import { useScanInterceptor } from '@/composables/useScanInterceptor';
 import type { BreadcrumbItemType } from '@/types';
 import ConfirmDialog from 'primevue/confirmdialog';
@@ -44,5 +44,5 @@ useScanInterceptor();
     <!-- Groupe dédié aux parcours fonctions RH / profils d'accès / sites (validation de
          compte, transfert de site...). Tous les toasts restent en haut à droite. -->
     <Toast group="top" position="top-right" />
-    <PwaInstallPrompt />
+    <PwaGate />
 </template>

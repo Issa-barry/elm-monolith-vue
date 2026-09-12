@@ -87,6 +87,39 @@ class NimbaSmsGatewayTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_send_returns_the_provider_message_id_on_success(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['message_id' => 'nimba-xyz-123'], 201)]);
+
+        $result = $this->gateway()->send('+224620000709', 'Votre code Eau La Maman est : 888888. Il expire dans 10 minutes.');
+
+        $this->assertSame('nimba-xyz-123', $result);
+    }
+
+    public function test_send_returns_null_when_the_response_carries_no_message_id(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response([], 201)]);
+
+        $result = $this->gateway()->send('+224620000710', 'Votre code Eau La Maman est : 999999. Il expire dans 10 minutes.');
+
+        $this->assertNull($result);
+    }
+
+    public function test_send_throws_with_the_http_status_as_exception_code_on_failure(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['error' => 'Solde insuffisant'], 402)]);
+
+        try {
+            $this->gateway()->send('+224620000711', 'Votre code Eau La Maman est : 121212. Il expire dans 10 minutes.');
+            $this->fail('NimbaSmsException attendue.');
+        } catch (NimbaSmsException $e) {
+            $this->assertSame(402, $e->getCode());
+        }
+    }
+
     public function test_send_throws_on_402_insufficient_balance(): void
     {
         $this->configureNimba();

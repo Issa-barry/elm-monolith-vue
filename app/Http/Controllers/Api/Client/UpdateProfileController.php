@@ -58,6 +58,16 @@ class UpdateProfileController extends Controller
 
         $target->update($data);
 
+        // Client garde ses propres colonnes (source des affichages back-office existants),
+        // mais reste un rôle porté par Personne (cf. docs/identite-client-personne.md) : sans
+        // ce miroir, un client qui modifie sa localisation ici resterait à jour côté Client
+        // mais figé côté Personne, visible depuis un autre rôle (Parrain, Propriétaire...) de
+        // la même personne physique. Silencieux si personne_id n'est pas encore renseigné
+        // (ne doit plus arriver après le backfill, mais jamais bloquant ici).
+        if ($resource instanceof Client) {
+            $resource->personne?->update($data);
+        }
+
         return response()->json((new ProfileResource($resource->fresh(), $user))->resolve($request));
     }
 }
