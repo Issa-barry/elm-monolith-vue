@@ -31,7 +31,7 @@ use Inertia\Response;
  * Depuis le 07/09/2026 (même jour) : `approbation_reception_logistique_obligatoire` n'est plus
  * qu'un DÉFAUT organisation, dérogeable par site (cf. Site::approbationReceptionObligatoireEffective(),
  * résolu par le site DESTINATION du transfert). updateSite() édite cette dérogation une ligne à la
- * fois — tableau récapitulatif choisi plutôt qu'un champ sur la fiche Site (SiteController), le
+ * fois — tableau récapitulatif choisi plutôt qu'un champ sur la fiche Site (EditSiteController), le
  * nombre de sites d'une organisation restant en pratique bien plus restreint que son nombre de
  * véhicules/clients, pour qui la dérogation individuelle (cf. SolvabiliteService) reste sur leur
  * propre fiche.

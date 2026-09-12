@@ -23,13 +23,15 @@ use App\Http\Controllers\Api\Backoffice\Logistique\ValidationAdminController;
 use App\Http\Controllers\Api\Backoffice\Logistique\ValiderReceptionController;
 use App\Http\Controllers\Api\Backoffice\StatsController;
 use App\Http\Controllers\Api\Client\ActiviteController;
-use App\Http\Controllers\Api\Client\CommandesController;
+use App\Http\Controllers\Api\Client\Commandes\IndexCommandeController;
+use App\Http\Controllers\Api\Client\Commandes\ShowCommandeController;
 use App\Http\Controllers\Api\Client\DashboardController;
 use App\Http\Controllers\Api\Client\DepensesController;
 use App\Http\Controllers\Api\Client\GainsController;
 use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
 use App\Http\Controllers\Api\Client\ProfileController;
-use App\Http\Controllers\Api\Client\PropositionsVehiculeController;
+use App\Http\Controllers\Api\Client\PropositionsVehicule\IndexPropositionVehiculeController;
+use App\Http\Controllers\Api\Client\PropositionsVehicule\StorePropositionVehiculeController;
 use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
 use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
@@ -42,10 +44,14 @@ use App\Http\Controllers\Api\Mobile\Logistique\DemarrerChargementController;
 use App\Http\Controllers\Api\Mobile\Logistique\LivraisonDetailController;
 use App\Http\Controllers\Api\Mobile\Logistique\MesLivraisonsController;
 use App\Http\Controllers\Api\Mobile\Logistique\SaisirQuantitesChargeesController;
-use App\Http\Controllers\Api\Mobile\NotificationsController;
+use App\Http\Controllers\Api\Mobile\Notifications\MarkAllNotificationsReadController;
+use App\Http\Controllers\Api\Mobile\Notifications\MarkNotificationReadController;
+use App\Http\Controllers\Api\Mobile\Notifications\NotificationsIndexController;
 use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
-use App\Http\Controllers\Api\Mobile\WebPushSubscriptionsController;
+use App\Http\Controllers\Api\Mobile\WebPush\DestroyWebPushSubscriptionController;
+use App\Http\Controllers\Api\Mobile\WebPush\StoreWebPushSubscriptionController;
+use App\Http\Controllers\Api\Mobile\WebPush\VapidPublicKeyController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
 use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
@@ -210,16 +216,16 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->name('client.depenses.mine');
             Route::get('activite', ActiviteController::class)
                 ->name('client.activite.mine');
-            Route::get('commandes/mine', [CommandesController::class, 'index'])
+            Route::get('commandes/mine', IndexCommandeController::class)
                 ->name('client.commandes.mine');
-            Route::get('commandes/{commandeId}', [CommandesController::class, 'show'])
+            Route::get('commandes/{commandeId}', ShowCommandeController::class)
                 ->name('client.commandes.show');
             // Noms 'propositions-vehicules.*' (pas 'propositions.*') : routes/web.php a déjà
             // 'client.propositions.index'/'client.propositions.store' pour les pages Inertia —
             // même piège de collision que 'client.dashboard'/'client.profile' plus haut.
-            Route::get('propositions-vehicules', [PropositionsVehiculeController::class, 'index'])
+            Route::get('propositions-vehicules', IndexPropositionVehiculeController::class)
                 ->name('client.propositions-vehicules.index');
-            Route::post('propositions-vehicules', [PropositionsVehiculeController::class, 'store'])
+            Route::post('propositions-vehicules', StorePropositionVehiculeController::class)
                 ->name('client.propositions-vehicules.store');
             Route::get('vehicules/mine', VehiculesController::class)
                 ->name('client.vehicules.mine');
@@ -262,14 +268,14 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->name('confirmer-depart');
         });
         Route::prefix('notifications')->name('client.notifications.')->group(function () {
-            Route::get('/', [NotificationsController::class, 'index'])->name('index');
-            Route::post('mark-all-read', [NotificationsController::class, 'markAllRead'])->name('mark-all-read');
-            Route::post('{id}/read', [NotificationsController::class, 'markRead'])->name('mark-read');
+            Route::get('/', NotificationsIndexController::class)->name('index');
+            Route::post('mark-all-read', MarkAllNotificationsReadController::class)->name('mark-all-read');
+            Route::post('{id}/read', MarkNotificationReadController::class)->name('mark-read');
         });
         Route::prefix('web-push')->name('client.web-push.')->group(function () {
-            Route::get('vapid-public-key', [WebPushSubscriptionsController::class, 'vapidPublicKey'])->name('vapid-public-key');
-            Route::post('subscriptions', [WebPushSubscriptionsController::class, 'store'])->name('subscriptions.store');
-            Route::delete('subscriptions', [WebPushSubscriptionsController::class, 'destroy'])->name('subscriptions.destroy');
+            Route::get('vapid-public-key', VapidPublicKeyController::class)->name('vapid-public-key');
+            Route::post('subscriptions', StoreWebPushSubscriptionController::class)->name('subscriptions.store');
+            Route::delete('subscriptions', DestroyWebPushSubscriptionController::class)->name('subscriptions.destroy');
         });
     });
     Route::middleware('role:client|proprietaire|livreur')->group(function () {

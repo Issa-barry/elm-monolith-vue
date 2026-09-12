@@ -41,7 +41,7 @@ class AuthRedirects
      * premier site avant tout accès normal au back-office ?" — une organisation sans aucun site
      * (le premier site n'est plus créé pendant /install, cf. InstallationService) répond oui,
      * quel que soit le rôle du membre, super_admin compris (lui seul peut d'ailleurs créer ce
-     * premier site, cf. OnboardingSiteController). Réutilisée à la fois ici (redirection post-
+     * premier site, cf. StoreOnboardingSiteController). Réutilisée à la fois ici (redirection post-
      * connexion) et par le middleware EnsureOrganizationHasSite (protection des accès ultérieurs)
      * pour ne jamais diverger — ne dupliquez pas cette requête ailleurs.
      */

@@ -61,7 +61,30 @@ class SiteTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->get(route('sites.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->post(route('sites.store'), [
+                'nom' => 'Depot Conakry',
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Ratoma',
+            ])
+            ->assertStatus(403);
+    }
 
     public function test_store_creates_site_and_redirects(): void
     {
@@ -128,7 +151,33 @@ class SiteTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_edit_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $site = $this->makeSite($otherOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('sites.edit', $site))
+            ->assertStatus(403);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
+
+    public function test_update_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $site = $this->makeSite($otherOrg);
+
+        $this->actingAs($this->user)
+            ->put(route('sites.update', $site), [
+                'nom' => 'Depot modifie',
+                'code' => $site->code,
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Kaloum',
+            ])
+            ->assertStatus(403);
+    }
 
     public function test_update_modifies_site_and_redirects(): void
     {

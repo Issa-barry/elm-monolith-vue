@@ -35,7 +35,7 @@ use Illuminate\Validation\ValidationException;
  *
  * Le premier site de l'organisation est désormais créé DANS install() (cf. creerSite()), pour que
  * l'installation laisse l'entreprise réellement prête à l'emploi — plus d'état intermédiaire
- * "organisation installée mais sans site exploitable". OnboardingSiteController/creerPremierSite()
+ * "organisation installée mais sans site exploitable". StoreOnboardingSiteController/creerPremierSite()
  * restent un filet de sécurité pour les organisations historiques déjà sans site (avant ce
  * changement) ou toute anomalie de migration, gardé par le middleware EnsureOrganizationHasSite,
  * mais une installation neuve n'y passe plus jamais.
@@ -448,7 +448,7 @@ class InstallationService
     /**
      * Filet de sécurité pour une organisation historique qui n'a encore aucun site (créée avant
      * que le premier site ne rejoigne install(), cf. docblock de classe) — utilisé par
-     * OnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite. Une installation
+     * StoreOnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite. Une installation
      * neuve n'y passe plus jamais.
      *
      * @param  array{type: string, ville: string, quartier: string}  $data

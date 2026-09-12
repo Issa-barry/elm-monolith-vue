@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Client;
+namespace App\Http\Controllers\Api\Client\PropositionsVehicule;
 
 use App\Exceptions\Client\DuplicateVehicleProposalException;
 use App\Http\Controllers\Controller;
@@ -11,7 +11,6 @@ use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\VehicleProposalService;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -20,23 +19,12 @@ use Illuminate\Validation\ValidationException;
  * `VehicleProposalService` (extrait le 26/08/2026). Seule la mise en forme de
  * la réponse diffère (JSON ici, redirect Inertia côté web).
  */
-class PropositionsVehiculeController extends Controller
+class StorePropositionVehiculeController extends Controller
 {
     public function __construct(
         private readonly ClientIdentityResolver $identityResolver,
         private readonly VehicleProposalService $proposalService,
     ) {}
-
-    public function index(): AnonymousResourceCollection
-    {
-        /** @var User $user */
-        $user = request()->user();
-        $identity = $this->identityResolver->resolve($user);
-
-        return PropositionVehiculeResource::collection(
-            $this->proposalService->mine($user->id, $identity->organizationId)
-        );
-    }
 
     #[Endpoint(
         description: 'Requête `multipart/form-data` (`photo` est un fichier image, 5 Mo max, '
@@ -45,7 +33,7 @@ class PropositionsVehiculeController extends Controller
             .'(même règle que l\'espace client Inertia, même service partagé '
             .'`VehicleProposalService` — jamais un moteur dupliqué).',
     )]
-    public function store(StoreVehicleProposalRequest $request): JsonResponse|PropositionVehiculeResource
+    public function __invoke(StoreVehicleProposalRequest $request): JsonResponse|PropositionVehiculeResource
     {
         /** @var User $user */
         $user = $request->user();
