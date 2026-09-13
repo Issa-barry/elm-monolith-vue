@@ -74,12 +74,13 @@ class UserTest extends TestCase
      * 179 était le compte de l'ANCIENNE liste locale de permissionsMap() (37 ressources — sans
      * `tresorerie`, oublié — × 4 actions + 31 standalone sur les 40 réellement seedées). Depuis
      * la refonte du 2026-09-06, permissionsMap() consomme PermissionCatalog — la même source de
-     * vérité que RoleController et le seeder — et couvre donc les 38 ressources × 4 actions + 42
+     * vérité que les contrôleurs Role\* et le seeder — et couvre donc les 38 ressources × 4 actions + 42
      * permissions standalone réellement définies (192 + `communications.read` puis
      * `communications.manage`, ajoutées le 07/09/2026 pour le monitoring et le paramétrage
-     * Communications) = 194.
+     * Communications) = 194, puis `ventes.valider_reception` (13/09/2026, séparation des
+     * permissions de workflow vente — cf. CommandeVentePolicy) = 195.
      */
-    public function test_permissions_map_returns_194_keys(): void
+    public function test_permissions_map_returns_195_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -87,7 +88,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(194, $map);
+        $this->assertCount(195, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

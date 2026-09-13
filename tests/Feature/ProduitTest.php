@@ -14,9 +14,11 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use App\Services\VarianteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -1801,5 +1803,299 @@ class ProduitTest extends TestCase
                 ],
             ])
             ->assertStatus(403);
+    }
+
+    // ── Baseline pré-extraction pilote (contrôleurs mono-action Variantes) ──────
+    // Ces tests capturent le comportement ACTUEL de updateVariante/variantesIndex/
+    // variantesBulkUpdate avant leur déplacement vers
+    // app/Http/Controllers/Produits/Variantes/*Controller.php — garde-fous de non-régression,
+    // pas une spécification de ce que le comportement "devrait" être.
+
+    /** Utilisateur de la même organisation, sans `produits.update` — pour distinguer le refus
+     * d'accès intra-organisation du refus cross-organisation déjà couvert ci-dessus. Rattaché
+     * au site par défaut de l'org : un utilisateur sans site est redirigé par
+     * RequireSiteAssigned avant d'atteindre la policy, ce qui fausserait ces tests (cf. régression
+     * onboarding site déjà rencontrée sur ce type de test). */
+    private function utilisateurSansPermissionUpdate(): User
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['produits.read']);
+        $site = Site::where('organization_id', $this->org->id)->first();
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
+    }
+
+    public function test_update_variante_partielle_conserve_les_champs_non_envoyes(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $prixVenteOriginal = (int) $variante->prix_vente;
+        $prixAchatOriginal = (int) $variante->prix_achat;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'is_active' => false,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $variante->id,
+            'is_active' => false,
+            'prix_vente' => $prixVenteOriginal,
+            'prix_achat' => $prixAchatOriginal,
+        ]);
+    }
+
+    public function test_update_variante_ignore_un_sku_envoye_dans_le_payload(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $skuOriginal = $variante->sku;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'sku' => 'AUTRE-SKU-999',
+                'prix_vente' => (int) $variante->prix_vente,
+                'prix_achat' => (int) $variante->prix_achat,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', ['id' => $variante->id, 'sku' => $skuOriginal]);
+    }
+
+    public function test_update_variante_partielle_valide_le_prix_vente_effectif(): void
+    {
+        // makeProduitDecline() crée un produit ACHAT_VENTE avec prix_achat=1000/prix_vente=2000.
+        // On n'envoie QUE prix_vente, sous le prix_achat existant (jamais renvoyé) : la règle
+        // doit être vérifiée sur les valeurs EFFECTIVES (existant + soumis), pas seulement sur
+        // les champs présents dans le payload.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 500,
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertDatabaseMissing('produit_variantes', ['id' => $variante->id, 'prix_vente' => 500]);
+    }
+
+    public function test_update_variante_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 3000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_variantes_index_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.variantes.index', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [['id' => $variante->id, 'prix_vente' => 3000]],
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_variante_priorise_lautorisation_sur_un_payload_invalide(): void
+    {
+        // Payload invalide (prix_vente <= prix_achat) ET utilisateur non autorisé : l'autorisation
+        // (L929) est vérifiée avant la validation (L932) — doit rester 403, jamais 422.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 1000,
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_update_priorise_lautorisation_sur_un_payload_invalide(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $variante->id, 'prix_vente' => 900, 'prix_achat' => 900],
+                ],
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_variante_etrangere_avec_prix_invalide_retourne_404_avant_validation(): void
+    {
+        // L'appartenance (abort_unless, L930) est vérifiée avant la validation (L932) : une
+        // variante étrangère reste 404 même si le payload violerait aussi la règle de prix.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $varianteEtrangere]), [
+                'prix_vente' => 500,
+                'prix_achat' => 500,
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_bulk_update_ligne_de_forme_invalide_retourne_422_avant_verification_dappartenance(): void
+    {
+        // Contrairement à l'individuel : la validation de FORME (L1007, sur tout le tableau) a
+        // lieu avant la transaction et donc avant toute vérification d'appartenance par ligne.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteEtrangere->id, 'prix_vente' => 'pas-un-nombre'],
+                ],
+            ])
+            ->assertSessionHasErrors('variantes.0.prix_vente');
+    }
+
+    public function test_bulk_update_ligne_de_forme_valide_mais_etrangere_retourne_404_avant_regle_de_prix(): void
+    {
+        // Forme valide (types corrects) mais variante étrangère ET prix qui violerait la règle
+        // métier si elle était atteinte : le firstOrFail() scopé au produit (L1024-1025, dans la
+        // transaction) précède validerPrixSelonType() (L1031) — toujours 404, jamais 422.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteEtrangere->id, 'prix_vente' => 500, 'prix_achat' => 500],
+                ],
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_bulk_update_rollback_conserve_les_valeurs_dorigine_de_toutes_les_lignes(): void
+    {
+        // Renforce test_bulk_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat() : vérifie
+        // la valeur d'ORIGINE exacte de TOUTES les lignes (pas seulement l'absence de la nouvelle
+        // valeur sur une seule ligne).
+        $produit = $this->makeProduitDecline($this->org);
+        [$varianteA, $varianteB] = $produit->variantes->all();
+        $prixVenteAOriginal = (int) $varianteA->prix_vente;
+        $prixAchatAOriginal = (int) $varianteA->prix_achat;
+        $isActiveAOriginal = $varianteA->is_active;
+        $prixVenteBOriginal = (int) $varianteB->prix_vente;
+        $prixAchatBOriginal = (int) $varianteB->prix_achat;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteA->id, 'prix_vente' => 3000, 'is_active' => false],
+                    ['id' => $varianteB->id, 'prix_vente' => 900, 'prix_achat' => 900],
+                ],
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $varianteA->id,
+            'prix_vente' => $prixVenteAOriginal,
+            'prix_achat' => $prixAchatAOriginal,
+            'is_active' => $isActiveAOriginal,
+        ]);
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $varianteB->id,
+            'prix_vente' => $prixVenteBOriginal,
+            'prix_achat' => $prixAchatBOriginal,
+        ]);
+    }
+
+    public function test_update_variante_retourne_422_json_pour_une_requete_json(): void
+    {
+        // Même route web/Inertia : une requête qui accepte le JSON (Accept: application/json,
+        // posé automatiquement par putJson()) reçoit une erreur 422 JSON, pas une redirection
+        // avec erreurs en session — distinction à préserver telle quelle après extraction.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->putJson(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 500,
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('prix_vente');
+    }
+
+    public function test_options_variante_identiques_et_dans_le_meme_ordre_entre_show_edit_et_variantes_index(): void
+    {
+        // varianteOptions() (méthode privée de ProduitController) est appelée par show(), edit()
+        // et variantesIndex() — son extraction vers un formatter partagé ne doit rien changer aux
+        // données ni à l'ordre des options retournées par ces trois pages.
+        $produit = Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit multi-options',
+            'produit_type_id' => $this->typeId('achat_vente'),
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 2000,
+        ]);
+        app(VarianteService::class)->genererVariantes($produit, [
+            ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
+            ['nom' => 'Taille', 'valeurs' => ['S', 'M']],
+        ]);
+        $produit->refresh();
+        $varianteId = $produit->variantes->first()->id;
+
+        $optionsShow = null;
+        $optionsEdit = null;
+        $optionsIndex = null;
+
+        $this->actingAs($this->user)->get(route('produits.show', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsShow, $varianteId) {
+                $variantes = $page->toArray()['props']['produit']['variantes'];
+                $optionsShow = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->actingAs($this->user)->get(route('produits.edit', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsEdit, $varianteId) {
+                $variantes = $page->toArray()['props']['produit']['variantes'];
+                $optionsEdit = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->actingAs($this->user)->get(route('produits.variantes.index', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsIndex, $varianteId) {
+                $variantes = $page->toArray()['props']['variantes'];
+                $optionsIndex = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->assertNotEmpty($optionsShow);
+        $this->assertSame($optionsShow, $optionsEdit);
+        $this->assertSame($optionsShow, $optionsIndex);
+        $this->assertSame(['Couleur', 'Taille'], array_column($optionsShow, 'option'));
     }
 }

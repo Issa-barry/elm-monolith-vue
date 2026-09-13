@@ -80,6 +80,59 @@ test('create site -> open details page', async ({ page }) => {
     ).toBeVisible({ timeout: 20_000 });
 });
 
+test('commissions du site : activées par défaut, désactivables à la création et affichées sur la fiche', async ({
+    page,
+}) => {
+    const nom = `${PREFIX}-comm-${Date.now()}`.slice(-40);
+
+    await page.goto('/backoffice/sites/create');
+    await expect(page).toHaveURL(/\/sites\/create$/, { timeout: 20_000 });
+
+    await page.locator('#nom').fill(nom);
+    await selectOptionFromCombobox(
+        page,
+        page.locator('#site-form').getByRole('combobox').first(),
+    );
+    await page.locator('#ville').fill('Conakry');
+    await page.locator('#quartier').fill('Kaloum');
+
+    const toggle = page.getByRole('switch', {
+        name: /activer les commissions pour ce site/i,
+    });
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    // Actif par défaut (décision produit COMM-013 : aucun changement de comportement pour un
+    // site jamais configuré explicitement).
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    await page
+        .locator('#site-form button[type="submit"]:visible')
+        .first()
+        .click();
+    await expect(page).toHaveURL(/\/sites$/, { timeout: 30_000 });
+
+    const search = await getVisibleSearchInput(page);
+    await search.fill(nom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
+
+    const row = rowByName(page, nom);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+
+    await openRowActions(row);
+    await page
+        .getByRole('menuitem', { name: /^voir$/i })
+        .first()
+        .click();
+    await expect(page).toHaveURL(/\/sites\/[a-z0-9]+$/, { timeout: 20_000 });
+
+    // Fiche : la ligne "Commissions" reflète la désactivation choisie à la création.
+    await expect(page.getByText('Désactivées')).toBeVisible({
+        timeout: 10_000,
+    });
+});
+
 test('create site -> edit -> delete', async ({ page }) => {
     const nom = await createSite(
         page,

@@ -27,6 +27,7 @@ const form = useForm({
     ville: null as string | null,
     quartier: null as string | null,
     telephone: null as string | null,
+    commissions_active: true,
 });
 
 function submit() {

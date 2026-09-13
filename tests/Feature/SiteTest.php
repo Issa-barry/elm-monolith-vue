@@ -61,7 +61,30 @@ class SiteTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->get(route('sites.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->post(route('sites.store'), [
+                'nom' => 'Depot Conakry',
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Ratoma',
+            ])
+            ->assertStatus(403);
+    }
 
     public function test_store_creates_site_and_redirects(): void
     {
@@ -96,6 +119,41 @@ class SiteTest extends TestCase
             ->assertSessionHasErrors('type');
     }
 
+    public function test_store_defaults_commissions_active_to_true_when_omitted(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('sites.store'), [
+                'nom' => 'Depot Conakry',
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Ratoma',
+            ])
+            ->assertRedirect(route('sites.index'));
+
+        $this->assertDatabaseHas('sites', [
+            'organization_id' => $this->org->id,
+            'commissions_active' => true,
+        ]);
+    }
+
+    public function test_store_persists_commissions_active_false(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('sites.store'), [
+                'nom' => 'Depot Conakry',
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Ratoma',
+                'commissions_active' => false,
+            ])
+            ->assertRedirect(route('sites.index'));
+
+        $this->assertDatabaseHas('sites', [
+            'organization_id' => $this->org->id,
+            'commissions_active' => false,
+        ]);
+    }
+
     // ── show ──────────────────────────────────────────────────────────────────
 
     public function test_show_returns_200_for_authorized_user(): void
@@ -128,7 +186,33 @@ class SiteTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_edit_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $site = $this->makeSite($otherOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('sites.edit', $site))
+            ->assertStatus(403);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
+
+    public function test_update_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $site = $this->makeSite($otherOrg);
+
+        $this->actingAs($this->user)
+            ->put(route('sites.update', $site), [
+                'nom' => 'Depot modifie',
+                'code' => $site->code,
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Kaloum',
+            ])
+            ->assertStatus(403);
+    }
 
     public function test_update_modifies_site_and_redirects(): void
     {
@@ -147,6 +231,48 @@ class SiteTest extends TestCase
         $this->assertDatabaseHas('sites', [
             'id' => $site->id,
         ]);
+    }
+
+    public function test_update_persists_commissions_active_false(): void
+    {
+        $site = $this->makeSite($this->org);
+        // ->fresh() : commissions_active n'est posé qu'au niveau du défaut colonne (SQL), jamais
+        // renseigné sur l'instance en mémoire retournée par Site::create() tant qu'elle n'a pas
+        // été relue depuis la base.
+        $this->assertTrue($site->fresh()->commissions_active, 'défaut attendu à la création');
+
+        $this->actingAs($this->user)
+            ->put(route('sites.update', $site), [
+                'nom' => $site->nom,
+                'code' => $site->code,
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Kaloum',
+                'commissions_active' => false,
+            ])
+            ->assertRedirect(route('sites.index'));
+
+        $this->assertDatabaseHas('sites', ['id' => $site->id, 'commissions_active' => false]);
+    }
+
+    public function test_update_without_commissions_active_field_leaves_value_unchanged(): void
+    {
+        $site = $this->makeSite($this->org);
+        $site->update(['commissions_active' => false]);
+
+        $this->actingAs($this->user)
+            ->put(route('sites.update', $site), [
+                'nom' => $site->nom,
+                'code' => $site->code,
+                'type' => 'depot',
+                'ville' => 'Conakry',
+                'quartier' => 'Kaloum',
+                // commissions_active volontairement omis : un appel API qui ignore ce champ ne
+                // doit jamais réactiver silencieusement les commissions d'un site désactivé.
+            ])
+            ->assertRedirect(route('sites.index'));
+
+        $this->assertDatabaseHas('sites', ['id' => $site->id, 'commissions_active' => false]);
     }
 
     public function test_update_fails_with_missing_required_fields(): void

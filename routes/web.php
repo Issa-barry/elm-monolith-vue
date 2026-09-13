@@ -51,7 +51,6 @@ use App\Http\Controllers\ImportVehiculesMajController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
-use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
@@ -62,6 +61,9 @@ use App\Http\Controllers\PdvController;
 use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
+use App\Http\Controllers\Produits\Variantes\BulkUpdateProduitVarianteController;
+use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
+use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\ProduitTypeController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
@@ -70,9 +72,19 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ScanLivraisonController;
 use App\Http\Controllers\ScanProduitController;
 use App\Http\Controllers\ScanUserController;
-use App\Http\Controllers\SiteController;
-use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\Sites\CreateSiteController;
+use App\Http\Controllers\Sites\DestroySiteController;
+use App\Http\Controllers\Sites\EditSiteController;
+use App\Http\Controllers\Sites\Import\AnalyserSiteImportController;
+use App\Http\Controllers\Sites\Import\ConfirmerSiteImportController;
+use App\Http\Controllers\Sites\Import\ModeleSiteImportController;
+use App\Http\Controllers\Sites\IndexSiteController;
+use App\Http\Controllers\Sites\Onboarding\ShowOnboardingSiteController;
+use App\Http\Controllers\Sites\Onboarding\StoreOnboardingSiteController;
+use App\Http\Controllers\Sites\ShowSiteController;
+use App\Http\Controllers\Sites\StoreSiteController;
+use App\Http\Controllers\Sites\UpdateSiteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\Testing\CommissionE2eDiagnosticController;
 use App\Http\Controllers\TransfertLogistiqueController;
@@ -173,8 +185,8 @@ Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 // organisation qui amène ici, cf. EnsureOrganizationHasSite — l'appliquer ici créerait une
 // boucle de redirection) mais toujours authentifié.
 Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
-    Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
-    Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
+    Route::get('site', ShowOnboardingSiteController::class)->name('site.show');
+    Route::post('site', StoreOnboardingSiteController::class)->name('site.store');
 });
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
@@ -411,11 +423,11 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.historique');
             Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
                 ->name('produits.archiver');
-            Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
+            Route::put('produits/{produit}/variantes/{variante}', UpdateProduitVarianteController::class)
                 ->name('produits.variantes.update');
-            Route::get('produits/{produit}/variantes', [ProduitController::class, 'variantesIndex'])
+            Route::get('produits/{produit}/variantes', IndexProduitVarianteController::class)
                 ->name('produits.variantes.index');
-            Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
+            Route::put('produits/{produit}/variantes', BulkUpdateProduitVarianteController::class)
                 ->name('produits.variantes.bulk-update');
 
             // Galerie photo produit — indépendante du formulaire principal, cf. MediaController.
@@ -433,17 +445,23 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Sites ────────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
-            Route::resource('sites', SiteController::class);
+            Route::get('sites', IndexSiteController::class)->name('sites.index');
+            Route::get('sites/create', CreateSiteController::class)->name('sites.create');
+            Route::post('sites', StoreSiteController::class)->name('sites.store');
+            Route::get('sites/{site}', ShowSiteController::class)->name('sites.show');
+            Route::get('sites/{site}/edit', EditSiteController::class)->name('sites.edit');
+            Route::match(['put', 'patch'], 'sites/{site}', UpdateSiteController::class)->name('sites.update');
+            Route::delete('sites/{site}', DestroySiteController::class)->name('sites.destroy');
             Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
                 ->name('sites.invitations.store')
                 ->middleware('throttle:10,1');
 
-            // Import en masse — Dialog depuis Sites/Index.vue, cf. SiteImportController.
-            Route::get('sites/import/modele', [SiteImportController::class, 'modele'])
+            // Import en masse — Dialog depuis Sites/Index.vue, cf. app/Http/Controllers/Sites/Import.
+            Route::get('sites/import/modele', ModeleSiteImportController::class)
                 ->name('sites.import.modele');
-            Route::post('sites/import/analyser', [SiteImportController::class, 'analyser'])
+            Route::post('sites/import/analyser', AnalyserSiteImportController::class)
                 ->name('sites.import.analyser');
-            Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
+            Route::post('sites/import/confirmer', ConfirmerSiteImportController::class)
                 ->name('sites.import.confirmer');
         });
 

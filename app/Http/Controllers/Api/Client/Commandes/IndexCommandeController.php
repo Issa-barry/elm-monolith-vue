@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Client;
+namespace App\Http\Controllers\Api\Client\Commandes;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Client\CommandesMineRequest;
@@ -8,8 +8,6 @@ use App\Http\Resources\Api\Client\CommandeVenteMineResource;
 use App\Models\CommandeVente;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
-use Dedoc\Scramble\Attributes\Endpoint;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
@@ -19,17 +17,17 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * docs/api-espace-client-contract.md). Résolution exclusivement via
  * `ClientIdentityResolver` → `identity->client` — jamais un `client_id` fourni
  * par l'appelant. Un compte sans profil Client (proprietaire/livreur purs)
- * reçoit une liste vide sur `index()` (cohérent avec le reste de l'API : un
- * profil non applicable renvoie du vide, pas une erreur), mais un 404 sur
- * `show()` (aucune commande ne peut jamais lui appartenir).
+ * reçoit une liste vide (cohérent avec le reste de l'API : un profil non
+ * applicable renvoie du vide, pas une erreur) — cf. ShowCommandeController
+ * pour le contrat de la fiche détail (404, pas de liste vide).
  */
-class CommandesController extends Controller
+class IndexCommandeController extends Controller
 {
     public function __construct(
         private readonly ClientIdentityResolver $identityResolver,
     ) {}
 
-    public function index(CommandesMineRequest $request): AnonymousResourceCollection
+    public function __invoke(CommandesMineRequest $request): AnonymousResourceCollection
     {
         /** @var User $user */
         $user = $request->user();
@@ -54,37 +52,5 @@ class CommandesController extends Controller
             ->withQueryString();
 
         return CommandeVenteMineResource::collection($commandes)->additional(['filters' => $filters]);
-    }
-
-    #[Endpoint(
-        description: 'Réponse wrappée `{"data": {...}}` (ressource unique, wrapping standard '
-            .'Laravel) — contrairement à `index()` ci-dessus, non wrappée au-delà de la '
-            .'pagination. Inclut les lignes de commande (`lignes[]`), absentes de la liste. '
-            .'Utilise les **snapshots** enregistrés à la commande (`libelle_snapshot`, '
-            .'`prix_vente_snapshot`), jamais une re-jointure vers le catalogue produit actuel '
-            .'(un prix modifié depuis ne réécrit jamais l\'historique). `404` (jamais `403`) si la '
-            .'commande n\'appartient pas au client résolu — ne confirme jamais son existence pour '
-            .'un autre compte.',
-    )]
-    public function show(string $commandeId, ClientIdentityResolver $identityResolver): JsonResponse|CommandeVenteMineResource
-    {
-        $identity = $identityResolver->resolve(request()->user());
-
-        if ($identity->client === null) {
-            return response()->json(['message' => 'Commande introuvable.'], 404);
-        }
-
-        $commande = CommandeVente::query()
-            ->with(['vehicule:id,nom_vehicule,immatriculation', 'lignes'])
-            ->where('id', $commandeId)
-            ->where('client_id', $identity->client->id)
-            ->when($identity->organizationId, fn ($q) => $q->where('organization_id', $identity->organizationId))
-            ->first();
-
-        if ($commande === null) {
-            return response()->json(['message' => 'Commande introuvable.'], 404);
-        }
-
-        return new CommandeVenteMineResource($commande);
     }
 }

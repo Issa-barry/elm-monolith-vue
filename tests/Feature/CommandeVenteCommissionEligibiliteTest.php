@@ -51,7 +51,10 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser([
+            'ventes.read', 'ventes.create', 'ventes.update',
+            'ventes.demarrer_chargement', 'ventes.valider_chargement',
+        ]);
 
         // Ce fichier teste l'ÉLIGIBILITÉ (livraison_vente) à la commission générée au moment du
         // chargement, indépendamment du déclencheur par défaut de l'organisation (devenu

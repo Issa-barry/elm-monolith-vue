@@ -47,10 +47,11 @@ enum DomaineActivite: string
     }
 
     /**
-     * Types de site suggérés à l'onboarding du premier site (cf. OnboardingSiteController) —
+     * Types de site suggérés à l'onboarding du premier site (cf. ShowOnboardingSiteController) —
      * une proposition adaptée au domaine, jamais une restriction : le CRUD Sites classique
-     * (SiteController) reste libre de proposer tous les types, une organisation pouvant très
-     * bien diversifier son activité après coup (ex: une boutique qui se met à fabriquer).
+     * (CreateSiteController/StoreSiteController) reste libre de proposer tous les types, une
+     * organisation pouvant très bien diversifier son activité après coup (ex: une boutique qui
+     * se met à fabriquer).
      *
      * @return array<int, SiteType>
      */

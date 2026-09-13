@@ -8,6 +8,7 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -20,15 +21,18 @@ use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\FactureVente;
 use App\Models\Livreur;
+use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -41,8 +45,8 @@ use Tests\TestCase;
  *                       ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
  *
  * Routes testées :
- *   POST  /ventes/{id}/statut/avancer  (CommandeVenteStatutController::avancer)
- *   POST  /ventes/{id}/statut/annuler  (CommandeVenteStatutController::annuler)
+ *   POST  /ventes/{id}/statut/avancer  (Ventes\AvancerStatutVenteController)
+ *   POST  /ventes/{id}/statut/annuler  (Ventes\AnnulerStatutVenteController)
  */
 class CommandeVenteStatutTest extends TestCase
 {
@@ -55,7 +59,10 @@ class CommandeVenteStatutTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
+        $this->initOrgAndUser([
+            'ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete',
+            'ventes.demarrer_chargement', 'ventes.valider_chargement', 'ventes.valider_reception',
+        ]);
 
         // Ce fichier teste le workflow de statut (dont la génération de commission au moment du
         // chargement), indépendamment du déclencheur par défaut de l'organisation (devenu
@@ -719,6 +726,165 @@ class CommandeVenteStatutTest extends TestCase
         // La policy avancerStatut retourne false pour LIVRAISON_EN_COURS
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande))
+            ->assertStatus(403);
+    }
+
+    // ── Autorisation : permission et isolation organisationnelle ──────────────
+
+    public function test_avancer_returns_403_without_ventes_update_permission(): void
+    {
+        $userSansPermission = $this->makeUserWithPermissions($this->org, ['ventes.read']);
+        $userSansPermission->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne();
+
+        $this->actingAs($userSansPermission)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertStatus(403);
+    }
+
+    public function test_avancer_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $autreOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertStatus(403);
+    }
+
+    // ── Séparation des permissions de workflow (2026-09-13) ───────────────────
+    // demarrerChargement()/validerChargement()/validerReception() vérifient chacune sa propre
+    // permission dédiée, totalement indépendante de ventes.update et des deux autres (cf.
+    // CommandeVentePolicy) : une personne peut démarrer un chargement sans pouvoir le valider
+    // ni valider une réception, et inversement.
+
+    public function test_demarrer_chargement_refuse_sans_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.update']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::A_CHARGER,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertStatus(403);
+
+        $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->fresh()->statut);
+    }
+
+    public function test_demarrer_chargement_autorise_par_sa_seule_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.demarrer_chargement']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::A_CHARGER,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertRedirect();
+
+        $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
+    }
+
+    public function test_valider_chargement_refuse_sans_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.update']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande, 'ligne' => $ligne] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
+            ])
+            ->assertStatus(403);
+
+        $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
+    }
+
+    public function test_valider_chargement_autorise_par_sa_seule_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.valider_chargement']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande, 'ligne' => $ligne] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
+            ])
+            ->assertRedirect();
+
+        $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
+    }
+
+    public function test_valider_reception_refuse_sans_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.update']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+            'nature_operation' => NatureOperation::DISTRIBUTION_CLIENT,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertStatus(403);
+
+        $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
+    }
+
+    public function test_valider_reception_autorise_par_sa_seule_permission_dediee(): void
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.valider_reception']);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+            'nature_operation' => NatureOperation::DISTRIBUTION_CLIENT,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertRedirect();
+
+        $this->assertEquals(StatutCommandeVente::LIVREE, $commande->fresh()->statut);
+    }
+
+    public function test_annuler_returns_403_for_non_admin_role(): void
+    {
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $manager = User::factory()->create(['organization_id' => $this->org->id]);
+        $manager->assignRole('manager');
+        $manager->givePermissionTo(['ventes.read', 'ventes.update']);
+        $manager->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        ['commande' => $commande] = $this->makeCommandeWithLigne();
+
+        $this->actingAs($manager)
+            ->post(route('ventes.statut.annuler', $commande), [
+                'motif_annulation_code' => 'erreur_saisie',
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_annuler_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $autreOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.annuler', $commande), [
+                'motif_annulation_code' => 'erreur_saisie',
+            ])
             ->assertStatus(403);
     }
 

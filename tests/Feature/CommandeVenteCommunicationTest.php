@@ -32,11 +32,11 @@ use Tests\TestCase;
  * frontend réel avant d'écrire ce test) :
  *
  * - "Confirmer" (Ventes/Show.vue::confirmer()) → PATCH /ventes/{id}/valider
- *   → CommandeVenteController::valider() → NotifierLivreursCommandeVenteJob.
+ *   → Ventes\ValiderCommandeVenteController → NotifierLivreursCommandeVenteJob.
  * - "Valider le chargement" (Ventes/partials/ChargementDialog.vue) → POST
  *   /ventes/{id}/statut/avancer (même URL que "démarrer chargement", le
- *   contrôleur distingue via l'ancien statut) → CommandeVenteStatutController::
- *   avancer() → NotifierChargementValideCommandeVenteJob.
+ *   contrôleur distingue via l'ancien statut) → Ventes\AvancerStatutVenteController
+ *   → NotifierChargementValideCommandeVenteJob.
  */
 class CommandeVenteCommunicationTest extends TestCase
 {
@@ -49,7 +49,7 @@ class CommandeVenteCommunicationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.confirmer']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.confirmer', 'ventes.demarrer_chargement', 'ventes.valider_chargement', 'ventes.valider_reception']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,

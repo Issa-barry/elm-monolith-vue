@@ -65,6 +65,7 @@ interface Site {
     type_label: string;
     statut: string | null;
     statut_label: string;
+    commissions_active: boolean;
     localisation: string | null;
     pays: string | null;
     ville: string | null;
@@ -600,6 +601,26 @@ function confirmRejectMember(m: Membre) {
                                         :label="site.statut_label"
                                         :dot-class="
                                             site.statut === 'active'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-zinc-400'
+                                        "
+                                    />
+                                </div>
+
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Commissions</span
+                                    >
+                                    <StatusDot
+                                        :label="
+                                            site.commissions_active
+                                                ? 'Activées'
+                                                : 'Désactivées'
+                                        "
+                                        :dot-class="
+                                            site.commissions_active
                                                 ? 'bg-emerald-500'
                                                 : 'bg-zinc-400'
                                         "
