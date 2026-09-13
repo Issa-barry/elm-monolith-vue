@@ -9,7 +9,7 @@ namespace App\Support\Permissions;
  * ressources), `RolesAndPermissionsSeeder::RESOURCES` (38 ressources, la plus complète —
  * base de cette classe) et `User::permissionsMap()` (37 ressources, sans `tresorerie`).
  *
- * `RoleController`, `RolesAndPermissionsSeeder` et `User::permissionsMap()` consomment
+ * Les contrôleurs `Role\*`, `RolesAndPermissionsSeeder` et `User::permissionsMap()` consomment
  * désormais tous cette classe — plus aucune de ces trois listes n'est dupliquée ailleurs.
  *
  * Convention de nommage (déjà en usage, figée ici) : `resource.action` en snake_case anglais
@@ -43,7 +43,7 @@ final class PermissionCatalog
 
     /**
      * Permissions "workflow" hors matrice CRUD standard, avec leur libellé humain — pour
-     * que `RoleController::edit()` puisse les afficher dans une section dédiée de la
+     * que `Role\EditRoleController` puisse les afficher dans une section dédiée de la
      * matrice au lieu de les laisser invisibles/non-éditables (cf. audit § totalPerms).
      */
     public const STANDALONE = [
@@ -81,6 +81,7 @@ final class PermissionCatalog
         'ventes.annuler' => 'Ventes — annuler',
         'ventes.demarrer_chargement' => 'Ventes — démarrer le chargement',
         'ventes.valider_chargement' => 'Ventes — valider le chargement',
+        'ventes.valider_reception' => 'Ventes — valider la réception',
         'factures.encaisser' => 'Factures — encaisser',
         'factures.annuler' => 'Factures — annuler',
         'commissions.payer' => 'Commissions — payer',
