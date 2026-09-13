@@ -188,7 +188,7 @@ class Vehicule extends Model
 
     /**
      * Véhicules sélectionnables pour une vente/PDV — remplace l'ancien filtre
-     * `categorie = 'externe'` (cf. CommandeVenteController, PdvController).
+     * `categorie = 'externe'` (cf. CommandeVenteFormBuilder, Ventes\IndexPdvController).
      */
     public function scopeLivraisonVente($query)
     {

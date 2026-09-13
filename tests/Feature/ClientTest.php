@@ -848,6 +848,25 @@ class ClientTest extends TestCase
         $this->assertTrue($client->fresh()->cashback_eligible);
     }
 
+    public function test_update_cashback_depuis_la_fiche_refuse_sans_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $client = Client::factory()->create([
+            'organization_id' => $user->organization_id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => 450,
+            ])
+            ->assertStatus(403);
+
+        $this->assertFalse($client->fresh()->cashback_eligible);
+    }
+
     public function test_update_cashback_depuis_la_fiche_est_isole_par_organisation(): void
     {
         $otherOrg = Organization::factory()->create();
@@ -1057,6 +1076,19 @@ class ClientTest extends TestCase
         $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_derogation_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $client = Client::factory()->create(['organization_id' => $user->organization_id]);
+
+        $this->actingAs($user)
             ->patch(route('clients.derogation-impayes.update', $client), [
                 'derogation_impayes_autorisee' => true,
                 'seuil_derogation_impayes' => 5_000_000,

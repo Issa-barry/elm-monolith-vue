@@ -15,8 +15,8 @@ namespace App\Contracts;
  * contrôle qui empêche toute règle WhatsApp de s'activer tant qu'aucun
  * fournisseur réel n'est branché — jamais un envoi silencieusement ignoré une
  * fois une règle activée (cf. App\Services\Communications\CommunicationRuleResolver
- * et App\Http\Controllers\Settings\CommunicationRuleController::update(), qui
- * vérifient tous deux ce même flag). Le jour où un fournisseur WhatsApp réel
+ * et App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController,
+ * qui vérifient tous deux ce même flag). Le jour où un fournisseur WhatsApp réel
  * est intégré, il implémente ce contrat et remplace ce binding — sans toucher
  * au moteur de règles ni aux contrôleurs métier (même principe que
  * NimbaSmsGateway pour SmsGateway).

@@ -45,7 +45,7 @@ class CommissionProcessus extends Model
      * une livraison Grossiste). Processus indépendant, AUCUN repli de barème (contrairement à
      * CODE_DISTRIBUTION_CLIENT) : `CommissionProcessusDefaults::processusResolutionBareme()` ne le
      * concerne pas, son barème doit être configuré explicitement (cf.
-     * CommandeVenteController::ensureTransfertGrossisteBaremeConfigure(), garde-fou préventif à la
+     * CommandeVenteFormBuilder::ensureTransfertGrossisteBaremeConfigure(), garde-fou préventif à la
      * création). Un Grossiste en Enlèvement (aucun véhicule) reste sur CODE_VENTE, inchangé.
      */
     public const CODE_TRANSFERT_GROSSISTE = 'transfert_grossiste';

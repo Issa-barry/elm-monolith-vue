@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Remplace la garde `role:super_admin|admin_entreprise|manager|commerciale|comptable` qui
  * enveloppait la quasi-totalité de /backoffice/* (routes/web.php) — cette liste figée bloquait
- * tout rôle personnalisé créé via RoleController, quelles que soient ses permissions (correction
+ * tout rôle personnalisé créé via les contrôleurs Role\*, quelles que soient ses permissions (correction
  * du 2026-08-21, cf. plan §4).
  *
  * Règle positive (2026-08-26) : l'accès est accordé dès que le compte porte au

@@ -241,7 +241,7 @@ function destroy(categorie: Categorie) {
                         life: 3000,
                     }),
                 // Le backend reste l'autorité finale (ex: catégorie utilisée comme référence de
-                // capacité véhicule — non détectable côté client, cf. CategorieController::destroy()).
+                // capacité véhicule — non détectable côté client, cf. DestroyCategorieController).
                 // Sans ce handler, un rejet backend échouait silencieusement : la ligne restait en
                 // place sans aucun message visible pour l'utilisateur.
                 onError: (errors) =>

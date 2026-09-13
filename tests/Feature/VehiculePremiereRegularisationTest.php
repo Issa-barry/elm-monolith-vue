@@ -19,7 +19,7 @@ use Tests\TestCase;
 
 /**
  * Verrou « première régularisation » (décision produit du 20/08/2026) — bout en bout, sur le
- * point d'entrée réel CommandeVenteController::store(). Le calcul lui-même (encaissé/restant,
+ * point d'entrée réel Ventes\StoreCommandeVenteController. Le calcul lui-même (encaissé/restant,
  * dérogations, isolation multi-org) est couvert unitairement par
  * tests/Unit/SolvabiliteServiceTest ; ce fichier vérifie que le contrôleur applique bien ce
  * verrou à la création réelle d'une commande, avec le bon message, et que le correctif sur
@@ -38,7 +38,7 @@ class VehiculePremiereRegularisationTest extends TestCase
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
-        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // Ventes\StoreCommandeVenteController (23/08/2026, cf. CommandeVenteService::
         // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 

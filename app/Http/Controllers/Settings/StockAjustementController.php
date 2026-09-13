@@ -24,7 +24,7 @@ class StockAjustementController extends Controller
 
         // Scopé à l'organisation courante — Role::orderBy('name')->get() sans filtre exposait
         // ici les rôles personnalisés de TOUTES les organisations de la plateforme (même
-        // correction que RoleController::visibleRoles(), cf. audit rôles/permissions).
+        // correction que Role\IndexRoleController::visibleRoles(), cf. audit rôles/permissions).
         $roles = RoleVisibility::query($orgId)->orderBy('name')->get(['id', 'name']);
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
 

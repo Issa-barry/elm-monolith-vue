@@ -12,7 +12,7 @@ use App\Models\Vehicule;
  * Point d'entrée unique pour dériver, à partir du véhicule et/ou du client d'une commande, le
  * mode de tarification ET l'éligibilité aux commissions — deux notions indépendantes (cf.
  * VehiculeCommandeContext), toutes deux figées en snapshot sur la commande à sa
- * création/modification (CommandeVenteController, PdvCheckoutService) pour ne jamais
+ * création/modification (Ventes\{Store,Update}CommandeVenteController, PdvCheckoutService) pour ne jamais
  * recalculer rétroactivement une commande déjà passée si le véhicule ou le client change ensuite.
  *
  * Règle métier (cf. analyse du modèle véhicules/partenaires/commissions) :

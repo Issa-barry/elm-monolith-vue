@@ -163,7 +163,7 @@ function onTelephoneInput(value: string | null | undefined) {
 }
 
 // ── Vérification live du téléphone, tous types de tiers (cf.
-// ClientController::verifierTelephone()/TelephoneOwnerLookupService) — même principe que
+// VerifierTelephoneClientController/TelephoneOwnerLookupService) — même principe que
 // EquipeStepperModal.vue, mais deux niveaux de sévérité : un autre CLIENT reste bloquant (DANGER,
 // même règle que le contrôle serveur à la soumission), tout autre type (Fournisseur, Propriétaire,
 // Livreur...) est purement informatif (WARNING, cf. règle UI CLAUDE.md — partager un numéro entre
@@ -220,7 +220,7 @@ async function checkTelephoneConflict(): Promise<void> {
         }
     } catch {
         // Vérification live indisponible (réseau) : le contrôle serveur à la soumission
-        // (ClientController::assertPhoneUniqueInOrg()) reste l'autorité finale.
+        // (App\Support\Clients\ClientUniqueness::assertPhoneUniqueInOrg()) reste l'autorité finale.
     } finally {
         if (props.form.telephone === phoneAtCallTime) {
             phoneChecking.value = false;

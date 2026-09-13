@@ -62,6 +62,7 @@ class CommandeVenteStatutTest extends TestCase
         $this->initOrgAndUser([
             'ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete',
             'ventes.demarrer_chargement', 'ventes.valider_chargement', 'ventes.valider_reception',
+            'factures.encaisser',
         ]);
 
         // Ce fichier teste le workflow de statut (dont la génération de commission au moment du

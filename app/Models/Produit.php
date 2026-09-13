@@ -134,7 +134,7 @@ class Produit extends Model
      * (décision du 02/09/2026, disponibilité/alerte indépendantes du statut lui-même). Nécessite
      * $this chargé avec ['produitType', 'variantes.stocks', 'seuilsAlerte'] pour éviter un
      * N+1 ; sinon déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show
-     * d'un seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
+     * d'un seul produit — à éviter en boucle sur une liste, cf. IndexProduitController qui
      * calcule ceci autrement pour cette raison).
      */
     public function getIsLowStockAttribute(): bool

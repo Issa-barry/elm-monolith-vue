@@ -34,11 +34,19 @@ interface RoleData {
     can_write: boolean;
 }
 
+interface DomainDef {
+    label: string;
+    resources: string[];
+    /** Sous-groupe métier (ex. "Cycle de vente") → clés de permission qu'il contient. */
+    standalone: Record<string, string[]>;
+}
+
 const props = defineProps<{
     role: RoleData;
     resources: string[];
     actions: string[];
     standalone: Record<string, string>;
+    domains: Record<string, DomainDef>;
 }>();
 
 const toast = useToast();
@@ -118,7 +126,7 @@ const isSuperAdmin = computed(() => props.role.name === 'super_admin');
 /**
  * Distinct de isSuperAdmin : un rôle système NON protégé (manager, commerciale, comptable,
  * admin_entreprise — partagé par toutes les organisations) reste en lecture seule pour un
- * acteur qui n'est pas lui-même super_admin (cf. RoleController::canManageRole()) — une
+ * acteur qui n'est pas lui-même super_admin (cf. RoleAccess::canManageRole()) — une
  * organisation ne doit plus pouvoir changer le comportement d'un rôle utilisé par d'autres
  * organisations, elle crée son propre rôle via ce même écran à la place.
  */
@@ -163,18 +171,22 @@ function toggle(resource: string, action: string) {
 
 type ColState = 'all' | 'partial' | 'none';
 
-function columnState(action: string): ColState {
-    const checked = props.resources.filter((r) => isChecked(r, action)).length;
+/**
+ * `resourceList` scope la colonne à un domaine métier (matrice éclatée en une mini-matrice par
+ * carte) — par défaut l'ensemble des ressources, pour un usage hors contexte de domaine.
+ */
+function columnState(action: string, resourceList: string[] = props.resources): ColState {
+    const checked = resourceList.filter((r) => isChecked(r, action)).length;
     if (checked === 0) return 'none';
-    if (checked === props.resources.length) return 'all';
+    if (checked === resourceList.length) return 'all';
     return 'partial';
 }
 
-function toggleColumn(action: string) {
+function toggleColumn(action: string, resourceList: string[] = props.resources) {
     if (readOnly.value) return;
-    const state = columnState(action);
+    const state = columnState(action, resourceList);
     const next = new Set(activePermissions.value);
-    props.resources.forEach((r) => {
+    resourceList.forEach((r) => {
         const key = permKey(r, action);
         if (state === 'all') next.delete(key);
         else next.add(key);
@@ -207,6 +219,41 @@ const totalPossible = computed(
         props.resources.length * props.actions.length +
         standaloneKeys.value.length,
 );
+
+// Object.entries() préserve l'ordre d'insertion du JSON renvoyé par PermissionCatalog::DOMAINS.
+const domainList = computed(() => Object.entries(props.domains ?? {}));
+
+/** Sous-groupes du domaine sous forme de tuples [libellé, clés] — ordre d'insertion préservé. */
+function standaloneGroups(domain: DomainDef): [string, string[]][] {
+    return Object.entries(domain.standalone);
+}
+
+function domainPermKeys(domain: DomainDef): string[] {
+    return [
+        ...domain.resources.flatMap((r) => props.actions.map((a) => permKey(r, a))),
+        ...Object.values(domain.standalone).flat(),
+    ];
+}
+
+function domainState(domain: DomainDef): ColState {
+    const keys = domainPermKeys(domain);
+    if (keys.length === 0) return 'none';
+    const checked = keys.filter((k) => activePermissions.value.has(k)).length;
+    if (checked === 0) return 'none';
+    if (checked === keys.length) return 'all';
+    return 'partial';
+}
+
+function toggleDomain(domain: DomainDef) {
+    if (readOnly.value) return;
+    const state = domainState(domain);
+    const next = new Set(activePermissions.value);
+    domainPermKeys(domain).forEach((key) => {
+        if (state === 'all') next.delete(key);
+        else next.add(key);
+    });
+    activePermissions.value = next;
+}
 
 function save() {
     if (readOnly.value) return;
@@ -241,6 +288,20 @@ function save() {
                 code: errors.code,
                 label: errors.label,
             };
+
+            // Erreurs sur `permissions`/`permissions.*` (ex: exists:permissions,name échoué pour
+            // une permission pas encore seedée en base) — jusqu'ici totalement silencieuses :
+            // aucune permission n'était persistée et rien ne le signalait à l'utilisateur, qui
+            // pouvait croire l'enregistrement réussi.
+            const permissionError = Object.entries(errors).find(([key]) => key.startsWith('permissions'))?.[1];
+            if (permissionError) {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Enregistrement impossible',
+                    detail: permissionError,
+                    life: 5000,
+                });
+            }
         },
         onFinish: () => {
             saving.value = false;
@@ -387,268 +448,345 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </p>
             </div>
 
-            <!-- Matrice des permissions -->
+            <!-- Barre d'actions + légende (communes à tous les domaines ci-dessous) -->
             <div
-                class="overflow-hidden overflow-x-auto rounded-xl border bg-card shadow-sm"
+                class="flex flex-col gap-3 rounded-xl border bg-card px-6 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
             >
                 <div
-                    class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
+                    class="flex items-center gap-4 text-xs text-muted-foreground"
                 >
-                    <p class="text-sm font-medium">Matrice des permissions</p>
-                    <div class="flex items-center gap-3">
-                        <transition name="fade">
-                            <span
-                                v-if="flashSuccess"
-                                class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
-                            >
-                                <CheckCheck class="h-4 w-4" />
-                                Sauvegardé
-                            </span>
-                        </transition>
-                        <Button
-                            v-if="!readOnly"
-                            size="sm"
-                            :disabled="saving"
-                            @click="save"
+                    <span class="flex items-center gap-1.5">
+                        <span
+                            class="inline-block h-2 w-2 rounded-sm bg-primary"
+                        />
+                        Accordé
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <span
+                            class="inline-block h-2 w-2 rounded-sm border border-border bg-background"
+                        />
+                        Non accordé
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <span
+                            class="inline-block h-2 w-2 rounded-sm border-2 border-primary/60 bg-primary/10"
+                        />
+                        Partiel
+                    </span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <transition name="fade">
+                        <span
+                            v-if="flashSuccess"
+                            class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
                         >
-                            <Save class="mr-2 h-4 w-4" />
-                            {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-                        </Button>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead>
-                            <tr class="border-b bg-muted/20">
-                                <th class="w-52 px-6 py-4 text-left">
-                                    <span
-                                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                    >
-                                        Ressource
-                                    </span>
-                                </th>
-                                <th
-                                    v-for="action in actions"
-                                    :key="action"
-                                    class="px-4 py-4 text-center"
-                                >
-                                    <div
-                                        class="flex flex-col items-center gap-2"
-                                    >
-                                        <span
-                                            class="text-xs font-semibold tracking-wider uppercase"
-                                            :class="
-                                                actionLabels[action]?.color ??
-                                                'text-muted-foreground'
-                                            "
-                                        >
-                                            {{
-                                                actionLabels[action]?.label ??
-                                                action
-                                            }}
-                                        </span>
-                                        <button
-                                            class="group flex h-7 w-7 items-center justify-center rounded-md border-2 transition-all"
-                                            :class="[
-                                                readOnly
-                                                    ? 'cursor-default border-muted opacity-60'
-                                                    : 'cursor-pointer hover:border-primary/60',
-                                                columnState(action) === 'none'
-                                                    ? 'border-border bg-background'
-                                                    : columnState(action) ===
-                                                        'all'
-                                                      ? 'border-primary bg-primary text-primary-foreground'
-                                                      : 'border-primary/60 bg-primary/10',
-                                            ]"
-                                            :disabled="readOnly"
-                                            :title="`Tout ${columnState(action) === 'all' ? 'désactiver' : 'activer'} — ${actionLabels[action]?.label}`"
-                                            @click="toggleColumn(action)"
-                                        >
-                                            <CheckSquare
-                                                v-if="
-                                                    columnState(action) ===
-                                                    'all'
-                                                "
-                                                class="h-4 w-4"
-                                            />
-                                            <Minus
-                                                v-else-if="
-                                                    columnState(action) ===
-                                                    'partial'
-                                                "
-                                                class="h-4 w-4 text-primary"
-                                            />
-                                            <Square
-                                                v-else
-                                                class="h-4 w-4 text-muted-foreground/40"
-                                            />
-                                        </button>
-                                    </div>
-                                </th>
-                            </tr>
-                        </thead>
-
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="(resource, idx) in resources"
-                                :key="resource"
-                                class="group transition-colors hover:bg-muted/30"
-                                :class="{ 'bg-muted/10': idx % 2 === 0 }"
-                            >
-                                <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <button
-                                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all"
-                                            :class="[
-                                                readOnly
-                                                    ? 'cursor-default opacity-60'
-                                                    : 'cursor-pointer',
-                                                rowState(resource) === 'none'
-                                                    ? 'border-border bg-background hover:border-primary/40'
-                                                    : rowState(resource) ===
-                                                        'all'
-                                                      ? 'border-primary bg-primary text-primary-foreground'
-                                                      : 'border-primary/60 bg-primary/10 hover:border-primary',
-                                            ]"
-                                            :disabled="readOnly"
-                                            :title="`${rowState(resource) === 'all' ? 'Tout retirer' : 'Tout accorder'} — ${resourceLabels[resource] ?? resource}`"
-                                            @click="toggleRow(resource)"
-                                        >
-                                            <Minus
-                                                v-if="
-                                                    rowState(resource) !==
-                                                    'none'
-                                                "
-                                                class="h-3.5 w-3.5"
-                                                :class="
-                                                    rowState(resource) === 'all'
-                                                        ? 'text-primary-foreground'
-                                                        : 'text-primary'
-                                                "
-                                            />
-                                        </button>
-                                        <span class="text-sm font-medium">
-                                            {{
-                                                resourceLabels[resource] ??
-                                                resource
-                                            }}
-                                        </span>
-                                    </div>
-                                </td>
-
-                                <td
-                                    v-for="action in actions"
-                                    :key="action"
-                                    class="px-4 py-4 text-center"
-                                >
-                                    <div class="flex justify-center">
-                                        <button
-                                            class="flex h-5 w-5 items-center justify-center rounded border-2 transition-all"
-                                            :class="[
-                                                readOnly
-                                                    ? 'cursor-default opacity-70'
-                                                    : 'cursor-pointer',
-                                                isChecked(resource, action)
-                                                    ? 'border-primary bg-primary text-primary-foreground'
-                                                    : 'border-border bg-background hover:border-primary/60',
-                                            ]"
-                                            :disabled="readOnly"
-                                            @click="toggle(resource, action)"
-                                        >
-                                            <Check
-                                                v-if="
-                                                    isChecked(resource, action)
-                                                "
-                                                class="h-3 w-3"
-                                            />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div
-                    class="flex items-center justify-between border-t bg-muted/20 px-6 py-3"
-                >
-                    <div
-                        class="flex items-center gap-4 text-xs text-muted-foreground"
-                    >
-                        <span class="flex items-center gap-1.5">
-                            <span
-                                class="inline-block h-2 w-2 rounded-sm bg-primary"
-                            />
-                            Accordé
+                            <CheckCheck class="h-4 w-4" />
+                            Sauvegardé
                         </span>
-                        <span class="flex items-center gap-1.5">
-                            <span
-                                class="inline-block h-2 w-2 rounded-sm border border-border bg-background"
-                            />
-                            Non accordé
-                        </span>
-                        <span class="flex items-center gap-1.5">
-                            <span
-                                class="inline-block h-2 w-2 rounded-sm border-2 border-primary/60 bg-primary/10"
-                            />
-                            Partiel
-                        </span>
-                    </div>
+                    </transition>
                     <p
                         v-if="isSuperAdmin"
                         class="text-xs text-muted-foreground italic"
                     >
-                        Les permissions du Super Admin sont gérées
-                        automatiquement.
+                        Permissions gérées automatiquement.
                     </p>
+                    <Button
+                        v-if="!readOnly"
+                        size="sm"
+                        :disabled="saving"
+                        @click="save"
+                    >
+                        <Save class="mr-2 h-4 w-4" />
+                        {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+                    </Button>
                 </div>
             </div>
 
-            <!-- Permissions standalone (hors matrice CRUD) -->
-            <div
-                v-if="standaloneKeys.length > 0"
-                class="overflow-hidden rounded-xl border bg-card shadow-sm"
-            >
-                <div class="border-b bg-muted/30 px-6 py-3">
-                    <p class="text-sm font-medium">
-                        Permissions spécifiques (hors matrice)
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        Actions de workflow qui ne rentrent pas dans le schéma
-                        créer/lire/modifier/supprimer.
-                    </p>
-                </div>
+            <!-- Permissions regroupées par domaine métier : chaque carte réunit les paramètres,
+                 la mini-matrice CRUD et les actions de workflow d'un même métier (Ventes,
+                 Logistique, Finance…) au lieu de les éclater entre une matrice unique et une
+                 liste "hors matrice" sans rapport visuel avec elle. -->
+            <div class="flex flex-col gap-4">
                 <div
-                    class="grid grid-cols-1 gap-x-6 gap-y-3 p-6 sm:grid-cols-2 lg:grid-cols-3"
+                    v-for="[domainKey, domain] in domainList"
+                    :key="domainKey"
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
-                    <label
-                        v-for="key in standaloneKeys"
-                        :key="key"
-                        class="flex items-start gap-2"
-                        :class="readOnly ? '' : 'cursor-pointer'"
+                    <div
+                        class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
                     >
+                        <p class="text-sm font-medium">{{ domain.label }}</p>
                         <button
-                            type="button"
-                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-all"
+                            class="group flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all"
                             :class="[
                                 readOnly
-                                    ? 'cursor-default opacity-70'
-                                    : 'cursor-pointer',
-                                isStandaloneChecked(key)
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-border bg-background hover:border-primary/60',
+                                    ? 'cursor-default border-muted opacity-60'
+                                    : 'cursor-pointer hover:border-primary/60',
+                                domainState(domain) === 'none'
+                                    ? 'border-border bg-background'
+                                    : domainState(domain) === 'all'
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-primary/60 bg-primary/10',
                             ]"
                             :disabled="readOnly"
-                            @click="toggleStandalone(key)"
+                            :title="`${domainState(domain) === 'all' ? 'Tout retirer' : 'Tout accorder'} — ${domain.label}`"
+                            @click="toggleDomain(domain)"
                         >
-                            <Check
-                                v-if="isStandaloneChecked(key)"
-                                class="h-3 w-3"
+                            <CheckSquare
+                                v-if="domainState(domain) === 'all'"
+                                class="h-3.5 w-3.5"
+                            />
+                            <Minus
+                                v-else-if="domainState(domain) === 'partial'"
+                                class="h-3.5 w-3.5 text-primary"
+                            />
+                            <Square
+                                v-else
+                                class="h-3.5 w-3.5 text-muted-foreground/40"
                             />
                         </button>
-                        <span class="text-sm">{{ standalone[key] }}</span>
-                    </label>
+                    </div>
+
+                    <!-- Mini-matrice CRUD du domaine -->
+                    <div v-if="domain.resources.length > 0" class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b bg-muted/20">
+                                    <th class="w-52 px-6 py-3 text-left">
+                                        <span
+                                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                        >
+                                            Ressource
+                                        </span>
+                                    </th>
+                                    <th
+                                        v-for="action in actions"
+                                        :key="action"
+                                        class="px-4 py-3 text-center"
+                                    >
+                                        <div
+                                            class="flex flex-col items-center gap-1.5"
+                                        >
+                                            <span
+                                                class="text-xs font-semibold tracking-wider uppercase"
+                                                :class="
+                                                    actionLabels[action]
+                                                        ?.color ??
+                                                    'text-muted-foreground'
+                                                "
+                                            >
+                                                {{
+                                                    actionLabels[action]
+                                                        ?.label ?? action
+                                                }}
+                                            </span>
+                                            <button
+                                                class="group flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all"
+                                                :class="[
+                                                    readOnly
+                                                        ? 'cursor-default border-muted opacity-60'
+                                                        : 'cursor-pointer hover:border-primary/60',
+                                                    columnState(
+                                                        action,
+                                                        domain.resources,
+                                                    ) === 'none'
+                                                        ? 'border-border bg-background'
+                                                        : columnState(
+                                                                action,
+                                                                domain.resources,
+                                                            ) === 'all'
+                                                          ? 'border-primary bg-primary text-primary-foreground'
+                                                          : 'border-primary/60 bg-primary/10',
+                                                ]"
+                                                :disabled="readOnly"
+                                                :title="`Tout ${columnState(action, domain.resources) === 'all' ? 'désactiver' : 'activer'} — ${actionLabels[action]?.label}`"
+                                                @click="
+                                                    toggleColumn(
+                                                        action,
+                                                        domain.resources,
+                                                    )
+                                                "
+                                            >
+                                                <CheckSquare
+                                                    v-if="
+                                                        columnState(
+                                                            action,
+                                                            domain.resources,
+                                                        ) === 'all'
+                                                    "
+                                                    class="h-3.5 w-3.5"
+                                                />
+                                                <Minus
+                                                    v-else-if="
+                                                        columnState(
+                                                            action,
+                                                            domain.resources,
+                                                        ) === 'partial'
+                                                    "
+                                                    class="h-3.5 w-3.5 text-primary"
+                                                />
+                                                <Square
+                                                    v-else
+                                                    class="h-3.5 w-3.5 text-muted-foreground/40"
+                                                />
+                                            </button>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+
+                            <tbody class="divide-y">
+                                <tr
+                                    v-for="resource in domain.resources"
+                                    :key="resource"
+                                    class="transition-colors hover:bg-muted/30"
+                                >
+                                    <td class="px-6 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <button
+                                                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all"
+                                                :class="[
+                                                    readOnly
+                                                        ? 'cursor-default opacity-60'
+                                                        : 'cursor-pointer',
+                                                    rowState(resource) ===
+                                                    'none'
+                                                        ? 'border-border bg-background hover:border-primary/40'
+                                                        : rowState(
+                                                                resource,
+                                                            ) === 'all'
+                                                          ? 'border-primary bg-primary text-primary-foreground'
+                                                          : 'border-primary/60 bg-primary/10 hover:border-primary',
+                                                ]"
+                                                :disabled="readOnly"
+                                                :title="`${rowState(resource) === 'all' ? 'Tout retirer' : 'Tout accorder'} — ${resourceLabels[resource] ?? resource}`"
+                                                @click="toggleRow(resource)"
+                                            >
+                                                <Minus
+                                                    v-if="
+                                                        rowState(resource) !==
+                                                        'none'
+                                                    "
+                                                    class="h-3.5 w-3.5"
+                                                    :class="
+                                                        rowState(resource) ===
+                                                        'all'
+                                                            ? 'text-primary-foreground'
+                                                            : 'text-primary'
+                                                    "
+                                                />
+                                            </button>
+                                            <span class="text-sm font-medium">
+                                                {{
+                                                    resourceLabels[
+                                                        resource
+                                                    ] ?? resource
+                                                }}
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    <td
+                                        v-for="action in actions"
+                                        :key="action"
+                                        class="px-4 py-3 text-center"
+                                    >
+                                        <div class="flex justify-center">
+                                            <button
+                                                class="flex h-5 w-5 items-center justify-center rounded border-2 transition-all"
+                                                :class="[
+                                                    readOnly
+                                                        ? 'cursor-default opacity-70'
+                                                        : 'cursor-pointer',
+                                                    isChecked(resource, action)
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : 'border-border bg-background hover:border-primary/60',
+                                                ]"
+                                                :disabled="readOnly"
+                                                @click="
+                                                    toggle(resource, action)
+                                                "
+                                            >
+                                                <Check
+                                                    v-if="
+                                                        isChecked(
+                                                            resource,
+                                                            action,
+                                                        )
+                                                    "
+                                                    class="h-3 w-3"
+                                                />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Actions de workflow du domaine (hors schéma créer/lire/modifier/supprimer),
+                         réparties par sous-processus métier (ex. "Cycle de vente" / "Facturation")
+                         plutôt qu'en une seule liste plate. -->
+                    <div
+                        v-if="standaloneGroups(domain).length > 0"
+                        :class="[
+                            'px-6 py-4',
+                            domain.resources.length > 0 ? 'border-t' : '',
+                        ]"
+                    >
+                        <p
+                            v-if="domain.resources.length > 0"
+                            class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Actions spécifiques
+                        </p>
+                        <div class="space-y-4">
+                            <div
+                                v-for="[groupLabel, keys] in standaloneGroups(domain)"
+                                :key="groupLabel"
+                            >
+                                <p
+                                    v-if="standaloneGroups(domain).length > 1"
+                                    class="mb-2 text-xs font-medium text-muted-foreground"
+                                >
+                                    {{ groupLabel }}
+                                </p>
+                                <div
+                                    class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3"
+                                >
+                                    <label
+                                        v-for="key in keys"
+                                        :key="key"
+                                        class="flex items-start gap-2"
+                                        :class="readOnly ? '' : 'cursor-pointer'"
+                                    >
+                                        <button
+                                            type="button"
+                                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-all"
+                                            :class="[
+                                                readOnly
+                                                    ? 'cursor-default opacity-70'
+                                                    : 'cursor-pointer',
+                                                isStandaloneChecked(key)
+                                                    ? 'border-primary bg-primary text-primary-foreground'
+                                                    : 'border-border bg-background hover:border-primary/60',
+                                            ]"
+                                            :disabled="readOnly"
+                                            @click="toggleStandalone(key)"
+                                        >
+                                            <Check
+                                                v-if="isStandaloneChecked(key)"
+                                                class="h-3 w-3"
+                                            />
+                                        </button>
+                                        <span class="text-sm">{{
+                                            standalone[key]
+                                        }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

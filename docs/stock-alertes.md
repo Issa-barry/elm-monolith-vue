@@ -131,8 +131,8 @@ Utilisées par :
 - `StockStatutService::detailParVarianteEtSite()` / `nombreAlertesPourProduit()` /
   `compterAlertesPourOrganisation()` (badge sidebar) ;
 - `Produit::getIsLowStockAttribute()`/`getIsOutOfStockAttribute()` (filtrés disponible+alerte) ;
-- `ProduitController::index()`/`show()` (Web — badges filtrés, tableaux non filtrés) ;
-- `StockController::stockQuery()` (page Stock — filtres de statut conditionnés par la
+- `IndexProduitController`/`ShowProduitController` (Web — badges filtrés, tableaux non filtrés) ;
+- `IndexStockController::stockQuery()` (page Stock — filtres de statut conditionnés par la
   disponibilité SEULE, jamais l'alerte) ;
 - `MouvementStockService::alerterSiFranchissementSeuil()` (notification email/in-app, filtrée
   disponible+alerte) ;
@@ -163,7 +163,7 @@ d'écriture, avec deux familles de méthodes totalement indépendantes :
 
 ## Formulaire web (fiche produit)
 
-`ProduitController::edit()` charge les sites **actifs** de l'organisation et la configuration
+`EditProduitController` charge les sites **actifs** de l'organisation et la configuration
 déjà enregistrée (disponibilité + alerte + seuil), exposées à `ProduitForm.vue` en deux sections
 distinctes :
 
@@ -176,7 +176,7 @@ Aucune configuration par site n'est possible à la **création** (le produit n'a
 un message indique que les deux se configurent après création — disponible partout et sans
 alerte par défaut.
 
-`ProduitController::update()` accepte :
+`UpdateProduitController` accepte :
 - `disponibilite_mode: 'tous'|'selection'` + `sites_disponibles: string[]` →
   `definirDisponibilitePourSites()` ; champ absent du payload = configuration inchangée ;
 - `seuils_site: [{site_id, actif, seuil}]` → `definir()` par ligne ; site absent du tableau =
@@ -207,7 +207,7 @@ appliquées à **tous les sites actifs** de l'organisation, sans jamais réécri
 Décision produit du 30/08/2026 — un `super_admin`/`admin_entreprise` (`User::isAdmin()`) voit
 et est alerté sur les stocks faibles/ruptures de **toutes** les agences de son organisation,
 jamais restreint à ses propres agences de rattachement. C'était déjà le cas pour l'affichage
-(`ProduitController::index()`/`show()`, `StockController::index()` ne scopent `site_ids` que
+(`IndexProduitController`/`ShowProduitController`, `IndexStockController` ne scopent `site_ids` que
 pour les non-admins ; le badge sidebar `compterAlertesPourOrganisation()` est org-wide pour tout
 le monde) — l'email/notification (ci-dessous) suit la même règle : jamais filtré par site pour
 les administrateurs.

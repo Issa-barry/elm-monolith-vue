@@ -15,18 +15,18 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
 - **CLIENTPERSONNE-002** — `Client` **garde ses propres colonnes d'identité** (`nom_complet`,
   `telephone`, `email`, `pays`, `ville`, `adresse`...) : `personne_id` sert à la
   résolution/dédoublonnage d'identité entre rôles, jamais à leur remplacement. Tous les
-  affichages/lectures existants (`CommandeVenteController`, `CashbackController`,
+  affichages/lectures existants (`Ventes\{Index,Show,Edit}CommandeVenteController`, `CashbackController`,
   `ClientSearchProvider`, l'espace client mobile...) continuent de lire directement les
   colonnes de `Client`, inchangées.
-- **CLIENTPERSONNE-003** — À la création d'un `Client` (`ClientController::store()`,
+- **CLIENTPERSONNE-003** — À la création d'un `Client` (`StoreClientController`,
   auto-inscription web/mobile), le téléphone est résolu via `Personne::resoudreOuCreer()` — la
   même méthode utilisée par tous les autres rôles. Si une `Personne` existe déjà dans
   l'organisation avec ce téléphone (un autre rôle, ou un autre client), elle est réutilisée
-  **telle quelle** (jamais de fusion/écrasement de ses champs). `ClientController` garantit déjà
-  qu'aucun autre client actif ne porte ce téléphone (`assertPhoneUniqueInOrg`), donc la Personne
+  **telle quelle** (jamais de fusion/écrasement de ses champs). `StoreClientController` garantit déjà
+  qu'aucun autre client actif ne porte ce téléphone (`App\Support\Clients\ClientUniqueness::assertPhoneUniqueInOrg()`), donc la Personne
   trouvée ne peut jamais appartenir à un client concurrent.
 - **CLIENTPERSONNE-004** — À la modification d'un client déjà rattaché
-  (`ClientController::update()`), l'identité est éditée **en place** sur sa `Personne`
+  (`UpdateClientController`), l'identité est éditée **en place** sur sa `Personne`
   existante — jamais de re-résolution par téléphone (même principe que
   `ProprietaireController::update()`). Si le nouveau téléphone appartient déjà à une **autre**
   `Personne`, la modification est refusée (`Personne::assertTelephoneDisponible()`) plutôt que

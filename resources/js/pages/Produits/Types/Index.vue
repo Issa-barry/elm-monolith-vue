@@ -147,7 +147,7 @@ const referenceOptions = computed(() => {
 });
 
 // 'structure' est une clé d'erreur serveur générique (garde-fou de modification structurelle,
-// cf. ProduitTypeController::update()), pas un champ du formulaire — absente du type
+// cf. UpdateProduitTypeController), pas un champ du formulaire — absente du type
 // FormDataErrors généré à partir de `form`, d'où l'accès via un index générique.
 const structureError = computed(
     () => (form.errors as Record<string, string>).structure,

@@ -25,7 +25,7 @@ use Tests\TestCase;
  *   - Alerte ("faut-il notifier ?") — défaut FAUX, avec seuil par site.
  * Un site non disponible n'a jamais de rupture "métier" ; un site disponible mais sans alerte
  * affiche son état réel sans jamais notifier. Couvre le formulaire web
- * (ProduitController::edit()/update()) et le contrôle du stock avec le bon site_id.
+ * (EditProduitController/UpdateProduitController) et le contrôle du stock avec le bon site_id.
  */
 class ProduitSeuilAlerteSiteTest extends TestCase
 {
@@ -495,7 +495,7 @@ class ProduitSeuilAlerteSiteTest extends TestCase
 
     /**
      * Même scénario que le test précédent, mais sur la liste Produits (bannière "Rupture de
-     * stock" + badge par ligne) — ProduitController::index() calculait auparavant is_out_of_stock
+     * stock" + badge par ligne) — IndexProduitController calculait auparavant is_out_of_stock
      * via un raccourci sur la seule quantité brute (`$s->qte_stock <= 0`), sans jamais consulter
      * la disponibilité par site.
      */

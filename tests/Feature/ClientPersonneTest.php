@@ -189,7 +189,7 @@ class ClientPersonneTest extends TestCase
     public function test_backfill_unifie_deux_clients_de_la_meme_organisation_partageant_un_telephone(): void
     {
         // Simule une donnée historique antérieure à la contrainte d'unicité applicative —
-        // jamais possible via ClientController::store() aujourd'hui, mais doit être géré
+        // jamais possible via StoreClientController aujourd'hui, mais doit être géré
         // proprement si elle existe déjà en base au moment du backfill.
         $clientA = Client::factory()->create([
             'organization_id' => $this->org->id,

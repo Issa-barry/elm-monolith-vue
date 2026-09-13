@@ -48,7 +48,7 @@ async function readUserSiteName(page: Page): Promise<string> {
         .first()
         .innerText();
 
-    // Backend : "{type_label} de {site_nom}" (cf. CommandeVenteController::getUserSite()).
+    // Backend : "{type_label} de {site_nom}" (cf. CommandeVenteFormBuilder::getUserSite()).
     const match = label.match(/\bde\s+(.+)$/i);
     return (match ? match[1] : label).trim();
 }

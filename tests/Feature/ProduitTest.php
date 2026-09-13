@@ -272,6 +272,15 @@ class ProduitTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
 
     public function test_store_creates_produit_and_redirects(): void
@@ -292,6 +301,20 @@ class ProduitTest extends TestCase
             'prix_achat' => 1000,
             'is_default' => true,
         ]);
+    }
+
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.store'), [
+                'nom' => 'Rouleau plastique',
+                'produit_type_id' => $this->typeId('materiel'),
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(403);
     }
 
     /**
@@ -668,6 +691,17 @@ class ProduitTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_show_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, []);
+        $sansDroit->sites()->attach($this->defaultSite()->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.show', $produit))
+            ->assertStatus(403);
+    }
+
     // ── edit ──────────────────────────────────────────────────────────────────
 
     public function test_edit_returns_200_for_authorized_user(): void
@@ -677,6 +711,26 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('produits.edit', $produit))
             ->assertStatus(200);
+    }
+
+    public function test_edit_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.edit', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_edit_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.edit', $produit))
+            ->assertStatus(403);
     }
 
     // ── update ────────────────────────────────────────────────────────────────
@@ -833,6 +887,34 @@ class ProduitTest extends TestCase
         $this->assertTrue($produit->variantes->every(fn ($v) => (int) $v->prix_achat === 8000));
     }
 
+    public function test_update_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Nouveau nom produit',
+                'produit_type_id' => $this->typeId('materiel', $otherOrg),
+                'statut' => 'actif',
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Nouveau nom produit',
+                'produit_type_id' => $this->typeId('materiel'),
+                'statut' => 'actif',
+            ])
+            ->assertStatus(403);
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_produit_and_redirects(): void
@@ -853,6 +935,49 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->delete(route('produits.destroy', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->delete(route('produits.destroy', $produit))
+            ->assertStatus(403);
+    }
+
+    // ── archiver ──────────────────────────────────────────────────────────────
+
+    public function test_archiver_archives_produit_and_redirects(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.archiver', $produit))
+            ->assertRedirect();
+
+        $this->assertSame('archive', $produit->fresh()->statut->value);
+    }
+
+    public function test_archiver_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.archiver', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_archiver_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->patch(route('produits.archiver', $produit))
             ->assertStatus(403);
     }
 

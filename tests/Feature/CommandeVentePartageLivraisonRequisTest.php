@@ -28,7 +28,7 @@ use Tests\TestCase;
 
 /**
  * Garde-fou préventif à la création d'une commande de vente —
- * CommandeVenteController::ensurePartageLivraisonCategorieConfigure() bloque la création quand
+ * CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure() bloque la création quand
  * l'équipe du véhicule sélectionné n'a pas de partage Livreur actif pour une catégorie dont le
  * barème équipe_livraison est positif sur le processus résolu (vente ou distribution client). Cf.
  * incident CMD-300826-007 (30/08/2026) : commande facturée et payée mais bloquée "à régulariser"
@@ -90,7 +90,7 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
      * Satisfait uniquement le garde-fou logistique de ensureNatureOperationCoherente()
      * (véhicule autorisé + livreur actif assigné), sans jamais créer de partage — utilisé par
      * les tests qui veulent isoler le garde-fou de partage testé par ce fichier de celui, distinct,
-     * de l'usage logistique (cf. CommandeVenteController::ensureNatureOperationCoherente()).
+     * de l'usage logistique (cf. CommandeVenteFormBuilder::ensureNatureOperationCoherente()).
      */
     private function assignChauffeurActif(Vehicule $vehicule): void
     {
@@ -192,7 +192,7 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     // ne lui est propre, le barème/partage à satisfaire pour débloquer la création est résolu par
     // repli automatique sur celui de CODE_LOGISTIQUE_TRANSFERT — cf.
     // CommissionProcessusDefaults::processusResolutionBareme() et
-    // CommandeVenteController::ensurePartageLivraisonCategorieConfigure().
+    // CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure().
 
     public function test_store_bloque_si_partage_manquant_pour_distribution_client(): void
     {

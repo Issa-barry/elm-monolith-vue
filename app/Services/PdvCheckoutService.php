@@ -52,7 +52,7 @@ class PdvCheckoutService
                 Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
             }
 
-            // Même règle de solvabilité que le back-office (CommandeVenteController::store()),
+            // Même règle de solvabilité que le back-office (Ventes\StoreCommandeVenteController),
             // sur le même service — le PDV créait auparavant sa facture sans AUCUN contrôle
             // d'impayés, quel que soit le paramétrage de l'organisation (trou identifié le
             // 18/08/2026). Exécuté sous le verrou ci-dessus pour rester fiable en concurrence.
@@ -66,7 +66,7 @@ class PdvCheckoutService
 
             // Grossiste : tarification catégorie × mode (Enlèvement/Livraison), non pertinente au
             // comptoir — jamais servi via PDV, cf. docs/grossiste.md. Décision de périmètre
-            // (05/09/2026) : passer par une commande de vente (CommandeVenteController), seul
+            // (05/09/2026) : passer par une commande de vente (Ventes\StoreCommandeVenteController), seul
             // point d'entrée qui connaît le mode de remise.
             if ($client?->type === ClientType::GROSSISTE) {
                 throw ValidationException::withMessages([
@@ -281,7 +281,7 @@ class PdvCheckoutService
             // non — il retombe lui-même sur prix_vente hors du cas fabricable+client. Fabricable
             // + client : ce prix gouverne SEUL le total, sans passer par le mode de tarification
             // véhicule/client (qui basculerait sinon un client Externe entier sur prix_usine,
-            // ignorant le prix_externe qu'on vient de résoudre) — cf. CommandeVenteController::
+            // ignorant le prix_externe qu'on vient de résoudre) — cf. CommandeVenteFormBuilder::
             // buildLignesDataAndTotal() pour le même correctif côté back-office.
             $ligneFabricablePourClient = PrixVenteNatureResolver::estFabricable($variante) && $client;
             $prixVente = PrixVenteNatureResolver::resolve($variante, $client);

@@ -7,7 +7,7 @@ use App\Models\Vehicule;
 /**
  * Nature commerciale d'une CommandeVente — figée à la création, jamais recalculée si le client
  * change de type ensuite (cf. deriverParDefaut(), seule source de vérité de la dérivation, appelée
- * à la fois par CommandeVenteController::store() et PdvCheckoutService::checkout()).
+ * à la fois par Ventes\StoreCommandeVenteController et PdvCheckoutService::checkout()).
  *
  * Distincte de ClientType : un client DISTRIBUTEUR retirant lui-même sa commande sans véhicule de
  * flotte reste VENTE_STANDARD (aucune équipe de livraison à commissionner) — la nature dépend du

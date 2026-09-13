@@ -9,7 +9,7 @@ use App\Contracts\WhatsAppGateway;
  * WhatsApp réel n'est intégré (cf. docblock du contrat) — `isConfigured()`
  * retourne toujours `false`, ce qui empêche structurellement toute règle
  * WhatsApp de s'activer (App\Services\Communications\CommunicationRuleResolver,
- * App\Http\Controllers\Settings\CommunicationRuleController::update()).
+ * App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController).
  * `send()` ne doit donc jamais être appelé en pratique — il lève une exception
  * plutôt que d'échouer silencieusement si ce garde-fou était contourné.
  */

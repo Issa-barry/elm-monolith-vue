@@ -27,17 +27,17 @@ maintenant.
 - **PARRAIN-003** — Une même `Personne` peut parrainer plusieurs véhicules. Il n'existe aucune
   contrainte d'unicité en base sur `parrains.personne_id` ; la déduplication du rôle est faite
   applicativement (`Parrain::firstOrCreate(['organization_id' => ..., 'personne_id' => ...])`
-  dans `ParrainController::store()`) — une même Personne n'a donc jamais deux lignes `Parrain`,
+  dans `StoreParrainController`) — une même Personne n'a donc jamais deux lignes `Parrain`,
   seulement plusieurs véhicules qui pointent vers la même ligne.
 - **PARRAIN-004** — `vehicules.parrain_id` est un pointeur simple vers le parrain **actuel**, sans
   historique : changer de parrain remplace la valeur, sans conserver trace du précédent (même
-  comportement que `vehicules.proprietaire_id`, cf. `ParrainController::store()`).
+  comportement que `vehicules.proprietaire_id`, cf. `StoreParrainController`).
 - **PARRAIN-005** — Modifier l'identité d'un parrain déjà rattaché (nom, téléphone, ville,
   adresse) l'édite **en place** sur sa `Personne` — jamais de re-résolution par téléphone, pour
   ne jamais rattacher silencieusement le véhicule à une autre personne existante (même principe
   que `ResolutionIdentiteTiersTrait`/`ProprietaireController::update()`). Si le nouveau téléphone
   saisi appartient déjà à une autre `Personne` de l'organisation, la modification est refusée
-  (`ParrainController::assertPhoneUniqueInOrg()`) plutôt que de violer silencieusement la
+  (`UpdateParrainController`, via `Personne::assertTelephoneDisponible()`) plutôt que de violer silencieusement la
   contrainte unique `personnes.(organization_id, telephone_normalise)`.
 - **PARRAIN-006** — Le rattachement d'un parrain est protégé par les mêmes permissions que le
   véhicule (`vehicules.update` + isolation par organisation via `VehiculePolicy`) : pas de
@@ -53,19 +53,20 @@ maintenant.
 | `Vehicule::parrain()` | `belongsTo(Parrain::class)`. |
 | `Personne::parrain()` | `hasOne(Parrain::class)` — une Personne n'a qu'un seul rôle Parrain (wrapper), réutilisé par plusieurs véhicules. |
 
-## Backend — `ParrainController`
+## Backend — `app/Http/Controllers/Vehicules/Parrain/`
 
-Trois actions, toutes scopées à un véhicule (`vehicules/{vehicule}/parrain...`) et gatées par
-`$this->authorize('update', $vehicule)` :
+Trois contrôleurs mono-action, tous scopés à un véhicule (`vehicules/{vehicule}/parrain...`) et
+gatés par `$this->authorize('update', $vehicule)` :
 
-- `rechercherTelephone` (GET, JSON) — lecture seule, ne crée jamais rien. Normalise le téléphone
-  soumis (même logique que partout ailleurs : `PhoneHandlerTrait` + `Personne::normaliserTelephone()`)
-  et cherche une `Personne` de l'organisation par `telephone_normalise`.
-- `store` (POST) — soit `personne_id` (personne trouvée, réutilisée telle quelle), soit les
-  champs d'identité complets (`nom_complet`, `telephone`, `code_pays`, `ville`, `adresse`) pour
-  créer/réutiliser via `Personne::resoudreOuCreer()`. Résout ensuite le `Parrain` (créé ou
-  réutilisé) et assigne `vehicule.parrain_id`.
-- `update` (PUT) — édite l'identité du parrain déjà rattaché, en place.
+- `RechercherTelephoneParrainController` (GET, JSON) — lecture seule, ne crée jamais rien.
+  Normalise le téléphone soumis (même logique que partout ailleurs : `PhoneHandlerTrait` +
+  `Personne::normaliserTelephone()`) et cherche une `Personne` de l'organisation par
+  `telephone_normalise`.
+- `StoreParrainController` (POST) — soit `personne_id` (personne trouvée, réutilisée telle
+  quelle), soit les champs d'identité complets (`nom_complet`, `telephone`, `code_pays`, `ville`,
+  `adresse`) pour créer/réutiliser via `Personne::resoudreOuCreer()`. Résout ensuite le `Parrain`
+  (créé ou réutilisé) et assigne `vehicule.parrain_id`.
+- `UpdateParrainController` (PUT) — édite l'identité du parrain déjà rattaché, en place.
 
 ## Frontend
 

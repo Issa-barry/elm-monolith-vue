@@ -8,8 +8,9 @@ use Spatie\Permission\Models\Role;
 /**
  * Filtre unique "quels rôles une organisation peut voir/affecter" : les rôles système
  * (`organization_id` null, partagés par toutes les organisations) + les rôles métier de
- * cette organisation — jamais ceux d'une autre organisation. Utilisé par RoleController,
- * UserController (affectation) et les contrôleurs de paramétrage (Ventes/Dépenses) — avant
+ * cette organisation — jamais ceux d'une autre organisation. Utilisé par les contrôleurs Role\*,
+ * App\Support\User\UserFormOptions (affectation) et les contrôleurs de paramétrage
+ * (Ventes/Dépenses) — avant
  * cette classe, ce filtre était soit dupliqué, soit absent (`Role::orderBy('name')->get()`
  * sans scope), ce qui exposait/modifiait les rôles d'autres organisations.
  */
@@ -30,10 +31,10 @@ final class RoleVisibility
     /**
      * Un rôle système (organization_id null, partagé par toutes les organisations) n'est
      * modifiable que par un super_admin plateforme — décision produit du 2026-09-06 (cf.
-     * RoleController::canManageRole()). Un rôle propre à l'organisation (organization_id ===
+     * RoleAccess::canManageRole()). Un rôle propre à l'organisation (organization_id ===
      * $organizationId) reste entièrement sous son contrôle. Règle unique, réutilisée par
-     * RoleController, VenteParametrageController et DepenseParametrageController — jamais
-     * redupliquée : muter un rôle système depuis un écran de paramétrage d'organisation
+     * RoleAccess, {Edit,Update}VenteParametrageController et EditDepenseParametrageController —
+     * jamais redupliquée : muter un rôle système depuis un écran de paramétrage d'organisation
      * affecterait sinon silencieusement toutes les AUTRES organisations qui l'utilisent.
      */
     public static function isWritableBy(Role $role, ?string $organizationId, bool $actorIsSuperAdmin): bool

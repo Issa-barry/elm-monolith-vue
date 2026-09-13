@@ -45,7 +45,7 @@ class CashbackService
     }
 
     /**
-     * Déclenché au paiement complet de la facture (EncaissementVenteController) — moment
+     * Déclenché au paiement complet de la facture (Ventes\StoreEncaissementVenteController) — moment
      * inchangé (CASHBACK-006, cf. docs/cashback.md), seule la FORMULE change (décision produit
      * du 28/08/2026, EN REMPLACEMENT du modèle à seuil d'achat global/gain fixe qui prévalait
      * jusque-là, cf. Parametre::CLE_CASHBACK_SEUIL_ACHAT/CLE_CASHBACK_MONTANT_GAIN, désormais

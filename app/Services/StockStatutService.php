@@ -116,7 +116,7 @@ class StockStatutService
 
         // Disponible = physique − engagé (StockReservationService, 25/08/2026) : un stock
         // physique positif mais entièrement engagé par des commandes confirmées n'est plus
-        // vendable, jamais affiché "Disponible" (même règle que StockController::stockQuery()).
+        // vendable, jamais affiché "Disponible" (même règle que IndexStockController::stockQuery()).
         $disponible = $varianteStock->qte_stock - $varianteStock->qte_reservee;
         $seuil = $this->seuilEffectifPourSite($produit, $varianteStock->site_id);
 

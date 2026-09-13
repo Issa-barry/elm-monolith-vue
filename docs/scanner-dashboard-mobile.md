@@ -16,9 +16,9 @@ et les ajouts décrits ci-dessous.
   différente :
   - `MeController` (`GET /api/auth/me`, cf. `docs/api-espace-client-contract.md`) —
     `null` si aucun profil propriétaire/livreur réellement rattaché.
-  - `ClientDashboardController::qrCode()` (espace client Inertia, image SVG) — replie
+  - `QrCodeClientDashboardController` (espace client Inertia, image SVG) — replie
     sur `route('dashboard')` si aucun profil (un QR y est toujours affiché).
-  - `DashboardController` (backoffice, nouveau) — expose `qr_payload` (`string|null`)
+  - `IndexDashboardController` (backoffice, nouveau) — expose `qr_payload` (`string|null`)
     comme prop Inertia dédiée à la page `Dashboard`, **pas** dans le payload `auth`
     partagé globalement (`HandleInertiaRequests`) : `ClientIdentityResolver` fait 3
     requêtes (Client/Proprietaire/Livreur) qu'il serait inutile de payer sur chaque

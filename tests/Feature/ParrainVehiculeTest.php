@@ -267,6 +267,42 @@ class ParrainVehiculeTest extends TestCase
             ->assertSessionHasErrors('telephone');
     }
 
+    public function test_update_refuse_sans_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $parrain = Parrain::factory()->create(['organization_id' => $user->organization_id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $user->organization_id,
+            'parrain_id' => $parrain->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('vehicules.parrain.update', $vehicule), [
+                'nom_complet' => 'Mamadou Diallo',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_refuse_un_vehicule_dune_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $parrain = Parrain::factory()->create(['organization_id' => $autreOrg->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $autreOrg->id,
+            'parrain_id' => $parrain->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.parrain.update', $vehicule), [
+                'nom_complet' => 'Mamadou Diallo',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+            ])
+            ->assertStatus(403);
+    }
+
     public function test_update_retourne_404_si_aucun_parrain_a_modifier(): void
     {
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'parrain_id' => null]);

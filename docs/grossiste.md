@@ -328,3 +328,27 @@ toujours gouverné par `ventes.update` et par le rôle admin, cf. `CommandeVente
 - Tests : `tests/Feature/CommandeVenteStatutTest.php` (nouvelle section « Séparation des
   permissions de workflow » — chaque permission testée seule, sans `ventes.update`, et son absence
   testée avec `ventes.update` seul).
+
+**Suite immédiate (même jour)** : en testant la séparation ci-dessus dans l'éditeur de rôles, une
+organisation a coché « Factures — encaisser » (`factures.encaisser`) sans effet sur le bouton
+« Encaisser » de `Ventes/Show.vue` — toujours désactivé. Même diagnostic que ci-dessus : le flag
+`can_encaisser` (`Ventes\ShowCommandeVenteController`) vérifiait `$user->can('update', $commande)`
+(donc `ventes.update`), jamais `factures.encaisser`. Plus grave ici :
+`Ventes\StoreEncaissementVenteController` (la route réellement appelée au clic, `encaissements.store`)
+n'avait **aucun contrôle d'autorisation propre** — seul le bouton désactivé côté frontend empêchait
+un utilisateur non habilité d'agir, en contradiction avec CLAUDE.md §9 (une validation financière ne
+doit jamais reposer sur le seul frontend).
+
+- `can_encaisser` vérifie désormais `$user->can('factures.encaisser')`. `Ventes\
+  StoreEncaissementVenteController` vérifie désormais explicitement cette permission (`abort_unless`
+  en tout premier, avant même le chargement de la facture).
+- **Migration** (`2026_09_13_152109_backfill_factures_encaisser_permission`) : même logique de
+  backfill non destructif — tout rôle ayant déjà `ventes.update` reçoit `factures.encaisser` s'il ne
+  l'avait pas, pour qu'aucune organisation ne perde d'un coup la capacité d'encaisser ses ventes
+  (régression plus sensible que les trois permissions ci-dessus : l'encaissement est une opération
+  quotidienne, pas occasionnelle).
+- `Ventes\DestroyEncaissementVenteController` (suppression/annulation d'un encaissement) présente le
+  même défaut structurel (aucun contrôle d'autorisation propre) mais n'est pas exposé sur
+  `Ventes/Show.vue` — **non corrigé dans ce chantier**, signalé comme point de vigilance distinct
+  (candidat naturel : `factures.annuler`, elle aussi déclarée dans `PermissionCatalog::STANDALONE`
+  mais encore vérifiée nulle part).

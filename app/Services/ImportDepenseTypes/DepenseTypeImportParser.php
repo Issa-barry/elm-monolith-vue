@@ -21,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
  *   tout écart entre ce qui a été prévisualisé et ce qui est enregistré ;
  * - AUCUNE mise à jour silencieuse d'un type existant : contrairement à
  *   l'import de sites, un libellé qui correspond (une fois transformé en
- *   `code`, cf. DepenseTypeController::generateCode) à un type déjà présent
+ *   `code`, cf. StoreDepenseTypeController::generateCode) à un type déjà présent
  *   dans l'organisation — actif ou archivé, le code n'est jamais réutilisé,
  *   cf. contrainte unique (organization_id, code) — est bloqué en erreur, pas
  *   rapproché. C'est une décision produit explicite (cf. brief : « aucun
@@ -46,7 +46,7 @@ class DepenseTypeImportParser
 
         // Codes déjà pris dans l'organisation, y compris les types archivés
         // (soft-deleted) — le code n'est jamais réutilisé (même logique que
-        // DepenseTypeController::generateCode), donc un import qui viserait
+        // StoreDepenseTypeController::generateCode), donc un import qui viserait
         // un code archivé doit être bloqué explicitement.
         $codesExistants = DepenseType::withTrashed()
             ->where('organization_id', $orgId)

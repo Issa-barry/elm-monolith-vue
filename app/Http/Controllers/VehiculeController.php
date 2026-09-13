@@ -616,7 +616,7 @@ class VehiculeController extends Controller
      * dans la requête : omis, le plafond déjà enregistré en base est conservé tel quel (ex:
      * réactiver une dérogation précédemment désactivée sans ressaisir son montant) — fourni, il
      * remplace la valeur actuelle. Réutilise ensureDerogationCoherente() tel quel (même règle,
-     * jamais dupliquée). Même schéma que CategorieController::toggle().
+     * jamais dupliquée). Même schéma que ToggleCategorieController.
      */
     public function updateDerogation(Request $request, Vehicule $vehicule): RedirectResponse
     {

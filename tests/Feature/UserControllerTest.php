@@ -168,6 +168,24 @@ class UserControllerTest extends TestCase
         $this->assertContains($userWithCustomRole->id, $ids);
     }
 
+    /**
+     * `pending_registrations` liste TOUS les comptes en attente de la plateforme (whereNull
+     * organization_id), sans scoping par organisation — réservé au super_admin. Un
+     * admin_entreprise n'y a jamais accès, même indirectement via cette prop, pour ne jamais
+     * exposer les inscriptions en attente d'autres organisations à un acteur non-plateforme.
+     */
+    public function test_index_hides_pending_registrations_from_non_super_admin(): void
+    {
+        $admin = $this->adminUser(Organization::factory()->create());
+        User::factory()->create(['organization_id' => null]);
+
+        $response = $this->actingAs($admin)->get(route('users.index'));
+
+        $response->assertStatus(200);
+        $pending = $response->original->getData()['page']['props']['pending_registrations'];
+        $this->assertCount(0, $pending);
+    }
+
     // ── create ────────────────────────────────────────────────────────────────
 
     public function test_create_returns_200_for_super_admin(): void
@@ -271,7 +289,7 @@ class UserControllerTest extends TestCase
     /**
      * Verrou central de la refonte "rôles personnalisés réellement affectables" (2026-09-06) :
      * avant cette règle, `Rule::in(STAFF_ROLES)` rejetait tout rôle créé via le CRUD
-     * self-service (RoleController) — un rôle personnalisé d'organisation, correctement scopé
+     * self-service (contrôleurs Role\*) — un rôle personnalisé d'organisation, correctement scopé
      * à celle-ci, doit désormais être assignable comme n'importe quel rôle historique.
      */
     public function test_store_assigns_a_custom_organization_role_to_user(): void

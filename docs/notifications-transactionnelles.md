@@ -10,8 +10,8 @@ métier (génération de code, résolution de canal OTP, fallback multi-canal).
 
 | Événement | Module | Transition d'état réelle | Contrôleur (vérifié contre le frontend) | Destinataire(s) |
 |---|---|---|---|---|
-| `commande_confirmee` | Ventes | `BROUILLON → A_CHARGER` | `CommandeVenteController::valider()` (`PATCH /ventes/{id}/valider`, bouton "Confirmer" de `Ventes/Show.vue`) | Livreur |
-| `chargement_valide` | Ventes | `CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS` | `CommandeVenteStatutController::avancer()` (`POST /ventes/{id}/statut/avancer`, `Ventes/partials/ChargementDialog.vue`) | Livreur + Client |
+| `commande_confirmee` | Ventes | `BROUILLON → A_CHARGER` | `Ventes\ValiderCommandeVenteController` (`PATCH /ventes/{id}/valider`, bouton "Confirmer" de `Ventes/Show.vue`) | Livreur |
+| `chargement_valide` | Ventes | `CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS` | `Ventes\AvancerStatutVenteController` (`POST /ventes/{id}/statut/avancer`, `Ventes/partials/ChargementDialog.vue`) | Livreur + Client |
 | `transfert_cree` | Logistique | Création avec équipe assignée | `TransfertLogistiqueController::store()` | Livreur |
 | `chargement_valide` | Logistique | `CHARGEMENT → TRANSIT` | `TransfertStatutController::avancer()` (`POST /logistique/{id}/statut/avancer`, `Logistique/Show.vue::submitChargement()`) | Livreur |
 
@@ -24,13 +24,13 @@ métier (génération de code, résolution de canal OTP, fallback multi-canal).
 
 ### Piège identifié pendant l'audit (point important pour la suite)
 
-`CommandeVenteStatutController::avancer()` peut TECHNIQUEMENT faire progresser une commande depuis
+`Ventes\AvancerStatutVenteController` peut TECHNIQUEMENT faire progresser une commande depuis
 `BROUILLON` (le service `CommandeVenteService::avancerStatut()` gère génériquement toutes les
 transitions) — un test de régression existant (`CommandeVenteStatutTest::
 test_avancer_confirme_brouillon_en_a_charger`) poste d'ailleurs directement sur `/statut/avancer`
 pour cette transition. **Vérifié contre le frontend réel** (`Ventes/Show.vue::confirmer()`) : le
 bouton "Confirmer" n'appelle jamais cet endpoint, uniquement `PATCH /valider`. Le déclencheur
-`commande_confirmee` reste donc exclusivement sur `CommandeVenteController::valider()`. Si un
+`commande_confirmee` reste donc exclusivement sur `Ventes\ValiderCommandeVenteController`. Si un
 futur appelant (API mobile, script) venait à confirmer une commande via `/statut/avancer`, aucun
 SMS ne partirait — à surveiller si un tel appelant apparaît un jour.
 

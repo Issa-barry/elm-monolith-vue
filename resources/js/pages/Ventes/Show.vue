@@ -208,7 +208,7 @@ interface CommissionStatut {
 /** Statut de la DERNIÈRE tentative de génération de commission — distinct de
  * commission_statut (paiement de commissions déjà générées). Non-null
  * uniquement en cas d'anomalie ("à régulariser" ou "partiellement générée",
- * chantier 2A du 05/09/2026), cf. CommandeVenteController. */
+ * chantier 2A du 05/09/2026), cf. CommandeVenteCommissionStatus. */
 interface CommissionGenerationStatut {
     value: 'erreur' | 'partiel';
     label: string;
@@ -656,7 +656,7 @@ const STEPS = computed(() => {
     if (requiertReception.value) {
         steps.push({
             key: 'reception',
-            shortLabel: 'Réception',
+            shortLabel: 'Réception à valider',
             icon: PackageCheck,
         });
     }

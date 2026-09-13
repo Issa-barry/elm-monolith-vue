@@ -79,7 +79,7 @@ class Personne extends Model
      * les affichages existants — personne_id ne sert qu'à la résolution/dédoublonnage
      * d'identité entre rôles (cf. docs/identite-client-personne.md), jamais à leur
      * remplacement. Garanti au plus un Client par Personne par organisation par
-     * ClientController::assertPhoneUniqueInOrg() (jamais deux clients avec le même
+     * App\Support\Clients\ClientUniqueness::assertPhoneUniqueInOrg() (jamais deux clients avec le même
      * téléphone dans une organisation).
      */
     public function client(): HasOne

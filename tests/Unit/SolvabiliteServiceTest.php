@@ -21,7 +21,8 @@ use Tests\TestCase;
 /**
  * Source de vérité UNIQUE du contrôle des impayés (cf. docblock SolvabiliteService) — ces
  * tests couvrent directement evaluer()/enforcerOuEchouer(), réutilisés à l'identique par
- * CommandeVenteController (back-office) et PdvCheckoutService (PDV), cf. tests Feature dédiés
+ * Ventes\CheckSolvabiliteCommandeVenteController / Ventes\StoreCommandeVenteController (back-office)
+ * et PdvCheckoutService (PDV), cf. tests Feature dédiés
  * pour la couverture HTTP de chacun de ces deux appelants.
  */
 class SolvabiliteServiceTest extends TestCase

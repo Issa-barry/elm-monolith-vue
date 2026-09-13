@@ -38,7 +38,7 @@ function submit() {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-            // Flashée par OptionCatalogueController::store() — cf. HandleInertiaRequests::share().
+            // Flashée par StoreOptionCatalogueController — cf. HandleInertiaRequests::share().
             const page = usePage();
             const createdId = (page.props as any).flash
                 ?.created_option_catalogue_id as string | undefined;

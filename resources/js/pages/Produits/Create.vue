@@ -12,7 +12,7 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions()) pilotent l'affichage
+// `required_prices`/`gere_stock` (cf. App\Support\Produits\ProduitFormOptions::types()) pilotent l'affichage
 // du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
 // `achetable`/`vendable` pilotent la visibilité (applicabilité) de prix_achat/prix_vente.
 interface ProduitTypeOption extends Option {

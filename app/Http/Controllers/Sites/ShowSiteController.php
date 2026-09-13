@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Sites;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\UserController;
 use App\Models\Site;
 use App\Models\UserInvitation;
 use App\Models\Vehicule;
 use App\Support\Sites\SiteDataFormatter;
+use App\Support\User\UserFormOptions;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
@@ -66,7 +66,7 @@ class ShowSiteController extends Controller
 
         $membres = $membresUsers->concat($membresInvitations)->values();
 
-        $rolesDisponibles = Role::whereIn('name', UserController::INVITABLE_ROLES)
+        $rolesDisponibles = Role::whereIn('name', UserFormOptions::INVITABLE_ROLES)
             ->get(['id', 'name'])
             ->map(fn ($r) => ['value' => $r->name, 'label' => $this->roleLabel($r->name)])
             ->values();

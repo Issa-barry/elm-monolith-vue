@@ -85,7 +85,7 @@ class ImportVehiculesMajController extends Controller
 
     /**
      * Traitement synchrone (pas de file d'attente) — même choix qu'ImportFlotteController /
-     * ImportProduitsController, volume comparable (plafonné à 500 lignes par
+     * ConfirmImportProduitsController, volume comparable (plafonné à 500 lignes par
      * ImportVehiculesMajParser::MAX_LIGNES).
      */
     public function confirm(ImportVehiculesMaj $importVehiculesMaj, ImportVehiculesMajExecutor $executor): RedirectResponse

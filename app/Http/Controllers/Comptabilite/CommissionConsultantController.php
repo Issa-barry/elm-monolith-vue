@@ -411,8 +411,8 @@ class CommissionConsultantController extends Controller
 
     /**
      * Dépenses attribuées directement au prestataire (beneficiaire_type=prestataire) —
-     * mécanisme désormais pleinement fonctionnel (CategorieDepense::PRESTATAIRE, cf.
-     * DepenseController), contrairement au même point resté un no-op documenté côté Commission
+     * mécanisme désormais pleinement fonctionnel (CategorieDepense::PRESTATAIRE, cf. module
+     * Dépenses, App\Http\Controllers\Depenses\StoreDepenseController), contrairement au même point resté un no-op documenté côté Commission
      * sites : une dépense créée avec ce bénéficiaire est réellement déduite ici.
      *
      * @param  array<int, string>  $consultantIds
