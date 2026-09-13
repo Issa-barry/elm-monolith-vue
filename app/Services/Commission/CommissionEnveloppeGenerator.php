@@ -83,7 +83,7 @@ class CommissionEnveloppeGenerator
         // tout type de client, avec ou sans véhicule — cf. docs/commissions.md.
         //
         // Identité du processus résolue par CommissionProcessusDefaults::identiteCodePourVente() —
-        // source UNIQUE partagée avec CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
+        // source UNIQUE partagée avec CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()
         // (chantier « Transfert grossiste », 05/09/2026, cf. docs/grossiste.md) : jamais un second
         // calcul indépendant qui pourrait diverger.
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
@@ -218,7 +218,7 @@ class CommissionEnveloppeGenerator
         // une fois le verrou obtenu, retrouve l'enveloppe déjà créée et s'arrête, au lieu
         // de produire deux tentatives quasi simultanées (cf. incident CMD-230826-004, 2
         // tentatives ERREUR à 1s d'écart). Défense en profondeur : le correctif du double
-        // appel constaté est côté déclencheurs (cf. EncaissementVenteController) — ce
+        // appel constaté est côté déclencheurs (cf. Ventes\StoreEncaissementVenteController) — ce
         // verrou couvre tout futur appel qui dupliquerait malgré tout le déclenchement.
         // Transaction imbriquée (savepoint) sans risque : la génération elle-même garde
         // sa propre transaction interne isolée juste en dessous.
@@ -466,7 +466,20 @@ class CommissionEnveloppeGenerator
         // conditionné à un gérant/une fonction/un rôle). Un site absent laisse simplement la cible
         // hors de $cibles : aucune tentative, aucune erreur — mirroring le comportement "pas de
         // règle configurée = pas de cible" déjà appliqué partout ailleurs.
-        if ($ctx->site) {
+        //
+        // `commissionsActives() === false` (COMM-013, docs/commissions.md) suit EXACTEMENT le même
+        // traitement que "site absent" — jamais un $erreurs (à régulariser). Testé en usage réel le
+        // 13/09/2026 : un premier essai traitait ça comme une erreur de résolution (même famille que
+        // "consultant inactif"/"véhicule sans propriétaire"), ce qui plaçait la tentative en PARTIEL
+        // — or CommandeVente::commissionsPretesPourCloture() n'autorise la clôture QUE sous SUCCES
+        // (cf. CommissionGenerationAttempt), jamais PARTIEL. Un site désactivé étant une
+        // configuration délibérée et PERMANENTE (pas une anomalie à corriger), chaque commande de ce
+        // site restait bloquée "à régulariser" pour toujours, avec un bouton "Relancer la
+        // génération" voué à échouer indéfiniment — contraire à COMM-013 qui garantit que les autres
+        // cibles/la commande fonctionnent normalement. La désactivation d'un site doit se comporter
+        // en tout point comme si ce site ne portait jamais la cible SITE, jamais comme une
+        // résolution ratée.
+        if ($ctx->site && $ctx->site->commissionsActives()) {
             $cibles[] = CommissionCibleType::CODE_SITE;
         }
         // Consultant : toujours candidate, contrairement à Site — elle ne dépend d'aucune donnée
@@ -484,7 +497,22 @@ class CommissionEnveloppeGenerator
             $variante = $ligne->variante;
             $produit = $variante?->produit;
             $categorie = $produit?->categorie;
-            $quantite = (float) $ligne->{$ctx->quantiteField};
+            $quantiteBrute = $ligne->{$ctx->quantiteField};
+
+            // Vente directe (aucun véhicule) : CommandeVenteService::creerFactureDirecte() ne
+            // comporte structurellement aucune étape de chargement, donc quantite_chargee ne sera
+            // JAMAIS renseignée pour ces lignes — se rabat sur quantite_demandee, même convention
+            // que CommandeVenteService::decrementerStockDirect() (quantite_chargee ??
+            // quantite_demandee). Sans ce repli, toute vente directe générait silencieusement une
+            // commission Consultant/Site à 0 GNF quel que soit le barème configuré, contredisant
+            // COMM-008/COMM-009 (cf. docs/commissions.md) qui garantissent ces cibles pour tout
+            // type de client, avec ou sans véhicule. Jamais appliqué à quantite_livree (réception
+            // explicite) : là, null signifie légitimement "pas encore réceptionné" (COMM-004).
+            if ($quantiteBrute === null && $vehicule === null && $ctx->quantiteField === 'quantite_chargee') {
+                $quantiteBrute = $ligne->quantite_demandee;
+            }
+
+            $quantite = (float) $quantiteBrute;
 
             foreach ($cibles as $cibleCode) {
                 $regle = CommissionRegleResolver::resolve(
@@ -582,7 +610,7 @@ class CommissionEnveloppeGenerator
                     // Barème Livreur résolu au niveau CATÉGORIE uniquement (jamais variante/
                     // produit) — cf. CommissionPartageLivraisonCategorieChecker, source unique
                     // partagée avec EquipeLivraisonController::validatePartagesCategorie et les
-                    // garde-fous préventifs à la création (CommandeVenteController,
+                    // garde-fous préventifs à la création (CommandeVenteFormBuilder,
                     // TransfertLogistiqueController), pour garantir que "enveloppe" et "partage
                     // manquant" signifient toujours la même chose partout. Une éventuelle règle
                     // plus spécifique (variante/produit) sur une ligne de cette catégorie n'est

@@ -25,6 +25,7 @@ class StoreSiteController extends Controller
             'ville' => 'nullable|string|max:100',
             'quartier' => 'nullable|string|max:100',
             'telephone' => 'nullable|string|max:50',
+            'commissions_active' => 'sometimes|boolean',
         ], SiteFormSupport::messages());
 
         $data = SiteFormSupport::normalizeStrings($data);

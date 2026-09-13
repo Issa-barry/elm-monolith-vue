@@ -31,14 +31,14 @@ même principe de barème dynamique au transfert logistique interne.
     `livreur_id` sur `CommandeVente`, le livreur est entièrement dérivé de l'équipe du véhicule.
 
   Toute violation renvoie une `ValidationException` (422) sur `nature_operation` ou `vehicule_id`
-  selon le cas (`CommandeVenteController::ensureNatureOperationCoherente()`), appelée à la fois
+  selon le cas (`CommandeVenteFormBuilder::ensureNatureOperationCoherente()`), appelée à la fois
   depuis `store()` et `update()` — deux points d'entrée indépendants, aucun ne suppose que l'autre a
   déjà protégé la donnée. `vente_standard` n'est soumise à aucune de ces exigences.
 
   Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
   client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
   véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques
-  (prop `vehicules_distribution`, résolue par `CommandeVenteController::vehiculesLogistiques()`) ;
+  (prop `vehicules_distribution`, résolue par `CommandeVenteFormBuilder::vehiculesLogistiques()`) ;
   les autres types voient la liste vente-only historique (`vehicules`, inchangée). Un véhicule déjà
   sélectionné qui quitte le pool courant (changement de type de client, ou retour arrière) est
   désélectionné automatiquement (`useDistributionVehiculePool.ts`) plutôt que laissé affiché mais
@@ -60,7 +60,7 @@ même principe de barème dynamique au transfert logistique interne.
     quantités par ligne dans `quantite_livree` — colonne préexistante mais jamais écrite avant
     cette révision, déjà lue par `CashbackService::quantiteEligible()`) → LIVREE. Un encaissement
     reçu avant la réception ne déclenche jamais LIVREE pour ces commandes
-    (`EncaissementVenteController` le vérifie explicitement) — statut et paiement sont deux axes
+    (`Ventes\StoreEncaissementVenteController` le vérifie explicitement) — statut et paiement sont deux axes
     indépendants pour elles, contrairement à la vente standard où le premier encaissement fait les
     deux à la fois.
   - Écart de réception vs chargement : décision produit du 30/08/2026, la facture est
@@ -103,7 +103,7 @@ même principe de barème dynamique au transfert logistique interne.
     chaque NOUVELLE distribution continue de générer une `CommissionEnveloppe` sous ce code, au
     même titre qu'avant cette révision.
   - Le garde-fou préventif à la création
-    (`CommandeVenteController::ensurePartageLivraisonCategorieConfigure()`) applique exactement la
+    (`CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()`) applique exactement la
     même résolution identité → barème que le générateur réel
     (`CommissionEnveloppeGenerator::genererPourCommandeVente()`), jamais une résolution divergente
     qui validerait ou exigerait un partage différent de celui réellement consommé.
@@ -164,7 +164,7 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
 | `App\Services\Commission\CommissionProcessusDefaults` | Valeurs par défaut (libellé/déclencheur/ancrage) par code processus — évite la duplication entre le générateur, le contrôleur de paramétrage et les services équipe. |
 | `App\Services\Commission\CommissionPartageLivraisonCategorieChecker` | Source unique de la résolution "enveloppe équipe_livraison > 0 + partage actif ?" — partagée par le générateur, la validation de saisie de l'équipe et les garde-fous préventifs à la création (voir ci-dessous). |
 | Paramètres > Commissions (`Settings\CommissionRegleController`) | Un seul écran, 2 onglets (`?processus=vente\|logistique_transfert`) — `distribution_client` reste un processus réel côté génération/reporting mais sans onglet dédié, cf. COMM-005 (repli automatique du barème sur `logistique_transfert` tant qu'il n'a pas sa propre configuration). |
-| `Commercial > Ventes` / `Commercial > Distribution` | Même liste (`CommandeVenteController::index()`), filtrée par nom de route (`ventes.index` / `distributions.index`), jamais un paramètre modifiable côté client. |
+| `Commercial > Ventes` / `Commercial > Distribution` | Même liste (`Ventes\IndexCommandeVenteController`), filtrée par nom de route (`ventes.index` / `distributions.index`), jamais un paramètre modifiable côté client. |
 
 ## Historique / héritage
 
@@ -308,7 +308,7 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   transfert_migre_avec_bareme_mais_sans_partage_equipe_est_marque_a_regulariser_jamais_zero_silencieux`.
 - **Garde-fou préventif à la création** (30/08/2026, cf. incident CMD-300826-007 : commande
   facturée et payée le jour même de l'ajout de `processus_id` ci-dessus, bloquée « à régulariser »
-  faute de partage migré pour `distribution_client`) — `CommandeVenteController::store()` et
+  faute de partage migré pour `distribution_client`) — `Ventes\StoreCommandeVenteController` et
   `TransfertLogistiqueController::store()` refusent désormais la création (`ValidationException`
   sur `vehicule_id`, jamais un simple avertissement) si l'équipe du véhicule sélectionné n'a aucun
   partage actif pour une catégorie vendue/transférée dont l'enveloppe équipe_livraison est positive
@@ -609,7 +609,7 @@ décisions AMOA antérieures au chantier Grossiste.
     cible a réussi et au moins une autre a échoué ; `ERREUR` reste réservé au cas où AUCUNE cible
     n'a pu être générée ; `SUCCES` couvre à la fois « tout généré » et « aucun barème nulle part »
     (silence légitime, décision AMOA #4 inchangée sur ce point précis).
-  - `CommandeVenteController::getCommissionGenerationStatut()` expose désormais `ERREUR` et
+  - `CommandeVenteCommissionStatus::getCommissionGenerationStatut()` expose désormais `ERREUR` et
     `PARTIEL` (plus seulement `ERREUR`) et ne filtre plus sur `commission_eligible_snapshot` — une
     commande sans véhicule peut avoir une vraie tentative à exposer. `relancerCommissions()`
     distingue les deux dans le message flash.
@@ -630,6 +630,40 @@ décisions AMOA antérieures au chantier Grossiste.
   Une éventuelle règle « Livreur payable dès réception, Consultant payable après encaissement
   client » resterait à concevoir séparément.
 
+## Correctif — commission Consultant/Site à 0 GNF sur toute vente directe (13/09/2026)
+
+Incident découvert en usage (écran Comptabilité > Commissions > Consultants, fiche d'un
+consultant : deux commandes affichaient 0 GNF alors qu'un barème actif existait).
+
+- **Cause** — `CommissionEnveloppeGenerator::genererDepuisContexte()` calcule le montant
+  PAR_UNITE_VENDUE comme `quantite × regle->montant`, où `quantite` est lue directement sur
+  `quantite_chargee` pour toute commande `vente_standard` (cf. `contexteDepuisCommandeVente()`).
+  Or une **vente directe** (`CommandeVenteService::creerFactureDirecte()`, commande créée sans
+  `vehicule_id` — cf. `StoreCommandeVenteController::store()`, qui bascule sur ce chemin dès que
+  `vehicule_id` est vide, pour **tout type de client**, pas seulement Grossiste) ne comporte
+  **structurellement aucune étape de chargement** : `quantite_chargee` y reste `null` à vie. Résultat :
+  toute vente directe généraient un montant Consultant/Site systématiquement nul, quel que soit le
+  barème configuré — contredisant COMM-008/COMM-009 ci-dessus, qui garantissent ces deux cibles
+  pour tout type de client, avec ou sans véhicule.
+- **Correctif** — repli explicite sur `quantite_demandee` quand `quantite_chargee` est `null` ET
+  qu'aucun véhicule n'est présent (même convention que `CommandeVenteService::
+  decrementerStockDirect()`, qui applique déjà `quantite_chargee ?? quantite_demandee` pour le
+  décrément de stock). Jamais appliqué à `quantite_livree` (réception explicite) : là, `null`
+  signifie légitimement « pas encore réceptionné » (COMM-004) — un repli y créerait une commission
+  prématurée sur une quantité pas encore acceptée par le client.
+- **Régularisation des données existantes** — `commissions:regulariser-ventes-directes`
+  (`--organization=*`, `--apply`) recalcule les enveloppes déjà générées à 0 GNF avant ce correctif
+  (cible Consultant/Site, `montant_total = 0`, `statut = CREEE`, commande sans véhicule), en
+  réutilisant le `CommissionRegle` déjà résolu et stocké à la génération — jamais une nouvelle
+  résolution qui pourrait diverger si le barème a changé depuis. Ignore explicitement tout 0 GNF
+  dont la commande a un véhicule (autre cause, hors périmètre — cf. VTE-080926-001 en local, laissé
+  en l'état) et tout 0 GNF réellement légitime (barème à 0). Exécutée une fois en environnement de
+  développement le 13/09/2026 (4 enveloppes régularisées).
+- Tests : `CommandeVenteGrossisteCommissionTest` (assertions de montant ajoutées aux scénarios
+  Grossiste + Enlèvement et Externe vente directe, jusqu'ici seulement vérifiés sur la présence de
+  l'enveloppe, jamais son montant) et `CommissionsRegulariserVentesDirectesCommandTest` (dry-run,
+  application, non-régression véhicule présent, non-régression barème réellement nul).
+
 ## Transfert grossiste — troisième processus de commission (05/09/2026)
 
 Corrige COMM-008 : un Grossiste livré par un véhicule de flotte n'est PAS un « transfert
@@ -643,7 +677,7 @@ COMMISSION qui change.
   (notamment `CODE_SITE`, jamais commissionné sur un transfert logistique interne, cf. barème
   configuré pour ce processus). Routage (`CommissionProcessusDefaults::identiteCodePourVente()`,
   source unique partagée par `CommissionEnveloppeGenerator::genererPourCommandeVente()` ET
-  `CommandeVenteController::ensurePartageLivraisonCategorieConfigure()`) :
+  `CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()`) :
   - `nature_operation = distribution_client` → `CODE_DISTRIBUTION_CLIENT`, priorité, inchangé.
   - `client.type = GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` → `CODE_TRANSFERT_GROSSISTE`.
   - **Grossiste + Enlèvement reste sur `CODE_VENTE`**, décision produit explicite du 05/09/2026 :
@@ -661,7 +695,7 @@ COMMISSION qui change.
   produit explicite : les bénéficiaires étant différents de `logistique_transfert`, hériter de son
   barème serait incorrect, pas seulement provisoire). Pour éviter qu'une organisation n'ayant encore
   rien configuré ne voie sa première livraison Grossiste générer silencieusement 0 commission sur
-  toutes les cibles, `CommandeVenteController::ensureTransfertGrossisteBaremeConfigure()` **bloque
+  toutes les cibles, `CommandeVenteFormBuilder::ensureTransfertGrossisteBaremeConfigure()` **bloque
   la création** de la commande (`ValidationException` sur `vehicule_id`) tant qu'aucune
   `CommissionRegle` active n'existe pour ce processus — contrôle volontairement grossier (« au
   moins une règle existe-t-elle ? »), jamais un contrôle par catégorie/cible : un barème
@@ -805,3 +839,66 @@ organisation : un site peut désormais s'en écarter individuellement.
 - Tests : `tests/Feature/CommissionTriggerLogistiqueTest.php` (section « Dérogation par site »),
   `tests/Feature/Settings/LogistiqueParametrageTest.php` (exposition des sites, `updateSite()`,
   isolation multi-tenant).
+
+## Activation des commissions par site — cible SITE uniquement (ajouté le 13/09/2026)
+
+Un site peut désormais être explicitement exclu de la génération de commission, sans passer par
+son `statut` opérationnel (active/inactive/suspendue, qui régit d'autres flux et n'était jusqu'ici
+câblé nulle part côté commission).
+
+- **COMM-013** — Nouvelle colonne `sites.commissions_active` (booléen **NON nullable**, défaut
+  `true` — contrairement à `approbation_reception_logistique_obligatoire`, ce flag n'hérite d'aucun
+  réglage organisation, c'est un interrupteur direct par site, migration
+  `2026_09_13_180000_add_commissions_active_to_sites_table`). Résolu par
+  `Site::commissionsActives()`.
+  - **Portée volontairement limitée à la cible `CommissionCibleType::CODE_SITE`** (décision produit
+    du 13/09/2026) : quand `commissions_active = false`, seule la part du site lui-même n'est plus
+    générée. Les cibles `CODE_EQUIPE_LIVRAISON`/`CODE_PROPRIETAIRE`/`CODE_CONSULTANT` de la même
+    opération continuent de générer normalement — ce réglage ne prive jamais un livreur, un
+    propriétaire de véhicule ou un consultant d'une commission à laquelle il a droit pour son
+    propre travail, indépendant du site où l'opération a eu lieu.
+  - **Point de contrôle unique** : `CommissionEnveloppeGenerator::genererDepuisContexte()`, au
+    moment de la construction de la liste des cibles candidates (`$cibles`) — `CODE_SITE` n'est
+    ajoutée que si `$ctx->site && $ctx->site->commissionsActives()`. Un site désactivé est donc
+    traité EXACTEMENT comme un site absent : la cible n'est jamais tentée, jamais un `$erreurs`,
+    jamais `CommissionGenerationStatut::PARTIEL`. Aucun autre point de génération n'existe dans le
+    code (moteur unique, cf. tête de ce document) — impossible à contourner via un contrôleur/API.
+  - **Correctif (13/09/2026, même jour, découvert en test manuel)** — la première version plaçait
+    ce contrôle DANS le bloc `CODE_SITE`, comme une résolution ratée (`$erreurs[] = "commissions
+    désactivées..."; continue`), sur le même modèle que le consultant inactif (COMM-010). Erreur de
+    conception : `CommandeVente::commissionsPretesPourCloture()` n'autorise la clôture que sous
+    `CommissionGenerationStatut::SUCCES`, jamais `PARTIEL` — un site désactivé étant une
+    configuration délibérée et **permanente** (contrairement à un consultant inactif, anomalie
+    ponctuelle destinée à être corrigée), chaque commande de ce site restait indéfiniment bloquée
+    « à régulariser », avec un bouton « Relancer la génération » voué à échouer pour toujours tant
+    que le site restait désactivé. Corrigé en excluant `CODE_SITE` de `$cibles` dès le départ plutôt
+    qu'en la faisant échouer — même traitement que « site absent », qui suivait déjà cette
+    mécanique. Aucune commande affectée par le bug n'a besoin de correction manuelle : un nouveau
+    « Relancer la génération » après ce correctif régularise normalement (nouvelle tentative
+    `SUCCES`, plus aucune part SITE, clôture débloquée).
+  - **S'applique à tous les processus qui commissionnent la cible SITE** (Vente, Transfert
+    grossiste, Distribution client) sans duplication de logique, puisqu'ils partagent tous le même
+    `genererDepuisContexte()`. Sans effet sur un transfert logistique interne, qui ne commissionne
+    déjà jamais la cible SITE (COMM-011, inchangé).
+  - **Non-rétroactif** : une commission déjà générée avant la désactivation n'est jamais supprimée
+    ni annulée — le réglage n'est lu qu'au moment de la génération, jamais après coup (même
+    principe que la dérogation d'approbation logistique ci-dessus).
+  - **Réactivation** : un site réactivé (`commissions_active = true`) recommence à générer sa part
+    dès la prochaine opération déclenchante — rien à rejouer manuellement pour les opérations
+    passées pendant qu'il était désactivé (elles restent définitivement sans part SITE, aucune
+    régularisation automatique).
+  - **UI** : champ sur la fiche Site (`Sites/Create.vue`, `Sites/Edit.vue` via
+    `SiteForm.vue` — composant `Switch`, même composant que la dérogation impayés véhicule/client),
+    affiché en lecture sur `Sites/Show.vue` (ligne « Commissions », `StatusDot`). Choisi directement
+    sur la fiche Site (pattern véhicule/client), à la différence de
+    la dérogation d'approbation logistique ci-dessus qui centralise ses réglages dans `Paramètres >
+    Logistique` — ici il n'y a pas de réglage organisation par défaut à faire apparaître en regard,
+    donc pas la même justification à un tableau récapitulatif centralisé.
+  - Validation : `commissions_active` optionnel (`sometimes|boolean`) sur `StoreSiteController`/
+    `UpdateSiteController` — omis, le site créé garde le défaut `true` (colonne), et un update sans
+    ce champ laisse la valeur existante inchangée.
+- Tests : `tests/Feature/CommissionEnveloppeGeneratorSiteTest.php` (site désactivé → aucune
+  enveloppe SITE générée, autres cibles inchangées ; réactivation ; non-rétroactivité sur une
+  enveloppe déjà générée), `tests/Feature/SiteTest.php` (persistance du champ via
+  `StoreSiteController`/`UpdateSiteController`), `tests/e2e/site-flow.spec.ts` (toggle visible et
+  fonctionnel sur le formulaire).

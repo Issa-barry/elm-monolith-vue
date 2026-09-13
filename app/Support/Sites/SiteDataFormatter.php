@@ -21,6 +21,7 @@ final class SiteDataFormatter
             'type_label' => $s->type_label,
             'statut' => $s->statut?->value,
             'statut_label' => $s->statut_label,
+            'commissions_active' => $s->commissions_active,
             'localisation' => $s->localisation,
             'pays' => $s->pays,
             'ville' => $s->ville,

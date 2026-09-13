@@ -38,6 +38,7 @@ final class SiteFormSupport
             'type.required' => 'Le type de site est obligatoire.',
             'type.in' => 'Type de site invalide.',
             'statut.in' => 'Statut invalide.',
+            'commissions_active.boolean' => 'La valeur du réglage Commissions est invalide.',
             'localisation.required' => "L'adresse du site est obligatoire.",
             'parent_id.exists' => 'Le site parent sélectionné est introuvable.',
         ];

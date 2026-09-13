@@ -25,6 +25,7 @@ class Site extends Model
         'statut',
         'is_siege_principal',
         'approbation_reception_logistique_obligatoire',
+        'commissions_active',
         'localisation',
         'pays',
         'ville',
@@ -44,6 +45,7 @@ class Site extends Model
             'statut' => SiteStatut::class,
             'is_siege_principal' => 'boolean',
             'approbation_reception_logistique_obligatoire' => 'boolean',
+            'commissions_active' => 'boolean',
         ];
     }
 
@@ -187,6 +189,18 @@ class Site extends Model
     public function isActive(): bool
     {
         return $this->statut === SiteStatut::ACTIVE;
+    }
+
+    /**
+     * Garde-fou métier indépendant du statut opérationnel : quand `false`, la cible de commission
+     * `CommissionCibleType::CODE_SITE` n'est plus générée pour ce site (cf.
+     * CommissionEnveloppeGenerator::genererDepuisContexte(), docs/commissions.md COMM-013).
+     * N'affecte JAMAIS les autres bénéficiaires (équipe de livraison, propriétaire, consultant) —
+     * décision produit du 13/09/2026, scope volontairement limité à la seule part du site.
+     */
+    public function commissionsActives(): bool
+    {
+        return (bool) $this->commissions_active;
     }
 
     /**
