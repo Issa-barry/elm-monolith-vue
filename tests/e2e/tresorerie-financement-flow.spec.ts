@@ -202,7 +202,7 @@ test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {
     // Le support de destination n'est plus demandé à la création : le
     // destinataire le choisit au moment de « Confirmer réception ».
     await page.locator('select').nth(2).selectOption({ label: 'Kouria' }); // site destination
-    await page.locator('input[type="number"]').fill('150000');
+    await page.locator('input[inputmode="numeric"]').fill('150000');
     await page.getByRole('button', { name: /créer le brouillon/i }).click();
 
     await expect(page).toHaveURL(/mouvements$/, { timeout: 10_000 });
