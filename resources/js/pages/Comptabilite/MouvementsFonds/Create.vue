@@ -127,7 +127,9 @@ function submit() {
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-sm font-medium">Site de destination</label>
+                    <label class="text-sm font-medium"
+                        >Site de destination</label
+                    >
                     <select
                         v-model="form.site_destination_id"
                         class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-1/2 sm:pr-8"
@@ -149,8 +151,8 @@ function submit() {
                     </p>
                     <p class="text-xs text-muted-foreground">
                         Le support de trésorerie de destination (caisse,
-                        banque…) sera choisi par le destinataire au moment de
-                        la confirmation de réception.
+                        banque…) sera choisi par le destinataire au moment de la
+                        confirmation de réception.
                     </p>
                 </div>
 

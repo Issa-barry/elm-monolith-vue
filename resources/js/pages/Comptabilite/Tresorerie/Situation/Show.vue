@@ -101,8 +101,8 @@ const journalHref = `/backoffice/comptabilite/journal?site_ids[]=${props.site.id
                                 colspan="3"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
-                                Aucun support de trésorerie configuré pour
-                                cette agence.
+                                Aucun support de trésorerie configuré pour cette
+                                agence.
                             </td>
                         </tr>
                     </tbody>

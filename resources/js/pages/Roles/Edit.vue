@@ -175,14 +175,20 @@ type ColState = 'all' | 'partial' | 'none';
  * `resourceList` scope la colonne à un domaine métier (matrice éclatée en une mini-matrice par
  * carte) — par défaut l'ensemble des ressources, pour un usage hors contexte de domaine.
  */
-function columnState(action: string, resourceList: string[] = props.resources): ColState {
+function columnState(
+    action: string,
+    resourceList: string[] = props.resources,
+): ColState {
     const checked = resourceList.filter((r) => isChecked(r, action)).length;
     if (checked === 0) return 'none';
     if (checked === resourceList.length) return 'all';
     return 'partial';
 }
 
-function toggleColumn(action: string, resourceList: string[] = props.resources) {
+function toggleColumn(
+    action: string,
+    resourceList: string[] = props.resources,
+) {
     if (readOnly.value) return;
     const state = columnState(action, resourceList);
     const next = new Set(activePermissions.value);
@@ -230,7 +236,9 @@ function standaloneGroups(domain: DomainDef): [string, string[]][] {
 
 function domainPermKeys(domain: DomainDef): string[] {
     return [
-        ...domain.resources.flatMap((r) => props.actions.map((a) => permKey(r, a))),
+        ...domain.resources.flatMap((r) =>
+            props.actions.map((a) => permKey(r, a)),
+        ),
         ...Object.values(domain.standalone).flat(),
     ];
 }
@@ -293,7 +301,9 @@ function save() {
             // une permission pas encore seedée en base) — jusqu'ici totalement silencieuses :
             // aucune permission n'était persistée et rien ne le signalait à l'utilisateur, qui
             // pouvait croire l'enregistrement réussi.
-            const permissionError = Object.entries(errors).find(([key]) => key.startsWith('permissions'))?.[1];
+            const permissionError = Object.entries(errors).find(([key]) =>
+                key.startsWith('permissions'),
+            )?.[1];
             if (permissionError) {
                 toast.add({
                     severity: 'error',
@@ -548,7 +558,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                     </div>
 
                     <!-- Mini-matrice CRUD du domaine -->
-                    <div v-if="domain.resources.length > 0" class="overflow-x-auto">
+                    <div
+                        v-if="domain.resources.length > 0"
+                        class="overflow-x-auto"
+                    >
                         <table class="w-full">
                             <thead>
                                 <tr class="border-b bg-muted/20">
@@ -652,9 +665,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                     rowState(resource) ===
                                                     'none'
                                                         ? 'border-border bg-background hover:border-primary/40'
-                                                        : rowState(
-                                                                resource,
-                                                            ) === 'all'
+                                                        : rowState(resource) ===
+                                                            'all'
                                                           ? 'border-primary bg-primary text-primary-foreground'
                                                           : 'border-primary/60 bg-primary/10 hover:border-primary',
                                                 ]"
@@ -678,9 +690,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                             </button>
                                             <span class="text-sm font-medium">
                                                 {{
-                                                    resourceLabels[
-                                                        resource
-                                                    ] ?? resource
+                                                    resourceLabels[resource] ??
+                                                    resource
                                                 }}
                                             </span>
                                         </div>
@@ -742,7 +753,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                         </p>
                         <div class="space-y-4">
                             <div
-                                v-for="[groupLabel, keys] in standaloneGroups(domain)"
+                                v-for="[groupLabel, keys] in standaloneGroups(
+                                    domain,
+                                )"
                                 :key="groupLabel"
                             >
                                 <p
@@ -758,7 +771,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         v-for="key in keys"
                                         :key="key"
                                         class="flex items-start gap-2"
-                                        :class="readOnly ? '' : 'cursor-pointer'"
+                                        :class="
+                                            readOnly ? '' : 'cursor-pointer'
+                                        "
                                     >
                                         <button
                                             type="button"

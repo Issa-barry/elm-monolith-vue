@@ -159,7 +159,11 @@ function detailHref(row: Row): string {
                                 :key="t.value"
                                 class="px-4 py-3 text-right tabular-nums"
                             >
-                                {{ formatGNF(total_general.par_type[t.value] ?? 0) }}
+                                {{
+                                    formatGNF(
+                                        total_general.par_type[t.value] ?? 0,
+                                    )
+                                }}
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(total_general.total) }}

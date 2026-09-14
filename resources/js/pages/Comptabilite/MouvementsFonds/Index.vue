@@ -398,8 +398,8 @@ function confirmerMotif() {
                         </option>
                     </select>
                     <p class="text-xs text-muted-foreground">
-                        Indiquez dans quelle caisse, banque ou wallet les
-                        fonds ont réellement été reçus à
+                        Indiquez dans quelle caisse, banque ou wallet les fonds
+                        ont réellement été reçus à
                         {{ receptionCible?.site_destination }}.
                     </p>
                     <p
