@@ -24,6 +24,7 @@ use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionProcessusFilter;
+use App\Support\Commission\CommissionSourceSiteFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -109,14 +110,12 @@ class CommissionVenteController extends Controller
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if ($isAdmin && ! empty($filtreSiteIds)) {
-            // enveloppe.source est polymorphe (CommandeVente OU TransfertLogistique) : les deux
-            // tables n'ont pas de colonne `site_id` commune (TransfertLogistique n'a que
-            // site_source_id/site_destination_id). On passe par la relation `site()`, alias
-            // polymorphisme-safe déjà utilisé par l'eager-load ci-dessus et par
-            // CommissionSiteController — jamais par le nom de colonne brut du modèle source.
-            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $filtreSiteIds));
+            // Cf. docblock de CommissionSourceSiteFilter : jamais whereHas('enveloppe.source.site',
+            // ...) en chaîne à points, qui plante dès que CommandeVente ET TransfertLogistique
+            // coexistent en base.
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
         } elseif (! $isAdmin && ! empty($siteIds)) {
-            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $siteIds));
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $siteIds));
         }
 
         $allParts = $query->get();
@@ -783,9 +782,8 @@ class CommissionVenteController extends Controller
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if (! empty($filtreSiteIds)) {
-            // Cf. commentaire équivalent dans index() : passer par `site()`, pas par la colonne
-            // `site_id` brute, absente de TransfertLogistique.
-            $query->whereHas('enveloppe.source.site', fn ($q) => $q->whereIn('id', $filtreSiteIds));
+            // Cf. docblock de CommissionSourceSiteFilter.
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
         }
 
         return $query->get();
