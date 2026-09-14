@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Http\Controllers\UserController;
 use App\Models\Employe;
 use App\Models\User;
+use App\Support\User\UserFormOptions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -61,6 +61,6 @@ class MatriculeService
 
     public static function isStaffRole(string $role): bool
     {
-        return in_array($role, UserController::STAFF_ROLES, true);
+        return in_array($role, UserFormOptions::STAFF_ROLES, true);
     }
 }

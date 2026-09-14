@@ -30,7 +30,7 @@ class SmsOtpChannelTest extends TestCase
                 return $this->configured;
             }
 
-            public function send(string $phoneNumber, string $message): void
+            public function send(string $phoneNumber, string $message): ?string
             {
                 throw new \RuntimeException('Ne doit jamais être appelé directement par SmsOtpChannel::send().');
             }

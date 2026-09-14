@@ -22,10 +22,11 @@ class EncaissementVenteTest extends TestCase
     private function utilisateur(Organization $org): User
     {
         Permission::firstOrCreate(['name' => 'ventes.update', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'factures.encaisser', 'guard_name' => 'web']);
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
-        $user->givePermissionTo('ventes.update');
+        $user->givePermissionTo(['ventes.update', 'factures.encaisser']);
 
         $site = Site::create([
             'organization_id' => $org->id,
@@ -144,6 +145,68 @@ class EncaissementVenteTest extends TestCase
         $response->assertStatus(422);
     }
 
+    // ── Autorisation : permission dédiée factures.encaisser (2026-09-13) ──────
+    // can_encaisser/StoreEncaissementVenteController vérifiaient jusqu'ici ventes.update — la
+    // route n'avait alors AUCUN contrôle d'autorisation propre. La permission dédiée
+    // factures.encaisser doit désormais être totalement indépendante de ventes.update.
+
+    public function test_encaissement_refuse_sans_permission_dediee(): void
+    {
+        ['facture' => $facture, 'org' => $org] = $this->creerContexte();
+
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
+        $user->givePermissionTo('ventes.update');
+
+        $response = $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ]
+        );
+
+        $response->assertStatus(403);
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_encaissement_autorise_par_sa_seule_permission_dediee(): void
+    {
+        ['facture' => $facture, 'org' => $org] = $this->creerContexte();
+
+        Permission::firstOrCreate(['name' => 'factures.encaisser', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        // Rôle attaché uniquement pour satisfaire EnsureIsStaffAccount::hasBackofficeAccess()
+        // (middleware 'staff') — ce rôle vide n'apporte aucune permission, la capacité
+        // d'encaisser vient exclusivement du don direct ci-dessous.
+        $user->assignRole('admin_entreprise');
+        $user->givePermissionTo('factures.encaisser');
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test 2',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ]
+        )->assertRedirect();
+
+        $this->assertDatabaseHas('encaissements_ventes', [
+            'facture_vente_id' => $facture->id,
+            'montant' => 1000,
+        ]);
+    }
+
     public function test_encaissement_sans_date_utilise_date_du_jour(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
@@ -162,7 +225,39 @@ class EncaissementVenteTest extends TestCase
         $this->assertEquals(now()->toDateString(), $enc->date_encaissement->toDateString());
     }
 
+    public function test_store_returns_403_for_facture_from_other_organization(): void
+    {
+        ['facture' => $facture] = $this->creerContexte();
+        $autreUser = $this->utilisateur(Organization::factory()->create());
+
+        $this->actingAs($autreUser)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ]
+        )->assertStatus(403);
+
+        $this->assertSame(0, $facture->fresh()->encaissements()->count());
+    }
+
     // ── Encaissement destroy ──────────────────────────────────────────────────
+
+    public function test_destroy_returns_403_for_encaissement_from_other_organization(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $enc = $facture->encaissements()->create([
+            'montant' => 1000, 'date_encaissement' => now()->toDateString(), 'mode_paiement' => 'especes',
+        ]);
+        $autreUser = $this->utilisateur(Organization::factory()->create());
+
+        $this->actingAs($autreUser)
+            ->delete(route('encaissements.destroy', $enc))
+            ->assertStatus(403);
+
+        $this->assertNotNull($enc->fresh());
+    }
 
     public function test_suppression_encaissement_recalcule_statut_facture(): void
     {

@@ -42,7 +42,7 @@ async function setApprobationObligatoire(
     );
 
     await page.getByRole('button', { name: /enregistrer/i }).last().click();
-    // Flash backend non accentué (cf. LogistiqueParametrageController::update()) — même
+    // Flash backend non accentué (cf. UpdateLogistiqueParametrageController::__invoke()) — même
     // pattern que setImpayesControle()/setChargementCompletRequired() sur les autres écrans
     // de Paramètres > Ventes.
     await expect(page.locator('body')).toContainText(/mis a jour/i, {

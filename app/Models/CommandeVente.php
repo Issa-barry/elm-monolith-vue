@@ -80,7 +80,7 @@ class CommandeVente extends Model
             if (empty($c->reference)) {
                 // Repli sur VENTE_STANDARD (même valeur que le défaut colonne) si nature_operation
                 // n'a pas été renseigné avant la création — jamais un null pointer ici : les deux
-                // points d'entrée réels (CommandeVenteController::store(), PdvCheckoutService::
+                // points d'entrée réels (Ventes\StoreCommandeVenteController, PdvCheckoutService::
                 // checkout()) le renseignent toujours explicitement, ce repli ne sert qu'aux
                 // créations directes (tests, scripts) qui s'en remettent au défaut colonne.
                 $prefixe = ($c->nature_operation ?? NatureOperation::VENTE_STANDARD)->prefixeReference();

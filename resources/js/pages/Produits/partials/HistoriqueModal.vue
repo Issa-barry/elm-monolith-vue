@@ -51,7 +51,7 @@ const props = defineProps<{
     loading?: boolean;
     title?: string;
     /** Motifs réellement présents dans les mouvements chargés — jamais de valeur
-     * inventée côté front, cf. ProduitController::historique()/show(). */
+     * inventée côté front, cf. HistoriqueProduitController/ShowProduitController. */
     motifOptions?: MotifOption[];
 }>();
 

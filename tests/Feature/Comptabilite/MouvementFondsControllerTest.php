@@ -55,7 +55,6 @@ class MouvementFondsControllerTest extends TestCase
             'site_origine_id' => $this->siege->id,
             'site_destination_id' => $this->agence->id,
             'compte_tresorerie_origine_id' => $this->caisseSiege->id,
-            'compte_tresorerie_destination_id' => $this->caisseAgence->id,
             'montant' => 250_000,
         ];
     }
@@ -91,16 +90,33 @@ class MouvementFondsControllerTest extends TestCase
     {
         $this->actingAs($this->user)->post(route('comptabilite.tresorerie.mouvements.store'), $this->storePayload());
         $mouvement = MouvementFonds::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertNull($mouvement->compte_tresorerie_destination_id);
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.tresorerie.mouvements.envoyer', $mouvement))
             ->assertRedirect();
         $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->fresh()->statut);
 
+        // Le support de destination est choisi ici, à la réception — pas à la création.
         $this->actingAs($this->user)
-            ->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement))
+            ->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement), [
+                'compte_tresorerie_destination_id' => $this->caisseAgence->id,
+            ])
             ->assertRedirect();
         $this->assertSame(StatutMouvementFonds::RECU, $mouvement->fresh()->statut);
+        $this->assertSame($this->caisseAgence->id, $mouvement->fresh()->compte_tresorerie_destination_id);
+    }
+
+    public function test_recevoir_requiert_un_support_de_tresorerie(): void
+    {
+        $this->actingAs($this->user)->post(route('comptabilite.tresorerie.mouvements.store'), $this->storePayload());
+        $mouvement = MouvementFonds::where('organization_id', $this->org->id)->firstOrFail();
+        $this->actingAs($this->user)->post(route('comptabilite.tresorerie.mouvements.envoyer', $mouvement));
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement), [])
+            ->assertSessionHasErrors('compte_tresorerie_destination_id');
+        $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->fresh()->statut);
     }
 
     public function test_double_confirmation_envoyer_echoue_la_deuxieme_fois(): void

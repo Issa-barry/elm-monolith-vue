@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
-import PwaInstallPrompt from '@/components/PwaInstallPrompt.vue';
+import PwaGate from '@/components/PwaGate.vue';
 import { home } from '@/routes';
 import { Link } from '@inertiajs/vue3';
 
@@ -47,5 +47,5 @@ defineProps<{
             </div>
         </div>
     </div>
-    <PwaInstallPrompt />
+    <PwaGate />
 </template>

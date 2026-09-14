@@ -53,32 +53,39 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
         });
     }
 
+    // "Gestion" agrège plusieurs permissions indépendantes — Communications
+    // (communications.manage) est une permission DÉDIÉE, distincte de
+    // parametres.update (cf. rapport notifications de commande, 07/09/2026) :
+    // un compte qui n'a que communications.manage doit quand même voir ce lien,
+    // même sans parametres.update.
+    const gestionItems: NavItem[] = [];
     if (can('parametres.update')) {
-        groups.push(
-            {
-                title: 'Gestion',
-                items: [
-                    { title: 'Produits', href: '/settings/produits' },
-                    {
-                        title: 'Validation des dépenses',
-                        href: '/settings/depenses',
-                    },
-                    { title: 'Ventes', href: '/settings/ventes' },
-                    { title: 'Logistique', href: '/settings/logistique' },
-                    { title: 'Commissions', href: '/settings/commissions' },
-                    { title: 'Applications', href: '/settings/modules' },
-                ],
-            },
-            {
-                title: 'Administration',
-                items: [
-                    {
-                        title: 'Imports et modèles',
-                        href: editParametres().url,
-                    },
-                ],
-            },
+        gestionItems.push(
+            { title: 'Produits', href: '/settings/produits' },
+            { title: 'Validation des dépenses', href: '/settings/depenses' },
+            { title: 'Ventes', href: '/settings/ventes' },
+            { title: 'Logistique', href: '/settings/logistique' },
+            { title: 'Commissions', href: '/settings/commissions' },
+            { title: 'Applications', href: '/settings/modules' },
         );
+    }
+    if (can('communications.manage')) {
+        gestionItems.push({
+            title: 'Communications',
+            href: '/settings/communications',
+        });
+    }
+    if (gestionItems.length > 0) {
+        groups.push({ title: 'Gestion', items: gestionItems });
+    }
+
+    if (can('parametres.update')) {
+        groups.push({
+            title: 'Administration',
+            items: [
+                { title: 'Imports et modèles', href: editParametres().url },
+            ],
+        });
     }
 
     return groups;

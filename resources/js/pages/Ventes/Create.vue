@@ -173,7 +173,7 @@ const props = defineProps<{
     // Pool séparé : uniquement des véhicules autorisés pour l'usage logistique
     // (Vehicule::livraison_logistique = true) — jamais fusionné à `vehicules` ci-dessus, qui ne
     // contient que des véhicules autorisés pour la vente (cf. règle métier distribution client
-    // du 31/08/2026, CommandeVenteController::vehiculesLogistiques()).
+    // du 31/08/2026, CommandeVenteFormBuilder::vehiculesLogistiques()).
     vehicules_distribution: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
@@ -202,7 +202,7 @@ const form = useForm({
         | 'distribution_client',
     // Pas de champ mode_remise_grossiste ici : depuis le 05/09/2026, le mode de remise Grossiste
     // n'est plus saisi par l'utilisateur, il est dérivé côté serveur de vehicule_id (cf.
-    // CommandeVenteController::deriverModeRemiseGrossiste()) — voir le computed local
+    // CommandeVenteFormBuilder::deriverModeRemiseGrossiste()) — voir le computed local
     // `modeRemiseGrossiste` plus bas, purement un aperçu, jamais soumis.
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
@@ -466,7 +466,7 @@ function ligneOrigineLabel(ligne: LigneForm): string {
 }
 /**
  * Une ligne au tarif de nature (fabricable + client) n'est jamais éditable — le serveur
- * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteController::
+ * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteFormBuilder::
  * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
  */
 function ligneUnitPriceEditable(ligne: LigneForm): boolean {
@@ -491,7 +491,7 @@ const clientSolvabiliteLoading = ref(false);
 // ── Grossiste : mode de remise (Enlèvement/Livraison), par commande — jamais une
 // caractéristique du client (cf. docs/grossiste.md). Depuis le 05/09/2026, plus un choix
 // utilisateur indépendant : dérivé uniquement de la présence d'un véhicule (seule source de
-// vérité), exactement comme le calcule le serveur (cf. CommandeVenteController::
+// vérité), exactement comme le calcule le serveur (cf. CommandeVenteFormBuilder::
 // deriverModeRemiseGrossiste()) — jamais un second champ à renseigner. Placé ICI (après
 // clientSelected, jamais avant) : isGrossiste lit clientSelected.value, et le watch() ci-dessous
 // évalue sa source dès son appel — même TDZ que vehiculesDisponibles plus bas, cf. son commentaire.
@@ -845,7 +845,7 @@ const commandeBloquee = computed(() =>
 // ── Validation locale ────────────────────────────────────────────────────────
 // Distribution client = livreur obligatoire (règle métier du 31/08/2026). Aucun champ
 // "livreur_id" n'existe sur la commande : le livreur est dérivé de l'équipe du véhicule
-// (cf. CommandeVenteController::ensureNatureOperationCoherente, source de vérité backend) — ici
+// (cf. CommandeVenteFormBuilder::ensureNatureOperationCoherente, source de vérité backend) — ici
 // on ne fait que refléter cette dérivation via livreur_nom, déjà résolu côté serveur.
 const livreurManquantPourDistribution = computed(
     () =>

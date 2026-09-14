@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
+import DestroyProfileController from '@/actions/App/Http/Controllers/Settings/Profile/DestroyProfileController';
 import { Form } from '@inertiajs/vue3';
 import { useTemplateRef } from 'vue';
 
@@ -46,7 +46,7 @@ const passwordInput = useTemplateRef('passwordInput');
                 </DialogTrigger>
                 <DialogContent>
                     <Form
-                        v-bind="ProfileController.destroy.form()"
+                        v-bind="DestroyProfileController.form()"
                         reset-on-success
                         @error="() => passwordInput?.$el?.focus()"
                         :options="{

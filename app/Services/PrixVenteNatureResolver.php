@@ -13,7 +13,7 @@ use App\Models\ProduitVariante;
  * (cf. ProduitType::code), indépendant de prix_usine et du mode de tarification véhicule
  * (VehiculeCommandeContextResolver, inchangé pour les produits non-fabricable).
  *
- * Toujours source de vérité serveur, jamais le prix envoyé par le frontend (CommandeVenteController
+ * Toujours source de vérité serveur, jamais le prix envoyé par le frontend (CommandeVenteFormBuilder
  * l'ignore pour ces lignes, PdvCheckoutService ne l'a jamais reçu) — cf. rapport du 28/08/2026.
  *
  * NULL sur le tarif spécifique (prix_externe/prix_revendeur/prix_distributeur) → repli sur
@@ -22,7 +22,7 @@ use App\Models\ProduitVariante;
  * GROSSISTE n'a PAS de tarif dans ce resolver (pas de colonne prix_grossiste sur la variante) :
  * son prix dépend de la catégorie du produit et du mode de remise de la commande, jamais de la
  * variante seule — cf. GrossisteTarifResolver, seul point d'entrée pour cette nature.
- * CommandeVenteController::buildLignesDataAndTotal()/PdvCheckoutService n'appellent jamais ce
+ * CommandeVenteFormBuilder::buildLignesDataAndTotal()/PdvCheckoutService n'appellent jamais ce
  * resolver pour un client Grossiste ; le bras ci-dessous n'existe que pour l'exhaustivité du match
  * PHP et retombe sur le prix de vente par défaut si jamais atteint par erreur.
  */

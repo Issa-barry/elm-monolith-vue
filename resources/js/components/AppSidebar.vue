@@ -23,6 +23,7 @@ import {
     Contact,
     Layers,
     LayoutGrid,
+    MessageSquare,
     Package,
     PackageCheck,
     Receipt,
@@ -312,6 +313,10 @@ const mainNavItems = computed((): NavItem[] => {
                             href: '/backoffice/comptabilite/tresorerie/mouvements',
                         },
                         {
+                            title: 'Situation de trésorerie',
+                            href: '/backoffice/comptabilite/tresorerie/situation',
+                        },
+                        {
                             title: 'Supports de trésorerie',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
@@ -361,6 +366,14 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Comptes',
             href: '/backoffice/comptes',
             icon: UsersRound,
+            group: 'Organisation',
+        });
+
+    if (can('communications.read'))
+        items.push({
+            title: 'Communications',
+            href: '/backoffice/communications',
+            icon: MessageSquare,
             group: 'Organisation',
         });
 

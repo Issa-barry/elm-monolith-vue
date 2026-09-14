@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
@@ -62,6 +63,23 @@ class CommandeVenteCanModifierTest extends TestCase
         return $user;
     }
 
+    /**
+     * Gate::before (AuthServiceProvider) bypasse toutes les Policies pour super_admin — donc
+     * $user->can('modifierContenu', ...) seul renvoie systématiquement true pour ce rôle,
+     * indépendamment de isEditable(). Un super_admin n'est jamais couvert par
+     * makeUserWithPermissions() ci-dessus (qui assigne admin_entreprise) ; il faut ce rôle précis
+     * pour reproduire le bypass.
+     */
+    private function superAdminUser(): User
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('super_admin');
+        $user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
+    }
+
     public function test_can_modifier_vrai_pour_brouillon_avec_permission(): void
     {
         $commande = $this->makeCommande(StatutCommandeVente::BROUILLON);
@@ -110,5 +128,59 @@ class CommandeVenteCanModifierTest extends TestCase
         $this->actingAs($user)
             ->get("/backoffice/ventes/{$commande->id}/edit")
             ->assertForbidden();
+    }
+
+    // ── Régression : bypass Gate::before pour super_admin ───────────────────────
+
+    public function test_can_modifier_faux_pour_super_admin_en_livraison_en_cours(): void
+    {
+        $commande = $this->makeCommande(StatutCommandeVente::LIVRAISON_EN_COURS);
+        $superAdmin = $this->superAdminUser();
+
+        $this->actingAs($superAdmin)
+            ->get("/backoffice/ventes/{$commande->id}")
+            ->assertInertia(fn ($page) => $page->where('commande.can_modifier', false));
+    }
+
+    public function test_can_modifier_vrai_pour_super_admin_en_brouillon(): void
+    {
+        $commande = $this->makeCommande(StatutCommandeVente::BROUILLON);
+        $superAdmin = $this->superAdminUser();
+
+        $this->actingAs($superAdmin)
+            ->get("/backoffice/ventes/{$commande->id}")
+            ->assertInertia(fn ($page) => $page->where('commande.can_modifier', true));
+    }
+
+    public function test_edit_refuse_hors_brouillon_pour_super_admin(): void
+    {
+        $commande = $this->makeCommande(StatutCommandeVente::LIVRAISON_EN_COURS);
+        $superAdmin = $this->superAdminUser();
+
+        $this->actingAs($superAdmin)
+            ->get("/backoffice/ventes/{$commande->id}/edit")
+            ->assertForbidden();
+    }
+
+    /**
+     * Le cas le plus sérieux : sans le garde-fou explicite dans update() (au-delà de
+     * authorize()), un super_admin pouvait réécrire lignes/total/véhicule d'une commande déjà
+     * sortie de brouillon via un simple appel API, malgré isEditable() = false — authorize()
+     * seul ne le bloque jamais pour ce rôle (Gate::before).
+     */
+    public function test_update_refuse_hors_brouillon_pour_super_admin(): void
+    {
+        $commande = $this->makeCommande(StatutCommandeVente::LIVRAISON_EN_COURS);
+        $totalAvant = $commande->total_commande;
+        $superAdmin = $this->superAdminUser();
+
+        $this->actingAs($superAdmin)
+            ->put("/backoffice/ventes/{$commande->id}", [
+                'client_id' => $this->client->id,
+                'lignes' => [],
+            ])
+            ->assertForbidden();
+
+        $this->assertEquals($totalAvant, $commande->fresh()->total_commande);
     }
 }

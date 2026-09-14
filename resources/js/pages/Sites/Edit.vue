@@ -19,6 +19,7 @@ interface SiteData {
     ville: string | null;
     quartier: string | null;
     telephone: string | null;
+    commissions_active: boolean;
 }
 
 const props = defineProps<{
@@ -40,6 +41,7 @@ const form = useForm({
     ville: props.site.ville,
     quartier: props.site.quartier,
     telephone: props.site.telephone,
+    commissions_active: props.site.commissions_active,
 });
 
 function submit() {

@@ -18,8 +18,9 @@ use Tests\TestCase;
  * Verrou de la refonte rôles/permissions (2026-09-06, § "commande de vente") :
  * `modifierContenu()` est la SEULE ability qui combine permission + organisation +
  * isEditable() (BROUILLON uniquement) — `update()`, elle, reste volontairement permission +
- * organisation seule, car `can_encaisser`/relancerCommissions() (cf. CommandeVenteController)
- * s'exercent sciemment sur des commandes déjà sorties de BROUILLON. Avant modifierContenu(),
+ * organisation seule, car `can_encaisser`/relancerCommissions() (cf. Ventes\ShowCommandeVenteController
+ * / Ventes\RelancerCommissionsCommandeVenteController) s'exercent sciemment sur des commandes déjà
+ * sorties de BROUILLON. Avant modifierContenu(),
  * rien dans la Policy elle-même n'empêchait un futur appelant d'autoriser une modification de
  * contenu via `update()` seule, sans jamais vérifier le statut.
  */

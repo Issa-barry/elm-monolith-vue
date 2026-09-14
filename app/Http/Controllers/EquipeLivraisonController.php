@@ -879,7 +879,7 @@ class EquipeLivraisonController extends Controller
      * Source unique de la règle (CommissionPartageLivraisonValidator pour la validation de somme,
      * CommissionPartageLivraisonCategorieChecker pour la résolution d'enveloppe), rejouée à
      * l'identique par CommissionEnveloppeGenerator à la génération et par les garde-fous
-     * préventifs à la création d'une opération (CommandeVenteController,
+     * préventifs à la création d'une opération (CommandeVenteFormBuilder,
      * TransfertLogistiqueController) — jamais de formule dupliquée entre ces points d'entrée.
      */
     private function validatePartagesCategorie(

@@ -56,7 +56,7 @@ const emit = defineEmits<{
     'clear-error': [field: string];
 }>();
 
-// Le libellé vient directement du backend (roles.label, cf. UserController::getRoleOptions())
+// Le libellé vient directement du backend (roles.label, cf. UserFormOptions::getRoleOptions())
 // — un rôle personnalisé d'organisation a désormais un libellé lisible ici comme n'importe quel
 // autre rôle, plus seulement les 5 rôles historiques d'un dictionnaire figé côté Vue.
 const roleOptions = computed(() => props.roles);

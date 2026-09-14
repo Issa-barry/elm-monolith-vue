@@ -11,8 +11,9 @@ class AuthRedirects
     /**
      * Point de calcul unique de "où doit atterrir cet utilisateur" — utilisé après connexion
      * (LoginResponse/RegisterResponse via resolvePostAuthRedirect ci-dessous), après changement
-     * de mot de passe forcé (ForcePasswordChangeController), sur `/` (routes/web.php), ET par le
-     * middleware EnsureOrganizationHasSite (alias org.site.required) qui protège aussi les accès
+     * de mot de passe forcé (Auth\ForcePasswordChange\UpdateForcePasswordChangeController), sur
+     * `/` (routes/web.php), ET par le middleware EnsureOrganizationHasSite (alias
+     * org.site.required) qui protège aussi les accès
      * ultérieurs au back-office (session reprise, lien profond) — cf. needsOnboarding() ci-dessous,
      * seule source de vérité pour "cette organisation a-t-elle besoin de l'onboarding ?".
      *
@@ -41,7 +42,7 @@ class AuthRedirects
      * premier site avant tout accès normal au back-office ?" — une organisation sans aucun site
      * (le premier site n'est plus créé pendant /install, cf. InstallationService) répond oui,
      * quel que soit le rôle du membre, super_admin compris (lui seul peut d'ailleurs créer ce
-     * premier site, cf. OnboardingSiteController). Réutilisée à la fois ici (redirection post-
+     * premier site, cf. StoreOnboardingSiteController). Réutilisée à la fois ici (redirection post-
      * connexion) et par le middleware EnsureOrganizationHasSite (protection des accès ultérieurs)
      * pour ne jamais diverger — ne dupliquez pas cette requête ailleurs.
      */

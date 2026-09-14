@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
  * CommissionEnveloppeGenerator (génération réelle, différée au déclencheur configuré par
  * l'organisation), EquipeLivraisonController::validatePartagesCategorie (cohérence à la
  * sauvegarde de l'équipe) et les garde-fous préventifs à la création d'une opération
- * (CommandeVenteController, TransfertLogistiqueController) — ces derniers réduisent le risque
+ * (CommandeVenteFormBuilder, TransfertLogistiqueController) — ces derniers réduisent le risque
  * qu'une commande/un transfert paraisse "payé(e)" mais reste bloqué(e) à "à régulariser" faute de
  * partage configuré (cf. incident CMD-300826-007, 30/08/2026), sans jamais remplacer le filet de
  * sécurité de la génération elle-même : la configuration peut encore changer entre la création

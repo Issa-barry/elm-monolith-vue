@@ -15,7 +15,7 @@ use Illuminate\Support\Collection;
  * peut être une vente, un transfert ou un ajustement manuel).
  *
  * Deux familles de motifs :
- *  - Ajustement manuel (ProduitController::ajusterStock()) : `notes` contient déjà le
+ *  - Ajustement manuel (AjusterStockProduitController) : `notes` contient déjà le
  *    libellé humain (MotifAjustementStock::toNotesString()) — on le fait juste
  *    correspondre à sa valeur d'enum pour obtenir une clé de filtre stable.
  *  - Mouvement automatique (vente, transfert...) : `notes` est vide, on classe via

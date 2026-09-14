@@ -13,7 +13,7 @@ use Tests\TestCase;
 /**
  * Verrou de la refonte rôles/permissions (2026-09-06) : `Role::orderBy('name')->get()` sans
  * filtre exposait ici les rôles personnalisés de TOUTES les organisations de la plateforme —
- * même bug que DepenseParametrageController::edit() avant sa propre correction.
+ * même bug que EditDepenseParametrageController avant sa propre correction.
  */
 class StockAjustementControllerTest extends TestCase
 {

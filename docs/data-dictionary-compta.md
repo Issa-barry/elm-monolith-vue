@@ -192,6 +192,26 @@ d'autre table — en particulier plus aucun registre parallèle depuis la suppre
 sont ajoutés séparément via `MouvementFonds` (compte 58), avec un rattachement optionnel à une
 échéance (`echeance_debut`/`echeance_fin`) pour éviter un double financement.
 
+`TresorerieDisponibiliteService::situationParSupport()` (ajouté le 2026-09-13) calcule la même
+chose à la granularité du **support** plutôt qu'agrégée par site — même requête `débit − crédit`
+sur `compta_ecritures`, jamais une seconde logique de calcul. Attention : `compta_ecritures` ne
+porte pas de `compte_tresorerie_id` (seulement `compte_comptable_id` + `site_id`) — si deux
+supports d'un même site partagent le même compte comptable (cas rare, non empêché à la création),
+leur solde renvoyé est identique (reflet exact du grand livre, pas un bug de ce calcul).
+
+## Situation de trésorerie — vue de lecture
+
+L'écran "Situation de trésorerie" (`/backoffice/comptabilite/tresorerie/situation`,
+`App\Http\Controllers\Comptabilite\SituationTresorerieController`) répond à « combien y a-t-il
+actuellement dans chaque caisse/banque/mobile money de chaque agence ? » — un manque identifié
+lors de la revue produit du 2026-09-13 (les écrans existants couvrent la configuration des
+supports, l'historique des mouvements et les besoins de financement, mais pas le solde courant).
+Vue de lecture pure sur `situationParSupport()` (donc sur `compta_ecritures`), agrégée par site et
+par type de support sur l'écran liste, détaillée par support sur l'écran par agence (`show`).
+Ne duplique jamais le détail entrées/sorties, déjà couvert par le Journal financier (lien direct
+depuis l'écran détail). Isolation par organisation, et par site pour les non-admin
+(`SiteScopeService`), même convention que les autres écrans du module.
+
 ## Journal financier — vue de lecture
 
 L'écran "Journal financier" (`/backoffice/comptabilite/journal`,
@@ -218,7 +238,7 @@ le versement de cashback, désormais comptabilisé via `CashbackComptabilisation
 | `factures_ventes` | Facturation client | `VenteComptabilisationService` | `vente_facturee` |
 | `encaissements_ventes` | Encaissement client | `VenteComptabilisationService` | `encaissement_vente_recu` |
 | `paie_paiements` | Paiement de salaire | `PaieComptabilisationService` (jambe trésorerie uniquement, pas d'engagement préalable) | `paiement_salaire` |
-| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
+| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. `compte_tresorerie_origine_id` est choisi à la création (l'émetteur sait d'où part l'argent) ; `compte_tresorerie_destination_id` est nullable et choisi par le destinataire au moment de `MouvementFondsService::recevoir()`, pas à la création — le site destinataire est connu à l'avance, mais pas forcément la caisse/wallet précis qui recevra réellement les fonds (revue produit du 2026-09-13). | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
 | `commission_payments` | Paiement direct de commission logistique — circuit actif et distinct de `paiement_fiches` (verrouillé contre le double paiement par `PeriodePayabilityChecker::assertPartsNotClaimedByFiche`) | `CommissionPaymentComptabilisationService` (jambe trésorerie uniquement) | `paiement_commission_logistique_direct` |
 | `cashback_versements` | Versement de cashback à un client | `CashbackComptabilisationService` (jambe trésorerie uniquement) | `versement_cashback` |
 

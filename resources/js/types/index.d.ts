@@ -40,7 +40,9 @@ export type StandalonePermission =
     | 'imports-produits.create'
     | 'imports-produits.read'
     | 'imports-vehicules-maj.create'
-    | 'imports-vehicules-maj.read';
+    | 'imports-vehicules-maj.read'
+    | 'communications.read'
+    | 'communications.manage';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

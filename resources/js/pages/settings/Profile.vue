@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
+import UpdateProfileController from '@/actions/App/Http/Controllers/Settings/Profile/UpdateProfileController';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
@@ -79,7 +79,7 @@ const roles = computed(() =>
                 />
 
                 <Form
-                    v-bind="ProfileController.update.form()"
+                    v-bind="UpdateProfileController.form()"
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
                     @success="

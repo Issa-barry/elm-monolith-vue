@@ -82,7 +82,25 @@ class ProduitTypeTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_index_returns_403_without_permission(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($sansDroit)
+            ->get($this->produitTypesRoute())
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->post($this->produitTypesRoute(), ['nom' => 'Nouveau type'])
+            ->assertStatus(403);
+    }
 
     public function test_store_creates_type(): void
     {
@@ -234,6 +252,17 @@ class ProduitTypeTest extends TestCase
         $this->assertFalse($type->fresh()->gere_stock);
     }
 
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'materiel')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->put($this->produitTypesRoute("/{$type->id}"), ['nom' => 'Test'])
+            ->assertStatus(403);
+    }
+
     public function test_destroy_refuse_si_type_utilise(): void
     {
         $type = $this->makeTypeUtilise();
@@ -257,6 +286,28 @@ class ProduitTypeTest extends TestCase
         $this->assertSoftDeleted('produit_types', ['id' => $type->id]);
     }
 
+    public function test_destroy_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($autreOrg->id);
+        $type = ProduitType::where('organization_id', $autreOrg->id)->where('code', 'materiel')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->delete($this->produitTypesRoute("/{$type->id}"))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->delete($this->produitTypesRoute("/{$type->id}"))
+            ->assertStatus(403);
+    }
+
     public function test_toggle_desactive_puis_reactive_le_type(): void
     {
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
@@ -267,6 +318,28 @@ class ProduitTypeTest extends TestCase
 
         $this->actingAs($this->user)->patch($this->produitTypesRoute("/{$type->id}/toggle"));
         $this->assertSame('actif', $type->fresh()->statut->value);
+    }
+
+    public function test_toggle_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($autreOrg->id);
+        $type = ProduitType::where('organization_id', $autreOrg->id)->where('code', 'materiel')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch($this->produitTypesRoute("/{$type->id}/toggle"))
+            ->assertStatus(403);
+    }
+
+    public function test_toggle_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'materiel')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->patch($this->produitTypesRoute("/{$type->id}/toggle"))
+            ->assertStatus(403);
     }
 
     public function test_type_desactive_nest_plus_proposable_a_la_creation_dun_produit(): void

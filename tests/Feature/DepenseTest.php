@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\CategorieDepense;
 use App\Enums\CategorieVehicule;
 use App\Enums\StatutDepense;
+use App\Models\AuditLog;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\DroitCreationDepense;
@@ -112,7 +113,7 @@ class DepenseTest extends TestCase
      * véhicule — totalement indépendante de l'usage vente/logistique. Contrairement à
      * l'ancien modèle où elle était reconstruite depuis livraison_logistique ('interne' si
      * logistique, 'externe' sinon, confusion usage/propriété), un véhicule PARTENAIRE utilisé
-     * pour la logistique reste PARTENAIRE : DepenseController::loadVehicules() doit exposer la
+     * pour la logistique reste PARTENAIRE : DepenseFormOptionsLoader::vehicules() doit exposer la
      * vraie colonne, pas un proxy d'usage.
      */
     public function test_create_expose_la_vraie_categorie_des_vehicules_independamment_de_lusage(): void
@@ -1496,5 +1497,55 @@ class DepenseTest extends TestCase
     {
         $this->app['auth']->logout();
         $this->get('/backoffice/depenses/imprimer')->assertRedirect('/login');
+    }
+
+    // ── Historique ───────────────────────────────────────────────────────────
+
+    public function test_historique_returns_logs_with_description(): void
+    {
+        $depense = Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        AuditLog::create([
+            'organization_id' => $this->org->id,
+            'auditable_type' => $depense->getMorphClass(),
+            'auditable_id' => $depense->id,
+            'event_code' => 'created',
+            'event_label' => 'Créée',
+            'actor_id' => $this->user->id,
+            'actor_name_snapshot' => $this->user->name,
+            'created_at' => now(),
+        ]);
+
+        $this->get("/backoffice/depenses/{$depense->id}/historique")
+            ->assertOk()
+            ->assertJson(['logs' => [
+                ['event_code' => 'created', 'description' => 'Dépense créée'],
+            ]]);
+    }
+
+    public function test_historique_forbidden_sans_permission(): void
+    {
+        $depense = Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $other = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($other)
+            ->get("/backoffice/depenses/{$depense->id}/historique")
+            ->assertForbidden();
+    }
+
+    public function test_historique_forbidden_for_other_org(): void
+    {
+        $otherDepense = Depense::factory()->create();
+
+        $this->get("/backoffice/depenses/{$otherDepense->id}/historique")->assertForbidden();
     }
 }

@@ -108,7 +108,7 @@ class CommissionTriggerService
 
     /**
      * Appelé à chaque transition réelle de facture DEPUIS PAYEE vers un autre statut
-     * (encaissement supprimé — cf. EncaissementVenteController::destroy(), ou tout autre
+     * (encaissement supprimé — cf. Ventes\DestroyEncaissementVenteController, ou tout autre
      * chemin traversant FactureVente::recalculStatut()) — symétrique de
      * onFactureVenteEncaissee().
      *

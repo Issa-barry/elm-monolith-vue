@@ -44,7 +44,7 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-// Page dédiée à nature_operation = 'distribution_client' (cf. CommandeVenteController::show()).
+// Page dédiée à nature_operation = 'distribution_client' (cf. Ventes\ShowCommandeVenteController).
 // Même backend, mêmes props que Ventes/Show.vue — seule la présentation diffère : stepper avec
 // étape Réception, distributeur mis en avant, table de lignes toujours complète (chargée + reçue).
 interface AuditEntry {
@@ -208,7 +208,7 @@ interface CommissionStatut {
 /** Statut de la DERNIÈRE tentative de génération de commission — distinct de
  * commission_statut (paiement de commissions déjà générées). Non-null
  * uniquement en cas d'anomalie ("à régulariser" ou "partiellement générée",
- * chantier 2A du 05/09/2026), cf. CommandeVenteController. */
+ * chantier 2A du 05/09/2026), cf. CommandeVenteCommissionStatus. */
 interface CommissionGenerationStatut {
     value: 'erreur' | 'partiel';
     label: string;
@@ -577,7 +577,7 @@ const STEPS = [
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },
     { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
     { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
-    { key: 'reception', shortLabel: 'Réception', icon: PackageCheck },
+    { key: 'reception', shortLabel: 'Réception à valider', icon: PackageCheck },
     { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
     { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
     { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },

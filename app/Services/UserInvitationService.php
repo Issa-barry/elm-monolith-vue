@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\AuditEvent;
 use App\Enums\OtpChannel;
 use App\Exceptions\InvitationException;
-use App\Http\Controllers\UserController;
 use App\Mail\UserInvitationMail;
 use App\Models\Client;
 use App\Models\Livreur;
@@ -15,6 +14,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
 use App\Models\UserInvitation;
+use App\Support\User\UserFormOptions;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -34,7 +34,7 @@ class UserInvitationService
         // Défense en profondeur : ne jamais faire confiance au rôle transmis, même
         // si le contrôleur a déjà validé — les rôles admin ne s'attribuent jamais
         // par invitation, seulement après validation du compte (gestion utilisateur).
-        if (in_array($role, UserController::ADMIN_ROLES, true)) {
+        if (in_array($role, UserFormOptions::ADMIN_ROLES, true)) {
             throw new InvitationException('Ce rôle ne peut pas être attribué par invitation.');
         }
 
@@ -156,14 +156,14 @@ class UserInvitationService
      * Accept an invitation: create the user, assign role + site, mark invitation accepted.
      *
      * Le compte est toujours créé en pending_validation, quel que soit le rôle : il ne
-     * devient actif qu'après validation explicite par un admin (voir UserController::validateAccount).
+     * devient actif qu'après validation explicite par un admin (voir User\ValidateAccountUserController).
      */
     public function accept(UserInvitation $invitation, array $data): User
     {
         // Défense en profondeur : un rôle admin n'a jamais dû pouvoir être stocké
         // sur une invitation (voir invite()), mais on refuse quand même de créer
         // le compte si c'était le cas plutôt que de faire confiance à la donnée.
-        if (in_array($invitation->role, UserController::ADMIN_ROLES, true)) {
+        if (in_array($invitation->role, UserFormOptions::ADMIN_ROLES, true)) {
             throw new \RuntimeException('Ce rôle ne peut pas être attribué via une invitation.');
         }
 
@@ -183,7 +183,7 @@ class UserInvitationService
             'status' => User::STATUS_PENDING_VALIDATION,
         ]);
         // Le code OTP de cette étape est envoyé à l'EMAIL de l'invitation (cf.
-        // AcceptInvitationController::checkPhone(), OtpInvitationMail) — jamais au
+        // Auth\AcceptInvitation\CheckPhoneAcceptInvitationController, OtpInvitationMail) — jamais au
         // téléphone lui-même. Un email ne prouve jamais la possession d'un
         // téléphone (cf. rapport du 27/08/2026, règle de sécurité OTP) :
         // `verified_at` reste donc NULL ici. Corrigé le 27/08/2026 — cette

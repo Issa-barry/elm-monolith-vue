@@ -51,12 +51,20 @@ class NimbaSmsGateway implements SmsGateway
 
     /**
      * @param  string  $phoneNumber  Format international déjà normalisé par ELM (ex: "+224620000000").
+     * @return string|null `message_id` renvoyé par Nimba (cf. contrat testé dans
+     *                     NimbaSmsGatewayTest) — `null` si la réponse ne le
+     *                     porte pas. Uniquement pour le monitoring (cf.
+     *                     App\Services\Communications\MessageLogService).
      *
      * @throws NimbaSmsException Configuration manquante, réponse Nimba non-2xx
      *                           (sender name non validé, solde insuffisant,
      *                           identifiants invalides...), ou erreur réseau/timeout.
+     *                           Le code de l'exception porte le statut HTTP
+     *                           Nimba en cas de réponse en échec (0 pour une
+     *                           configuration manquante ou une erreur réseau,
+     *                           faute de réponse HTTP exploitable).
      */
-    public function send(string $phoneNumber, string $message): void
+    public function send(string $phoneNumber, string $message): ?string
     {
         if (! $this->isConfigured()) {
             throw new NimbaSmsException(
@@ -109,8 +117,10 @@ class NimbaSmsGateway implements SmsGateway
                 'body' => $safeBody,
             ]);
 
-            throw new NimbaSmsException("Nimba SMS : échec de l'envoi (HTTP {$response->status()}).");
+            throw new NimbaSmsException("Nimba SMS : échec de l'envoi (HTTP {$response->status()}).", $response->status());
         }
+
+        return $response->json('message_id');
     }
 
     /** Masque un numéro pour les journaux — jamais le numéro complet en clair dans les logs applicatifs. */

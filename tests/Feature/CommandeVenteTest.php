@@ -16,11 +16,13 @@ use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
+use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -35,10 +37,10 @@ class CommandeVenteTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete', 'factures.encaisser']);
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
-        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // Ventes\StoreCommandeVenteController (23/08/2026, cf. CommandeVenteService::
         // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
@@ -133,6 +135,15 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('ventes.create'))
             ->assertStatus(200);
+    }
+
+    public function test_create_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->get(route('ventes.create'))
+            ->assertStatus(403);
     }
 
     public function test_create_exposes_vehicule_capacity_in_inertia_props(): void
@@ -714,6 +725,22 @@ class CommandeVenteTest extends TestCase
         $this->assertDatabaseHas('commandes_ventes', ['id' => $commande->id, 'client_id' => $client->id]);
     }
 
+    public function test_update_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'client_id' => Client::factory()->create(['organization_id' => $otherOrg->id])->id,
+                'lignes' => [],
+            ])
+            ->assertStatus(403);
+    }
+
     public function test_create_exposes_vehicule_capacity_for_new_ligne_default(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
@@ -759,6 +786,19 @@ class CommandeVenteTest extends TestCase
                 ->where('vehicules.0.id', $vehicule->id)
                 ->where('vehicules.0.capacites.0.capacite_max', 2)
             );
+    }
+
+    public function test_edit_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.edit', $commande))
+            ->assertStatus(403);
     }
 
     // ── show ──────────────────────────────────────────────────────────────────
@@ -883,6 +923,138 @@ class CommandeVenteTest extends TestCase
             ->assertStatus(403);
     }
 
+    /**
+     * Régression : Gate::before (AuthServiceProvider) bypasse toutes les Policies pour
+     * super_admin, donc $user->can('validerReception', ...) seul renvoie systématiquement true
+     * pour ce rôle — indépendamment de CommandeVente::requiertReceptionExplicite(). Sans le
+     * garde-fou explicite dans Ventes\ShowCommandeVenteController, un super_admin voyait le bouton
+     * « Valider la réception » sur une vente standard en LIVRAISON_EN_COURS (qui doit passer en
+     * LIVREE via le premier encaissement, cf. Ventes\StoreEncaissementVenteController appelant
+     * CommandeVenteService::passerEnLivree()) et
+     * se heurtait au 422 de CommandeVenteService::validerReception().
+     */
+    public function test_can_valider_reception_is_false_for_super_admin_on_vente_standard_en_livraison(): void
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+        ]);
+        $this->assertFalse($commande->requiertReceptionExplicite());
+
+        $this->actingAs($superAdmin)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.can_valider_reception', false)
+            );
+    }
+
+    /**
+     * can_encaisser (Ventes\ShowCommandeVenteController) vérifie désormais sa propre permission
+     * factures.encaisser, indépendamment de ventes.update — voir aussi
+     * tests/Feature/EncaissementVenteTest.php pour l'autorisation côté route (encaissements.store).
+     */
+    public function test_can_encaisser_is_true_with_factures_encaisser_permission(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+        ]);
+        FactureVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $commande->id,
+            'montant_net' => 5000,
+        ]);
+
+        // $this->user a factures.encaisser depuis le setUp() de ce fichier.
+        $this->actingAs($this->user)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.can_encaisser', true)
+            );
+    }
+
+    public function test_can_encaisser_is_false_without_factures_encaisser_permission_even_with_ventes_update(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+        ]);
+        FactureVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $commande->id,
+            'montant_net' => 5000,
+        ]);
+
+        $userSansEncaisser = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.update']);
+        $userSansEncaisser->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($userSansEncaisser)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.can_encaisser', false)
+            );
+    }
+
+    /**
+     * Bout en bout via la vraie route Role\UpdateRoleController (pas un don direct de
+     * permission) : un admin ajoute uniquement `factures.encaisser` au rôle d'un commercial,
+     * sans toucher à `ventes.valider_reception` ni à aucune autre permission — le prochain
+     * chargement de la page vente pour ce commercial doit immédiatement refléter le changement.
+     * Verrouille l'absence de tout cache intermédiaire (Spatie ou applicatif) entre la
+     * sauvegarde du rôle et le calcul de `can_encaisser` — cf. investigation du 13/09/2026 où
+     * ce point avait été suspecté à tort.
+     */
+    public function test_can_encaisser_reflects_role_permission_update_without_touching_other_permissions(): void
+    {
+        Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
+        $role = Role::create([
+            'name' => 'commercial_test',
+            'label' => 'Commercial Test',
+            'guard_name' => 'web',
+            'organization_id' => $this->org->id,
+        ]);
+        $role->givePermissionTo(['ventes.read', 'ventes.update']);
+
+        $commercial = User::factory()->create(['organization_id' => $this->org->id]);
+        $commercial->assignRole($role);
+        $commercial->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
+        ]);
+        FactureVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $commande->id,
+            'montant_net' => 5000,
+        ]);
+
+        $this->actingAs($commercial)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page->where('commande.can_encaisser', false));
+
+        // $this->user (admin_entreprise) modifie le rôle du commercial via la vraie route —
+        // seule factures.encaisser est ajoutée, ventes.valider_reception n'existe même pas ici.
+        $this->actingAs($this->user)
+            ->put(route('roles.update', $role), [
+                'permissions' => ['ventes.read', 'ventes.update', 'factures.encaisser'],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($commercial)
+            ->get(route('ventes.show', $commande))
+            ->assertInertia(fn (Assert $page) => $page->where('commande.can_encaisser', true));
+    }
+
     // ── valider : BROUILLON → A_CHARGER ──────────────────────────────────────
 
     public function test_valider_transitions_brouillon_to_a_charger(): void
@@ -938,6 +1110,21 @@ class CommandeVenteTest extends TestCase
             'commande_vente_id' => $commande->id,
             'statut_facture' => 'creee',
         ]);
+    }
+
+    public function test_valider_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.valider', $commande))
+            ->assertStatus(403);
+
+        $this->assertEquals(StatutCommandeVente::BROUILLON, $commande->fresh()->statut);
     }
 
     // ── annuler : BROUILLON|A_CHARGER → ANNULEE ──────────────────────────────
@@ -1111,6 +1298,23 @@ class CommandeVenteTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_annuler_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => 'erreur_saisie',
+            ])
+            ->assertStatus(403);
+
+        $this->assertEquals(StatutCommandeVente::BROUILLON, $commande->fresh()->statut);
+    }
+
     // ── auto-clôture : LIVRAISON_EN_COURS → LIVREE → CLOTUREE ────────────────
 
     public function test_auto_cloture_when_facture_fully_paid_and_no_commissions(): void
@@ -1213,7 +1417,7 @@ class CommandeVenteTest extends TestCase
     /**
      * Véhicule autorisé pour l'usage logistique (livraison_logistique = true), avec une équipe
      * active et un chauffeur actif assigné — le seul type de véhicule qu'une distribution client
-     * peut légitimement utiliser depuis le 31/08/2026 (cf. CommandeVenteController::
+     * peut légitimement utiliser depuis le 31/08/2026 (cf. CommandeVenteFormBuilder::
      * ensureNatureOperationCoherente()).
      */
     private function makeVehiculeLogistiqueAvecChauffeur(bool $livraisonVenteAussi = false): Vehicule
@@ -1321,5 +1525,62 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->delete(route('ventes.destroy', $commande))
             ->assertStatus(403);
+    }
+
+    public function test_destroy_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'statut' => StatutCommandeVente::ANNULEE,
+        ]);
+
+        $this->actingAs($this->user)
+            ->delete(route('ventes.destroy', $commande))
+            ->assertStatus(403);
+
+        $this->assertDatabaseHas('commandes_ventes', ['id' => $commande->id]);
+    }
+
+    // ── relancerCommissions ───────────────────────────────────────────────────
+
+    public function test_relancer_commissions_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($user)
+            ->post(route('ventes.commissions.relancer', $commande))
+            ->assertStatus(403);
+    }
+
+    public function test_relancer_commissions_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $commande = CommandeVente::factory()->create(['organization_id' => $otherOrg->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.commissions.relancer', $commande))
+            ->assertStatus(403);
+    }
+
+    /**
+     * Aucun véhicule lié : la génération ne trouve aucune cible à régulariser (rien à
+     * l'origine, cf. commission_eligible_snapshot) — cas le plus simple pour vérifier le
+     * branchement HTTP (redirection + message de succès), sans monter tout le barème de
+     * commissions (cf. CommandeVenteStatutTest pour les scénarios de génération réelle).
+     */
+    public function test_relancer_commissions_redirects_with_success_when_nothing_to_regularize(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => null,
+            'client_id' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.commissions.relancer', $commande))
+            ->assertRedirect(route('ventes.show', $commande))
+            ->assertSessionHasNoErrors();
     }
 }

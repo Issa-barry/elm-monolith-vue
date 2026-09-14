@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Contracts\SmsGateway;
 use App\Enums\OtpPurpose;
+use App\Services\Communications\MessageLogService;
 use App\Services\Otp\OtpChannelResolver;
 use App\Services\Otp\OtpFallbackTarget;
 use Illuminate\Bus\Queueable;
@@ -51,10 +52,18 @@ class SendSmsOtpJob implements ShouldQueue
         private readonly ?OtpFallbackTarget $fallback = null,
     ) {}
 
-    public function handle(SmsGateway $gateway, OtpChannelResolver $resolver): void
+    public function handle(SmsGateway $gateway, OtpChannelResolver $resolver, MessageLogService $messageLogs): void
     {
+        // Journal de monitoring (cf. App\Services\Communications\MessageLogService)
+        // créé DÈS la tentative, avant l'appel réseau — aucune tentative ne doit
+        // disparaître du monitoring, y compris un échec total du transport.
+        // Purement observationnel : ne participe jamais à la logique OTP
+        // (génération/validation/fallback), qui reste inchangée ci-dessous.
+        $log = $messageLogs->logSmsOtpAttempt($this->phoneNumber, $this->purpose);
+
         try {
-            $gateway->send($this->phoneNumber, $this->message);
+            $providerMessageId = $gateway->send($this->phoneNumber, $this->message);
+            $messageLogs->markSent($log, $providerMessageId);
 
             return;
         } catch (\Throwable $e) {
@@ -63,6 +72,7 @@ class SendSmsOtpJob implements ShouldQueue
             // JAMAIS en dehors de ce job (cf. docblock de classe), et pour
             // déclencher le repli explicite ci-dessous.
             Log::error('SendSmsOtpJob : envoi SMS OTP non abouti.', ['exception' => $e->getMessage()]);
+            $messageLogs->markFailed($log, $e);
         }
 
         if ($this->fallback === null) {

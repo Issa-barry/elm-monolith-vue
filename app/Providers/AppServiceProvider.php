@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\SmsGateway;
+use App\Contracts\WhatsAppGateway;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
@@ -14,6 +15,7 @@ use App\Models\Proprietaire;
 use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
+use App\Services\Communications\NullWhatsAppGateway;
 use App\Services\Sms\NimbaSmsGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -39,6 +41,16 @@ class AppServiceProvider extends ServiceProvider
         // changer cette seule ligne, jamais SmsOtpChannel/OtpService/les
         // contrôleurs.
         $this->app->bind(SmsGateway::class, NimbaSmsGateway::class);
+
+        // Fournisseur WhatsApp pour les notifications transactionnelles (cf.
+        // App\Services\Communications\TransactionalCommunicationDispatcher) —
+        // aucun fournisseur réel intégré à ce jour (rapport notifications de
+        // commande, 07/09/2026) : NullWhatsAppGateway::isConfigured() est
+        // toujours faux, ce qui empêche structurellement toute règle WhatsApp
+        // de s'activer. Remplacer cette seule ligne le jour où un fournisseur
+        // WhatsApp réel est intégré, jamais le moteur de règles ni les
+        // contrôleurs métier.
+        $this->app->bind(WhatsAppGateway::class, NullWhatsAppGateway::class);
     }
 
     /**

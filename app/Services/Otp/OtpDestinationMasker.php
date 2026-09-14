@@ -33,14 +33,15 @@ final class OtpDestinationMasker
     }
 
     /**
-     * SMS/WhatsApp non câblés aujourd'hui (aucun fournisseur configuré, cf.
-     * OtpChannelResolver) — ce chemin n'est donc pas encore emprunté en
-     * pratique, préparé pour ne pas avoir à revenir sur le contrat API le
-     * jour où un canal SMS/WhatsApp devient réellement disponible. Garde les
+     * Public depuis le chantier notifications de commande (07/09/2026) :
+     * réutilisé par App\Services\Communications\MessageLogService pour les
+     * notifications transactionnelles (SMS/WhatsApp uniquement — jamais un
+     * destinataire email dans ce contexte, `mask()` ci-dessus reste le seul
+     * point d'entrée qui a besoin de brancher sur `OtpChannel`). Garde les
      * 3 premiers chiffres (indicatif pays approximatif) et les 2 derniers
      * visibles, masque le reste.
      */
-    private function maskPhone(string $phone): string
+    public function maskPhone(string $phone): string
     {
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
 

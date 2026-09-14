@@ -212,7 +212,7 @@ class FortifyServiceProvider extends ServiceProvider
         });
 
         // Assistant d'installation web (/install) — route sensible tant qu'aucune organisation
-        // n'est marquée installée, cf. InstallWizardController.
+        // n'est marquée installée, cf. InstallWizard\*.
         RateLimiter::for('install', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
         });

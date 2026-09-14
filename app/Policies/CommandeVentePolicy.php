@@ -33,9 +33,11 @@ class CommandeVentePolicy
      * Modifier le CONTENU de la commande (lignes, quantités...) — jamais après le démarrage du
      * chargement (règle actuelle : "modifiable uniquement en BROUILLON", cf.
      * StatutCommandeVente::isEditable()). Ability distincte de update() ci-dessus, qui reste
-     * permission+organisation seule : `can_encaisser` et relancerCommissions() (cf.
-     * CommandeVenteController) s'exercent volontairement sur des commandes déjà sorties de
-     * BROUILLON et continuent donc de s'appuyer sur `update()` telle quelle. Avant cette
+     * permission+organisation seule : relancerCommissions() (cf.
+     * Ventes\RelancerCommissionsCommandeVenteController) s'exerce volontairement sur des commandes
+     * déjà sorties de BROUILLON et continue donc de s'appuyer sur `update()` telle quelle
+     * (`can_encaisser`, lui, vérifie sa propre permission `factures.encaisser` depuis le
+     * 13/09/2026 — cf. Ventes\ShowCommandeVenteController). Avant cette
      * méthode, `isEditable()` n'était vérifié qu'à la main dans le contrôleur (abort_if séparé
      * + recalcul du flag `can_modifier` dupliqué à 2 endroits) — jamais dans la Policy
      * elle-même, donc absent de tout futur appelant qui autoriserait via `update()` seule.
@@ -61,18 +63,30 @@ class CommandeVentePolicy
             && $commande->isBrouillon();
     }
 
-    /** Démarrer le chargement (A_CHARGER → CHARGEMENT_EN_COURS) */
+    /**
+     * Démarrer le chargement (A_CHARGER → CHARGEMENT_EN_COURS).
+     * Permission dédiée `ventes.demarrer_chargement`, indépendante de `ventes.update` depuis le
+     * 13/09/2026 : décision produit — un livreur/agent "chargement" peut démarrer un chargement
+     * sans pouvoir modifier le contenu de la commande ni valider les étapes suivantes. Avant
+     * cette date, `ventes.update` seul suffisait pour les quatre transitions du workflow (cf.
+     * migration backfill_ventes_workflow_permissions qui a préservé la capacité de tous les
+     * rôles existants ayant déjà `ventes.update`).
+     */
     public function demarrerChargement(User $user, CommandeVente $commande): bool
     {
-        return $user->can('ventes.update')
+        return $user->can('ventes.demarrer_chargement')
             && $this->sameOrganization($user, $commande)
             && $commande->isACharger();
     }
 
-    /** Valider le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS) */
+    /**
+     * Valider le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS).
+     * Permission dédiée `ventes.valider_chargement`, indépendante de `ventes.update` — voir la
+     * docblock de demarrerChargement() ci-dessus pour le contexte de cette séparation.
+     */
     public function validerChargement(User $user, CommandeVente $commande): bool
     {
-        return $user->can('ventes.update')
+        return $user->can('ventes.valider_chargement')
             && $this->sameOrganization($user, $commande)
             && $commande->isChargementEnCours();
     }
@@ -80,15 +94,15 @@ class CommandeVentePolicy
     /**
      * Valider la réception (LIVRAISON_EN_COURS → LIVREE) — réservée aux commandes nécessitant une
      * réception explicite (cf. CommandeVente::requiertReceptionExplicite() : distribution_client,
-     * et depuis le 06/09/2026 Grossiste + Livraison, cf. docs/grossiste.md). Même niveau de
-     * permission que les autres transitions du workflow (ventes.update), pas un accès élevé
-     * distinct : contrairement au transfert logistique, il n'y a pas ici de partie tierce (usine)
-     * à faire arbitrer par un admin — c'est ELM elle-même qui constate la réception chez son
-     * propre client.
+     * et depuis le 06/09/2026 Grossiste + Livraison, cf. docs/grossiste.md).
+     * Permission dédiée `ventes.valider_reception` depuis le 13/09/2026 (auparavant `ventes.update`,
+     * ce qui donnait à tout rôle "Commercial" ayant simplement le droit de modifier une vente la
+     * capacité de valider sa réception client — voir la docblock de demarrerChargement() ci-dessus
+     * pour le contexte complet de cette séparation en trois permissions indépendantes).
      */
     public function validerReception(User $user, CommandeVente $commande): bool
     {
-        return $user->can('ventes.update')
+        return $user->can('ventes.valider_reception')
             && $this->sameOrganization($user, $commande)
             && $commande->isLivraisonEnCours()
             && $commande->requiertReceptionExplicite();

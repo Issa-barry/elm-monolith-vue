@@ -19,7 +19,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Moteur financier unique de l'espace client (gains, dépenses, solde) — SOURCE
- * DE VÉRITÉ PARTAGÉE entre l'espace client Inertia (ClientDashboardController)
+ * DE VÉRITÉ PARTAGÉE entre l'espace client Inertia (`ClientDashboardPayloadBuilder`)
  * et l'API (DashboardController, cf. docs/api-espace-client-contract.md). Toute
  * évolution de ce calcul doit se faire ICI, jamais dans un contrôleur, pour que
  * les deux surfaces ne puissent plus jamais diverger.
@@ -528,9 +528,9 @@ class ClientEarningsService
 
     /**
      * Véhicules accessibles à une identité (proprietaire et/ou livreur) — même
-     * requête que celle déjà utilisée par ClientDashboardController et
+     * requête que celle déjà utilisée par `ClientDashboardPayloadBuilder` et
      * VehiculesController (API), centralisée ici car `summary()` en a besoin
-     * en entrée. `$with` reste au choix de l'appelant : les deux contrôleurs
+     * en entrée. `$with` reste au choix de l'appelant : les deux appelants
      * existants ont des besoins d'eager-load différents (capacités vs équipe).
      *
      * @return Collection<int, Vehicule>

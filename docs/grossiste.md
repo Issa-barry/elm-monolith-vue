@@ -37,7 +37,7 @@ vente). Le champ **véhicule** est l'unique source de vérité :
 - **Véhicule sélectionné ⇒ `LIVRAISON`.**
 - **Aucun véhicule ⇒ `ENLEVEMENT`.**
 
-`CommandeVenteController::deriverModeRemiseGrossiste(?string $vehiculeId, ?Client $client): ?ModeRemiseGrossiste`
+`CommandeVenteFormBuilder::deriverModeRemiseGrossiste(?string $vehiculeId, ?Client $client): ?ModeRemiseGrossiste`
 (appelé depuis `store()` et `update()`, avant `buildLignesDataAndTotal()`) calcule
 `CommandeVente::mode_remise_grossiste` **uniquement** à partir de la présence de `vehicule_id` —
 un `mode_remise_grossiste` éventuellement soumis dans la requête est ignoré : il n'existe aucun
@@ -81,7 +81,7 @@ catégorie/mode. La clé tarifaire réelle est **client + catégorie + mode**, j
 Table `categorie_tarifs_grossiste` (`organization_id`, `client_id`, `categorie_id`, `mode`,
 `prix`, unique par **client_id+categorie_id+mode**) et modèle `App\Models\CategorieTarifGrossiste`
 (relations `client()`, `categorie()`, méthode statique `gridForClient()` — seule lecture réutilisée
-par `ClientController::show()` et `CategorieTarifGrossisteController::forClient()`). Volontairement
+par `ShowClientController` et `Clients\ShowTarifsGrossisteClientController`). Volontairement
 **pas** une nouvelle colonne `prix_grossiste` sur `produit_variantes` : contrairement à
 `prix_externe`/`prix_revendeur`/`prix_distributeur` (tarif par nature de client, au grain
 variante), le tarif Grossiste dépend de la catégorie du produit ET du client, pas de la variante.
@@ -104,7 +104,7 @@ seul point de résolution, jamais un prix envoyé par le frontend :
   pour Fabricable, `prix_achat` pour Achat/Vente, ignoré pour les types sans référence) — même
   principe anti-vente-à-perte que `ProduitService::validerPrixSelonType()`, appliqué ici en défense
   en profondeur au moment de la vente. Le même garde-fou s'applique côté admin
-  (`CategorieTarifGrossisteController::update()`, contre tous les produits déjà rattachés à la
+  (`Clients\UpdateTarifsGrossisteClientController`, contre tous les produits déjà rattachés à la
   catégorie) avant même d'enregistrer un tarif incohérent — un tarif absent, lui, ne déclenche
   jamais ce contrôle puisqu'il n'y a rien à valider.
 
@@ -112,7 +112,7 @@ seul point de résolution, jamais un prix envoyé par le frontend :
 le tarif spécial a été appliqué, `VENTE` quand c'est le repli sur le prix normal — tracé dans
 `CommandeLigne::prix_origine_snapshot` comme pour toute autre ligne.
 
-`CommandeVenteController::buildLignesDataAndTotal()` (et son miroir `PdvCheckoutService`) branchent
+`CommandeVenteFormBuilder::buildLignesDataAndTotal()` (et son miroir `PdvCheckoutService`) branchent
 sur `client.type === GROSSISTE` **avant** toute logique `PrixVenteNatureResolver`/`PrixUsineResolver`
 — ces deux resolvers ne sont jamais appelés pour une ligne Grossiste. `PdvCheckoutService::checkout()`
 refuse explicitement un client Grossiste (`ValidationException`) : le tarif catégorie × mode n'a pas
@@ -122,7 +122,7 @@ Administration : onglet **« Tarification »** sur la fiche du client Grossiste 
 (`Clients/Show.vue`, visible uniquement si `client.type === 'grossiste'`) — jamais une page
 d'administration globale. Gatée par la policy Client (`clients.read`/`clients.update` + même
 organisation), pas une permission séparée : les tarifs Grossiste sont un sous-résultat du client.
-`CategorieTarifGrossisteController::forClient()` (JSON, `GET clients/{client}/tarifs-grossiste`)
+`Clients\ShowTarifsGrossisteClientController` (JSON, `GET clients/{client}/tarifs-grossiste`)
 sert aussi l'aperçu live sur `Ventes/Create.vue`/`Edit.vue`, fetché uniquement au choix d'un client
 Grossiste — jamais une grille envoyée à toute création de vente, qui exposerait les tarifs négociés
 de tous les Grossistes de l'organisation même pour une commande destinée à un autre client.
@@ -156,11 +156,11 @@ une règle active existe. Détail complet, patch du moteur et tests dans `docs/c
   `tarifsGrossiste()`)
 - `app/Services/GrossisteTarifResolver.php` (signature avec `Client $client`, repli sur
   `prix_vente`, `resolveOrigine()`)
-- `app/Http/Controllers/CommandeVenteController.php` (`deriverModeRemiseGrossiste()`,
+- `app/Support/Ventes/CommandeVenteFormBuilder.php` (`deriverModeRemiseGrossiste()`,
   `buildLignesDataAndTotal()`)
-- `app/Http/Controllers/ClientController.php` (`show()` embarque `tarifs_grossiste` pour CE client)
-- `app/Http/Controllers/CategorieTarifGrossisteController.php` (`forClient()`, `update()`, tous
-  deux scopés `Client $client`)
+- `app/Http/Controllers/Clients/ShowClientController.php` (embarque `tarifs_grossiste` pour CE client)
+- `app/Http/Controllers/Clients/{Show,Update}TarifsGrossisteClientController.php` (tous deux
+  scopés `Client $client`)
 - `app/Services/CommandeVenteService.php`, `app/Services/CommissionTriggerService.php`,
   `app/Services/Commission/CommissionEnveloppeGenerator.php` (cf. COMM-008)
 - `resources/js/pages/Clients/Show.vue` (onglet Tarification, pattern « Ajouter une ligne »,
@@ -245,7 +245,7 @@ seul le MÉCANISME de réception est désormais partagé) :
   unique remplaçant partout l'ancien test `nature_operation === DISTRIBUTION_CLIENT` :
   `nature_operation === DISTRIBUTION_CLIENT || mode_remise_grossiste === LIVRAISON`. Utilisée par
   `CommandeVenteService` (guard de `validerReception()`, ex-`validerReceptionDistribution()`, et
-  garde-fou anti-auto-LIVREE dans `EncaissementVenteController`), `CommandeVentePolicy` (méthode
+  garde-fou anti-auto-LIVREE dans `Ventes\StoreEncaissementVenteController`), `CommandeVentePolicy` (méthode
   renommée `validerReception()`), `CommissionTriggerService` (`onChargementValide()`/
   `onFactureVenteEncaissee()`/`onFactureVenteEncaissementRetire()` deviennent des no-op pour ces
   commandes) et `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()` (calcule désormais
@@ -263,13 +263,22 @@ seul le MÉCANISME de réception est désormais partagé) :
   `commande.mode_remise_grossiste === 'livraison'` (`requiertReception`, calculé côté Vue), jamais
   affichés pour une vente classique ni un Grossiste + Enlèvement. `Distributions/Show.vue` reste
   inchangé (page scopée à `distribution_client`, le nouveau cas Grossiste s'affiche sur
-  `Ventes/Show.vue`, jamais ici — cf. le routage déjà existant de `CommandeVenteController::show()`
+  `Ventes/Show.vue`, jamais ici — cf. le routage déjà existant de `Ventes\ShowCommandeVenteController`
   sur `nature_operation`).
-- **Backend déjà générique, aucune duplication** : `CommandeVenteController::show()` alimentait
+- **Backend déjà générique, aucune duplication** : `Ventes\ShowCommandeVenteController` alimentait
   déjà `Ventes/Show`/`Distributions/Show` avec exactement le même payload (`mode_remise_grossiste`,
   `reception_validee_at`, `can_valider_reception`, lignes avec `quantite_livree`/
   `type_ecart_reception`/`ecart_livraison`) — seul le composant Vue rendu diffère. Aucune
   modification backend de mapping n'a été nécessaire pour exposer la réception à `Ventes/Show.vue`.
+- **Correctif du 08/09/2026** : `can_valider_reception` était calculé uniquement via
+  `$user->can('validerReception', $commande)`. Le `Gate::before` global (`AuthServiceProvider`)
+  court-circuite toutes les Policies pour `super_admin`, donc ce flag devenait `true` pour
+  n'importe quelle vente en LIVRAISON_EN_COURS vue par un super_admin, y compris une vente
+  standard n'ayant jamais besoin de réception — le bouton « Valider la réception » s'affichait à
+  tort et l'action échouait avec un 422 (`CommandeVenteService::validerReception()`). Le flag
+  inclut désormais explicitement `$commande->requiertReceptionExplicite()`, comme le fait déjà
+  `Ventes\StoreEncaissementVenteController` pour l'auto-transition LIVREE. Aucune règle métier changée, juste
+  l'exposition UI qui respecte enfin la règle pour tous les rôles.
 - **Rétrocompatibilité** : aucune migration de données. Une commande Grossiste + Livraison déjà en
   LIVRAISON_EN_COURS au moment du déploiement suit désormais le nouveau chemin (réception
   obligatoire) dès son prochain encaissement/action — pas de bascule silencieuse d'un historique
@@ -278,3 +287,68 @@ seul le MÉCANISME de réception est désormais partagé) :
   plus de commission, la réception devient l'étape requise, montants exacts vérifiés après
   réception), `tests/Feature/CommissionMoteurGeneriqueMultiProcessusTest.php` (coexistence Transfert
   logistique/Transfert grossiste sur la même équipe, mise à jour pour inclure la réception).
+
+## Chantier « Permissions de workflow vente séparées » (fait le 13/09/2026)
+
+**Origine** : un rôle Commercial pouvait valider la réception d'une vente Grossiste + Livraison
+(bouton « Valider la réception » sur `Ventes/Show.vue`) alors que la permission « Logistique —
+valider la réception » (`logistique.valider_reception`) était décochée pour ce rôle. Diagnostic :
+cette case ne gouverne pas du tout cette action — elle concerne la réception des **transferts
+logistiques** inter-sites (`TransfertLogistiquePolicy`), une fonctionnalité distincte. Le bouton
+« Valider la réception » d'une vente était en réalité gouverné par `CommandeVentePolicy::
+validerReception()`, qui ne vérifiait que `ventes.update` — exactement la même permission que
+`confirmer()`/`demarrerChargement()`/`validerChargement()`, si bien qu'aucune des quatre étapes
+n'était réellement isolable des autres.
+
+Décision produit : `demarrerChargement()` (A_CHARGER → CHARGEMENT_EN_COURS), `validerChargement()`
+(CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS) et `validerReception()` (LIVRAISON_EN_COURS → LIVREE,
+commandes à réception explicite uniquement) doivent pouvoir être attribuées à des personnes
+différentes, totalement indépendamment les unes des autres et de `ventes.update` — un agent peut
+démarrer un chargement sans pouvoir le valider ni valider une réception. `confirmer()`
+(BROUILLON → A_CHARGER) et `annuler()` restent hors périmètre de ce chantier (respectivement
+toujours gouverné par `ventes.update` et par le rôle admin, cf. `CommandeVentePolicy`).
+
+- **Permissions** : `ventes.demarrer_chargement` et `ventes.valider_chargement` existaient déjà
+  dans `PermissionCatalog::STANDALONE` (visibles dans la matrice de rôles depuis un chantier
+  antérieur) mais n'étaient vérifiées par aucune Policy — de simples cases sans effet. `
+  ventes.valider_reception` est une permission nouvelle, créée par cette migration. Les trois sont
+  désormais vérifiées explicitement dans `CommandeVentePolicy`.
+- **Migration de données** (`2026_09_13_140136_backfill_ventes_workflow_permissions`) : non
+  destructive et idempotente — pour tout rôle (système ou d'organisation) ayant déjà `ventes.update`,
+  ajoute les trois permissions dédiées si absentes, afin qu'aucun rôle existant ne perde
+  silencieusement une capacité qu'il avait avant ce chantier. Une organisation qui souhaite
+  restreindre un rôle (ex. retirer « Valider la réception » à Commercial) doit désormais décocher
+  explicitement la case correspondante dans `/backoffice/roles` — la migration ne prend pas cette
+  décision à sa place.
+- **Rôles système par défaut** (`RolesAndPermissionsSeeder`) : `admin_entreprise` et `manager`
+  reçoivent désormais aussi `ventes.valider_reception` (ils avaient déjà les deux autres). Le
+  template `commerciale` n'a volontairement PAS reçu `ventes.demarrer_chargement`/
+  `ventes.valider_chargement`/`ventes.valider_reception` — une organisation qui veut les accorder à
+  son rôle Commercial le fait explicitement via l'éditeur de rôles.
+- Tests : `tests/Feature/CommandeVenteStatutTest.php` (nouvelle section « Séparation des
+  permissions de workflow » — chaque permission testée seule, sans `ventes.update`, et son absence
+  testée avec `ventes.update` seul).
+
+**Suite immédiate (même jour)** : en testant la séparation ci-dessus dans l'éditeur de rôles, une
+organisation a coché « Factures — encaisser » (`factures.encaisser`) sans effet sur le bouton
+« Encaisser » de `Ventes/Show.vue` — toujours désactivé. Même diagnostic que ci-dessus : le flag
+`can_encaisser` (`Ventes\ShowCommandeVenteController`) vérifiait `$user->can('update', $commande)`
+(donc `ventes.update`), jamais `factures.encaisser`. Plus grave ici :
+`Ventes\StoreEncaissementVenteController` (la route réellement appelée au clic, `encaissements.store`)
+n'avait **aucun contrôle d'autorisation propre** — seul le bouton désactivé côté frontend empêchait
+un utilisateur non habilité d'agir, en contradiction avec CLAUDE.md §9 (une validation financière ne
+doit jamais reposer sur le seul frontend).
+
+- `can_encaisser` vérifie désormais `$user->can('factures.encaisser')`. `Ventes\
+  StoreEncaissementVenteController` vérifie désormais explicitement cette permission (`abort_unless`
+  en tout premier, avant même le chargement de la facture).
+- **Migration** (`2026_09_13_152109_backfill_factures_encaisser_permission`) : même logique de
+  backfill non destructif — tout rôle ayant déjà `ventes.update` reçoit `factures.encaisser` s'il ne
+  l'avait pas, pour qu'aucune organisation ne perde d'un coup la capacité d'encaisser ses ventes
+  (régression plus sensible que les trois permissions ci-dessus : l'encaissement est une opération
+  quotidienne, pas occasionnelle).
+- `Ventes\DestroyEncaissementVenteController` (suppression/annulation d'un encaissement) présente le
+  même défaut structurel (aucun contrôle d'autorisation propre) mais n'est pas exposé sur
+  `Ventes/Show.vue` — **non corrigé dans ce chantier**, signalé comme point de vigilance distinct
+  (candidat naturel : `factures.annuler`, elle aussi déclarée dans `PermissionCatalog::STANDALONE`
+  mais encore vérifiée nulle part).

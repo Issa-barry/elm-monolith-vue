@@ -21,7 +21,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Lue une fois côté serveur (jamais stockée en base, jamais renvoyée au
-    | client) — voir InstallWizardController. En on_premise, optionnelle mais
+    | client) — voir App\Support\Auth\InstallWizardGuard. En on_premise, optionnelle mais
     | recommandée dès la production (sans elle, /install reste ouvert jusqu'à
     | la 1ère installation, qui le referme définitivement via isLocked()). En
     | saas, OBLIGATOIRE : /install y reste accessible indéfiniment, donc sans
@@ -42,7 +42,7 @@ return [
     | de /install (InstallationService::isLocked()) : en on_premise, une seule
     | organisation jamais plus ; en saas, /install reste ouvert indéfiniment
     | pour créer de nouvelles organisations (APP_INSTALL_TOKEN y est alors
-    | obligatoire, cf. InstallWizardController).
+    | obligatoire, cf. App\Support\Auth\InstallWizardGuard).
     |
     */
 

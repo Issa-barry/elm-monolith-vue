@@ -58,7 +58,7 @@ const props = withDefaults(
         sitesAutorises: Site[];
         canAugmenter: boolean;
         canDiminuer: boolean;
-        /** Stock réel par variante × site — cf. ProduitController::show(). */
+        /** Stock réel par variante × site — cf. ShowProduitController. */
         varianteStocks?: VarianteStockEntry[];
     }>(),
     { varianteStocks: () => [] },
@@ -84,7 +84,7 @@ const form = useForm({
 
 // Produit à vraies déclinaisons commerciales (> 1 variante) : on demande explicitement
 // laquelle ajuster. Un produit simple ne montre jamais ce champ — la variante par défaut
-// (interne, invisible) reste implicite, cf. ProduitController::ajusterStock().
+// (interne, invisible) reste implicite, cf. AjusterStockProduitController.
 const aPlusieursVariantes = computed(
     () => (props.produit.variantes?.length ?? 0) > 1,
 );
@@ -165,7 +165,7 @@ const isAutre = computed(() => form.motif_type === 'autre');
 
 // Motif obligatoire : le type doit être renseigné, et si "autre" est sélectionné,
 // le détail ne peut pas être vide ou composé uniquement d'espaces (miroir de la
-// validation backend, cf. ProduitController::ajusterStock()).
+// validation backend, cf. AjusterStockProduitController).
 const motifValide = computed(() => {
     if (!form.motif_type) return false;
     if (form.motif_type === 'autre') return form.motif_detail.trim().length > 0;

@@ -294,7 +294,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
                 // supposeraient une catégorie effectivement résolue) — même absence que
                 // distribution_client ci-dessous, pour une raison différente (lui est hors
                 // codesApplicables ; transfert_grossiste y est mais n'a aucun bareme catégorie).
-                // Voir CommandeVenteController::ensureTransfertGrossisteBaremeConfigure() pour le
+                // Voir CommandeVenteFormBuilder::ensureTransfertGrossisteBaremeConfigure() pour le
                 // garde-fou distinct qui, lui, bloque la CRÉATION d'une commande Grossiste dans ce cas.
                 ->missing("statuts_partage_commission.{$categorie->id}.transfert_grossiste")
                 // distribution_client n'est jamais dans codesApplicablesPourVehicule(), même

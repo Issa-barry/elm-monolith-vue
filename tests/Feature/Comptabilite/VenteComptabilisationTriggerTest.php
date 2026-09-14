@@ -38,7 +38,7 @@ class VenteComptabilisationTriggerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'factures.encaisser']);
 
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,

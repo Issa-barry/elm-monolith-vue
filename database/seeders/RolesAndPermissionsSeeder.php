@@ -49,7 +49,8 @@ class RolesAndPermissionsSeeder extends Seeder
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         // Rôles système (organization_id NULL, partagés par toutes les organisations) — seul
         // super_admin est protégé contre le renommage/suppression (règle centralisée dans
-        // RoleController, jamais une colonne : cf. sa docblock). Les 7 autres sont désormais des
+        // App\Support\Permissions\RoleAccess, jamais une colonne : cf. sa docblock). Les 7 autres
+        // sont désormais des
         // rôles métier ordinaires, modifiables/supprimables comme n'importe quel rôle créé via le
         // CRUD, simplement pré-remplis ici pour ne pas partir d'une organisation vide.
         // Le label est réassigné à chaque exécution (idempotent) plutôt que seulement à la
@@ -102,6 +103,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
+            'ventes.valider_reception',
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
             'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',      'fournisseurs.delete',
             'factures.create',          'factures.read',          'factures.update',          'factures.delete',
@@ -133,6 +135,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
             // Administration
             'users.create',             'users.read',             'users.update',
+            'communications.read',      'communications.manage',
             // Paramètres
             'parametres.read',          'parametres.update',
             'parametres-produits.read', 'parametres-produits.update',
@@ -166,6 +169,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
+            'ventes.valider_reception',
             'achats.create',            'achats.read',            'achats.update',
             'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',
             'factures.read',            'factures.create',
@@ -193,6 +197,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',
             // Administration
             'users.read',
+            'communications.read',
             // Paramètres
             'parametres.read',
             'parametres-produits.read',

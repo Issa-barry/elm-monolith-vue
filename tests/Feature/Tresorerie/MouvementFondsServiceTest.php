@@ -76,7 +76,6 @@ class MouvementFondsServiceTest extends TestCase
             'site_origine_id' => $this->siege->id,
             'site_destination_id' => $this->agence->id,
             'compte_tresorerie_origine_id' => $this->caisseSiege->id,
-            'compte_tresorerie_destination_id' => $this->caisseAgence->id,
             'montant' => $montant,
         ], $this->user->id);
     }
@@ -89,6 +88,18 @@ class MouvementFondsServiceTest extends TestCase
         $this->assertSame(StatutMouvementFonds::BROUILLON, $mouvement->statut);
     }
 
+    /**
+     * Le support de destination n'est plus imposé à la création : c'est le
+     * destinataire qui le choisit au moment de recevoir() (cf. docblock de
+     * MouvementFondsService, revue produit du 2026-09-13).
+     */
+    public function test_creation_sans_support_destination(): void
+    {
+        $mouvement = $this->creerMouvement();
+
+        $this->assertNull($mouvement->compte_tresorerie_destination_id);
+    }
+
     public function test_refuse_meme_site_origine_et_destination(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -97,7 +108,6 @@ class MouvementFondsServiceTest extends TestCase
             'site_origine_id' => $this->siege->id,
             'site_destination_id' => $this->siege->id,
             'compte_tresorerie_origine_id' => $this->caisseSiege->id,
-            'compte_tresorerie_destination_id' => $this->caisseSiege->id,
             'montant' => 100,
         ], $this->user->id);
     }
@@ -127,10 +137,12 @@ class MouvementFondsServiceTest extends TestCase
     {
         $mouvement = $this->creerMouvement(500_000);
         $mouvement = $this->service->envoyer($mouvement, $this->user->id);
-        $mouvement = $this->service->recevoir($mouvement, $this->user->id);
+        $mouvement = $this->service->recevoir($mouvement, $this->user->id, $this->caisseAgence->id);
 
         $this->assertSame(StatutMouvementFonds::RECU, $mouvement->statut);
         $this->assertNotNull($mouvement->piece_comptable_reception_id);
+        // Le support choisi à la réception est bien celui persisté sur le mouvement.
+        $this->assertSame($this->caisseAgence->id, $mouvement->compte_tresorerie_destination_id);
 
         $compte58 = CompteComptable::where('organization_id', $this->org->id)->where('numero', '588000')->firstOrFail();
         $solde = EcritureComptable::where('compte_comptable_id', $compte58->id)
@@ -162,7 +174,17 @@ class MouvementFondsServiceTest extends TestCase
         $mouvement = $this->creerMouvement();
 
         $this->expectException(TransitionMouvementFondsInvalideException::class);
-        $this->service->recevoir($mouvement, $this->user->id);
+        $this->service->recevoir($mouvement, $this->user->id, $this->caisseAgence->id);
+    }
+
+    /** Le support choisi à la réception doit appartenir au site de destination du mouvement. */
+    public function test_recevoir_refuse_un_support_d_un_autre_site(): void
+    {
+        $mouvement = $this->creerMouvement(500_000);
+        $mouvement = $this->service->envoyer($mouvement, $this->user->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->service->recevoir($mouvement, $this->user->id, $this->caisseSiege->id);
     }
 
     public function test_annuler_un_brouillon(): void
@@ -237,7 +259,7 @@ class MouvementFondsServiceTest extends TestCase
         $mouvement = $this->service->envoyer($mouvement, $this->user->id);
         $mouvement = $this->service->contester($mouvement, $this->user->id, 'Erreur initiale du destinataire');
 
-        $recu = $this->service->recevoir($mouvement, $this->user->id);
+        $recu = $this->service->recevoir($mouvement, $this->user->id, $this->caisseAgence->id);
 
         $this->assertSame(StatutMouvementFonds::RECU, $recu->statut);
     }

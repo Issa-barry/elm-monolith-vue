@@ -58,6 +58,7 @@ class MouvementFondsController extends Controller
             'reference' => $m->reference,
             'site_origine' => $m->siteOrigine?->nom,
             'site_destination' => $m->siteDestination?->nom,
+            'site_destination_id' => $m->site_destination_id,
             'compte_origine' => $m->compteTresorerieOrigine?->libelle,
             'compte_destination' => $m->compteTresorerieDestination?->libelle,
             'montant' => (float) $m->montant,
@@ -84,6 +85,10 @@ class MouvementFondsController extends Controller
             'sites' => $this->sitesDisponibles($orgId, $user),
             'is_admin' => $isAdmin,
             'peut_creer' => $user->can('create', MouvementFonds::class),
+            // Nécessaire pour choisir le support de destination au moment de
+            // « Confirmer réception » (cf. MouvementFondsService::recevoir()) —
+            // le frontend filtre par site_destination_id du mouvement concerné.
+            'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->get(['id', 'site_id', 'libelle', 'type']),
         ]);
     }
 
@@ -113,7 +118,10 @@ class MouvementFondsController extends Controller
             'site_origine_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'site_destination_id' => ['required', 'different:site_origine_id', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'compte_tresorerie_origine_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
-            'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
+            // Le support de destination n'est plus saisi à la création : c'est le
+            // destinataire qui le choisit au moment de « Confirmer réception »
+            // (cf. docblock de MouvementFondsService), il ne peut donc pas être
+            // connu avec certitude par l'émetteur.
             'montant' => ['required', 'numeric', 'min:0.01'],
             'moyen_transfert' => ['nullable', 'string', 'max:30'],
             'reference_externe' => ['nullable', 'string', 'max:100'],
@@ -144,11 +152,17 @@ class MouvementFondsController extends Controller
         return back()->with('success', "Mouvement {$mouvement->reference} marqué comme envoyé.");
     }
 
-    public function recevoir(MouvementFonds $mouvement)
+    public function recevoir(Request $request, MouvementFonds $mouvement)
     {
         $this->authorize('recevoir', $mouvement);
 
-        $mouvement = $this->service->recevoir($mouvement, auth()->id());
+        $orgId = auth()->user()->organization_id;
+
+        $data = $request->validate([
+            'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
+        ]);
+
+        $mouvement = $this->service->recevoir($mouvement, auth()->id(), $data['compte_tresorerie_destination_id']);
 
         return back()->with('success', "Mouvement {$mouvement->reference} confirmé reçu.");
     }

@@ -292,16 +292,22 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         $this->actingAs($this->user);
         CommandeVenteService::creerFactureDirecte($commande);
 
-        // Consultant et Site paramétrés → générés, tous deux sous le processus VENTE.
+        // Consultant et Site paramétrés → générés, tous deux sous le processus VENTE, avec un
+        // montant réellement calculé sur quantite_demandee (2 × 200 / 2 × 100) — une vente directe
+        // n'a structurellement aucune quantite_chargee, cf. repli ajouté dans
+        // CommissionEnveloppeGenerator::genererDepuisContexte() : sans lui, ces deux cibles
+        // resteraient silencieusement à 0 GNF quel que soit le barème configuré.
         $this->assertDatabaseHas('commission_enveloppes', [
             'source_id' => $commande->id,
             'cible_type' => CommissionCibleType::CODE_CONSULTANT,
             'processus_id' => $this->processus->id,
+            'montant_total' => 400,
         ]);
         $this->assertDatabaseHas('commission_enveloppes', [
             'source_id' => $commande->id,
             'cible_type' => CommissionCibleType::CODE_SITE,
             'processus_id' => $this->processus->id,
+            'montant_total' => 200,
         ]);
         // Propriétaire/Livreur : structurellement impossibles sans véhicule, quel que soit leur
         // paramétrage — jamais tentés, jamais un fallback qui aurait pu les créer malgré tout.
@@ -436,7 +442,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
 
         $ligne = $commande->lignes()->firstOrFail();
         // store() confirme déjà automatiquement une commande créée avec véhicule (cf.
-        // CommandeVenteController::store() : BROUILLON → A_CHARGER dans la même transaction) —
+        // Ventes\StoreCommandeVenteController : BROUILLON → A_CHARGER dans la même transaction) —
         // jamais un second appel à confirmer() ici, la commande n'est plus en BROUILLON.
         CommandeVenteService::demarrerChargement($commande);
         CommandeVenteService::validerChargement($commande->fresh(), [[
@@ -637,9 +643,13 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         $this->actingAs($this->user);
         CommandeVenteService::creerFactureDirecte($commande);
 
+        // Montant réellement calculé sur quantite_demandee (2 × 200), jamais 0 : une vente directe
+        // n'a structurellement aucune quantite_chargee (pas d'étape de chargement sur ce chemin),
+        // cf. repli ajouté dans CommissionEnveloppeGenerator::genererDepuisContexte().
         $this->assertDatabaseHas('commission_enveloppes', [
             'source_id' => $commande->id,
             'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'montant_total' => 400,
         ]);
         $this->assertDatabaseMissing('commission_enveloppes', [
             'source_id' => $commande->id,
@@ -652,7 +662,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
     }
 
     // ── Garde-fou préventif : barème Transfert grossiste non configuré ──────────
-    // (CommandeVenteController::ensureTransfertGrossisteBaremeConfigure(), 05/09/2026)
+    // (CommandeVenteFormBuilder::ensureTransfertGrossisteBaremeConfigure(), 05/09/2026)
 
     /**
      * Décision produit du 05/09/2026 (cf. docs/grossiste.md) : contrairement à

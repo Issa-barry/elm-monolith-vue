@@ -144,7 +144,7 @@ const form = useForm({
     client_id: props.commande.client_id as number | null,
     client_vehicule_id: props.commande.client_vehicule_id as number | null,
     // Pas de champ mode_remise_grossiste : dérivé côté serveur de vehicule_id (cf.
-    // CommandeVenteController::deriverModeRemiseGrossiste()) — voir le computed local
+    // CommandeVenteFormBuilder::deriverModeRemiseGrossiste()) — voir le computed local
     // `modeRemiseGrossiste` plus bas, purement un aperçu, jamais soumis.
     lignes: props.commande.lignes.map((l) => ({
         produit_id: l.produit_id,
@@ -295,7 +295,7 @@ function ligneOrigineLabel(ligne: LigneForm): string {
 }
 /**
  * Une ligne au tarif de nature (fabricable + client) n'est jamais éditable — le serveur
- * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteController::
+ * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteFormBuilder::
  * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
  */
 function ligneUnitPriceEditable(ligne: LigneForm): boolean {
@@ -370,7 +370,7 @@ function clientLabel(c: ClientOption): string {
 // ── Grossiste : mode de remise (Enlèvement/Livraison), par commande — jamais une
 // caractéristique du client (cf. docs/grossiste.md). Depuis le 05/09/2026, plus un choix
 // utilisateur indépendant : dérivé uniquement de la présence d'un véhicule, exactement comme le
-// calcule le serveur (cf. CommandeVenteController::deriverModeRemiseGrossiste()).
+// calcule le serveur (cf. CommandeVenteFormBuilder::deriverModeRemiseGrossiste()).
 const isGrossiste = computed(() => clientSelected.value?.type === 'grossiste');
 
 const modeRemiseGrossiste = computed<'enlevement' | 'livraison'>(() =>

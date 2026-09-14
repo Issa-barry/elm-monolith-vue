@@ -50,7 +50,7 @@ class MouvementStockService
      * à la réalité rend le journal non réconciliable). Le contrôle est fait ICI,
      * sous le verrou — jamais seulement par un pré-contrôle dans l'appelant, qui
      * laisserait une fenêtre de concurrence (cf. faille TOCTOU relevée sur
-     * ProduitController::ajusterStock() avant ce correctif) ou pourrait être
+     * AjusterStockProduitController avant ce correctif) ou pourrait être
      * contourné par un appel direct au service.
      *
      * @throws ValidationException si la sortie dépasse le disponible et $allowNegative est faux
@@ -435,7 +435,7 @@ class MouvementStockService
      * ligne VarianteStock a strictement 0 de disponible — jamais de repli sur l'agrégat legacy
      * Produit::qte_stock, qui ne renseigne sur aucune agence en particulier. Point d'entrée
      * UNIQUE de ce calcul, réutilisé par toute la chaîne de vente (CommandeVenteService::
-     * verifierDisponibiliteLignes(), ProduitController::ajusterStock(),
+     * verifierDisponibiliteLignes(), AjusterStockProduitController,
      * TransfertLogistiqueService::checkDisponibiliteStockSource()) — jamais dupliqué en logique.
      * PdvCheckoutService::buildLignes() reste une exception : verrouillage groupé de plusieurs
      * lignes en une seule requête (concurrence PDV), mais applique le même calcul physique

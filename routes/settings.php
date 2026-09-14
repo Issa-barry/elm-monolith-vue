@@ -2,30 +2,41 @@
 
 use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\CommissionRegleController;
-use App\Http\Controllers\Settings\DepenseParametrageController;
-use App\Http\Controllers\Settings\LogistiqueParametrageController;
+use App\Http\Controllers\Settings\Communications\EditCommunicationRuleController;
+use App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController;
+use App\Http\Controllers\Settings\Depenses\EditDepenseParametrageController;
+use App\Http\Controllers\Settings\Depenses\UpdateDepenseParametrageController;
+use App\Http\Controllers\Settings\Logistique\EditLogistiqueParametrageController;
+use App\Http\Controllers\Settings\Logistique\UpdateLogistiqueParametrageController;
+use App\Http\Controllers\Settings\Logistique\UpdateSiteLogistiqueParametrageController;
 use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\OrganisationController;
-use App\Http\Controllers\Settings\ParametreController;
-use App\Http\Controllers\Settings\PasswordController;
-use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\Parametres\DownloadTemplateParametreController;
+use App\Http\Controllers\Settings\Parametres\EditParametreController;
+use App\Http\Controllers\Settings\Parametres\UpdateParametreController;
+use App\Http\Controllers\Settings\Password\EditPasswordController;
+use App\Http\Controllers\Settings\Password\UpdatePasswordController;
+use App\Http\Controllers\Settings\Profile\DestroyProfileController;
+use App\Http\Controllers\Settings\Profile\EditProfileController;
+use App\Http\Controllers\Settings\Profile\UpdateProfileController;
+use App\Http\Controllers\Settings\ShowTwoFactorAuthenticationController;
 use App\Http\Controllers\Settings\StockAjustementController;
 use App\Http\Controllers\Settings\ThemeController;
-use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
-use App\Http\Controllers\Settings\VenteParametrageController;
+use App\Http\Controllers\Settings\Ventes\EditVenteParametrageController;
+use App\Http\Controllers\Settings\Ventes\UpdateVenteParametrageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::middleware('auth')->group(function () {
     Route::redirect('settings', '/settings/profile');
 
-    Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::get('settings/profile', EditProfileController::class)->name('profile.edit');
+    Route::patch('settings/profile', UpdateProfileController::class)->name('profile.update');
+    Route::delete('settings/profile', DestroyProfileController::class)->name('profile.destroy');
 
-    Route::get('settings/password', [PasswordController::class, 'edit'])->name('user-password.edit');
+    Route::get('settings/password', EditPasswordController::class)->name('user-password.edit');
 
-    Route::put('settings/password', [PasswordController::class, 'update'])
+    Route::put('settings/password', UpdatePasswordController::class)
         ->middleware('throttle:6,1')
         ->name('user-password.update');
 
@@ -33,16 +44,16 @@ Route::middleware('auth')->group(function () {
         return Inertia::render('settings/Appearance');
     })->name('appearance.edit');
 
-    Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
+    Route::get('settings/two-factor', ShowTwoFactorAuthenticationController::class)
         ->name('two-factor.show');
 
     Route::get('settings/organisation', [OrganisationController::class, 'edit'])->name('organisation.edit');
     Route::put('settings/organisation', [OrganisationController::class, 'update'])->name('organisation.update');
 
-    Route::get('settings/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
-    Route::get('settings/parametres/templates/{template}', [ParametreController::class, 'downloadTemplate'])
+    Route::get('settings/parametres', EditParametreController::class)->name('parametres.edit');
+    Route::get('settings/parametres/templates/{template}', DownloadTemplateParametreController::class)
         ->name('parametres.templates.download');
-    Route::put('settings/parametres/{parametre}', [ParametreController::class, 'update'])->name('parametres.update');
+    Route::put('settings/parametres/{parametre}', UpdateParametreController::class)->name('parametres.update');
 
     Route::get('settings/modules', [ModuleController::class, 'edit'])->name('modules.edit');
     Route::patch('settings/modules', [ModuleController::class, 'toggle'])->name('modules.toggle');
@@ -50,12 +61,15 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/theme', [ThemeController::class, 'edit'])->name('theme.edit');
     Route::put('settings/theme', [ThemeController::class, 'update'])->name('theme.update');
 
-    Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
-    Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
+    Route::get('settings/ventes', EditVenteParametrageController::class)->name('settings.ventes.edit');
+    Route::put('settings/ventes', UpdateVenteParametrageController::class)->name('settings.ventes.update');
 
-    Route::get('settings/logistique', [LogistiqueParametrageController::class, 'edit'])->name('settings.logistique.edit');
-    Route::put('settings/logistique', [LogistiqueParametrageController::class, 'update'])->name('settings.logistique.update');
-    Route::patch('settings/logistique/sites/{site}', [LogistiqueParametrageController::class, 'updateSite'])->name('settings.logistique.sites.update');
+    Route::get('settings/logistique', EditLogistiqueParametrageController::class)->name('settings.logistique.edit');
+    Route::put('settings/logistique', UpdateLogistiqueParametrageController::class)->name('settings.logistique.update');
+    Route::patch('settings/logistique/sites/{site}', UpdateSiteLogistiqueParametrageController::class)->name('settings.logistique.sites.update');
+
+    Route::get('settings/communications', EditCommunicationRuleController::class)->name('settings.communications.edit');
+    Route::put('settings/communications', UpdateCommunicationRuleController::class)->name('settings.communications.update');
 
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
     Route::get('settings/commissions/configuration', [CommissionRegleController::class, 'redirectConfiguration']);
@@ -66,8 +80,8 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/produits', [StockAjustementController::class, 'edit'])->name('settings.produits');
     Route::put('settings/produits', [StockAjustementController::class, 'update'])->name('settings.produits.update');
 
-    Route::get('settings/depenses', [DepenseParametrageController::class, 'edit'])->name('settings.depenses');
-    Route::put('settings/depenses/droits', [DepenseParametrageController::class, 'updateDroits'])->name('settings.depenses.droits');
+    Route::get('settings/depenses', EditDepenseParametrageController::class)->name('settings.depenses');
+    Route::put('settings/depenses/droits', UpdateDepenseParametrageController::class)->name('settings.depenses.droits');
 
     // La gestion des types de dépense a déménagé dans le module Dépenses (cf.
     // routes/web.php, groupe module:depenses) — cette page n'existe plus dans

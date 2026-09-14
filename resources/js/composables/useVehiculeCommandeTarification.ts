@@ -4,7 +4,7 @@
  * et éligibilité aux commissions — deux notions indépendantes.
  *
  * Règle : un véhicule de flotte gérée (toujours livraison_vente=true dans ce picker,
- * cf. CommandeVenteController::vehiculesActifs()) facture toujours au prix de vente
+ * cf. CommandeVenteFormBuilder::vehiculesActifs()) facture toujours au prix de vente
  * plein et est toujours éligible aux commissions. Sans véhicule, seul un client
  * Externe facture à prix usine (jamais de commission — aucun véhicule de flotte
  * impliqué). Partagé entre Ventes/Create.vue et Ventes/Edit.vue pour ne pas dupliquer

@@ -22,7 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
  * personnellement affecté à un site, et exempte le super_admin qui gère tous les sites sans avoir
  * besoin d'y être assigné) : ici, c'est l'ORGANISATION elle-même qui n'a encore AUCUN site, un état
  * plus radical qui concerne tous les rôles staff sans exception, super_admin compris — lui seul
- * peut d'ailleurs créer ce premier site (cf. OnboardingSiteController).
+ * peut d'ailleurs créer ce premier site (cf. StoreOnboardingSiteController).
  *
  * Alias : org.site.required (cf. bootstrap/app.php). Ne JAMAIS appliquer aux routes /onboarding/*
  * elles-mêmes (boucle de redirection garantie).

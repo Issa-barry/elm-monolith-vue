@@ -18,7 +18,7 @@ import {
  *
  * En mode FACTURE_ENCAISSEE, une commission générée à l'entrée en PAYEE reste
  * vivante et payable même après suppression de l'encaissement qui l'avait fait
- * naître. Preuve : app/Http/Controllers/EncaissementVenteController.php::destroy()
+ * naître. Preuve : app/Http/Controllers/Ventes/DestroyEncaissementVenteController.php
  * autorise la suppression tant que la facture n'est pas ANNULEE, sans vérifier
  * l'existence d'une commission déjà générée ; App\Models\FactureVente::recalculStatut()
  * ne déclenche CommissionTriggerService::onFactureVenteEncaissee() que sur la

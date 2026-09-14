@@ -58,7 +58,7 @@ class UserControllerPrivilegeEscalationTest extends TestCase
      * `array` en test) persiste pour la durée du PROCESSUS PHPUnit entier, pas juste la
      * transaction RefreshDatabase — un rôle créé dans un test précédent puis "vu" en cache peut
      * fausser hasRole() dans un test suivant si le cache n'est pas explicitement invalidé, cf.
-     * RoleController qui le fait déjà après chaque mutation de rôle.
+     * les contrôleurs Role\* qui le font déjà après chaque mutation de rôle.
      */
     protected function setUp(): void
     {
@@ -138,7 +138,7 @@ class UserControllerPrivilegeEscalationTest extends TestCase
      * organisation) — un rôle métier ordinaire habilité à cette seule permission (ex. profil RH
      * pouvant éditer des fiches employé) ne doit pas pouvoir s'auto-élever en admin_entreprise
      * via ce formulaire, faute de quoi la gestion des rôles ne serait plus réservée à
-     * canManageRoles() comme RoleController le garantit par ailleurs.
+     * canManageRoles() comme les contrôleurs Role\* le garantissent par ailleurs.
      */
     public function test_non_admin_with_only_users_update_cannot_self_assign_admin_entreprise(): void
     {

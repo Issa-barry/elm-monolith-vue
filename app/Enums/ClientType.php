@@ -10,7 +10,7 @@ namespace App\Enums;
  * en collision avec `Vehicule::categorie` = PARTENAIRE (sens opposé).
  *
  * REVENDEUR remplace l'ancien STANDARD (migration `migrate_client_type_standard_to_revendeur`,
- * 28/08/2026) — automatiquement éligible au cashback (cf. ClientController). DISTRIBUTEUR est une
+ * 28/08/2026) — automatiquement éligible au cashback (cf. StoreClientController). DISTRIBUTEUR est une
  * nature neuve, sans avantage automatique (ni cashback, ni dérogation, ni prix usine) sauf règle
  * explicite. Les trois natures ont chacune leur propre tarif sur les produits fabricables
  * (prix_externe/prix_revendeur/prix_distributeur, cf. PrixVenteNatureResolver).
