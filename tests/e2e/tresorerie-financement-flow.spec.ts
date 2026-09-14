@@ -199,11 +199,9 @@ test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {
         .locator('select')
         .nth(1)
         .selectOption({ label: 'Caisse Matoto E2E 2' }); // support origine
+    // Le support de destination n'est plus demandé à la création : le
+    // destinataire le choisit au moment de « Confirmer réception ».
     await page.locator('select').nth(2).selectOption({ label: 'Kouria' }); // site destination
-    await page
-        .locator('select')
-        .nth(3)
-        .selectOption({ label: 'Caisse Kouria E2E 2' }); // support destination
     await page.locator('input[type="number"]').fill('150000');
     await page.getByRole('button', { name: /créer le brouillon/i }).click();
 
@@ -216,8 +214,14 @@ test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {
     await row.getByRole('button', { name: /^envoyer$/i }).click();
     await expect(row.getByText(/envoyé/i)).toBeVisible({ timeout: 10_000 });
 
-    // ── Réception ──────────────────────────────────────────────────────────
+    // ── Réception : le destinataire choisit le support qui a reçu les fonds ─
     await row.getByRole('button', { name: /confirmer réception/i }).click();
+    const receptionDialog = page.getByRole('dialog');
+    await expect(receptionDialog).toBeVisible({ timeout: 10_000 });
+    await receptionDialog
+        .locator('select')
+        .selectOption({ label: 'Caisse Kouria E2E 2' });
+    await receptionDialog.getByRole('button', { name: /^confirmer$/i }).click();
     await expect(row.getByText(/^reçu$/i)).toBeVisible({ timeout: 10_000 });
 });
 

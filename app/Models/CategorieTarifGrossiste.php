@@ -81,9 +81,10 @@ class CategorieTarifGrossiste extends Model
     /**
      * Grille catégorie × mode pour UN client Grossiste — catégories racines de l'organisation
      * (lignes toujours affichées, même sans tarif configuré) + tarifs déjà enregistrés pour ce
-     * client précis. Seule source de cette lecture, réutilisée par ClientController::show()
-     * (embarquée server-side sur la fiche client) et CategorieTarifGrossisteController::forClient()
-     * (fetch live depuis Ventes/Create.vue/Edit.vue au choix du client).
+     * client précis. Seule source de cette lecture, réutilisée par ShowClientController
+     * (embarquée server-side sur la fiche client) et
+     * Clients\ShowTarifsGrossisteClientController (fetch live depuis Ventes/Create.vue/Edit.vue
+     * au choix du client).
      *
      * @return array{categories: array<int, array{id: string, nom: string, produits_count: int}>, tarifs: array<int, array{categorie_id: string, mode: string, prix: int}>}
      */

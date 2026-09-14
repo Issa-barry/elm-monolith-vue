@@ -43,7 +43,7 @@ class ComptabilisationBloquanteTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['comptabilite.payer', 'depenses.valider', 'rh-paie.pay']);
+        $this->initOrgAndUser(['comptabilite.payer', 'depenses.valider', 'rh-paie.pay', 'factures.encaisser']);
 
         // Admin Entreprise ($this->user) reste soumis au plafond de montant
         // depuis le 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001).

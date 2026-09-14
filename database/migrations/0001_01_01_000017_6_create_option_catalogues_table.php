@@ -19,7 +19,7 @@ return new class extends Migration
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->string('nom');
             // Option de bibliothèque proposée par défaut (Couleur/Taille/Pointure), seedée
-            // pour chaque organisation. Non supprimable (cf. OptionCatalogueController::destroy()),
+            // pour chaque organisation. Non supprimable (cf. DestroyOptionCatalogueController),
             // mais ses valeurs proposées restent librement ajoutables/supprimables.
             $table->boolean('is_system')->default(false);
             $table->unsignedInteger('position')->default(0);

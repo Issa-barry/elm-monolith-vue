@@ -9,7 +9,7 @@ use Illuminate\Validation\Rule;
 class UpdateCategorieTarifsGrossisteRequest extends FormRequest
 {
     /**
-     * Autorisation réelle déléguée à CategorieTarifGrossisteController::update()
+     * Autorisation réelle déléguée à Clients\UpdateTarifsGrossisteClientController
      * ($this->authorize('update', $client), même policy que la fiche client elle-même — les
      * tarifs Grossiste sont un sous-résultat du client, pas une permission séparée) : ce
      * FormRequest ne porte que les règles de validation.
@@ -25,8 +25,8 @@ class UpdateCategorieTarifsGrossisteRequest extends FormRequest
 
         return [
             // 'present' et non 'required' : un tableau vide est légitime (toutes les lignes
-            // retirées via l'UI, cf. Clients/Show.vue) — CategorieTarifGrossisteController::
-            // update() supprime alors la totalité des tarifs de ce client.
+            // retirées via l'UI, cf. Clients/Show.vue) — Clients\UpdateTarifsGrossisteClientController
+            // supprime alors la totalité des tarifs de ce client.
             'tarifs' => ['present', 'array'],
             'tarifs.*.categorie_id' => ['required', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
             'tarifs.*.mode' => ['required', Rule::in(ModeRemiseGrossiste::values())],

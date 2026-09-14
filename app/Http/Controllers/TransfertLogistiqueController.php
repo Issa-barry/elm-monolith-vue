@@ -337,8 +337,8 @@ class TransfertLogistiqueController extends Controller
         $transfert = DB::transaction(function () use ($data, $orgId) {
             // Résoudre + dédoublonner les lignes AVANT toute création, pour vérifier le stock
             // disponible du site source avant de committer quoi que ce soit — même pattern que
-            // CommandeVenteController::store() (buildLignesDataAndTotal() puis
-            // assertStockDisponiblePourLignes(), avant CommandeVente::create()).
+            // Ventes\StoreCommandeVenteController (CommandeVenteFormBuilder::buildLignesDataAndTotal()
+            // puis assertStockDisponiblePourLignes(), avant CommandeVente::create()).
             $lignesData = [];
             $seen = [];
             foreach ($data['lignes'] as $ligne) {
@@ -838,7 +838,7 @@ class TransfertLogistiqueController extends Controller
      * verifierDisponibiliteLignes() — jamais de logique dupliquée ici, ce contrôleur ne fait que
      * traduire le résultat en ValidationException affichée dans le formulaire. $lignesData est le
      * format déjà résolu (variante_id + quantite_demandee), jamais recalculé. Même mécanique que
-     * CommandeVenteController::assertStockDisponiblePourLignes() — clé d'erreur 'lignes' comprise.
+     * CommandeVenteFormBuilder::assertStockDisponiblePourLignes() — clé d'erreur 'lignes' comprise.
      *
      * @param  array<int, array{variante_id: string, quantite_demandee: int}>  $lignesData
      *
@@ -863,7 +863,7 @@ class TransfertLogistiqueController extends Controller
      * Même contrôle que la vente web/PDV (VehiculeCapaciteService), mais sans exigence de
      * chargement complet : un transfert peut charger moins que la capacité du véhicule, il ne
      * peut simplement jamais la dépasser. $lignes utilise 'quantite_demandee' (pas 'qte' comme la
-     * vente), seule différence avec l'appel équivalent de CommandeVenteController.
+     * vente), seule différence avec l'appel équivalent de CommandeVenteFormBuilder.
      *
      * @throws ValidationException
      */
@@ -878,7 +878,7 @@ class TransfertLogistiqueController extends Controller
     }
 
     /**
-     * Garde-fou préventif, symétrique à CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
+     * Garde-fou préventif, symétrique à CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()
      * — réduit le risque qu'un transfert apparaisse chargé/réceptionné mais reste bloqué "à
      * régulariser" faute de partage Livreur configuré pour une catégorie transférée (cf. incident
      * CMD-300826-007, 30/08/2026, même famille de problème côté vente). S'applique désormais à
@@ -923,13 +923,13 @@ class TransfertLogistiqueController extends Controller
      * disponible PAR SITE (04/09/2026) — le formulaire ne propose qu'un sélecteur de produit
      * (pas encore de variante, cf. resolveVariante() ci-dessous), donc le stock est calculé sur
      * la variante par défaut/unique, même résolution que resolveVariante(). Contrairement au
-     * dropdown vente (CommandeVenteController::produitsActifs()), TOUS les sites de
+     * dropdown vente (CommandeVenteFormBuilder::produitsActifs()), TOUS les sites de
      * l'organisation sont renvoyés en une fois (pas seulement le site source courant) : le site
      * source peut changer côté client (sélecteur admin, cf. Logistique/Create.vue) sans
      * round-trip serveur, jamais un stock par défaut implicite pour un site non encore choisi.
      * Même formule que MouvementStockService::quantiteDisponible() (qte_stock − qte_reservee),
      * appliquée en bulk ici pour éviter un N+1 par (produit, site) — même pattern que
-     * CommandeVenteController::produitsActifs(). Un produit non géré en stock (type service)
+     * CommandeVenteFormBuilder::produitsActifs(). Un produit non géré en stock (type service)
      * n'est jamais plafonné (gere_stock=false, aucune entrée stocks_par_site) : Logistique/
      * Create.vue doit le traiter comme toujours disponible, à l'image de
      * TransfertLogistiqueService::verifierDisponibiliteLignes() qui l'ignore côté serveur.

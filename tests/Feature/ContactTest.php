@@ -38,4 +38,27 @@ class ContactTest extends TestCase
 
         $this->assertNotNull($msg->fresh()->read_at);
     }
+
+    public function test_unread_count_scopes_to_own_organization(): void
+    {
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
+
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        ContactMessage::factory()->count(2)->create(['organization_id' => $org->id]);
+        ContactMessage::factory()->create(); // autre org
+
+        $this->actingAs($user)
+            ->get(route('contact-messages.unread-count'))
+            ->assertJson(['count' => 2]);
+    }
 }

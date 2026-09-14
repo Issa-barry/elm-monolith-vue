@@ -16,7 +16,7 @@ use Tests\TestCase;
 
 /**
  * Tarification par nature de client (Externe/Revendeur/Distributeur) sur un produit
- * fabricable — bout-en-bout via CommandeVenteController::store() (back-office) et
+ * fabricable — bout-en-bout via Ventes\StoreCommandeVenteController (back-office) et
  * PdvCheckoutService::checkout() (PDV). Cf. rapport du 28/08/2026 : remplace prix_vente
  * uniquement pour les produits fabricables, jamais pour les autres types (comportement
  * historique inchangé, cf. CommandeVenteModeTarificationTest).
@@ -71,7 +71,7 @@ class CommandeVenteNaturePricingTest extends TestCase
         return CommandeVente::where('client_id', $clientId)->latest()->firstOrFail();
     }
 
-    // ── Back-office (CommandeVenteController::store()) ───────────────────────────
+    // ── Back-office (Ventes\StoreCommandeVenteController) ───────────────────────────
 
     public function test_store_facture_un_client_revendeur_au_prix_revendeur(): void
     {

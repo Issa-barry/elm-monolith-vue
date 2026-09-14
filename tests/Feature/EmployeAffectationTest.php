@@ -24,7 +24,7 @@ class EmployeAffectationTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. RoleController. */
+    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. les contrôleurs Role\*. */
     protected function setUp(): void
     {
         parent::setUp();

@@ -150,14 +150,14 @@ class CommissionProcessusDefaults
      * de `logistique_transfert`, même pour les cibles où lui-même n'aurait rien configuré (évite
      * un mélange confus "moitié barème propre, moitié hérité" difficile à auditer). Utilisée à la
      * fois par la génération réelle (CommissionEnveloppeGenerator) et par le garde-fou préventif à
-     * la création (CommandeVenteController::ensurePartageLivraisonCategorieConfigure()), pour que
+     * la création (CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()), pour que
      * les deux ne puissent jamais résoudre un barème différent pour la même commande.
      */
     /**
      * Code processus D'IDENTITÉ applicable à une CommandeVente — source UNIQUE de cette décision
      * (chantier « Transfert grossiste », 05/09/2026), consommée à la fois par
      * CommissionEnveloppeGenerator::genererPourCommandeVente() (génération réelle) et
-     * CommandeVenteController::ensurePartageLivraisonCategorieConfigure() (garde-fou préventif à
+     * CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure() (garde-fou préventif à
      * la création) — ces deux appelants calculaient auparavant ce code indépendamment (risque de
      * divergence déjà signalé avant ce chantier), désormais éliminé.
      *

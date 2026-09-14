@@ -10,7 +10,7 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 /**
  * Modèle Excel téléchargeable pour l'import produits — 4 onglets générés dynamiquement pour
  * l'organisation connectée (MODE_EMPLOI, PRODUITS, REFERENCES, EXEMPLES), cf.
- * ImportProduitsController::template().
+ * TemplateImportProduitsController.
  */
 class ImportProduitsTemplateExport implements WithMultipleSheets
 {

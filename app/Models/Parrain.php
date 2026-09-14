@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Une même Personne n'a qu'un seul Parrain (wrapper), réutilisé par plusieurs véhicules
  * (Vehicule::parrain_id -> parrains.id) : un parrain peut donc légitimement parrainer plusieurs
  * véhicules. Volontairement aucune contrainte unique en base sur personne_id — la déduplication
- * est faite applicativement par ParrainController::store() (Parrain::firstOrCreate()).
+ * est faite applicativement par StoreParrainController (Parrain::firstOrCreate()).
  */
 class Parrain extends Model
 {

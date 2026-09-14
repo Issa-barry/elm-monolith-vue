@@ -14,7 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Expose `ClientDashboardController::storeVehicleProposal()` via l'API SANS
+ * Expose `StoreVehicleProposalClientDashboardController` via l'API SANS
  * dupliquer sa logique — les deux contrôleurs appellent le même
  * `VehicleProposalService` (extrait le 26/08/2026). Seule la mise en forme de
  * la réponse diffère (JSON ici, redirect Inertia côté web).

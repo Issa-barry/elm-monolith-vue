@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
  * décision produit du 05/09/2026 — jamais une grille partagée par toute l'organisation). Jamais
  * de la variante seule (contrairement à PrixVenteNatureResolver, qui ne s'applique pas à cette
  * nature — cf. son docblock). Toujours source de vérité serveur
- * (CommandeVenteController::buildLignesDataAndTotal()), jamais un prix envoyé par le frontend.
+ * (CommandeVenteFormBuilder::buildLignesDataAndTotal()), jamais un prix envoyé par le frontend.
  * Cf. docs/grossiste.md.
  *
  * Le tarif Grossiste est une SURCHARGE facultative du prix normal du produit, jamais une

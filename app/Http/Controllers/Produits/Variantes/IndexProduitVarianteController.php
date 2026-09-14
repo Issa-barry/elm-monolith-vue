@@ -13,7 +13,7 @@ use Inertia\Response;
  * Éditeur groupé façon Shopify — vue dense de toutes les variantes d'un produit, avec
  * sélection multiple et modification en masse (cf. BulkUpdateProduitVarianteController). Le
  * stock n'y est volontairement pas éditable : il reste soumis au flux motif-tracké "Ajuster le
- * stock" (ProduitController::ajusterStock()) pour préserver la traçabilité des mouvements — ce
+ * stock" (AjusterStockProduitController) pour préserver la traçabilité des mouvements — ce
  * n'est pas un oubli.
  */
 class IndexProduitVarianteController extends Controller
@@ -30,7 +30,7 @@ class IndexProduitVarianteController extends Controller
                 'nom' => $produit->nom,
                 'type_nom' => $produit->produitType?->nom,
                 'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
-                // cf. ProduitController::typesOptions() : achetable/vendable pilotent la
+                // cf. App\Support\Produits\ProduitFormOptions::types() : achetable/vendable pilotent la
                 // visibilité de prix_achat/prix_vente, indépendamment de leur caractère
                 // obligatoire.
                 'achetable' => (bool) ($produit->produitType?->achetable ?? true),

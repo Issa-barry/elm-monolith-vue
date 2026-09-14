@@ -119,7 +119,7 @@ class CommunicationControllerTest extends TestCase
      * builder dès que la valeur passée à `where()` est `null`), ce qui
      * afficherait TOUTES les lignes `message_logs` sans organisation à ce
      * compte — jamais les communications d'une AUTRE organisation identifiée,
-     * mais un vrai croisement de données non voulu. `CommunicationController`
+     * mais un vrai croisement de données non voulu. `IndexCommunicationController`
      * doit refuser explicitement plutôt que laisser ce comportement implicite
      * s'appliquer.
      */

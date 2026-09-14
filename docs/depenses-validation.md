@@ -41,8 +41,8 @@ historique — cette table porte aussi le droit de création de dépense, hors p
   `peut_valider` sont tous deux désactivés.
 - **DEPVAL-005** — Égalité autorisée : `montant == plafond` → validation permise.
   `montant > plafond`, même de 1 GNF → refusée.
-- **DEPVAL-006** — Le plafond ne bloque que l'**approbation** (`DepenseController::valider()`).
-  Le **rejet** (`DepenseController::rejeter()`) reste possible même au-dessus du plafond du
+- **DEPVAL-006** — Le plafond ne bloque que l'**approbation** (`ValiderDepenseController`).
+  Le **rejet** (`RejeterDepenseController`) reste possible même au-dessus du plafond du
   rôle : un validateur (Admin Entreprise inclus) doit toujours pouvoir renvoyer une dépense trop
   élevée pour lui, sans escalade obligatoire vers Super Admin.
 
@@ -75,13 +75,13 @@ que ce soit** dans ce service — `admin_entreprise` va toujours chercher la vra
 
 Ces critères sont combinés à deux endroits :
 
-1. [`DepenseController::valider()`](../app/Http/Controllers/DepenseController.php) — contrôle
-   réel au moment de l'action, retourne `back()->withErrors(['montant' => ...])` avec un message
-   explicite si le montant dépasse le plafond. C'est le seul point qui fait foi : un appel direct
-   à `PATCH /depenses/{depense}/valider` sans passer par l'UI est bloqué de la même façon, y
-   compris pour un compte Admin Entreprise sans plafond configuré.
-2. `DepenseController::index()` (prop `can_valider` par ligne) — pilote uniquement l'affichage
-   du bouton « Valider » dans la liste, sans valeur de sécurité.
+1. [`ValiderDepenseController`](../app/Http/Controllers/Depenses/ValiderDepenseController.php) —
+   contrôle réel au moment de l'action, retourne `back()->withErrors(['montant' => ...])` avec un
+   message explicite si le montant dépasse le plafond. C'est le seul point qui fait foi : un appel
+   direct à `PATCH /depenses/{depense}/valider` sans passer par l'UI est bloqué de la même façon,
+   y compris pour un compte Admin Entreprise sans plafond configuré.
+2. `IndexDepenseController` (prop `can_valider` par ligne, via `DepenseListingService::transform()`)
+   — pilote uniquement l'affichage du bouton « Valider » dans la liste, sans valeur de sécurité.
 
 Le critère de plafond n'a volontairement **pas** été ajouté dans `DepensePolicy::valider()` :
 cette ability (toujours bypassée par `isAdmin()`, donc par Admin Entreprise) est aussi utilisée

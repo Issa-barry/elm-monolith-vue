@@ -77,7 +77,7 @@ class Parametre extends Model
      * l'organisation suivent la même politique"), et jamais appliqué aux transferts ni aux
      * ajustements manuels (cf. TransfertLogistiqueService::checkDisponibiliteStockSource(),
      * toujours strict). Éditée depuis Paramètres > Paramètres produits (cf.
-     * StockAjustementController), pas depuis l'écran générique ParametreController (groupe
+     * StockAjustementController), pas depuis l'écran générique EditParametreController (groupe
      * GROUPE_VENTES exclu de cet écran) — le groupe ne détermine que la catégorisation, pas
      * l'écran d'édition.
      */
@@ -127,8 +127,8 @@ class Parametre extends Model
     public const CLE_MAX_VARIANTES_PRODUIT = 'max_variantes_produit';
 
     // ── Thème global (preset PrimeVue / couleur principale / surface) ──────────
-    // Administré via ThemeController, jamais via ParametreController générique
-    // (cf. ParametreController::update() qui refuse explicitement ce groupe) —
+    // Administré via ThemeController, jamais via EditParametreController générique
+    // (cf. UpdateParametreController::__invoke() qui refuse explicitement ce groupe) —
     // la validation contre la politique de l'environnement (ThemePolicyService)
     // ne doit avoir qu'un seul point d'entrée.
     public const CLE_THEME_PRESET = 'theme_preset';

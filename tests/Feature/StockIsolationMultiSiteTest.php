@@ -19,7 +19,7 @@ use Tests\TestCase;
 
 /**
  * Non-régression multi-agences : le stock d'une agence ne doit jamais être lu,
- * écrit, ou visible dans une autre — ni via l'affichage (ProduitController::index()),
+ * écrit, ou visible dans une autre — ni via l'affichage (IndexProduitController),
  * ni via l'ajustement manuel, ni via une vente/sortie générique. Couvre aussi le
  * cas du stock legacy (Produit::qte_stock) jamais hérité implicitement par la
  * première agence touchée.

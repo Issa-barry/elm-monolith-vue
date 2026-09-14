@@ -93,6 +93,133 @@ final class PermissionCatalog
     ];
 
     /**
+     * Regroupement métier des ressources (matrice CRUD) et des permissions STANDALONE, utilisé
+     * uniquement pour l'affichage de l'écran `/backoffice/roles/{role}/edit` (Role\EditRoleController
+     * → Roles/Edit.vue). Un domaine rassemble ses paramètres dédiés (ex. `parametres-ventes`) avec
+     * ses ressources et ses actions de workflow, pour que l'admin configure un métier au même
+     * endroit plutôt que de le retrouver éclaté entre "Paramètres" et "Permissions spécifiques".
+     * Ordre des clés calé sur le menu latéral de l'application (AppSidebar.vue) : Ventes → Achats
+     * → Contacts → Véhicules → Produits → Imports → Logistique → Sites → Finance → Dépenses → RH
+     * → Administration → Communications → Pièces d'identité.
+     *
+     * `standalone` regroupe chaque permission de workflow par sous-processus métier (ex. "Cycle de
+     * vente" / "Facturation" dans le domaine Ventes) plutôt qu'en une liste plate — décision du
+     * 13/09/2026 pour que la section "Actions spécifiques" reste lisible à mesure qu'elle grossit.
+     * Jamais une seconde matrice créer/lire/modifier/supprimer : simplement des cases à cocher
+     * réparties sous des intitulés de sous-groupe (Roles/Edit.vue masque l'intitulé quand un
+     * domaine n'a qu'un seul sous-groupe, pour ne pas répéter le nom du domaine juste au-dessus).
+     *
+     * N'influence ni les noms de permissions ni les autorisations : `UpdateRoleController` valide
+     * toujours contre `permissions.name` en base, indépendamment de ce regroupement. Chaque clé de
+     * RESOURCES/STANDALONE doit apparaître dans exactement un domaine — couverture vérifiée par
+     * `PermissionCatalogTest::test_domains_cover_every_resource_exactly_once()` et
+     * `test_domains_cover_every_standalone_permission_exactly_once()`.
+     */
+    public const DOMAINS = [
+        'ventes' => [
+            'label' => 'Ventes',
+            'resources' => ['parametres-ventes', 'ventes', 'factures', 'cashback', 'pdv'],
+            'standalone' => [
+                'Cycle de vente' => [
+                    'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement',
+                    'ventes.valider_chargement', 'ventes.valider_reception',
+                    'ventes.qte.update', 'ventes.prix.update',
+                ],
+                'Facturation' => ['factures.encaisser', 'factures.annuler'],
+            ],
+        ],
+        'achats' => [
+            'label' => 'Achats & Fournisseurs',
+            'resources' => ['achats', 'fournisseurs'],
+            'standalone' => [],
+        ],
+        'contacts' => [
+            'label' => 'Clients & Contacts',
+            'resources' => ['clients', 'prestataires', 'livreurs', 'proprietaires'],
+            'standalone' => [],
+        ],
+        'vehicules' => [
+            'label' => 'Véhicules & Flotte',
+            'resources' => ['vehicules', 'type-vehicules'],
+            'standalone' => [],
+        ],
+        'produits' => [
+            'label' => 'Produits & Stock',
+            'resources' => ['parametres-produits', 'produits', 'categories', 'options', 'type-produits', 'packings'],
+            'standalone' => [
+                'Stock' => ['produits.ajuster_stock'],
+            ],
+        ],
+        'imports' => [
+            'label' => 'Imports',
+            'resources' => [],
+            'standalone' => [
+                'Flotte' => ['imports-flotte.create', 'imports-flotte.read'],
+                'Véhicules' => ['imports-vehicules-maj.create', 'imports-vehicules-maj.read'],
+                'Produits' => ['imports-produits.create', 'imports-produits.read'],
+            ],
+        ],
+        'logistique' => [
+            'label' => 'Logistique',
+            'resources' => ['logistique', 'transferts', 'receptions', 'equipes-livraison'],
+            'standalone' => [
+                'Chargement / Réception' => ['logistique.valider_chargement', 'logistique.valider_reception'],
+                'Commissions' => ['logistique.commission.verser', 'logistique.cloturer'],
+            ],
+        ],
+        'sites' => [
+            'label' => 'Sites',
+            'resources' => ['sites'],
+            'standalone' => [],
+        ],
+        'finance' => [
+            'label' => 'Finance & Comptabilité',
+            'resources' => ['comptabilite', 'journal-financier', 'tresorerie', 'commissions'],
+            'standalone' => [
+                'Trésorerie' => [
+                    'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter',
+                    'tresorerie.confirmer_retour', 'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+                ],
+                'Comptabilité' => ['comptabilite.payer'],
+                'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter'],
+            ],
+        ],
+        'depenses' => [
+            'label' => 'Dépenses',
+            'resources' => ['parametres-depenses', 'depenses'],
+            'standalone' => [
+                'Dépenses' => ['depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler'],
+            ],
+        ],
+        'rh' => [
+            'label' => 'RH & Paie',
+            'resources' => ['rh-employes', 'rh-contrats', 'rh-paie'],
+            'standalone' => [
+                'Paie' => ['rh-paie.validate', 'rh-paie.pay', 'rh-paie.close'],
+            ],
+        ],
+        'administration' => [
+            'label' => 'Administration & Système',
+            'resources' => ['users', 'parametres', 'parametres-systeme', 'modules-metier'],
+            'standalone' => [],
+        ],
+        'communications' => [
+            'label' => 'Communications',
+            'resources' => [],
+            'standalone' => [
+                'Communications' => ['communications.read', 'communications.manage'],
+            ],
+        ],
+        'pieces-identite' => [
+            'label' => "Pièces d'identité",
+            'resources' => ['pieces-identite'],
+            'standalone' => [
+                "Pièces d'identité" => ['pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter'],
+            ],
+        ],
+    ];
+
+    /**
      * @return list<string>
      */
     public static function crudPermissionNames(): array
@@ -118,5 +245,31 @@ final class PermissionCatalog
     public static function totalCount(): int
     {
         return count(self::allPermissionNames());
+    }
+
+    /**
+     * DOMAINS restreint aux ressources effectivement visibles pour l'acteur courant (ex. `users`
+     * retiré pour un non-super-admin, cf. Role\EditRoleController) — les domaines qui se
+     * retrouvent sans aucune ressource ni permission standalone sont supprimés du résultat.
+     *
+     * @param  list<string>  $visibleResources
+     * @return array<string, array{label: string, resources: list<string>, standalone: array<string, list<string>>}>
+     */
+    public static function domainsFor(array $visibleResources): array
+    {
+        $domains = [];
+        foreach (self::DOMAINS as $key => $domain) {
+            $resources = array_values(array_intersect($domain['resources'], $visibleResources));
+            if ($resources === [] && $domain['standalone'] === []) {
+                continue;
+            }
+            $domains[$key] = [
+                'label' => $domain['label'],
+                'resources' => $resources,
+                'standalone' => $domain['standalone'],
+            ];
+        }
+
+        return $domains;
     }
 }

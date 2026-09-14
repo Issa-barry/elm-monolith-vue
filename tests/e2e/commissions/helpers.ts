@@ -281,7 +281,7 @@ export async function lireDiagnosticCommission(
 
 /**
  * Supprime un encaissement via le VRAI endpoint applicatif (DELETE /encaissements/{id},
- * EncaissementVenteController::destroy()) — pas de bouton UI pour cette action aujourd'hui
+ * Ventes\DestroyEncaissementVenteController) — pas de bouton UI pour cette action aujourd'hui
  * (aucune trace dans Ventes/Show.vue au-delà de l'historique en lecture seule), donc un
  * appel HTTP direct authentifié par la session du navigateur est la façon la plus proche
  * du "vrai parcours" disponible, sans jamais appeler un service PHP directement. CSRF géré

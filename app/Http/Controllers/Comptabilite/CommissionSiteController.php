@@ -21,6 +21,7 @@ use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionProcessusFilter;
+use App\Support\Commission\CommissionSourceSiteFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -330,7 +331,10 @@ class CommissionSiteController extends Controller
         }
 
         if ($filtreSiteType !== '') {
-            $query->whereHas('enveloppe.source.site', fn ($q) => $q->where('type', $filtreSiteType));
+            // Cf. docblock de CommissionSourceSiteFilter : jamais whereHas('enveloppe.source.site',
+            // ...) en chaîne à points, qui plante dès que CommandeVente ET TransfertLogistique
+            // coexistent en base.
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->where('type', $filtreSiteType));
         }
 
         $allParts = $query->get();

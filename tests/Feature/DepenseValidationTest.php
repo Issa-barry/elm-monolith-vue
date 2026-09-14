@@ -19,7 +19,7 @@ use Tests\TestCase;
  * Tests du workflow de validation des dépenses :
  * - DepensePolicy::valider (bypass RBAC/agences — Super Admin ET Admin
  *   Entreprise, cf. isAdmin())
- * - Plafond de montant, contrôlé séparément dans DepenseController::valider()
+ * - Plafond de montant, contrôlé séparément dans ValiderDepenseController
  *   (Super Admin seul reste sans plafond — Admin Entreprise y est soumis
  *   comme tout autre rôle, cf. section dédiée plus bas)
  * - can_valider par ligne dans l'index

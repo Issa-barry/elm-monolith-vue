@@ -23,7 +23,7 @@ class User extends Authenticatable
     /**
      * Statuts de cycle de vie du compte. Un compte créé via invitation démarre
      * toujours en pending_validation, quel que soit le rôle : il ne devient
-     * "active" qu'après validation explicite par un admin (voir UserController).
+     * "active" qu'après validation explicite par un admin (voir User\ValidateAccountUserController).
      */
     public const STATUS_ACTIVE = 'active';
 
@@ -322,7 +322,7 @@ class User extends Authenticatable
      * Les 3 rôles strictement externes : le portail client (espace client, API
      * mobile/Nuxt). Source de vérité unique pour la distinction backoffice/espace
      * client — réutilisée par EnsureIsStaffAccount (garde d'accès backoffice),
-     * AuthRedirects (redirection post-connexion) et UserController (préserve un
+     * AuthRedirects (redirection post-connexion) et User\UpdateUserController (préserve un
      * rôle externe cumulé lors de l'édition du rôle staff). Ne pas la dupliquer
      * ailleurs — public pour rester consultable depuis ces points d'usage externes.
      */
@@ -332,7 +332,7 @@ class User extends Authenticatable
      * Un compte a accès au backoffice s'il porte au moins un rôle qui n'est PAS
      * strictement externe — qu'il s'agisse d'un rôle système historique
      * (super_admin, admin_entreprise, manager, commerciale, comptable) ou d'un
-     * rôle personnalisé d'organisation créé via RoleController. Le cumul avec un
+     * rôle personnalisé d'organisation créé via Role\StoreRoleController. Le cumul avec un
      * rôle externe est autorisé : un compte qui a AUSSI un rôle client/
      * proprietaire/livreur garde son accès backoffice tant qu'il conserve au moins
      * un rôle non-externe (ex: un admin qui possède lui-même un véhicule, ou

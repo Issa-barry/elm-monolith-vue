@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Centralise le contrôle "quantité vendue ≤ capacité du véhicule", utilisé par la vente web
- * (CommandeVenteController), le PDV (PdvCheckoutService) et les transferts logistiques
+ * (CommandeVenteFormBuilder), le PDV (PdvCheckoutService) et les transferts logistiques
  * (TransfertLogistiqueController).
  *
  * La capacité est portée EXCLUSIVEMENT par le véhicule lui-même (vehicule_capacites), par

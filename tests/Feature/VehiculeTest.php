@@ -1633,7 +1633,7 @@ class VehiculeTest extends TestCase
 
     /**
      * Les scopes ci-dessous sont le mécanisme réel utilisé par tous les sélecteurs
-     * opérationnels (CommandeVenteController::vehiculesActifs(), PdvController,
+     * opérationnels (CommandeVenteFormBuilder::vehiculesActifs(), Ventes\IndexPdvController,
      * TransfertLogistiqueController, RessourcesController) — les tester directement
      * couvre donc l'exclusion effective d'un véhicule sans usage (ou avec un usage
      * différent de celui demandé) de ces sélecteurs.

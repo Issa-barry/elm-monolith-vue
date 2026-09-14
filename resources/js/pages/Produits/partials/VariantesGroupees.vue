@@ -81,7 +81,7 @@ function formatPrice(val: number | null): string {
 }
 
 // Noms d'options distincts, dans l'ordre de position déjà appliqué côté backend
-// (ProduitController::varianteOptions()) — sert à peupler le sélecteur "Regrouper par".
+// (App\Support\Produits\ProduitVarianteOptionsFormatter::pour()) — sert à peupler le sélecteur "Regrouper par".
 const optionNames = computed(() => {
     const noms: string[] = [];
     for (const v of props.variantes) {

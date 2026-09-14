@@ -268,7 +268,7 @@ class DistributionClientVehiculeLogistiqueTest extends TestCase
 
     /**
      * Une distribution avec véhicule passe immédiatement en A_CHARGER à la création
-     * (CommandeVenteController::store() confirme dès qu'un véhicule est renseigné) — elle n'est
+     * (Ventes\StoreCommandeVenteController confirme dès qu'un véhicule est renseigné) — elle n'est
      * donc jamais éditable en pratique via update() (réservé aux BROUILLON). Ce test construit
      * directement un brouillon (contournant store()) pour vérifier que le garde-fou de update()
      * protège quand même correctement CE point d'entrée indépendamment — défense en profondeur,

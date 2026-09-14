@@ -24,6 +24,7 @@ interface Mouvement {
     reference: string;
     site_origine: string | null;
     site_destination: string | null;
+    site_destination_id: string;
     compte_origine: string | null;
     compte_destination: string | null;
     montant: number;
@@ -39,6 +40,13 @@ interface Mouvement {
     peut_confirmer_retour: boolean;
 }
 
+interface CompteTresorerie {
+    id: string;
+    site_id: string;
+    libelle: string;
+    type: string;
+}
+
 const props = defineProps<{
     mouvements: { data: Mouvement[]; total: number };
     filters: { statut: string; search: string; site_ids: string[] };
@@ -46,6 +54,7 @@ const props = defineProps<{
     sites: { value: string; label: string }[];
     is_admin: boolean;
     peut_creer: boolean;
+    comptes_tresorerie: CompteTresorerie[];
 }>();
 
 useFlashToast('top');
@@ -86,11 +95,49 @@ function envoyer(m: Mouvement) {
     );
 }
 
-function recevoir(m: Mouvement) {
+// ── Dialog réception : le destinataire choisit le support de trésorerie qui a
+// réellement reçu les fonds (caisse, banque, mobile money du site destination) ──
+
+const receptionDialogOpen = ref(false);
+const receptionCible = ref<Mouvement | null>(null);
+const receptionCompteId = ref('');
+const receptionError = ref('');
+
+const comptesReception = computed(() =>
+    props.comptes_tresorerie.filter(
+        (c) => c.site_id === receptionCible.value?.site_destination_id,
+    ),
+);
+
+function ouvrirDialogReception(m: Mouvement) {
+    receptionCible.value = m;
+    receptionCompteId.value = '';
+    receptionError.value = '';
+    receptionDialogOpen.value = true;
+}
+
+function confirmerReception() {
+    if (!receptionCompteId.value) {
+        receptionError.value = 'Le support de trésorerie est obligatoire.';
+        return;
+    }
+    if (!receptionCible.value) return;
+
     router.post(
-        `/backoffice/comptabilite/tresorerie/mouvements/${m.id}/recevoir`,
-        {},
-        { preserveScroll: true },
+        `/backoffice/comptabilite/tresorerie/mouvements/${receptionCible.value.id}/recevoir`,
+        { compte_tresorerie_destination_id: receptionCompteId.value },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                receptionDialogOpen.value = false;
+            },
+            onError: (errors) => {
+                receptionError.value =
+                    errors.compte_tresorerie_destination_id ??
+                    'Une erreur est survenue.';
+            },
+        },
     );
 }
 
@@ -231,7 +278,7 @@ function confirmerMotif() {
                                         v-if="m.peut_recevoir"
                                         type="button"
                                         class="text-xs font-medium text-primary hover:underline"
-                                        @click="recevoir(m)"
+                                        @click="ouvrirDialogReception(m)"
                                     >
                                         Confirmer réception
                                     </button>
@@ -318,6 +365,62 @@ function confirmerMotif() {
                         type="button"
                         class="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
                         @click="confirmerMotif"
+                    >
+                        Confirmer
+                    </button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog v-model:open="receptionDialogOpen">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>
+                        Confirmer réception {{ receptionCible?.reference }}
+                    </DialogTitle>
+                </DialogHeader>
+                <div class="space-y-1.5">
+                    <Label for="compte-reception"
+                        >Support de trésorerie reçu</Label
+                    >
+                    <select
+                        id="compte-reception"
+                        v-model="receptionCompteId"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                        <option value="" disabled>Sélectionner…</option>
+                        <option
+                            v-for="c in comptesReception"
+                            :key="c.id"
+                            :value="c.id"
+                        >
+                            {{ c.libelle }}
+                        </option>
+                    </select>
+                    <p class="text-xs text-muted-foreground">
+                        Indiquez dans quelle caisse, banque ou wallet les fonds
+                        ont réellement été reçus à
+                        {{ receptionCible?.site_destination }}.
+                    </p>
+                    <p
+                        v-if="receptionError"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ receptionError }}
+                    </p>
+                </div>
+                <DialogFooter>
+                    <button
+                        type="button"
+                        class="h-9 rounded-md border px-4 text-sm"
+                        @click="receptionDialogOpen = false"
+                    >
+                        Annuler
+                    </button>
+                    <button
+                        type="button"
+                        class="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+                        @click="confirmerReception"
                     >
                         Confirmer
                     </button>

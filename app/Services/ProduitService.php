@@ -130,7 +130,7 @@ class ProduitService
      * au coût de référence du type — cf. ProduitType::champPrixReference()) : un produit vendu
      * à perte ou à marge nulle est refusé, jamais silencieusement accepté. Ce garde-fou reste
      * imposé par le système même si les capacités du type sont désormais éditables par
-     * l'organisation (cf. ProduitTypeController) — l'admin choisit la configuration du type,
+     * l'organisation (cf. App\Http\Controllers\Produits\Types\*) — l'admin choisit la configuration du type,
      * jamais la désactivation de la règle de marge qui en découle.
      */
     /**

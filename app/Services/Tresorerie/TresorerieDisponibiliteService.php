@@ -7,6 +7,7 @@ use App\Models\CompteTresorerie;
 use App\Models\EcritureComptable;
 use App\Models\MouvementFonds;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Position de trésorerie réelle d'un site, calculée depuis le grand livre
@@ -91,5 +92,50 @@ class TresorerieDisponibiliteService
             ->where('statut', StatutMouvementFonds::RECU->value)
             ->whereBetween('date_reception', [$debut->toDateString(), $fin->toDateString()])
             ->sum('montant'), 2);
+    }
+
+    /**
+     * Solde actuel de chaque support de trésorerie actif de l'organisation, au
+     * plus tard $date — même source de vérité (grand livre) et même logique
+     * (débit - crédit des pièces datées au plus tard $date) que
+     * disponiblePourSite(), mais à la granularité du support plutôt
+     * qu'agrégée par site. Sert l'écran "Situation de trésorerie".
+     *
+     * Attention : `compta_ecritures` ne porte pas de compte_tresorerie_id
+     * (seulement compte_comptable_id + site_id, cf. EcritureComptableService)
+     * — si deux supports du même site partagent le même compte comptable
+     * (cas rare, non empêché à la création), ils sont indiscernables au
+     * niveau du grand livre et affichent donc le même solde : c'est le reflet
+     * exact de la comptabilité, pas un bug de ce calcul.
+     *
+     * @return Collection<int, array{compte_tresorerie_id:string, site_id:string, libelle:string, type:string, solde:float}>
+     */
+    public function situationParSupport(string $organizationId, Carbon $date): Collection
+    {
+        $comptes = CompteTresorerie::forOrg($organizationId)->actifs()->get(['id', 'site_id', 'compte_comptable_id', 'libelle', 'type']);
+
+        if ($comptes->isEmpty()) {
+            return collect();
+        }
+
+        $soldesParPaire = EcritureComptable::query()
+            ->whereIn('compte_comptable_id', $comptes->pluck('compte_comptable_id')->unique())
+            ->whereHas('piece', fn ($q) => $q->where('organization_id', $organizationId)->whereDate('date_piece', '<=', $date->toDateString()))
+            ->selectRaw('site_id, compte_comptable_id, COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as solde')
+            ->groupBy('site_id', 'compte_comptable_id')
+            ->get()
+            ->keyBy(fn ($row) => $row->site_id.'|'.$row->compte_comptable_id);
+
+        return $comptes->map(function (CompteTresorerie $c) use ($soldesParPaire) {
+            $ligne = $soldesParPaire->get($c->site_id.'|'.$c->compte_comptable_id);
+
+            return [
+                'compte_tresorerie_id' => $c->id,
+                'site_id' => $c->site_id,
+                'libelle' => $c->libelle,
+                'type' => $c->type->value,
+                'solde' => round((float) ($ligne->solde ?? 0), 2),
+            ];
+        });
     }
 }

@@ -7,7 +7,7 @@ const props = defineProps<{
     /**
      * Optionnel : à fournir explicitement seulement quand le périmètre de libellés diffère de
      * celui de l'organisation courante (ex: Accounts/Index.vue, vue plateforme multi-organisations
-     * pour un super_admin — cf. AccountController::index()). Sinon, retombe sur
+     * pour un super_admin — cf. Account\IndexAccountController). Sinon, retombe sur
      * `auth.role_labels` (org courante), lui-même déjà scopé correctement pour l'immense
      * majorité des écrans (ex: Users/Index.vue).
      */

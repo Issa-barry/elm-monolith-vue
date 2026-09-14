@@ -13,7 +13,7 @@ use App\Models\Personne;
  * propriétaire réel, plutôt qu'un message générique.
  *
  * Ne remplace AUCUN contrôle d'unicité existant (chaque contrôleur garde son propre contrôle
- * intra-type, ex: ClientController::assertPhoneUniqueInOrg(), EquipeLivraisonController::
+ * intra-type, ex: App\Support\Clients\ClientUniqueness::assertPhoneUniqueInOrg(), EquipeLivraisonController::
  * detecterConflitTelephone()) — ce service ne fait qu'INFORMER quand le numéro existe ailleurs.
  * Ne pas en déduire une règle de blocage cross-type : partager un numéro entre rôles différents
  * (ex: un client qui est aussi fournisseur) est un cas légitime dans ce projet, cf.

@@ -46,7 +46,7 @@ locale.
 `message_logs` (ils n'y transitent d'ailleurs à aucun moment : `App\Contracts\SmsGateway` ne les
 expose jamais au-delà de `NimbaSmsGateway`).
 
-**COMM-006** — `CommunicationController::index()` refuse explicitement (403) tout compte dont
+**COMM-006** — `IndexCommunicationController` refuse explicitement (403) tout compte dont
 `organization_id` est `null`, avant même de construire la requête. Trouvé lors de l'audit sécurité
 du 07/09/2026 : `organization_id` est nullable sur `users` (`nullOnDelete` si l'organisation d'un
 compte est supprimée) — sans cette garde, `MessageLog::where('organization_id', $orgId)` avec
@@ -108,7 +108,7 @@ il observe uniquement le transport.
 vérification téléphone tenté **pendant une inscription** (avant qu'un compte/organisation
 n'existe) journalise donc avec `organization_id = null` plutôt qu'une valeur inventée.
 
-**Limite P1 assumée et disclosed** : l'écran de monitoring (`CommunicationController::index()`)
+**Limite P1 assumée et disclosed** : l'écran de monitoring (`IndexCommunicationController`)
 filtre strictement par `organization_id` de l'utilisateur connecté — une ligne à
 `organization_id = null` n'apparaît sur **aucun** écran d'organisation en P1. C'est un flux
 marginal (OTP de vérification pendant une inscription non encore aboutie), documenté ici plutôt
@@ -137,7 +137,7 @@ pour le détail complet des colonnes.
 
 ## Écran back-office
 
-`GET /backoffice/communications` (`CommunicationController::index`) — liste + filtres
+`GET /backoffice/communications` (`IndexCommunicationController`) — liste + filtres
 (`DataFilters.vue` : Statut, Canal, Sens, Destinataire, Période), statut affiché via
 `StatusDot.vue`. Affiche indifféremment les lignes OTP et transactionnelles (mêmes colonnes,
 `purpose_label`/`recipient_type_label` distinguent les deux). Volontairement simple : pas de KPI

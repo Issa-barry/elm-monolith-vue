@@ -13,8 +13,8 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Paramètres → Logistique (LogistiqueParametrageController). Déplacé le 07/09/2026 depuis
- * Paramètres → Ventes (cf. VenteParametrageController) : ce sont des réglages de workflow
+ * Paramètres → Logistique (Settings\Logistique\{Edit,Update,UpdateSite}LogistiqueParametrageController).
+ * Déplacé le 07/09/2026 depuis Paramètres → Ventes : ce sont des réglages de workflow
  * logistique, pas des réglages de vente — seul l'écran d'édition change, les clés Parametre
  * restent identiques (`ventes_declencheur_commission_logistique`,
  * `logistique_approbation_reception_obligatoire`).

@@ -116,7 +116,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 // Accès direct à /backoffice/ventes/create bloqué (aucun stock disponible pour ce site) :
-// CommandeVenteController::create()/store() ne renvoient jamais une page 403, ils redirigent
+// Ventes\CreateCommandeVenteController / Ventes\StoreCommandeVenteController ne renvoient jamais une page 403, ils redirigent
 // ici avec un flash 'error' (partagé globalement par HandleInertiaRequests) — affiché en toast
 // top-right plutôt qu'en page d'erreur, cf. règle projet <Toast position="top-right">.
 onMounted(() => {

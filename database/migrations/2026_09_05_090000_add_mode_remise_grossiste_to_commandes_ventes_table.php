@@ -12,7 +12,7 @@ return new class extends Migration
             // Nullable pour tous les clients autres que Grossiste (Externe/Revendeur/
             // Distributeur n'ont pas de mode de remise explicite, cf. docs/grossiste.md) —
             // jamais un défaut implicite, la cohérence est vérifiée à l'écriture
-            // (CommandeVenteController::ensureModeRemiseGrossisteCoherent()).
+            // (CommandeVenteFormBuilder::deriverModeRemiseGrossiste()).
             $table->string('mode_remise_grossiste', 20)->nullable()->after('nature_operation');
         });
     }

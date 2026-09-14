@@ -37,6 +37,37 @@ class VenteParametrageTest extends TestCase
         return $user;
     }
 
+    public function test_edit_returns_403_without_permission(): void
+    {
+        $this->createRoles();
+        $organization = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $organization->id]);
+        $user->assignRole(Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']));
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(403);
+    }
+
+    public function test_update_returns_403_without_permission(): void
+    {
+        $this->createRoles();
+        $organization = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $organization->id]);
+        $user->assignRole(Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']));
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+            ])
+            ->assertStatus(403);
+    }
+
     public function test_edit_exposes_price_permission_flags_per_role(): void
     {
         $this->createRoles();

@@ -61,7 +61,7 @@ class CommissionTriggerVenteTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'factures.encaisser']);
 
         // Les tests de cette classe sans Parametre::set... explicite couvrent le déclencheur
         // CHARGEMENT_VALIDE (cf. docblock de classe) — fixé ici explicitement car ce n'est plus

@@ -335,7 +335,62 @@ class UserInvitationTest extends TestCase
         $this->assertTrue($invitation->isRevoked());
     }
 
-    // ── AcceptInvitationController::show ──────────────────────────────────────
+    // ── forceDestroy (suppression définitive) ────────────────────────────────
+
+    public function test_force_destroy_returns_403_for_user_from_other_org(): void
+    {
+        $org1 = $this->makeOrg();
+        $org2 = $this->makeOrg();
+        $site1 = $this->makeSite($org1);
+        $site2 = $this->makeSite($org2);
+
+        $invitation = $this->makeInvitation($site2, ['revoked_at' => now()]);
+
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'users.create', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org1->id]);
+        $user->assignRole('admin_entreprise');
+        $user->givePermissionTo('users.create');
+        $user->sites()->attach($site1->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($user)
+            ->delete(route('invitations.force-destroy', $invitation))
+            ->assertStatus(403);
+
+        $this->assertNotNull($invitation->fresh());
+    }
+
+    public function test_force_destroy_permanently_deletes_a_revoked_invitation(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $admin = $this->makeAdmin($org, $site);
+
+        $invitation = $this->makeInvitation($site, ['revoked_at' => now()]);
+
+        $this->actingAs($admin)
+            ->delete(route('invitations.force-destroy', $invitation))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('user_invitations', ['id' => $invitation->id]);
+    }
+
+    public function test_force_destroy_refuses_a_pending_invitation(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $admin = $this->makeAdmin($org, $site);
+
+        $invitation = $this->makeInvitation($site);
+
+        $this->actingAs($admin)
+            ->delete(route('invitations.force-destroy', $invitation))
+            ->assertSessionHasErrors('email');
+
+        $this->assertDatabaseHas('user_invitations', ['id' => $invitation->id]);
+    }
+
+    // ── Auth\AcceptInvitation\ShowAcceptInvitationController ──────────────────
 
     public function test_accept_show_returns_error_for_unknown_token(): void
     {
@@ -413,7 +468,7 @@ class UserInvitationTest extends TestCase
             );
     }
 
-    // ── AcceptInvitationController::checkPhone ────────────────────────────────
+    // ── Auth\AcceptInvitation\CheckPhoneAcceptInvitationController ────────────
 
     public function test_check_phone_returns_422_for_unknown_token(): void
     {
@@ -481,7 +536,7 @@ class UserInvitationTest extends TestCase
         $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.OtpPurpose::INVITATION->value.'|'.$context)));
     }
 
-    // ── AcceptInvitationController::verifyOtp ─────────────────────────────────
+    // ── Auth\AcceptInvitation\VerifyOtpAcceptInvitationController ─────────────
 
     public function test_verify_otp_returns_422_for_wrong_code(): void
     {
@@ -586,7 +641,7 @@ class UserInvitationTest extends TestCase
         $this->assertGreaterThan(0, $response->json('retry_after_seconds'));
     }
 
-    // ── AcceptInvitationController::resendOtp ─────────────────────────────────
+    // ── Auth\AcceptInvitation\ResendOtpAcceptInvitationController ─────────────
 
     public function test_resend_otp_invalidates_old_code_and_sends_new_one(): void
     {
@@ -652,7 +707,47 @@ class UserInvitationTest extends TestCase
         ])->assertStatus(422);
     }
 
-    // ── AcceptInvitationController::accept ────────────────────────────────────
+    // ── Auth\AcceptInvitation\AcceptAcceptInvitationController ────────────────
+
+    public function test_accept_redirects_to_show_with_already_authenticated_state(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $existingUser = User::factory()->create();
+
+        $this->actingAs($existingUser)
+            ->post(route('invitations.accept.store', $token), [
+                'telephone' => '+224620000049',
+                'prenom' => 'Test',
+                'nom' => 'User',
+                'password' => 'Password123',
+            ])
+            ->assertRedirect(route('invitations.accept', [
+                'token' => $token,
+                'state' => 'already_authenticated',
+            ]));
+    }
+
+    public function test_accept_show_returns_error_for_already_authenticated_state(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        // Invitation encore valide (pending) : invitationErrorState() renvoie null, ce qui laisse
+        // queryErrorState() décider — sinon 'not_found'/'already_accepted' primerait toujours sur
+        // l'état de requête, quel qu'il soit.
+        $this->get(route('invitations.accept', ['token' => $token, 'state' => 'already_authenticated']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Invitations/Accept')
+                ->where('error', 'already_authenticated')
+            );
+    }
 
     public function test_accept_returns_422_when_user_already_authenticated(): void
     {

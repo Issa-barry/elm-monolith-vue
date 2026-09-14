@@ -9,7 +9,7 @@ namespace App\Enums;
  * 07/09/2026, point 1) :
  *
  * - `COMMANDE_CONFIRMEE` : Ventes uniquement — `StatutCommandeVente::BROUILLON
- *   → A_CHARGER` (CommandeVenteController::valider(), même point que
+ *   → A_CHARGER` (Ventes\ValiderCommandeVenteController, même point que
  *   NotifierLivreursCommandeVenteJob existant). PAS la création brute
  *   (store()) — une commande en brouillon peut encore changer de véhicule/
  *   équipe avant confirmation.

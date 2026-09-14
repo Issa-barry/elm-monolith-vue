@@ -73,7 +73,7 @@ class DroitAjustementStockService
      *
      * Vérifie explicitement que `$siteId` appartient bien à `$orgId` avant de laisser
      * `toutes_agences` répondre vrai sans condition : les appelants actuels (ex.
-     * `ProduitController::ajusterStock()`) re-résolvent déjà le site scopé à l'organisation
+     * `AjusterStockProduitController`) re-résolvent déjà le site scopé à l'organisation
      * avant d'appeler cette méthode, mais cette méthode ne doit jamais dépendre de la discipline
      * de ses appelants pour son isolation multi-organisation (cf. CLAUDE.md § sécurité).
      */

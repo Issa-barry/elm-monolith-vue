@@ -23,7 +23,7 @@ class CommandeVenteService
     /**
      * Décide si une NOUVELLE commande peut être créée pour ce site — bouton « Nouvelle
      * commande » de la page Ventes et route de création elle-même (les deux appellent cette
-     * même méthode, cf. CommandeVenteController::index()/create()/store()). Toujours vrai si
+     * même méthode, cf. Ventes\{Index,Create,Store}CommandeVenteController). Toujours vrai si
      * la politique globale autorise la vente sans stock (Parametre::
      * isVentesAutoriseesSansStock()) ; sinon délègue à StockStatutService::
      * sitePossedeStockVendable() — une EXISTENCE ("ce site a-t-il au moins un produit
@@ -699,8 +699,8 @@ class CommandeVenteService
      * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver). Recontrôle aussi
      * la disponibilité (24/08/2026, cf. reserverLignes()) : le stock a pu changer depuis la
      * création du brouillon (une autre commande confirmée entre-temps a pu le réserver) — jamais
-     * suffisant de ne compter que sur le contrôle fait à la création (CommandeVenteController::
-     * store()/update()).
+     * suffisant de ne compter que sur le contrôle fait à la création (Ventes\{Store,Update}
+     * CommandeVenteController).
      */
     private static function checkConfirmer(CommandeVente $commande, array &$errors): void
     {
@@ -740,7 +740,7 @@ class CommandeVenteService
     /**
      * Vérifie, ligne par ligne et sur le site de la commande, que la quantité chargée ne
      * dépasse pas le stock disponible — cf. verifierDisponibiliteLignes() ci-dessous, point
-     * d'entrée unique réutilisé par CommandeVenteController::store()/update() (création et
+     * d'entrée unique réutilisé par Ventes\{Store,Update}CommandeVenteController (création et
      * modification, 24/08/2026), checkConfirmer() (confirmation — réservation) ET ce contrôle au
      * chargement. Le stock a pu changer entre chaque étape (autre vente entre-temps,
      * ajustement...) : chaque contrôle reste indispensable même si le précédent a déjà validé la
@@ -771,7 +771,7 @@ class CommandeVenteService
      * explicitement la vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock(),
      * paramètre DSI, réservé au PDV et aux commandes vente — jamais aux transferts/
      * ajustements, et jamais un réglage par produit). Appelée par :
-     *  - CommandeVenteController::store()/update() (création/modification d'une commande,
+     *  - Ventes\{Store,Update}CommandeVenteController (création/modification d'une commande,
      *    24/08/2026 — avant cette date, une commande pouvait être créée avec une quantité
      *    supérieure au stock, le seul contrôle existant était au chargement) ;
      *  - checkDisponibiliteStock() ci-dessus (chargement) ;

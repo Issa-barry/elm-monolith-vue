@@ -16,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * Déclenche les notifications transactionnelles SMS/WhatsApp (cf. rapport
  * notifications de commande, 07/09/2026) pour l'événement `chargement_valide`
  * d'une commande vente — transition `CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS`
- * dans `CommandeVenteStatutController::avancer()`. SEUL point qui notifie le
+ * dans `Ventes\AvancerStatutVenteController`. SEUL point qui notifie le
  * CLIENT (App\Models\TransfertLogistique n'en a aucun) : cf.
  * NotifierChargementValideTransfertJob pour l'équivalent Logistique
  * (livreur uniquement).

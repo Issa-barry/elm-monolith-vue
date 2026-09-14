@@ -95,8 +95,8 @@ async function creerProduitAvecStock(
  * « Ajuster le stock » (modale directe) a été retiré du menu de la liste Produits — redondant
  * avec la page Stock, où site et variante sont clairement identifiés (décision produit du
  * 24/08/2026). Remplacé par « Voir le stock », qui ouvre Produits/Stock/Index.vue filtré sur
- * ce produit (réutilise le champ de recherche existant de cette page, cf. StockController::
- * stockQuery()). L'action « Ajuster le stock (par variante) », qui renvoie vers la fiche
+ * ce produit (réutilise le champ de recherche existant de cette page, cf.
+ * IndexStockController::stockQuery()). L'action « Ajuster le stock (par variante) », qui renvoie vers la fiche
  * détail du produit, reste inchangée pour les produits à déclinaisons.
  */
 test('le menu Produits propose « Voir le stock » et plus « Ajuster le stock »', async ({

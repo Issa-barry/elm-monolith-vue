@@ -106,7 +106,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->org = Organization::factory()->create();
         Feature::for($this->org)->activate(ModuleFeature::LOGISTIQUE);
 
-        foreach (['ventes.read', 'ventes.create', 'ventes.update', 'logistique.create', 'logistique.read', 'logistique.update'] as $perm) {
+        foreach (['ventes.read', 'ventes.create', 'ventes.update', 'logistique.create', 'logistique.read', 'logistique.update', 'factures.encaisser'] as $perm) {
             Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
         }
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
@@ -120,7 +120,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
 
         $this->user = User::factory()->create(['organization_id' => $this->org->id]);
         $this->user->assignRole('admin_entreprise');
-        $this->user->givePermissionTo(['ventes.read', 'ventes.create', 'ventes.update', 'logistique.read', 'logistique.update']);
+        $this->user->givePermissionTo(['ventes.read', 'ventes.create', 'ventes.update', 'logistique.read', 'logistique.update', 'factures.encaisser']);
         $this->user->sites()->attach($this->site->id, ['role' => 'responsable', 'is_default' => true]);
 
         $this->categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
@@ -502,7 +502,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
 
     /**
      * Chantier du 31/08/2026 : même contrôleur/données pour les deux natures — seul le composant
-     * Inertia rendu par CommandeVenteController::show() diffère, choisi selon nature_operation
+     * Inertia rendu par Ventes\ShowCommandeVenteController diffère, choisi selon nature_operation
      * (jamais par le nom de route lui-même : ventes.show et distributions.show pointent vers la
      * même action et doivent rendre la même page pour une commande donnée).
      */
@@ -571,7 +571,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         // Un encaissement avant réception ne fait pas non plus passer en LIVREE (contrairement à
         // vente_standard) — statut et paiement sont deux axes indépendants pour la distribution.
         // Passe réellement par le contrôleur (pas une création directe du modèle) : c'est
-        // EncaissementVenteController::store() qui porte le garde-fou testé ici, jamais
+        // Ventes\StoreEncaissementVenteController qui porte le garde-fou testé ici, jamais
         // l'observer du modèle EncaissementVente (qui ne gère que recalculStatut()/
         // cloturerSiComplete(), pas la transition LIVRAISON_EN_COURS → LIVREE).
         $facture = $commande->fresh()->facture;

@@ -104,6 +104,31 @@ class RoleTest extends TestCase
         ));
     }
 
+    // ── create ────────────────────────────────────────────────────────────────
+
+    public function test_create_returns_200_for_authorized_user(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+
+        $this->actingAs($user)
+            ->get(route('roles.create'))
+            ->assertStatus(200);
+    }
+
+    public function test_create_returns_403_if_not_admin_entreprise(): void
+    {
+        $org = Organization::factory()->create();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('manager');
+        $this->attachSite($org, $user);
+
+        $this->actingAs($user)
+            ->get(route('roles.create'))
+            ->assertStatus(403);
+    }
+
     // ── edit ──────────────────────────────────────────────────────────────────
 
     public function test_edit_returns_200_for_authorized_user(): void

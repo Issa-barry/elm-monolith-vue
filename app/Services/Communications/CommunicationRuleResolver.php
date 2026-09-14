@@ -16,8 +16,8 @@ use App\Models\CommunicationRule;
  * `App\Models\CommunicationRule::query()` ailleurs dans l'application.
  *
  * Vérifie TOUJOURS `WhatsAppGateway::isConfigured()` en plus du flag `enabled`
- * en base, même si `App\Http\Controllers\Settings\CommunicationRuleController::
- * update()` refuse déjà d'enregistrer une règle WhatsApp active sans
+ * en base, même si `App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController`
+ * refuse déjà d'enregistrer une règle WhatsApp active sans
  * fournisseur configuré : défense en profondeur si la configuration change
  * après coup (fournisseur retiré) sans que les règles déjà enregistrées ne
  * soient retouchées. Il ne doit jamais exister un état où l'administrateur

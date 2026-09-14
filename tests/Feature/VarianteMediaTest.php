@@ -18,7 +18,7 @@ use Tests\TestCase;
 /**
  * Association média ↔ variante (produit_variantes.media_id) : partage d'une même photo entre
  * plusieurs variantes (ex: toutes les pointures "Blanc"), résolution d'image effective avec
- * fallback, et endpoints HTTP de la galerie (MediaController) — distinct de
+ * fallback, et endpoints HTTP de la galerie (App\Http\Controllers\Produits\Medias\*) — distinct de
  * ProduitMediaTest.php qui couvre MediaService au niveau service (upload/limite/principale).
  */
 class VarianteMediaTest extends TestCase
@@ -84,6 +84,25 @@ class VarianteMediaTest extends TestCase
             ->assertStatus(403);
     }
 
+    /**
+     * Les 5 actions de la galerie (store/definirPrincipale/reordonner/destroy/assignerVariantes)
+     * partagent toutes exactement `$this->authorize('update', $produit)` (ProduitPolicy::update,
+     * déjà testée en profondeur — permission + organisation — dans ProduitTest.php) : un seul
+     * test représentatif suffit ici à confirmer que cette autorisation est bien branchée sur
+     * chaque contrôleur mono-action, pas une policy distincte propre à la galerie.
+     */
+    public function test_store_media_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.medias.store', $produit), [
+                'images' => [UploadedFile::fake()->image('a.jpg')],
+            ])
+            ->assertStatus(403);
+    }
+
     public function test_definir_principale_via_http(): void
     {
         $produit = $this->makeProduitDecline();
@@ -97,6 +116,17 @@ class VarianteMediaTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('produit_medias', ['id' => $medias->last()->id, 'is_primary' => true]);
+    }
+
+    public function test_definir_principale_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $produit = $this->makeProduitDecline($autreOrg);
+        $media = app(MediaService::class)->ajouter($produit, [UploadedFile::fake()->image('a.jpg')])->first();
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.medias.principale', [$produit, $media]))
+            ->assertStatus(403);
     }
 
     public function test_reordonner_via_http(): void
@@ -114,6 +144,22 @@ class VarianteMediaTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('produit_medias', ['id' => $medias->last()->id, 'position' => 0]);
+    }
+
+    public function test_reordonner_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $produit = $this->makeProduitDecline($autreOrg);
+        $medias = app(MediaService::class)->ajouter($produit, [
+            UploadedFile::fake()->image('a.jpg'),
+            UploadedFile::fake()->image('b.jpg'),
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.medias.reordonner', $produit), [
+                'ordre' => [$medias->last()->id, $medias->first()->id],
+            ])
+            ->assertStatus(403);
     }
 
     // ── Assignation à des variantes (partage, sans duplication) ──────────────────

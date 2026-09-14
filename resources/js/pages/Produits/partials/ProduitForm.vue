@@ -35,7 +35,7 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions() côté backend, seule
+// `required_prices`/`gere_stock` (cf. App\Support\Produits\ProduitFormOptions::types() côté backend, seule
 // source de vérité) pilotent le "*" affiché sur les prix obligatoires et l'affichage de la
 // section Stock pour le type sélectionné. `achetable`/`vendable` pilotent une notion distincte,
 // l'applicabilité fonctionnelle (même champs que ceux qui filtrent les flux achat/vente) : un
@@ -128,7 +128,7 @@ interface FormData {
     seuils_site: { site_id: string; actif: boolean; seuil: number | null }[];
     description: string | null;
     // Tableau (même si un seul fichier ici) : le backend attend la clé "images[]"
-    // (ProduitController::validerFormulaire()), partagée avec la galerie multi-photo.
+    // (App\Support\Produits\ProduitFormValidator::valider()), partagée avec la galerie multi-photo.
     images: File[];
     options: OptionInput[];
 }

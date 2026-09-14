@@ -17,7 +17,7 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * App\Http\Controllers\Settings\CommunicationRuleController — écran
+ * App\Http\Controllers\Settings\Communications\{Edit,Update}CommunicationRuleController — écran
  * Paramètres → Communications (cf. rapport notifications de commande,
  * 07/09/2026). Permission dédiée `communications.manage`, distincte de
  * `communications.read` (monitoring).
@@ -99,6 +99,18 @@ class CommunicationRuleControllerTest extends TestCase
         $user = $this->makeUser($org, []);
 
         $this->actingAs($user)->get('/settings/communications')->assertStatus(403);
+    }
+
+    public function test_update_is_refused_without_the_permission(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeUser($org, []);
+
+        $this->actingAs($user)->put('/settings/communications', [
+            'rules' => [
+                ['module' => 'ventes', 'event' => 'commande_confirmee', 'recipient_type' => 'livreur', 'client_type' => null, 'channel' => 'sms', 'enabled' => true],
+            ],
+        ])->assertStatus(403);
     }
 
     /** communications.read (monitoring) ne suffit jamais pour gérer les règles. */

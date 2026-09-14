@@ -20,6 +20,13 @@ use Illuminate\Support\Facades\DB;
  * (lockForUpdate) juste avant d'agir — l'idempotence réelle des écritures
  * elles-mêmes vient en plus de EcritureComptableService (contrainte unique
  * compta_pieces_idempotency_unique).
+ *
+ * Le support de trésorerie d'ORIGINE est toujours choisi à la création
+ * (l'émetteur sait d'où part l'argent). Le support de DESTINATION, lui, est
+ * choisi à la réception par `recevoir()`, pas à la création par
+ * `creerBrouillon()` — le site destinataire est connu à l'avance, mais pas
+ * forcément la caisse/wallet précis qui recevra réellement les fonds tant que
+ * le destinataire ne l'a pas confirmé (revue produit du 2026-09-13).
  */
 class MouvementFondsService
 {
@@ -27,7 +34,12 @@ class MouvementFondsService
         private readonly MouvementFondsComptabilisationService $comptabilisation,
     ) {}
 
-    /** @param  array{site_origine_id:string,site_destination_id:string,compte_tresorerie_origine_id:string,compte_tresorerie_destination_id:string,montant:float,moyen_transfert?:?string,reference_externe?:?string,justificatif_path?:?string,commentaire?:?string,echeance_debut?:?string,echeance_fin?:?string}  $data */
+    /**
+     * Le support de trésorerie de destination est facultatif ici : choisi au
+     * moment de la réception (cf. docblock de la classe et de `recevoir()`).
+     *
+     * @param  array{site_origine_id:string,site_destination_id:string,compte_tresorerie_origine_id:string,compte_tresorerie_destination_id?:?string,montant:float,moyen_transfert?:?string,reference_externe?:?string,justificatif_path?:?string,commentaire?:?string,echeance_debut?:?string,echeance_fin?:?string}  $data
+     */
     public function creerBrouillon(string $organizationId, array $data, ?string $createdBy): MouvementFonds
     {
         if ($data['site_origine_id'] === $data['site_destination_id']) {
@@ -35,10 +47,18 @@ class MouvementFondsService
         }
 
         $origine = CompteTresorerie::forOrg($organizationId)->findOrFail($data['compte_tresorerie_origine_id']);
-        $destination = CompteTresorerie::forOrg($organizationId)->findOrFail($data['compte_tresorerie_destination_id']);
 
-        if ($origine->site_id !== $data['site_origine_id'] || $destination->site_id !== $data['site_destination_id']) {
+        if ($origine->site_id !== $data['site_origine_id']) {
             throw new \InvalidArgumentException('Le support de trésorerie choisi ne correspond pas au site sélectionné.');
+        }
+
+        $destinationId = null;
+        if (! empty($data['compte_tresorerie_destination_id'])) {
+            $destination = CompteTresorerie::forOrg($organizationId)->findOrFail($data['compte_tresorerie_destination_id']);
+            if ($destination->site_id !== $data['site_destination_id']) {
+                throw new \InvalidArgumentException('Le support de trésorerie choisi ne correspond pas au site sélectionné.');
+            }
+            $destinationId = $destination->id;
         }
 
         if ((float) $data['montant'] <= 0) {
@@ -50,7 +70,7 @@ class MouvementFondsService
             'site_origine_id' => $data['site_origine_id'],
             'site_destination_id' => $data['site_destination_id'],
             'compte_tresorerie_origine_id' => $origine->id,
-            'compte_tresorerie_destination_id' => $destination->id,
+            'compte_tresorerie_destination_id' => $destinationId,
             'montant' => $data['montant'],
             'moyen_transfert' => $data['moyen_transfert'] ?? null,
             'reference_externe' => $data['reference_externe'] ?? null,
@@ -87,18 +107,31 @@ class MouvementFondsService
     /**
      * Acceptée depuis ENVOYE (cas nominal) ou CONTESTE (l'investigation a
      * montré que les fonds avaient bien été reçus — contestation levée).
+     *
+     * Le support de trésorerie de destination est choisi ICI par le
+     * destinataire (jamais à la création, cf. creerBrouillon()) : c'est lui
+     * qui sait dans quelle caisse/wallet les fonds sont réellement arrivés.
+     * Toujours requis, même si le mouvement en portait déjà un (ancien
+     * comportement où il était figé à la création) — on ne réutilise jamais
+     * silencieusement une valeur non confirmée par le destinataire à cet instant.
      */
-    public function recevoir(MouvementFonds $mouvement, ?string $userId, ?\DateTimeInterface $dateReception = null): MouvementFonds
+    public function recevoir(MouvementFonds $mouvement, ?string $userId, string $compteTresorerieDestinationId, ?\DateTimeInterface $dateReception = null): MouvementFonds
     {
-        return DB::transaction(function () use ($mouvement, $userId, $dateReception) {
+        return DB::transaction(function () use ($mouvement, $userId, $compteTresorerieDestinationId, $dateReception) {
             $verrouille = MouvementFonds::whereKey($mouvement->id)->lockForUpdate()->firstOrFail();
 
             if (! in_array($verrouille->statut, [StatutMouvementFonds::ENVOYE, StatutMouvementFonds::CONTESTE], true)) {
                 throw TransitionMouvementFondsInvalideException::pour($verrouille, 'recevoir', [StatutMouvementFonds::ENVOYE, StatutMouvementFonds::CONTESTE]);
             }
 
+            $destination = CompteTresorerie::forOrg($verrouille->organization_id)->findOrFail($compteTresorerieDestinationId);
+            if ($destination->site_id !== $verrouille->site_destination_id) {
+                throw new \InvalidArgumentException('Le support de trésorerie choisi ne correspond pas au site de destination du mouvement.');
+            }
+
             $verrouille->date_reception = $dateReception ?? now();
             $verrouille->received_by = $userId;
+            $verrouille->compte_tresorerie_destination_id = $destination->id;
             $verrouille->statut = StatutMouvementFonds::RECU->value;
             $verrouille->save();
 

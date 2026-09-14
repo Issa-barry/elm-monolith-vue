@@ -12,10 +12,10 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Source de vérité UNIQUE du contrôle des impayés — décision produit du 18/08/2026 : avant ce
- * service, l'aperçu (CommandeVenteController::checkSolvabilite()) et le blocage réel
+ * service, l'aperçu (Ventes\CheckSolvabiliteCommandeVenteController) et le blocage réel
  * (enforceImpayesBlocking()) recalculaient chacun la même requête indépendamment, avec un
  * risque de divergence, et le flux PDV (PdvCheckoutService) ne faisait AUCUN contrôle du tout.
- * Réutilisé identiquement par CommandeVenteController (back-office) et PdvCheckoutService (PDV) :
+ * Réutilisé identiquement par Ventes\StoreCommandeVenteController (back-office) et PdvCheckoutService (PDV) :
  * le frontend n'est plus qu'un affichage de ce que ce service calcule, jamais une garantie.
  *
  * Règle de ciblage (client prioritaire, véhicule en repli — décision produit du 28/08/2026,
@@ -166,7 +166,7 @@ class SolvabiliteService
 
     /**
      * Évalue puis lève une ValidationException si bloqué — seul point d'entrée à utiliser avant
-     * de créer une vente (CommandeVenteController::store(), PdvCheckoutService::checkout()).
+     * de créer une vente (Ventes\StoreCommandeVenteController, PdvCheckoutService::checkout()).
      * checkSolvabilite() (aperçu) utilise evaluer() directement : il ne doit jamais lever, juste
      * refléter l'état pour l'utilisateur avant qu'il ne soumette.
      *
@@ -260,9 +260,9 @@ class SolvabiliteService
     }
 
     /**
-     * Seuil applicable à ce client, sans le détail de son origine — utilisé par ClientController
-     * pour afficher le seuil sur la fiche client, sans dupliquer la règle de résolution côté
-     * frontend (même rôle que seuilApplicableVehicule()).
+     * Seuil applicable à ce client, sans le détail de son origine — pour afficher le seuil sur la
+     * fiche client (ShowClientController/EditClientController), sans dupliquer la règle de
+     * résolution côté frontend (même rôle que seuilApplicableVehicule()).
      */
     public function seuilApplicableClient(string $orgId, string $clientId): int
     {

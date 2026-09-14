@@ -103,6 +103,15 @@ class CategorieTest extends TestCase
         $response->assertSessionHas('created_categorie_id', $categorie->id);
     }
 
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['categories.read']);
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.categories.store'), ['nom' => 'Boissons'])
+            ->assertStatus(403);
+    }
+
     public function test_store_fails_without_nom(): void
     {
         $this->actingAs($this->user)
@@ -209,6 +218,16 @@ class CategorieTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $categorie = $this->makeCategorie($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['categories.read']);
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.categories.update', $categorie), ['nom' => 'Test'])
+            ->assertStatus(403);
+    }
+
     // ── toggle ────────────────────────────────────────────────────────────────
 
     public function test_toggle_desactive_puis_reactive(): void
@@ -224,6 +243,26 @@ class CategorieTest extends TestCase
             ->patch(route('produits.categories.toggle', $categorie))
             ->assertRedirect();
         $this->assertDatabaseHas('categories', ['id' => $categorie->id, 'statut' => 'actif']);
+    }
+
+    public function test_toggle_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $categorie = $this->makeCategorie($otherOrg);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.categories.toggle', $categorie))
+            ->assertStatus(403);
+    }
+
+    public function test_toggle_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $categorie = $this->makeCategorie($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['categories.read']);
+
+        $this->actingAs($sansDroit)
+            ->patch(route('produits.categories.toggle', $categorie))
+            ->assertStatus(403);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -302,6 +341,16 @@ class CategorieTest extends TestCase
         $categorie = $this->makeCategorie($otherOrg);
 
         $this->actingAs($this->user)
+            ->delete(route('produits.categories.destroy', $categorie))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $categorie = $this->makeCategorie($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['categories.read']);
+
+        $this->actingAs($sansDroit)
             ->delete(route('produits.categories.destroy', $categorie))
             ->assertStatus(403);
     }

@@ -12,7 +12,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * et is_active (jamais en self-service) — ces champs restent réservés au
  * backoffice, cohérent avec la séparation déjà en place partout ailleurs dans
  * l'application entre édition "propriétaire" (self-service) et édition "staff"
- * (ProprietaireController, ClientController...).
+ * (ProprietaireController, UpdateClientController...).
  */
 class UpdateProfileRequest extends FormRequest
 {

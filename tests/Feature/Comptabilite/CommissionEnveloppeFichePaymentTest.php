@@ -567,7 +567,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
     /**
      * Page Commande (Ventes/Show) : le badge de statut commission doit refléter une commission
      * encore CREEE, jamais rester vide comme s'il n'existait aucune commission — cf.
-     * CommandeVenteController::getCommissionStatutGlobal(), qui lit la relation commissions().
+     * Ventes\ShowCommandeVenteController::getCommissionStatutGlobal(), qui lit la relation commissions().
      */
     /** @test */
     public function la_page_commande_affiche_le_statut_creee_dune_commission(): void

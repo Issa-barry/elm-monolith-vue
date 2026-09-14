@@ -313,6 +313,10 @@ const mainNavItems = computed((): NavItem[] => {
                             href: '/backoffice/comptabilite/tresorerie/mouvements',
                         },
                         {
+                            title: 'Situation de trésorerie',
+                            href: '/backoffice/comptabilite/tresorerie/situation',
+                        },
+                        {
                             title: 'Supports de trésorerie',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },

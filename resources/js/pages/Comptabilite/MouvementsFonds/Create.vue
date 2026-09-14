@@ -37,7 +37,6 @@ const form = useForm({
     site_origine_id: '',
     site_destination_id: props.site_prerempli ?? '',
     compte_tresorerie_origine_id: '',
-    compte_tresorerie_destination_id: '',
     montant: props.montant_prerempli ?? '',
     moyen_transfert: '',
     reference_externe: '',
@@ -49,11 +48,6 @@ const form = useForm({
 
 const comptesOrigine = computed(() =>
     props.comptes_tresorerie.filter((c) => c.site_id === form.site_origine_id),
-);
-const comptesDestination = computed(() =>
-    props.comptes_tresorerie.filter(
-        (c) => c.site_id === form.site_destination_id,
-    ),
 );
 
 function onFileChange(e: Event) {
@@ -132,55 +126,34 @@ function submit() {
                     </div>
                 </div>
 
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="space-y-1.5">
-                        <label class="text-sm font-medium"
-                            >Site de destination</label
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium"
+                        >Site de destination</label
+                    >
+                    <select
+                        v-model="form.site_destination_id"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-1/2 sm:pr-8"
+                    >
+                        <option value="" disabled>Sélectionner…</option>
+                        <option
+                            v-for="s in sites"
+                            :key="s.value"
+                            :value="s.value"
                         >
-                        <select
-                            v-model="form.site_destination_id"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                            <option value="" disabled>Sélectionner…</option>
-                            <option
-                                v-for="s in sites"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
-                        <p
-                            v-if="form.errors.site_destination_id"
-                            class="text-xs text-red-600 dark:text-red-400"
-                        >
-                            {{ form.errors.site_destination_id }}
-                        </p>
-                    </div>
-                    <div class="space-y-1.5">
-                        <label class="text-sm font-medium"
-                            >Support de trésorerie de destination</label
-                        >
-                        <select
-                            v-model="form.compte_tresorerie_destination_id"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                            <option value="" disabled>Sélectionner…</option>
-                            <option
-                                v-for="c in comptesDestination"
-                                :key="c.id"
-                                :value="c.id"
-                            >
-                                {{ c.libelle }}
-                            </option>
-                        </select>
-                        <p
-                            v-if="form.errors.compte_tresorerie_destination_id"
-                            class="text-xs text-red-600 dark:text-red-400"
-                        >
-                            {{ form.errors.compte_tresorerie_destination_id }}
-                        </p>
-                    </div>
+                            {{ s.label }}
+                        </option>
+                    </select>
+                    <p
+                        v-if="form.errors.site_destination_id"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ form.errors.site_destination_id }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        Le support de trésorerie de destination (caisse,
+                        banque…) sera choisi par le destinataire au moment de la
+                        confirmation de réception.
+                    </p>
                 </div>
 
                 <div class="space-y-1.5">
