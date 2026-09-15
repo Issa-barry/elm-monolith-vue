@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -19,6 +20,8 @@ interface TypeVehiculeRow {
 }
 
 const props = defineProps<{ types: TypeVehiculeRow[] }>();
+
+const { can } = usePermissions();
 
 const page = usePage();
 const flash = computed(
@@ -80,7 +83,10 @@ function destroy(id: string) {
                         flotte.
                     </p>
                 </div>
-                <Link href="/backoffice/type-vehicules/create">
+                <Link
+                    v-if="can('type-vehicules.create')"
+                    href="/backoffice/type-vehicules/create"
+                >
                     <button
                         class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
                     >
@@ -167,6 +173,7 @@ function destroy(id: string) {
                                     class="flex items-center justify-end gap-2"
                                 >
                                     <Link
+                                        v-if="can('type-vehicules.update')"
                                         :href="`/backoffice/type-vehicules/${type.id}/edit`"
                                     >
                                         <button
@@ -176,6 +183,7 @@ function destroy(id: string) {
                                         </button>
                                     </Link>
                                     <button
+                                        v-if="can('type-vehicules.delete')"
                                         :disabled="type.vehicules_count > 0"
                                         class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
                                         @click="destroy(type.id)"

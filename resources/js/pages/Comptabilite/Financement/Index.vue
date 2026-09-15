@@ -3,6 +3,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -51,6 +52,8 @@ const props = defineProps<{
     sites: { value: string; label: string }[];
     is_admin: boolean;
 }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -366,7 +369,10 @@ function nouveauFinancementHref(row: Row): string {
                             </td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
                                 <Link
-                                    v-if="row.statut === 'a_financer'"
+                                    v-if="
+                                        row.statut === 'a_financer' &&
+                                        can('tresorerie.create')
+                                    "
                                     :href="nouveauFinancementHref(row)"
                                     class="text-xs font-medium text-primary hover:underline"
                                 >

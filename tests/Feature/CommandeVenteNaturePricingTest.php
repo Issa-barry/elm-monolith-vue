@@ -31,7 +31,7 @@ class CommandeVenteNaturePricingTest extends TestCase
     {
         parent::setUp();
 
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'pdv.create']);
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
         $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -21,6 +22,8 @@ interface ImportRow {
 }
 
 defineProps<{ imports: ImportRow[] }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/parametres' },
@@ -47,7 +50,10 @@ function ouvrir(id: string) {
                     </p>
                 </div>
                 <div class="flex gap-2">
-                    <Link href="/settings/imports-flotte/nouveau">
+                    <Link
+                        v-if="can('imports-flotte.create')"
+                        href="/settings/imports-flotte/nouveau"
+                    >
                         <Button size="sm">
                             <Plus class="mr-1.5 h-4 w-4" />
                             Nouvel import

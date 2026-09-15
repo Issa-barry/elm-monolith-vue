@@ -44,6 +44,7 @@ class VehiculeCapaciteTest extends TestCase
             'vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete',
             'type-vehicules.read', 'type-vehicules.create', 'type-vehicules.update', 'type-vehicules.delete',
             'logistique.read', 'logistique.create', 'logistique.update',
+            'pdv.create',
         ]);
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de

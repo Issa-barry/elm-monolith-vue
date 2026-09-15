@@ -45,6 +45,7 @@ class ReferenceMetierParPrefixeTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser([
             'ventes.read', 'ventes.create',
+            'pdv.read', 'pdv.create',
             'logistique.read', 'logistique.create',
             'comptabilite.read',
         ]);
@@ -320,7 +321,7 @@ class ReferenceMetierParPrefixeTest extends TestCase
 
         // Deuxième organisation, entièrement indépendante — même jour, même préfixe.
         $orgB = Organization::factory()->create();
-        $userB = $this->makeUserWithPermissions($orgB, ['ventes.read', 'ventes.create']);
+        $userB = $this->makeUserWithPermissions($orgB, ['ventes.read', 'ventes.create', 'pdv.read', 'pdv.create']);
         $siteB = Site::create(['organization_id' => $orgB->id, 'nom' => 'Site B', 'type' => 'depot', 'localisation' => 'Kindia']);
         $userB->sites()->attach($siteB->id, ['role' => 'employe', 'is_default' => true]);
         Feature::for($orgB)->activate(ModuleFeature::PDV);

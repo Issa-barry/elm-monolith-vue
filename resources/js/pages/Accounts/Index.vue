@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -48,6 +49,7 @@ const props = defineProps<{
 
 const confirm = useConfirm();
 const toast = useToast();
+const { can, hasRole } = usePermissions();
 
 const TYPE_LABELS: Record<string, string> = {
     agent: 'Agent',
@@ -394,7 +396,14 @@ function confirmToggle(a: Account) {
                     <!-- Actions -->
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
-                            <div class="flex justify-end">
+                            <div
+                                v-if="
+                                    (data.type === 'agent' &&
+                                        can('users.update')) ||
+                                    hasRole('super_admin')
+                                "
+                                class="flex justify-end"
+                            >
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
                                         <Button
@@ -409,7 +418,12 @@ function confirmToggle(a: Account) {
                                         align="end"
                                         class="w-44"
                                     >
-                                        <template v-if="data.type === 'agent'">
+                                        <template
+                                            v-if="
+                                                data.type === 'agent' &&
+                                                can('users.update')
+                                            "
+                                        >
                                             <DropdownMenuItem as-child>
                                                 <Link
                                                     :href="`/backoffice/users/${data.id}/edit`"
@@ -419,9 +433,12 @@ function confirmToggle(a: Account) {
                                                     Modifier
                                                 </Link>
                                             </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
+                                            <DropdownMenuSeparator
+                                                v-if="hasRole('super_admin')"
+                                            />
                                         </template>
                                         <DropdownMenuItem
+                                            v-if="hasRole('super_admin')"
                                             class="cursor-pointer"
                                             :class="
                                                 data.is_active

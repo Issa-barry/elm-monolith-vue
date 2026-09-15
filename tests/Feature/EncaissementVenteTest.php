@@ -207,6 +207,107 @@ class EncaissementVenteTest extends TestCase
         ]);
     }
 
+    // ── Référence obligatoire Mobile Money / Virement (2026-09-14) ────────────
+    // Mode et opérateur sont deux dimensions distinctes (cf. App\Enums\OperateurMobileMoney) :
+    // mode_paiement reste stable (especes/mobile_money/virement/cheque), l'opérateur (Orange
+    // Money, Kulu, Soutra Money, MOMO, PayCard) est un champ séparé.
+
+    public function test_encaissement_mobile_money_sans_operateur_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $response = $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'mobile_money',
+                'reference_paiement' => 'OM-123456',
+            ]
+        );
+
+        $response->assertSessionHasErrors('operateur_mobile_money');
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_encaissement_mobile_money_sans_reference_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $response = $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'mobile_money',
+                'operateur_mobile_money' => 'orange_money',
+            ]
+        );
+
+        $response->assertSessionHasErrors('reference_paiement');
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_encaissement_virement_sans_reference_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $response = $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'virement',
+            ]
+        );
+
+        $response->assertSessionHasErrors('reference_paiement');
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_encaissement_cheque_sans_reference_est_accepte(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'cheque',
+            ]
+        )->assertRedirect();
+
+        $this->assertDatabaseHas('encaissements_ventes', [
+            'facture_vente_id' => $facture->id,
+            'mode_paiement' => 'cheque',
+            'reference_paiement' => null,
+        ]);
+    }
+
+    public function test_encaissement_mobile_money_avec_operateur_et_reference_est_enregistre(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 1000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'mobile_money',
+                'operateur_mobile_money' => 'orange_money',
+                'reference_paiement' => 'OM-987654',
+            ]
+        )->assertRedirect();
+
+        $this->assertDatabaseHas('encaissements_ventes', [
+            'facture_vente_id' => $facture->id,
+            'mode_paiement' => 'mobile_money',
+            'operateur_mobile_money' => 'orange_money',
+            'reference_paiement' => 'OM-987654',
+        ]);
+    }
+
     public function test_encaissement_sans_date_utilise_date_du_jour(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();

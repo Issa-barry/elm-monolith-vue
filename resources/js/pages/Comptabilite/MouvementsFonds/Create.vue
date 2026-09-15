@@ -52,22 +52,27 @@ const comptesOrigine = computed(() =>
 );
 
 // ── Montant formaté (séparateur de milliers) ──────────────────────────────
+// toLocaleString('fr-FR') insère une espace fine insécable (U+202F) comme
+// séparateur de milliers : quasi invisible dans une police grasse/large
+// comme celle de ce champ. On la remplace par une espace normale pour que
+// le regroupement reste visible ; la valeur numérique envoyée au backend
+// (form.montant) n'est pas affectée par ce remplacement purement visuel.
+function formatMontant(valeur: number): string {
+    return valeur
+        .toLocaleString('fr-FR', { maximumFractionDigits: 0 })
+        .replace(/ /g, ' ');
+}
+
 const montantDisplay = ref(
     props.montant_prerempli
-        ? Number(props.montant_prerempli).toLocaleString('fr-FR', {
-              maximumFractionDigits: 0,
-          })
+        ? formatMontant(Number(props.montant_prerempli))
         : '',
 );
 
 function handleMontantInput(e: Event) {
     const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
     form.montant = raw ? parseInt(raw, 10) : '';
-    montantDisplay.value = raw
-        ? parseInt(raw, 10).toLocaleString('fr-FR', {
-              maximumFractionDigits: 0,
-          })
-        : '';
+    montantDisplay.value = raw ? formatMontant(parseInt(raw, 10)) : '';
 }
 
 function onFileChange(e: Event) {
@@ -168,7 +173,7 @@ function submit() {
                         >
                         <select
                             v-model="form.site_destination_id"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-1/2"
+                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                             <option value="" disabled>Sélectionner…</option>
                             <option
@@ -184,10 +189,6 @@ function submit() {
                             class="text-xs text-red-600 dark:text-red-400"
                         >
                             {{ form.errors.site_destination_id }}
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            Le support de réception sera choisi par le
-                            destinataire lors de la confirmation.
                         </p>
                     </div>
                 </div>

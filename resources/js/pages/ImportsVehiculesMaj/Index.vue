@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -20,6 +21,8 @@ interface ImportRow {
 }
 
 defineProps<{ imports: ImportRow[] }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Véhicules', href: '/backoffice/vehicules' },
@@ -50,7 +53,10 @@ function ouvrir(id: string) {
                     </p>
                 </div>
                 <div class="flex gap-2">
-                    <Link href="/backoffice/vehicules/imports-maj/nouveau">
+                    <Link
+                        v-if="can('imports-vehicules-maj.create')"
+                        href="/backoffice/vehicules/imports-maj/nouveau"
+                    >
                         <Button size="sm">
                             <Plus class="mr-1.5 h-4 w-4" />
                             Nouvel import
