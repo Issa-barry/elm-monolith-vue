@@ -2000,7 +2000,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         class="w-full"
                         fluid
                         :class="{
-                            'p-invalid': encaisserForm.errors.reference_paiement,
+                            'p-invalid':
+                                encaisserForm.errors.reference_paiement,
                         }"
                     />
                     <p
