@@ -6,6 +6,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { flattenCategorieTree } from '@/lib/categorieTree';
 import { type BreadcrumbItem } from '@/types';
@@ -38,6 +39,7 @@ const props = defineProps<{
 
 const toast = useToast();
 const confirm = useConfirm();
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -274,7 +276,11 @@ function destroy(categorie: Categorie) {
                         plusieurs niveaux.
                     </p>
                 </div>
-                <Button size="sm" @click="openCreate">
+                <Button
+                    v-if="can('categories.create')"
+                    size="sm"
+                    @click="openCreate"
+                >
                     <Plus class="mr-1.5 h-3.5 w-3.5" />
                     Nouvelle catégorie
                 </Button>
@@ -305,7 +311,10 @@ function destroy(categorie: Categorie) {
                             }}
                         </p>
                         <Button
-                            v-if="categories.length === 0"
+                            v-if="
+                                categories.length === 0 &&
+                                can('categories.create')
+                            "
                             variant="outline"
                             size="sm"
                             @click="openCreate"
@@ -384,6 +393,7 @@ function destroy(categorie: Categorie) {
                             <td class="px-4 py-2.5 text-right">
                                 <div class="flex justify-end gap-0.5">
                                     <button
+                                        v-if="can('categories.update')"
                                         type="button"
                                         :title="
                                             c.source.statut === 'actif'
@@ -396,6 +406,7 @@ function destroy(categorie: Categorie) {
                                         <Power class="h-3.5 w-3.5" />
                                     </button>
                                     <button
+                                        v-if="can('categories.update')"
                                         type="button"
                                         title="Modifier"
                                         class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -404,6 +415,7 @@ function destroy(categorie: Categorie) {
                                         <Pencil class="h-3.5 w-3.5" />
                                     </button>
                                     <button
+                                        v-if="can('categories.delete')"
                                         type="button"
                                         title="Supprimer"
                                         class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"

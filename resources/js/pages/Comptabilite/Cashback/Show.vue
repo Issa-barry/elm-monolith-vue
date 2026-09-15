@@ -6,6 +6,7 @@ import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsT
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import type { BreadcrumbItem } from '@/types';
@@ -45,6 +46,8 @@ const props = defineProps<{
     modes_paiement: ModePaiementOption[];
     montant_disponible: number;
 }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -251,7 +254,12 @@ function submitVerser() {
                     class="flex items-center justify-between border-b px-4 py-3"
                 >
                     <h2 class="text-sm font-semibold">Dépenses client</h2>
-                    <Button as-child size="sm" variant="outline">
+                    <Button
+                        v-if="can('depenses.create')"
+                        as-child
+                        size="sm"
+                        variant="outline"
+                    >
                         <Link
                             :href="`/backoffice/depenses/create?beneficiaire_type=client&beneficiaire_id=${client.id}`"
                         >

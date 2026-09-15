@@ -1,9 +1,10 @@
 # Standards UI — à respecter impérativement
 
-Ces deux règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
-exécuté dans le CI (`.github/workflows/lint.yml`, job `quality`, step "Check UI standards").
-Une PR qui les viole échoue le check **avant merge**. Lance `npm run lint:standards` en local
-pour vérifier avant de pousser.
+Les règles 1 et 2 ci-dessous sont contrôlées automatiquement par
+`node scripts/check-ui-standards.mjs`, exécuté dans le CI (`.github/workflows/lint.yml`, job
+`quality`, step "Check UI standards"). Une PR qui les viole échoue le check **avant merge**.
+Lance `npm run lint:standards` en local pour vérifier avant de pousser. La règle 3 n'est pas
+(encore) couverte par ce script — à vérifier manuellement en revue de code.
 
 ## 1. Badge de statut : point coloré, jamais de fond coloré
 
@@ -44,6 +45,28 @@ Toute page de liste (Index) avec des filtres doit utiliser
   envoyer `site_ids[]` au backend.
 - Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
   c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
+
+## 3. Visibilité des actions : jamais affichée sans la permission réelle
+
+Un bouton/lien Créer, Modifier, Supprimer (ou une action métier spécifique : valider, encaisser,
+annuler...) ne doit jamais s'afficher à un utilisateur qui n'a pas la permission backend
+correspondante — même si le backend refuse déjà la requête (403 silencieux au clic). Le frontend
+doit refléter l'état d'autorisation réel, jamais laisser deviner une action qui échouera.
+
+```vue
+<Button v-if="can('categories.create')" @click="openCreate">Nouvelle catégorie</Button>
+```
+
+- Utilise `usePermissions()` / `can('resource.action')`
+  (`resources/js/composables/usePermissions.ts`) — jamais une nouvelle vérification ad hoc,
+  jamais un simple `:disabled` sur un bouton qui reste visible.
+- La clé de permission doit correspondre **exactement** à celle vérifiée côté backend
+  (`$this->authorize(...)` ou `$user->can(...)` dans le contrôleur/policy) — vérifie le fichier
+  concerné avant d'écrire le `v-if`, ne devine jamais le nom de la permission.
+- Si la page entière n'est déjà accessible qu'aux utilisateurs ayant cette permission (ex:
+  `authorize(...)` posé aussi sur l'action `index`/`viewAny`), le `can()` frontend devient
+  redondant mais reste sans risque — pas obligatoire dans ce cas précis.
+- S'applique aussi aux liens de navigation (sidebar, etc.) menant vers une action protégée.
 
 ## Échappatoire
 
