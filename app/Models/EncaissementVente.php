@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Enums\OperateurMobileMoney;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -23,6 +24,8 @@ class EncaissementVente extends Model
         'montant',
         'date_encaissement',
         'mode_paiement',
+        'operateur_mobile_money',
+        'reference_paiement',
         'note',
         'created_by',
     ];
@@ -33,6 +36,7 @@ class EncaissementVente extends Model
             'montant' => 'decimal:2',
             'date_encaissement' => 'date:Y-m-d',
             'mode_paiement' => ModePaiement::class,
+            'operateur_mobile_money' => OperateurMobileMoney::class,
         ];
     }
 

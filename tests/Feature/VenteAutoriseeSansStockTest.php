@@ -55,7 +55,7 @@ class VenteAutoriseeSansStockTest extends TestCase
         // résolvait alors le stock sur l'autre site que celui vérifié par ce test. Même
         // construction minimaliste, à un seul site, que PdvCheckoutTest.
         $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'produits.read']);
+        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'produits.read', 'pdv.create']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,
@@ -171,7 +171,7 @@ class VenteAutoriseeSansStockTest extends TestCase
     public function test_politique_est_isolee_par_organisation(): void
     {
         $orgB = Organization::factory()->create();
-        $userB = $this->makeUserWithPermissions($orgB, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $userB = $this->makeUserWithPermissions($orgB, ['ventes.read', 'ventes.create', 'ventes.update', 'pdv.create']);
         $siteB = Site::create([
             'organization_id' => $orgB->id,
             'nom' => 'Site B',

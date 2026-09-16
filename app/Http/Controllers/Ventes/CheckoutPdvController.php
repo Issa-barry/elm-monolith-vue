@@ -17,6 +17,9 @@ class CheckoutPdvController extends Controller
     public function __invoke(PdvCheckoutRequest $request): RedirectResponse
     {
         $user = auth()->user();
+
+        abort_unless($user->can('pdv.create'), 403);
+
         $orgId = $user->organization_id;
 
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");

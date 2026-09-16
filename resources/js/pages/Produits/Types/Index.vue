@@ -6,6 +6,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -42,6 +43,7 @@ const props = defineProps<{
 
 const toast = useToast();
 const confirm = useConfirm();
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -261,7 +263,11 @@ function destroy(type: ProduitTypeRow) {
                         stock, achat/vente possibles, prix requis.
                     </p>
                 </div>
-                <Button size="sm" @click="openCreate">
+                <Button
+                    v-if="can('type-produits.create')"
+                    size="sm"
+                    @click="openCreate"
+                >
                     <Plus class="mr-1.5 h-3.5 w-3.5" />
                     Nouveau type
                 </Button>
@@ -370,6 +376,7 @@ function destroy(type: ProduitTypeRow) {
                                 <td class="px-4 py-2.5 text-right">
                                     <div class="flex justify-end gap-0.5">
                                         <button
+                                            v-if="can('type-produits.update')"
                                             type="button"
                                             :title="
                                                 t.statut === 'actif'
@@ -382,6 +389,7 @@ function destroy(type: ProduitTypeRow) {
                                             <Power class="h-3.5 w-3.5" />
                                         </button>
                                         <button
+                                            v-if="can('type-produits.update')"
                                             type="button"
                                             title="Modifier"
                                             class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -390,6 +398,7 @@ function destroy(type: ProduitTypeRow) {
                                             <Pencil class="h-3.5 w-3.5" />
                                         </button>
                                         <button
+                                            v-if="can('type-produits.delete')"
                                             type="button"
                                             title="Supprimer"
                                             class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"

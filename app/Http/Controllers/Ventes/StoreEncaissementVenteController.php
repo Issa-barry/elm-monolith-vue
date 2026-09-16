@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ventes;
 
 use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
+use App\Enums\OperateurMobileMoney;
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Controller;
 use App\Models\FactureVente;
@@ -51,6 +52,19 @@ class StoreEncaissementVenteController extends Controller
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
             'date_encaissement' => 'nullable|date',
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
+            // Référence obligatoire pour Mobile Money et Virement (rapprochement bancaire /
+            // opérateur) — Chèque et Espèces n'exigent aucune référence structurée.
+            'reference_paiement' => [
+                'nullable', 'string', 'max:190',
+                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
+            ],
+            // Opérateur Mobile Money obligatoire uniquement pour ce mode — distinct de
+            // mode_paiement pour ne pas faire exploser cet enum à chaque nouveau fintech
+            // guinéen (Orange Money, Kulu, Soutra Money, MOMO, PayCard...).
+            'operateur_mobile_money' => [
+                'nullable', Rule::in(array_column(OperateurMobileMoney::cases(), 'value')),
+                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value,
+            ],
             'note' => 'nullable|string|max:2000',
         ], [
             'montant.required' => 'Le montant est obligatoire.',
@@ -58,6 +72,9 @@ class StoreEncaissementVenteController extends Controller
             'montant.max' => 'Le montant ne peut pas depasser le restant du.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
             'mode_paiement.in' => 'Mode de paiement invalide.',
+            'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
+            'operateur_mobile_money.required_if' => 'L\'operateur Mobile Money est obligatoire.',
+            'operateur_mobile_money.in' => 'Operateur Mobile Money invalide.',
         ]);
 
         $data['date_encaissement'] ??= now()->toDateString();
@@ -91,6 +108,8 @@ class StoreEncaissementVenteController extends Controller
                     'montant' => $data['montant'],
                     'date_encaissement' => $data['date_encaissement'],
                     'mode_paiement' => $data['mode_paiement'],
+                    'operateur_mobile_money' => $data['operateur_mobile_money'] ?? null,
+                    'reference_paiement' => $data['reference_paiement'] ?? null,
                     'note' => $data['note'] ?? null,
                     'created_by' => auth()->id(),
                 ]);
@@ -105,6 +124,8 @@ class StoreEncaissementVenteController extends Controller
                         [
                             'montant' => (float) $data['montant'],
                             'mode_paiement' => $data['mode_paiement'],
+                            'operateur_mobile_money' => $data['operateur_mobile_money'] ?? null,
+                            'reference_paiement' => $data['reference_paiement'] ?? null,
                             'date_encaissement' => $data['date_encaissement'],
                         ],
                     );

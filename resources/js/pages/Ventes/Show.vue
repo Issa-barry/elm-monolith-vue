@@ -35,10 +35,11 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
 
@@ -69,6 +70,9 @@ interface Encaissement {
     heure: string | null;
     mode_paiement: string;
     mode_paiement_label: string;
+    operateur_mobile_money: string | null;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -535,13 +539,48 @@ const modesPaiement = [
     { value: 'cheque', label: 'Chèque' },
 ];
 
+// Opérateurs Mobile Money actifs sur le marché guinéen (cf. App\Enums\OperateurMobileMoney) —
+// distinct de mode_paiement pour ne pas devoir modifier cet enum à chaque nouveau fintech.
+const operateursMobileMoney = [
+    { value: 'orange_money', label: 'Orange Money' },
+    { value: 'kulu', label: 'Kulu' },
+    { value: 'soutra_money', label: 'Soutra Money' },
+    { value: 'momo', label: 'MOMO (MTN Mobile Money)' },
+    { value: 'paycard', label: 'PayCard' },
+    { value: 'autre', label: 'Autre' },
+];
+
+// Référence obligatoire pour rapprochement — Mobile Money (opérateur) et Virement (bancaire).
+// Chèque/Espèces n'ont pas de référence structurée pour l'instant (cf. StoreEncaissementVenteController).
+const referencePaiementRequise = computed(
+    () =>
+        encaisserForm.mode_paiement === 'mobile_money' ||
+        encaisserForm.mode_paiement === 'virement',
+);
+
 const encaisserDialogVisible = ref(false);
 const encaisserForm = useForm({
     montant: null as number | null,
     mode_paiement: 'especes' as string | null,
+    operateur_mobile_money: null as string | null,
+    reference_paiement: '',
     note: '',
     date_encaissement: new Date().toISOString().slice(0, 10),
 });
+
+// Effacer opérateur/référence dès qu'on quitte un mode qui les exige, pour ne jamais soumettre
+// une valeur devenue obsolète après un changement de mode de paiement dans la même ouverture.
+watch(
+    () => encaisserForm.mode_paiement,
+    (mode) => {
+        if (mode !== 'mobile_money') {
+            encaisserForm.operateur_mobile_money = null;
+        }
+        if (mode !== 'mobile_money' && mode !== 'virement') {
+            encaisserForm.reference_paiement = '';
+        }
+    },
+);
 
 function openEncaisserDialog() {
     encaisserForm.reset();
@@ -1621,6 +1660,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             Mode
                                         </th>
                                         <th
+                                            class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell"
+                                        >
+                                            Référence
+                                        </th>
+                                        <th
                                             class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         >
                                             Montant
@@ -1649,7 +1693,21 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         <td
                                             class="px-4 py-3 text-muted-foreground"
                                         >
-                                            {{ enc.mode_paiement_label }}
+                                            {{ enc.mode_paiement_label
+                                            }}<span
+                                                v-if="
+                                                    enc.operateur_mobile_money_label
+                                                "
+                                            >
+                                                ({{
+                                                    enc.operateur_mobile_money_label
+                                                }})</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="hidden px-4 py-3 text-muted-foreground md:table-cell"
+                                        >
+                                            {{ enc.reference_paiement ?? '—' }}
                                         </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -1900,6 +1958,59 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         {{ encaisserForm.errors.mode_paiement }}
                     </p>
                 </div>
+                <div v-if="encaisserForm.mode_paiement === 'mobile_money'">
+                    <Label for="enc-operateur" class="mb-1.5 block text-sm">
+                        Opérateur Mobile Money
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <Select
+                        id="enc-operateur"
+                        v-model="encaisserForm.operateur_mobile_money"
+                        :options="operateursMobileMoney"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner"
+                        class="w-full"
+                        fluid
+                        :class="{
+                            'p-invalid':
+                                encaisserForm.errors.operateur_mobile_money,
+                        }"
+                    />
+                    <p
+                        v-if="encaisserForm.errors.operateur_mobile_money"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ encaisserForm.errors.operateur_mobile_money }}
+                    </p>
+                </div>
+                <div v-if="referencePaiementRequise">
+                    <Label for="enc-reference" class="mb-1.5 block text-sm">
+                        Référence
+                        {{
+                            encaisserForm.mode_paiement === 'virement'
+                                ? 'du virement'
+                                : 'de la transaction'
+                        }}
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <InputText
+                        id="enc-reference"
+                        v-model="encaisserForm.reference_paiement"
+                        class="w-full"
+                        fluid
+                        :class="{
+                            'p-invalid':
+                                encaisserForm.errors.reference_paiement,
+                        }"
+                    />
+                    <p
+                        v-if="encaisserForm.errors.reference_paiement"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ encaisserForm.errors.reference_paiement }}
+                    </p>
+                </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
@@ -1912,7 +2023,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         :disabled="
                             encaisserForm.processing ||
                             !encaisserForm.montant ||
-                            !encaisserForm.mode_paiement
+                            !encaisserForm.mode_paiement ||
+                            (encaisserForm.mode_paiement === 'mobile_money' &&
+                                !encaisserForm.operateur_mobile_money) ||
+                            (referencePaiementRequise &&
+                                !encaisserForm.reference_paiement)
                         "
                         @click="submitEncaisser"
                     >
