@@ -21,6 +21,7 @@ export type Resource =
     | 'ventes'
     | 'achats'
     | 'fournisseurs'
+    | 'pdv'
     | 'depenses'
     | 'users'
     | 'parametres'
