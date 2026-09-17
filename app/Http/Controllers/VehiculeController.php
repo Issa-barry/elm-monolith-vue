@@ -27,6 +27,7 @@ use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
+use App\Services\Vehicules\VehiculeSituationVentesService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -40,7 +41,10 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class VehiculeController extends Controller
 {
-    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+    public function __construct(
+        private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+        private readonly VehiculeSituationVentesService $situationVentesService,
+    ) {}
 
     private function vehiculeData(Vehicule $v): array
     {
@@ -365,6 +369,9 @@ class VehiculeController extends Controller
                 'commentaire' => $d->commentaire,
             ]);
 
+        $situationPeriode = $request->query('situation_periode', 'all');
+        $situationVentes = $this->situationVentesService->pourVehicule($vehicule, $situationPeriode);
+
         $equipe = $vehicule->equipe;
         $equipeData = null;
         if ($equipe) {
@@ -406,6 +413,8 @@ class VehiculeController extends Controller
             'vehicule' => $this->vehiculeData($vehicule),
             'depenses' => $depenses,
             'equipe' => $equipeData,
+            'situation_ventes' => $situationVentes,
+            'situation_periode' => $situationPeriode,
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),

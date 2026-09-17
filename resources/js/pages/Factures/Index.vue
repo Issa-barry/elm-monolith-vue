@@ -2,7 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +38,8 @@ interface EncaissementItem {
     date_encaissement: string | null;
     enregistre_le: string | null;
     mode_paiement: string;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -74,11 +76,6 @@ interface Totaux {
     montant_payees: number;
 }
 
-interface ModePaiementOption {
-    value: string;
-    label: string;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface SiteOption {
     value: string;
@@ -94,7 +91,6 @@ interface LivreurInfo {
 const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
-    modes_paiement: ModePaiementOption[];
     periode: string;
     statut: string;
     site_ids?: string[];
@@ -263,6 +259,8 @@ function openDialog(facture: FactureItem) {
 function handleEncaissSubmit(payload: {
     montant: number;
     mode_paiement: string;
+    operateur_mobile_money?: string;
+    reference_paiement?: string;
 }) {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
@@ -834,6 +832,11 @@ function _progressPercent(f: FactureItem): number {
                                 Mode
                             </th>
                             <th
+                                class="hidden px-3 py-2 text-left font-medium text-muted-foreground sm:table-cell"
+                            >
+                                Référence
+                            </th>
+                            <th
                                 class="px-3 py-2 text-right font-medium text-muted-foreground"
                             >
                                 Montant
@@ -866,7 +869,15 @@ function _progressPercent(f: FactureItem): number {
                                 }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement }}
+                                {{ e.mode_paiement
+                                }}<span v-if="e.operateur_mobile_money_label">
+                                    ({{ e.operateur_mobile_money_label }})</span
+                                >
+                            </td>
+                            <td
+                                class="hidden px-3 py-2 text-muted-foreground sm:table-cell"
+                            >
+                                {{ e.reference_paiement ?? '—' }}
                             </td>
                             <td
                                 class="px-3 py-2 text-right font-medium tabular-nums"
@@ -881,7 +892,7 @@ function _progressPercent(f: FactureItem): number {
                     <tfoot>
                         <tr class="border-t">
                             <td
-                                colspan="3"
+                                colspan="4"
                                 class="px-3 py-2 text-sm font-semibold"
                             >
                                 Total encaissé
@@ -906,7 +917,7 @@ function _progressPercent(f: FactureItem): number {
         </Dialog>
 
         <!-- Dialog encaissement ─────────────────────────────────────────────── -->
-        <PaymentDialogCompact
+        <PaymentCard
             v-model:visible="dialogVisible"
             :title="
                 factureActive
@@ -916,7 +927,6 @@ function _progressPercent(f: FactureItem): number {
             :solde="factureActive?.montant_restant ?? 0"
             :processing="encaissProcessing"
             :errors="encaissErrors"
-            :modes-paiement="modes_paiement"
             @submit="handleEncaissSubmit"
         />
     </AppLayout>

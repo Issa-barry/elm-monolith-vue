@@ -207,10 +207,14 @@ class EncaissementVenteTest extends TestCase
         ]);
     }
 
-    // ── Référence obligatoire Mobile Money / Virement (2026-09-14) ────────────
-    // Mode et opérateur sont deux dimensions distinctes (cf. App\Enums\OperateurMobileMoney) :
-    // mode_paiement reste stable (especes/mobile_money/virement/cheque), l'opérateur (Orange
-    // Money, Kulu, Soutra Money, MOMO, PayCard) est un champ séparé.
+    // ── Référence/opérateur obligatoires selon le mode de paiement (2026-09-15) ────────
+    // mode_paiement reste l'une des 4 valeurs stables attendues par la comptabilisation
+    // (especes/mobile_money/virement/cheque — cf. PlanComptableBootstrapService,
+    // CompteMappingResolver). L'opérateur Mobile Money (Orange Money, Kulu, Soutra Money, MOMO,
+    // PayCard) est un champ séparé `operateur_mobile_money`, présenté comme une seule liste
+    // déroulante côté UI (cf. PaymentCard.vue) mais jamais fusionné dans mode_paiement — un
+    // encaissement mode_paiement="orange_money" ferait échouer la résolution du compte de
+    // trésorerie (retomberait sur le compte Caisse par défaut).
 
     public function test_encaissement_mobile_money_sans_operateur_est_refuse(): void
     {
@@ -295,16 +299,16 @@ class EncaissementVenteTest extends TestCase
                 'montant' => 1000,
                 'date_encaissement' => now()->toDateString(),
                 'mode_paiement' => 'mobile_money',
-                'operateur_mobile_money' => 'orange_money',
-                'reference_paiement' => 'OM-987654',
+                'operateur_mobile_money' => 'kulu',
+                'reference_paiement' => 'KUL-987654',
             ]
         )->assertRedirect();
 
         $this->assertDatabaseHas('encaissements_ventes', [
             'facture_vente_id' => $facture->id,
             'mode_paiement' => 'mobile_money',
-            'operateur_mobile_money' => 'orange_money',
-            'reference_paiement' => 'OM-987654',
+            'operateur_mobile_money' => 'kulu',
+            'reference_paiement' => 'KUL-987654',
         ]);
     }
 

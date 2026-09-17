@@ -82,6 +82,7 @@ final class PermissionCatalog
         'ventes.demarrer_chargement' => 'Ventes — démarrer le chargement',
         'ventes.valider_chargement' => 'Ventes — valider le chargement',
         'ventes.valider_reception' => 'Ventes — valider la réception',
+        'ventes.exporter' => 'Ventes — exporter',
         'factures.encaisser' => 'Factures — encaisser',
         'factures.annuler' => 'Factures — annuler',
         'commissions.payer' => 'Commissions — payer',
@@ -126,6 +127,7 @@ final class PermissionCatalog
                     'ventes.qte.update', 'ventes.prix.update',
                 ],
                 'Facturation' => ['factures.encaisser', 'factures.annuler'],
+                'Export' => ['ventes.exporter'],
             ],
         ],
         'achats' => [

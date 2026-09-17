@@ -84,13 +84,13 @@ const propositionsATraiter = computed(
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
-    if (can('proprietaires.read'))
-        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('vehicules.read'))
         sub.push({
             title: 'Liste de véhicules',
             href: '/backoffice/vehicules',
         });
+    if (can('proprietaires.read'))
+        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('equipes-livraison.read'))
         sub.push({
             title: 'Équipes de livraison',

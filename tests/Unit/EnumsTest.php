@@ -3,7 +3,9 @@
 namespace Tests\Unit;
 
 use App\Enums\ClientType;
+use App\Enums\ModePaiement;
 use App\Enums\ModeRemiseGrossiste;
+use App\Enums\OperateurMobileMoney;
 use App\Enums\PackingStatut;
 use App\Enums\PrestataireType;
 use App\Enums\PrixOrigine;
@@ -350,6 +352,53 @@ class EnumsTest extends TestCase
         $this->assertCount(2, $options);
         $this->assertSame('enlevement', $options[0]['value']);
         $this->assertSame('livraison', $options[1]['value']);
+    }
+
+    // ── ModePaiement ──────────────────────────────────────────────────────────
+    // Reste à 4 valeurs stables (especes/mobile_money/virement/cheque) : consommé par la
+    // comptabilisation (PlanComptableBootstrapService, CompteMappingResolver — comptes 561xxx
+    // déjà configurés) ET par des paiements sans rapport (commissions, cashback, paiement de
+    // fiches, salaires). Ne jamais y ajouter une valeur par opérateur Mobile Money — cf.
+    // App\Enums\OperateurMobileMoney, champ séparé sur encaissements_ventes uniquement.
+
+    public function test_mode_paiement_labels(): void
+    {
+        $this->assertSame('Espèces', ModePaiement::ESPECES->label());
+        $this->assertSame('Mobile Money', ModePaiement::MOBILE_MONEY->label());
+        $this->assertSame('Virement', ModePaiement::VIREMENT->label());
+        $this->assertSame('Chèque', ModePaiement::CHEQUE->label());
+    }
+
+    public function test_mode_paiement_options_returns_all_cases(): void
+    {
+        $options = ModePaiement::options();
+        $this->assertCount(4, $options);
+    }
+
+    // ── OperateurMobileMoney ──────────────────────────────────────────────────
+    // Champ séparé sur encaissements_ventes (operateur_mobile_money), requis uniquement quand
+    // mode_paiement = mobile_money — présenté comme une seule liste déroulante côté UI
+    // (cf. resources/js/components/payment/PaymentCard.vue) mais jamais fusionné dans
+    // mode_paiement (voir ModePaiement ci-dessus pour la raison comptable).
+
+    public function test_operateur_mobile_money_labels(): void
+    {
+        $this->assertSame('Orange Money', OperateurMobileMoney::ORANGE_MONEY->label());
+        $this->assertSame('Kulu', OperateurMobileMoney::KULU->label());
+        $this->assertSame('Soutra Money', OperateurMobileMoney::SOUTRA_MONEY->label());
+        $this->assertSame('MOMO (MTN Mobile Money)', OperateurMobileMoney::MOMO->label());
+        $this->assertSame('PayCard', OperateurMobileMoney::PAYCARD->label());
+        $this->assertSame('Autre', OperateurMobileMoney::AUTRE->label());
+    }
+
+    public function test_operateur_mobile_money_options_returns_all_cases(): void
+    {
+        $options = OperateurMobileMoney::options();
+        $this->assertCount(6, $options);
+        foreach ($options as $option) {
+            $this->assertArrayHasKey('value', $option);
+            $this->assertArrayHasKey('label', $option);
+        }
     }
 
     // ── PrixOrigine::GROSSISTE ────────────────────────────────────────────────

@@ -203,6 +203,7 @@ use App\Http\Controllers\Ventes\CreateCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
 use App\Http\Controllers\Ventes\EditCommandeVenteController;
+use App\Http\Controllers\Ventes\ExportCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
@@ -364,6 +365,9 @@ Route::prefix('backoffice')->group(function () {
             Route::get('ventes/check-solvabilite', CheckSolvabiliteCommandeVenteController::class)->name('ventes.check-solvabilite');
             Route::get('ventes', IndexCommandeVenteController::class)->name('ventes.index');
             Route::get('ventes/create', CreateCommandeVenteController::class)->name('ventes.create');
+            // Avant ventes/{vente} : un segment statique doit toujours être déclaré avant la route
+            // paramétrée correspondante, sous peine d'être capturé par {vente} (cf. show()).
+            Route::get('ventes/export', ExportCommandeVenteController::class)->name('ventes.export');
             Route::post('ventes', StoreCommandeVenteController::class)->name('ventes.store');
             Route::get('ventes/{vente}', ShowCommandeVenteController::class)->name('ventes.show');
             Route::get('ventes/{vente}/edit', EditCommandeVenteController::class)->name('ventes.edit');
@@ -373,6 +377,8 @@ Route::prefix('backoffice')->group(function () {
             // contrôleur (déterminé par le nom de route, jamais un paramètre client) — la création
             // reste sur ventes.create/ventes.store, avec le choix de nature sur le formulaire.
             Route::get('distributions', IndexCommandeVenteController::class)->name('distributions.index');
+            // Même contrôleur d'export que ventes.export — cf. sa docblock.
+            Route::get('distributions/export', ExportCommandeVenteController::class)->name('distributions.export');
             // Même contrôleur/données que ventes.show — seul le composant Inertia rendu diffère
             // (Distributions/Show au lieu de Ventes/Show), choisi côté contrôleur selon
             // nature_operation, jamais par ce nom de route lui-même. Le paramètre {vente} doit
