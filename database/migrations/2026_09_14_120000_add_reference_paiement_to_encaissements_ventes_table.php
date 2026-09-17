@@ -9,15 +9,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('encaissements_ventes', function (Blueprint $table) {
-            $table->string('operateur_mobile_money', 30)->nullable()->after('mode_paiement');
-            $table->string('reference_paiement', 190)->nullable()->after('operateur_mobile_money');
+            $table->string('reference_paiement', 190)->nullable()->after('mode_paiement');
         });
     }
 
     public function down(): void
     {
         Schema::table('encaissements_ventes', function (Blueprint $table) {
-            $table->dropColumn(['operateur_mobile_money', 'reference_paiement']);
+            $table->dropColumn('reference_paiement');
         });
     }
 };
