@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -52,6 +53,7 @@ interface FactureItem {
     vehicule_nom: string | null;
     client_nom: string | null;
     site_nom: string | null;
+    quantite_totale: number;
     montant_net: number;
     montant_encaisse: number;
     montant_restant: number;
@@ -214,11 +216,6 @@ const statutColor: Record<string, string> = {
     payee: 'bg-emerald-500',
     annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
-
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
@@ -648,6 +645,20 @@ function _progressPercent(f: FactureItem): number {
                         </template>
                     </Column>
 
+                    <!-- Quantité -->
+                    <Column
+                        field="quantite_totale"
+                        header="Qté"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">{{
+                                formatQuantite(data.quantite_totale)
+                            }}</span>
+                        </template>
+                    </Column>
+
                     <!-- Montant -->
                     <Column
                         field="montant_net"
@@ -804,7 +815,7 @@ function _progressPercent(f: FactureItem): number {
                     ? `Historique — ${factureHistory.reference}`
                     : 'Historique'
             "
-            :style="{ width: '560px' }"
+            :style="{ width: '880px', maxWidth: '95vw' }"
         >
             <div v-if="factureHistory">
                 <div
@@ -869,10 +880,10 @@ function _progressPercent(f: FactureItem): number {
                                 }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement
-                                }}<span v-if="e.operateur_mobile_money_label">
-                                    ({{ e.operateur_mobile_money_label }})</span
-                                >
+                                {{
+                                    e.operateur_mobile_money_label ??
+                                    e.mode_paiement
+                                }}
                             </td>
                             <td
                                 class="hidden px-3 py-2 text-muted-foreground sm:table-cell"

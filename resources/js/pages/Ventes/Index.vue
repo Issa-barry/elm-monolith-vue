@@ -21,6 +21,7 @@ import {
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { KpiWidgetItem } from '@/types/kpi-widgets';
 import type { VenteMobile } from '@/types/vente-mobile';
@@ -56,6 +57,7 @@ const vTooltip = Tooltip;
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande extends VenteMobile {
     nature_operation: 'vente_standard' | 'distribution_client';
+    quantite_totale: number;
     processus_code: string;
     facture_id: number | null;
     encaissements: {
@@ -302,11 +304,6 @@ const mobileFiltered = computed(() => {
             (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
-
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
 
 // ── Export ────────────────────────────────────────────────────────────────────
 // Colonnes proposées par ExportCommandeVenteController / VenteListExport (clés identiques
@@ -1017,6 +1014,20 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Quantité -->
+                    <Column
+                        field="quantite_totale"
+                        header="Qté"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">{{
+                                formatQuantite(data.quantite_totale)
+                            }}</span>
+                        </template>
+                    </Column>
+
                     <!-- Montant -->
                     <Column
                         field="total_commande"
@@ -1263,7 +1274,7 @@ function confirmDelete(c: Commande) {
                     ? `Historique — ${historyCommande.reference}`
                     : 'Historique'
             "
-            :style="{ width: '560px' }"
+            :style="{ width: '880px', maxWidth: '95vw' }"
         >
             <div v-if="historyCommande">
                 <div
@@ -1324,10 +1335,10 @@ function confirmDelete(c: Commande) {
                                 {{ e.heure ?? '—' }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement_label
-                                }}<span v-if="e.operateur_mobile_money_label">
-                                    ({{ e.operateur_mobile_money_label }})</span
-                                >
+                                {{
+                                    e.operateur_mobile_money_label ??
+                                    e.mode_paiement_label
+                                }}
                             </td>
                             <td
                                 class="hidden px-3 py-2 text-muted-foreground sm:table-cell"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { formatGNF } from '@/lib/utils';
 import {
     FileText,
     HandCoins,
@@ -73,7 +74,8 @@ const DEFAULT_MODES: ModeOption[] = [
         mode_paiement: 'especes',
         requiresReference: false,
         icon: Wallet,
-        badgeClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+        badgeClass:
+            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     },
     {
         key: 'orange_money',
@@ -82,7 +84,8 @@ const DEFAULT_MODES: ModeOption[] = [
         operateur_mobile_money: 'orange_money',
         requiresReference: true,
         icon: Smartphone,
-        badgeClass: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300',
+        badgeClass:
+            'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300',
         referencePlaceholder: 'Ex. OM123456789',
     },
     {
@@ -92,7 +95,8 @@ const DEFAULT_MODES: ModeOption[] = [
         operateur_mobile_money: 'kulu',
         requiresReference: true,
         icon: Smartphone,
-        badgeClass: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300',
+        badgeClass:
+            'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300',
         referencePlaceholder: 'Ex. KU123456789',
     },
     {
@@ -102,7 +106,8 @@ const DEFAULT_MODES: ModeOption[] = [
         operateur_mobile_money: 'soutra_money',
         requiresReference: true,
         icon: Smartphone,
-        badgeClass: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/40 dark:text-cyan-300',
+        badgeClass:
+            'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/40 dark:text-cyan-300',
         referencePlaceholder: 'Ex. SM123456789',
     },
     {
@@ -112,7 +117,8 @@ const DEFAULT_MODES: ModeOption[] = [
         operateur_mobile_money: 'momo',
         requiresReference: true,
         icon: Smartphone,
-        badgeClass: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+        badgeClass:
+            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
         referencePlaceholder: 'Ex. MTN123456789',
     },
     {
@@ -122,7 +128,8 @@ const DEFAULT_MODES: ModeOption[] = [
         operateur_mobile_money: 'paycard',
         requiresReference: true,
         icon: Smartphone,
-        badgeClass: 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300',
+        badgeClass:
+            'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300',
         referencePlaceholder: 'Ex. PC123456789',
     },
     {
@@ -131,7 +138,8 @@ const DEFAULT_MODES: ModeOption[] = [
         mode_paiement: 'virement',
         requiresReference: true,
         icon: Landmark,
-        badgeClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300',
+        badgeClass:
+            'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300',
         referencePlaceholder: 'Ex. VIR20260915001',
     },
     {
@@ -140,7 +148,8 @@ const DEFAULT_MODES: ModeOption[] = [
         mode_paiement: 'cheque',
         requiresReference: false,
         icon: FileText,
-        badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+        badgeClass:
+            'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
     },
 ];
 
@@ -184,9 +193,13 @@ function modeByKey(key: string): ModeOption | undefined {
 }
 
 const modeActif = computed(() => modeByKey(selectedKey.value));
-const referencePaiementRequise = computed(() => modeActif.value?.requiresReference ?? false);
+const referencePaiementRequise = computed(
+    () => modeActif.value?.requiresReference ?? false,
+);
 const referencePlaceholder = computed(
-    () => modeActif.value?.referencePlaceholder ?? 'Numéro ou référence de la transaction',
+    () =>
+        modeActif.value?.referencePlaceholder ??
+        'Numéro ou référence de la transaction',
 );
 
 watch(
@@ -209,8 +222,10 @@ watch(selectedKey, (key) => {
     }
 });
 
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+// Les montants pré-formatés reçus des pages parentes (infoRows) utilisent souvent l'espace fine
+// U+202F de fr-FR, quasi invisible : on la remplace par une espace normale.
+function espacer(texte: string): string {
+    return texte.replace(/[  ]/g, ' ');
 }
 
 function close() {
@@ -252,29 +267,29 @@ function handleSubmit() {
                     class="flex justify-between"
                 >
                     <span>{{ row.label }}</span>
-                    <span class="font-medium text-foreground">{{ row.value }}</span>
+                    <span class="font-medium text-foreground">{{
+                        espacer(row.value)
+                    }}</span>
                 </div>
             </div>
 
             <!-- Montant dû — information principale du modal, à ne jamais confondre avec le
                  montant saisi ci-dessous (cf. docs/encaissements.md). -->
             <div
-                class="flex items-center justify-between rounded-xl border border-orange-200 bg-orange-50 px-5 py-4 dark:border-orange-900 dark:bg-orange-950/30"
+                class="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-5 py-3"
             >
                 <div>
-                    <p class="text-sm font-semibold text-orange-600 dark:text-orange-400">
-                        Montant dû
-                    </p>
+                    <p class="text-sm font-semibold text-primary">Montant dû</p>
                     <p
-                        class="mt-1 text-3xl font-extrabold tracking-tight tabular-nums text-orange-700 dark:text-orange-300"
+                        class="mt-0.5 text-2xl font-extrabold tracking-tight text-primary tabular-nums [word-spacing:0.16em]"
                     >
                         {{ formatGNF(solde) }}
                     </p>
                 </div>
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15"
                 >
-                    <Receipt class="h-5 w-5 text-orange-600 dark:text-orange-300" />
+                    <Receipt class="h-4 w-4 text-primary" />
                 </div>
             </div>
 
@@ -284,11 +299,14 @@ function handleSubmit() {
                     >Montant (GNF)
                     <span class="text-destructive">*</span>
                     <Info
-                        v-tooltip.top="'Veuillez saisir le montant à encaisser en GNF.'"
+                        v-tooltip.top="
+                            'Veuillez saisir le montant à encaisser en GNF.'
+                        "
                         class="h-3.5 w-3.5 cursor-help text-muted-foreground"
-                    /></Label
-                >
+                /></Label>
                 <div class="relative">
+                    <!-- fr-CA et non fr-FR : sépare les milliers par une espace insécable de largeur
+                         normale (U+00A0) au lieu de l'espace fine U+202F, quasi invisible en gras. -->
                     <InputNumber
                         v-model="montant"
                         :min="1"
@@ -296,9 +314,9 @@ function handleSubmit() {
                         :min-fraction-digits="0"
                         :max-fraction-digits="0"
                         :use-grouping="true"
-                        locale="fr-FR"
+                        locale="fr-CA"
                         class="w-full"
-                        input-class="h-14 w-full pr-16 text-2xl font-bold tabular-nums"
+                        input-class="h-14 w-full pr-16 text-xl font-bold tabular-nums [word-spacing:0.19em]"
                         :class="{ 'p-invalid': errors?.montant }"
                     />
                     <span
@@ -315,7 +333,8 @@ function handleSubmit() {
             <!-- Mode de paiement — une seule liste, l'opérateur Mobile Money en fait partie -->
             <div>
                 <Label class="mb-1.5 block text-sm"
-                    >Mode de paiement <span class="text-destructive">*</span></Label
+                    >Mode de paiement
+                    <span class="text-destructive">*</span></Label
                 >
                 <Select
                     v-model="selectedKey"
@@ -326,7 +345,10 @@ function handleSubmit() {
                     :class="{ 'p-invalid': errors?.mode_paiement }"
                 >
                     <template #value="{ value }">
-                        <div v-if="modeByKey(value)" class="flex items-center gap-2">
+                        <div
+                            v-if="modeByKey(value)"
+                            class="flex items-center gap-2"
+                        >
                             <span
                                 class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                                 :class="modeByKey(value)!.badgeClass"
@@ -345,13 +367,19 @@ function handleSubmit() {
                                 class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                                 :class="option.badgeClass"
                             >
-                                <component :is="option.icon" class="h-3.5 w-3.5" />
+                                <component
+                                    :is="option.icon"
+                                    class="h-3.5 w-3.5"
+                                />
                             </span>
                             <span>{{ option.label }}</span>
                         </div>
                     </template>
                 </Select>
-                <p v-if="errors?.mode_paiement" class="mt-1 text-xs text-destructive">
+                <p
+                    v-if="errors?.mode_paiement"
+                    class="mt-1 text-xs text-destructive"
+                >
                     {{ errors.mode_paiement }}
                 </p>
                 <p

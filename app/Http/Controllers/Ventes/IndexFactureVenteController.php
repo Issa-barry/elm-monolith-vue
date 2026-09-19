@@ -67,6 +67,7 @@ class IndexFactureVenteController extends Controller
             'commande.vehicule.equipe.membres.livreur',
             'commande.client',
             'commande.site',
+            'commande.lignes:id,commande_vente_id,quantite_demandee,quantite_chargee,quantite_livree',
             'encaissements.creator',
         ])
             ->where('organization_id', $orgId);
@@ -154,6 +155,7 @@ class IndexFactureVenteController extends Controller
                 'vehicule_nom' => $f->commande?->vehicule?->nom_vehicule,
                 'client_nom' => $f->commande?->client?->nom_complet,
                 'site_nom' => $f->commande?->site?->nom,
+                'quantite_totale' => $f->commande?->quantite_totale ?? 0,
                 'montant_net' => (float) $f->montant_net,
                 'montant_encaisse' => (float) $f->montant_encaisse,
                 'montant_restant' => (float) $f->montant_restant,

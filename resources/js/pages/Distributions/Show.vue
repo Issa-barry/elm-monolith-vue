@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PaymentCard from '@/components/payment/PaymentCard.vue';
-import StatusDot from '@/components/StatusDot.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -1547,16 +1547,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         <td
                                             class="px-4 py-3 text-muted-foreground"
                                         >
-                                            {{ enc.mode_paiement_label
-                                            }}<span
-                                                v-if="
-                                                    enc.operateur_mobile_money_label
-                                                "
-                                            >
-                                                ({{
-                                                    enc.operateur_mobile_money_label
-                                                }})</span
-                                            >
+                                            {{
+                                                enc.operateur_mobile_money_label ??
+                                                enc.mode_paiement_label
+                                            }}
                                         </td>
                                         <td
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"

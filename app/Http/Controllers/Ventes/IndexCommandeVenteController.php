@@ -52,6 +52,7 @@ class IndexCommandeVenteController extends Controller
             'client',
             'site',
             'facture.encaissements.creator',
+            'lignes:id,commande_vente_id,quantite_demandee,quantite_chargee,quantite_livree',
         ])
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at');
@@ -291,6 +292,7 @@ class IndexCommandeVenteController extends Controller
             'processus_code' => $processusCode,
             'processus_label' => CommissionProcessusDefaults::libelle($processusCode),
             'total_commande' => (float) $c->total_commande,
+            'quantite_totale' => $c->quantite_totale,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
             'vehicule_photo_url' => $c->vehicule?->photo_url,

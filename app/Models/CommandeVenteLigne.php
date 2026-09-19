@@ -61,6 +61,18 @@ class CommandeVenteLigne extends Model
 
     // ── Accessors écart ───────────────────────────────────────────────────────
 
+    /**
+     * Quantité "réelle" de la ligne : livrée (commandes à réception explicite), sinon chargée,
+     * sinon demandée. Même chaîne que celle qui recalcule `total_ligne` (cf.
+     * CommandeVenteService::appliquerQuantitesChargees()/appliquerQuantitesRecues()), donc
+     * toujours cohérente avec le Montant affiché à côté. Une quantité à 0 est une vraie valeur
+     * (rien chargé/livré) : seul null retombe sur l'étape précédente.
+     */
+    public function getQuantiteEffectiveAttribute(): int
+    {
+        return (int) ($this->quantite_livree ?? $this->quantite_chargee ?? $this->quantite_demandee ?? 0);
+    }
+
     public function getEcartChargementAttribute(): ?int
     {
         if ($this->quantite_chargee === null) {
