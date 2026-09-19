@@ -131,6 +131,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -154,6 +155,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteB->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -246,6 +248,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
             ])
             ->assertSessionHasErrors('motif_type');
@@ -262,6 +265,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => '',
@@ -280,6 +284,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => '     ',
@@ -298,6 +303,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => 'Correction inventaire',
@@ -321,6 +327,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteB->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])

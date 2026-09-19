@@ -481,6 +481,8 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    /** Date métier de l'opération (jamais l'horodatage technique de création). */
+    date: string;
     created_at: string;
     is_initial?: boolean;
 }

@@ -6,6 +6,7 @@ import {
 } from '@/shared/motifs-ajustement-stock';
 import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Lock, Package } from 'lucide-vue-next';
+import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -73,13 +74,39 @@ const localVisible = computed({
     set: (val) => emit('update:visible', val),
 });
 
+// Conversion date string (Y-m-d, format envoyé au serveur) ↔ Date object pour Calendar —
+// même convention que Packings/PackingForm.vue.
+function toDate(val: string | null): Date | null {
+    if (!val) return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function fromDate(val: Date | null): string {
+    if (!val) return '';
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+const today = new Date();
+
 const form = useForm({
     site_id: null as string | null,
     variante_id: null as string | null,
+    date: fromDate(today) as string,
     augmenter: null as number | null,
     diminuer: null as number | null,
     motif_type: null as string | null,
     motif_detail: '',
+});
+
+const dateValue = computed<Date | null>({
+    get: () => toDate(form.date),
+    set: (val) => {
+        form.date = fromDate(val);
+    },
 });
 
 // Produit à vraies déclinaisons commerciales (> 1 variante) : on demande explicitement
@@ -104,6 +131,9 @@ watch(
     () => props.visible,
     (val) => {
         if (!val) return;
+        // Toujours la date du jour à l'ouverture — jamais celle figée à l'instanciation du
+        // composant, qui resterait périmée si le composant reste monté au-delà de minuit.
+        form.date = fromDate(new Date());
         if (props.sitesAutorises.length === 1) {
             form.site_id = props.sitesAutorises[0].id;
         }
@@ -177,6 +207,7 @@ const motifValide = computed(() => {
 const formValide = computed(
     () =>
         !!form.site_id &&
+        !!form.date &&
         (!aPlusieursVariantes.value || !!form.variante_id) &&
         (!!form.augmenter || !!form.diminuer) &&
         motifValide.value,
@@ -339,6 +370,27 @@ function submit() {
 
                 <p v-if="form.errors.site_id" class="text-xs text-destructive">
                     {{ form.errors.site_id }}
+                </p>
+            </div>
+
+            <!-- Date -->
+            <div class="space-y-1.5">
+                <label for="ajuster-date" class="text-sm font-medium">
+                    Date <span class="text-destructive">*</span>
+                </label>
+                <Calendar
+                    v-model="dateValue"
+                    input-id="ajuster-date"
+                    date-format="dd/mm/yy"
+                    :show-icon="true"
+                    :max-date="today"
+                    class="w-full"
+                    input-class="w-full"
+                    :class="form.errors.date ? 'p-invalid' : ''"
+                    :pt="{ root: { 'data-testid': 'stock-date-input' } }"
+                />
+                <p v-if="form.errors.date" class="text-xs text-destructive">
+                    {{ form.errors.date }}
                 </p>
             </div>
 

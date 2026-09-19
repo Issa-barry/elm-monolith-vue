@@ -32,6 +32,7 @@ class AjusterStockProduitController extends Controller
         $data = $request->validate([
             'site_id' => ['required', 'exists:sites,id'],
             'variante_id' => ['nullable', 'exists:produit_variantes,id'],
+            'date' => ['required', 'date', 'before_or_equal:today'],
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
@@ -49,6 +50,9 @@ class AjusterStockProduitController extends Controller
         ], [
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est invalide.',
+            'date.required' => 'La date est obligatoire.',
+            'date.date' => 'La date est invalide.',
+            'date.before_or_equal' => 'La date ne peut pas être dans le futur.',
             'augmenter.integer' => 'La quantité doit être un nombre entier.',
             'augmenter.min' => 'La quantité doit être supérieure à 0.',
             'diminuer.integer' => 'La quantité doit être un nombre entier.',
@@ -107,7 +111,7 @@ class AjusterStockProduitController extends Controller
         $quantite = $hasAugmenter ? (int) $data['augmenter'] : (int) $data['diminuer'];
         $type = $hasAugmenter ? 'entree' : 'sortie';
 
-        DB::transaction(function () use ($produit, $variante, $site, $type, $quantite, $notes, $user) {
+        DB::transaction(function () use ($produit, $variante, $site, $type, $quantite, $notes, $user, $data) {
             $mouvement = MouvementStockService::appliquer(
                 varianteId: $variante->id,
                 siteId: $site->id,
@@ -116,6 +120,7 @@ class AjusterStockProduitController extends Controller
                 quantite: $quantite,
                 userId: $user->id,
                 notes: $notes,
+                date: $data['date'],
             );
 
             $this->auditService->record(

@@ -55,7 +55,8 @@ interface StockRow {
         type: 'entree' | 'sortie';
         quantite: number;
         motif_label: string | null;
-        created_at: string;
+        /** Date métier de l'opération (jamais l'horodatage technique de création). */
+        date: string;
     } | null;
     can_ajuster: boolean;
 }
@@ -89,6 +90,7 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    date: string;
     created_at: string;
 }
 
@@ -525,9 +527,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         <div
                                             class="text-xs whitespace-nowrap text-muted-foreground"
                                         >
-                                            {{
-                                                row.dernier_mouvement.created_at
-                                            }}
+                                            {{ row.dernier_mouvement.date }}
                                         </div>
                                     </div>
                                     <span v-else class="text-muted-foreground"
@@ -718,7 +718,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                     mouvementSigneLabel(row.dernier_mouvement)
                                 }}</span
                             >
-                            · {{ row.dernier_mouvement.created_at }}
+                            · {{ row.dernier_mouvement.date }}
                         </span>
                         <span v-else>Aucun mouvement</span>
                     </div>
