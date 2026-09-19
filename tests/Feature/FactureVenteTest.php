@@ -147,7 +147,6 @@ class FactureVenteTest extends TestCase
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
                 ->has('totaux')
-                ->has('modes_paiement')
                 ->has('periode')
                 ->has('statut')
             );

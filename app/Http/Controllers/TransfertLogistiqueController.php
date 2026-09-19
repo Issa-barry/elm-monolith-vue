@@ -89,7 +89,7 @@ class TransfertLogistiqueController extends Controller
             'equipeLivraison:id,vehicule_id',
             'equipeLivraison.vehicule:id,nom_vehicule',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
-            'lignes:id,transfert_logistique_id,variante_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
+            'lignes:id,transfert_logistique_id,variante_id,quantite_demandee,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
             'lignes.variante:id,produit_id,sku',
             // image_url est un accesseur (dérivé de produit_medias, pas une colonne) : on charge
             // la relation medias plutôt que de la lister dans un select() limité aux colonnes.
@@ -629,6 +629,9 @@ class TransfertLogistiqueController extends Controller
             'can_annuler' => $user->can('annuler', $t),
             'can_valider_reception' => $user->can('validerReception', $t),
             'created_at' => $t->created_at?->format(self::DATE_DISPLAY_FORMAT),
+            // Quantité la plus avancée connue par ligne (reçue > chargée > demandée), sommée sur
+            // tout le transfert — permet d'afficher un total unique quel que soit le statut.
+            'quantite_totale' => $t->lignes->sum(fn ($l) => $l->quantite_recue ?? $l->quantite_chargee ?? $l->quantite_demandee ?? 0),
             'lignes_reception' => $t->statut === StatutTransfert::TRANSIT
                 ? $t->lignes->map(fn ($l) => [
                     'id' => $l->id,

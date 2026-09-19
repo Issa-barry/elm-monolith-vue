@@ -171,6 +171,15 @@ class CommandeVente extends Model
         return $this->statut instanceof StatutCommandeVente ? $this->statut->label() : '';
     }
 
+    /**
+     * Total des unités de la commande (somme des CommandeVenteLigne::quantite_effective). Charger
+     * `lignes` en amont pour les listes : sans cela, chaque commande déclenche sa propre requête.
+     */
+    public function getQuantiteTotaleAttribute(): int
+    {
+        return (int) $this->lignes->sum(fn (CommandeVenteLigne $l) => $l->quantite_effective);
+    }
+
     // ── Méthodes d'état ───────────────────────────────────────────────────────
 
     public function isBrouillon(): bool

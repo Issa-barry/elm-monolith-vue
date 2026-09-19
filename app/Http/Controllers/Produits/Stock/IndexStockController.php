@@ -203,8 +203,9 @@ class IndexStockController extends Controller
         $derniersMouvements = MouvementStock::where('organization_id', $orgId)
             ->whereIn('produit_variante_id', $varianteIds)
             ->whereIn('site_id', $siteIds)
+            ->orderByDesc('date')
             ->orderByDesc('created_at')
-            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'source_type', 'source_id', 'notes', 'created_at'])
+            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'source_type', 'source_id', 'notes', 'date', 'created_at'])
             ->unique(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id)
             ->keyBy(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id);
 
@@ -257,7 +258,9 @@ class IndexStockController extends Controller
                     'type' => $dernierMouvement->type,
                     'quantite' => (int) $dernierMouvement->quantite,
                     'motif_label' => $dernierMouvement->motif_label,
-                    'created_at' => $dernierMouvement->created_at?->format('d/m/Y H:i'),
+                    // Date métier de l'opération — jamais created_at (horodatage technique),
+                    // cf. HistoriqueProduitController pour la même distinction.
+                    'date' => $dernierMouvement->date?->format('d/m/Y'),
                 ] : null,
                 'can_ajuster' => $sitesAjustablesIds->contains((string) $row->site_id),
             ];

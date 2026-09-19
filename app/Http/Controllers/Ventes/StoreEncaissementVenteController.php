@@ -48,22 +48,27 @@ class StoreEncaissementVenteController extends Controller
 
         $montantRestant = $facture_vente->montant_restant;
 
+        // mode_paiement reste la valeur générique attendue par la comptabilisation
+        // (App\Services\Comptabilite\VenteComptabilisationService, PlanComptableBootstrapService,
+        // CompteMappingResolver — mappings et comptes 561xxx déjà configurés autour de
+        // especes/mobile_money/virement/cheque, jamais autour d'un opérateur précis). L'opérateur
+        // Mobile Money (Orange Money, Kulu, Soutra Money, MOMO, PayCard) est un champ séparé,
+        // uniquement présenté comme un seul select côté UI (cf. PaymentCard.vue) — le stocker
+        // directement dans mode_paiement casserait la résolution du compte de trésorerie
+        // (retomberait sur le compte Caisse par défaut, montant mal classé en comptabilité).
+        // Référence obligatoire pour Mobile Money et Virement (rapprochement) — Chèque et
+        // Espèces n'en ont pas.
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
             'date_encaissement' => 'nullable|date',
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            // Référence obligatoire pour Mobile Money et Virement (rapprochement bancaire /
-            // opérateur) — Chèque et Espèces n'exigent aucune référence structurée.
-            'reference_paiement' => [
-                'nullable', 'string', 'max:190',
-                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
-            ],
-            // Opérateur Mobile Money obligatoire uniquement pour ce mode — distinct de
-            // mode_paiement pour ne pas faire exploser cet enum à chaque nouveau fintech
-            // guinéen (Orange Money, Kulu, Soutra Money, MOMO, PayCard...).
             'operateur_mobile_money' => [
                 'nullable', Rule::in(array_column(OperateurMobileMoney::cases(), 'value')),
                 'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value,
+            ],
+            'reference_paiement' => [
+                'nullable', 'string', 'max:190',
+                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
             ],
             'note' => 'nullable|string|max:2000',
         ], [
@@ -72,9 +77,9 @@ class StoreEncaissementVenteController extends Controller
             'montant.max' => 'Le montant ne peut pas depasser le restant du.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
             'mode_paiement.in' => 'Mode de paiement invalide.',
-            'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
             'operateur_mobile_money.required_if' => 'L\'operateur Mobile Money est obligatoire.',
             'operateur_mobile_money.in' => 'Operateur Mobile Money invalide.',
+            'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
         ]);
 
         $data['date_encaissement'] ??= now()->toDateString();

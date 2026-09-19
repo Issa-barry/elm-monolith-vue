@@ -25,6 +25,9 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    /** Date métier de l'opération (saisie par l'utilisateur pour un ajustement manuel). */
+    date: string;
+    /** Horodatage technique de création — distinct de `date`, cf. colonne Date du tableau. */
     created_at: string;
     is_initial?: boolean;
 }
@@ -301,9 +304,20 @@ function formatQte(val: number | null | undefined): string {
                                         class="group transition-colors hover:bg-muted/20"
                                     >
                                         <td
-                                            class="px-4 py-3 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                                            class="px-4 py-3 font-mono text-xs whitespace-nowrap"
                                         >
-                                            {{ m.created_at }}
+                                            <div class="text-foreground">
+                                                {{ m.date }}
+                                            </div>
+                                            <div
+                                                class="text-[11px] text-muted-foreground"
+                                                :title="
+                                                    'Enregistré le ' +
+                                                    m.created_at
+                                                "
+                                            >
+                                                Saisi le {{ m.created_at }}
+                                            </div>
                                         </td>
                                         <td class="px-4 py-3 text-xs">
                                             <span

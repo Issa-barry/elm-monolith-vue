@@ -180,6 +180,52 @@ class MouvementStockServiceTest extends TestCase
     }
 
     /**
+     * `date` (date métier de l'opération) est optionnel côté service — tous les appelants
+     * automatiques existants (vente, transfert, réception) ne le renseignent jamais et doivent
+     * continuer à fonctionner sans changement : le service retombe sur la date du jour.
+     */
+    public function test_appliquer_sans_date_utilise_la_date_du_jour(): void
+    {
+        $this->seedStock(10);
+
+        $mouvement = MouvementStockService::appliquer(
+            varianteId: $this->varianteId,
+            siteId: $this->site->id,
+            orgId: $this->org->id,
+            type: 'entree',
+            quantite: 5,
+            userId: $this->user->id,
+        );
+
+        $this->assertSame(now()->toDateString(), $mouvement->date->toDateString());
+    }
+
+    /**
+     * L'ajustement manuel (seul appelant à exposer ce choix à l'utilisateur, cf.
+     * AjusterStockProduitController) peut fournir une date métier explicite, distincte
+     * d'aujourd'hui — persistée telle quelle, sans jamais affecter stock_avant/stock_apres.
+     */
+    public function test_appliquer_avec_date_explicite_la_persiste_telle_quelle(): void
+    {
+        $this->seedStock(10);
+        $hier = now()->subDay()->toDateString();
+
+        $mouvement = MouvementStockService::appliquer(
+            varianteId: $this->varianteId,
+            siteId: $this->site->id,
+            orgId: $this->org->id,
+            type: 'entree',
+            quantite: 5,
+            userId: $this->user->id,
+            date: $hier,
+        );
+
+        $this->assertSame($hier, $mouvement->date->toDateString());
+        $this->assertSame(10, $mouvement->stock_avant);
+        $this->assertSame(15, $mouvement->stock_apres);
+    }
+
+    /**
      * Correctif du 25/08/2026 : mouvements_stock.created_by est passé de cascadeOnDelete() à
      * nullOnDelete() — supprimer un compte utilisateur ne doit plus effacer son historique de
      * mouvements de stock (contraire au principe d'immuabilité du journal, cf. docblock de

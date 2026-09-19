@@ -138,6 +138,8 @@ interface StockMouvement {
     motif_label: string;
     site_nom: string | null;
     site_code: string | null;
+    /** Date métier de l'opération, déjà formatée d/m/Y côté serveur. */
+    date: string | null;
     created_at: string | null;
     createur_nom: string | null;
     is_initial?: boolean;
@@ -328,6 +330,7 @@ function siteStockColor(s: SiteStock): string {
 // Format mouvements so the date field matches what HistoriqueModal expects (string)
 const ajustements = props.mouvements.map((m) => ({
     ...m,
+    date: m.date ?? '—',
     created_at: m.created_at
         ? new Intl.DateTimeFormat('fr-FR', {
               day: '2-digit',

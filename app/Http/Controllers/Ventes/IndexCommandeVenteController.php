@@ -7,6 +7,7 @@ use App\Enums\StatutCommandeVente;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\Site;
+use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Http\Request;
@@ -51,6 +52,7 @@ class IndexCommandeVenteController extends Controller
             'client',
             'site',
             'facture.encaissements.creator',
+            'lignes:id,commande_vente_id,quantite_demandee,quantite_chargee,quantite_livree',
         ])
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at');
@@ -210,6 +212,20 @@ class IndexCommandeVenteController extends Controller
                 ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values()
             : [];
 
+        // Options du filtre Véhicule de la modale d'export (cf. Ventes/Index.vue) — même périmètre
+        // de sites qu'ailleurs sur cette page : tous les véhicules de l'organisation pour un admin,
+        // uniquement ceux des sites de l'utilisateur sinon.
+        $vehiculesQuery = Vehicule::where('organization_id', $orgId);
+        if (! $user->isAdmin()) {
+            $userSiteIds = $user->sites()->pluck('sites.id');
+            $vehiculesQuery->whereIn('site_id', $userSiteIds);
+        }
+        $vehicules = $vehiculesQuery->orderBy('nom_vehicule')->get(['id', 'nom_vehicule', 'immatriculation'])
+            ->map(fn (Vehicule $v) => [
+                'id' => $v->id,
+                'nom' => $v->immatriculation ? "{$v->nom_vehicule} ({$v->immatriculation})" : $v->nom_vehicule,
+            ])->values();
+
         // Bouton « Nouvelle commande » : bloqué uniquement quand la politique globale interdit
         // la vente sans stock ET que le site personnel de l'utilisateur (celui qui sera
         // effectivement utilisé par create()/store(), cf. getUserSiteModel()) n'a absolument
@@ -234,6 +250,7 @@ class IndexCommandeVenteController extends Controller
             'statuts_actifs' => $statuts,
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
+            'vehicules' => $vehicules,
             'is_admin' => $user->isAdmin(),
             'can_creer_commande' => $canCreerCommande,
             'raison_blocage_commande' => $raisonBlocageCommande,
@@ -275,6 +292,7 @@ class IndexCommandeVenteController extends Controller
             'processus_code' => $processusCode,
             'processus_label' => CommissionProcessusDefaults::libelle($processusCode),
             'total_commande' => (float) $c->total_commande,
+            'quantite_totale' => $c->quantite_totale,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
             'vehicule_photo_url' => $c->vehicule?->photo_url,
@@ -295,6 +313,8 @@ class IndexCommandeVenteController extends Controller
                 'date_encaissement' => $e->date_encaissement?->format('d/m/Y'),
                 'heure' => $e->created_at?->format('H:i'),
                 'mode_paiement_label' => $e->mode_paiement?->label(),
+                'operateur_mobile_money_label' => $e->operateur_mobile_money?->label(),
+                'reference_paiement' => $e->reference_paiement,
                 'created_by' => $e->creator?->name,
             ])->values() : [],
             'created_at' => $c->created_at?->format('d/m/Y'),

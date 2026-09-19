@@ -49,6 +49,7 @@ class HistoriqueProduitController extends Controller
 
         $mouvements = $query
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
+            ->orderByDesc('date')
             ->orderByDesc('created_at')
             ->take(200)
             ->get();
@@ -68,6 +69,10 @@ class HistoriqueProduitController extends Controller
                 'createur_nom' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
                     : null,
+                // Date métier de l'opération (saisie par l'utilisateur pour un ajustement
+                // manuel, jour de création pour un mouvement automatique) — distincte de
+                // created_at, l'horodatage technique de création affiché séparément ci-dessous.
+                'date' => $m->date?->format('d/m/Y'),
                 'created_at' => $m->created_at?->format('d/m/Y H:i'),
             ]);
 

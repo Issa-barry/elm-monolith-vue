@@ -202,7 +202,6 @@ class ShowCommandeVenteController extends Controller
                     'heure' => $e->created_at?->format('H:i'),
                     'mode_paiement' => $e->mode_paiement?->value,
                     'mode_paiement_label' => $e->mode_paiement?->label(),
-                    'operateur_mobile_money' => $e->operateur_mobile_money?->value,
                     'operateur_mobile_money_label' => $e->operateur_mobile_money?->label(),
                     'reference_paiement' => $e->reference_paiement,
                     'note' => $e->note,
