@@ -9,9 +9,13 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
-import SituationVentesTab from '@/pages/Vehicules/partials/SituationVentesTab.vue';
+import SituationTab from '@/pages/Vehicules/partials/SituationTab.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
+import type {
+    SituationPeriode,
+    SituationVentesData,
+} from '@/types/vehicule-situation';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -51,32 +55,6 @@ interface DepenseRow {
     date_depense: string | null;
     statut: string;
     commentaire: string | null;
-}
-
-interface SituationVentesData {
-    kpis: {
-        ca_vendu: number;
-        encaisse: number;
-        reste_du: number;
-        nb_ventes: number;
-    };
-    produits: Array<{
-        variante_id: string;
-        libelle: string | null;
-        quantite: number;
-        montant: number;
-    }>;
-    ventes: Array<{
-        id: string;
-        reference: string;
-        date: string | null;
-        client_nom: string | null;
-        montant: number;
-        encaisse: number;
-        reste: number;
-        statut: string | null;
-        statut_label: string;
-    }>;
 }
 
 interface MembreEquipeDetail {
@@ -175,7 +153,7 @@ const props = defineProps<{
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     situation_ventes: SituationVentesData;
-    situation_periode: 'all' | 'month' | 'year';
+    situation_periode: SituationPeriode;
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
@@ -1178,10 +1156,11 @@ function formatGNF(val: number): string {
                 </div>
 
                 <!-- Situation tab -->
-                <SituationVentesTab
+                <SituationTab
                     v-else-if="activeTab === 'situation'"
                     :vehicule-id="vehicule.id"
-                    :situation="situation_ventes"
+                    :vehicule-recherche="vehicule.immatriculation"
+                    :ventes="situation_ventes"
                     :periode="situation_periode"
                 />
 

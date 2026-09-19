@@ -3,14 +3,19 @@
 namespace App\Services\Vehicules;
 
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
+use App\Models\FactureVente;
 use App\Models\Vehicule;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Situation commerciale d'un véhicule (onglet Vehicules/Show « Situation → Ventes »).
- * Ne réimplémente aucun calcul financier : réutilise FactureVente::montant_encaisse /
- * montant_restant (accesseurs existants, mêmes formules que IndexCommandeVenteController).
+ * Section « Activité commerciale » de l'onglet Situation (Vehicules/Show). Synthèse uniquement
+ * (KPI, produits vendus, situation des paiements) : le détail transaction par transaction reste
+ * sur l'écran Ventes. Ne réimplémente aucun calcul financier : réutilise FactureVente::
+ * montant_encaisse / montant_restant / statut_facture (mêmes formules que
+ * IndexCommandeVenteController).
  *
  * « Vendu » = commande ayant dépassé le stade brouillon et non annulée (décision produit du
  * 15/09/2026, cf. docs/vehicule-situation-ventes.md) — une commande encore en brouillon n'a
@@ -23,43 +28,90 @@ use Illuminate\Support\Collection;
 class VehiculeSituationVentesService
 {
     /**
-     * @return array{kpis: array, produits: array, ventes: array}
+     * Situation de paiement d'une vente = statut_facture de sa facture (recalculé à chaque
+     * encaissement par FactureVente::recalculStatut() : aucun encaissement → impayée, encaissé
+     * ≥ net → payée, sinon partiel). Une facture n'a qu'un statut : les catégories sont donc
+     * mutuellement exclusives. « Créée » (aucun encaissement encore enregistré) et « impayée »
+     * sont le même état financier — rien n'a été encaissé — et forment ensemble « Dû ».
+     */
+    private const CATEGORIES_PAIEMENT = [
+        'paye' => ['label' => 'Payé', 'statuts' => [StatutFactureVente::PAYEE]],
+        'partiel' => ['label' => 'Partiel', 'statuts' => [StatutFactureVente::PARTIEL]],
+        'du' => ['label' => 'Dû', 'statuts' => [StatutFactureVente::CREEE, StatutFactureVente::IMPAYEE]],
+    ];
+
+    /**
+     * @return array{kpis: array, produits: array, paiements: array, periode_debut: ?string, periode_fin: ?string}
      */
     public function pourVehicule(Vehicule $vehicule, string $periode = 'all'): array
     {
+        [$debut, $fin] = $this->bornesPeriode($periode);
+
         $query = CommandeVente::where('vehicule_id', $vehicule->id)
             ->whereNotIn('statut', [StatutCommandeVente::BROUILLON->value, StatutCommandeVente::ANNULEE->value])
-            ->with(['lignes', 'client', 'facture.encaissements']);
+            ->with(['lignes.variante.produit', 'facture.encaissements'])
+            ->orderByDesc('created_at');
 
-        match ($periode) {
-            'month' => $query->whereYear('created_at', now()->year)->whereMonth('created_at', now()->month),
-            'year' => $query->whereYear('created_at', now()->year),
-            default => null,
-        };
+        if ($debut && $fin) {
+            $query->whereBetween('created_at', [$debut, $fin]);
+        }
 
-        $ventes = $query->orderByDesc('created_at')->get();
+        $ventes = $query->get();
+        $factures = $this->facturesActives($ventes);
 
         return [
-            'kpis' => $this->kpis($ventes),
+            'kpis' => $this->kpis($ventes, $factures),
             'produits' => $this->produitsVendus($ventes),
-            'ventes' => $this->detailVentes($ventes),
+            'paiements' => $this->paiements($factures),
+            'periode_debut' => $debut?->toDateString(),
+            'periode_fin' => $fin?->toDateString(),
         ];
     }
 
     /**
-     * @param  Collection<int, CommandeVente>  $ventes
+     * @return array{0: ?Carbon, 1: ?Carbon}
      */
-    private function kpis(Collection $ventes): array
+    private function bornesPeriode(string $periode): array
+    {
+        return match ($periode) {
+            'month' => [now()->startOfMonth(), now()->endOfMonth()],
+            'year' => [now()->startOfYear(), now()->endOfYear()],
+            default => [null, null],
+        };
+    }
+
+    /**
+     * Factures non annulées des ventes — même exclusion que l'écran Ventes pour « à encaisser » /
+     * « déjà payé ».
+     *
+     * @param  Collection<int, CommandeVente>  $ventes
+     * @return Collection<int, FactureVente>
+     */
+    private function facturesActives(Collection $ventes): Collection
+    {
+        return $ventes
+            ->map(fn (CommandeVente $v) => $v->facture)
+            ->filter(fn (?FactureVente $f) => $f !== null && ! $f->isAnnulee())
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, CommandeVente>  $ventes
+     * @param  Collection<int, FactureVente>  $factures
+     */
+    private function kpis(Collection $ventes, Collection $factures): array
     {
         return [
             'ca_vendu' => (float) $ventes->sum('total_commande'),
-            'encaisse' => (float) $ventes->sum(fn (CommandeVente $v) => $v->facture ? (float) $v->facture->montant_encaisse : 0.0),
-            'reste_du' => (float) $ventes->sum(fn (CommandeVente $v) => $v->facture ? (float) $v->facture->montant_restant : 0.0),
+            'encaisse' => (float) $factures->sum(fn (FactureVente $f) => $f->montant_encaisse),
+            'reste_du' => (float) $factures->sum(fn (FactureVente $f) => $f->montant_restant),
             'nb_ventes' => $ventes->count(),
         ];
     }
 
     /**
+     * Agrégé par variante (grain transactionnel réel), trié par quantité vendue décroissante.
+     *
      * @param  Collection<int, CommandeVente>  $ventes
      */
     private function produitsVendus(Collection $ventes): array
@@ -67,37 +119,64 @@ class VehiculeSituationVentesService
         return $ventes->flatMap(fn (CommandeVente $v) => $v->lignes)
             ->groupBy('variante_id')
             ->map(function (Collection $lignes) {
-                // Libellé snapshot figé à la vente — jamais le nom produit courant (le produit
-                // peut avoir été renommé depuis, cf. CommandeVenteLigne.libelle_snapshot).
-                $libelle = $lignes->first()->libelle_snapshot;
+                // $ventes est trié du plus récent au plus ancien : le libellé affiché est celui de
+                // la vente la plus récente (snapshot figé à la vente, jamais le nom courant), avec
+                // le même repli que CommandeVenteFormBuilder pour les lignes antérieures aux snapshots.
+                $derniere = $lignes->first();
 
                 return [
-                    'variante_id' => $lignes->first()->variante_id,
-                    'libelle' => $libelle,
+                    'variante_id' => $derniere->variante_id,
+                    'libelle' => $derniere->libelle_snapshot ?? $derniere->variante?->produit?->nom,
                     'quantite' => $lignes->sum(fn ($l) => (int) ($l->quantite_livree ?? $l->quantite_demandee)),
                     'montant' => (float) $lignes->sum('total_ligne'),
                 ];
             })
-            ->sortByDesc('montant')
+            ->sort(fn (array $a, array $b) => [$b['quantite'], $b['montant']] <=> [$a['quantite'], $a['montant']])
             ->values()
             ->all();
     }
 
     /**
-     * @param  Collection<int, CommandeVente>  $ventes
+     * Chaque catégorie est valorisée au montant facturé (montant_net) de ses ventes : le total
+     * des catégories redonne le facturé, sans double compte. La part non encaissée d'une vente
+     * partielle reste dans « Partiel » (exposée à part dans reste_a_encaisser) — le « Reste dû »
+     * global = reste_a_encaisser de « Dû » + celui de « Partiel ».
+     *
+     * Pourcentage du montant et pourcentage du nombre de ventes sont deux champs distincts.
+     *
+     * @param  Collection<int, FactureVente>  $factures
      */
-    private function detailVentes(Collection $ventes): array
+    private function paiements(Collection $factures): array
     {
-        return $ventes->map(fn (CommandeVente $v) => [
-            'id' => $v->id,
-            'reference' => $v->reference,
-            'date' => $v->created_at?->format('d/m/Y'),
-            'client_nom' => $v->client?->nom_complet,
-            'montant' => (float) $v->total_commande,
-            'encaisse' => $v->facture ? (float) $v->facture->montant_encaisse : 0.0,
-            'reste' => $v->facture ? (float) $v->facture->montant_restant : 0.0,
-            'statut' => $v->statut?->value,
-            'statut_label' => $v->statut_label,
-        ])->values()->all();
+        $totalMontant = (float) $factures->sum(fn (FactureVente $f) => (float) $f->montant_net);
+        $totalVentes = $factures->count();
+
+        $repartition = [];
+        foreach (self::CATEGORIES_PAIEMENT as $code => $categorie) {
+            $groupe = $factures->filter(fn (FactureVente $f) => in_array($f->statut_facture, $categorie['statuts'], true));
+            $montant = (float) $groupe->sum(fn (FactureVente $f) => (float) $f->montant_net);
+            $nbVentes = $groupe->count();
+
+            $repartition[] = [
+                'code' => $code,
+                'label' => $categorie['label'],
+                'montant' => $montant,
+                'pourcentage_montant' => $this->pourcentage($montant, $totalMontant),
+                'nb_ventes' => $nbVentes,
+                'pourcentage_ventes' => $this->pourcentage($nbVentes, $totalVentes),
+                'reste_a_encaisser' => (float) $groupe->sum(fn (FactureVente $f) => $f->montant_restant),
+            ];
+        }
+
+        return [
+            'total_montant' => $totalMontant,
+            'total_ventes' => $totalVentes,
+            'repartition' => $repartition,
+        ];
+    }
+
+    private function pourcentage(float|int $part, float|int $total): float
+    {
+        return $total > 0 ? round($part / $total * 100, 1) : 0.0;
     }
 }
