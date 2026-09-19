@@ -10,7 +10,6 @@ import ListPageActions from '@/components/ListPageActions.vue';
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,6 +17,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -382,33 +382,53 @@ function computePeriodeRange(preset: string): { debut: string; fin: string } {
             return { debut: toIsoDate(hier), fin: toIsoDate(hier) };
         }
         case 'week':
-            return { debut: toIsoDate(startOfWeekMonday(today)), fin: toIsoDate(today) };
+            return {
+                debut: toIsoDate(startOfWeekMonday(today)),
+                fin: toIsoDate(today),
+            };
         case 'last_week': {
             const finDerniere = addDays(startOfWeekMonday(today), -1);
             const debutDerniere = addDays(finDerniere, -6);
-            return { debut: toIsoDate(debutDerniere), fin: toIsoDate(finDerniere) };
+            return {
+                debut: toIsoDate(debutDerniere),
+                fin: toIsoDate(finDerniere),
+            };
         }
         case 'month':
             return {
-                debut: toIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+                debut: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth(), 1),
+                ),
                 fin: toIsoDate(today),
             };
         case 'last_month':
             return {
-                debut: toIsoDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
-                fin: toIsoDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+                debut: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth() - 1, 1),
+                ),
+                fin: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth(), 0),
+                ),
             };
         case 'last_3_months':
             return {
                 debut: toIsoDate(
-                    new Date(today.getFullYear(), today.getMonth() - 3, today.getDate()),
+                    new Date(
+                        today.getFullYear(),
+                        today.getMonth() - 3,
+                        today.getDate(),
+                    ),
                 ),
                 fin: toIsoDate(today),
             };
         case 'last_6_months':
             return {
                 debut: toIsoDate(
-                    new Date(today.getFullYear(), today.getMonth() - 6, today.getDate()),
+                    new Date(
+                        today.getFullYear(),
+                        today.getMonth() - 6,
+                        today.getDate(),
+                    ),
                 ),
                 fin: toIsoDate(today),
             };
@@ -496,7 +516,9 @@ function submitExport() {
     if (exportDateDebut.value) params.set('date_debut', exportDateDebut.value);
     if (exportDateFin.value) params.set('date_fin', exportDateFin.value);
     exportSiteIds.value.forEach((id) => params.append('site_ids[]', id));
-    exportVehiculeIds.value.forEach((id) => params.append('vehicule_ids[]', id));
+    exportVehiculeIds.value.forEach((id) =>
+        params.append('vehicule_ids[]', id),
+    );
     exportStatuts.value.forEach((s) => params.append('statuts[]', s));
     exportColumns.value.forEach((c) => params.append('columns[]', c));
     params.set('format', exportFormat.value);

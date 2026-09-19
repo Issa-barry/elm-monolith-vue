@@ -253,8 +253,7 @@ const totalProduits = computed(() => ({
                 class="rounded-lg border border-dashed py-10 text-center"
             >
                 <p class="text-sm text-muted-foreground">
-                    Aucune vente enregistrée pour ce véhicule sur cette
-                    période.
+                    Aucune vente enregistrée pour ce véhicule sur cette période.
                 </p>
             </div>
 
