@@ -18,6 +18,8 @@ class IndexPdvController extends Controller
 {
     public function __invoke(): Response
     {
+        abort_unless(auth()->user()->can('pdv.read'), 403);
+
         $orgId = auth()->user()->organization_id;
 
         $produits = $this->produitsPdv($orgId, PdvSiteResolver::defaultSiteId());

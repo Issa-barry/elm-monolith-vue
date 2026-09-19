@@ -3,7 +3,8 @@ import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { ArrowDown } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface CompteTresorerie {
     id: string;
@@ -37,7 +38,7 @@ const form = useForm({
     site_origine_id: '',
     site_destination_id: props.site_prerempli ?? '',
     compte_tresorerie_origine_id: '',
-    montant: props.montant_prerempli ?? '',
+    montant: props.montant_prerempli ?? ('' as number | ''),
     moyen_transfert: '',
     reference_externe: '',
     echeance_debut: props.echeance_debut_prerempli ?? '',
@@ -49,6 +50,30 @@ const form = useForm({
 const comptesOrigine = computed(() =>
     props.comptes_tresorerie.filter((c) => c.site_id === form.site_origine_id),
 );
+
+// ── Montant formaté (séparateur de milliers) ──────────────────────────────
+// toLocaleString('fr-FR') insère une espace fine insécable (U+202F) comme
+// séparateur de milliers : quasi invisible dans une police grasse/large
+// comme celle de ce champ. On la remplace par une espace normale pour que
+// le regroupement reste visible ; la valeur numérique envoyée au backend
+// (form.montant) n'est pas affectée par ce remplacement purement visuel.
+function formatMontant(valeur: number): string {
+    return valeur
+        .toLocaleString('fr-FR', { maximumFractionDigits: 0 })
+        .replace(/ /g, ' ');
+}
+
+const montantDisplay = ref(
+    props.montant_prerempli
+        ? formatMontant(Number(props.montant_prerempli))
+        : '',
+);
+
+function handleMontantInput(e: Event) {
+    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
+    form.montant = raw ? parseInt(raw, 10) : '';
+    montantDisplay.value = raw ? formatMontant(parseInt(raw, 10)) : '';
+}
 
 function onFileChange(e: Event) {
     const target = e.target as HTMLInputElement;
@@ -69,19 +94,85 @@ function submit() {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
-            <h1 class="text-xl font-semibold">Nouveau mouvement de fonds</h1>
+            <div>
+                <h1 class="text-xl font-semibold">
+                    Nouveau mouvement de fonds
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Transférer des fonds d'un site vers un autre.
+                </p>
+            </div>
 
-            <form
-                class="space-y-5 rounded-xl border bg-card p-6"
-                @submit.prevent="submit"
-            >
-                <div class="grid gap-4 sm:grid-cols-2">
+            <form class="space-y-4" @submit.prevent="submit">
+                <!-- Transfert -->
+                <div class="space-y-3 rounded-xl border bg-card p-4">
+                    <h2
+                        class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    >
+                        Transfert
+                    </h2>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <label class="text-sm font-medium"
+                                >Site d'origine</label
+                            >
+                            <select
+                                v-model="form.site_origine_id"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            >
+                                <option value="" disabled>Sélectionner…</option>
+                                <option
+                                    v-for="s in sites"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                            <p
+                                v-if="form.errors.site_origine_id"
+                                class="text-xs text-red-600 dark:text-red-400"
+                            >
+                                {{ form.errors.site_origine_id }}
+                            </p>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-sm font-medium"
+                                >Support de trésorerie d'origine</label
+                            >
+                            <select
+                                v-model="form.compte_tresorerie_origine_id"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            >
+                                <option value="" disabled>Sélectionner…</option>
+                                <option
+                                    v-for="c in comptesOrigine"
+                                    :key="c.id"
+                                    :value="c.id"
+                                >
+                                    {{ c.libelle }}
+                                </option>
+                            </select>
+                            <p
+                                v-if="form.errors.compte_tresorerie_origine_id"
+                                class="text-xs text-red-600 dark:text-red-400"
+                            >
+                                {{ form.errors.compte_tresorerie_origine_id }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center py-1">
+                        <ArrowDown class="h-4 w-4 text-muted-foreground" />
+                    </div>
+
                     <div class="space-y-1.5">
                         <label class="text-sm font-medium"
-                            >Site d'origine</label
+                            >Site de destination</label
                         >
                         <select
-                            v-model="form.site_origine_id"
+                            v-model="form.site_destination_id"
                             class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                             <option value="" disabled>Sélectionner…</option>
@@ -94,143 +185,139 @@ function submit() {
                             </option>
                         </select>
                         <p
-                            v-if="form.errors.site_origine_id"
+                            v-if="form.errors.site_destination_id"
                             class="text-xs text-red-600 dark:text-red-400"
                         >
-                            {{ form.errors.site_origine_id }}
-                        </p>
-                    </div>
-                    <div class="space-y-1.5">
-                        <label class="text-sm font-medium"
-                            >Support de trésorerie d'origine</label
-                        >
-                        <select
-                            v-model="form.compte_tresorerie_origine_id"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                            <option value="" disabled>Sélectionner…</option>
-                            <option
-                                v-for="c in comptesOrigine"
-                                :key="c.id"
-                                :value="c.id"
-                            >
-                                {{ c.libelle }}
-                            </option>
-                        </select>
-                        <p
-                            v-if="form.errors.compte_tresorerie_origine_id"
-                            class="text-xs text-red-600 dark:text-red-400"
-                        >
-                            {{ form.errors.compte_tresorerie_origine_id }}
+                            {{ form.errors.site_destination_id }}
                         </p>
                     </div>
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium"
-                        >Site de destination</label
+                <!-- Montant -->
+                <div class="space-y-2 rounded-xl border bg-card p-4">
+                    <h2
+                        class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                     >
-                    <select
-                        v-model="form.site_destination_id"
-                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-1/2 sm:pr-8"
-                    >
-                        <option value="" disabled>Sélectionner…</option>
-                        <option
-                            v-for="s in sites"
-                            :key="s.value"
-                            :value="s.value"
+                        Montant
+                    </h2>
+                    <div class="relative">
+                        <input
+                            :value="montantDisplay"
+                            type="text"
+                            inputmode="numeric"
+                            placeholder="0"
+                            class="h-14 w-full rounded-md border border-input bg-background px-3 pr-16 text-right text-2xl font-bold tabular-nums shadow-sm transition-colors placeholder:font-normal placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            :class="{
+                                'border-destructive': form.errors.montant,
+                            }"
+                            @input="handleMontantInput"
+                        />
+                        <span
+                            class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-muted-foreground"
+                            >GNF</span
                         >
-                            {{ s.label }}
-                        </option>
-                    </select>
-                    <p
-                        v-if="form.errors.site_destination_id"
-                        class="text-xs text-red-600 dark:text-red-400"
-                    >
-                        {{ form.errors.site_destination_id }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        Le support de trésorerie de destination (caisse,
-                        banque…) sera choisi par le destinataire au moment de la
-                        confirmation de réception.
-                    </p>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium">Montant (GNF)</label>
-                    <input
-                        v-model="form.montant"
-                        type="number"
-                        min="1"
-                        step="1"
-                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    />
+                    </div>
                     <p
                         v-if="form.errors.montant"
                         class="text-xs text-red-600 dark:text-red-400"
                     >
                         {{ form.errors.montant }}
                     </p>
+                    <p class="text-xs text-muted-foreground">
+                        Ce montant sera débité du support d'origine au moment de
+                        l'envoi.
+                    </p>
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium"
-                        >Échéance visée
-                        <span class="font-normal text-muted-foreground"
-                            >(optionnel — laisser vide pour une remise sans
-                            échéance précise)</span
-                        ></label
+                <!-- Période de financement visée -->
+                <div class="space-y-3 rounded-xl border bg-card p-4">
+                    <h2
+                        class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                     >
+                        Période de financement visée
+                        <span class="font-normal">(optionnel)</span>
+                    </h2>
                     <div class="grid grid-cols-2 gap-4">
-                        <input
-                            v-model="form.echeance_debut"
-                            type="date"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        />
-                        <input
-                            v-model="form.echeance_fin"
-                            type="date"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        />
+                        <div class="space-y-1.5">
+                            <label class="text-xs text-muted-foreground"
+                                >Du</label
+                            >
+                            <input
+                                v-model="form.echeance_debut"
+                                type="date"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-xs text-muted-foreground"
+                                >Au</label
+                            >
+                            <input
+                                v-model="form.echeance_fin"
+                                type="date"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                        </div>
                     </div>
+                    <p class="text-xs text-muted-foreground">
+                        Laisser vide pour une remise sans période précise.
+                        Rattacher ce financement à une période permet d'éviter
+                        un double financement de la même agence.
+                    </p>
                 </div>
 
-                <div class="grid gap-4 sm:grid-cols-2">
+                <!-- Informations complémentaires -->
+                <div class="space-y-3 rounded-xl border bg-card p-4">
+                    <h2
+                        class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    >
+                        Informations complémentaires
+                        <span class="font-normal">(optionnel)</span>
+                    </h2>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <label class="text-sm font-medium"
+                                >Moyen de transfert</label
+                            >
+                            <input
+                                v-model="form.moyen_transfert"
+                                type="text"
+                                placeholder="Espèces, virement…"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-sm font-medium"
+                                >Référence externe</label
+                            >
+                            <input
+                                v-model="form.reference_externe"
+                                type="text"
+                                placeholder="N° de reçu, de virement…"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                        </div>
+                    </div>
+
                     <div class="space-y-1.5">
-                        <label class="text-sm font-medium"
-                            >Moyen de transfert</label
-                        >
-                        <input
-                            v-model="form.moyen_transfert"
-                            type="text"
-                            placeholder="Espèces, virement…"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        <label class="text-sm font-medium">Commentaire</label>
+                        <textarea
+                            v-model="form.commentaire"
+                            rows="3"
+                            placeholder="Ajouter une remarque…"
+                            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         />
                     </div>
+
                     <div class="space-y-1.5">
-                        <label class="text-sm font-medium"
-                            >Référence externe</label
-                        >
+                        <label class="text-sm font-medium">Justificatif</label>
                         <input
-                            v-model="form.reference_externe"
-                            type="text"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            type="file"
+                            class="text-sm"
+                            @change="onFileChange"
                         />
                     </div>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium">Commentaire</label>
-                    <textarea
-                        v-model="form.commentaire"
-                        rows="3"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium">Justificatif</label>
-                    <input type="file" class="text-sm" @change="onFileChange" />
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">

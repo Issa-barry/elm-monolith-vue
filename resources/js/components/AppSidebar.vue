@@ -126,7 +126,7 @@ const mainNavItems = computed((): NavItem[] => {
                 href: '/backoffice/distributions',
             },
         ];
-        if (moduleActive('pdv')) {
+        if (canSee('pdv.read', 'pdv')) {
             ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
         }
         ventesSubItems.push({
