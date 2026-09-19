@@ -110,6 +110,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->adminUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -121,6 +122,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->adminUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -132,6 +134,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -145,6 +148,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -158,6 +162,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'perte',
             ])
@@ -171,6 +176,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -185,6 +191,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($user)
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -193,6 +200,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($user)
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'perte',
             ])
@@ -220,6 +228,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -289,6 +298,7 @@ class ProduitAjustementScopeTest extends TestCase
         $this->actingAs($this->managerUser())
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])

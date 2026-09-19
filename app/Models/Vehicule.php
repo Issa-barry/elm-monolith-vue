@@ -184,6 +184,15 @@ class Vehicule extends Model
         return $this->hasMany(VehiculeCapacite::class);
     }
 
+    /**
+     * Ventes rattachées à ce véhicule (colonne directe commandes_ventes.vehicule_id, pas de
+     * relation inverse jusqu'ici) — cf. onglet Situation, VehiculeSituationVentesService.
+     */
+    public function commandesVentes(): HasMany
+    {
+        return $this->hasMany(CommandeVente::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     /**

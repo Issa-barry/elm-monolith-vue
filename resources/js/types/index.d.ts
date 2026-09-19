@@ -37,6 +37,7 @@ export type StandalonePermission =
     | 'logistique.commission.verser'
     | 'ventes.qte.update'
     | 'ventes.prix.update'
+    | 'ventes.exporter'
     | 'imports-flotte.create'
     | 'imports-flotte.read'
     | 'imports-produits.create'

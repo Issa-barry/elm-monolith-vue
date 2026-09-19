@@ -176,7 +176,7 @@ export async function encaisserFacture(
     }
     await montantInput.press('Tab');
 
-    const validerEncaissement = dialog.getByRole('button', { name: /confirmer le paiement/i });
+    const validerEncaissement = dialog.getByRole('button', { name: /^confirmer$/i });
     await expect(validerEncaissement).toBeEnabled({ timeout: 5_000 });
     await validerEncaissement.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });

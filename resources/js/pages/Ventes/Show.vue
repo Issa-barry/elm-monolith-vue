@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import StatusDot from '@/components/StatusDot.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,12 +35,10 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
 
@@ -70,7 +69,6 @@ interface Encaissement {
     heure: string | null;
     mode_paiement: string;
     mode_paiement_label: string;
-    operateur_mobile_money: string | null;
     operateur_mobile_money_label: string | null;
     reference_paiement: string | null;
     note: string | null;
@@ -532,76 +530,47 @@ const activeTab = ref<
 >('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-const modesPaiement = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-];
-
-// Opérateurs Mobile Money actifs sur le marché guinéen (cf. App\Enums\OperateurMobileMoney) —
-// distinct de mode_paiement pour ne pas devoir modifier cet enum à chaque nouveau fintech.
-const operateursMobileMoney = [
-    { value: 'orange_money', label: 'Orange Money' },
-    { value: 'kulu', label: 'Kulu' },
-    { value: 'soutra_money', label: 'Soutra Money' },
-    { value: 'momo', label: 'MOMO (MTN Mobile Money)' },
-    { value: 'paycard', label: 'PayCard' },
-    { value: 'autre', label: 'Autre' },
-];
-
-// Référence obligatoire pour rapprochement — Mobile Money (opérateur) et Virement (bancaire).
-// Chèque/Espèces n'ont pas de référence structurée pour l'instant (cf. StoreEncaissementVenteController).
-const referencePaiementRequise = computed(
-    () =>
-        encaisserForm.mode_paiement === 'mobile_money' ||
-        encaisserForm.mode_paiement === 'virement',
-);
-
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard (Espèces, Orange Money, Kulu,
+// Soutra Money, MOMO, PayCard, Virement bancaire, Chèque). Sous le capot, PaymentCard envoie
+// mode_paiement + operateur_mobile_money séparément (cf. commentaire dans PaymentCard.vue —
+// mode_paiement doit rester l'une des 4 valeurs stables attendues par la comptabilisation).
 const encaisserDialogVisible = ref(false);
-const encaisserForm = useForm({
-    montant: null as number | null,
-    mode_paiement: 'especes' as string | null,
-    operateur_mobile_money: null as string | null,
-    reference_paiement: '',
-    note: '',
-    date_encaissement: new Date().toISOString().slice(0, 10),
-});
-
-// Effacer opérateur/référence dès qu'on quitte un mode qui les exige, pour ne jamais soumettre
-// une valeur devenue obsolète après un changement de mode de paiement dans la même ouverture.
-watch(
-    () => encaisserForm.mode_paiement,
-    (mode) => {
-        if (mode !== 'mobile_money') {
-            encaisserForm.operateur_mobile_money = null;
-        }
-        if (mode !== 'mobile_money' && mode !== 'virement') {
-            encaisserForm.reference_paiement = '';
-        }
-    },
-);
+const encaisserProcessing = ref(false);
+const encaisserErrors = ref<Record<string, string>>({});
 
 function openEncaisserDialog() {
-    encaisserForm.reset();
-    encaisserForm.montant = props.facture?.montant_restant ?? null;
-    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserErrors.value = {};
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser() {
+function submitEncaisser(payload: {
+    montant: number;
+    mode_paiement: string;
+    operateur_mobile_money?: string;
+    reference_paiement?: string;
+}) {
     if (!props.facture) return;
-    encaisserForm.post(
+    encaisserProcessing.value = true;
+    encaisserErrors.value = {};
+    router.post(
         `/backoffice/factures/${props.facture.id}/encaissements`,
+        payload,
         {
+            preserveScroll: true,
             onSuccess: () => {
                 encaisserDialogVisible.value = false;
                 toast.add({
                     severity: 'success',
                     summary: 'Encaissement enregistré',
-                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    detail: `${formatGNF(payload.montant)} enregistré avec succès.`,
                     life: 3000,
                 });
+            },
+            onError: (e) => {
+                encaisserErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaisserProcessing.value = false;
             },
         },
     );
@@ -1693,16 +1662,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         <td
                                             class="px-4 py-3 text-muted-foreground"
                                         >
-                                            {{ enc.mode_paiement_label
-                                            }}<span
-                                                v-if="
-                                                    enc.operateur_mobile_money_label
-                                                "
-                                            >
-                                                ({{
-                                                    enc.operateur_mobile_money_label
-                                                }})</span
-                                            >
+                                            {{
+                                                enc.operateur_mobile_money_label ??
+                                                enc.mode_paiement_label
+                                            }}
                                         </td>
                                         <td
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
@@ -1898,149 +1861,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
         </div>
 
         <!-- Dialog Encaissement -->
-        <Dialog
+        <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            modal
-            header="Encaisser un paiement"
-            :style="{ width: '440px' }"
-        >
-            <div class="space-y-4">
-                <div v-if="facture" class="rounded-lg bg-primary/10 px-4 py-3">
-                    <p class="text-xs text-primary">Restant dû</p>
-                    <p class="text-xl font-bold text-primary tabular-nums">
-                        {{ formatGNF(facture.montant_restant) }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-montant" class="mb-1.5 block text-sm">
-                        Montant <span class="text-destructive">*</span>
-                    </Label>
-                    <InputNumber
-                        id="enc-montant"
-                        v-model="encaisserForm.montant"
-                        :max="facture?.montant_restant"
-                        :min="1"
-                        :use-grouping="true"
-                        locale="fr-FR"
-                        suffix=" GNF"
-                        class="w-full"
-                        fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.montant"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.montant }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-mode" class="mb-1.5 block text-sm">
-                        Mode de paiement <span class="text-destructive">*</span>
-                    </Label>
-                    <Select
-                        id="enc-mode"
-                        v-model="encaisserForm.mode_paiement"
-                        :options="modesPaiement"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid': encaisserForm.errors.mode_paiement,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.mode_paiement"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.mode_paiement }}
-                    </p>
-                </div>
-                <div v-if="encaisserForm.mode_paiement === 'mobile_money'">
-                    <Label for="enc-operateur" class="mb-1.5 block text-sm">
-                        Opérateur Mobile Money
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <Select
-                        id="enc-operateur"
-                        v-model="encaisserForm.operateur_mobile_money"
-                        :options="operateursMobileMoney"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid':
-                                encaisserForm.errors.operateur_mobile_money,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.operateur_mobile_money"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.operateur_mobile_money }}
-                    </p>
-                </div>
-                <div v-if="referencePaiementRequise">
-                    <Label for="enc-reference" class="mb-1.5 block text-sm">
-                        Référence
-                        {{
-                            encaisserForm.mode_paiement === 'virement'
-                                ? 'du virement'
-                                : 'de la transaction'
-                        }}
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <InputText
-                        id="enc-reference"
-                        v-model="encaisserForm.reference_paiement"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid':
-                                encaisserForm.errors.reference_paiement,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.reference_paiement"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.reference_paiement }}
-                    </p>
-                </div>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        @click="encaisserDialogVisible = false"
-                        >Annuler</Button
-                    >
-                    <Button
-                        :disabled="
-                            encaisserForm.processing ||
-                            !encaisserForm.montant ||
-                            !encaisserForm.mode_paiement ||
-                            (encaisserForm.mode_paiement === 'mobile_money' &&
-                                !encaisserForm.operateur_mobile_money) ||
-                            (referencePaiementRequise &&
-                                !encaisserForm.reference_paiement)
-                        "
-                        @click="submitEncaisser"
-                    >
-                        <HandCoins class="mr-2 h-4 w-4" />
-                        {{
-                            encaisserForm.processing
-                                ? 'Enregistrement…'
-                                : 'Confirmer'
-                        }}
-                    </Button>
-                </div>
-            </template>
-        </Dialog>
+            title="Encaisser un paiement"
+            :solde="facture?.montant_restant ?? 0"
+            :processing="encaisserProcessing"
+            :errors="encaisserErrors"
+            @submit="submitEncaisser"
+        />
 
         <!-- Dialog Annulation -->
         <Dialog
