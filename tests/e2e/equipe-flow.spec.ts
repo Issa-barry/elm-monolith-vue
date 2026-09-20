@@ -329,8 +329,8 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
 
-    // Après enregistrement, la page véhicule montre les membres
-    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+$/, {
+    // Après enregistrement, la page véhicule montre les membres (onglet actif dans l'URL : ?tab=…)
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+(\?.*)?$/, {
         timeout: 15_000,
     });
     await page

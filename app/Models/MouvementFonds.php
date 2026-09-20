@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\NatureMouvementFonds;
 use App\Enums\StatutMouvementFonds;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +18,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Chaque transition transactionnelle est portée par MouvementFondsService,
  * jamais directement par le modèle (garde-fous idempotence/permissions/
  * verrouillage de période comptable centralisés là-bas).
+ *
+ * `nature` distingue le mouvement entre agences (`inter_sites`, historique) du versement d'une
+ * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site) — cf.
+ * NatureMouvementFonds.
  */
 class MouvementFonds extends Model
 {
@@ -27,6 +32,7 @@ class MouvementFonds extends Model
     protected $fillable = [
         'organization_id',
         'reference',
+        'nature',
         'site_origine_id',
         'site_destination_id',
         'compte_tresorerie_origine_id',
@@ -59,6 +65,7 @@ class MouvementFonds extends Model
             'echeance_debut' => 'date',
             'echeance_fin' => 'date',
             'statut' => StatutMouvementFonds::class,
+            'nature' => NatureMouvementFonds::class,
         ];
     }
 
@@ -157,6 +164,31 @@ class MouvementFonds extends Model
     public function isTerminal(): bool
     {
         return $this->statut->isTerminal();
+    }
+
+    public function isInterne(): bool
+    {
+        return $this->nature === NatureMouvementFonds::INTERNE_CAISSES;
+    }
+
+    /**
+     * Séparation envoi/réception d'un versement de caisse : celui qui a envoyé les fonds ne
+     * confirme pas lui-même leur réception, ni ne la conteste — un autre utilisateur habilité doit
+     * le faire. Seul le super admin peut y déroger (décision du 2026-09-19) ; l'envoyeur et le
+     * receveur restent tous deux enregistrés (`sent_by`, `received_by`), donc l'exception est
+     * traçable. Sans objet pour un mouvement entre agences, dont la séparation se fait par site.
+     *
+     * Règle unique, partagée par le service (source de vérité), la policy et les indicateurs
+     * `peut_*` de l'écran : le Gate::before du super admin neutralise les policies, elle ne
+     * peut donc pas reposer sur la policy seule.
+     */
+    public function separationEnvoiReceptionRespectee(?User $acteur): bool
+    {
+        if (! $this->isInterne() || $acteur === null || $this->sent_by === null) {
+            return true;
+        }
+
+        return $this->sent_by !== $acteur->id || $acteur->isSuperAdmin();
     }
 
     /** Remise agence -> siège : le site d'origine n'est pas de type siège, la destination l'est. */

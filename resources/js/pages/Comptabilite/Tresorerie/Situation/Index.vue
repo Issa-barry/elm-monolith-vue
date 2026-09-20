@@ -2,23 +2,31 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { Wallet } from 'lucide-vue-next';
+import { ArrowRightLeft, Wallet } from 'lucide-vue-next';
 import { computed } from 'vue';
 
+// `en_cours_versement` : versements de caisses dédiées envoyés mais pas encore reçus. Déjà sortis de
+// tous les soldes (transit au grand livre), donc jamais inclus dans `total` ni `par_type` — simple
+// information de suivi pour expliquer un total qui baisse à l'envoi.
 interface Row {
     site_id: string;
     site_nom: string;
     par_type: Record<string, number>;
     total: number;
+    en_cours_versement: number;
+    versements_en_cours: number;
 }
 
 interface TotalGeneral {
     par_type: Record<string, number>;
     total: number;
+    en_cours_versement: number;
+    versements_en_cours: number;
 }
 
 const props = defineProps<{
@@ -87,6 +95,26 @@ function detailHref(row: Row): string {
                 </div>
             </div>
 
+            <Alert
+                v-if="total_general.en_cours_versement > 0"
+                data-testid="situation-en-cours-versement"
+            >
+                <ArrowRightLeft class="text-blue-500" />
+                <AlertTitle>
+                    {{ formatGNF(total_general.en_cours_versement) }} en cours
+                    de versement
+                </AlertTitle>
+                <AlertDescription>
+                    {{
+                        total_general.versements_en_cours > 1
+                            ? `${total_general.versements_en_cours} versements envoyés par des caisses d'agents attendent la confirmation de la caisse de l'agence.`
+                            : "1 versement envoyé par une caisse d'agent attend la confirmation de la caisse de l'agence."
+                    }}
+                    Ce montant n'est plus dans les soldes ci-dessus et n'est pas
+                    encore crédité : il l'est dès la réception confirmée.
+                </AlertDescription>
+            </Alert>
+
             <DataFilters
                 url="/backoffice/comptabilite/tresorerie/situation"
                 :values="filters"
@@ -140,6 +168,14 @@ function detailHref(row: Row): string {
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
                             >
                                 {{ formatGNF(row.total) }}
+                                <div
+                                    v-if="row.en_cours_versement > 0"
+                                    class="mt-0.5 text-xs font-medium whitespace-nowrap text-blue-600 dark:text-blue-400"
+                                    data-testid="situation-site-en-cours"
+                                >
+                                    En cours de versement :
+                                    {{ formatGNF(row.en_cours_versement) }}
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="rows.length === 0">

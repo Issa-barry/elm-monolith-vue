@@ -287,6 +287,7 @@ class IndexCommandeVenteController extends Controller
             'reference' => $c->reference,
             'statut' => $c->statut?->value,
             'statut_label' => $c->statut_label,
+            'statut_affichage' => $c->statutAffichage(),
             'statut_color' => $c->statut?->color(),
             'nature_operation' => $c->nature_operation?->value,
             'processus_code' => $processusCode,

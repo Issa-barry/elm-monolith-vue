@@ -303,21 +303,24 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Trésorerie',
                     href: '/backoffice/comptabilite/tresorerie/financement',
+                    // Libellés courts : le parent porte déjà « Trésorerie » et les
+                    // libellés longs sont tronqués au 3e niveau de la sidebar. Les
+                    // titres de page gardent leur libellé complet.
                     items: [
                         {
-                            title: 'Financement des agences',
-                            href: '/backoffice/comptabilite/tresorerie/financement',
-                        },
-                        {
-                            title: 'Mouvements de fonds',
-                            href: '/backoffice/comptabilite/tresorerie/mouvements',
-                        },
-                        {
-                            title: 'Situation de trésorerie',
+                            title: 'Situation',
                             href: '/backoffice/comptabilite/tresorerie/situation',
                         },
                         {
-                            title: 'Supports de trésorerie',
+                            title: 'Financement',
+                            href: '/backoffice/comptabilite/tresorerie/financement',
+                        },
+                        {
+                            title: 'Mouvements',
+                            href: '/backoffice/comptabilite/tresorerie/mouvements',
+                        },
+                        {
+                            title: 'Supports',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
                     ],

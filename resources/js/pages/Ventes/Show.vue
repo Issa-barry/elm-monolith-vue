@@ -160,6 +160,7 @@ interface CommandeData {
     reference: string;
     statut: string;
     statut_label: string;
+    statut_affichage: { value: string; label: string };
     statut_color: string;
     total_commande: number;
     mode_tarification_snapshot: string | null;
@@ -893,8 +894,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </h1>
                         <div class="mt-1 flex items-center gap-2">
                             <StatusDot
-                                :status="commande.statut"
-                                :label="commande.statut_label"
+                                :status="commande.statut_affichage.value"
+                                :label="commande.statut_affichage.label"
                             />
                             <span class="text-sm text-muted-foreground">{{
                                 commande.created_at
@@ -1190,8 +1191,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </h3>
                         <div class="flex items-center gap-2">
                             <StatusDot
-                                :status="commande.statut"
-                                :label="commande.statut_label"
+                                :status="commande.statut_affichage.value"
+                                :label="commande.statut_affichage.label"
                             />
                             <button
                                 v-if="facture"

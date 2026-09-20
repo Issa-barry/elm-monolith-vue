@@ -3,9 +3,11 @@
 namespace App\Services\Comptabilite;
 
 use App\Enums\EvenementComptable;
+use App\Enums\ModePaiement;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\PieceComptable;
+use App\Services\Tresorerie\CaisseAgentResolver;
 use Illuminate\Support\Carbon;
 
 /**
@@ -23,7 +25,10 @@ use Illuminate\Support\Carbon;
  *    et ::creerFactureDirecte(). Créance client constatée : débit Client,
  *    crédit Ventes.
  *  - ENCAISSEMENT_VENTE_RECU : chaque EncaissementVente créé (partiel ou
- *    total) — règlement de la créance : débit Trésorerie, crédit Client.
+ *    total) — règlement de la créance : débit Trésorerie, crédit Client. La
+ *    trésorerie débitée est le compte du moyen de paiement (compta_mappings), ou le
+ *    sous-compte de la caisse dédiée de l'agent pour ses encaissements en espèces
+ *    (cf. CaisseAgentResolver).
  *
  * Ne comptabilise jamais la commission d'un livreur/propriétaire elle-même :
  * cette traduction reste entièrement portée par FicheComptabilisationService,
@@ -36,6 +41,7 @@ class VenteComptabilisationService
 {
     public function __construct(
         private readonly EcritureComptableService $ecritures,
+        private readonly CaisseAgentResolver $caisses,
     ) {}
 
     /**
@@ -112,6 +118,30 @@ class VenteComptabilisationService
             $ligneClient['tiers_model'] = $client;
         }
 
+        // Espèces encaissées par un agent qui a une caisse dédiée sur ce site : la ligne de
+        // trésorerie vise directement le sous-compte de SA caisse (le moteur accepte un compte
+        // déjà résolu, comme pour la charge d'une dépense) au lieu du compte 571000 partagé —
+        // cf. CaisseAgentResolver pour les conditions exactes. Le crédit reste sur le compte
+        // client : le produit est déjà constaté à la facturation (VENTE_FACTUREE).
+        $caisse = $this->caisses->pourEncaissement($encaissement, $facture);
+        $ligneTresorerie = $caisse === null
+            ? [
+                'role' => 'tresorerie',
+                'sens' => 'debit',
+                'montant' => $montant,
+                'moyen_paiement' => $encaissement->mode_paiement?->value,
+            ]
+            : [
+                'compte_comptable_id' => $caisse->compte_comptable_id,
+                // Le journal reste celui d'un encaissement en espèces (« Caisse ») : la ligne
+                // client n'en porte pas, cf. EcritureComptableService (option journal_role).
+                'journal_role' => 'tresorerie',
+                'moyen_paiement' => ModePaiement::ESPECES->value,
+                'sens' => 'debit',
+                'montant' => $montant,
+                'libelle' => 'Encaissement facture '.$facture->reference.' — '.$caisse->libelle,
+            ];
+
         return $this->ecritures->comptabiliser(
             evenement: EvenementComptable::ENCAISSEMENT_VENTE_RECU,
             source: $encaissement,
@@ -122,12 +152,7 @@ class VenteComptabilisationService
             dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
             libelle: 'Encaissement facture '.$facture->reference,
             lignes: [
-                [
-                    'role' => 'tresorerie',
-                    'sens' => 'debit',
-                    'montant' => $montant,
-                    'moyen_paiement' => $encaissement->mode_paiement?->value,
-                ],
+                $ligneTresorerie,
                 $ligneClient,
             ],
             siteId: $facture->site_id,

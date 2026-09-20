@@ -95,6 +95,7 @@ class ShowCommandeVenteController extends Controller
                 'reference' => $commande->reference,
                 'statut' => $commande->statut?->value,
                 'statut_label' => $commande->statut_label,
+                'statut_affichage' => $commande->statutAffichage(),
                 'statut_color' => $commande->statut?->color(),
                 'total_commande' => (float) $commande->total_commande,
                 'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,

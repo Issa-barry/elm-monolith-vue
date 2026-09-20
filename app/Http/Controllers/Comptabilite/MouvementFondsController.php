@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\NatureMouvementFonds;
 use App\Enums\StatutMouvementFonds;
 use App\Http\Controllers\Controller;
 use App\Models\CompteTresorerie;
@@ -30,7 +31,11 @@ class MouvementFondsController extends Controller
         $isAdmin = $user->isAdmin();
 
         $query = MouvementFonds::where('organization_id', $orgId)
-            ->with(['siteOrigine:id,nom', 'siteDestination:id,nom', 'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle']);
+            ->with([
+                'siteOrigine:id,nom', 'siteDestination:id,nom',
+                'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle',
+                'expediteur.personne', 'receptionnaire.personne',
+            ]);
 
         if (! $isAdmin) {
             $siteIds = $this->siteScope->accessibleSiteIds($user);
@@ -39,6 +44,10 @@ class MouvementFondsController extends Controller
 
         if ($statut = $request->input('statut')) {
             $query->where('statut', $statut);
+        }
+
+        if ($nature = NatureMouvementFonds::tryFrom((string) $request->input('nature'))) {
+            $query->where('nature', $nature->value);
         }
 
         if ($isAdmin && $siteIds = array_filter((array) $request->input('site_ids', []))) {
@@ -56,39 +65,56 @@ class MouvementFondsController extends Controller
         $mouvements = $query->orderByDesc('created_at')->paginate(25)->withQueryString()->through(fn (MouvementFonds $m) => [
             'id' => $m->id,
             'reference' => $m->reference,
+            'nature' => $m->nature->value,
+            'nature_label' => $m->nature->label(),
+            'commentaire' => $m->commentaire,
             'site_origine' => $m->siteOrigine?->nom,
             'site_destination' => $m->siteDestination?->nom,
             'site_destination_id' => $m->site_destination_id,
             'compte_origine' => $m->compteTresorerieOrigine?->libelle,
             'compte_destination' => $m->compteTresorerieDestination?->libelle,
+            'compte_destination_id' => $m->compte_tresorerie_destination_id,
             'montant' => (float) $m->montant,
             'statut' => $m->statut->value,
             'statut_label' => $m->statut->label(),
             'date_envoi' => $m->date_envoi?->toDateString(),
             'date_reception' => $m->date_reception?->toDateString(),
+            'expediteur' => $m->expediteur?->name,
+            'receptionnaire' => $m->receptionnaire?->name,
             'created_at' => $m->created_at->toDateString(),
-            'peut_envoyer' => $user->can('envoyer', $m),
-            'peut_recevoir' => $user->can('recevoir', $m),
-            'peut_annuler' => $user->can('annuler', $m),
-            'peut_contester' => $user->can('contester', $m),
-            'peut_confirmer_retour' => $user->can('confirmerRetour', $m),
+            // L'état du mouvement est vérifié EXPLICITEMENT en plus de la policy : le Gate::before du
+            // super admin passe avant elle et afficherait sinon toutes les actions sur chaque ligne,
+            // y compris terminée. Même raison pour la séparation envoi/réception d'un versement de
+            // caisse (MouvementFonds::separationEnvoiReceptionRespectee()). Le service reste la
+            // garantie réelle de chacune de ces règles.
+            'peut_envoyer' => $m->isBrouillon() && $user->can('envoyer', $m),
+            'peut_recevoir' => ($m->isEnvoye() || $m->isConteste())
+                && $m->separationEnvoiReceptionRespectee($user)
+                && $user->can('recevoir', $m),
+            'peut_annuler' => $m->isBrouillon() && $user->can('annuler', $m),
+            'peut_contester' => $m->isEnvoye()
+                && $m->separationEnvoiReceptionRespectee($user)
+                && $user->can('contester', $m),
+            'peut_confirmer_retour' => $m->isConteste() && $user->can('confirmerRetour', $m),
         ]);
 
         return Inertia::render('Comptabilite/MouvementsFonds/Index', [
             'mouvements' => $mouvements,
             'filters' => [
                 'statut' => $request->input('statut', ''),
+                'nature' => $request->input('nature', ''),
                 'search' => $request->input('search', ''),
                 'site_ids' => array_values(array_filter((array) $request->input('site_ids', []))),
             ],
             'statut_options' => StatutMouvementFonds::options(),
+            'nature_options' => NatureMouvementFonds::options(),
             'sites' => $this->sitesDisponibles($orgId, $user),
             'is_admin' => $isAdmin,
             'peut_creer' => $user->can('create', MouvementFonds::class),
             // Nécessaire pour choisir le support de destination au moment de
             // « Confirmer réception » (cf. MouvementFondsService::recevoir()) —
             // le frontend filtre par site_destination_id du mouvement concerné.
-            'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->get(['id', 'site_id', 'libelle', 'type']),
+            'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->agence()->get(['id', 'site_id', 'libelle', 'type']),
         ]);
     }
 
@@ -100,7 +126,7 @@ class MouvementFondsController extends Controller
 
         return Inertia::render('Comptabilite/MouvementsFonds/Create', [
             'sites' => $this->sitesDisponibles($orgId, auth()->user()),
-            'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->get(['id', 'site_id', 'libelle', 'type']),
+            'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->agence()->get(['id', 'site_id', 'libelle', 'type']),
             'site_prerempli' => $request->input('site_id'),
             'montant_prerempli' => $request->input('montant'),
             'echeance_debut_prerempli' => $request->input('echeance_debut'),
@@ -158,11 +184,15 @@ class MouvementFondsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $data = $request->validate([
-            'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
-        ]);
+        // Un versement de caisse a sa destination fixée à l'envoi : la confirmation ne demande
+        // aucun choix (le service refuse de toute façon un autre support).
+        $destinationId = $mouvement->isInterne()
+            ? $mouvement->compte_tresorerie_destination_id
+            : $request->validate([
+                'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
+            ])['compte_tresorerie_destination_id'];
 
-        $mouvement = $this->service->recevoir($mouvement, auth()->id(), $data['compte_tresorerie_destination_id']);
+        $mouvement = $this->service->recevoir($mouvement, auth()->id(), $destinationId);
 
         return back()->with('success', "Mouvement {$mouvement->reference} confirmé reçu.");
     }
