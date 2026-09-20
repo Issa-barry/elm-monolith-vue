@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
+use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -156,6 +157,29 @@ class CommandeVenteExportTest extends TestCase
         $tableau = $this->readSheet($response, 'ventes');
 
         $this->assertSame(['Référence', 'Statut'], $tableau[0]);
+    }
+
+    public function test_export_colonne_statut_ne_dit_pas_a_encaisser_pour_une_vente_soldee(): void
+    {
+        $soldee = $this->makeCommande(['statut' => StatutCommandeVente::FACTURATION]);
+        FactureVente::factory()->payee()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $soldee->id,
+            'montant_net' => 5000,
+        ]);
+        $nonSoldee = $this->makeCommande(['statut' => StatutCommandeVente::FACTURATION]);
+        FactureVente::factory()->impayee()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $nonSoldee->id,
+            'montant_net' => 5000,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('ventes.export', ['columns' => ['reference', 'statut']]));
+        $statutParReference = array_column(array_slice($this->readSheet($response, 'ventes'), 1), 1, 0);
+
+        $this->assertSame('Commissions à verser', $statutParReference[$soldee->reference]);
+        $this->assertSame('À encaisser', $statutParReference[$nonSoldee->reference]);
     }
 
     public function test_export_csv_format(): void

@@ -22,6 +22,8 @@ class CommandeVente extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
+    public const STATUT_AFFICHAGE_COMMISSIONS_A_VERSER = 'commissions_a_verser';
+
     protected $table = 'commandes_ventes';
 
     protected $fillable = [
@@ -169,6 +171,29 @@ class CommandeVente extends Model
     public function getStatutLabelAttribute(): string
     {
         return $this->statut instanceof StatutCommandeVente ? $this->statut->label() : '';
+    }
+
+    /**
+     * Statut tel qu'affiché à l'écran (fiche, liste, export web) ; `statut` reste la valeur brute
+     * du workflow et `statut_label` (API, mobile) n'est pas modifié.
+     *
+     * FACTURATION ne veut dire « À encaisser » que tant que la facture n'est pas soldée : une fois
+     * PAYEE, la commande n'attend plus que le versement des commissions avant l'auto-clôture
+     * (cf. cloturerSiComplete()). Afficher « À encaisser » à côté d'une facture « Payée » serait
+     * contradictoire.
+     *
+     * @return array{value: string|null, label: string}
+     */
+    public function statutAffichage(): array
+    {
+        if ($this->isFacturation() && $this->facture?->isPayee()) {
+            return [
+                'value' => self::STATUT_AFFICHAGE_COMMISSIONS_A_VERSER,
+                'label' => 'Commissions à verser',
+            ];
+        }
+
+        return ['value' => $this->statut?->value, 'label' => $this->statut_label];
     }
 
     /**

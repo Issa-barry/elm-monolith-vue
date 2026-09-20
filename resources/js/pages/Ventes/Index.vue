@@ -298,7 +298,8 @@ const mobileFiltered = computed(() => {
                 c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
-            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.statut_affichage.label &&
+                c.statut_affichage.label.toLowerCase().includes(q)) ||
             (c.facture_statut_label &&
                 c.facture_statut_label.toLowerCase().includes(q)) ||
             (c.created_at && c.created_at.toLowerCase().includes(q)),
@@ -1125,8 +1126,8 @@ function confirmDelete(c: Commande) {
                     >
                         <template #body="{ data }">
                             <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
+                                :status="data.statut_affichage.value"
+                                :label="data.statut_affichage.label"
                             />
                         </template>
                     </Column>

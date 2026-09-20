@@ -4,6 +4,7 @@ export interface VenteMobile {
     reference: string;
     statut: string;
     statut_label: string;
+    statut_affichage: { value: string; label: string };
     processus_label: string;
     created_at: string;
     vehicule_nom: string | null;

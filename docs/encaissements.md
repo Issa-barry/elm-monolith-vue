@@ -90,3 +90,21 @@ Chaque contrôleur qui expose une liste d'encaissements (`ShowCommandeVenteContr
 `IndexCommandeVenteController`, `IndexFactureVenteController`) inclut `operateur_mobile_money_label`
 et `reference_paiement` dans le payload, affichés dans l'historique correspondant (ex: "Mobile
 Money (Orange Money)" + colonne Référence).
+
+## Statut affiché de la commande après encaissement complet
+
+Une vente directe reste au statut brut `facturation` (libellé « À encaisser ») jusqu'à sa clôture
+automatique, qui attend aussi le versement des commissions (`CommandeVente::cloturerSiComplete()`).
+Entre l'encaissement complet et ce versement, la facture est « Payée » alors que la commande
+affichait encore « À encaisser » — contradiction corrigée le 19/09/2026.
+
+- `CommandeVente::statutAffichage()` (source unique) renvoie `{value, label}` : pour une commande
+  `facturation` dont la facture est `payee`, `commissions_a_verser` / « Commissions à verser »
+  (point bleu, comme l'étape « Commissions » de la frise) ; sinon le statut brut et son libellé
+  habituel. Une facture non soldée, annulée ou absente garde « À encaisser ».
+- Exposé sous `statut_affichage` par `ShowCommandeVenteController` (fiche Ventes et Distributions),
+  `IndexCommandeVenteController` (liste desktop et mobile) et la colonne « Statut » de l'export
+  `VenteListExport`.
+- **Inchangés** : le statut brut `statut`, `statut_label` (API client, mobile, scan), le workflow
+  et la règle de clôture. Le filtre « Statut commande » de la liste et de l'export reste basé sur
+  le statut brut : filtrer sur `facturation` inclut donc aussi les ventes « Commissions à verser ».

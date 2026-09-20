@@ -35,6 +35,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     envoye: 'bg-blue-500',
     calculee: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
+    // Vente encaissée en totalité, en attente du versement des commissions avant clôture
+    // (CommandeVente::statutAffichage()).
+    commissions_a_verser: 'bg-blue-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
