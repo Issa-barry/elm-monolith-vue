@@ -144,7 +144,7 @@ describe('Supports de trésorerie — tableau', () => {
         etat.permissions = [];
     });
 
-    it('présente Agence, Caisse, Nature, Responsable, Solde, Statut et Actions', () => {
+    it('présente Agence, Caisse, Compte, Nature, Responsable, Solde, Statut et Actions', () => {
         const colonnes = monter()
             .findAll('thead th')
             .map((entete) => entete.text());
@@ -152,6 +152,7 @@ describe('Supports de trésorerie — tableau', () => {
         expect(colonnes).toEqual([
             'Agence',
             'Caisse',
+            'Compte',
             'Nature',
             'Responsable',
             'Solde',
@@ -164,12 +165,16 @@ describe('Supports de trésorerie — tableau', () => {
         const ligne = lignes(monter())[0];
 
         expect(ligne.text()).toContain('Caisse Moussa sidibé');
-        expect(ligne.text()).toContain('Compte 571001');
+        // Le numéro de compte a sa propre colonne, il n'est plus glissé sous le libellé.
+        expect(ligne.find('[data-testid="support-compte"]').text()).toBe(
+            '571001',
+        );
+        expect(ligne.findAll('td')[1].text()).not.toContain('571001');
         expect(ligne.find('[data-testid="support-nature"]').text()).toBe(
             'Caisse dédiée',
         );
         // Responsable : le nom de l'agent, jamais « Agence ».
-        expect(ligne.findAll('td')[3].text()).toBe('Moussa sidibé');
+        expect(ligne.findAll('td')[4].text()).toBe('Moussa sidibé');
         expect(ligne.find('[data-testid="support-solde"]').text()).toBe(
             '1 000 000 GNF',
         );
@@ -181,7 +186,13 @@ describe('Supports de trésorerie — tableau', () => {
         expect(caisse.find('[data-testid="support-nature"]').text()).toBe(
             'Caisse agence',
         );
-        expect(caisse.findAll('td')[3].text()).toBe('Agence');
+        expect(caisse.findAll('td')[4].text()).toBe('Agence');
+        expect(caisse.find('[data-testid="support-compte"]').text()).toBe(
+            '571000',
+        );
+        expect(banque.find('[data-testid="support-compte"]').text()).toBe(
+            '521000',
+        );
         expect(caisse.find('[data-testid="support-solde"]').text()).toBe(
             '266 824 000 GNF',
         );
@@ -210,6 +221,12 @@ describe('Supports de trésorerie — tableau', () => {
         // Le montant suit les filtres : il ne doit pas passer pour toute la trésorerie.
         expect(items[2].title).toBe('Solde total des supports affichés');
         expect(items[2].subtitle).toContain('Disponible de Financement');
+    });
+
+    it("affiche un tiret quand le support n'a pas de compte comptable", () => {
+        const [ligne] = lignes(monter([compte({ compte_numero: null })]));
+
+        expect(ligne.find('[data-testid="support-compte"]').text()).toBe('—');
     });
 
     it('signale que le résumé suit les filtres actifs', () => {

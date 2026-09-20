@@ -322,8 +322,9 @@ un agent (`agent_id`) et à un site, destinée à recevoir les encaissements en 
 | **Mouvements de fonds entre agences** | **Interdites** en origine comme en destination (`MouvementFondsService`, garde serveur ; les listes de l'écran les excluent aussi). Leur solde passera par un versement vers la caisse de l'agence (phase 3). |
 | **Journal financier** | Incluses, filtrables par compte (chaque caisse a son sous-compte). |
 
-**Écran** (`/backoffice/comptabilite/tresorerie/supports`) : liste Agence / Caisse / Nature /
-Responsable / Solde / Statut / Actions, solde calculé depuis le grand livre (y compris pour un support désactivé),
+**Écran** (`/backoffice/comptabilite/tresorerie/supports`) : liste Agence / Caisse / Compte (numéro
+du compte comptable du support, colonne dédiée) / Nature / Responsable / Solde / Statut / Actions,
+solde calculé depuis le grand livre (y compris pour un support désactivé),
 filtres serveur (agence `site_ids[]`, statut, type, nature, agent) via `DataFilters` en
 `trigger-only`, création dans un dialogue « Créer une caisse » avec choix de la nature dans une
 liste déroulante (« Caisse de l'agence » ou « Caisse dédiée à un agent »). Depuis la phase 3,

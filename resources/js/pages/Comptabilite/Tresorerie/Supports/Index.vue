@@ -666,11 +666,12 @@ const selectClass =
             />
 
             <div class="overflow-x-auto rounded-xl border bg-card">
-                <table class="w-full min-w-[980px] text-sm">
+                <table class="w-full min-w-[1060px] text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40 text-left">
                             <th class="px-4 py-3 font-medium">Agence</th>
                             <th class="px-4 py-3 font-medium">Caisse</th>
+                            <th class="px-4 py-3 font-medium">Compte</th>
                             <th class="px-4 py-3 font-medium">Nature</th>
                             <th class="px-4 py-3 font-medium">Responsable</th>
                             <th class="px-4 py-3 text-right font-medium">
@@ -694,18 +695,23 @@ const selectClass =
                             <td class="px-4 py-4 align-middle">
                                 <div class="font-medium">{{ c.libelle }}</div>
                                 <div
-                                    v-if="c.compte_numero"
-                                    class="text-xs text-muted-foreground tabular-nums"
-                                >
-                                    Compte {{ c.compte_numero }}
-                                </div>
-                                <div
                                     v-if="alerte"
                                     class="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
                                     data-testid="support-alerte-solde"
                                 >
                                     {{ alerte }}
                                 </div>
+                            </td>
+                            <td
+                                class="px-4 py-4 align-middle tabular-nums"
+                                data-testid="support-compte"
+                            >
+                                <span v-if="c.compte_numero">{{
+                                    c.compte_numero
+                                }}</span>
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
                             <td class="px-4 py-4 align-middle">
                                 <Badge
@@ -886,7 +892,7 @@ const selectClass =
                         </tr>
                         <tr v-if="comptes.length === 0">
                             <td
-                                colspan="7"
+                                colspan="8"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
                                 {{
