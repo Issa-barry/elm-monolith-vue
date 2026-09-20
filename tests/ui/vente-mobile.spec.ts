@@ -50,6 +50,7 @@ const base = {
     reference: 'VTE-070926-001',
     statut: 'livree',
     statut_label: 'Livrée',
+    statut_affichage: { value: 'livree', label: 'Livrée' },
     nature_operation: 'vente_standard',
     processus_code: 'transfert_grossiste',
     processus_label: 'Transfert grossiste',
@@ -125,6 +126,10 @@ test.beforeEach(async ({ page }) => {
                     processus_label: 'Vente',
                     statut: 'brouillon',
                     statut_label: 'Brouillon',
+                    statut_affichage: {
+                        value: 'brouillon',
+                        label: 'Brouillon',
+                    },
                     facture_id: null,
                     facture_statut: null,
                     facture_statut_label: null,
@@ -140,6 +145,10 @@ test.beforeEach(async ({ page }) => {
                     vehicule_photo_url: '/storage/vehicules/introuvable.jpg',
                     statut: 'chargement_en_cours',
                     statut_label: 'Chargement en cours',
+                    statut_affichage: {
+                        value: 'chargement_en_cours',
+                        label: 'Chargement en cours',
+                    },
                 },
             ],
             totaux: {

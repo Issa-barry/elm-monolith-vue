@@ -70,7 +70,9 @@ final class PermissionCatalog
         'tresorerie.annuler' => 'Trésorerie — annuler un mouvement',
         'tresorerie.rejeter' => 'Trésorerie — rejeter un mouvement',
         'tresorerie.confirmer_retour' => 'Trésorerie — confirmer un retour',
+        'tresorerie.verser' => "Trésorerie — verser une caisse dédiée à la caisse de l'agence",
         'tresorerie.gerer_soldes_ouverture' => "Trésorerie — gérer les soldes d'ouverture",
+        'tresorerie.valider_supports' => 'Trésorerie — valider un support (caisse, banque, Mobile Money)',
         'tresorerie.exporter' => 'Trésorerie — exporter',
         'depenses.soumettre' => 'Dépenses — soumettre',
         'depenses.valider' => 'Dépenses — valider',
@@ -180,7 +182,8 @@ final class PermissionCatalog
             'standalone' => [
                 'Trésorerie' => [
                     'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter',
-                    'tresorerie.confirmer_retour', 'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+                    'tresorerie.confirmer_retour', 'tresorerie.verser', 'tresorerie.gerer_soldes_ouverture',
+                    'tresorerie.valider_supports', 'tresorerie.exporter',
                 ],
                 'Comptabilité' => ['comptabilite.payer'],
                 'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter'],

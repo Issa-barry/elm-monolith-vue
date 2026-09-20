@@ -63,7 +63,7 @@ const detailRows = computed(() => {
             type="button"
             class="block w-full rounded-2xl border border-border/60 bg-card p-3.5 text-left transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none active:bg-muted/40"
             aria-haspopup="dialog"
-            :aria-label="`${commande.reference}, ${commande.statut_label}. Voir les détails`"
+            :aria-label="`${commande.reference}, ${commande.statut_affichage.label}. Voir les détails`"
             @click="openDetail(commande, $event)"
         >
             <div class="flex items-center gap-3">
@@ -118,8 +118,8 @@ const detailRows = computed(() => {
                     <p class="mt-1 tabular-nums">{{ commande.created_at }}</p>
                 </div>
                 <StatusDot
-                    :status="commande.statut"
-                    :label="commande.statut_label"
+                    :status="commande.statut_affichage.value"
+                    :label="commande.statut_affichage.label"
                     size="sm"
                     class="max-w-[55%] whitespace-normal"
                 />
@@ -165,8 +165,8 @@ const detailRows = computed(() => {
                     </h2>
                     <StatusDot
                         v-if="selected"
-                        :status="selected.statut"
-                        :label="selected.statut_label"
+                        :status="selected.statut_affichage.value"
+                        :label="selected.statut_affichage.label"
                         size="sm"
                         class="max-w-[48%] shrink-0 whitespace-normal"
                     />

@@ -116,6 +116,7 @@ const LIST_PAGE_ACTIONS_REQUIRED = [
     'resources/js/components/commission/CommissionIndexLayout.vue',
     'resources/js/pages/Produits/Stock/Index.vue',
     'resources/js/pages/Depenses/Index.vue',
+    'resources/js/pages/Comptabilite/Tresorerie/Supports/Index.vue',
 ];
 
 /** @returns {string[]} absolute paths of .vue files under dir */

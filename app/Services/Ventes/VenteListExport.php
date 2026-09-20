@@ -89,7 +89,7 @@ class VenteListExport implements FromCollection, WithHeadings, WithMapping, With
             'montant' => (float) $commande->total_commande,
             'deja_paye' => $commande->facture ? (float) $commande->facture->montant_encaisse : 0.0,
             'reste' => $commande->facture ? (float) $commande->facture->montant_restant : 0.0,
-            'statut' => $commande->statut_label,
+            'statut' => $commande->statutAffichage()['label'],
         ];
 
         return array_map(fn (string $key) => $values[$key], $this->activeColumns());

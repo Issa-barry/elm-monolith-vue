@@ -45,7 +45,10 @@ export type StandalonePermission =
     | 'imports-vehicules-maj.create'
     | 'imports-vehicules-maj.read'
     | 'communications.read'
-    | 'communications.manage';
+    | 'communications.manage'
+    | 'tresorerie.verser'
+    | 'tresorerie.gerer_soldes_ouverture'
+    | 'tresorerie.valider_supports';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

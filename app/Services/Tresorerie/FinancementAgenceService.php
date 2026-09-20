@@ -131,10 +131,15 @@ class FinancementAgenceService
      * Mobile Money oublié), cf. règle #7 de la spec : jamais un faux besoin
      * précis. Avant cette correction (revue Codex du 2026-08-22), un seul
      * support validé sur plusieurs suffisait à tort à déclarer le site fiable.
+     *
+     * Seuls les supports d'agence comptent : une caisse dédiée à un agent
+     * démarre à 0 sans solde d'ouverture et n'entre pas dans le disponible
+     * (cf. TresorerieDisponibiliteService::disponiblePourSite()), elle ne doit
+     * donc jamais rendre la position du site « non fiable ».
      */
     private function positionFiable(string $organizationId, string $siteId): bool
     {
-        $comptes = CompteTresorerie::forOrg($organizationId)->where('site_id', $siteId)->actifs()->with('soldeOuverture')->get();
+        $comptes = CompteTresorerie::forOrg($organizationId)->where('site_id', $siteId)->actifs()->agence()->with('soldeOuverture')->get();
 
         if ($comptes->isEmpty()) {
             return false;

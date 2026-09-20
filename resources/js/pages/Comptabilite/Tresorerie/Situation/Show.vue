@@ -1,22 +1,29 @@
 <script setup lang="ts">
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRightLeft, Wallet } from 'lucide-vue-next';
 
+// `en_cours_versement` : versements envoyés par cette caisse, pas encore reçus. Déjà sortis du
+// solde (transit au grand livre) : information de suivi, jamais incluse dans `solde` ni `total`.
 interface Support {
     compte_tresorerie_id: string;
     site_id: string;
     libelle: string;
     type: string;
     solde: number;
+    en_cours_versement: number;
+    versements_en_cours: number;
 }
 
 const props = defineProps<{
     site: { id: string; nom: string };
     supports: Support[];
     total: number;
+    en_cours_versement: number;
+    versements_en_cours: number;
     filters: { date: string };
 }>();
 
@@ -69,6 +76,25 @@ const journalHref = `/backoffice/comptabilite/journal?site_ids[]=${props.site.id
                 </p>
             </div>
 
+            <Alert
+                v-if="en_cours_versement > 0"
+                data-testid="situation-en-cours-versement"
+            >
+                <ArrowRightLeft class="text-blue-500" />
+                <AlertTitle>
+                    {{ formatGNF(en_cours_versement) }} en cours de versement
+                </AlertTitle>
+                <AlertDescription>
+                    {{
+                        versements_en_cours > 1
+                            ? `${versements_en_cours} versements envoyés par des caisses d'agents attendent la confirmation de la caisse de l'agence.`
+                            : "1 versement envoyé par une caisse d'agent attend la confirmation de la caisse de l'agence."
+                    }}
+                    Ce montant n'est plus dans les soldes ci-dessous et n'est
+                    pas encore crédité : il l'est dès la réception confirmée.
+                </AlertDescription>
+            </Alert>
+
             <div class="overflow-x-auto rounded-xl border bg-card">
                 <table class="w-full text-sm">
                     <thead>
@@ -94,6 +120,14 @@ const journalHref = `/backoffice/comptabilite/journal?site_ids[]=${props.site.id
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(s.solde) }}
+                                <div
+                                    v-if="s.en_cours_versement > 0"
+                                    class="mt-0.5 text-xs font-medium whitespace-nowrap text-blue-600 dark:text-blue-400"
+                                    data-testid="situation-support-en-cours"
+                                >
+                                    En cours de versement :
+                                    {{ formatGNF(s.en_cours_versement) }}
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="supports.length === 0">

@@ -64,7 +64,8 @@ test('parrainage véhicule : création (téléphone inconnu) puis réutilisation
     await page.getByTestId('parrain-creation-nom-input').fill(nomParrain);
     await page.getByTestId('parrain-creer-et-associer-btn').click();
 
-    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+    // L'onglet actif est dans l'URL (?tab=parrain) : requête facultative.
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+(\?.*)?$/, { timeout: 15_000 });
     await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain);
     // Le numéro est affiché groupé par formatPhoneDisplay (ex. règle Guinée [3,2,2,2]),
     // qui peut insérer une espace au milieu des 4 derniers chiffres : on tolère cette espace.
@@ -89,7 +90,7 @@ test('parrainage véhicule : création (téléphone inconnu) puis réutilisation
     await expect(page.getByText(/existe déjà dans l.organisation/)).toBeVisible();
 
     await page.getByTestId('parrain-utiliser-personne-btn').click();
-    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+(\?.*)?$/, { timeout: 15_000 });
 
     await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain);
 });
