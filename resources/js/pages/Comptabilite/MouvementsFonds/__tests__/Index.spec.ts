@@ -1,7 +1,9 @@
 import StatusDot from '@/components/StatusDot.vue';
+import DataFilters from '@/components/filters/DataFilters.vue';
 import MouvementsIndex from '@/pages/Comptabilite/MouvementsFonds/Index.vue';
 import { shallowMount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 vi.mock('@/composables/useFlashToast', () => ({ useFlashToast: vi.fn() }));
 vi.mock('@/layouts/AppLayout.vue', async () => {
@@ -59,19 +61,42 @@ const mouvement = (surcharge: Record<string, unknown> = {}) => ({
     ...surcharge,
 });
 
-const monter = (mouvements: ReturnType<typeof mouvement>[]) =>
+const monter = (
+    mouvements: ReturnType<typeof mouvement>[],
+    surcharge: Record<string, unknown> = {},
+) =>
     shallowMount(MouvementsIndex, {
         props: {
             mouvements: { data: mouvements, total: mouvements.length },
-            filters: { statut: '', nature: '', search: '', site_ids: [] },
+            filters: {
+                statut: '',
+                nature: '',
+                search: '',
+                site_ids: [],
+                site_origine_id: '',
+                site_destination_id: '',
+                montant_min: '',
+                montant_max: '',
+            },
             statut_options: [],
             nature_options: [],
             sites: [],
+            sites_mouvements: [],
             is_admin: true,
             peut_creer: false,
             comptes_tresorerie: [],
+            ...surcharge,
         },
-        global: { renderStubDefaultSlot: true },
+        global: {
+            renderStubDefaultSlot: true,
+            // Le stub par défaut ne rend que le slot par défaut : on veut aussi #filters et #primary.
+            stubs: {
+                ListPageActions: {
+                    template:
+                        '<div data-testid="list-page-actions"><slot name="filters" /><slot name="primary" /></div>',
+                },
+            },
+        },
     });
 
 const enAttente = (ligne: ReturnType<ReturnType<typeof monter>['find']>) =>
@@ -113,5 +138,130 @@ describe('Mouvements de fonds — versement en attente de confirmation', () => {
 
         expect(enAttente(recu).exists()).toBe(false);
         expect(enAttente(entreAgences).exists()).toBe(false);
+    });
+});
+
+describe('Mouvements de fonds — filtres de la barre', () => {
+    const sites = [
+        { value: 's1', label: 'Matoto' },
+        { value: 's2', label: 'Siège' },
+    ];
+
+    it('garde Référence, Nature, Origine et Destination directement dans la barre', () => {
+        const champs = monter([], { sites_mouvements: sites })
+            .findComponent(DataFilters)
+            .props('fields');
+        const parCle = Object.fromEntries(champs.map((c) => [c.key, c]));
+
+        expect(parCle.search).toMatchObject({
+            label: 'Référence',
+            type: 'text',
+            inline: true,
+        });
+        expect(parCle.nature).toMatchObject({
+            label: 'Nature',
+            type: 'select',
+            inline: true,
+        });
+        expect(parCle.site_origine_id).toMatchObject({
+            label: 'Origine',
+            type: 'select',
+            inline: true,
+            options: sites,
+        });
+        expect(parCle.site_destination_id).toMatchObject({
+            label: 'Destination',
+            type: 'select',
+            inline: true,
+            options: sites,
+        });
+    });
+
+    it('range Statut et Montant min/max dans le tiroir du bouton « Filtres » (pas dans la barre)', () => {
+        const wrapper = monter([]);
+        const filtres = wrapper.findComponent(DataFilters);
+        const parCle = Object.fromEntries(
+            filtres.props('fields').map((c) => [c.key, c]),
+        );
+
+        // Un champ sans `inline` va dans le tiroir ; DataFilters affiche alors le bouton « Filtres ».
+        expect(parCle.statut.inline).toBeFalsy();
+        expect(parCle.montant_min).toMatchObject({
+            label: 'Montant min',
+            type: 'number',
+        });
+        expect(parCle.montant_min.inline).toBeFalsy();
+        expect(parCle.montant_max).toMatchObject({
+            label: 'Montant max',
+            type: 'number',
+        });
+        expect(parCle.montant_max.inline).toBeFalsy();
+        // Le bouton « Filtres » vit dans la barre : la page n'utilise pas la variante « trigger-only ».
+        expect(filtres.props('triggerOnly')).toBeFalsy();
+    });
+
+    it('place le bouton « Filtres » dans l’en-tête, juste avant « Nouveau mouvement »', async () => {
+        const wrapper = monter([], { peut_creer: true });
+        await nextTick();
+
+        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const actions = wrapper.get('[data-testid="list-page-actions"]');
+        const nouveau = actions.get('[href$="/mouvements/create"]');
+
+        expect(cible).toBeInstanceOf(HTMLElement);
+        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(nouveau.text()).toBe('Nouveau mouvement');
+        // Ordre standard des actions d'en-tête : Filtres puis Nouveau.
+        expect(
+            (cible as HTMLElement).compareDocumentPosition(nouveau.element) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('garde le bouton « Filtres » dans l’en-tête même sans le droit de créer un mouvement', async () => {
+        const wrapper = monter([], { peut_creer: false });
+        await nextTick();
+
+        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const actions = wrapper.get('[data-testid="list-page-actions"]');
+
+        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(actions.find('[href$="/mouvements/create"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it('conserve les filtres existants, dans le même ordre, avant les nouveaux', () => {
+        const cles = monter([])
+            .findComponent(DataFilters)
+            .props('fields')
+            .map((c) => c.key);
+
+        expect(cles).toEqual([
+            'search',
+            'statut',
+            'nature',
+            'site_origine_id',
+            'site_destination_id',
+            'montant_min',
+            'montant_max',
+        ]);
+    });
+
+    it('restitue les valeurs filtrées à la barre pour qu’elles survivent au rechargement', () => {
+        const filters = {
+            statut: '',
+            nature: '',
+            search: '',
+            site_ids: [],
+            site_origine_id: 's2',
+            site_destination_id: 's1',
+            montant_min: '200000',
+            montant_max: '900000',
+        };
+
+        expect(
+            monter([], { filters }).findComponent(DataFilters).props('values'),
+        ).toEqual(filters);
     });
 });

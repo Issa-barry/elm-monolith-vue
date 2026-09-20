@@ -39,6 +39,7 @@ Les filtres avancés sont appliqués uniquement au clic sur **Appliquer les filt
 | `searchKey` | `string` | — | Si fourni, inclut la valeur de recherche dans les params serveur |
 | `resultCount` | `number` | **requis** | Nombre de résultats affichés |
 | `fields` | `FilterField[]` | **requis** | Configuration des champs du drawer |
+| `triggerTarget` | `HTMLElement \| null` | `null` | Élément où déplacer le bouton **Filtres** (ex. en-tête de page, à côté de « Nouveau ») ; voir [Bouton « Filtres » dans l'en-tête](#bouton--filtres--dans-len-tête-triggertarget) |
 
 ## v-model
 
@@ -117,10 +118,20 @@ Champ date unique.
 ```
 
 ### `number`
-Champ numérique.
+Champ numérique, dans le drawer ou — avec `inline: true` — directement dans la barre (même gabarit
+que le champ `text` : libellé au-dessus, `h-9`, 180 px, **Entrée** applique ; spinners du navigateur
+masqués). Une valeur vide est omise de l'URL.
+
+Pour une plage (montant, quantité…), déclarer **deux** champs `number` : le backend applique
+`>=` sur la borne min et `<=` sur la borne max (bornes incluses) et ignore une valeur non numérique.
 ```typescript
-{ key: 'montant_min', label: 'Montant minimum', type: 'number' }
+// Dans le tiroir du bouton « Filtres » (défaut) ; ajouter `inline: true` pour les mettre dans la barre.
+{ key: 'montant_min', label: 'Montant min', type: 'number', placeholder: '0' },
+{ key: 'montant_max', label: 'Montant max', type: 'number', placeholder: '0' },
 ```
+Exemple en production : `Comptabilite/MouvementsFonds/Index.vue` (Agence, Référence, Nature, Origine et
+Destination dans la barre ; **Statut et Montant min/max dans le tiroir « Filtres »**, dont le bouton est
+placé dans l'en-tête à côté de « Nouveau mouvement » ; backend dans `MouvementFondsController::index`).
 
 ### `boolean`
 PrimeVue Select avec les options Tous / Oui / Non. Émet `'1'`, `'0'` ou `''`.
@@ -300,6 +311,42 @@ Pour ajouter des contrôles directement dans la barre (hors drawer) :
     </template>
 </DataFilters>
 ```
+
+---
+
+## Bouton « Filtres » dans l'en-tête (`triggerTarget`)
+
+Deux façons de placer le bouton **Filtres** dans l'en-tête de page, à côté de « Nouveau » :
+
+- **`trigger-only`** — tous les champs vont dans le tiroir et la page n'a pas de barre de filtres
+  (Ventes, Produits, Supports…).
+- **`triggerTarget`** — la page garde des champs directement dans la barre (`inline: true`) **et** déplace
+  le bouton **Filtres** (donc le tiroir des champs sans `inline`) dans l'en-tête. C'est **une seule instance**
+  de `DataFilters` : le bouton est simplement téléporté (`<Teleport>`), l'état reste partagé. Le bouton
+  « Appliquer les filtres » du tiroir envoie aussi les champs de la barre, « Réinitialiser » vide tout, et le
+  badge du bouton ne compte que les filtres du tiroir.
+
+```vue
+<script setup lang="ts">
+const filtresHote = ref<HTMLElement | null>(null)
+</script>
+
+<template>
+    <ListPageActions>
+        <template #filters><div ref="filtresHote" class="contents"></div></template>
+        <template #primary><Link href="…">Nouveau mouvement</Link></template>
+    </ListPageActions>
+
+    <DataFilters url="…" :values="filters" :fields="filterFields" :trigger-target="filtresHote" />
+</template>
+```
+
+- Le conteneur cible est un `<div class="contents">` placé dans le slot `#filters` de `ListPageActions` :
+  l'ordre standard des actions d'en-tête (Exporter → Importer → Filtres → Nouveau) est ainsi conservé, et
+  le conteneur vide n'ajoute aucun espace.
+- Tant que la cible n'existe pas (premier rendu, avant que le `ref` soit posé) ou si `triggerTarget` n'est pas
+  fourni, le bouton reste dans la barre : le comportement historique est inchangé.
+- Exemple en production : `Comptabilite/MouvementsFonds/Index.vue`.
 
 ---
 

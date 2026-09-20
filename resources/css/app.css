@@ -7,11 +7,43 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Poppins — police du template Apollo, chargée UNIQUEMENT par les éléments qui utilisent la classe
+ * `font-apollo` (cartes KPI de Trésorerie > Supports) : le navigateur ne télécharge un fichier que
+ * si un texte l'utilise. Le reste de l'application reste en Instrument Sans (`font-sans`).
+ * Licence : resources/fonts/poppins/LICENSE.txt (SIL OFL 1.1).
+ */
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../fonts/poppins/poppins-v20-latin-500.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('../fonts/poppins/poppins-v20-latin-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('../fonts/poppins/poppins-v20-latin-700.woff2') format('woff2');
+}
+
 @theme inline {
     --font-sans:
         Instrument Sans, ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
+
+    --font-apollo: Poppins, ui-sans-serif, system-ui, sans-serif;
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);

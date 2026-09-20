@@ -228,7 +228,7 @@ describe('Supports de trésorerie — cartes KPI', () => {
     const valeur = (wrapper: ReturnType<typeof monter>, id: string) =>
         carte(wrapper, id).find('[data-testid="support-kpi-valeur"]').text();
 
-    it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes)', () => {
+    it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes selon la largeur de la zone)', () => {
         const cartes = monter().findAll('[data-testid="support-kpis"] > div');
 
         expect(cartes).toHaveLength(4);
@@ -242,16 +242,70 @@ describe('Supports de trésorerie — cartes KPI', () => {
             'solde-total',
             'en-cours-versement',
         ]);
+        // Le responsive agit sur la DISPOSITION, mesurée sur la zone de contenu (container query) :
+        // 4 colonnes seulement si un montant à 10 chiffres à 31,5 px + « GNF » tient dans la carte.
         for (const c of cartes) {
             expect(c.classes()).toEqual(
                 expect.arrayContaining([
                     'col-span-12',
-                    'md:col-span-6',
-                    'xl:col-span-3',
+                    '@[40rem]:col-span-6',
+                    '@[82.5rem]:col-span-3',
                 ]),
             );
             expect(c.find('.card').classes()).toContain('h-full');
         }
+    });
+
+    it('garde la typographie Apollo constante : aucune taille de police ne rétrécit avec la largeur', () => {
+        const wrapper = monter([
+            compte({
+                solde: 1_519_203_500,
+                en_cours_versement: 3_000_000,
+                versements_en_cours: 1,
+            }),
+        ]);
+        const zone = wrapper.find('[data-testid="support-kpis"]');
+        const enCours = carte(wrapper, 'en-cours-versement');
+
+        // Poppins limitée à cette grille ; Apollo : titre 15,75 / 600 / 24,5 — chiffre 31,5 / 700 / 35 —
+        // information secondaire 14 / 500 / 16,8.
+        expect(zone.classes()).toContain('font-apollo');
+        expect(enCours.find('span.font-semibold').classes()).toEqual(
+            expect.arrayContaining([
+                'text-[15.75px]',
+                'leading-[24.5px]',
+                'font-semibold',
+            ]),
+        );
+        expect(
+            enCours.find('[data-testid="support-kpi-valeur"]').element
+                .parentElement?.className,
+        ).toContain('text-[31.5px] leading-[35px] font-bold');
+        expect(
+            enCours.find('[data-testid="support-kpi-detail"]').classes(),
+        ).toEqual(
+            expect.arrayContaining([
+                'text-[14px]',
+                'leading-[16.8px]',
+                'font-medium',
+            ]),
+        );
+
+        // Garde-fou : plus aucune logique qui réduit la police (clamp / unité de container query).
+        expect(zone.html()).not.toContain('clamp(');
+        expect(zone.html()).not.toContain('cqw');
+    });
+
+    it('ne coupe jamais un nombre au milieu : le chiffre reste insécable, seule « GNF » peut passer dessous', () => {
+        const solde = carte(monter(), 'solde-total');
+
+        expect(
+            solde.find('[data-testid="support-kpi-valeur"]').classes(),
+        ).toContain('whitespace-nowrap');
+        const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
+        expect(unite?.classes()).toEqual(
+            expect.arrayContaining(['inline-block', 'whitespace-nowrap']),
+        );
     });
 
     it('affiche des titres courts et la valeur de chaque indicateur', () => {

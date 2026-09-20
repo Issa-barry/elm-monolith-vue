@@ -54,6 +54,28 @@ class MouvementFondsController extends Controller
             $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
         }
 
+        // Filtres directionnels : s'ajoutent (ET) au périmètre déjà posé ci-dessus, ils ne l'élargissent jamais.
+        $siteOrigineId = $this->filtreScalaire($request, 'site_origine_id');
+        $siteDestinationId = $this->filtreScalaire($request, 'site_destination_id');
+        $montantMin = $this->filtreScalaire($request, 'montant_min');
+        $montantMax = $this->filtreScalaire($request, 'montant_max');
+
+        if ($siteOrigineId !== '') {
+            $query->where('site_origine_id', $siteOrigineId);
+        }
+
+        if ($siteDestinationId !== '') {
+            $query->where('site_destination_id', $siteDestinationId);
+        }
+
+        if (is_numeric($montantMin)) {
+            $query->where('montant', '>=', (float) $montantMin);
+        }
+
+        if (is_numeric($montantMax)) {
+            $query->where('montant', '<=', (float) $montantMax);
+        }
+
         if ($search = trim((string) $request->input('search', ''))) {
             $s = mb_strtolower($search);
             $query->where(fn ($q) => $q
@@ -105,10 +127,15 @@ class MouvementFondsController extends Controller
                 'nature' => $request->input('nature', ''),
                 'search' => $request->input('search', ''),
                 'site_ids' => array_values(array_filter((array) $request->input('site_ids', []))),
+                'site_origine_id' => $siteOrigineId,
+                'site_destination_id' => $siteDestinationId,
+                'montant_min' => $montantMin,
+                'montant_max' => $montantMax,
             ],
             'statut_options' => StatutMouvementFonds::options(),
             'nature_options' => NatureMouvementFonds::options(),
             'sites' => $this->sitesDisponibles($orgId, $user),
+            'sites_mouvements' => $this->sitesOrganisation($orgId),
             'is_admin' => $isAdmin,
             'peut_creer' => $user->can('create', MouvementFonds::class),
             // Nécessaire pour choisir le support de destination au moment de
@@ -240,5 +267,25 @@ class MouvementFondsController extends Controller
         }
 
         return $query->get(['id', 'nom'])->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])->all();
+    }
+
+    /**
+     * Tous les sites de l'organisation, pour les filtres Origine/Destination : un utilisateur
+     * limité à son agence voit aussi les mouvements venant du siège ou allant vers lui, il doit
+     * donc pouvoir filtrer sur un site hors de son périmètre (le périmètre reste imposé à la requête).
+     *
+     * @return list<array{value:string,label:string}>
+     */
+    private function sitesOrganisation(string $orgId): array
+    {
+        return Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            ->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])->all();
+    }
+
+    private function filtreScalaire(Request $request, string $key): string
+    {
+        $value = $request->input($key);
+
+        return is_string($value) || is_numeric($value) ? trim((string) $value) : '';
     }
 }

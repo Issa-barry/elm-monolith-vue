@@ -1,0 +1,12 @@
+Poppins (poppins-v20-latin-500 / 600 / 700, woff2, sous-ensemble latin)
+
+Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
+
+Cette police est distribuée sous la SIL Open Font License, Version 1.1.
+Texte complet : https://openfontlicense.org
+
+Source des fichiers : template Apollo PrimeVue 6.2.0 (src/assets/layout/fonts).
+
+Usage dans ce projet : uniquement les cartes KPI de Trésorerie > Supports (classe `font-apollo`),
+pour reproduire à l'identique la typographie du dashboard Apollo E-Commerce. Le reste de
+l'application reste en Instrument Sans.

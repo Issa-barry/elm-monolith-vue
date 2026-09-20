@@ -65,6 +65,8 @@ const props = withDefaults(
         hideResultCount?: boolean;
         /** N'affiche que le bouton ouvrant le drawer, pour une utilisation dans un en-tête */
         triggerOnly?: boolean;
+        /** Élément où déplacer le bouton « Filtres » (ex. en-tête, à côté de « Nouveau ») ; les champs `inline` restent dans la barre */
+        triggerTarget?: HTMLElement | null;
     }>(),
     {
         baseParams: () => ({}),
@@ -74,6 +76,7 @@ const props = withDefaults(
         hideAgenceSelector: false,
         hideResultCount: false,
         triggerOnly: false,
+        triggerTarget: null,
     },
 );
 
@@ -413,6 +416,26 @@ const hasActiveFilters = computed(
                 />
             </div>
 
+            <!-- number -->
+            <div
+                v-else-if="field.type === 'number'"
+                class="flex shrink-0 flex-col gap-1"
+            >
+                <span class="text-xs font-medium text-muted-foreground">{{
+                    field.label
+                }}</span>
+                <input
+                    v-model.number="localValues[field.key]"
+                    type="number"
+                    inputmode="decimal"
+                    :data-testid="`filter-inline-${field.key}`"
+                    :placeholder="field.placeholder ?? ''"
+                    :disabled="field.disabled ?? false"
+                    class="h-9 w-[180px] [appearance:textfield] rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    @keydown.enter="applyFilters"
+                />
+            </div>
+
             <!-- autocomplete -->
             <FilterAutocomplete
                 v-else-if="
@@ -432,214 +455,220 @@ const hasActiveFilters = computed(
         <slot v-if="!triggerOnly" name="inline" />
 
         <!-- ── 3. Bouton Filtres (drawer) ── toujours en dernier ────────────── -->
-        <div v-if="drawerFields.length > 0" class="shrink-0 self-end">
-            <FilterDrawer
-                v-model:open="filterDrawerOpen"
-                title="Filtres"
-                :active-count="
-                    triggerOnly ? activeFilterCount : drawerFilterCount
-                "
-                :apply-disabled="!pendingChange"
-                @apply="applyFilters"
-                @reset="resetFilters"
+        <Teleport :to="triggerTarget" :disabled="!triggerTarget">
+            <div
+                v-if="drawerFields.length > 0"
+                :class="triggerTarget ? 'shrink-0' : 'shrink-0 self-end'"
             >
-                <div class="space-y-5">
-                    <div
-                        v-if="
-                            triggerOnly &&
-                            !hideAgenceSelector &&
-                            siteOptions.length > 0
-                        "
-                        data-testid="agency-filter"
-                        class="space-y-1.5"
-                    >
-                        <Label class="flex items-center gap-1.5">
-                            Agence
-                            <Lock
-                                v-if="siteSelectorLocked"
-                                class="h-3 w-3 text-muted-foreground opacity-60"
-                            />
-                        </Label>
-                        <FilterMultiSelect
-                            v-model="localSiteIds"
-                            :options="siteOptions"
-                            placeholder="Toutes les agences"
-                            :empty-means-all="isAdmin"
-                            :disabled="siteSelectorLocked"
-                        />
-                    </div>
-
-                    <template
-                        v-for="field in displayedDrawerFields"
-                        :key="field.key"
-                    >
-                        <!-- multi-select ou select -->
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="
+                        triggerOnly ? activeFilterCount : drawerFilterCount
+                    "
+                    :apply-disabled="!pendingChange"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-5">
                         <div
                             v-if="
-                                field.type === 'multi-select' ||
-                                field.type === 'select'
+                                triggerOnly &&
+                                !hideAgenceSelector &&
+                                siteOptions.length > 0
                             "
-                            :data-testid="`filter-field-${field.key}`"
+                            data-testid="agency-filter"
                             class="space-y-1.5"
                         >
                             <Label class="flex items-center gap-1.5">
-                                {{ field.label }}
+                                Agence
                                 <Lock
-                                    v-if="field.disabled"
+                                    v-if="siteSelectorLocked"
                                     class="h-3 w-3 text-muted-foreground opacity-60"
                                 />
                             </Label>
                             <FilterMultiSelect
-                                v-model="
-                                    localValues[field.key] as (
-                                        | string
-                                        | number
-                                    )[]
-                                "
-                                :options="field.options ?? []"
-                                :placeholder="field.placeholder ?? 'Tous'"
-                                :disabled="field.disabled ?? false"
-                                :single-select="field.type === 'select'"
+                                v-model="localSiteIds"
+                                :options="siteOptions"
+                                placeholder="Toutes les agences"
+                                :empty-means-all="isAdmin"
+                                :disabled="siteSelectorLocked"
                             />
                         </div>
 
-                        <!-- date-range -->
-                        <div
-                            v-else-if="field.type === 'date-range'"
-                            class="grid grid-cols-2 gap-2"
+                        <template
+                            v-for="field in displayedDrawerFields"
+                            :key="field.key"
                         >
-                            <div class="space-y-1.5">
-                                <Label>Date début</Label>
+                            <!-- multi-select ou select -->
+                            <div
+                                v-if="
+                                    field.type === 'multi-select' ||
+                                    field.type === 'select'
+                                "
+                                :data-testid="`filter-field-${field.key}`"
+                                class="space-y-1.5"
+                            >
+                                <Label class="flex items-center gap-1.5">
+                                    {{ field.label }}
+                                    <Lock
+                                        v-if="field.disabled"
+                                        class="h-3 w-3 text-muted-foreground opacity-60"
+                                    />
+                                </Label>
+                                <FilterMultiSelect
+                                    v-model="
+                                        localValues[field.key] as (
+                                            | string
+                                            | number
+                                        )[]
+                                    "
+                                    :options="field.options ?? []"
+                                    :placeholder="field.placeholder ?? 'Tous'"
+                                    :disabled="field.disabled ?? false"
+                                    :single-select="field.type === 'select'"
+                                />
+                            </div>
+
+                            <!-- date-range -->
+                            <div
+                                v-else-if="field.type === 'date-range'"
+                                class="grid grid-cols-2 gap-2"
+                            >
+                                <div class="space-y-1.5">
+                                    <Label>Date début</Label>
+                                    <Input
+                                        v-model="
+                                            localValues[
+                                                field.startKey ??
+                                                    `${field.key}_debut`
+                                            ] as string | number | undefined
+                                        "
+                                        type="date"
+                                        class="h-9"
+                                    />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label>Date fin</Label>
+                                    <Input
+                                        v-model="
+                                            localValues[
+                                                field.endKey ??
+                                                    `${field.key}_fin`
+                                            ] as string | number | undefined
+                                        "
+                                        type="date"
+                                        class="h-9"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- date -->
+                            <div
+                                v-else-if="field.type === 'date'"
+                                class="space-y-1.5"
+                            >
+                                <Label>{{ field.label }}</Label>
                                 <Input
                                     v-model="
-                                        localValues[
-                                            field.startKey ??
-                                                `${field.key}_debut`
-                                        ] as string | number | undefined
+                                        localValues[field.key] as
+                                            | string
+                                            | number
+                                            | undefined
                                     "
                                     type="date"
                                     class="h-9"
                                 />
                             </div>
-                            <div class="space-y-1.5">
-                                <Label>Date fin</Label>
+
+                            <!-- number -->
+                            <div
+                                v-else-if="field.type === 'number'"
+                                class="space-y-1.5"
+                            >
+                                <Label>{{ field.label }}</Label>
                                 <Input
-                                    v-model="
-                                        localValues[
-                                            field.endKey ?? `${field.key}_fin`
-                                        ] as string | number | undefined
+                                    v-model.number="
+                                        localValues[field.key] as
+                                            | string
+                                            | number
+                                            | undefined
                                     "
-                                    type="date"
+                                    type="number"
+                                    :placeholder="field.placeholder"
                                     class="h-9"
                                 />
                             </div>
-                        </div>
 
-                        <!-- date -->
-                        <div
-                            v-else-if="field.type === 'date'"
-                            class="space-y-1.5"
-                        >
-                            <Label>{{ field.label }}</Label>
-                            <Input
-                                v-model="
-                                    localValues[field.key] as
-                                        | string
-                                        | number
-                                        | undefined
-                                "
-                                type="date"
-                                class="h-9"
-                            />
-                        </div>
+                            <!-- boolean -->
+                            <div
+                                v-else-if="field.type === 'boolean'"
+                                class="space-y-1.5"
+                            >
+                                <Label>{{ field.label }}</Label>
+                                <Select
+                                    v-model="localValues[field.key]"
+                                    :options="[
+                                        { value: '', label: 'Tous' },
+                                        { value: '1', label: 'Oui' },
+                                        { value: '0', label: 'Non' },
+                                    ]"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="w-full"
+                                    fluid
+                                />
+                            </div>
 
-                        <!-- number -->
-                        <div
-                            v-else-if="field.type === 'number'"
-                            class="space-y-1.5"
-                        >
-                            <Label>{{ field.label }}</Label>
-                            <Input
-                                v-model.number="
-                                    localValues[field.key] as
-                                        | string
-                                        | number
-                                        | undefined
+                            <!-- autocomplete -->
+                            <div
+                                v-else-if="
+                                    field.type === 'autocomplete' &&
+                                    field.suggestionsUrl
                                 "
-                                type="number"
-                                :placeholder="field.placeholder"
-                                class="h-9"
-                            />
-                        </div>
+                                :data-testid="`filter-field-${field.key}`"
+                            >
+                                <FilterAutocomplete
+                                    v-model="localValues[field.key] as string"
+                                    :label="field.label"
+                                    :suggestions-url="field.suggestionsUrl"
+                                    :field-name="
+                                        field.suggestionsField ?? field.key
+                                    "
+                                    :placeholder="field.placeholder ?? ''"
+                                    :disabled="field.disabled ?? false"
+                                    full-width
+                                />
+                            </div>
 
-                        <!-- boolean -->
-                        <div
-                            v-else-if="field.type === 'boolean'"
-                            class="space-y-1.5"
-                        >
-                            <Label>{{ field.label }}</Label>
-                            <Select
-                                v-model="localValues[field.key]"
-                                :options="[
-                                    { value: '', label: 'Tous' },
-                                    { value: '1', label: 'Oui' },
-                                    { value: '0', label: 'Non' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-full"
-                                fluid
-                            />
-                        </div>
-
-                        <!-- autocomplete -->
-                        <div
-                            v-else-if="
-                                field.type === 'autocomplete' &&
-                                field.suggestionsUrl
-                            "
-                            :data-testid="`filter-field-${field.key}`"
-                        >
-                            <FilterAutocomplete
-                                v-model="localValues[field.key] as string"
-                                :label="field.label"
-                                :suggestions-url="field.suggestionsUrl"
-                                :field-name="
-                                    field.suggestionsField ?? field.key
-                                "
-                                :placeholder="field.placeholder ?? ''"
-                                :disabled="field.disabled ?? false"
-                                full-width
-                            />
-                        </div>
-
-                        <!-- text -->
-                        <div
-                            v-else
-                            :data-testid="`filter-field-${field.key}`"
-                            class="space-y-1.5"
-                        >
-                            <Label>{{ field.label }}</Label>
-                            <Input
-                                v-model="
-                                    localValues[field.key] as
-                                        | string
-                                        | number
-                                        | undefined
-                                "
-                                type="text"
-                                :placeholder="field.placeholder ?? ''"
-                                class="h-9"
-                                @keydown.enter="
-                                    applyFilters();
-                                    filterDrawerOpen = false;
-                                "
-                            />
-                        </div>
-                    </template>
-                </div>
-            </FilterDrawer>
-        </div>
+                            <!-- text -->
+                            <div
+                                v-else
+                                :data-testid="`filter-field-${field.key}`"
+                                class="space-y-1.5"
+                            >
+                                <Label>{{ field.label }}</Label>
+                                <Input
+                                    v-model="
+                                        localValues[field.key] as
+                                            | string
+                                            | number
+                                            | undefined
+                                    "
+                                    type="text"
+                                    :placeholder="field.placeholder ?? ''"
+                                    class="h-9"
+                                    @keydown.enter="
+                                        applyFilters();
+                                        filterDrawerOpen = false;
+                                    "
+                                />
+                            </div>
+                        </template>
+                    </div>
+                </FilterDrawer>
+            </div>
+        </Teleport>
 
         <template v-if="!triggerOnly" #actions>
             <span

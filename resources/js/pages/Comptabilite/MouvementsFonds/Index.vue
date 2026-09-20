@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import DataFilters, {
     type FilterField,
@@ -66,10 +67,15 @@ const props = defineProps<{
         nature: string;
         search: string;
         site_ids: string[];
+        site_origine_id: string;
+        site_destination_id: string;
+        montant_min: string;
+        montant_max: string;
     };
     statut_options: { value: string; label: string }[];
     nature_options: { value: string; label: string }[];
     sites: { value: string; label: string }[];
+    sites_mouvements: { value: string; label: string }[];
     is_admin: boolean;
     peut_creer: boolean;
     comptes_tresorerie: CompteTresorerie[];
@@ -91,11 +97,13 @@ const filterFields: FilterField[] = [
         inline: true,
         placeholder: 'MVT-2026-00001',
     },
+    // Statut et montants : dans le tiroir du bouton « Filtres » (pas de `inline`), lui-même placé dans
+    // l'en-tête à côté de « Nouveau mouvement ». Le reste — Agence, Référence, Nature, Origine,
+    // Destination — reste directement dans la barre.
     {
         key: 'statut',
         label: 'Statut',
         type: 'select',
-        inline: true,
         options: props.statut_options,
     },
     {
@@ -104,6 +112,32 @@ const filterFields: FilterField[] = [
         type: 'select',
         inline: true,
         options: props.nature_options,
+    },
+    {
+        key: 'site_origine_id',
+        label: 'Origine',
+        type: 'select',
+        inline: true,
+        options: props.sites_mouvements,
+    },
+    {
+        key: 'site_destination_id',
+        label: 'Destination',
+        type: 'select',
+        inline: true,
+        options: props.sites_mouvements,
+    },
+    {
+        key: 'montant_min',
+        label: 'Montant min',
+        type: 'number',
+        placeholder: '0',
+    },
+    {
+        key: 'montant_max',
+        label: 'Montant max',
+        type: 'number',
+        placeholder: '0',
     },
 ];
 
@@ -115,6 +149,8 @@ function estVersement(m: Mouvement): boolean {
 function dateFr(date: string): string {
     return new Date(date).toLocaleDateString('fr-FR');
 }
+
+const filtresHote = ref<HTMLElement | null>(null);
 
 // DataFilters attend { id, nom } (convention Site), pas { value, label }.
 const sitesPourFiltre = computed(() =>
@@ -281,13 +317,20 @@ function confirmerMotif() {
                         </TooltipProvider>
                     </h1>
                 </div>
-                <Link
-                    v-if="peut_creer"
-                    href="/backoffice/comptabilite/tresorerie/mouvements/create"
-                    class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                    Nouveau mouvement
-                </Link>
+                <ListPageActions>
+                    <template #filters>
+                        <div ref="filtresHote" class="contents"></div>
+                    </template>
+                    <template #primary>
+                        <Link
+                            v-if="peut_creer"
+                            href="/backoffice/comptabilite/tresorerie/mouvements/create"
+                            class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        >
+                            Nouveau mouvement
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
             <DataFilters
@@ -296,6 +339,7 @@ function confirmerMotif() {
                 :fields="filterFields"
                 :sites="sitesPourFiltre"
                 :result-count="mouvements.total"
+                :trigger-target="filtresHote"
             />
 
             <div class="overflow-x-auto rounded-xl border bg-card">
