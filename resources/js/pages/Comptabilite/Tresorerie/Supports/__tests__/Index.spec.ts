@@ -406,6 +406,16 @@ describe('Supports de trésorerie — cartes KPI', () => {
         );
     });
 
+    it('espace le nombre de « GNF » côté nombre : passée à la ligne, « GNF » reste aligné à gauche', () => {
+        const solde = carte(monter(), 'solde-total');
+        const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
+
+        expect(
+            solde.find('[data-testid="support-kpi-valeur"]').classes(),
+        ).toContain('mr-1.5');
+        expect(unite?.classes()).not.toContain('ml-1.5');
+    });
+
     it('affiche des titres courts et la valeur de chaque indicateur', () => {
         const wrapper = monter();
 

@@ -1,8 +1,11 @@
 import StatusDot from '@/components/StatusDot.vue';
 import DataFilters from '@/components/filters/DataFilters.vue';
+import { Dialog } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import MouvementsIndex from '@/pages/Comptabilite/MouvementsFonds/Index.vue';
+import { router } from '@inertiajs/vue3';
 import { shallowMount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 vi.mock('@/composables/useFlashToast', () => ({ useFlashToast: vi.fn() }));
@@ -196,7 +199,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             type: 'number',
         });
         expect(parCle.montant_max.inline).toBeFalsy();
-        // Le bouton « Filtres » vit dans la barre : la page n'utilise pas la variante « trigger-only ».
+        // Pas la variante « trigger-only » : les champs `inline` restent dans la barre, seul le bouton part en en-tête.
         expect(filtres.props('triggerOnly')).toBeFalsy();
     });
 
@@ -263,5 +266,163 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         expect(
             monter([], { filters }).findComponent(DataFilters).props('values'),
         ).toEqual(filters);
+    });
+});
+
+// Une action de trésorerie ne part qu'une fois : le backend refuse un second envoi (verrou + statut),
+// mais l'interface ne doit pas laisser cliquer plusieurs fois ni fermer la fenêtre en plein envoi.
+describe('Mouvements de fonds — un seul envoi à la fois', () => {
+    const post = vi.mocked(router.post);
+
+    beforeEach(() => post.mockClear());
+
+    const bouton = (wrapper: ReturnType<typeof monter>, texte: string) =>
+        wrapper.findAll('button').find((b) => b.text() === texte)!;
+
+    const terminerRequete = async (appel = 0) => {
+        (post.mock.calls[appel][2] as { onFinish: () => void }).onFinish();
+        await nextTick();
+    };
+
+    const ouvrirReception = async () => {
+        const wrapper = monter([mouvement({ peut_recevoir: true })]);
+        await bouton(wrapper, 'Confirmer réception').trigger('click');
+
+        return wrapper;
+    };
+
+    it('affiche un chargement sur « Confirmer » et désactive les deux boutons pendant l’envoi, puis les réactive', async () => {
+        const wrapper = await ouvrirReception();
+        const confirmer = wrapper.get('[data-testid="reception-confirmer"]');
+        const annuler = wrapper.get('[data-testid="reception-annuler"]');
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+        expect(wrapper.findComponent(Spinner).exists()).toBe(false);
+
+        await confirmer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/recevoir',
+        );
+        expect(post.mock.calls[0][1]).toEqual({
+            compte_tresorerie_destination_id: 'c-agence',
+        });
+        expect(confirmer.attributes('disabled')).toBeDefined();
+        expect(confirmer.attributes('aria-busy')).toBe('true');
+        expect(annuler.attributes('disabled')).toBeDefined();
+        expect(confirmer.text()).toBe('Confirmation…');
+        expect(confirmer.findComponent(Spinner).exists()).toBe(true);
+
+        await terminerRequete();
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(annuler.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+        expect(wrapper.findComponent(Spinner).exists()).toBe(false);
+    });
+
+    it('n’envoie jamais deux fois, même si un second clic passe avant le rendu', async () => {
+        const wrapper = await ouvrirReception();
+        const vm = wrapper.vm as unknown as { confirmerReception: () => void };
+
+        vm.confirmerReception();
+        vm.confirmerReception();
+
+        expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('garde la fenêtre ouverte pendant l’envoi (Échap, clic à l’extérieur, croix), et laisse la fermer ensuite', async () => {
+        const wrapper = await ouvrirReception();
+        const fenetre = wrapper.findAllComponents(Dialog)[1];
+        expect(fenetre.props('open')).toBe(true);
+
+        await wrapper
+            .get('[data-testid="reception-confirmer"]')
+            .trigger('click');
+        fenetre.vm.$emit('update:open', false);
+        await nextTick();
+
+        expect(fenetre.props('open')).toBe(true);
+
+        await terminerRequete();
+        fenetre.vm.$emit('update:open', false);
+        await nextTick();
+
+        expect(fenetre.props('open')).toBe(false);
+    });
+
+    it('protège aussi la fenêtre de motif (annuler / contester / retour) avec le même chargement', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_annuler: true,
+            }),
+        ]);
+        await bouton(wrapper, 'Annuler').trigger('click');
+        await wrapper.get('#motif').setValue('Erreur de saisie');
+        const confirmer = wrapper.get('[data-testid="motif-confirmer"]');
+
+        await confirmer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/annuler',
+        );
+        expect(post.mock.calls[0][1]).toEqual({ motif: 'Erreur de saisie' });
+        expect(confirmer.attributes('disabled')).toBeDefined();
+        expect(confirmer.text()).toBe('Confirmation…');
+        expect(
+            wrapper.get('[data-testid="motif-annuler"]').attributes('disabled'),
+        ).toBeDefined();
+
+        await terminerRequete();
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+    });
+
+    it('ne verrouille rien quand la saisie est refusée avant l’envoi (motif vide)', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_annuler: true,
+            }),
+        ]);
+        await bouton(wrapper, 'Annuler').trigger('click');
+        const confirmer = wrapper.get('[data-testid="motif-confirmer"]');
+
+        await confirmer.trigger('click');
+
+        expect(post).not.toHaveBeenCalled();
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(wrapper.text()).toContain('Le motif est obligatoire.');
+    });
+
+    it('empêche aussi le double clic sur « Envoyer » dans la liste', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_envoyer: true,
+            }),
+        ]);
+        const envoyer = bouton(wrapper, 'Envoyer');
+
+        await envoyer.trigger('click');
+        await envoyer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/envoyer',
+        );
+        expect(envoyer.attributes('disabled')).toBeDefined();
+
+        await terminerRequete();
+
+        expect(envoyer.attributes('disabled')).toBeUndefined();
     });
 });

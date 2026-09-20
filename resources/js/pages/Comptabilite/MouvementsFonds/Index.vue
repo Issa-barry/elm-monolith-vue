@@ -12,6 +12,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import {
     Tooltip,
     TooltipContent,
@@ -157,11 +158,35 @@ const sitesPourFiltre = computed(() =>
     props.sites.map((s) => ({ id: s.value, nom: s.label })),
 );
 
+// Une seule requête à la fois pour « Envoyer » et les deux fenêtres de confirmation. La bascule est
+// posée dans le gestionnaire de clic, avant tout rendu : un double clic n'envoie jamais deux fois.
+const enCours = ref(false);
+
+// Croix de fermeture des fenêtres (dernier bouton enfant du contenu) : grisée pendant l'envoi.
+const CROIX_INACTIVE =
+    '[&>button:last-child]:pointer-events-none [&>button:last-child]:opacity-40';
+
+function poster(
+    url: string,
+    donnees: Record<string, string>,
+    options: NonNullable<Parameters<typeof router.post>[2]> = {},
+) {
+    if (enCours.value) return;
+    enCours.value = true;
+
+    router.post(url, donnees, {
+        preserveScroll: true,
+        ...options,
+        onFinish: () => {
+            enCours.value = false;
+        },
+    });
+}
+
 function envoyer(m: Mouvement) {
-    router.post(
+    poster(
         `/backoffice/comptabilite/tresorerie/mouvements/${m.id}/envoyer`,
         {},
-        { preserveScroll: true },
     );
 }
 
@@ -196,11 +221,10 @@ function confirmerReception() {
     }
     if (!receptionCible.value) return;
 
-    router.post(
+    poster(
         `/backoffice/comptabilite/tresorerie/mouvements/${receptionCible.value.id}/recevoir`,
         { compte_tresorerie_destination_id: receptionCompteId.value },
         {
-            preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
                 receptionDialogOpen.value = false;
@@ -245,11 +269,10 @@ function confirmerMotif() {
     }
     if (!motifCible.value) return;
 
-    router.post(
+    poster(
         `/backoffice/comptabilite/tresorerie/mouvements/${motifCible.value.id}/${motifDialogAction.value}`,
         { motif: motif.value },
         {
-            preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
                 motifDialogOpen.value = false;
@@ -450,7 +473,8 @@ function confirmerMotif() {
                                     <button
                                         v-if="m.peut_envoyer"
                                         type="button"
-                                        class="text-xs font-medium text-primary hover:underline"
+                                        :disabled="enCours"
+                                        class="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
                                         @click="envoyer(m)"
                                     >
                                         Envoyer
@@ -510,8 +534,18 @@ function confirmerMotif() {
             </div>
         </div>
 
-        <Dialog v-model:open="motifDialogOpen">
-            <DialogContent class="sm:max-w-md">
+        <Dialog
+            :open="motifDialogOpen"
+            @update:open="
+                (ouvert: boolean) => {
+                    if (!enCours) motifDialogOpen = ouvert;
+                }
+            "
+        >
+            <DialogContent
+                class="sm:max-w-md"
+                :class="{ [CROIX_INACTIVE]: enCours }"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {{ motifDialogTitres[motifDialogAction] }}
@@ -537,24 +571,40 @@ function confirmerMotif() {
                 <DialogFooter>
                     <button
                         type="button"
-                        class="h-9 rounded-md border px-4 text-sm"
+                        data-testid="motif-annuler"
+                        :disabled="enCours"
+                        class="h-9 rounded-md border px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         @click="motifDialogOpen = false"
                     >
                         Annuler
                     </button>
                     <button
                         type="button"
-                        class="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+                        data-testid="motif-confirmer"
+                        :disabled="enCours"
+                        :aria-busy="enCours"
+                        class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         @click="confirmerMotif"
                     >
-                        Confirmer
+                        <Spinner v-if="enCours" />
+                        {{ enCours ? 'Confirmation…' : 'Confirmer' }}
                     </button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
 
-        <Dialog v-model:open="receptionDialogOpen">
-            <DialogContent class="sm:max-w-md">
+        <Dialog
+            :open="receptionDialogOpen"
+            @update:open="
+                (ouvert: boolean) => {
+                    if (!enCours) receptionDialogOpen = ouvert;
+                }
+            "
+        >
+            <DialogContent
+                class="sm:max-w-md"
+                :class="{ [CROIX_INACTIVE]: enCours }"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         Confirmer réception {{ receptionCible?.reference }}
@@ -617,17 +667,23 @@ function confirmerMotif() {
                 <DialogFooter>
                     <button
                         type="button"
-                        class="h-9 rounded-md border px-4 text-sm"
+                        data-testid="reception-annuler"
+                        :disabled="enCours"
+                        class="h-9 rounded-md border px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         @click="receptionDialogOpen = false"
                     >
                         Annuler
                     </button>
                     <button
                         type="button"
-                        class="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+                        data-testid="reception-confirmer"
+                        :disabled="enCours"
+                        :aria-busy="enCours"
+                        class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         @click="confirmerReception"
                     >
-                        Confirmer
+                        <Spinner v-if="enCours" />
+                        {{ enCours ? 'Confirmation…' : 'Confirmer' }}
                     </button>
                 </DialogFooter>
             </DialogContent>

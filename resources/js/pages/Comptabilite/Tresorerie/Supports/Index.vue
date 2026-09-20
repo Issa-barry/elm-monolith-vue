@@ -708,13 +708,13 @@ const selectClass =
                                         class="text-[31.5px] leading-[35px] font-bold text-slate-900 dark:text-slate-50"
                                     >
                                         <span
-                                            class="whitespace-nowrap"
+                                            class="mr-1.5 whitespace-nowrap"
                                             data-testid="support-kpi-valeur"
                                             >{{ carte.valeur }}</span
                                         >
                                         <span
                                             v-if="carte.unite"
-                                            class="ml-1.5 inline-block text-[14px] leading-[16.8px] font-medium whitespace-nowrap text-muted-foreground"
+                                            class="inline-block text-[14px] leading-[16.8px] font-medium whitespace-nowrap text-muted-foreground"
                                             >{{ carte.unite }}</span
                                         >
                                     </p>
