@@ -71,7 +71,7 @@ interface FilterField {
   endKey?: string       // date-range uniquement : nom du param fin
   inline?: boolean      // dans la barre plutôt que dans le drawer
   searchable?: boolean  // select uniquement : liste avec recherche par nom + croix d'effacement
-  wide?: boolean        // champ inline plus large (240 px au lieu de 180) pour un libellé long
+  wide?: boolean        // champ inline plus large (280 px au lieu de 180) pour un libellé long
 }
 
 type FilterFieldType =

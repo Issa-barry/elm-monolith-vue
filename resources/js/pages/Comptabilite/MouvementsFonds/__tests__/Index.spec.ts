@@ -209,7 +209,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             { value: 'destination', label: 'Destination' },
         ]);
         // Sans choix : origine OU destination (placeholder), c'est le comportement par défaut du backend.
-        expect(position?.placeholder).toBe('Origine ou destination');
+        expect(position?.placeholder).toBe('Les deux');
         // Les listes d'agences d'origine et de destination ne sont plus dans la barre principale.
         expect(champs.filter((c) => c.inline).map((c) => c.key)).toEqual([
             'caisse_id',

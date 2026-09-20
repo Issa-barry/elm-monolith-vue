@@ -41,7 +41,7 @@ export interface FilterField {
     inline?: boolean;
     /** Pour type: 'select' — liste avec champ de recherche par nom et croix d'effacement (choix unique) */
     searchable?: boolean;
-    /** Champ `inline` plus large (240 px au lieu de 180) pour afficher en entier un libellé long */
+    /** Champ `inline` plus large (280 px au lieu de 180) pour afficher en entier un libellé long */
     wide?: boolean;
     /** Pour type: 'autocomplete' — URL de l'endpoint de suggestions */
     suggestionsUrl?: string;
@@ -389,7 +389,7 @@ const hasActiveFilters = computed(
                 }}</span>
                 <div
                     class="relative"
-                    :class="field.wide ? 'w-[240px]' : 'w-[180px]'"
+                    :class="field.wide ? 'w-[280px]' : 'w-[180px]'"
                 >
                     <FilterSearchSelect
                         v-if="field.searchable && field.type === 'select'"

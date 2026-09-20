@@ -7,7 +7,7 @@ export interface SearchSelectOption {
     label: string;
 }
 
-withDefaults(
+const props = withDefaults(
     defineProps<{
         options: SearchSelectOption[];
         placeholder?: string;
@@ -25,6 +25,11 @@ const model = defineModel<(string | number)[]>({ default: () => [] });
 
 const valeur = computed(() => model.value[0] ?? null);
 
+// Infobulle : le nom complet reste lisible au survol quand il dépasse la largeur du champ.
+const libelleChoisi = computed(
+    () => props.options.find((o) => o.value === valeur.value)?.label,
+);
+
 function choisir(nouvelle: string | number | null | undefined) {
     model.value =
         nouvelle === null || nouvelle === undefined || nouvelle === ''
@@ -41,6 +46,7 @@ function choisir(nouvelle: string | number | null | undefined) {
         option-value="value"
         :placeholder="placeholder"
         :disabled="disabled"
+        :title="libelleChoisi"
         filter
         auto-filter-focus
         filter-placeholder="Rechercher…"

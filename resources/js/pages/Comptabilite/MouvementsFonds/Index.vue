@@ -127,7 +127,7 @@ const filterFields: FilterField[] = [
         label: 'Origine / Destination',
         type: 'select',
         inline: true,
-        placeholder: 'Origine ou destination',
+        placeholder: 'Les deux',
         options: [
             { value: 'origine', label: 'Origine' },
             { value: 'destination', label: 'Destination' },
