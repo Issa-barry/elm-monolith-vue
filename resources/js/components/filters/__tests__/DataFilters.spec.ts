@@ -1,8 +1,11 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
+import FilterSearchSelect from '@/components/filters/FilterSearchSelect.vue';
 import { shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 const routerGet = vi.hoisted(() => vi.fn());
 
@@ -248,6 +251,108 @@ describe('DataFilters — bouton « Filtres » déplacé hors de la barre (trigg
             '/liste',
             { search: 'MVT-1', statut: 'envoye', montant_min: 5000 },
             expect.objectContaining({ replace: true }),
+        );
+    });
+});
+
+describe('DataFilters — liste avec recherche par nom (searchable)', () => {
+    beforeEach(() => routerGet.mockClear());
+
+    const caisses = [
+        { value: 'c1', label: 'Caisse Moussa sidibé' },
+        { value: 'c2', label: 'Caisse Agence' },
+    ];
+
+    const monterCaisse = (
+        values: Record<string, unknown> = {},
+        surcharge: Partial<FilterField> = {},
+    ) =>
+        shallowMount(DataFilters, {
+            props: {
+                url: '/liste',
+                values,
+                resultCount: 2,
+                fields: [
+                    {
+                        key: 'caisse_id',
+                        label: 'Caisse',
+                        type: 'select',
+                        inline: true,
+                        searchable: true,
+                        placeholder: 'Rechercher une caisse…',
+                        options: caisses,
+                        ...surcharge,
+                    },
+                    {
+                        key: 'nature',
+                        label: 'Nature',
+                        type: 'select',
+                        inline: true,
+                        options: [
+                            { value: 'inter_sites', label: 'Entre agences' },
+                        ],
+                    },
+                ],
+            },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+    it('affiche la liste avec recherche pour un champ searchable, la liste classique pour les autres', () => {
+        const wrapper = monterCaisse();
+        const recherche = wrapper.findComponent(FilterSearchSelect);
+
+        expect(wrapper.findAllComponents(FilterSearchSelect)).toHaveLength(1);
+        expect(wrapper.findAllComponents(FilterMultiSelect)).toHaveLength(1);
+        expect(recherche.props('options')).toEqual(caisses);
+        expect(recherche.props('placeholder')).toBe('Rechercher une caisse…');
+    });
+
+    it('restitue la caisse déjà filtrée', () => {
+        const wrapper = monterCaisse({ caisse_id: 'c1' });
+
+        expect(
+            wrapper.findComponent(FilterSearchSelect).props('modelValue'),
+        ).toEqual(['c1']);
+    });
+
+    it('envoie l’identifiant de la caisse choisie (pas son nom) au serveur', async () => {
+        const wrapper = monterCaisse();
+
+        wrapper
+            .findComponent(FilterSearchSelect)
+            .vm.$emit('update:modelValue', ['c2']);
+        // « Appliquer » n'est actif qu'après le rendu qui constate le changement en attente.
+        await nextTick();
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/liste',
+            { caisse_id: 'c2' },
+            expect.objectContaining({ replace: true }),
+        );
+    });
+
+    it('retire le paramètre quand le filtre est effacé', async () => {
+        const wrapper = monterCaisse({ caisse_id: 'c1' });
+
+        wrapper
+            .findComponent(FilterSearchSelect)
+            .vm.$emit('update:modelValue', []);
+        await nextTick();
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith('/liste', {}, expect.anything());
+    });
+
+    it('élargit le champ avec `wide` (240 px), sinon 180 px', () => {
+        const largeur = (wrapper: ReturnType<typeof monterCaisse>) =>
+            wrapper
+                .get('[data-testid="filter-inline-caisse_id"] > div')
+                .classes();
+
+        expect(largeur(monterCaisse())).toContain('w-[180px]');
+        expect(largeur(monterCaisse({}, { wide: true }))).toContain(
+            'w-[240px]',
         );
     });
 });

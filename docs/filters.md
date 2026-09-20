@@ -69,6 +69,9 @@ interface FilterField {
   placeholder?: string
   startKey?: string     // date-range uniquement : nom du param début
   endKey?: string       // date-range uniquement : nom du param fin
+  inline?: boolean      // dans la barre plutôt que dans le drawer
+  searchable?: boolean  // select uniquement : liste avec recherche par nom + croix d'effacement
+  wide?: boolean        // champ inline plus large (240 px au lieu de 180) pour un libellé long
 }
 
 type FilterFieldType =
@@ -97,6 +100,19 @@ La différence entre les deux est sémantique — en pratique ils s'affichent id
 ```
 
 La valeur interne est toujours un `string[]`. Vide `[]` = Tous = paramètre omis de l'URL.
+
+### `select` avec recherche (`searchable: true`)
+Pour choisir **une entité par son nom** dans une liste trop longue pour être parcourue à l'œil (une caisse,
+un client…), un `select` peut être `searchable` : `FilterSearchSelect` (PrimeVue Select avec champ de
+recherche, croix d'effacement, libellé complet affiché) remplace la liste à cocher. Le contrat ne change
+pas : l'état interne reste un `string[]` d'au plus une valeur, et **c'est l'identifiant (`value`) qui part au
+serveur**, jamais le libellé — le filtrage se fait côté backend. Ajouter `wide: true` (champ `inline`) pour
+que le nom choisi s'affiche en entier dans la barre.
+
+```typescript
+{ key: 'caisse_id', label: 'Caisse', type: 'select', inline: true, searchable: true, wide: true,
+  placeholder: 'Rechercher une caisse…', options: caisses }  // caisses: [{ value: id, label: nom }]
+```
 
 ### `text`
 Champ texte libre.
@@ -129,9 +145,17 @@ Pour une plage (montant, quantité…), déclarer **deux** champs `number` : le 
 { key: 'montant_min', label: 'Montant min', type: 'number', placeholder: '0' },
 { key: 'montant_max', label: 'Montant max', type: 'number', placeholder: '0' },
 ```
-Exemple en production : `Comptabilite/MouvementsFonds/Index.vue` (Agence, Référence, Nature, Origine et
-Destination dans la barre ; **Statut et Montant min/max dans le tiroir « Filtres »**, dont le bouton est
-placé dans l'en-tête à côté de « Nouveau mouvement » ; backend dans `MouvementFondsController::index`).
+Exemple en production : `Comptabilite/MouvementsFonds/Index.vue` (barre : Agence → **Caisse** (recherche par
+nom) → Référence → Nature → **Origine / Destination** (position de la caisse) ; **Statut, agences d'origine et
+de destination et Montant min/max dans le tiroir « Filtres »**, dont le bouton est placé dans l'en-tête à côté
+de « Nouveau mouvement » ; backend dans `MouvementFondsController::index`).
+
+Filtre Caisse de Mouvements de fonds : `caisse_id` (identifiant d'un support de trésorerie) filtre les
+mouvements où cette caisse est l'**origine OU la destination** (`compte_tresorerie_origine_id` /
+`compte_tresorerie_destination_id`) ; `caisse_role` (`origine` | `destination`, facultatif) restreint à une
+seule position et est **ignoré sans caisse**. Les caisses proposées sont celles qui figurent sur un mouvement
+que l'utilisateur peut voir (un non-admin ne découvre jamais une caisse hors de ses agences) ; deux caisses
+de même nom sont distinguées par leur agence. Les filtres se cumulent (ET) avec tous les autres.
 
 ### `boolean`
 PrimeVue Select avec les options Tous / Oui / Non. Émet `'1'`, `'0'` ou `''`.

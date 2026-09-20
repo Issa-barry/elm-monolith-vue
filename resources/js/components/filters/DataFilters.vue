@@ -3,6 +3,7 @@ import FilterBar from '@/components/FilterBar.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import FilterAutocomplete from '@/components/filters/FilterAutocomplete.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
+import FilterSearchSelect from '@/components/filters/FilterSearchSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { router, usePage } from '@inertiajs/vue3';
@@ -38,6 +39,10 @@ export interface FilterField {
     disabled?: boolean;
     /** Affiche le champ dans la barre principale plutôt que dans le drawer */
     inline?: boolean;
+    /** Pour type: 'select' — liste avec champ de recherche par nom et croix d'effacement (choix unique) */
+    searchable?: boolean;
+    /** Champ `inline` plus large (240 px au lieu de 180) pour afficher en entier un libellé long */
+    wide?: boolean;
     /** Pour type: 'autocomplete' — URL de l'endpoint de suggestions */
     suggestionsUrl?: string;
     /** Pour type: 'autocomplete' — nom du champ passé à l'endpoint (?field=xxx) */
@@ -382,8 +387,19 @@ const hasActiveFilters = computed(
                 <span class="text-xs font-medium text-muted-foreground">{{
                     field.label
                 }}</span>
-                <div class="relative w-[180px]">
+                <div
+                    class="relative"
+                    :class="field.wide ? 'w-[240px]' : 'w-[180px]'"
+                >
+                    <FilterSearchSelect
+                        v-if="field.searchable && field.type === 'select'"
+                        v-model="localValues[field.key] as (string | number)[]"
+                        :options="field.options ?? []"
+                        :placeholder="field.placeholder ?? field.label"
+                        :disabled="field.disabled ?? false"
+                    />
                     <FilterMultiSelect
+                        v-else
                         v-model="localValues[field.key] as (string | number)[]"
                         :options="field.options ?? []"
                         :placeholder="field.placeholder ?? field.label"
@@ -516,7 +532,23 @@ const hasActiveFilters = computed(
                                         class="h-3 w-3 text-muted-foreground opacity-60"
                                     />
                                 </Label>
+                                <FilterSearchSelect
+                                    v-if="
+                                        field.searchable &&
+                                        field.type === 'select'
+                                    "
+                                    v-model="
+                                        localValues[field.key] as (
+                                            | string
+                                            | number
+                                        )[]
+                                    "
+                                    :options="field.options ?? []"
+                                    :placeholder="field.placeholder ?? 'Tous'"
+                                    :disabled="field.disabled ?? false"
+                                />
                                 <FilterMultiSelect
+                                    v-else
                                     v-model="
                                         localValues[field.key] as (
                                             | string

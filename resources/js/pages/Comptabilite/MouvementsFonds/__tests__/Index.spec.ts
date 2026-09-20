@@ -78,6 +78,8 @@ const monter = (
                 site_ids: [],
                 site_origine_id: '',
                 site_destination_id: '',
+                caisse_id: '',
+                caisse_role: '',
                 montant_min: '',
                 montant_max: '',
             },
@@ -85,6 +87,7 @@ const monter = (
             nature_options: [],
             sites: [],
             sites_mouvements: [],
+            caisses_filtre: [],
             is_admin: true,
             peut_creer: false,
             comptes_tresorerie: [],
@@ -150,12 +153,22 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         { value: 's2', label: 'Siège' },
     ];
 
-    it('garde Référence, Nature, Origine et Destination directement dans la barre', () => {
-        const champs = monter([], { sites_mouvements: sites })
+    const caisses = [
+        { value: 'c1', label: 'Caisse Moussa sidibé' },
+        { value: 'c2', label: 'Caisse Agence' },
+    ];
+
+    it('garde Caisse, Référence, Nature et Origine / Destination directement dans la barre', () => {
+        const champs = monter([], { caisses_filtre: caisses })
             .findComponent(DataFilters)
             .props('fields');
         const parCle = Object.fromEntries(champs.map((c) => [c.key, c]));
 
+        expect(parCle.caisse_id).toMatchObject({
+            label: 'Caisse',
+            type: 'select',
+            inline: true,
+        });
         expect(parCle.search).toMatchObject({
             label: 'Référence',
             type: 'text',
@@ -166,22 +179,48 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             type: 'select',
             inline: true,
         });
-        expect(parCle.site_origine_id).toMatchObject({
-            label: 'Origine',
+        expect(parCle.caisse_role).toMatchObject({
+            label: 'Origine / Destination',
             type: 'select',
             inline: true,
-            options: sites,
-        });
-        expect(parCle.site_destination_id).toMatchObject({
-            label: 'Destination',
-            type: 'select',
-            inline: true,
-            options: sites,
         });
     });
 
-    it('range Statut et Montant min/max dans le tiroir du bouton « Filtres » (pas dans la barre)', () => {
-        const wrapper = monter([]);
+    it('cherche une caisse par son NOM : liste avec recherche, assez large, alimentée par les caisses des mouvements', () => {
+        const caisse = monter([], { caisses_filtre: caisses })
+            .findComponent(DataFilters)
+            .props('fields')
+            .find((c) => c.key === 'caisse_id');
+
+        expect(caisse).toMatchObject({
+            searchable: true,
+            wide: true,
+            placeholder: 'Rechercher une caisse…',
+            options: caisses,
+        });
+    });
+
+    it('traite Origine / Destination comme la position de la caisse choisie, pas comme deux listes indépendantes', () => {
+        const champs = monter([]).findComponent(DataFilters).props('fields');
+        const position = champs.find((c) => c.key === 'caisse_role');
+
+        expect(position?.options).toEqual([
+            { value: 'origine', label: 'Origine' },
+            { value: 'destination', label: 'Destination' },
+        ]);
+        // Sans choix : origine OU destination (placeholder), c'est le comportement par défaut du backend.
+        expect(position?.placeholder).toBe('Origine ou destination');
+        // Les listes d'agences d'origine et de destination ne sont plus dans la barre principale.
+        expect(champs.filter((c) => c.inline).map((c) => c.key)).toEqual([
+            'caisse_id',
+            'search',
+            'nature',
+            'caisse_role',
+        ]);
+    });
+
+    it('range Statut, agences d’origine/destination et Montant min/max dans le tiroir du bouton « Filtres »', () => {
+        const wrapper = monter([], { sites_mouvements: sites });
         const filtres = wrapper.findComponent(DataFilters);
         const parCle = Object.fromEntries(
             filtres.props('fields').map((c) => [c.key, c]),
@@ -189,6 +228,17 @@ describe('Mouvements de fonds — filtres de la barre', () => {
 
         // Un champ sans `inline` va dans le tiroir ; DataFilters affiche alors le bouton « Filtres ».
         expect(parCle.statut.inline).toBeFalsy();
+        // Fonctionnalité conservée (mêmes paramètres d'URL), libellés distincts de « Origine / Destination ».
+        expect(parCle.site_origine_id).toMatchObject({
+            label: "Agence d'origine",
+            options: sites,
+        });
+        expect(parCle.site_origine_id.inline).toBeFalsy();
+        expect(parCle.site_destination_id).toMatchObject({
+            label: 'Agence de destination',
+            options: sites,
+        });
+        expect(parCle.site_destination_id.inline).toBeFalsy();
         expect(parCle.montant_min).toMatchObject({
             label: 'Montant min',
             type: 'number',
@@ -234,16 +284,18 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         );
     });
 
-    it('conserve les filtres existants, dans le même ordre, avant les nouveaux', () => {
+    it('conserve tous les filtres existants (mêmes clés d’URL) et ajoute la caisse et sa position', () => {
         const cles = monter([])
             .findComponent(DataFilters)
             .props('fields')
             .map((c) => c.key);
 
         expect(cles).toEqual([
+            'caisse_id',
             'search',
-            'statut',
             'nature',
+            'caisse_role',
+            'statut',
             'site_origine_id',
             'site_destination_id',
             'montant_min',
@@ -259,6 +311,8 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             site_ids: [],
             site_origine_id: 's2',
             site_destination_id: 's1',
+            caisse_id: 'c1',
+            caisse_role: 'origine',
             montant_min: '200000',
             montant_max: '900000',
         };

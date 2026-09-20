@@ -70,6 +70,8 @@ const props = defineProps<{
         site_ids: string[];
         site_origine_id: string;
         site_destination_id: string;
+        caisse_id: string;
+        caisse_role: string;
         montant_min: string;
         montant_max: string;
     };
@@ -77,6 +79,7 @@ const props = defineProps<{
     nature_options: { value: string; label: string }[];
     sites: { value: string; label: string }[];
     sites_mouvements: { value: string; label: string }[];
+    caisses_filtre: { value: string; label: string }[];
     is_admin: boolean;
     peut_creer: boolean;
     comptes_tresorerie: CompteTresorerie[];
@@ -90,22 +93,27 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Mouvements de fonds', href: '#' },
 ];
 
+// Barre : Agence → Caisse → Référence → Nature → Origine / Destination. Le reste (Statut, agences d'origine
+// et de destination, montants) est dans le tiroir du bouton « Filtres », lui-même placé dans l'en-tête à côté
+// de « Nouveau mouvement ». « Origine / Destination » ne remplace pas deux listes : c'est la POSITION de la
+// caisse choisie dans le mouvement (sans choix : origine ou destination).
 const filterFields: FilterField[] = [
+    {
+        key: 'caisse_id',
+        label: 'Caisse',
+        type: 'select',
+        inline: true,
+        searchable: true,
+        wide: true,
+        placeholder: 'Rechercher une caisse…',
+        options: props.caisses_filtre,
+    },
     {
         key: 'search',
         label: 'Référence',
         type: 'text',
         inline: true,
         placeholder: 'MVT-2026-00001',
-    },
-    // Statut et montants : dans le tiroir du bouton « Filtres » (pas de `inline`), lui-même placé dans
-    // l'en-tête à côté de « Nouveau mouvement ». Le reste — Agence, Référence, Nature, Origine,
-    // Destination — reste directement dans la barre.
-    {
-        key: 'statut',
-        label: 'Statut',
-        type: 'select',
-        options: props.statut_options,
     },
     {
         key: 'nature',
@@ -115,17 +123,32 @@ const filterFields: FilterField[] = [
         options: props.nature_options,
     },
     {
-        key: 'site_origine_id',
-        label: 'Origine',
+        key: 'caisse_role',
+        label: 'Origine / Destination',
         type: 'select',
         inline: true,
+        placeholder: 'Origine ou destination',
+        options: [
+            { value: 'origine', label: 'Origine' },
+            { value: 'destination', label: 'Destination' },
+        ],
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: props.statut_options,
+    },
+    {
+        key: 'site_origine_id',
+        label: "Agence d'origine",
+        type: 'select',
         options: props.sites_mouvements,
     },
     {
         key: 'site_destination_id',
-        label: 'Destination',
+        label: 'Agence de destination',
         type: 'select',
-        inline: true,
         options: props.sites_mouvements,
     },
     {
