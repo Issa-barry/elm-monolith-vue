@@ -538,7 +538,15 @@ export async function selectOptionFromCombobox(
             const count = await visibleOptions.count();
             for (let i = 0; i < count; i++) {
                 const candidate = visibleOptions.nth(i);
-                const text = (await candidate.innerText().catch(() => '')).trim();
+                // Timeout explicite : sans actionTimeout global, innerText() sur un nth(i) qui a
+                // disparu (liste remplacée entre count() et la lecture, ex. celle des pays par
+                // celle de la nature du client) attend jusqu'au timeout du test au lieu d'échouer,
+                // et le catch() ne sert alors à rien — retry CI du 20/09/2026 bloquée 185 s.
+                const text = (
+                    await candidate
+                        .innerText({ timeout: 1_000 })
+                        .catch(() => '')
+                ).trim();
                 if (text && matchesOptionText(text, wantedOption)) {
                     return candidate;
                 }
