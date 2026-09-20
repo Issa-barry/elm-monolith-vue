@@ -11,6 +11,12 @@ use App\Models\User;
  * réception ou conteste — jamais la même personne des deux côtés d'affilée
  * sauf si admin (autorité globale sur l'organisation, comme
  * TransfertLogistiquePolicy).
+ *
+ * Pour un versement de caisse (`interne_caisses`), origine et destination sont le même site : la
+ * séparation se fait alors par PERSONNE — celui qui a envoyé ne confirme ni ne conteste
+ * (MouvementFonds::separationEnvoiReceptionRespectee(), dérogation super admin comprise). Le
+ * Gate::before du super admin passe avant toute policy : la règle est donc aussi imposée par
+ * MouvementFondsService, seule garantie réelle.
  */
 class MouvementFondsPolicy
 {
@@ -46,6 +52,9 @@ class MouvementFondsPolicy
         if (! $mouvement->isEnvoye() && ! $mouvement->isConteste()) {
             return false;
         }
+        if (! $mouvement->separationEnvoiReceptionRespectee($user)) {
+            return false;
+        }
 
         return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
     }
@@ -63,6 +72,9 @@ class MouvementFondsPolicy
     public function contester(User $user, MouvementFonds $mouvement): bool
     {
         if (! $user->can('tresorerie.rejeter') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
+            return false;
+        }
+        if (! $mouvement->separationEnvoiReceptionRespectee($user)) {
             return false;
         }
 

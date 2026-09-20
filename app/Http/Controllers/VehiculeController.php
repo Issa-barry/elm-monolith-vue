@@ -28,6 +28,7 @@ use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -369,7 +370,7 @@ class VehiculeController extends Controller
                 'commentaire' => $d->commentaire,
             ]);
 
-        $situationPeriode = $request->query('situation_periode', 'all');
+        $situationPeriode = SituationPeriode::depuisRequete($request);
         $situationVentes = $this->situationVentesService->pourVehicule($vehicule, $situationPeriode);
 
         $equipe = $vehicule->equipe;
@@ -414,7 +415,7 @@ class VehiculeController extends Controller
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'situation_ventes' => $situationVentes,
-            'situation_periode' => $situationPeriode,
+            'situation_periode' => $situationPeriode->pourFront(),
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),

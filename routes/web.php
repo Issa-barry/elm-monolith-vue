@@ -56,6 +56,7 @@ use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\SalaireController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
+use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
 use App\Http\Controllers\Depenses\CreateDepenseController;
@@ -749,6 +750,8 @@ Route::prefix('backoffice')->group(function () {
                 Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
+                Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
+                Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
 
                 Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
                 Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');

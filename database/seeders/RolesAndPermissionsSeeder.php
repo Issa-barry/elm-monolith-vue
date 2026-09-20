@@ -126,8 +126,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.create', 'journal-financier.read', 'journal-financier.update', 'journal-financier.delete',
             'tresorerie.create',        'tresorerie.read',        'tresorerie.update',        'tresorerie.delete',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
-            'tresorerie.confirmer_retour',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+            'tresorerie.confirmer_retour', 'tresorerie.verser',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',       'rh-employes.delete',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
@@ -189,7 +189,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'comptabilite.read',        'comptabilite.payer',
             'journal-financier.read',
             'tresorerie.create',        'tresorerie.read',
-            'tresorerie.envoyer',       'tresorerie.recevoir',
+            'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.verser',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
@@ -238,8 +238,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.read',
             'tresorerie.create',      'tresorerie.read',        'tresorerie.update',
             'tresorerie.envoyer',     'tresorerie.recevoir',    'tresorerie.annuler',     'tresorerie.rejeter',
-            'tresorerie.confirmer_retour',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+            'tresorerie.confirmer_retour', 'tresorerie.verser',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
         ]);

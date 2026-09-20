@@ -54,8 +54,15 @@ class SituationTresorerieController extends Controller
 
         $types = TypeSupportTresorerie::cases();
 
-        $rows = $sites->map(function (Site $site) use ($supports, $types) {
+        // Versements de caisses dédiées envoyés mais pas encore reçus : hors de tous les soldes
+        // ci-dessous (ils sont en transit au grand livre), affichés à part pour que le total qui
+        // baisse à l'envoi ne passe pas pour de l'argent disparu. Information de suivi uniquement.
+        $enCours = $this->disponibilite->versementsEnCours($orgId, $date)
+            ->whereIn('site_id', $sites->pluck('id')->all());
+
+        $rows = $sites->map(function (Site $site) use ($supports, $enCours, $types) {
             $supportsSite = $supports->where('site_id', $site->id);
+            $enCoursSite = $enCours->where('site_id', $site->id);
             $parType = [];
             foreach ($types as $type) {
                 $parType[$type->value] = round((float) $supportsSite->where('type', $type->value)->sum('solde'), 2);
@@ -66,6 +73,8 @@ class SituationTresorerieController extends Controller
                 'site_nom' => $site->nom,
                 'par_type' => $parType,
                 'total' => round((float) $supportsSite->sum('solde'), 2),
+                'en_cours_versement' => round((float) $enCoursSite->sum('montant'), 2),
+                'versements_en_cours' => (int) $enCoursSite->sum('nombre'),
             ];
         })->values();
 
@@ -74,6 +83,8 @@ class SituationTresorerieController extends Controller
                 fn (TypeSupportTresorerie $t) => [$t->value => round((float) $rows->sum(fn (array $r) => $r['par_type'][$t->value]), 2)]
             )->all(),
             'total' => round((float) $rows->sum('total'), 2),
+            'en_cours_versement' => round((float) $rows->sum('en_cours_versement'), 2),
+            'versements_en_cours' => (int) $rows->sum('versements_en_cours'),
         ];
 
         return Inertia::render('Comptabilite/Tresorerie/Situation/Index', [
@@ -106,15 +117,28 @@ class SituationTresorerieController extends Controller
 
         $date = $request->filled('date') ? Carbon::parse($request->input('date')) : now();
 
+        // Versements envoyés par une caisse de cette agence, pas encore reçus : suivi uniquement,
+        // jamais compris dans les soldes affichés (cf. index()).
+        $enCours = $this->disponibilite->versementsEnCours($orgId, $date)
+            ->where('site_id', $siteModel->id)
+            ->keyBy('compte_tresorerie_id');
+
         $supports = $this->disponibilite->situationParSupport($orgId, $date)
             ->where('site_id', $siteModel->id)
             ->sortBy('libelle')
-            ->values();
+            ->values()
+            ->map(fn (array $support) => [
+                ...$support,
+                'en_cours_versement' => (float) ($enCours->get($support['compte_tresorerie_id'])['montant'] ?? 0),
+                'versements_en_cours' => (int) ($enCours->get($support['compte_tresorerie_id'])['nombre'] ?? 0),
+            ]);
 
         return Inertia::render('Comptabilite/Tresorerie/Situation/Show', [
             'site' => ['id' => $siteModel->id, 'nom' => $siteModel->nom],
             'supports' => $supports,
             'total' => round((float) $supports->sum('solde'), 2),
+            'en_cours_versement' => round((float) $enCours->sum('montant'), 2),
+            'versements_en_cours' => (int) $enCours->sum('nombre'),
             'filters' => ['date' => $date->toDateString()],
         ]);
     }

@@ -22,16 +22,22 @@ import { computed, ref } from 'vue';
 interface Mouvement {
     id: string;
     reference: string;
+    nature: string;
+    nature_label: string;
+    commentaire: string | null;
     site_origine: string | null;
     site_destination: string | null;
     site_destination_id: string;
     compte_origine: string | null;
     compte_destination: string | null;
+    compte_destination_id: string | null;
     montant: number;
     statut: string;
     statut_label: string;
     date_envoi: string | null;
     date_reception: string | null;
+    expediteur: string | null;
+    receptionnaire: string | null;
     created_at: string;
     peut_envoyer: boolean;
     peut_recevoir: boolean;
@@ -49,8 +55,14 @@ interface CompteTresorerie {
 
 const props = defineProps<{
     mouvements: { data: Mouvement[]; total: number };
-    filters: { statut: string; search: string; site_ids: string[] };
+    filters: {
+        statut: string;
+        nature: string;
+        search: string;
+        site_ids: string[];
+    };
     statut_options: { value: string; label: string }[];
+    nature_options: { value: string; label: string }[];
     sites: { value: string; label: string }[];
     is_admin: boolean;
     peut_creer: boolean;
@@ -80,7 +92,23 @@ const filterFields: FilterField[] = [
         inline: true,
         options: props.statut_options,
     },
+    {
+        key: 'nature',
+        label: 'Nature',
+        type: 'select',
+        inline: true,
+        options: props.nature_options,
+    },
 ];
+
+// Versement d'une caisse dédiée vers la caisse de l'agence (même agence) : affiché caisse → caisse.
+function estVersement(m: Mouvement): boolean {
+    return m.nature === 'interne_caisses';
+}
+
+function dateFr(date: string): string {
+    return new Date(date).toLocaleDateString('fr-FR');
+}
 
 // DataFilters attend { id, nom } (convention Site), pas { value, label }.
 const sitesPourFiltre = computed(() =>
@@ -111,7 +139,10 @@ const comptesReception = computed(() =>
 
 function ouvrirDialogReception(m: Mouvement) {
     receptionCible.value = m;
-    receptionCompteId.value = '';
+    // Un versement a sa caisse de destination fixée à l'envoi : rien à choisir, on la confirme.
+    receptionCompteId.value = estVersement(m)
+        ? (m.compte_destination_id ?? '')
+        : '';
     receptionError.value = '';
     receptionDialogOpen.value = true;
 }
@@ -201,8 +232,9 @@ function confirmerMotif() {
                         Mouvements de fonds
                     </h1>
                     <p class="text-sm text-muted-foreground">
-                        Remises des agences au siège et financements envoyés par
-                        le siège.
+                        Remises des agences au siège, financements envoyés par
+                        le siège et versements des caisses dédiées vers la
+                        caisse de l'agence.
                     </p>
                 </div>
                 <Link
@@ -246,14 +278,64 @@ function confirmerMotif() {
                             :key="m.id"
                             class="hover:bg-muted/30"
                         >
-                            <td class="px-4 py-3 font-medium">
-                                {{ m.reference }}
+                            <td class="px-4 py-3">
+                                <div class="font-medium">
+                                    {{ m.reference }}
+                                </div>
+                                <div
+                                    v-if="estVersement(m)"
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-nature"
+                                >
+                                    {{ m.nature_label }}
+                                    <template v-if="m.commentaire">
+                                        · {{ m.commentaire }}
+                                    </template>
+                                </div>
+                                <div
+                                    v-if="m.expediteur || m.receptionnaire"
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-acteurs"
+                                >
+                                    <template v-if="m.expediteur">
+                                        Envoyé par {{ m.expediteur }}
+                                        <template v-if="m.date_envoi">
+                                            le {{ dateFr(m.date_envoi) }}
+                                        </template>
+                                    </template>
+                                    <template v-if="m.receptionnaire">
+                                        · Reçu par {{ m.receptionnaire }}
+                                        <template v-if="m.date_reception">
+                                            le {{ dateFr(m.date_reception) }}
+                                        </template>
+                                    </template>
+                                </div>
                             </td>
                             <td class="px-4 py-3">
-                                {{ m.site_origine ?? '—' }}
+                                <template v-if="estVersement(m)">
+                                    <div class="font-medium">
+                                        {{ m.compte_origine ?? '—' }}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ m.site_origine }}
+                                    </div>
+                                </template>
+                                <template v-else>{{
+                                    m.site_origine ?? '—'
+                                }}</template>
                             </td>
                             <td class="px-4 py-3">
-                                {{ m.site_destination ?? '—' }}
+                                <template v-if="estVersement(m)">
+                                    <div class="font-medium">
+                                        {{ m.compte_destination ?? '—' }}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ m.site_destination }}
+                                    </div>
+                                </template>
+                                <template v-else>{{
+                                    m.site_destination ?? '—'
+                                }}</template>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(m.montant) }}
@@ -263,6 +345,17 @@ function confirmerMotif() {
                                     :status="m.statut"
                                     :label="m.statut_label"
                                 />
+                                <!-- Versement envoyé : l'argent a quitté la caisse de l'agent mais n'est pas encore
+                                     crédité à la caisse de l'agence. Visible de tous, pas seulement de l'envoyeur. -->
+                                <div
+                                    v-if="
+                                        estVersement(m) && m.statut === 'envoye'
+                                    "
+                                    class="mt-0.5 text-xs text-muted-foreground"
+                                    data-testid="mouvement-en-attente"
+                                >
+                                    En attente de confirmation
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
                                 <div class="flex justify-end gap-3">
@@ -379,7 +472,31 @@ function confirmerMotif() {
                         Confirmer réception {{ receptionCible?.reference }}
                     </DialogTitle>
                 </DialogHeader>
-                <div class="space-y-1.5">
+                <div
+                    v-if="receptionCible && estVersement(receptionCible)"
+                    class="space-y-1.5"
+                    data-testid="reception-versement"
+                >
+                    <p class="text-sm">
+                        Caisse de destination :
+                        <span class="font-medium">{{
+                            receptionCible.compte_destination
+                        }}</span>
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        Cette caisse a été fixée à l'envoi. Confirmez que les
+                        {{ formatGNF(receptionCible.montant) }} envoyés par
+                        {{ receptionCible.expediteur ?? "l'expéditeur" }} ont
+                        bien été reçus.
+                    </p>
+                    <p
+                        v-if="receptionError"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ receptionError }}
+                    </p>
+                </div>
+                <div v-else class="space-y-1.5">
                     <Label for="compte-reception"
                         >Support de trésorerie reçu</Label
                     >

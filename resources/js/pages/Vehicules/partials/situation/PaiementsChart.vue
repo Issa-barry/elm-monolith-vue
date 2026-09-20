@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
-import { formatGNF, formatQuantite } from '@/lib/utils';
+import { formatGNF } from '@/lib/utils';
 import type {
     SituationPaiementCategorie,
     SituationPaiementCode,
@@ -20,33 +20,55 @@ const chartData = ref({});
 const chartOptions = ref({});
 const carte = ref<HTMLElement | null>(null);
 
+type Etape = [variable: string, repli: string];
+type Mode = 'clair' | 'sombre';
+
 // Statuts de paiement (vert / ambre / rouge), déjà portés par la palette PrimeVue du projet.
-// Étapes choisies avec le validateur du guide dataviz (écart de teinte entre les 3 tranches
-// mutuellement adjacentes, en clair et en sombre) ; le libellé et l'icône de chaque ligne du
-// tableau doublent la couleur, qui n'est jamais le seul canal.
+// Étapes « base » choisies avec le validateur du guide dataviz (écart de teinte entre les 3
+// tranches mutuellement adjacentes, en clair et en sombre) ; le libellé et l'icône de chaque
+// ligne du tableau doublent la couleur, qui n'est jamais le seul canal. « survol » = un cran
+// plus clair, comme les hoverBackgroundColor du camembert Apollo (ChartDoc).
 const PALETTE: Record<
     SituationPaiementCode,
-    { clair: [string, string]; sombre: [string, string] }
+    Record<Mode, { base: Etape; survol: Etape }>
 > = {
     paye: {
-        clair: ['--p-emerald-600', '#059669'],
-        sombre: ['--p-emerald-600', '#059669'],
+        clair: {
+            base: ['--p-emerald-600', '#059669'],
+            survol: ['--p-emerald-500', '#10b981'],
+        },
+        sombre: {
+            base: ['--p-emerald-600', '#059669'],
+            survol: ['--p-emerald-500', '#10b981'],
+        },
     },
     partiel: {
-        clair: ['--p-amber-500', '#f59e0b'],
-        sombre: ['--p-amber-600', '#d97706'],
+        clair: {
+            base: ['--p-amber-500', '#f59e0b'],
+            survol: ['--p-amber-400', '#fbbf24'],
+        },
+        sombre: {
+            base: ['--p-amber-600', '#d97706'],
+            survol: ['--p-amber-500', '#f59e0b'],
+        },
     },
-    du: {
-        clair: ['--p-red-600', '#dc2626'],
-        sombre: ['--p-red-700', '#b91c1c'],
+    impaye: {
+        clair: {
+            base: ['--p-red-600', '#dc2626'],
+            survol: ['--p-red-500', '#ef4444'],
+        },
+        sombre: {
+            base: ['--p-red-700', '#b91c1c'],
+            survol: ['--p-red-600', '#dc2626'],
+        },
     },
 };
-const ICONES = { paye: CircleCheck, partiel: Contrast, du: CircleAlert };
+const ICONES = { paye: CircleCheck, partiel: Contrast, impaye: CircleAlert };
 
 const couleurs = ref<Record<SituationPaiementCode, string>>({
     paye: '#059669',
     partiel: '#f59e0b',
-    du: '#dc2626',
+    impaye: '#dc2626',
 });
 
 function formatPourcentage(valeur: number): string {
@@ -57,17 +79,12 @@ const pluriel = (n: number) => (n > 1 ? 'ventes' : 'vente');
 
 function setColorOptions() {
     const style = getComputedStyle(document.documentElement);
-    const mode = isDarkTheme.value ? 'sombre' : 'clair';
+    const mode: Mode = isDarkTheme.value ? 'sombre' : 'clair';
+    const lire = ([variable, repli]: Etape) =>
+        style.getPropertyValue(variable).trim() || repli;
+    const codes = Object.keys(PALETTE) as SituationPaiementCode[];
     couleurs.value = Object.fromEntries(
-        (
-            Object.entries(PALETTE) as [
-                SituationPaiementCode,
-                (typeof PALETTE)[SituationPaiementCode],
-            ][]
-        ).map(([code, palette]) => {
-            const [variable, repli] = palette[mode];
-            return [code, style.getPropertyValue(variable).trim() || repli];
-        }),
+        codes.map((code) => [code, lire(PALETTE[code][mode].base)]),
     ) as Record<SituationPaiementCode, string>;
 
     // Interstice de 2 px entre tranches = couleur exacte de la carte (jamais un contour).
@@ -85,34 +102,39 @@ function setColorOptions() {
             {
                 data: repartition.map((c) => c.montant),
                 backgroundColor: repartition.map((c) => couleurs.value[c.code]),
-                hoverBackgroundColor: repartition.map(
-                    (c) => couleurs.value[c.code],
+                hoverBackgroundColor: repartition.map((c) =>
+                    lire(PALETTE[c.code][mode].survol),
                 ),
                 borderColor: surface,
                 borderWidth: 2,
-                hoverOffset: 4,
+                hoverOffset: 8,
             },
         ],
     };
 
+    // Camembert plein (Apollo « Pie ») : rien n'est dessiné par-dessus le canvas, l'infobulle
+    // reste donc entièrement lisible. Le titre de l'infobulle porte déjà le statut : le corps
+    // ne le répète pas.
     chartOptions.value = {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '70%',
-        layout: { padding: 6 },
+        layout: { padding: 10 },
         plugins: {
             legend: { display: false },
             tooltip: {
+                padding: 12,
+                boxPadding: 6,
+                bodySpacing: 6,
+                titleFont: { size: 14, weight: 600 },
+                bodyFont: { size: 13 },
                 callbacks: {
-                    label: (ctx: { dataIndex: number }) => {
-                        const c = repartition[ctx.dataIndex];
-                        return ` ${c.label} : ${formatGNF(c.montant)}`;
-                    },
+                    label: (ctx: { dataIndex: number }) =>
+                        ` ${formatGNF(repartition[ctx.dataIndex].montant)}`,
                     afterLabel: (ctx: { dataIndex: number }) => {
                         const c = repartition[ctx.dataIndex];
                         return [
                             ` ${formatPourcentage(c.pourcentage_montant)} du montant`,
-                            ` ${c.nb_ventes} ${pluriel(c.nb_ventes)} (${formatPourcentage(c.pourcentage_ventes)} des ventes)`,
+                            ` ${c.nb_ventes} ${pluriel(c.nb_ventes)}`,
                         ];
                     },
                 },
@@ -154,10 +176,10 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
         <template v-else>
             <div
                 v-if="paiements.total_montant > 0"
-                class="relative mx-auto mt-4 h-44 w-44"
+                class="mx-auto mt-4 h-56 w-56"
             >
                 <Chart
-                    type="doughnut"
+                    type="pie"
                     :data="chartData"
                     :options="chartOptions"
                     :canvas-props="{
@@ -167,50 +189,33 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
                     }"
                     class="h-full w-full"
                 />
-                <div
-                    class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
-                >
-                    <span class="text-3xl leading-none font-bold">{{
-                        paiements.total_ventes
-                    }}</span>
-                    <span class="mt-1 text-xs text-muted-foreground">{{
-                        pluriel(paiements.total_ventes)
-                    }}</span>
-                </div>
             </div>
 
             <div class="mt-5 overflow-x-auto">
-                <table class="w-full min-w-[320px] text-sm">
+                <table class="w-full min-w-[340px] text-sm">
                     <thead class="text-xs text-muted-foreground">
-                        <tr>
+                        <tr class="border-b">
                             <th
-                                rowspan="2"
-                                class="pr-2 pb-1.5 text-left align-bottom font-medium"
+                                class="pr-2 pb-2 text-left align-bottom font-medium"
                             >
                                 Statut
                             </th>
                             <th
-                                colspan="2"
-                                class="border-b px-2 pb-1 text-center font-medium"
+                                class="px-2 pb-2 text-right align-bottom font-medium"
                             >
                                 Montant
                             </th>
                             <th
-                                colspan="2"
-                                class="border-b px-2 pb-1 text-center font-medium"
+                                class="px-2 pb-2 text-right align-bottom font-medium"
+                                title="Part du montant total des ventes"
                             >
-                                Ventes
+                                %
                             </th>
-                        </tr>
-                        <tr>
-                            <th class="px-2 py-1 text-right font-normal">
-                                GNF
+                            <th
+                                class="px-2 pb-2 text-right align-bottom font-medium"
+                            >
+                                Nombre de ventes
                             </th>
-                            <th class="px-2 py-1 text-right font-normal">%</th>
-                            <th class="px-2 py-1 text-right font-normal">
-                                Nombre
-                            </th>
-                            <th class="px-2 py-1 text-right font-normal">%</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -235,15 +240,13 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
                             <td
                                 class="px-2 py-2.5 text-right align-top font-semibold whitespace-nowrap tabular-nums"
                             >
-                                {{ formatQuantite(ligne.montant) }}
+                                {{ formatGNF(ligne.montant) }}
                                 <span
                                     v-if="resteSurPartiel(ligne)"
                                     class="block text-xs font-normal text-muted-foreground"
                                 >
-                                    dont reste
-                                    {{
-                                        formatQuantite(ligne.reste_a_encaisser)
-                                    }}
+                                    dont reste à payer
+                                    {{ formatGNF(ligne.reste_a_encaisser) }}
                                 </span>
                             </td>
                             <td
@@ -258,13 +261,6 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
                             >
                                 {{ ligne.nb_ventes }}
                             </td>
-                            <td
-                                class="px-2 py-2.5 text-right align-top whitespace-nowrap tabular-nums"
-                            >
-                                {{
-                                    formatPourcentage(ligne.pourcentage_ventes)
-                                }}
-                            </td>
                         </tr>
                     </tbody>
                     <tfoot>
@@ -273,7 +269,7 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
                             <td
                                 class="px-2 py-2.5 text-right whitespace-nowrap tabular-nums"
                             >
-                                {{ formatQuantite(paiements.total_montant) }}
+                                {{ formatGNF(paiements.total_montant) }}
                             </td>
                             <td
                                 class="px-2 py-2.5 text-right whitespace-nowrap tabular-nums"
@@ -282,11 +278,6 @@ const resteSurPartiel = (ligne: SituationPaiementCategorie): boolean =>
                             </td>
                             <td class="px-2 py-2.5 text-right tabular-nums">
                                 {{ paiements.total_ventes }}
-                            </td>
-                            <td
-                                class="px-2 py-2.5 text-right whitespace-nowrap tabular-nums"
-                            >
-                                100 %
                             </td>
                         </tr>
                     </tfoot>

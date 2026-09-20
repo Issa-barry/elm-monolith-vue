@@ -7,7 +7,7 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Vehicule;
-use Illuminate\Support\Carbon;
+use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Support\Collection;
 
 /**
@@ -32,28 +32,29 @@ class VehiculeSituationVentesService
      * encaissement par FactureVente::recalculStatut() : aucun encaissement → impayée, encaissé
      * ≥ net → payée, sinon partiel). Une facture n'a qu'un statut : les catégories sont donc
      * mutuellement exclusives. « Créée » (aucun encaissement encore enregistré) et « impayée »
-     * sont le même état financier — rien n'a été encaissé — et forment ensemble « Dû ».
+     * sont le même état financier — rien n'a été encaissé — et forment ensemble « Impayé ».
      */
     private const CATEGORIES_PAIEMENT = [
         'paye' => ['label' => 'Payé', 'statuts' => [StatutFactureVente::PAYEE]],
         'partiel' => ['label' => 'Partiel', 'statuts' => [StatutFactureVente::PARTIEL]],
-        'du' => ['label' => 'Dû', 'statuts' => [StatutFactureVente::CREEE, StatutFactureVente::IMPAYEE]],
+        'impaye' => ['label' => 'Impayé', 'statuts' => [StatutFactureVente::CREEE, StatutFactureVente::IMPAYEE]],
     ];
 
     /**
-     * @return array{kpis: array, produits: array, paiements: array, periode_debut: ?string, periode_fin: ?string}
+     * Les ventes sont retenues sur leur date de création, dans les bornes de la période commune
+     * de la Situation (SituationPeriode) ; sans bornes = toute la période.
+     *
+     * @return array{kpis: array, produits: array, paiements: array}
      */
-    public function pourVehicule(Vehicule $vehicule, string $periode = 'all'): array
+    public function pourVehicule(Vehicule $vehicule, SituationPeriode $periode): array
     {
-        [$debut, $fin] = $this->bornesPeriode($periode);
-
         $query = CommandeVente::where('vehicule_id', $vehicule->id)
             ->whereNotIn('statut', [StatutCommandeVente::BROUILLON->value, StatutCommandeVente::ANNULEE->value])
             ->with(['lignes.variante.produit', 'facture.encaissements'])
             ->orderByDesc('created_at');
 
-        if ($debut && $fin) {
-            $query->whereBetween('created_at', [$debut, $fin]);
+        if ($periode->debut && $periode->fin) {
+            $query->whereBetween('created_at', [$periode->debut, $periode->fin]);
         }
 
         $ventes = $query->get();
@@ -63,21 +64,7 @@ class VehiculeSituationVentesService
             'kpis' => $this->kpis($ventes, $factures),
             'produits' => $this->produitsVendus($ventes),
             'paiements' => $this->paiements($factures),
-            'periode_debut' => $debut?->toDateString(),
-            'periode_fin' => $fin?->toDateString(),
         ];
-    }
-
-    /**
-     * @return array{0: ?Carbon, 1: ?Carbon}
-     */
-    private function bornesPeriode(string $periode): array
-    {
-        return match ($periode) {
-            'month' => [now()->startOfMonth(), now()->endOfMonth()],
-            'year' => [now()->startOfYear(), now()->endOfYear()],
-            default => [null, null],
-        };
     }
 
     /**
@@ -139,10 +126,11 @@ class VehiculeSituationVentesService
     /**
      * Chaque catégorie est valorisée au montant facturé (montant_net) de ses ventes : le total
      * des catégories redonne le facturé, sans double compte. La part non encaissée d'une vente
-     * partielle reste dans « Partiel » (exposée à part dans reste_a_encaisser) — le « Reste dû »
-     * global = reste_a_encaisser de « Dû » + celui de « Partiel ».
+     * partielle reste dans « Partiel » (exposée à part dans reste_a_encaisser) — le « Reste à payer »
+     * global = reste_a_encaisser de « Impayé » + celui de « Partiel ».
      *
-     * Pourcentage du montant et pourcentage du nombre de ventes sont deux champs distincts.
+     * Un seul pourcentage est exposé : la part du montant total facturé. Le nombre de ventes
+     * reste informatif, sans pourcentage (décision produit du 19/09/2026).
      *
      * @param  Collection<int, FactureVente>  $factures
      */
@@ -163,7 +151,6 @@ class VehiculeSituationVentesService
                 'montant' => $montant,
                 'pourcentage_montant' => $this->pourcentage($montant, $totalMontant),
                 'nb_ventes' => $nbVentes,
-                'pourcentage_ventes' => $this->pourcentage($nbVentes, $totalVentes),
                 'reste_a_encaisser' => (float) $groupe->sum(fn (FactureVente $f) => $f->montant_restant),
             ];
         }
@@ -175,7 +162,7 @@ class VehiculeSituationVentesService
         ];
     }
 
-    private function pourcentage(float|int $part, float|int $total): float
+    private function pourcentage(float $part, float $total): float
     {
         return $total > 0 ? round($part / $total * 100, 1) : 0.0;
     }

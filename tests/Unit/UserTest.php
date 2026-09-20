@@ -79,9 +79,12 @@ class UserTest extends TestCase
      * `communications.manage`, ajoutées le 07/09/2026 pour le monitoring et le paramétrage
      * Communications) = 194, puis `ventes.valider_reception` (13/09/2026, séparation des
      * permissions de workflow vente — cf. CommandeVentePolicy) = 195, puis `ventes.exporter`
-     * (15/09/2026, bouton "Exporter" de Ventes/Index.vue — cf. ExportCommandeVenteController) = 196.
+     * (15/09/2026, bouton "Exporter" de Ventes/Index.vue — cf. ExportCommandeVenteController) = 196,
+     * puis `tresorerie.verser` (19/09/2026, versement d'une caisse dédiée à un agent vers la caisse
+     * de l'agence — cf. CompteTresoreriePolicy) = 197, puis `tresorerie.valider_supports`
+     * (19/09/2026, validation d'un support de trésorerie avant usage — cf. CompteTresoreriePolicy) = 198.
      */
-    public function test_permissions_map_returns_196_keys(): void
+    public function test_permissions_map_returns_198_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -89,7 +92,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(196, $map);
+        $this->assertCount(198, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

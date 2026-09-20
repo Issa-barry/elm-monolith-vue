@@ -2,7 +2,10 @@
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import type { AppPageProps } from '@/types';
-import type { SituationVentesData } from '@/types/vehicule-situation';
+import type {
+    SituationPeriode,
+    SituationVentesData,
+} from '@/types/vehicule-situation';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     ArrowRight,
@@ -20,6 +23,7 @@ import SituationSection from './SituationSection.vue';
 const props = defineProps<{
     // Texte cherché par le filtre « Véhicule » de l'écran Ventes (nom ou immatriculation).
     vehiculeRecherche: string;
+    periode: SituationPeriode;
     data: SituationVentesData;
 }>();
 
@@ -37,11 +41,11 @@ const peutVoirVentes = computed(
 // standard (les distributions ont leur propre écran) : le total peut donc différer.
 const lienVentes = computed(() => {
     const params = new URLSearchParams({ vehicule: props.vehiculeRecherche });
-    if (props.data.periode_debut) {
-        params.set('date_debut', props.data.periode_debut);
+    if (props.periode.date_debut) {
+        params.set('date_debut', props.periode.date_debut);
     }
-    if (props.data.periode_fin) {
-        params.set('date_fin', props.data.periode_fin);
+    if (props.periode.date_fin) {
+        params.set('date_fin', props.periode.date_fin);
     }
 
     return `/backoffice/ventes?${params.toString()}`;
@@ -82,7 +86,7 @@ const lienVentes = computed(() => {
                 tone="success"
             />
             <SituationKpiCard
-                label="Reste dû"
+                label="Reste à payer"
                 :value="data.kpis.reste_du"
                 unit="GNF"
                 :icon="WalletCards"

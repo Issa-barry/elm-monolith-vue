@@ -117,9 +117,24 @@ Ce document distingue deux couches, volontairement séparées :
   `moyen_paiement` de `compta_mappings` (rôle `tresorerie`) via `SupportTresorerieTypeResolver`,
   vérifié à la création et à la modification (`CompteTresorerieController`). Type et compte
   deviennent figés dès qu'un solde d'ouverture existe.
-- **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `compte_comptable_id` →
-  `compta_comptes`.
-- **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site).
+- **`valide_le`** (timestamp nullable) et **`valide_par_id`** (`users`, `nullOnDelete`), depuis le
+  2026-09-19 : **cycle de vie du support** (ADR [0002](adr/0002-cycle-de-vie-support-tresorerie.md)).
+  Un support est créé en **brouillon** (`valide_le` NULL, `actif` = false), inutilisable partout,
+  puis **validé** par un utilisateur habilité (`tresorerie.valider_supports`) : il devient **actif**
+  (`valide_le` + `valide_par_id` renseignés, `actif` = true) et peut ensuite être désactivé puis
+  réactivé. Le statut affiché (Brouillon / Actif / Inactif) est **dérivé** de `valide_le` et
+  `actif`, jamais stocké ; `actif` reste l'unique verrou d'usage lu partout. Un support jamais
+  validé ne peut pas devenir actif (garde du modèle). Tous les supports antérieurs au workflow ont
+  été **repris comme validés à leur date de création** (`valide_par_id` NULL), avec leur état
+  actif/inactif inchangé.
+- **`agent_id`** (nullable, depuis le 2026-09-19) : responsable d'une **caisse dédiée à un agent**.
+  `NULL` = support de l'agence (tous les supports historiques) ; renseigné = caisse dédiée. La
+  « nature » est **dérivée** de cette colonne, jamais stockée. Voir la section « Caisses dédiées à
+  un agent » ci-dessous.
+- **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
+  (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
+- **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour
+  les caisses dédiées, "argent détenu par agent".
 
 ### `compta_soldes_ouverture`
 - **Rôle** : solde d'ouverture d'un support de trésorerie — au plus un par support (unique),
@@ -134,7 +149,7 @@ Ce document distingue deux couches, volontairement séparées :
 | Événement | Déclencheur | Type | Comptes (rôles) |
 |---|---|---|---|
 | `vente_facturee` | Facture quitte le statut CREEE | Engagement, shadow (try/catch, ne bloque jamais la vente) | `client` (411) / `produit_vente` (701) |
-| `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) / `tresorerie` |
+| `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`) |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
 | `fiche_site_validee` | `PaiementFiche` (site) validée | Engagement, shadow | idem (622300 / 467170 / 467190) |
@@ -212,6 +227,177 @@ Ne duplique jamais le détail entrées/sorties, déjà couvert par le Journal fi
 depuis l'écran détail). Isolation par organisation, et par site pour les non-admin
 (`SiteScopeService`), même convention que les autres écrans du module.
 
+**Situation = où est l'argent** : elle inclut les caisses dédiées aux agents (chacune avec son
+solde propre, distinct de la caisse de l'agence du même site). Ce n'est **pas** le « disponible »
+du Financement — cf. ci-dessous.
+
+## Cycle de vie d'un support de trésorerie (Brouillon → Actif → Inactif)
+
+Décision du 2026-09-19 (ADR [0002](adr/0002-cycle-de-vie-support-tresorerie.md)). **Tout** support —
+caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycle :
+
+| Statut | Signification | Utilisable ? |
+|---|---|---|
+| **Brouillon** | Créé (écran Supports ou `CaisseAgentService::creer()`), jamais validé. | **Non**, nulle part. |
+| **Actif** | Validé par un utilisateur habilité, en service. | Oui. |
+| **Inactif** | Validé, puis désactivé. Se réactive (règles de désactivation inchangées). | Non. |
+
+- **Validation** (`SupportTresorerieValidationService::valider()`, route
+  `POST comptabilite/tresorerie/supports/{support}/valider`) : brouillon → actif, avec la trace
+  `valide_par_id` / `valide_le`. Permission dédiée **`tresorerie.valider_supports`**, distincte de
+  `tresorerie.gerer_soldes_ouverture` (qui crée et modifie) : l'organisation peut confier la
+  validation à un autre profil. **Portée** : même organisation, agence de l'utilisateur (les admins
+  ont autorité sur toutes). Il n'y a **pas** de règle « créateur ≠ validateur » : la séparation se
+  fait par l'attribution des permissions. Un support déjà validé ne se revalide pas (le
+  `Gate::before` du super admin neutralise la policy : l'état est revérifié par le service et par
+  l'indicateur `peut_valider` de l'écran).
+- **Caisse dédiée** : à la validation, le service revérifie les conditions de la création — agent
+  actif et rattaché à l'agence, **une seule caisse dédiée active par (agent, site)**. Créer un
+  brouillon reste refusé tant qu'une caisse active existe pour le même (agent, site).
+- **Un brouillon ne s'active jamais par une simple modification** : `update` avec `actif = true`
+  est refusé (erreur sur `actif`), et le modèle lève une `LogicException` en dernier recours. Sa
+  modification (libellé, type, compte) reste possible.
+- **Un brouillon est inutilisable** : hors Situation, hors disponible et position du Financement,
+  hors listes des mouvements de fonds ; refusé côté serveur par `MouvementFondsService` (origine,
+  destination, réception, versement) ; pas de solde d'ouverture avant validation
+  (`SoldeOuvertureTresorerieService::enregistrer()`) ; ne reçoit aucun encaissement
+  (`CaisseAgentResolver`, qui date la mise en service à `valide_le`, pas à la création).
+- **Suppression d'un utilisateur** responsable d'une caisse dédiée en **brouillon** ou active :
+  refusée (sinon la FK `nullOnDelete` la transformerait en support d'agence).
+- **Reprise de l'existant** : la migration marque tout support existant comme validé à sa date de
+  création. Aucun changement d'usage ni d'état pour l'existant. Un support créé directement actif
+  par du code (hors écran, ex. tests) est réputé validé — les deux seuls points de création
+  applicatifs créent explicitement en brouillon.
+- **Permission `tresorerie.valider_supports`** (nouvelle, refusée par défaut — aucun backfill des
+  rôles existants ; présente dans les préréglages `admin_entreprise` et `comptable` du seeder, les
+  deux rôles qui gèrent les supports). Le super admin la possède implicitement.
+- **Solde d'ouverture** : acte distinct, sans dépendance avec la validation du support. Il n'est
+  proposé qu'à partir d'un support validé.
+
+**Écran** : une seule colonne **Statut** (`StatusDot` : Brouillon, Actif, Inactif) ; bouton
+« Valider » (avec confirmation) sur un brouillon, pour qui a la permission dans le périmètre ; le
+solde d'ouverture n'est plus un second statut dans la liste — il n'y apparaît qu'en **alerte
+ambre** quand une action est requise sur un support actif d'agence (« à saisir », ou « à valider ·
+montant · non compté dans le solde »), et son détail (montant, état) est en lecture seule dans
+« Modifier le support », avec la trace « Validé le … par … ».
+
+## Caisses dédiées à un agent (Trésorerie > Supports)
+
+Décision du 2026-09-19 (ADR [0001](adr/0001-caisse-dediee-agent-sous-compte.md)), phase 1
+livrée : modèle + écran Supports. Une caisse dédiée est un support de type **Caisse** rattaché à
+un agent (`agent_id`) et à un site, destinée à recevoir les encaissements en espèces de cet agent.
+
+**Règles garanties côté serveur** (`CaisseAgentService`, jamais seulement par l'interface) :
+
+- **Un sous-compte comptable propre par caisse** (571001, 571002... sous le compte racine 571000),
+  créé automatiquement à la création de la caisse, numéroté par organisation et jamais réattribué.
+  C'est ce qui rend son solde distinguable de celui de la caisse de l'agence : `compta_ecritures`
+  ne porte que compte + site, pas de support.
+- L'agent doit appartenir à l'organisation, être actif et **rattaché au site** (`user_sites`).
+  Aucune contrainte de rôle : un agent est un utilisateur, pas un rôle.
+- Une caisse dédiée est créée en **brouillon** et validée comme tout support (cf. « Cycle de vie
+  d'un support de trésorerie » ci-dessus) ; seule une caisse **active** est utilisable.
+- **Une seule caisse dédiée active par (agent, site)** — nécessaire à la phase 2 (routage
+  automatique des encaissements en espèces). Un agent rattaché à deux sites peut avoir une caisse
+  par site. Un agent dont la caisse est désactivée peut en recevoir une nouvelle.
+- Type (toujours Caisse), compte et agent sont **figés** après création : seuls le libellé et
+  l'activation se modifient.
+- Une caisse qui détient de l'argent (solde ≠ 0 au grand livre) **ne peut pas être désactivée** ;
+  la réactivation est refusée si une autre caisse active existe pour le même (agent, site).
+- **Pas de solde d'ouverture** : la caisse démarre à 0, et l'enregistrement d'un solde d'ouverture
+  est refusé. L'argent y arrive par les encaissements en espèces de l'agent (phase 2) ou par un
+  transfert depuis la caisse de l'agence (phase 3).
+- La suppression d'un utilisateur qui est responsable d'une caisse dédiée **active ou en brouillon** est refusée
+  (`DestroyUserController`) : sinon la FK `nullOnDelete` la transformerait silencieusement en
+  support d'agence et son argent entrerait dans le disponible. Une caisse déjà désactivée (donc
+  vide) ne bloque pas.
+
+**Effets sur le reste de la trésorerie** :
+
+| Vue | Caisses dédiées |
+|---|---|
+| **Situation** (`situationParSupport()`) | **Incluses** — c'est « où est l'argent ». |
+| **Disponible du Financement** (`disponiblePourSite()`) | **Exclues** — l'argent d'un agent n'est utilisable par l'agence qu'une fois versé et réceptionné. Il ne réduit donc pas le « à financer par le siège ». |
+| **Position fiable** (`FinancementAgenceService::positionFiable()`) | **Exclues** — une caisse dédiée sans solde d'ouverture ne rend jamais le site « non fiable ». |
+| **Mouvements de fonds entre agences** | **Interdites** en origine comme en destination (`MouvementFondsService`, garde serveur ; les listes de l'écran les excluent aussi). Leur solde passera par un versement vers la caisse de l'agence (phase 3). |
+| **Journal financier** | Incluses, filtrables par compte (chaque caisse a son sous-compte). |
+
+**Écran** (`/backoffice/comptabilite/tresorerie/supports`) : liste Agence / Caisse / Nature /
+Responsable / Solde / Statut / Actions, solde calculé depuis le grand livre (y compris pour un support désactivé),
+filtres serveur (agence `site_ids[]`, statut, type, nature, agent) via `DataFilters` en
+`trigger-only`, création dans un dialogue « Créer une caisse » avec choix de la nature dans une
+liste déroulante (« Caisse de l'agence » ou « Caisse dédiée à un agent »). Depuis la phase 3,
+**lecture ouverte à `tresorerie.read`**, limitée aux agences de l'utilisateur (admins : toutes) ;
+création, modification et soldes d'ouverture restent sous `tresorerie.gerer_soldes_ouverture` (les
+données de gestion — utilisateurs, comptes comptables — ne sont même pas envoyées à un simple
+lecteur).
+
+**Phase 2 (livrée le 2026-09-19) — routage des encaissements** : un encaissement en espèces
+enregistré par un agent qui a une caisse dédiée active sur le site de la facture débite le
+sous-compte de SA caisse au lieu de 571000 (`CaisseAgentResolver`, conditions et exceptions dans
+[encaissements.md](encaissements.md), section « Comptabilisation : caisse dédiée de l'agent »).
+L'argent y est visible dans la Situation, jamais dans le disponible du Financement.
+
+**Phase 3 (livrée le 2026-09-19) — versement d'une caisse dédiée vers la caisse de l'agence** :
+parcours Supports → caisse agent → « Verser à l'agence » → Envoyer, puis Mouvements → « Confirmer
+réception ». C'est un `MouvementFonds` de **nature `interne_caisses`** (même table, même référence
+`MVT-AAAA-NNNNN`, mêmes statuts et mêmes écritures via le compte de transit 588000 que les
+mouvements entre agences).
+
+- **Envoyé** (`MouvementFondsService::verserCaisseAgent()`, création + envoi en une opération, sans
+  brouillon) : débit 588000 / crédit sous-compte de la caisse de l'agent — la caisse de l'agent
+  baisse tout de suite, celle de l'agence n'augmente pas. **Reçu** : débit caisse de l'agence /
+  crédit 588000, confirmé par un **autre utilisateur** ; le transit est alors soldé et l'argent
+  redevient disponible pour l'agence. Aucun produit, charge ni encaissement client.
+- **Contrôles serveur, sous verrou sur la caisse source** : source = caisse dédiée active ;
+  destination = caisse (type Caisse) **d'agence** active, du **même site** et de la même
+  organisation (jamais une banque, un compte Mobile Money ni la caisse d'un agent) ; montant > 0 et
+  **au plus égal au solde de la caisse au grand livre** (deux versements successifs relisent le
+  solde déjà diminué). La caisse de destination est fixée à l'envoi : la réception la confirme, elle
+  ne la remplace pas, et exige qu'elle soit toujours active.
+- **Séparation envoi/réception** : celui qui a envoyé ne confirme ni ne conteste
+  (`MouvementFonds::separationEnvoiReceptionRespectee()`, appliquée par le service, la policy et les
+  indicateurs de l'écran). **Seul le super admin peut y déroger** (décision du 2026-09-19) ;
+  `sent_by` et `received_by` restent enregistrés, l'exception est donc traçable. Un
+  `admin_entreprise` n'a pas cette dérogation.
+- **Contestation / retour** : réutilisés tels quels (Contesté → Reçu, ou → Retourné qui recrédite la
+  caisse de l'agent). Pas d'annulation après l'envoi. Une caisse ne peut pas être désactivée tant
+  qu'un de ses versements est Envoyé ou Contesté.
+- **Permission `tresorerie.verser`** (nouvelle, refusée par défaut — aucun backfill des rôles
+  existants ; présente dans les préréglages admin, manager et comptable du seeder). Portée : agence
+  de l'utilisateur ; sans `tresorerie.envoyer` (hors responsable) on ne verse que **sa propre**
+  caisse. La réception reste sous `tresorerie.recevoir`. Le `Gate::before` du super admin neutralise
+  les policies : l'état de la caisse et la séparation sont donc revérifiés par le service, et les
+  indicateurs `peut_*` de l'écran Mouvements vérifient désormais l'état du mouvement explicitement
+  (un super admin ne voit plus toutes les actions sur une ligne terminée).
+- **Financement** : les versements internes sont exclus de « fonds en transit » et de « déjà
+  financé » (`TresorerieDisponibiliteService`) — ce n'est pas un financement du siège. Pendant l'état
+  Envoyé, l'argent n'est compté dans aucun solde (ni caisse de l'agent, ni disponible de l'agence) :
+  il est au compte de transit 588000.
+- **« En cours de versement »** (affichage, 2026-09-20) : pour que cet argent ne semble jamais
+  disparaître, les écrans le signalent **à part**, sans jamais l'ajouter à un solde —
+  **Solde ≠ en cours de versement ≠ reçu**. Le calcul est une simple lecture des mouvements
+  (`TresorerieDisponibiliteService::versementsEnCours()`) : versements `interne_caisses` **Envoyé ou
+  Contesté** (un litige non résolu laisse l'argent en transit), par caisse source, envoyés au plus tard
+  à la date de situation. Aucune écriture, aucun solde ni workflow Envoyé → Reçu n'est modifié ; le
+  grand livre reste la source de vérité. Où le voir :
+  - **Supports** : 4ᵉ carte « En cours de versement » (montant + « N versement(s) à confirmer », 0 GNF
+    sans versement), et sous le solde de la caisse qui verse « En cours de versement : X GNF » —
+    solde actuel + en cours = ce que la caisse détenait avant le versement. Les deux suivent les
+    filtres, comme le solde total.
+  - **Situation** (liste et fiche d'une agence) : bandeau « X GNF en cours de versement » et mention
+    sous le total de l'agence / le solde de la caisse concernée, seulement quand un versement est en
+    cours. Le total de la Situation n'est pas modifié. À une date passée, un versement reçu après
+    cette date y est encore « en cours » ; un versement retourné depuis n'est pas retrouvé (le retour
+    n'est pas daté sur le mouvement) — cas rare, sans effet à la date du jour.
+  - **Mouvements** : « En attente de confirmation » sous le statut de tout versement Envoyé, visible
+    de l'envoyeur comme du destinataire.
+  Après la réception : la caisse de l'agence est créditée, « en cours de versement » retombe à 0.
+- **Non traité** : le sens inverse (alimenter une caisse dédiée depuis la caisse de l'agence) ; un
+  contrôle de solde pour les mouvements entre agences (il n'en existe toujours pas).
+
+**Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
+
 ## Journal financier — vue de lecture
 
 L'écran "Journal financier" (`/backoffice/comptabilite/journal`,
@@ -238,7 +424,7 @@ le versement de cashback, désormais comptabilisé via `CashbackComptabilisation
 | `factures_ventes` | Facturation client | `VenteComptabilisationService` | `vente_facturee` |
 | `encaissements_ventes` | Encaissement client | `VenteComptabilisationService` | `encaissement_vente_recu` |
 | `paie_paiements` | Paiement de salaire | `PaieComptabilisationService` (jambe trésorerie uniquement, pas d'engagement préalable) | `paiement_salaire` |
-| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. `compte_tresorerie_origine_id` est choisi à la création (l'émetteur sait d'où part l'argent) ; `compte_tresorerie_destination_id` est nullable et choisi par le destinataire au moment de `MouvementFondsService::recevoir()`, pas à la création — le site destinataire est connu à l'avance, mais pas forcément la caisse/wallet précis qui recevra réellement les fonds (revue produit du 2026-09-13). | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
+| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement), ou — `nature = interne_caisses` depuis le 2026-09-19 — versement d'une caisse dédiée à un agent vers une caisse de l'agence, au sein d'un même site (cf. « Caisses dédiées à un agent » ; `nature` vaut `inter_sites` pour tout l'existant). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. `compte_tresorerie_origine_id` est choisi à la création (l'émetteur sait d'où part l'argent) ; `compte_tresorerie_destination_id` est nullable et choisi par le destinataire au moment de `MouvementFondsService::recevoir()`, pas à la création — le site destinataire est connu à l'avance, mais pas forcément la caisse/wallet précis qui recevra réellement les fonds (revue produit du 2026-09-13). | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
 | `commission_payments` | Paiement direct de commission logistique — circuit actif et distinct de `paiement_fiches` (verrouillé contre le double paiement par `PeriodePayabilityChecker::assertPartsNotClaimedByFiche`) | `CommissionPaymentComptabilisationService` (jambe trésorerie uniquement) | `paiement_commission_logistique_direct` |
 | `cashback_versements` | Versement de cashback à un client | `CashbackComptabilisationService` (jambe trésorerie uniquement) | `versement_cashback` |
 

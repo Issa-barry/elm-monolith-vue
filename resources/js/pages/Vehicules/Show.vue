@@ -5,6 +5,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
+import { queryDe, useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
@@ -16,7 +17,7 @@ import type {
     SituationPeriode,
     SituationVentesData,
 } from '@/types/vehicule-situation';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ArrowLeftRight,
@@ -166,6 +167,19 @@ const props = defineProps<{
     processus_options: { value: string; label: string }[];
 }>();
 
+const page = usePage();
+const ONGLETS = [
+    'informations',
+    'equipe',
+    'parrain',
+    'situation',
+    'depenses',
+] as const;
+const { onglet: activeTab, choisir: choisirOnglet } = useUrlTab(
+    ONGLETS,
+    'informations',
+);
+
 // Les barèmes/partages restent résolus côté serveur pour le processus demandé, mais l'état
 // local de la fiche doit être conservé : changer Vente/Distribution/Transfert ne doit jamais
 // renvoyer l'utilisateur vers l'onglet Informations ni déplacer sa position dans la page.
@@ -175,7 +189,7 @@ function onProcessusChange(code: string | null): void {
     }
     router.get(
         `/backoffice/vehicules/${props.vehicule.id}`,
-        { processus: code },
+        { ...queryDe(page.url), tab: activeTab.value, processus: code },
         {
             preserveScroll: true,
             preserveState: true,
@@ -269,10 +283,6 @@ function partsCommissionMembre(livreurId: string | null) {
         ];
     });
 }
-
-const activeTab = ref<
-    'informations' | 'equipe' | 'parrain' | 'situation' | 'depenses'
->('informations');
 
 const showParrainDialog = ref(false);
 const parrainDialogMode = ref<'ajouter' | 'modifier'>('ajouter');
@@ -419,7 +429,7 @@ function formatGNF(val: number): string {
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted'
                         "
-                        @click="activeTab = 'informations'"
+                        @click="choisirOnglet('informations')"
                     >
                         <span class="inline-flex items-center gap-2">
                             <CircleHelp class="h-4 w-4" />
@@ -434,7 +444,7 @@ function formatGNF(val: number): string {
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted'
                         "
-                        @click="activeTab = 'equipe'"
+                        @click="choisirOnglet('equipe')"
                     >
                         <span class="inline-flex items-center gap-2">
                             <Users class="h-4 w-4" />
@@ -460,7 +470,7 @@ function formatGNF(val: number): string {
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted'
                         "
-                        @click="activeTab = 'parrain'"
+                        @click="choisirOnglet('parrain')"
                     >
                         <span class="inline-flex items-center gap-2">
                             <UserRound class="h-4 w-4" />
@@ -476,7 +486,7 @@ function formatGNF(val: number): string {
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted'
                         "
-                        @click="activeTab = 'situation'"
+                        @click="choisirOnglet('situation')"
                     >
                         <span class="inline-flex items-center gap-2">
                             <TrendingUp class="h-4 w-4" />
@@ -491,7 +501,7 @@ function formatGNF(val: number): string {
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted'
                         "
-                        @click="activeTab = 'depenses'"
+                        @click="choisirOnglet('depenses')"
                     >
                         <span class="inline-flex items-center gap-2">
                             <Receipt class="h-4 w-4" />

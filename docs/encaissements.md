@@ -76,6 +76,36 @@ paiements sans rapport (commissions, salaires, paie, cashback, paiement de fiche
 ci-dessus). Ne pas le confondre avec `PaymentCard`, ne pas lui ajouter la logique de référence de
 paiement décrite ici.
 
+## Comptabilisation : caisse dédiée de l'agent (espèces)
+
+Décision du 2026-09-19 (ADR [0001](adr/0001-caisse-dediee-agent-sous-compte.md), phase 2). Chaque
+encaissement génère une pièce `encaissement_vente_recu` (débit trésorerie / crédit client 411,
+`VenteComptabilisationService::comptabiliserEncaissementVente()`). La trésorerie débitée est, **par
+défaut**, celle du moyen de paiement (`compta_mappings` : espèces → 571000, virement/chèque → 521000,
+Mobile Money → 561xxx). Elle devient le **sous-compte de la caisse dédiée de l'agent** quand
+`App\Services\Tresorerie\CaisseAgentResolver` désigne une caisse — **toutes** ces conditions :
+
+| Condition | Pourquoi |
+|---|---|
+| `mode_paiement = especes` | Seul l'argent physiquement détenu par l'agent alimente sa caisse. Mobile Money, virement et chèque gardent leurs supports habituels. |
+| L'auteur de l'encaissement (`created_by`) a une caisse dédiée **active** (donc validée — un brouillon ne reçoit rien) | Un encaissement sans auteur, ou d'un agent sans caisse, suit le comportement historique. |
+| La caisse est celle du **site de la facture** | La pièce est déjà rattachée au site de la facture ; l'agent a au plus une caisse active par site, donc jamais d'ambiguïté. |
+| Date de l'encaissement **≥** date de **mise en service** de la caisse (sa validation, `valide_le`) | Pas de reclassement d'un encaissement antidaté. |
+| L'encaissement a été enregistré **après** la mise en service de la caisse | Filet pour les rattrapages comptables (`ComptabiliteRattrapageCommand`), qui repassent sur d'anciens encaissements : l'historique n'est jamais reclassé — y compris ceux enregistrés pendant que la caisse était encore en brouillon. |
+
+- **Crédit** : toujours le compte client 411 — le produit est déjà constaté à la facturation.
+- **Journal** : celui d'un encaissement en espèces (« Caisse ») — la ligne client n'en porte pas
+  volontairement. Le moteur `EcritureComptableService` accepte pour cela l'option de ligne
+  `journal_role` (compte imposé, journal tiré du mapping de ce rôle) ; sans effet pour les autres
+  appelants.
+- **Suppression d'un encaissement** : la contrepassation reprend les comptes de la pièce d'origine,
+  donc l'extourne vise le même sous-compte.
+- **Situation vs Financement** : l'argent ainsi encaissé apparaît dans la Situation (solde de la
+  caisse de l'agent) mais n'entre pas dans le « disponible » du Financement tant qu'il n'est pas
+  versé à la caisse de l'agence (phase 3).
+- Aucune colonne n'a été ajoutée à `encaissements_ventes` : la caisse destinataire se lit dans la
+  pièce comptable (Journal financier, filtre par compte).
+
 ## Backend comme source de vérité
 
 La validation (référence/opérateur obligatoires selon le mode) est portée exclusivement par
