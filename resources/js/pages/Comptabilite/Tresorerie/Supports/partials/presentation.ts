@@ -1,4 +1,4 @@
-import { formatGNF } from '@/lib/utils';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { Landmark, Smartphone, UserRound, Wallet } from 'lucide-vue-next';
 import type { Component } from 'vue';
 
@@ -195,11 +195,66 @@ export function resumeSupports(
     };
 }
 
-/** « 1 versement à confirmer », « 2 versements à confirmer » ou « Aucun versement à confirmer ». */
+/** « 1 à confirmer », « 3 à confirmer » — vide quand aucun versement n'attend de confirmation. */
 export function libelleVersementsAConfirmer(nombre: number): string {
-    if (nombre <= 0) {
-        return 'Aucun versement à confirmer';
-    }
+    return nombre > 0 ? `${nombre} à confirmer` : '';
+}
 
-    return `${nombre} ${nombre > 1 ? 'versements' : 'versement'} à confirmer`;
+/**
+ * Carte KPI de l'en-tête de la page : titre court, valeur, et au plus une information secondaire
+ * très courte. Le détail métier (ce que l'indicateur n'est PAS) reste en infobulle (`astuce`),
+ * jamais dans un paragraphe de la carte.
+ */
+export interface CarteResume {
+    id: 'supports' | 'caisses-dediees' | 'solde-total' | 'en-cours-versement';
+    titre: string;
+    valeur: string;
+    unite?: string;
+    detail?: string;
+    astuce?: string;
+}
+
+/**
+ * Les quatre cartes de la synthèse. Le solde total et l'en cours de versement restent deux
+ * valeurs distinctes : Solde ≠ en cours de versement ≠ reçu — l'en cours n'est jamais ajouté au
+ * solde. Aucun calcul ici : simple mise en forme de `resumeSupports()`.
+ */
+export function cartesResume(
+    resume: ResumeSupports,
+    filtreActif = false,
+): CarteResume[] {
+    return [
+        {
+            id: 'supports',
+            titre: 'Supports',
+            valeur: String(resume.total),
+            ...(filtreActif ? { astuce: 'Selon les filtres actifs' } : {}),
+        },
+        {
+            id: 'caisses-dediees',
+            titre: 'Caisses dédiées',
+            valeur: String(resume.caissesAgents),
+        },
+        {
+            id: 'solde-total',
+            titre: 'Solde total',
+            valeur: formatQuantite(resume.soldeTotal),
+            unite: 'GNF',
+            astuce: 'Vue de situation, distincte du Disponible de Financement.',
+        },
+        {
+            id: 'en-cours-versement',
+            titre: 'En cours de versement',
+            valeur: formatQuantite(resume.enCoursVersement),
+            unite: 'GNF',
+            ...(resume.versementsEnCours > 0
+                ? {
+                      detail: libelleVersementsAConfirmer(
+                          resume.versementsEnCours,
+                      ),
+                  }
+                : {}),
+            astuce: "Envoyé, pas encore reçu : n'est plus dans la caisse de l'agent ni encore dans celle de l'agence.",
+        },
+    ];
 }

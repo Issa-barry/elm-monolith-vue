@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -21,7 +20,6 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import type { KpiWidgetItem } from '@/types/kpi-widgets';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowRightLeft,
@@ -39,7 +37,7 @@ import { computed, ref, watch } from 'vue';
 import {
     actionsMenu,
     alerteSoldeOuverture,
-    libelleVersementsAConfirmer,
+    cartesResume,
     natureAffichee,
     resumeSupports,
     type CompteTresorerie,
@@ -157,51 +155,13 @@ const lignes = computed(() =>
     })),
 );
 
-// Synthèse des supports affichés (filtres actifs inclus). Le solde total est une vue de
-// situation — jamais le « Disponible » utilisé par Financement.
-const resumeItems = computed((): KpiWidgetItem[] => {
-    const resume = resumeSupports(props.comptes);
-
-    return [
-        {
-            id: 'supports',
-            title: 'Supports',
-            value: String(resume.total),
-            subtitle: filtreActif.value
-                ? 'Selon les filtres actifs'
-                : 'Caisses, banques et Mobile Money',
-        },
-        {
-            id: 'caisses-agents',
-            title: 'Caisses dédiées aux agents',
-            value: String(resume.caissesAgents),
-            subtitle: 'Une caisse active par agent et par agence',
-        },
-        {
-            id: 'solde-total',
-            title: 'Solde total des supports affichés',
-            value: formatGNF(resume.soldeTotal),
-            subtitle:
-                'Vue de situation, distincte du Disponible de Financement',
-        },
-        // Argent déjà sorti d'une caisse d'agent (versement Envoyé) mais pas encore reçu par la
-        // caisse de l'agence : hors du solde ci-dessus, jamais présenté comme disponible.
-        {
-            id: 'en-cours-versement',
-            title: 'En cours de versement',
-            value: formatGNF(resume.enCoursVersement),
-            subtitle: libelleVersementsAConfirmer(resume.versementsEnCours),
-            subtitleClass:
-                resume.versementsEnCours > 0
-                    ? 'font-medium text-blue-600 dark:text-blue-400'
-                    : undefined,
-            note:
-                resume.versementsEnCours > 0
-                    ? "Envoyé, pas encore reçu : n'est plus dans la caisse de l'agent ni encore dans celle de l'agence."
-                    : undefined,
-        },
-    ];
-});
+// Cartes de synthèse des supports affichés (filtres actifs inclus) : titre court, valeur, au plus
+// une information secondaire — le détail métier reste en infobulle (cf. cartesResume). Le solde
+// total est une vue de situation, jamais le « Disponible » de Financement ; l'en cours de
+// versement n'est jamais ajouté au solde.
+const cartes = computed(() =>
+    cartesResume(resumeSupports(props.comptes), filtreActif.value),
+);
 
 // Un compte Mobile Money ne doit pas être sélectionnable pour un support
 // Caisse (et inversement) — cf. revue du 2026-08-22. type_support est déduit
@@ -656,14 +616,54 @@ const selectClass =
                 </ListPageActions>
             </div>
 
-            <KpiCardsResponsive
-                :items="resumeItems"
-                breakpoint="sm"
-                desktop-wrapper-class="grid-cols-2 gap-4 lg:grid-cols-4"
-                mobile-slide-width-class="w-full min-w-full max-w-full"
-                mobile-card-min-height-class="min-h-0"
-                desktop-card-min-height-class="min-h-0"
-            />
+            <!-- Cartes KPI : reprise du bloc KPI du dashboard Apollo E-Commerce (StatsEcommerceWidget) —
+                 même structure (.card h-full, titre, flex justify-between items-start), mêmes proportions.
+                 Apollo tourne sur une racine à 14 px : ses `p-8`, `gap-8`, `text-lg`, `text-4xl` valent 28 / 28 /
+                 15,75 / 31,5 px de rendu. Cette application est à 16 px : on reprend ces VALEURS RENDUES
+                 (p-7, gap-7, 16 px, 31,5 px), pas les mêmes classes, qui donneraient des cartes plus grandes.
+                 Le chiffre plafonne à 31,5 px et ne rétrécit (unité cqw) que si un montant à 10 chiffres ne
+                 tient pas sur UNE ligne dans une carte étroite — jamais coupé au milieu du nombre. -->
+            <div class="grid grid-cols-12 gap-7" data-testid="support-kpis">
+                <div
+                    v-for="carte in cartes"
+                    :key="carte.id"
+                    class="col-span-12 md:col-span-6 xl:col-span-3"
+                    :title="carte.astuce"
+                    :data-testid="`support-kpi-${carte.id}`"
+                >
+                    <div
+                        class="card @container h-full p-7 shadow-[0_4px_30px_0_rgba(221,224,255,0.54)] dark:shadow-none"
+                    >
+                        <span
+                            class="text-sm font-semibold @[12rem]:text-base"
+                            >{{ carte.titre }}</span
+                        >
+                        <div class="mt-3.5 flex items-start justify-between">
+                            <div>
+                                <p
+                                    class="text-[length:clamp(1rem,calc((100cqw_-_2.9rem)/7),1.96875rem)] leading-[1.11] font-bold whitespace-nowrap text-foreground tabular-nums"
+                                >
+                                    <span data-testid="support-kpi-valeur">{{
+                                        carte.valeur
+                                    }}</span>
+                                    <span
+                                        v-if="carte.unite"
+                                        class="ml-1.5 text-sm font-medium text-muted-foreground"
+                                        >{{ carte.unite }}</span
+                                    >
+                                </p>
+                                <p
+                                    v-if="carte.detail"
+                                    class="text-sm font-medium text-blue-600 dark:text-blue-400"
+                                    data-testid="support-kpi-detail"
+                                >
+                                    {{ carte.detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="overflow-x-auto rounded-xl border bg-card">
                 <table class="w-full min-w-[1060px] text-sm">

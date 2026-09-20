@@ -11,12 +11,18 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowRightLeft } from 'lucide-vue-next';
+import { ArrowRightLeft, Info } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Mouvement {
@@ -230,12 +236,50 @@ function confirmerMotif() {
                     <h1 class="flex items-center gap-2 text-xl font-semibold">
                         <ArrowRightLeft class="h-5 w-5 text-muted-foreground" />
                         Mouvements de fonds
+                        <TooltipProvider :delay-duration="150">
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Informations sur les mouvements de fonds"
+                                        class="shrink-0 rounded-sm text-primary transition-colors outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info
+                                            class="h-4 w-4"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="bottom"
+                                    class="w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-left text-sm leading-relaxed font-normal text-pretty"
+                                >
+                                    <p class="mb-2 font-semibold">
+                                        Cette page regroupe :
+                                    </p>
+                                    <ul class="list-disc space-y-2 pl-4">
+                                        <li>
+                                            Les
+                                            <strong>remises des agences</strong>
+                                            au siège.
+                                        </li>
+                                        <li>
+                                            Les <strong>financements</strong>
+                                            envoyés par le siège.
+                                        </li>
+                                        <li>
+                                            Les
+                                            <strong
+                                                >versements des caisses
+                                                dédiées</strong
+                                            >
+                                            vers la caisse de l'agence.
+                                        </li>
+                                    </ul>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </h1>
-                    <p class="text-sm text-muted-foreground">
-                        Remises des agences au siège, financements envoyés par
-                        le siège et versements des caisses dédiées vers la
-                        caisse de l'agence.
-                    </p>
                 </div>
                 <Link
                     v-if="peut_creer"

@@ -382,7 +382,7 @@ mouvements entre agences).
   Contesté** (un litige non résolu laisse l'argent en transit), par caisse source, envoyés au plus tard
   à la date de situation. Aucune écriture, aucun solde ni workflow Envoyé → Reçu n'est modifié ; le
   grand livre reste la source de vérité. Où le voir :
-  - **Supports** : 4ᵉ carte « En cours de versement » (montant + « N versement(s) à confirmer », 0 GNF
+  - **Supports** : 4ᵉ carte « En cours de versement » (montant + « N à confirmer », 0 GNF
     sans versement), et sous le solde de la caisse qui verse « En cours de versement : X GNF » —
     solde actuel + en cours = ce que la caisse détenait avant le versement. Les deux suivent les
     filtres, comme le solde total.

@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
     actionsMenu,
     alerteSoldeOuverture,
+    cartesResume,
     libelleVersementsAConfirmer,
     natureAffichee,
     resumeSupports,
     type CompteTresorerie,
+    type ResumeSupports,
 } from '../presentation';
 
 const soldeOuverture = (statut: string) => ({
@@ -243,10 +245,87 @@ describe('resumeSupports', () => {
 
 describe('libelleVersementsAConfirmer', () => {
     it.each([
-        [0, 'Aucun versement à confirmer'],
-        [1, '1 versement à confirmer'],
-        [3, '3 versements à confirmer'],
+        [0, ''],
+        [1, '1 à confirmer'],
+        [3, '3 à confirmer'],
     ])('%i versement(s) → « %s »', (nombre, libelle) => {
         expect(libelleVersementsAConfirmer(nombre)).toBe(libelle);
+    });
+});
+
+describe('cartesResume', () => {
+    const resume = (
+        surcharge: Partial<ResumeSupports> = {},
+    ): ResumeSupports => ({
+        total: 8,
+        caissesAgents: 2,
+        soldeTotal: 272_203_500,
+        enCoursVersement: 0,
+        versementsEnCours: 0,
+        ...surcharge,
+    });
+
+    it('produit quatre cartes courtes, dans cet ordre', () => {
+        const cartes = cartesResume(resume());
+
+        expect(cartes.map((c) => [c.id, c.titre, c.valeur])).toEqual([
+            ['supports', 'Supports', '8'],
+            ['caisses-dediees', 'Caisses dédiées', '2'],
+            ['solde-total', 'Solde total', '272 203 500'],
+            ['en-cours-versement', 'En cours de versement', '0'],
+        ]);
+    });
+
+    it("n'affiche l'unité GNF que sur les deux montants", () => {
+        const [supports, dediees, solde, enCours] = cartesResume(resume());
+
+        expect(supports.unite).toBeUndefined();
+        expect(dediees.unite).toBeUndefined();
+        expect(solde.unite).toBe('GNF');
+        expect(enCours.unite).toBe('GNF');
+    });
+
+    it("ne met une information secondaire que sur « En cours de versement », et seulement s'il y en a", () => {
+        const sans = cartesResume(resume());
+        const avec = cartesResume(
+            resume({ enCoursVersement: 3_000_000, versementsEnCours: 1 }),
+        );
+
+        expect(sans.every((c) => c.detail === undefined)).toBe(true);
+        expect(avec.map((c) => c.detail)).toEqual([
+            undefined,
+            undefined,
+            undefined,
+            '1 à confirmer',
+        ]);
+        expect(avec[3].valeur).toBe('3 000 000');
+    });
+
+    it("n'ajoute jamais l'en cours de versement au solde total (Solde ≠ en cours ≠ reçu)", () => {
+        const [, , solde, enCours] = cartesResume(
+            resume({
+                soldeTotal: 50_000,
+                enCoursVersement: 800_000,
+                versementsEnCours: 1,
+            }),
+        );
+
+        expect(solde.valeur).toBe('50 000');
+        expect(enCours.valeur).toBe('800 000');
+    });
+
+    it('garde le détail métier en infobulle, jamais dans la carte', () => {
+        const cartes = cartesResume(resume());
+
+        expect(cartes[2].astuce).toContain('Disponible de Financement');
+        expect(cartes[3].astuce).toContain('pas encore reçu');
+        expect(cartes[0].astuce).toBeUndefined();
+        expect(cartes[1].astuce).toBeUndefined();
+    });
+
+    it('rappelle en infobulle que la synthèse suit les filtres quand ils sont actifs', () => {
+        expect(cartesResume(resume(), true)[0].astuce).toBe(
+            'Selon les filtres actifs',
+        );
     });
 });

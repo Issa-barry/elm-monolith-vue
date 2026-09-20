@@ -1,4 +1,3 @@
-import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import SupportsIndex from '@/pages/Comptabilite/Tresorerie/Supports/Index.vue';
 import type { CompteTresorerie } from '@/pages/Comptabilite/Tresorerie/Supports/partials/presentation';
@@ -209,32 +208,102 @@ describe('Supports de trésorerie — tableau', () => {
         expect(banque.text()).not.toContain('Validé');
     });
 
-    it('résume les supports, les caisses dédiées et le solde total sans le confondre avec le Disponible', () => {
-        const items = monter().findComponent(KpiCardsResponsive).props('items');
-
-        expect(items.map((i: { value: string }) => i.value)).toEqual([
-            '3',
-            '1',
-            '267 824 000 GNF',
-            '0 GNF',
-        ]);
-        // Le montant suit les filtres : il ne doit pas passer pour toute la trésorerie.
-        expect(items[2].title).toBe('Solde total des supports affichés');
-        expect(items[2].subtitle).toContain('Disponible de Financement');
-    });
-
     it("affiche un tiret quand le support n'a pas de compte comptable", () => {
         const [ligne] = lignes(monter([compte({ compte_numero: null })]));
 
         expect(ligne.find('[data-testid="support-compte"]').text()).toBe('—');
     });
+});
 
-    it('signale que le résumé suit les filtres actifs', () => {
-        const items = monter(COMPTES, true)
-            .findComponent(KpiCardsResponsive)
-            .props('items');
+// Cartes KPI : pattern Apollo (.card, grille 12 colonnes), titre court + valeur + au plus une
+// information secondaire. Aucun paragraphe explicatif : le détail métier est en infobulle.
+describe('Supports de trésorerie — cartes KPI', () => {
+    beforeEach(() => {
+        etat.permissions = [];
+    });
 
-        expect(items[0].subtitle).toBe('Selon les filtres actifs');
+    const carte = (wrapper: ReturnType<typeof monter>, id: string) =>
+        wrapper.find(`[data-testid="support-kpi-${id}"]`);
+
+    const valeur = (wrapper: ReturnType<typeof monter>, id: string) =>
+        carte(wrapper, id).find('[data-testid="support-kpi-valeur"]').text();
+
+    it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes)', () => {
+        const cartes = monter().findAll('[data-testid="support-kpis"] > div');
+
+        expect(cartes).toHaveLength(4);
+        expect(
+            cartes.map((c) =>
+                c.attributes('data-testid')?.replace('support-kpi-', ''),
+            ),
+        ).toEqual([
+            'supports',
+            'caisses-dediees',
+            'solde-total',
+            'en-cours-versement',
+        ]);
+        for (const c of cartes) {
+            expect(c.classes()).toEqual(
+                expect.arrayContaining([
+                    'col-span-12',
+                    'md:col-span-6',
+                    'xl:col-span-3',
+                ]),
+            );
+            expect(c.find('.card').classes()).toContain('h-full');
+        }
+    });
+
+    it('affiche des titres courts et la valeur de chaque indicateur', () => {
+        const wrapper = monter();
+
+        expect(carte(wrapper, 'supports').text()).toContain('Supports');
+        expect(valeur(wrapper, 'supports')).toBe('3');
+        expect(carte(wrapper, 'caisses-dediees').text()).toContain(
+            'Caisses dédiées',
+        );
+        expect(carte(wrapper, 'caisses-dediees').text()).not.toContain(
+            'agents',
+        );
+        expect(valeur(wrapper, 'caisses-dediees')).toBe('1');
+        expect(carte(wrapper, 'solde-total').text()).toContain('Solde total');
+        expect(carte(wrapper, 'solde-total').text()).not.toContain('affichés');
+        expect(valeur(wrapper, 'solde-total')).toBe('267 824 000');
+        expect(carte(wrapper, 'solde-total').text()).toContain('GNF');
+        expect(valeur(wrapper, 'en-cours-versement')).toBe('0');
+    });
+
+    it('ne met aucun paragraphe explicatif dans les cartes', () => {
+        const texte = monter().find('[data-testid="support-kpis"]').text();
+
+        for (const explication of [
+            'Caisses, banques et Mobile Money',
+            'Une caisse active par agent',
+            'Vue de situation',
+            'Envoyé, pas encore reçu',
+            'Selon les filtres',
+            'Aucun versement à confirmer',
+        ]) {
+            expect(texte).not.toContain(explication);
+        }
+    });
+
+    it("garde le détail métier en infobulle : le solde total n'est pas le Disponible de Financement", () => {
+        const wrapper = monter();
+
+        expect(carte(wrapper, 'solde-total').attributes('title')).toContain(
+            'Disponible de Financement',
+        );
+        expect(
+            carte(wrapper, 'en-cours-versement').attributes('title'),
+        ).toContain('pas encore reçu');
+        expect(carte(wrapper, 'supports').attributes('title')).toBeUndefined();
+    });
+
+    it('rappelle en infobulle que la synthèse suit les filtres actifs', () => {
+        expect(
+            carte(monter(COMPTES, true), 'supports').attributes('title'),
+        ).toBe('Selon les filtres actifs');
     });
 });
 
@@ -364,39 +433,62 @@ describe('Supports de trésorerie — versements en cours', () => {
         etat.permissions = [];
     });
 
-    const cartes = (comptes: CompteTresorerie[]) =>
-        monter(comptes).findComponent(KpiCardsResponsive).props('items') as {
-            id: string;
-            title: string;
-            value: string;
-            subtitle: string;
-            note?: string;
-        }[];
+    const carte = (wrapper: ReturnType<typeof monter>, id: string) =>
+        wrapper.find(`[data-testid="support-kpi-${id}"]`);
 
-    it('affiche « En cours de versement » à part du solde, avec le nombre de versements à confirmer', () => {
-        const items = cartes([
+    it('affiche « En cours de versement » à part du solde, avec « 1 à confirmer »', () => {
+        const wrapper = monter([
             CAISSE_QUI_VERSE,
             compte({ id: 'c-agence', solde: 0 }),
         ]);
-        const solde = items.find((i) => i.id === 'solde-total');
-        const enCours = items.find((i) => i.id === 'en-cours-versement');
+        const solde = carte(wrapper, 'solde-total');
+        const enCours = carte(wrapper, 'en-cours-versement');
 
         // Solde ≠ en cours de versement : les 800 000 ne sont dans aucun solde.
-        expect(solde?.value).toBe('50 000 GNF');
-        expect(enCours?.title).toBe('En cours de versement');
-        expect(enCours?.value).toBe('800 000 GNF');
-        expect(enCours?.subtitle).toBe('1 versement à confirmer');
-        expect(enCours?.note).toContain('pas encore reçu');
+        expect(solde.find('[data-testid="support-kpi-valeur"]').text()).toBe(
+            '50 000',
+        );
+        expect(enCours.text()).toContain('En cours de versement');
+        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
+            '800 000',
+        );
+        expect(enCours.find('[data-testid="support-kpi-detail"]').text()).toBe(
+            '1 à confirmer',
+        );
     });
 
-    it('affiche 0 GNF et « Aucun versement à confirmer » sans versement en cours', () => {
-        const enCours = cartes([compte({})]).find(
-            (i) => i.id === 'en-cours-versement',
-        );
+    it('affiche 0 GNF sans information secondaire quand aucun versement n’est en cours', () => {
+        const enCours = carte(monter([compte({})]), 'en-cours-versement');
 
-        expect(enCours?.value).toBe('0 GNF');
-        expect(enCours?.subtitle).toBe('Aucun versement à confirmer');
-        expect(enCours?.note).toBeUndefined();
+        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
+            '0',
+        );
+        expect(enCours.text()).toContain('GNF');
+        expect(
+            enCours.find('[data-testid="support-kpi-detail"]').exists(),
+        ).toBe(false);
+    });
+
+    it('compte les versements en cours de plusieurs caisses', () => {
+        const wrapper = monter([
+            CAISSE_QUI_VERSE,
+            compte({
+                id: 'c-verse-2',
+                nature: 'dediee',
+                agent: { id: 'u2', nom: 'Moussa' },
+                solde: 0,
+                en_cours_versement: 200_000,
+                versements_en_cours: 2,
+            }),
+        ]);
+        const enCours = carte(wrapper, 'en-cours-versement');
+
+        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
+            '1 000 000',
+        );
+        expect(enCours.find('[data-testid="support-kpi-detail"]').text()).toBe(
+            '3 à confirmer',
+        );
     });
 
     it('détaille le versement sous le solde de la caisse qui verse, sans changer ce solde', () => {
