@@ -10,6 +10,7 @@ use App\Models\MouvementFonds;
 use App\Models\Site;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\MouvementFondsService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -30,17 +31,12 @@ class MouvementFondsController extends Controller
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
 
-        $query = MouvementFonds::where('organization_id', $orgId)
+        $query = $this->mouvementsVisibles($orgId, $user, $isAdmin)
             ->with([
                 'siteOrigine:id,nom', 'siteDestination:id,nom',
                 'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle',
                 'expediteur.personne', 'receptionnaire.personne',
             ]);
-
-        if (! $isAdmin) {
-            $siteIds = $this->siteScope->accessibleSiteIds($user);
-            $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
-        }
 
         if ($statut = $request->input('statut')) {
             $query->where('statut', $statut);
@@ -52,6 +48,47 @@ class MouvementFondsController extends Controller
 
         if ($isAdmin && $siteIds = array_filter((array) $request->input('site_ids', []))) {
             $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
+        }
+
+        // Filtres directionnels : s'ajoutent (ET) au périmètre déjà posé ci-dessus, ils ne l'élargissent jamais.
+        $siteOrigineId = $this->filtreScalaire($request, 'site_origine_id');
+        $siteDestinationId = $this->filtreScalaire($request, 'site_destination_id');
+        $montantMin = $this->filtreScalaire($request, 'montant_min');
+        $montantMax = $this->filtreScalaire($request, 'montant_max');
+
+        if ($siteOrigineId !== '') {
+            $query->where('site_origine_id', $siteOrigineId);
+        }
+
+        if ($siteDestinationId !== '') {
+            $query->where('site_destination_id', $siteDestinationId);
+        }
+
+        // Une caisse peut être l'origine OU la destination d'un mouvement : sans précision de position,
+        // les deux comptent. Le rôle n'a de sens qu'avec une caisse choisie, sinon il est ignoré.
+        $caisseId = $this->filtreScalaire($request, 'caisse_id');
+        $caisseRole = $this->filtreScalaire($request, 'caisse_role');
+        if ($caisseId === '' || ! in_array($caisseRole, ['origine', 'destination'], true)) {
+            $caisseRole = '';
+        }
+
+        if ($caisseId !== '') {
+            $query->where(function ($q) use ($caisseId, $caisseRole) {
+                if ($caisseRole !== 'destination') {
+                    $q->orWhere('compte_tresorerie_origine_id', $caisseId);
+                }
+                if ($caisseRole !== 'origine') {
+                    $q->orWhere('compte_tresorerie_destination_id', $caisseId);
+                }
+            });
+        }
+
+        if (is_numeric($montantMin)) {
+            $query->where('montant', '>=', (float) $montantMin);
+        }
+
+        if (is_numeric($montantMax)) {
+            $query->where('montant', '<=', (float) $montantMax);
         }
 
         if ($search = trim((string) $request->input('search', ''))) {
@@ -105,10 +142,18 @@ class MouvementFondsController extends Controller
                 'nature' => $request->input('nature', ''),
                 'search' => $request->input('search', ''),
                 'site_ids' => array_values(array_filter((array) $request->input('site_ids', []))),
+                'site_origine_id' => $siteOrigineId,
+                'site_destination_id' => $siteDestinationId,
+                'caisse_id' => $caisseId,
+                'caisse_role' => $caisseRole,
+                'montant_min' => $montantMin,
+                'montant_max' => $montantMax,
             ],
             'statut_options' => StatutMouvementFonds::options(),
             'nature_options' => NatureMouvementFonds::options(),
             'sites' => $this->sitesDisponibles($orgId, $user),
+            'sites_mouvements' => $this->sitesOrganisation($orgId),
+            'caisses_filtre' => $this->caissesFiltre($orgId, $user, $isAdmin),
             'is_admin' => $isAdmin,
             'peut_creer' => $user->can('create', MouvementFonds::class),
             // Nécessaire pour choisir le support de destination au moment de
@@ -240,5 +285,62 @@ class MouvementFondsController extends Controller
         }
 
         return $query->get(['id', 'nom'])->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])->all();
+    }
+
+    /**
+     * Tous les sites de l'organisation, pour les filtres Origine/Destination : un utilisateur
+     * limité à son agence voit aussi les mouvements venant du siège ou allant vers lui, il doit
+     * donc pouvoir filtrer sur un site hors de son périmètre (le périmètre reste imposé à la requête).
+     *
+     * @return list<array{value:string,label:string}>
+     */
+    private function sitesOrganisation(string $orgId): array
+    {
+        return Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            ->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])->all();
+    }
+
+    /** Mouvements de l'organisation que l'utilisateur a le droit de voir (un non-admin : ceux qui touchent ses agences). */
+    private function mouvementsVisibles(string $orgId, $user, bool $isAdmin): Builder
+    {
+        $query = MouvementFonds::where('organization_id', $orgId);
+
+        if (! $isAdmin) {
+            $siteIds = $this->siteScope->accessibleSiteIds($user);
+            $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Caisses proposées par le filtre « Caisse » : celles qui figurent, en origine ou en destination, sur un
+     * mouvement visible par l'utilisateur — jamais une caisse d'une agence hors de son périmètre. Deux caisses de
+     * même libellé (ex. « Caisse-espèce » dans deux agences) sont distinguées par leur agence.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    private function caissesFiltre(string $orgId, $user, bool $isAdmin): array
+    {
+        $visibles = $this->mouvementsVisibles($orgId, $user, $isAdmin);
+
+        $ids = (clone $visibles)->whereNotNull('compte_tresorerie_origine_id')->distinct()->pluck('compte_tresorerie_origine_id')
+            ->merge((clone $visibles)->whereNotNull('compte_tresorerie_destination_id')->distinct()->pluck('compte_tresorerie_destination_id'))
+            ->unique()->values();
+
+        $supports = CompteTresorerie::forOrg($orgId)->whereIn('id', $ids)->with('site:id,nom')->orderBy('libelle')->get(['id', 'site_id', 'libelle']);
+        $parLibelle = $supports->countBy('libelle');
+
+        return $supports->map(fn (CompteTresorerie $s) => [
+            'value' => $s->id,
+            'label' => $parLibelle[$s->libelle] > 1 && $s->site ? "{$s->libelle} · {$s->site->nom}" : $s->libelle,
+        ])->values()->all();
+    }
+
+    private function filtreScalaire(Request $request, string $key): string
+    {
+        $value = $request->input($key);
+
+        return is_string($value) || is_numeric($value) ? trim((string) $value) : '';
     }
 }

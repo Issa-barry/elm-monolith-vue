@@ -1,7 +1,12 @@
 import StatusDot from '@/components/StatusDot.vue';
+import DataFilters from '@/components/filters/DataFilters.vue';
+import { Dialog } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import MouvementsIndex from '@/pages/Comptabilite/MouvementsFonds/Index.vue';
+import { router } from '@inertiajs/vue3';
 import { shallowMount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 vi.mock('@/composables/useFlashToast', () => ({ useFlashToast: vi.fn() }));
 vi.mock('@/layouts/AppLayout.vue', async () => {
@@ -59,19 +64,45 @@ const mouvement = (surcharge: Record<string, unknown> = {}) => ({
     ...surcharge,
 });
 
-const monter = (mouvements: ReturnType<typeof mouvement>[]) =>
+const monter = (
+    mouvements: ReturnType<typeof mouvement>[],
+    surcharge: Record<string, unknown> = {},
+) =>
     shallowMount(MouvementsIndex, {
         props: {
             mouvements: { data: mouvements, total: mouvements.length },
-            filters: { statut: '', nature: '', search: '', site_ids: [] },
+            filters: {
+                statut: '',
+                nature: '',
+                search: '',
+                site_ids: [],
+                site_origine_id: '',
+                site_destination_id: '',
+                caisse_id: '',
+                caisse_role: '',
+                montant_min: '',
+                montant_max: '',
+            },
             statut_options: [],
             nature_options: [],
             sites: [],
+            sites_mouvements: [],
+            caisses_filtre: [],
             is_admin: true,
             peut_creer: false,
             comptes_tresorerie: [],
+            ...surcharge,
         },
-        global: { renderStubDefaultSlot: true },
+        global: {
+            renderStubDefaultSlot: true,
+            // Le stub par défaut ne rend que le slot par défaut : on veut aussi #filters et #primary.
+            stubs: {
+                ListPageActions: {
+                    template:
+                        '<div data-testid="list-page-actions"><slot name="filters" /><slot name="primary" /></div>',
+                },
+            },
+        },
     });
 
 const enAttente = (ligne: ReturnType<ReturnType<typeof monter>['find']>) =>
@@ -113,5 +144,339 @@ describe('Mouvements de fonds — versement en attente de confirmation', () => {
 
         expect(enAttente(recu).exists()).toBe(false);
         expect(enAttente(entreAgences).exists()).toBe(false);
+    });
+});
+
+describe('Mouvements de fonds — filtres de la barre', () => {
+    const sites = [
+        { value: 's1', label: 'Matoto' },
+        { value: 's2', label: 'Siège' },
+    ];
+
+    const caisses = [
+        { value: 'c1', label: 'Caisse Moussa sidibé' },
+        { value: 'c2', label: 'Caisse Agence' },
+    ];
+
+    it('garde Caisse, Référence, Nature et Origine / Destination directement dans la barre', () => {
+        const champs = monter([], { caisses_filtre: caisses })
+            .findComponent(DataFilters)
+            .props('fields');
+        const parCle = Object.fromEntries(champs.map((c) => [c.key, c]));
+
+        expect(parCle.caisse_id).toMatchObject({
+            label: 'Caisse',
+            type: 'select',
+            inline: true,
+        });
+        expect(parCle.search).toMatchObject({
+            label: 'Référence',
+            type: 'text',
+            inline: true,
+        });
+        expect(parCle.nature).toMatchObject({
+            label: 'Nature',
+            type: 'select',
+            inline: true,
+        });
+        expect(parCle.caisse_role).toMatchObject({
+            label: 'Origine / Destination',
+            type: 'select',
+            inline: true,
+        });
+    });
+
+    it('cherche une caisse par son NOM : liste avec recherche, assez large, alimentée par les caisses des mouvements', () => {
+        const caisse = monter([], { caisses_filtre: caisses })
+            .findComponent(DataFilters)
+            .props('fields')
+            .find((c) => c.key === 'caisse_id');
+
+        expect(caisse).toMatchObject({
+            searchable: true,
+            wide: true,
+            placeholder: 'Rechercher une caisse…',
+            options: caisses,
+        });
+    });
+
+    it('traite Origine / Destination comme la position de la caisse choisie, pas comme deux listes indépendantes', () => {
+        const champs = monter([]).findComponent(DataFilters).props('fields');
+        const position = champs.find((c) => c.key === 'caisse_role');
+
+        expect(position?.options).toEqual([
+            { value: 'origine', label: 'Origine' },
+            { value: 'destination', label: 'Destination' },
+        ]);
+        // Sans choix : origine OU destination (placeholder), c'est le comportement par défaut du backend.
+        expect(position?.placeholder).toBe('Origine ou destination');
+        // Les listes d'agences d'origine et de destination ne sont plus dans la barre principale.
+        expect(champs.filter((c) => c.inline).map((c) => c.key)).toEqual([
+            'caisse_id',
+            'search',
+            'nature',
+            'caisse_role',
+        ]);
+    });
+
+    it('range Statut, agences d’origine/destination et Montant min/max dans le tiroir du bouton « Filtres »', () => {
+        const wrapper = monter([], { sites_mouvements: sites });
+        const filtres = wrapper.findComponent(DataFilters);
+        const parCle = Object.fromEntries(
+            filtres.props('fields').map((c) => [c.key, c]),
+        );
+
+        // Un champ sans `inline` va dans le tiroir ; DataFilters affiche alors le bouton « Filtres ».
+        expect(parCle.statut.inline).toBeFalsy();
+        // Fonctionnalité conservée (mêmes paramètres d'URL), libellés distincts de « Origine / Destination ».
+        expect(parCle.site_origine_id).toMatchObject({
+            label: "Agence d'origine",
+            options: sites,
+        });
+        expect(parCle.site_origine_id.inline).toBeFalsy();
+        expect(parCle.site_destination_id).toMatchObject({
+            label: 'Agence de destination',
+            options: sites,
+        });
+        expect(parCle.site_destination_id.inline).toBeFalsy();
+        expect(parCle.montant_min).toMatchObject({
+            label: 'Montant min',
+            type: 'number',
+        });
+        expect(parCle.montant_min.inline).toBeFalsy();
+        expect(parCle.montant_max).toMatchObject({
+            label: 'Montant max',
+            type: 'number',
+        });
+        expect(parCle.montant_max.inline).toBeFalsy();
+        // Pas la variante « trigger-only » : les champs `inline` restent dans la barre, seul le bouton part en en-tête.
+        expect(filtres.props('triggerOnly')).toBeFalsy();
+    });
+
+    it('place le bouton « Filtres » dans l’en-tête, juste avant « Nouveau mouvement »', async () => {
+        const wrapper = monter([], { peut_creer: true });
+        await nextTick();
+
+        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const actions = wrapper.get('[data-testid="list-page-actions"]');
+        const nouveau = actions.get('[href$="/mouvements/create"]');
+
+        expect(cible).toBeInstanceOf(HTMLElement);
+        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(nouveau.text()).toBe('Nouveau mouvement');
+        // Ordre standard des actions d'en-tête : Filtres puis Nouveau.
+        expect(
+            (cible as HTMLElement).compareDocumentPosition(nouveau.element) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('garde le bouton « Filtres » dans l’en-tête même sans le droit de créer un mouvement', async () => {
+        const wrapper = monter([], { peut_creer: false });
+        await nextTick();
+
+        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const actions = wrapper.get('[data-testid="list-page-actions"]');
+
+        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(actions.find('[href$="/mouvements/create"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it('conserve tous les filtres existants (mêmes clés d’URL) et ajoute la caisse et sa position', () => {
+        const cles = monter([])
+            .findComponent(DataFilters)
+            .props('fields')
+            .map((c) => c.key);
+
+        expect(cles).toEqual([
+            'caisse_id',
+            'search',
+            'nature',
+            'caisse_role',
+            'statut',
+            'site_origine_id',
+            'site_destination_id',
+            'montant_min',
+            'montant_max',
+        ]);
+    });
+
+    it('restitue les valeurs filtrées à la barre pour qu’elles survivent au rechargement', () => {
+        const filters = {
+            statut: '',
+            nature: '',
+            search: '',
+            site_ids: [],
+            site_origine_id: 's2',
+            site_destination_id: 's1',
+            caisse_id: 'c1',
+            caisse_role: 'origine',
+            montant_min: '200000',
+            montant_max: '900000',
+        };
+
+        expect(
+            monter([], { filters }).findComponent(DataFilters).props('values'),
+        ).toEqual(filters);
+    });
+});
+
+// Une action de trésorerie ne part qu'une fois : le backend refuse un second envoi (verrou + statut),
+// mais l'interface ne doit pas laisser cliquer plusieurs fois ni fermer la fenêtre en plein envoi.
+describe('Mouvements de fonds — un seul envoi à la fois', () => {
+    const post = vi.mocked(router.post);
+
+    beforeEach(() => post.mockClear());
+
+    const bouton = (wrapper: ReturnType<typeof monter>, texte: string) =>
+        wrapper.findAll('button').find((b) => b.text() === texte)!;
+
+    const terminerRequete = async (appel = 0) => {
+        (post.mock.calls[appel][2] as { onFinish: () => void }).onFinish();
+        await nextTick();
+    };
+
+    const ouvrirReception = async () => {
+        const wrapper = monter([mouvement({ peut_recevoir: true })]);
+        await bouton(wrapper, 'Confirmer réception').trigger('click');
+
+        return wrapper;
+    };
+
+    it('affiche un chargement sur « Confirmer » et désactive les deux boutons pendant l’envoi, puis les réactive', async () => {
+        const wrapper = await ouvrirReception();
+        const confirmer = wrapper.get('[data-testid="reception-confirmer"]');
+        const annuler = wrapper.get('[data-testid="reception-annuler"]');
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+        expect(wrapper.findComponent(Spinner).exists()).toBe(false);
+
+        await confirmer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/recevoir',
+        );
+        expect(post.mock.calls[0][1]).toEqual({
+            compte_tresorerie_destination_id: 'c-agence',
+        });
+        expect(confirmer.attributes('disabled')).toBeDefined();
+        expect(confirmer.attributes('aria-busy')).toBe('true');
+        expect(annuler.attributes('disabled')).toBeDefined();
+        expect(confirmer.text()).toBe('Confirmation…');
+        expect(confirmer.findComponent(Spinner).exists()).toBe(true);
+
+        await terminerRequete();
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(annuler.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+        expect(wrapper.findComponent(Spinner).exists()).toBe(false);
+    });
+
+    it('n’envoie jamais deux fois, même si un second clic passe avant le rendu', async () => {
+        const wrapper = await ouvrirReception();
+        const vm = wrapper.vm as unknown as { confirmerReception: () => void };
+
+        vm.confirmerReception();
+        vm.confirmerReception();
+
+        expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('garde la fenêtre ouverte pendant l’envoi (Échap, clic à l’extérieur, croix), et laisse la fermer ensuite', async () => {
+        const wrapper = await ouvrirReception();
+        const fenetre = wrapper.findAllComponents(Dialog)[1];
+        expect(fenetre.props('open')).toBe(true);
+
+        await wrapper
+            .get('[data-testid="reception-confirmer"]')
+            .trigger('click');
+        fenetre.vm.$emit('update:open', false);
+        await nextTick();
+
+        expect(fenetre.props('open')).toBe(true);
+
+        await terminerRequete();
+        fenetre.vm.$emit('update:open', false);
+        await nextTick();
+
+        expect(fenetre.props('open')).toBe(false);
+    });
+
+    it('protège aussi la fenêtre de motif (annuler / contester / retour) avec le même chargement', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_annuler: true,
+            }),
+        ]);
+        await bouton(wrapper, 'Annuler').trigger('click');
+        await wrapper.get('#motif').setValue('Erreur de saisie');
+        const confirmer = wrapper.get('[data-testid="motif-confirmer"]');
+
+        await confirmer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/annuler',
+        );
+        expect(post.mock.calls[0][1]).toEqual({ motif: 'Erreur de saisie' });
+        expect(confirmer.attributes('disabled')).toBeDefined();
+        expect(confirmer.text()).toBe('Confirmation…');
+        expect(
+            wrapper.get('[data-testid="motif-annuler"]').attributes('disabled'),
+        ).toBeDefined();
+
+        await terminerRequete();
+
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(confirmer.text()).toBe('Confirmer');
+    });
+
+    it('ne verrouille rien quand la saisie est refusée avant l’envoi (motif vide)', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_annuler: true,
+            }),
+        ]);
+        await bouton(wrapper, 'Annuler').trigger('click');
+        const confirmer = wrapper.get('[data-testid="motif-confirmer"]');
+
+        await confirmer.trigger('click');
+
+        expect(post).not.toHaveBeenCalled();
+        expect(confirmer.attributes('disabled')).toBeUndefined();
+        expect(wrapper.text()).toContain('Le motif est obligatoire.');
+    });
+
+    it('empêche aussi le double clic sur « Envoyer » dans la liste', async () => {
+        const wrapper = monter([
+            mouvement({
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                peut_envoyer: true,
+            }),
+        ]);
+        const envoyer = bouton(wrapper, 'Envoyer');
+
+        await envoyer.trigger('click');
+        await envoyer.trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/envoyer',
+        );
+        expect(envoyer.attributes('disabled')).toBeDefined();
+
+        await terminerRequete();
+
+        expect(envoyer.attributes('disabled')).toBeUndefined();
     });
 });

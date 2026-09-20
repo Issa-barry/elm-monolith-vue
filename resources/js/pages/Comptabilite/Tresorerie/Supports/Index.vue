@@ -15,6 +15,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -24,6 +30,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowRightLeft,
     CheckCircle2,
+    Info,
     MoreVertical,
     Pencil,
     PiggyBank,
@@ -582,14 +589,57 @@ const selectClass =
         <div class="w-full space-y-6 p-4 sm:p-6">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="flex flex-col gap-1">
-                    <h1 class="text-xl font-semibold">
+                    <h1 class="flex items-center gap-2 text-xl font-semibold">
                         Supports de trésorerie
+                        <TooltipProvider :delay-duration="150">
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Informations sur les supports de trésorerie"
+                                        class="shrink-0 rounded-sm text-primary transition-colors outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info
+                                            class="h-4 w-4"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="bottom"
+                                    class="w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-left text-sm leading-relaxed font-normal text-pretty"
+                                >
+                                    <p class="mb-2 font-semibold">
+                                        Cette page regroupe :
+                                    </p>
+                                    <ul class="list-disc space-y-2 pl-4">
+                                        <li>
+                                            Les
+                                            <strong>caisses de l'agence</strong
+                                            >.
+                                        </li>
+                                        <li>
+                                            Les
+                                            <strong
+                                                >caisses dédiées aux
+                                                agents</strong
+                                            >.
+                                        </li>
+                                        <li>Les <strong>banques</strong>.</li>
+                                        <li>
+                                            Les comptes
+                                            <strong>Mobile Money</strong>.
+                                        </li>
+                                    </ul>
+                                    <p class="mt-3">
+                                        Le <strong>solde actuel</strong> de
+                                        chaque support est calculé à partir du
+                                        grand livre.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </h1>
-                    <p class="text-sm text-muted-foreground">
-                        Caisses de l'agence, caisses dédiées aux agents, banques
-                        et comptes Mobile Money — avec leur solde actuel,
-                        calculé depuis le grand livre.
-                    </p>
                 </div>
                 <ListPageActions>
                     <template #filters>
@@ -621,44 +671,61 @@ const selectClass =
                  Apollo tourne sur une racine à 14 px : ses `p-8`, `gap-8`, `text-lg`, `text-4xl` valent 28 / 28 /
                  15,75 / 31,5 px de rendu. Cette application est à 16 px : on reprend ces VALEURS RENDUES
                  (p-7, gap-7, 16 px, 31,5 px), pas les mêmes classes, qui donneraient des cartes plus grandes.
-                 Le chiffre plafonne à 31,5 px et ne rétrécit (unité cqw) que si un montant à 10 chiffres ne
-                 tient pas sur UNE ligne dans une carte étroite — jamais coupé au milieu du nombre. -->
-            <div class="grid grid-cols-12 gap-7" data-testid="support-kpis">
+                 Typographie = celle d'Apollo, mesurée dans le navigateur, CONSTANTE à toutes les largeurs :
+                 Poppins (`font-apollo`, limitée à ces 4 cartes), titre 15,75 px / 600 / interligne 24,5 px,
+                 chiffre 31,5 px / 700 / 35 px, information secondaire 14 px / 500 / 16,8 px, aucun
+                 interlettrage. On ne sacrifie JAMAIS la taille de police : le responsive agit sur la
+                 DISPOSITION. Un montant à 10 chiffres à 31,5 px fait ~203 px ; à 4 colonnes la carte offre
+                 `zone / 4 − 77` px, donc 4 colonnes dès que la zone dispose de 70 rem (1120 px), comme Apollo
+                 sur un écran de bureau ; en dessous, 2 colonnes ; sur mobile, 1. La largeur mesurée est celle
+                 de la zone de contenu (container query), pas celle de l'écran : barre latérale repliée,
+                 4 colonnes reviennent plus tôt. Le titre peut passer sur deux lignes ; le nombre ne se coupe
+                 jamais, « GNF » passe dessous s'il ne tient pas à côté. -->
+            <div class="@container">
                 <div
-                    v-for="carte in cartes"
-                    :key="carte.id"
-                    class="col-span-12 md:col-span-6 xl:col-span-3"
-                    :title="carte.astuce"
-                    :data-testid="`support-kpi-${carte.id}`"
+                    class="grid grid-cols-12 gap-7 font-apollo antialiased"
+                    data-testid="support-kpis"
                 >
                     <div
-                        class="card @container h-full p-7 shadow-[0_4px_30px_0_rgba(221,224,255,0.54)] dark:shadow-none"
+                        v-for="carte in cartes"
+                        :key="carte.id"
+                        class="col-span-12 @[40rem]:col-span-6 @[70rem]:col-span-3"
+                        :title="carte.astuce"
+                        :data-testid="`support-kpi-${carte.id}`"
                     >
-                        <span
-                            class="text-sm font-semibold @[12rem]:text-base"
-                            >{{ carte.titre }}</span
+                        <div
+                            class="card h-full p-7 shadow-[0_4px_30px_0_rgba(221,224,255,0.54)] dark:shadow-none"
                         >
-                        <div class="mt-3.5 flex items-start justify-between">
-                            <div>
-                                <p
-                                    class="text-[length:clamp(1rem,calc((100cqw_-_2.9rem)/7),1.96875rem)] leading-[1.11] font-bold whitespace-nowrap text-foreground tabular-nums"
-                                >
-                                    <span data-testid="support-kpi-valeur">{{
-                                        carte.valeur
-                                    }}</span>
-                                    <span
-                                        v-if="carte.unite"
-                                        class="ml-1.5 text-sm font-medium text-muted-foreground"
-                                        >{{ carte.unite }}</span
+                            <span
+                                class="block text-[15.75px] leading-[24.5px] font-semibold text-slate-700 dark:text-slate-200"
+                                >{{ carte.titre }}</span
+                            >
+                            <div
+                                class="mt-3.5 flex items-start justify-between"
+                            >
+                                <div>
+                                    <p
+                                        class="text-[31.5px] leading-[35px] font-bold text-slate-900 dark:text-slate-50"
                                     >
-                                </p>
-                                <p
-                                    v-if="carte.detail"
-                                    class="text-sm font-medium text-blue-600 dark:text-blue-400"
-                                    data-testid="support-kpi-detail"
-                                >
-                                    {{ carte.detail }}
-                                </p>
+                                        <span
+                                            class="mr-1.5 whitespace-nowrap"
+                                            data-testid="support-kpi-valeur"
+                                            >{{ carte.valeur }}</span
+                                        >
+                                        <span
+                                            v-if="carte.unite"
+                                            class="inline-block text-[14px] leading-[16.8px] font-medium whitespace-nowrap text-muted-foreground"
+                                            >{{ carte.unite }}</span
+                                        >
+                                    </p>
+                                    <p
+                                        v-if="carte.detail"
+                                        class="text-[14px] leading-[16.8px] font-medium text-blue-600 dark:text-blue-400"
+                                        data-testid="support-kpi-detail"
+                                    >
+                                        {{ carte.detail }}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -918,32 +985,23 @@ const selectClass =
     >
         <form
             v-if="versementCible"
-            class="space-y-4 pt-2 pb-1"
+            id="versement-form"
+            class="space-y-4 pb-1"
             data-testid="versement-form"
             @submit.prevent="envoyerVersement"
         >
-            <div class="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
-                <div>
-                    <p class="text-xs text-muted-foreground">Caisse source</p>
-                    <p class="font-medium">
-                        {{ versementCible.libelle }} —
-                        <span class="tabular-nums">{{
-                            formatGNF(versementCible.solde)
-                        }}</span>
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">
-                        Agence destination
-                    </p>
-                    <p class="font-medium">{{ versementCible.site }}</p>
-                </div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span class="text-muted-foreground">Depuis</span>
+                <span class="font-medium">{{ versementCible.libelle }}</span>
             </div>
 
             <div>
                 <Label for="vers-dest" class="mb-1.5 block text-xs font-medium">
                     Caisse destination
                     <span class="text-destructive">*</span>
+                    <span class="font-normal text-muted-foreground">
+                        · {{ versementCible.site }}
+                    </span>
                 </Label>
                 <select
                     id="vers-dest"
@@ -989,34 +1047,30 @@ const selectClass =
                 >
                     {{ versementForm.errors.montant }}
                 </p>
+                <dl
+                    class="mt-2 grid grid-cols-2 gap-3 text-xs"
+                    data-testid="versement-recapitulatif"
+                >
+                    <div>
+                        <dt class="text-muted-foreground">Disponible</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums">
+                            {{ formatGNF(versementCible.solde) }}
+                        </dd>
+                    </div>
+                    <div class="text-right">
+                        <dt class="text-muted-foreground">Reste après envoi</dt>
+                        <dd
+                            class="mt-0.5 font-medium tabular-nums"
+                            :class="{
+                                'text-destructive': soldeApresVersement < 0,
+                            }"
+                            aria-live="polite"
+                        >
+                            {{ formatGNF(soldeApresVersement) }}
+                        </dd>
+                    </div>
+                </dl>
             </div>
-
-            <dl
-                class="grid grid-cols-3 gap-2 rounded-lg border p-3 text-xs"
-                data-testid="versement-recapitulatif"
-            >
-                <div>
-                    <dt class="text-muted-foreground">Solde disponible</dt>
-                    <dd class="font-medium tabular-nums">
-                        {{ formatGNF(versementCible.solde) }}
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Montant</dt>
-                    <dd class="font-medium tabular-nums">
-                        {{ formatGNF(versementMontant) }}
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Solde après</dt>
-                    <dd
-                        class="font-medium tabular-nums"
-                        :class="{ 'text-destructive': soldeApresVersement < 0 }"
-                    >
-                        {{ formatGNF(soldeApresVersement) }}
-                    </dd>
-                </div>
-            </dl>
             <p
                 v-if="soldeApresVersement < 0"
                 class="text-xs text-destructive"
@@ -1042,17 +1096,38 @@ const selectClass =
                 {{ erreurCaisseSource }}
             </p>
 
-            <p
-                class="text-xs text-muted-foreground"
+            <div
+                class="flex items-center gap-2 text-xs text-muted-foreground"
                 data-testid="versement-confirmation"
             >
-                Les fonds passent à l'état « Envoyé ». Un autre utilisateur
-                habilité de l'agence {{ versementCible.site }} devra confirmer
-                la réception dans Mouvements : la caisse de l'agence n'est
-                créditée qu'à ce moment.
-            </p>
-
-            <div class="flex justify-between pt-2">
+                <p>La caisse de l'agence sera créditée après confirmation.</p>
+                <TooltipProvider :delay-duration="150">
+                    <Tooltip>
+                        <TooltipTrigger as-child>
+                            <button
+                                type="button"
+                                aria-label="Comment confirmer la réception des fonds"
+                                class="shrink-0 rounded-sm text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                <Info class="h-4 w-4" aria-hidden="true" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                            side="top"
+                            class="z-[1200] w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-sm leading-relaxed"
+                        >
+                            Un autre utilisateur habilité de l'agence
+                            {{ versementCible.site }} doit confirmer la
+                            réception dans « Mouvements de fonds ». La caisse de
+                            l'agence est créditée uniquement après cette
+                            confirmation.
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
                 <Button
                     type="button"
                     variant="outline"
@@ -1062,6 +1137,7 @@ const selectClass =
                 >
                 <Button
                     type="submit"
+                    form="versement-form"
                     size="sm"
                     data-testid="versement-envoyer"
                     :disabled="versementForm.processing || versementInvalide"
@@ -1069,7 +1145,7 @@ const selectClass =
                     {{ versementForm.processing ? 'Envoi…' : 'Envoyer' }}
                 </Button>
             </div>
-        </form>
+        </template>
     </Dialog>
 
     <!-- Création -->

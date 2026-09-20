@@ -132,11 +132,108 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             agents_filtre: [],
             comptes_comptables: [],
         },
-        global: { renderStubDefaultSlot: true },
+        global: {
+            renderStubDefaultSlot: true,
+            stubs: {
+                Dialog: {
+                    template: '<div><slot /><slot name="footer" /></div>',
+                },
+                Button: false,
+                Primitive: false,
+            },
+        },
     });
 
 const lignes = (wrapper: ReturnType<typeof monter>) =>
     wrapper.findAll('[data-testid="support-row"]');
+
+describe('Supports de trésorerie — formulaire de versement compact', () => {
+    const ouvrir = async () => {
+        const wrapper = monter();
+        await wrapper.setProps({
+            destinations_versement: [
+                { id: 'c-agence', site_id: 's1', libelle: 'Caisse-espèce' },
+                { id: 'c-autre', site_id: 's2', libelle: 'Autre agence' },
+            ],
+        });
+        await wrapper.get('[data-testid="support-verser"]').trigger('click');
+        return wrapper;
+    };
+
+    it('garde la caisse source et la destination avec les deux repères de solde', async () => {
+        const wrapper = await ouvrir();
+        const form = wrapper.get('[data-testid="versement-form"]');
+        expect(form.text()).toContain('Caisse Moussa sidibé');
+        expect(form.get('[for="vers-dest"]').text()).toContain('Matoto');
+        expect(form.get('#vers-dest').element).toHaveProperty(
+            'value',
+            'c-agence',
+        );
+        expect(
+            form.findAll('#vers-dest option').map((o) => o.text()),
+        ).not.toContain('Autre agence');
+
+        await form.get('#vers-montant').setValue('250000');
+        const recap = form.get('[data-testid="versement-recapitulatif"]');
+        expect(recap.findAll('dt').map((dt) => dt.text())).toEqual([
+            'Disponible',
+            'Reste après envoi',
+        ]);
+        expect(recap.findAll('dd').map((dd) => dd.text())).toEqual([
+            '1 000 000 GNF',
+            '750 000 GNF',
+        ]);
+    });
+
+    it('conserve le blocage des montants nuls et supérieurs au disponible', async () => {
+        const wrapper = await ouvrir();
+        const envoyer = wrapper.get('[data-testid="versement-envoyer"]');
+        expect(envoyer.attributes('disabled')).toBeDefined();
+        await wrapper.get('#vers-montant').setValue('1000001');
+        expect(envoyer.attributes('disabled')).toBeDefined();
+        expect(
+            wrapper.get('[data-testid="versement-depassement"]').text(),
+        ).toContain('dépasse le solde disponible');
+        await wrapper.get('#vers-montant').setValue('1000000');
+        expect(envoyer.attributes('disabled')).toBeUndefined();
+        expect(
+            wrapper.find('[data-testid="versement-depassement"]').exists(),
+        ).toBe(false);
+    });
+
+    it('relie le bouton du pied de fenêtre au formulaire et conserve les données envoyées', async () => {
+        const wrapper = await ouvrir();
+        await wrapper.get('#vers-montant').setValue('250000');
+        const form = wrapper.get('[data-testid="versement-form"]');
+        const envoyer = wrapper.get('[data-testid="versement-envoyer"]');
+        expect(envoyer.attributes('form')).toBe(form.attributes('id'));
+        expect(form.find('[data-testid="versement-envoyer"]').exists()).toBe(
+            false,
+        );
+        await form.trigger('submit');
+
+        const vm = wrapper.vm as unknown as {
+            versementForm: {
+                montant: string;
+                compte_tresorerie_destination_id: string;
+                motif: string;
+                post: ReturnType<typeof vi.fn>;
+            };
+        };
+        expect(vm.versementForm.montant).toBe('250000');
+        expect(vm.versementForm.compte_tresorerie_destination_id).toBe(
+            'c-agence',
+        );
+        expect(vm.versementForm.motif).toBe('Versement caisse agent');
+        expect(vm.versementForm.post).toHaveBeenCalledWith(
+            '/backoffice/comptabilite/tresorerie/supports/c-agent/verser',
+            expect.objectContaining({
+                preserveScroll: true,
+                preserveState: true,
+            }),
+        );
+    });
+});
 
 describe('Supports de trésorerie — tableau', () => {
     beforeEach(() => {
@@ -228,7 +325,7 @@ describe('Supports de trésorerie — cartes KPI', () => {
     const valeur = (wrapper: ReturnType<typeof monter>, id: string) =>
         carte(wrapper, id).find('[data-testid="support-kpi-valeur"]').text();
 
-    it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes)', () => {
+    it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes selon la largeur de la zone)', () => {
         const cartes = monter().findAll('[data-testid="support-kpis"] > div');
 
         expect(cartes).toHaveLength(4);
@@ -242,16 +339,81 @@ describe('Supports de trésorerie — cartes KPI', () => {
             'solde-total',
             'en-cours-versement',
         ]);
+        // Le responsive agit sur la DISPOSITION, mesurée sur la zone de contenu (container query) :
+        // 4 colonnes dès 70 rem (1120 px) de zone : un montant à 10 chiffres à 31,5 px (~203 px) tient
+        // alors sur une ligne dans la carte (zone / 4 − 77), « GNF » passant dessous si besoin.
         for (const c of cartes) {
             expect(c.classes()).toEqual(
                 expect.arrayContaining([
                     'col-span-12',
-                    'md:col-span-6',
-                    'xl:col-span-3',
+                    '@[40rem]:col-span-6',
+                    '@[70rem]:col-span-3',
                 ]),
             );
             expect(c.find('.card').classes()).toContain('h-full');
         }
+    });
+
+    it('garde la typographie Apollo constante : aucune taille de police ne rétrécit avec la largeur', () => {
+        const wrapper = monter([
+            compte({
+                solde: 1_519_203_500,
+                en_cours_versement: 3_000_000,
+                versements_en_cours: 1,
+            }),
+        ]);
+        const zone = wrapper.find('[data-testid="support-kpis"]');
+        const enCours = carte(wrapper, 'en-cours-versement');
+
+        // Poppins limitée à cette grille ; Apollo : titre 15,75 / 600 / 24,5 — chiffre 31,5 / 700 / 35 —
+        // information secondaire 14 / 500 / 16,8.
+        expect(zone.classes()).toContain('font-apollo');
+        expect(enCours.find('span.font-semibold').classes()).toEqual(
+            expect.arrayContaining([
+                'text-[15.75px]',
+                'leading-[24.5px]',
+                'font-semibold',
+            ]),
+        );
+        expect(
+            enCours.find('[data-testid="support-kpi-valeur"]').element
+                .parentElement?.className,
+        ).toContain('text-[31.5px] leading-[35px] font-bold');
+        expect(
+            enCours.find('[data-testid="support-kpi-detail"]').classes(),
+        ).toEqual(
+            expect.arrayContaining([
+                'text-[14px]',
+                'leading-[16.8px]',
+                'font-medium',
+            ]),
+        );
+
+        // Garde-fou : plus aucune logique qui réduit la police (clamp / unité de container query).
+        expect(zone.html()).not.toContain('clamp(');
+        expect(zone.html()).not.toContain('cqw');
+    });
+
+    it('ne coupe jamais un nombre au milieu : le chiffre reste insécable, seule « GNF » peut passer dessous', () => {
+        const solde = carte(monter(), 'solde-total');
+
+        expect(
+            solde.find('[data-testid="support-kpi-valeur"]').classes(),
+        ).toContain('whitespace-nowrap');
+        const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
+        expect(unite?.classes()).toEqual(
+            expect.arrayContaining(['inline-block', 'whitespace-nowrap']),
+        );
+    });
+
+    it('espace le nombre de « GNF » côté nombre : passée à la ligne, « GNF » reste aligné à gauche', () => {
+        const solde = carte(monter(), 'solde-total');
+        const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
+
+        expect(
+            solde.find('[data-testid="support-kpi-valeur"]').classes(),
+        ).toContain('mr-1.5');
+        expect(unite?.classes()).not.toContain('ml-1.5');
     });
 
     it('affiche des titres courts et la valeur de chaque indicateur', () => {

@@ -213,10 +213,25 @@ async function remplirPremiereLigne(
         .first()
         .click();
 
+    // La liste doit être refermée AVANT de toucher à la quantité : PrimeVue Select rend le focus
+    // à son champ dans un setTimeout(0) après le clic sur une option. Sur un runner chargé, ce
+    // focus arrive après celui de la quantité et la fait blur à vide → l'InputNumber committe
+    // null, Create.vue::onQteChange le ramène à 1 (min) et la frappe s'insère avant ce « 1 »
+    // ("4601" au lieu de "460", CI du 20/09/2026 ; la 1re saisie y échappe car la quantité vaut
+    // déjà 1, donc aucun re-rendu).
+    await page
+        .locator('[role="listbox"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 5_000 });
+
+    // Saisie par remplacement de la sélection, jamais fill('') puis frappe : le champ ne passe
+    // ainsi jamais par l'état vide (null → 1). La valeur affichée est revérifiée pour qu'une
+    // saisie erronée échoue ici, avec un message clair, et non 20 s plus tard sur l'URL.
     const qteInput = row.locator('td').nth(1).locator('input');
-    await qteInput.fill('');
+    await qteInput.selectText();
     await qteInput.pressSequentially(String(qte));
     await qteInput.blur();
+    await expect(qteInput).toHaveValue(String(qte));
 }
 
 /**
