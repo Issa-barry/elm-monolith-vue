@@ -132,11 +132,108 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             agents_filtre: [],
             comptes_comptables: [],
         },
-        global: { renderStubDefaultSlot: true },
+        global: {
+            renderStubDefaultSlot: true,
+            stubs: {
+                Dialog: {
+                    template: '<div><slot /><slot name="footer" /></div>',
+                },
+                Button: false,
+                Primitive: false,
+            },
+        },
     });
 
 const lignes = (wrapper: ReturnType<typeof monter>) =>
     wrapper.findAll('[data-testid="support-row"]');
+
+describe('Supports de trésorerie — formulaire de versement compact', () => {
+    const ouvrir = async () => {
+        const wrapper = monter();
+        await wrapper.setProps({
+            destinations_versement: [
+                { id: 'c-agence', site_id: 's1', libelle: 'Caisse-espèce' },
+                { id: 'c-autre', site_id: 's2', libelle: 'Autre agence' },
+            ],
+        });
+        await wrapper.get('[data-testid="support-verser"]').trigger('click');
+        return wrapper;
+    };
+
+    it('garde la caisse source et la destination avec les deux repères de solde', async () => {
+        const wrapper = await ouvrir();
+        const form = wrapper.get('[data-testid="versement-form"]');
+        expect(form.text()).toContain('Caisse Moussa sidibé');
+        expect(form.get('[for="vers-dest"]').text()).toContain('Matoto');
+        expect(form.get('#vers-dest').element).toHaveProperty(
+            'value',
+            'c-agence',
+        );
+        expect(
+            form.findAll('#vers-dest option').map((o) => o.text()),
+        ).not.toContain('Autre agence');
+
+        await form.get('#vers-montant').setValue('250000');
+        const recap = form.get('[data-testid="versement-recapitulatif"]');
+        expect(recap.findAll('dt').map((dt) => dt.text())).toEqual([
+            'Disponible',
+            'Reste après envoi',
+        ]);
+        expect(recap.findAll('dd').map((dd) => dd.text())).toEqual([
+            '1 000 000 GNF',
+            '750 000 GNF',
+        ]);
+    });
+
+    it('conserve le blocage des montants nuls et supérieurs au disponible', async () => {
+        const wrapper = await ouvrir();
+        const envoyer = wrapper.get('[data-testid="versement-envoyer"]');
+        expect(envoyer.attributes('disabled')).toBeDefined();
+        await wrapper.get('#vers-montant').setValue('1000001');
+        expect(envoyer.attributes('disabled')).toBeDefined();
+        expect(
+            wrapper.get('[data-testid="versement-depassement"]').text(),
+        ).toContain('dépasse le solde disponible');
+        await wrapper.get('#vers-montant').setValue('1000000');
+        expect(envoyer.attributes('disabled')).toBeUndefined();
+        expect(
+            wrapper.find('[data-testid="versement-depassement"]').exists(),
+        ).toBe(false);
+    });
+
+    it('relie le bouton du pied de fenêtre au formulaire et conserve les données envoyées', async () => {
+        const wrapper = await ouvrir();
+        await wrapper.get('#vers-montant').setValue('250000');
+        const form = wrapper.get('[data-testid="versement-form"]');
+        const envoyer = wrapper.get('[data-testid="versement-envoyer"]');
+        expect(envoyer.attributes('form')).toBe(form.attributes('id'));
+        expect(form.find('[data-testid="versement-envoyer"]').exists()).toBe(
+            false,
+        );
+        await form.trigger('submit');
+
+        const vm = wrapper.vm as unknown as {
+            versementForm: {
+                montant: string;
+                compte_tresorerie_destination_id: string;
+                motif: string;
+                post: ReturnType<typeof vi.fn>;
+            };
+        };
+        expect(vm.versementForm.montant).toBe('250000');
+        expect(vm.versementForm.compte_tresorerie_destination_id).toBe(
+            'c-agence',
+        );
+        expect(vm.versementForm.motif).toBe('Versement caisse agent');
+        expect(vm.versementForm.post).toHaveBeenCalledWith(
+            '/backoffice/comptabilite/tresorerie/supports/c-agent/verser',
+            expect.objectContaining({
+                preserveScroll: true,
+                preserveState: true,
+            }),
+        );
+    });
+});
 
 describe('Supports de trésorerie — tableau', () => {
     beforeEach(() => {
@@ -243,13 +340,14 @@ describe('Supports de trésorerie — cartes KPI', () => {
             'en-cours-versement',
         ]);
         // Le responsive agit sur la DISPOSITION, mesurée sur la zone de contenu (container query) :
-        // 4 colonnes seulement si un montant à 10 chiffres à 31,5 px + « GNF » tient dans la carte.
+        // 4 colonnes dès 70 rem (1120 px) de zone : un montant à 10 chiffres à 31,5 px (~203 px) tient
+        // alors sur une ligne dans la carte (zone / 4 − 77), « GNF » passant dessous si besoin.
         for (const c of cartes) {
             expect(c.classes()).toEqual(
                 expect.arrayContaining([
                     'col-span-12',
                     '@[40rem]:col-span-6',
-                    '@[82.5rem]:col-span-3',
+                    '@[70rem]:col-span-3',
                 ]),
             );
             expect(c.find('.card').classes()).toContain('h-full');

@@ -675,11 +675,12 @@ const selectClass =
                  Poppins (`font-apollo`, limitée à ces 4 cartes), titre 15,75 px / 600 / interligne 24,5 px,
                  chiffre 31,5 px / 700 / 35 px, information secondaire 14 px / 500 / 16,8 px, aucun
                  interlettrage. On ne sacrifie JAMAIS la taille de police : le responsive agit sur la
-                 DISPOSITION. Un montant à 10 chiffres à 31,5 px + « GNF » demande ~297 px de carte, donc
-                 4 colonnes seulement quand la zone dispose de 82,5 rem (1320 px) ; en dessous, 2 colonnes ;
-                 sur mobile, 1. La largeur mesurée est celle de la zone de contenu (container query), pas
-                 celle de l'écran : barre latérale repliée, 4 colonnes reviennent plus tôt. Le titre peut
-                 passer sur deux lignes ; le nombre ne se coupe jamais, « GNF » peut passer dessous. -->
+                 DISPOSITION. Un montant à 10 chiffres à 31,5 px fait ~203 px ; à 4 colonnes la carte offre
+                 `zone / 4 − 77` px, donc 4 colonnes dès que la zone dispose de 70 rem (1120 px), comme Apollo
+                 sur un écran de bureau ; en dessous, 2 colonnes ; sur mobile, 1. La largeur mesurée est celle
+                 de la zone de contenu (container query), pas celle de l'écran : barre latérale repliée,
+                 4 colonnes reviennent plus tôt. Le titre peut passer sur deux lignes ; le nombre ne se coupe
+                 jamais, « GNF » passe dessous s'il ne tient pas à côté. -->
             <div class="@container">
                 <div
                     class="grid grid-cols-12 gap-7 font-apollo antialiased"
@@ -688,7 +689,7 @@ const selectClass =
                     <div
                         v-for="carte in cartes"
                         :key="carte.id"
-                        class="col-span-12 @[40rem]:col-span-6 @[82.5rem]:col-span-3"
+                        class="col-span-12 @[40rem]:col-span-6 @[70rem]:col-span-3"
                         :title="carte.astuce"
                         :data-testid="`support-kpi-${carte.id}`"
                     >
@@ -984,32 +985,23 @@ const selectClass =
     >
         <form
             v-if="versementCible"
-            class="space-y-4 pt-2 pb-1"
+            id="versement-form"
+            class="space-y-4 pb-1"
             data-testid="versement-form"
             @submit.prevent="envoyerVersement"
         >
-            <div class="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
-                <div>
-                    <p class="text-xs text-muted-foreground">Caisse source</p>
-                    <p class="font-medium">
-                        {{ versementCible.libelle }} —
-                        <span class="tabular-nums">{{
-                            formatGNF(versementCible.solde)
-                        }}</span>
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">
-                        Agence destination
-                    </p>
-                    <p class="font-medium">{{ versementCible.site }}</p>
-                </div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span class="text-muted-foreground">Depuis</span>
+                <span class="font-medium">{{ versementCible.libelle }}</span>
             </div>
 
             <div>
                 <Label for="vers-dest" class="mb-1.5 block text-xs font-medium">
                     Caisse destination
                     <span class="text-destructive">*</span>
+                    <span class="font-normal text-muted-foreground">
+                        · {{ versementCible.site }}
+                    </span>
                 </Label>
                 <select
                     id="vers-dest"
@@ -1055,34 +1047,30 @@ const selectClass =
                 >
                     {{ versementForm.errors.montant }}
                 </p>
+                <dl
+                    class="mt-2 grid grid-cols-2 gap-3 text-xs"
+                    data-testid="versement-recapitulatif"
+                >
+                    <div>
+                        <dt class="text-muted-foreground">Disponible</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums">
+                            {{ formatGNF(versementCible.solde) }}
+                        </dd>
+                    </div>
+                    <div class="text-right">
+                        <dt class="text-muted-foreground">Reste après envoi</dt>
+                        <dd
+                            class="mt-0.5 font-medium tabular-nums"
+                            :class="{
+                                'text-destructive': soldeApresVersement < 0,
+                            }"
+                            aria-live="polite"
+                        >
+                            {{ formatGNF(soldeApresVersement) }}
+                        </dd>
+                    </div>
+                </dl>
             </div>
-
-            <dl
-                class="grid grid-cols-3 gap-2 rounded-lg border p-3 text-xs"
-                data-testid="versement-recapitulatif"
-            >
-                <div>
-                    <dt class="text-muted-foreground">Solde disponible</dt>
-                    <dd class="font-medium tabular-nums">
-                        {{ formatGNF(versementCible.solde) }}
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Montant</dt>
-                    <dd class="font-medium tabular-nums">
-                        {{ formatGNF(versementMontant) }}
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Solde après</dt>
-                    <dd
-                        class="font-medium tabular-nums"
-                        :class="{ 'text-destructive': soldeApresVersement < 0 }"
-                    >
-                        {{ formatGNF(soldeApresVersement) }}
-                    </dd>
-                </div>
-            </dl>
             <p
                 v-if="soldeApresVersement < 0"
                 class="text-xs text-destructive"
@@ -1108,17 +1096,38 @@ const selectClass =
                 {{ erreurCaisseSource }}
             </p>
 
-            <p
-                class="text-xs text-muted-foreground"
+            <div
+                class="flex items-center gap-2 text-xs text-muted-foreground"
                 data-testid="versement-confirmation"
             >
-                Les fonds passent à l'état « Envoyé ». Un autre utilisateur
-                habilité de l'agence {{ versementCible.site }} devra confirmer
-                la réception dans Mouvements : la caisse de l'agence n'est
-                créditée qu'à ce moment.
-            </p>
-
-            <div class="flex justify-between pt-2">
+                <p>La caisse de l'agence sera créditée après confirmation.</p>
+                <TooltipProvider :delay-duration="150">
+                    <Tooltip>
+                        <TooltipTrigger as-child>
+                            <button
+                                type="button"
+                                aria-label="Comment confirmer la réception des fonds"
+                                class="shrink-0 rounded-sm text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                <Info class="h-4 w-4" aria-hidden="true" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                            side="top"
+                            class="z-[1200] w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-sm leading-relaxed"
+                        >
+                            Un autre utilisateur habilité de l'agence
+                            {{ versementCible.site }} doit confirmer la
+                            réception dans « Mouvements de fonds ». La caisse de
+                            l'agence est créditée uniquement après cette
+                            confirmation.
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
                 <Button
                     type="button"
                     variant="outline"
@@ -1128,6 +1137,7 @@ const selectClass =
                 >
                 <Button
                     type="submit"
+                    form="versement-form"
                     size="sm"
                     data-testid="versement-envoyer"
                     :disabled="versementForm.processing || versementInvalide"
@@ -1135,7 +1145,7 @@ const selectClass =
                     {{ versementForm.processing ? 'Envoi…' : 'Envoyer' }}
                 </Button>
             </div>
-        </form>
+        </template>
     </Dialog>
 
     <!-- Création -->
