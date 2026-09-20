@@ -67,6 +67,7 @@ class IndexFactureVenteController extends Controller
             'commande.vehicule.equipe.membres.livreur',
             'commande.client',
             'commande.site',
+            'commande.lignes:id,commande_vente_id,quantite_demandee,quantite_chargee,quantite_livree',
             'encaissements.creator',
         ])
             ->where('organization_id', $orgId);
@@ -154,6 +155,7 @@ class IndexFactureVenteController extends Controller
                 'vehicule_nom' => $f->commande?->vehicule?->nom_vehicule,
                 'client_nom' => $f->commande?->client?->nom_complet,
                 'site_nom' => $f->commande?->site?->nom,
+                'quantite_totale' => $f->commande?->quantite_totale ?? 0,
                 'montant_net' => (float) $f->montant_net,
                 'montant_encaisse' => (float) $f->montant_encaisse,
                 'montant_restant' => (float) $f->montant_restant,
@@ -174,6 +176,8 @@ class IndexFactureVenteController extends Controller
                         'mode_paiement' => $e->mode_paiement instanceof ModePaiement
                             ? $e->mode_paiement->label()
                             : (string) $e->mode_paiement,
+                        'operateur_mobile_money_label' => $e->operateur_mobile_money?->label(),
+                        'reference_paiement' => $e->reference_paiement,
                         'note' => $e->note,
                         'created_by' => $e->creator?->name,
                     ])
@@ -206,7 +210,6 @@ class IndexFactureVenteController extends Controller
         return Inertia::render('Factures/Index', [
             'factures' => $factures->values(),
             'totaux' => $totaux,
-            'modes_paiement' => ModePaiement::options(),
             'periode' => $periode,
             'statut' => $statut,
             'site_ids' => $siteIds,

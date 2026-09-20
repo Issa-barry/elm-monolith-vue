@@ -135,6 +135,7 @@ class ShowProduitController extends Controller
 
         $mouvementsCollection = (clone $mouvementsBaseQuery)
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code', 'variante:id,combo_hash'])
+            ->orderByDesc('date')
             ->orderByDesc('created_at')
             ->take(100)
             ->get();
@@ -151,6 +152,9 @@ class ShowProduitController extends Controller
                 'motif_label' => $m->motif_label,
                 'site_nom' => $m->site?->nom,
                 'site_code' => $m->site?->code,
+                // Date métier de l'opération — distincte de created_at (horodatage technique),
+                // cf. HistoriqueModal.vue qui affiche les deux séparément.
+                'date' => $m->date?->format('d/m/Y'),
                 'created_at' => $m->created_at?->toISOString(),
                 'createur_nom' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
@@ -176,6 +180,7 @@ class ShowProduitController extends Controller
                 'motif_label' => 'Stock initial',
                 'site_nom' => null,
                 'site_code' => null,
+                'date' => $creation->created_at?->format('d/m/Y'),
                 'created_at' => $creation->created_at?->toISOString(),
                 'createur_nom' => $creation->actor_name_snapshot,
                 'is_initial' => true,

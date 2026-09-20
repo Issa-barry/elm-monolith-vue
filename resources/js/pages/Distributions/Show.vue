@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import StatusDot from '@/components/StatusDot.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,7 +38,6 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
@@ -73,6 +73,8 @@ interface Encaissement {
     heure: string | null;
     mode_paiement: string;
     mode_paiement_label: string;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -476,41 +478,47 @@ const activeTab = ref<
 >('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-const modesPaiement = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-];
-
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard (Espèces, Orange Money, Kulu,
+// Soutra Money, MOMO, PayCard, Virement bancaire, Chèque). Sous le capot, PaymentCard envoie
+// mode_paiement + operateur_mobile_money séparément (cf. commentaire dans PaymentCard.vue —
+// mode_paiement doit rester l'une des 4 valeurs stables attendues par la comptabilisation).
 const encaisserDialogVisible = ref(false);
-const encaisserForm = useForm({
-    montant: null as number | null,
-    mode_paiement: 'especes' as string | null,
-    note: '',
-    date_encaissement: new Date().toISOString().slice(0, 10),
-});
+const encaisserProcessing = ref(false);
+const encaisserErrors = ref<Record<string, string>>({});
 
 function openEncaisserDialog() {
-    encaisserForm.reset();
-    encaisserForm.montant = props.facture?.montant_restant ?? null;
-    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserErrors.value = {};
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser() {
+function submitEncaisser(payload: {
+    montant: number;
+    mode_paiement: string;
+    operateur_mobile_money?: string;
+    reference_paiement?: string;
+}) {
     if (!props.facture) return;
-    encaisserForm.post(
+    encaisserProcessing.value = true;
+    encaisserErrors.value = {};
+    router.post(
         `/backoffice/factures/${props.facture.id}/encaissements`,
+        payload,
         {
+            preserveScroll: true,
             onSuccess: () => {
                 encaisserDialogVisible.value = false;
                 toast.add({
                     severity: 'success',
                     summary: 'Encaissement enregistré',
-                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    detail: `${formatGNF(payload.montant)} enregistré avec succès.`,
                     life: 3000,
                 });
+            },
+            onError: (e) => {
+                encaisserErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaisserProcessing.value = false;
             },
         },
     );
@@ -1506,6 +1514,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             Mode
                                         </th>
                                         <th
+                                            class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell"
+                                        >
+                                            Référence
+                                        </th>
+                                        <th
                                             class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         >
                                             Montant
@@ -1534,7 +1547,15 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         <td
                                             class="px-4 py-3 text-muted-foreground"
                                         >
-                                            {{ enc.mode_paiement_label }}
+                                            {{
+                                                enc.operateur_mobile_money_label ??
+                                                enc.mode_paiement_label
+                                            }}
+                                        </td>
+                                        <td
+                                            class="hidden px-4 py-3 text-muted-foreground md:table-cell"
+                                        >
+                                            {{ enc.reference_paiement ?? '—' }}
                                         </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -1725,92 +1746,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
         </div>
 
         <!-- Dialog Encaissement -->
-        <Dialog
+        <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            modal
-            header="Encaisser un paiement"
-            :style="{ width: '440px' }"
-        >
-            <div class="space-y-4">
-                <div v-if="facture" class="rounded-lg bg-primary/10 px-4 py-3">
-                    <p class="text-xs text-primary">Restant dû</p>
-                    <p class="text-xl font-bold text-primary tabular-nums">
-                        {{ formatGNF(facture.montant_restant) }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-montant" class="mb-1.5 block text-sm">
-                        Montant <span class="text-destructive">*</span>
-                    </Label>
-                    <InputNumber
-                        id="enc-montant"
-                        v-model="encaisserForm.montant"
-                        :max="facture?.montant_restant"
-                        :min="1"
-                        :use-grouping="true"
-                        locale="fr-FR"
-                        suffix=" GNF"
-                        class="w-full"
-                        fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.montant"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.montant }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-mode" class="mb-1.5 block text-sm">
-                        Mode de paiement <span class="text-destructive">*</span>
-                    </Label>
-                    <Select
-                        id="enc-mode"
-                        v-model="encaisserForm.mode_paiement"
-                        :options="modesPaiement"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid': encaisserForm.errors.mode_paiement,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.mode_paiement"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.mode_paiement }}
-                    </p>
-                </div>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        @click="encaisserDialogVisible = false"
-                        >Annuler</Button
-                    >
-                    <Button
-                        :disabled="
-                            encaisserForm.processing ||
-                            !encaisserForm.montant ||
-                            !encaisserForm.mode_paiement
-                        "
-                        @click="submitEncaisser"
-                    >
-                        <HandCoins class="mr-2 h-4 w-4" />
-                        {{
-                            encaisserForm.processing
-                                ? 'Enregistrement…'
-                                : 'Confirmer'
-                        }}
-                    </Button>
-                </div>
-            </template>
-        </Dialog>
+            title="Encaisser un paiement"
+            :solde="facture?.montant_restant ?? 0"
+            :processing="encaisserProcessing"
+            :errors="encaisserErrors"
+            @submit="submitEncaisser"
+        />
 
         <!-- Dialog Annulation -->
         <Dialog

@@ -347,6 +347,7 @@ class VenteAutoriseeSansStockTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $this->produit), [
                 'site_id' => $this->site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 150,
                 'motif_type' => 'perte',
             ])

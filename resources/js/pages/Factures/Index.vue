@@ -2,7 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -38,6 +39,8 @@ interface EncaissementItem {
     date_encaissement: string | null;
     enregistre_le: string | null;
     mode_paiement: string;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -50,6 +53,7 @@ interface FactureItem {
     vehicule_nom: string | null;
     client_nom: string | null;
     site_nom: string | null;
+    quantite_totale: number;
     montant_net: number;
     montant_encaisse: number;
     montant_restant: number;
@@ -74,11 +78,6 @@ interface Totaux {
     montant_payees: number;
 }
 
-interface ModePaiementOption {
-    value: string;
-    label: string;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface SiteOption {
     value: string;
@@ -94,7 +93,6 @@ interface LivreurInfo {
 const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
-    modes_paiement: ModePaiementOption[];
     periode: string;
     statut: string;
     site_ids?: string[];
@@ -219,11 +217,6 @@ const statutColor: Record<string, string> = {
     annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
-
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
 const mobileFiltered = computed(() => {
@@ -263,6 +256,8 @@ function openDialog(facture: FactureItem) {
 function handleEncaissSubmit(payload: {
     montant: number;
     mode_paiement: string;
+    operateur_mobile_money?: string;
+    reference_paiement?: string;
 }) {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
@@ -650,6 +645,20 @@ function _progressPercent(f: FactureItem): number {
                         </template>
                     </Column>
 
+                    <!-- Quantité -->
+                    <Column
+                        field="quantite_totale"
+                        header="Qté"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">{{
+                                formatQuantite(data.quantite_totale)
+                            }}</span>
+                        </template>
+                    </Column>
+
                     <!-- Montant -->
                     <Column
                         field="montant_net"
@@ -806,7 +815,7 @@ function _progressPercent(f: FactureItem): number {
                     ? `Historique — ${factureHistory.reference}`
                     : 'Historique'
             "
-            :style="{ width: '560px' }"
+            :style="{ width: '880px', maxWidth: '95vw' }"
         >
             <div v-if="factureHistory">
                 <div
@@ -832,6 +841,11 @@ function _progressPercent(f: FactureItem): number {
                                 class="px-3 py-2 text-left font-medium text-muted-foreground"
                             >
                                 Mode
+                            </th>
+                            <th
+                                class="hidden px-3 py-2 text-left font-medium text-muted-foreground sm:table-cell"
+                            >
+                                Référence
                             </th>
                             <th
                                 class="px-3 py-2 text-right font-medium text-muted-foreground"
@@ -866,7 +880,15 @@ function _progressPercent(f: FactureItem): number {
                                 }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement }}
+                                {{
+                                    e.operateur_mobile_money_label ??
+                                    e.mode_paiement
+                                }}
+                            </td>
+                            <td
+                                class="hidden px-3 py-2 text-muted-foreground sm:table-cell"
+                            >
+                                {{ e.reference_paiement ?? '—' }}
                             </td>
                             <td
                                 class="px-3 py-2 text-right font-medium tabular-nums"
@@ -881,7 +903,7 @@ function _progressPercent(f: FactureItem): number {
                     <tfoot>
                         <tr class="border-t">
                             <td
-                                colspan="3"
+                                colspan="4"
                                 class="px-3 py-2 text-sm font-semibold"
                             >
                                 Total encaissé
@@ -906,7 +928,7 @@ function _progressPercent(f: FactureItem): number {
         </Dialog>
 
         <!-- Dialog encaissement ─────────────────────────────────────────────── -->
-        <PaymentDialogCompact
+        <PaymentCard
             v-model:visible="dialogVisible"
             :title="
                 factureActive
@@ -916,7 +938,6 @@ function _progressPercent(f: FactureItem): number {
             :solde="factureActive?.montant_restant ?? 0"
             :processing="encaissProcessing"
             :errors="encaissErrors"
-            :modes-paiement="modes_paiement"
             @submit="handleEncaissSubmit"
         />
     </AppLayout>

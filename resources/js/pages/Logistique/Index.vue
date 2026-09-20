@@ -68,6 +68,7 @@ interface Transfert {
     can_annuler: boolean;
     can_valider_reception: boolean;
     created_at: string;
+    quantite_totale: number;
     lignes_reception: LigneReception[];
 }
 
@@ -577,6 +578,20 @@ const commStatutDot: Record<string, string> = {
                                     class="ml-1 font-mono text-xs"
                                     >({{ data.immatriculation }})</span
                                 >
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- Quantité totale -->
+                    <Column
+                        field="quantite_totale"
+                        header="Quantité totale"
+                        sortable
+                        style="width: 130px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-right tabular-nums">
+                                {{ data.quantite_totale }}
                             </span>
                         </template>
                     </Column>

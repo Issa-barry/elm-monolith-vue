@@ -53,6 +53,13 @@ class MouvementStockService
      * AjusterStockProduitController avant ce correctif) ou pourrait être
      * contourné par un appel direct au service.
      *
+     * $date est la date MÉTIER du mouvement (distincte de created_at, horodatage technique
+     * immuable) — par défaut aujourd'hui pour tout mouvement automatique (vente, transfert,
+     * réception), mais peut être choisie par l'utilisateur pour un ajustement manuel (cf.
+     * AjusterStockProduitController, modale "Ajuster le stock"). Jamais dans le futur au niveau
+     * de ce point d'entrée applicatif — la borne réelle est imposée par la validation de
+     * l'appelant (before_or_equal:today), pas ici.
+     *
      * @throws ValidationException si la sortie dépasse le disponible et $allowNegative est faux
      */
     public static function appliquer(
@@ -65,6 +72,7 @@ class MouvementStockService
         ?string $sourceId = null,
         ?string $userId = null,
         ?string $notes = null,
+        ?string $date = null,
         bool $allowNegative = false,
     ): MouvementStock {
         // VarianteStock::lockOuCreer() (24-25/08/2026) : récupère la ligne sous verrou, ou la
@@ -104,6 +112,7 @@ class MouvementStockService
             'produit_variante_id' => $varianteId,
             'type' => $type,
             'quantite' => $quantite,
+            'date' => $date ?? now()->toDateString(),
             'stock_avant' => $stockAvant,
             'stock_apres' => $stockApres,
             'source_type' => $sourceType,
@@ -241,6 +250,10 @@ class MouvementStockService
             'produit_variante_id' => $mouvement->produit_variante_id,
             'type' => $typeContraire,
             'quantite' => $mouvement->quantite,
+            // Date du jour (pas celle du mouvement annulé) : l'annulation est un événement à
+            // part entière, survenant "maintenant", jamais une correction rétroactive silencieuse
+            // de la date du mouvement original.
+            'date' => now()->toDateString(),
             'stock_avant' => $stockAvant,
             'stock_apres' => $stockApres,
             'source_type' => $mouvement->source_type,

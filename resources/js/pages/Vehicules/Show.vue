@@ -9,6 +9,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
+import SituationVentesTab from '@/pages/Vehicules/partials/SituationVentesTab.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -25,6 +26,7 @@ import {
     Receipt,
     Settings,
     ShoppingCart,
+    TrendingUp,
     TriangleAlert,
     UserRound,
     Users,
@@ -49,6 +51,32 @@ interface DepenseRow {
     date_depense: string | null;
     statut: string;
     commentaire: string | null;
+}
+
+interface SituationVentesData {
+    kpis: {
+        ca_vendu: number;
+        encaisse: number;
+        reste_du: number;
+        nb_ventes: number;
+    };
+    produits: Array<{
+        variante_id: string;
+        libelle: string | null;
+        quantite: number;
+        montant: number;
+    }>;
+    ventes: Array<{
+        id: string;
+        reference: string;
+        date: string | null;
+        client_nom: string | null;
+        montant: number;
+        encaisse: number;
+        reste: number;
+        statut: string | null;
+        statut_label: string;
+    }>;
 }
 
 interface MembreEquipeDetail {
@@ -146,6 +174,8 @@ const props = defineProps<{
     vehicule: VehiculeData;
     depenses: DepenseRow[];
     equipe: EquipeData | null;
+    situation_ventes: SituationVentesData;
+    situation_periode: 'all' | 'month' | 'year';
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
@@ -262,9 +292,9 @@ function partsCommissionMembre(livreurId: string | null) {
     });
 }
 
-const activeTab = ref<'informations' | 'equipe' | 'parrain' | 'depenses'>(
-    'informations',
-);
+const activeTab = ref<
+    'informations' | 'equipe' | 'parrain' | 'situation' | 'depenses'
+>('informations');
 
 const showParrainDialog = ref(false);
 const parrainDialogMode = ref<'ajouter' | 'modifier'>('ajouter');
@@ -457,6 +487,22 @@ function formatGNF(val: number): string {
                         <span class="inline-flex items-center gap-2">
                             <UserRound class="h-4 w-4" />
                             Parrain
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="situation-tab-btn"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'situation'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'situation'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <TrendingUp class="h-4 w-4" />
+                            Situation
                         </span>
                     </button>
                     <button
@@ -1130,6 +1176,14 @@ function formatGNF(val: number): string {
                         </div>
                     </div>
                 </div>
+
+                <!-- Situation tab -->
+                <SituationVentesTab
+                    v-else-if="activeTab === 'situation'"
+                    :vehicule-id="vehicule.id"
+                    :situation="situation_ventes"
+                    :periode="situation_periode"
+                />
 
                 <!-- Dépenses tab -->
                 <div v-else class="rounded-xl border bg-card p-5 sm:p-6">

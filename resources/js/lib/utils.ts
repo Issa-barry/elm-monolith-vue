@@ -154,6 +154,14 @@ export function formatGNF(value: number | null | undefined): string {
     return formatted.replace(/[  ]/g, ' ') + ' GNF';
 }
 
+// Même rendu des milliers que formatGNF (espace normale, pas l'espace fine insécable fr-FR),
+// sans l'unité — pour une quantité de produits (ex: "12 500").
+export function formatQuantite(value: number | null | undefined): string {
+    return new Intl.NumberFormat('fr-FR')
+        .format(Math.round(Number(value ?? 0)))
+        .replace(/[  ]/g, ' ');
+}
+
 export function phoneToTelHref(value: string | null | undefined) {
     if (!value) return '';
 

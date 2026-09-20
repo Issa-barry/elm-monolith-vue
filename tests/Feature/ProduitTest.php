@@ -993,6 +993,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 20,
                 'motif_type' => 'apres_production',
             ])
@@ -1027,6 +1028,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 15,
                 'motif_type' => 'perte',
             ])
@@ -1058,6 +1060,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1098,6 +1101,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1116,6 +1120,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1133,6 +1138,7 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1153,6 +1159,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $otherSite->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1167,6 +1174,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'diminuer' => 5,
                 'motif_type' => 'correction_stock',
@@ -1182,6 +1190,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('augmenter');
@@ -1195,6 +1204,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 0,
             ])
             ->assertSessionHasErrors('augmenter');
@@ -1202,6 +1212,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => -5,
             ])
             ->assertSessionHasErrors('diminuer');
@@ -1215,6 +1226,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'apres_achat',
             ])
@@ -1232,6 +1244,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'apres_achat',
             ])
@@ -1255,6 +1268,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 100,
                 'motif_type' => 'correction_stock',
             ])
@@ -1276,6 +1290,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
             ])
             ->assertStatus(403);
@@ -1299,12 +1314,106 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 9999,
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 
         $this->assertSame($countBefore, MouvementStock::where('produit_variante_id', $varianteId)->count());
+    }
+
+    // ── ajuster-stock : date métier ──────────────────────────────────────────────
+
+    public function test_ajuster_stock_echoue_sans_date(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_echoue_avec_date_future(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => now()->addDay()->toDateString(),
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_echoue_avec_date_invalide(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => 'pas-une-date',
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_accepte_aujourdhui_comme_date(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => now()->toDateString(),
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+    }
+
+    /**
+     * La date métier saisie par l'utilisateur doit être persistée telle quelle sur le
+     * mouvement — distincte de created_at (horodatage technique, toujours "maintenant"). Un
+     * ajustement peut légitimement être daté d'hier (rattrapage d'un oubli de saisie), sans que
+     * cela ne modifie le calcul stock_avant/stock_apres (toujours basé sur l'état réel actuel du
+     * stock, jamais rejoué à la date choisie).
+     */
+    public function test_ajuster_stock_enregistre_la_date_saisie_par_lutilisateur(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+        $hier = now()->subDay()->toDateString();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => $hier,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $mouvement = MouvementStock::where('produit_variante_id', $this->varianteId($produit))->firstOrFail();
+
+        $this->assertSame($hier, $mouvement->date->toDateString());
+        $this->assertNotNull($mouvement->created_at);
+        // created_at reste "aujourd'hui" (horodatage technique de création), même si la date
+        // métier saisie est antérieure — les deux ne sont jamais confondues.
+        $this->assertSame(now()->toDateString(), $mouvement->created_at->toDateString());
     }
 
     // ── historique ────────────────────────────────────────────────────────────
@@ -1324,6 +1433,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1332,9 +1442,11 @@ class ProduitTest extends TestCase
             ->getJson(route('produits.historique', $produit));
 
         $response->assertStatus(200)
-            ->assertJsonStructure(['ajustements', 'modifications']);
+            ->assertJsonStructure(['ajustements' => [['date', 'created_at']], 'modifications']);
 
         $this->assertNotEmpty($response->json('ajustements'));
+        // La date métier (d/m/Y) est distincte de created_at (horodatage technique, d/m/Y H:i).
+        $this->assertSame(now()->format('d/m/Y'), $response->json('ajustements.0.date'));
     }
 
     // ── Sécurité multi-agences ────────────────────────────────────────────────
@@ -1362,6 +1474,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $autresSite->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -1401,6 +1514,7 @@ class ProduitTest extends TestCase
         $this->actingAs($employe)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1438,6 +1552,7 @@ class ProduitTest extends TestCase
         $this->actingAs($employe)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $siteInterdit->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1479,6 +1594,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 50,
                 'motif_type' => 'correction_stock',
             ])
@@ -1511,6 +1627,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1540,6 +1657,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 15,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1570,6 +1688,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 20,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1636,6 +1755,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1643,6 +1763,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site2->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1780,6 +1901,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -1795,6 +1917,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'variante_id' => $varianteA->id,
                 'augmenter' => 7,
                 'motif_type' => 'apres_achat',

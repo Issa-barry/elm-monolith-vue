@@ -147,9 +147,11 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
     await montantInput.fill('1000');
     await montantInput.press('Tab');
 
-    // Soumettre
+    // Soumettre — le dialog d'encaissement de /factures est rendu par PaymentCard.vue, dont le
+    // bouton final s'intitule "Confirmer" ; "Confirmer le paiement" n'est plus que le libellé de
+    // PaymentDialogCompact.vue (Paie, commissions), jamais affiché ici.
     const validerEncaissement = dialog.getByRole('button', {
-        name: /confirmer le paiement/i,
+        name: /^confirmer$/i,
     });
     await expect(validerEncaissement).toBeEnabled({ timeout: 5_000 });
     await validerEncaissement.click();
