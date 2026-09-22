@@ -15,13 +15,15 @@ use App\Models\Site;
 use App\Services\Tresorerie\MouvementFondsService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class MouvementFondsServiceTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private MouvementFondsService $service;
 
@@ -68,6 +70,11 @@ class MouvementFondsServiceTest extends TestCase
             'type' => 'caisse',
             'libelle' => 'Caisse Agence',
         ]);
+
+        // Alimentation généreuse : la plupart des tests de ce fichier portent sur le workflow
+        // (envoyer/recevoir/contester...), pas sur le solde — garantirSoldeSuffisant() (règle du
+        // 22/09/2026, cf. tests dédiés plus bas) ne doit pas les faire échouer par manque de fonds.
+        $this->alimenterCaisse($this->caisseSiege, 50_000_000);
     }
 
     private function creerMouvement(float $montant = 500_000): MouvementFonds
@@ -236,12 +243,14 @@ class MouvementFondsServiceTest extends TestCase
         $piece = PieceComptable::find($pieceEnvoiId);
         $this->assertTrue($piece->fresh()->statut === StatutPieceComptable::CONTREPASSEE);
 
-        // La caisse du siège doit être revenue à son solde d'avant l'envoi (contrepassation).
+        // La caisse du siège doit être revenue à son solde d'avant l'envoi (contrepassation) —
+        // 50 000 000 (alimentation de setUp), pas 0 : ce test ne part plus d'une caisse à sec
+        // depuis la règle du 22/09/2026 (garantirSoldeSuffisant()).
         $solde = EcritureComptable::where('compte_comptable_id', $this->caisseSiege->compte_comptable_id)
             ->where('site_id', $this->siege->id)
             ->selectRaw('COALESCE(SUM(debit),0) - COALESCE(SUM(credit),0) as solde')
             ->value('solde');
-        $this->assertEquals(0.0, (float) $solde);
+        $this->assertEquals(50_000_000.0, (float) $solde);
     }
 
     public function test_confirmer_retour_refuse_sans_contestation_prealable(): void
@@ -276,5 +285,174 @@ class MouvementFondsServiceTest extends TestCase
             'compte_tresorerie_destination_id' => $this->caisseAgence->id,
             'montant' => 100,
         ], $this->user->id);
+    }
+
+    // ── Solde suffisant à l'envoi (règle du 22/09/2026) ─────────────────────────────────────
+    //
+    // Une caisse/support ne doit jamais pouvoir envoyer un montant supérieur à son solde
+    // disponible — vrai pour un mouvement entre agences comme pour un versement de caisse
+    // dédiée (déjà couvert par VersementCaisseAgentServiceTest, même garantirSoldeSuffisant()).
+
+    /** Caisse fraîche, jamais alimentée — indépendante de $this->caisseSiege (financée en setUp). */
+    private function nouvelleCaisseOrigine(string $libelle = 'Caisse test'): CompteTresorerie
+    {
+        $site = Site::create(['organization_id' => $this->org->id, 'nom' => $libelle.' — Site', 'type' => 'agence', 'localisation' => 'Conakry']);
+        $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();
+
+        return CompteTresorerie::create([
+            'organization_id' => $this->org->id, 'site_id' => $site->id,
+            'compte_comptable_id' => $compteCaisse->id, 'type' => 'caisse', 'libelle' => $libelle,
+        ]);
+    }
+
+    private function creerMouvementDepuis(CompteTresorerie $origine, float $montant): MouvementFonds
+    {
+        return $this->service->creerBrouillon($this->org->id, [
+            'site_origine_id' => $origine->site_id,
+            'site_destination_id' => $this->agence->id,
+            'compte_tresorerie_origine_id' => $origine->id,
+            'montant' => $montant,
+        ], $this->user->id);
+    }
+
+    public function test_envoyer_refuse_une_caisse_a_solde_nul(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $mouvement = $this->creerMouvementDepuis($origine, 500_000);
+
+        $this->assertErreurValidationSur('montant', fn () => $this->service->envoyer($mouvement, $this->user->id));
+        $this->assertSame(StatutMouvementFonds::BROUILLON, $mouvement->fresh()->statut);
+        $this->assertNull($mouvement->fresh()->piece_comptable_envoi_id);
+    }
+
+    public function test_envoyer_refuse_un_solde_inferieur_au_montant(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $this->alimenterCaisse($origine, 500_000);
+        $mouvement = $this->creerMouvementDepuis($origine, 1_000_000);
+
+        try {
+            $this->service->envoyer($mouvement, $this->user->id);
+            $this->fail('ValidationException attendue');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('montant', $e->errors());
+            // Le message cite le disponible ET le montant demandé — explicite pour l'utilisateur.
+            $this->assertStringContainsString('500 000', $e->errors()['montant'][0]);
+            $this->assertStringContainsString('1 000 000', $e->errors()['montant'][0]);
+        }
+        $this->assertSame(StatutMouvementFonds::BROUILLON, $mouvement->fresh()->statut);
+    }
+
+    public function test_envoyer_accepte_un_solde_exactement_egal_au_montant(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $this->alimenterCaisse($origine, 1_000_000);
+        $mouvement = $this->creerMouvementDepuis($origine, 1_000_000);
+
+        $envoye = $this->service->envoyer($mouvement, $this->user->id);
+
+        $this->assertSame(StatutMouvementFonds::ENVOYE, $envoye->statut);
+    }
+
+    public function test_envoyer_accepte_un_solde_superieur_au_montant(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $this->alimenterCaisse($origine, 1_500_000);
+        $mouvement = $this->creerMouvementDepuis($origine, 1_000_000);
+
+        $envoye = $this->service->envoyer($mouvement, $this->user->id);
+
+        $this->assertSame(StatutMouvementFonds::ENVOYE, $envoye->statut);
+    }
+
+    public function test_envoyer_refuse_une_caisse_desactivee_apres_la_creation_du_brouillon(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $this->alimenterCaisse($origine, 1_000_000);
+        $mouvement = $this->creerMouvementDepuis($origine, 500_000);
+
+        // Désactivée APRÈS coup : le brouillon existait déjà quand la caisse était encore utilisable.
+        $origine->update(['actif' => false]);
+
+        $this->assertErreurValidationSur('compte_tresorerie_id', fn () => $this->service->envoyer($mouvement, $this->user->id));
+    }
+
+    /**
+     * Défense en profondeur : creerBrouillon() refuse déjà une caisse jamais validée
+     * (cf. SupportTresorerieValidationServiceTest::test_un_mouvement_entre_agences_refuse_un_support_en_brouillon).
+     * Ce test contourne ce premier gate (création directe en base) pour prouver qu'envoyer()
+     * la refuse LUI AUSSI, pas seulement au premier passage.
+     */
+    public function test_envoyer_refuse_une_caisse_jamais_validee(): void
+    {
+        $site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site brouillon', 'type' => 'agence', 'localisation' => 'Conakry']);
+        $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();
+        // 'actif' => false explicite : sans quoi CompteTresorerie::boot() la réputerait
+        // automatiquement validée (cf. son docblock) — ici, jamais passée par
+        // SupportTresorerieValidationService::valider(), elle reste en brouillon (valide_le = null).
+        $origine = CompteTresorerie::create([
+            'organization_id' => $this->org->id, 'site_id' => $site->id,
+            'compte_comptable_id' => $compteCaisse->id, 'type' => 'caisse', 'libelle' => 'Caisse en brouillon',
+            'actif' => false,
+        ]);
+        $mouvement = MouvementFonds::create([
+            'organization_id' => $this->org->id,
+            'nature' => 'inter_sites',
+            'site_origine_id' => $origine->site_id,
+            'site_destination_id' => $this->agence->id,
+            'compte_tresorerie_origine_id' => $origine->id,
+            'montant' => 100_000,
+            'statut' => StatutMouvementFonds::BROUILLON->value,
+        ]);
+
+        $this->assertErreurValidationSur('compte_tresorerie_id', fn () => $this->service->envoyer($mouvement, $this->user->id));
+    }
+
+    /**
+     * Défense en profondeur : creerBrouillon() refuse déjà un montant nul/négatif à la création,
+     * et le montant est immuable ensuite (pas de route de modification d'un brouillon). Ce test
+     * contourne ce premier gate pour prouver qu'envoyer() le refuse LUI AUSSI.
+     */
+    public function test_envoyer_refuse_un_montant_nul_ou_negatif(): void
+    {
+        foreach ([0, -50_000] as $montant) {
+            $mouvement = MouvementFonds::create([
+                'organization_id' => $this->org->id,
+                'nature' => 'inter_sites',
+                'site_origine_id' => $this->siege->id,
+                'site_destination_id' => $this->agence->id,
+                'compte_tresorerie_origine_id' => $this->caisseSiege->id,
+                'montant' => $montant,
+                'statut' => StatutMouvementFonds::BROUILLON->value,
+            ]);
+
+            $this->assertErreurValidationSur('montant', fn () => $this->service->envoyer($mouvement, $this->user->id));
+        }
+    }
+
+    /**
+     * Protection contre le double envoi d'un même solde : chaque appel relit le solde RÉEL sous
+     * verrou (lockForUpdate sur la caisse), jamais une valeur mise en cache par le premier appel.
+     * Même mécanisme, même preuve que VersementCaisseAgentServiceTest::
+     * test_deux_versements_successifs_relisent_le_solde_deja_diminue() pour l'autre nature.
+     */
+    public function test_deux_envois_successifs_relisent_le_solde_deja_diminue(): void
+    {
+        $origine = $this->nouvelleCaisseOrigine();
+        $this->alimenterCaisse($origine, 800_000);
+
+        $premier = $this->creerMouvementDepuis($origine, 500_000);
+        $this->service->envoyer($premier, $this->user->id);
+
+        // Il ne reste que 300 000 : un second envoi de 500 000 depuis la même caisse est refusé,
+        // preuve que le solde relu tient compte du premier envoi déjà comptabilisé.
+        $second = $this->creerMouvementDepuis($origine, 500_000);
+        $this->assertErreurValidationSur('montant', fn () => $this->service->envoyer($second, $this->user->id));
+        $this->assertSame(StatutMouvementFonds::BROUILLON, $second->fresh()->statut);
+
+        // Le solde restant (300 000) suffit en revanche pour un envoi plus modeste.
+        $troisieme = $this->creerMouvementDepuis($origine, 300_000);
+        $envoye = $this->service->envoyer($troisieme, $this->user->id);
+        $this->assertSame(StatutMouvementFonds::ENVOYE, $envoye->statut);
     }
 }

@@ -344,7 +344,7 @@ describe('DataFilters — liste avec recherche par nom (searchable)', () => {
         expect(routerGet).toHaveBeenCalledWith('/liste', {}, expect.anything());
     });
 
-    it('élargit le champ avec `wide` (240 px), sinon 180 px', () => {
+    it('élargit le champ avec `wide` (280 px), sinon 180 px', () => {
         const largeur = (wrapper: ReturnType<typeof monterCaisse>) =>
             wrapper
                 .get('[data-testid="filter-inline-caisse_id"] > div')
@@ -352,7 +352,7 @@ describe('DataFilters — liste avec recherche par nom (searchable)', () => {
 
         expect(largeur(monterCaisse())).toContain('w-[180px]');
         expect(largeur(monterCaisse({}, { wide: true }))).toContain(
-            'w-[240px]',
+            'w-[280px]',
         );
     });
 });

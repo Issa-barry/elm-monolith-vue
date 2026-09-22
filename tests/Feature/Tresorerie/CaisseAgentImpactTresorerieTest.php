@@ -173,6 +173,8 @@ class CaisseAgentImpactTresorerieTest extends TestCase
     public function test_la_reception_d_un_mouvement_refuse_une_caisse_dediee_comme_destination(): void
     {
         [$siege, $caisseSiege] = $this->siegeAvecCaisse();
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi.
+        $this->alimenterCaisse($caisseSiege, 100_000);
         $service = app(MouvementFondsService::class);
         $mouvement = $service->envoyer($service->creerBrouillon($this->org->id, [
             'site_origine_id' => $siege->id,

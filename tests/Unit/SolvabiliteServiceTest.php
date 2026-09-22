@@ -127,10 +127,10 @@ class SolvabiliteServiceTest extends TestCase
 
     /**
      * Isole le blocage par SEUIL (dérogatoire) du verrou « première régularisation » — la
-     * facture doit avoir reçu au moins un encaissement, sinon le verrou bloquerait de toute
-     * façon et le test ne prouverait plus quel mécanisme est réellement à l'origine du blocage
-     * (cf. test_derogation_avec_plafond_enorme_ne_contourne_jamais_le_verrou_premiere_
-     * regularisation, qui teste spécifiquement le verrou).
+     * facture doit avoir reçu au moins un encaissement, sinon le test ne prouverait plus quel
+     * mécanisme est réellement à l'origine du blocage (cf. tests dédiés au verrou plus bas,
+     * section « Verrou « première régularisation » », qui couvrent aussi son interaction avec
+     * la dérogation).
      */
     public function test_vehicule_avec_derogation_bloque_au_dela_de_son_propre_plafond(): void
     {
@@ -594,23 +594,25 @@ class SolvabiliteServiceTest extends TestCase
 
     /**
      * Complète test_facture_creee_non_encaissee_bloque_le_vehicule_meme_sans_dette_au_sens_du_
-     * seuil (sans dérogation) et test_derogation_avec_plafond_enorme_ne_contourne_jamais_le_
-     * verrou_premiere_regularisation (statut IMPAYEE) : le cas explicite statut CREEE + une
-     * dérogation active manquait encore — la dérogation ne doit avoir AUCUN effet sur ce verrou,
-     * qu'il s'agisse d'une facture CREEE ou IMPAYEE.
+     * seuil (sans dérogation) : le cas explicite statut CREEE + une dérogation active dont le
+     * plafond couvre largement l'exposition (999 999 999 contre 1 000 000) — le verrou doit
+     * céder (décision produit du 22/09/2026, EN CORRECTION de la version du 20/08/2026 qui
+     * l'excluait totalement, cf. docblock de classe). La facture CREEE n'entre pas dans
+     * total_remaining (toujours exclue par facturesImpayeesVehicule()) : c'est bien son propre
+     * montant_restant qui doit être comparé au plafond ici, pas 0.
      */
-    public function test_facture_creee_avec_derogation_active_reste_bloquee_par_le_verrou(): void
+    public function test_facture_creee_avec_derogation_suffisante_leve_le_verrou(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 999_999_999]);
-        $facture = $this->makeFacture(1_000_000, StatutFactureVente::CREEE, $vehicule->id);
+        $this->makeFacture(1_000_000, StatutFactureVente::CREEE, $vehicule->id);
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
-        $this->assertSame('derogation', $resultat['seuil_origine'], 'la dérogation reste résolue normalement...');
-        $this->assertTrue($resultat['blocage_premiere_facture'], '...mais ne neutralise jamais le verrou');
-        $this->assertTrue($resultat['blocked']);
-        $this->assertSame($facture->reference, $resultat['facture_bloquante_reference']);
+        $this->assertSame('derogation', $resultat['seuil_origine']);
+        $this->assertSame(0, $resultat['total_remaining'], 'CREEE reste exclu du calcul de seuil, inchangé');
+        $this->assertFalse($resultat['blocage_premiere_facture'], 'sous le plafond dérogatoire → le verrou cède');
+        $this->assertFalse($resultat['blocked']);
     }
 
     public function test_facture_zero_encaissement_bloque_meme_controle_impayes_desactive(): void
@@ -745,12 +747,13 @@ class SolvabiliteServiceTest extends TestCase
     }
 
     /**
-     * Un plafond dérogatoire très élevé ne doit jamais permettre de contourner le verrou
-     * absolu « première régularisation » (cf. docblock de classe et section métier « Point à
-     * confirmer » de l'analyse du 22/08/2026) — ce verrou est totalement indépendant du calcul
-     * de seuil/dérogation.
+     * Un plafond dérogatoire qui couvre largement l'exposition lève désormais le verrou absolu
+     * « première régularisation » (décision produit du 22/09/2026, EN CORRECTION de la version
+     * du 20/08/2026 qui l'excluait totalement — cf. docblock de classe). facture_bloquante_*
+     * reste renseigné à titre informatif même une fois le verrou levé : la facture identifiée
+     * reste la même, seul blocage_premiere_facture/blocked change.
      */
-    public function test_derogation_avec_plafond_enorme_ne_contourne_jamais_le_verrou_premiere_regularisation(): void
+    public function test_derogation_avec_plafond_suffisant_leve_le_verrou_premiere_regularisation(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 999_999_999]);
@@ -758,9 +761,45 @@ class SolvabiliteServiceTest extends TestCase
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
-        $this->assertTrue($resultat['blocage_premiere_facture']);
+        $this->assertFalse($resultat['blocage_premiere_facture']);
+        $this->assertFalse($resultat['blocked']);
+        $this->assertSame($facture->reference, $resultat['facture_bloquante_reference']);
+    }
+
+    /**
+     * Symétrique du test précédent : une dérogation active mais dont le plafond ne couvre PAS
+     * l'exposition (facture bloquante comprise) laisse le verrou en place — la dérogation ne
+     * lève le verrou que si elle couvre réellement la situation, jamais inconditionnellement.
+     */
+    public function test_derogation_avec_plafond_insuffisant_laisse_le_verrou_premiere_regularisation(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
+        $facture = $this->makeFacture(10_000, StatutFactureVente::IMPAYEE, $vehicule->id); // 10 000 > plafond 5 000
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertTrue($resultat['blocage_premiere_facture'], 'le plafond ne couvre pas l\'exposition → le verrou reste actif');
         $this->assertTrue($resultat['blocked']);
         $this->assertSame($facture->reference, $resultat['facture_bloquante_reference']);
+    }
+
+    /**
+     * Exactement le scénario rapporté le 22/09/2026 : véhicule dérogatoire à 15 000 000 GNF avec
+     * une facture précédente jamais encaissée de 10 800 000 GNF — largement sous son propre
+     * plafond, donc désormais autorisé.
+     */
+    public function test_derogation_15_millions_avec_facture_non_encaissee_de_10_8_millions_leve_le_verrou(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 15_000_000]);
+        $this->makeFacture(10_800_000, StatutFactureVente::IMPAYEE, $vehicule->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertFalse($resultat['blocage_premiere_facture']);
+        $this->assertFalse($resultat['blocked']);
+        $this->assertSame(4_200_000, $resultat['montant_disponible']);
     }
 
     // ── Le plafond ne compare JAMAIS la dette existante au montant d'une nouvelle vente

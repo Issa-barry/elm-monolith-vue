@@ -18,13 +18,15 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Verrou « première régularisation » (décision produit du 20/08/2026) — bout en bout, sur le
- * point d'entrée réel Ventes\StoreCommandeVenteController. Le calcul lui-même (encaissé/restant,
+ * Verrou « première régularisation » (décision produit du 20/08/2026, ASSOUPLI le 22/09/2026
+ * pour une dérogation active dont le plafond couvre l'exposition) — bout en bout, sur le point
+ * d'entrée réel Ventes\StoreCommandeVenteController. Le calcul lui-même (encaissé/restant,
  * dérogations, isolation multi-org) est couvert unitairement par
  * tests/Unit/SolvabiliteServiceTest ; ce fichier vérifie que le contrôleur applique bien ce
- * verrou à la création réelle d'une commande, avec le bon message, et que le correctif sur
- * CommandeVenteService::annuler() (facture annulée en cascade) débloque effectivement le
- * véhicule. Voir aussi PdvCheckoutTest pour l'équivalent côté PDV, sur le même service.
+ * verrou (et son assouplissement par dérogation) à la création réelle d'une commande, avec le
+ * bon message, et que le correctif sur CommandeVenteService::annuler() (facture annulée en
+ * cascade) débloque effectivement le véhicule. Voir aussi PdvCheckoutTest pour l'équivalent côté
+ * PDV, sur le même service.
  */
 class VehiculePremiereRegularisationTest extends TestCase
 {
@@ -262,6 +264,58 @@ class VehiculePremiereRegularisationTest extends TestCase
         // encore active.
         $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
         $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->where('statut', '!=', 'annulee')->count());
+    }
+
+    // ── Dérogation active : peut lever le verrou (décision produit du 22/09/2026) ────
+
+    /**
+     * Reproduit exactement le scénario rapporté le 22/09/2026 : véhicule avec une dérogation à
+     * 15 000 000 GNF, facture précédente jamais encaissée de 10 800 000 GNF — largement sous le
+     * plafond, la nouvelle commande doit désormais être autorisée. Avant cette correction, le
+     * verrou du 20/08/2026 bloquait inconditionnellement, ignorant la dérogation configurée.
+     */
+    public function test_store_autorise_par_derogation_quand_lexposition_reste_sous_le_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule();
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 15_000_000]);
+        $this->makeFactureNonEncaissee(10_800_000, $vehicule);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), $this->payloadVente($vehicule))
+            ->assertSessionDoesntHaveErrors('impayes');
+
+        $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    /** Symétrique : une dérogation dont le plafond ne couvre pas l'exposition laisse le verrou actif. */
+    public function test_store_bloque_malgre_la_derogation_quand_lexposition_depasse_le_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule();
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
+        $facture = $this->makeFactureNonEncaissee(10_000, $vehicule); // 10 000 > plafond 5 000
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), $this->payloadVente($vehicule))
+            ->assertSessionHasErrors('impayes');
+
+        $errors = session('errors')->getBag('default')->get('impayes');
+        $this->assertStringContainsString('aucun paiement', $errors[0]);
+        $this->assertStringContainsString($facture->reference, $errors[0]);
+        $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    /** Sans dérogation active, le verrou reste absolu — comportement inchangé (cf. Cas 2 plus haut). */
+    public function test_store_bloque_sans_derogation_meme_avec_un_seuil_standard_tres_eleve(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 100_000_000);
+        $vehicule = $this->makeVehicule();
+        $this->makeFactureNonEncaissee(10_000, $vehicule);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), $this->payloadVente($vehicule))
+            ->assertSessionHasErrors('impayes');
     }
 
     // ── Cohérence aperçu (check-solvabilite) / création réelle ──────────────

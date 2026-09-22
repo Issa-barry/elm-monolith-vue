@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 vi.mock('@/composables/useFlashToast', () => ({ useFlashToast: vi.fn() }));
+vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }));
 vi.mock('@/layouts/AppLayout.vue', async () => {
     const { defineComponent, h } = await import('vue');
 
@@ -147,6 +148,101 @@ describe('Mouvements de fonds — versement en attente de confirmation', () => {
     });
 });
 
+// Chaque information a sa propre colonne (Référence / Type / Origine / Destination / Montant /
+// Envoyé par / Reçu par / Statut / Actions) : plus de regroupement « Traçabilité » multi-info dans
+// la cellule Référence (cf. revue produit du 22/09/2026).
+describe('Mouvements de fonds — colonnes indépendantes du tableau', () => {
+    const cellules = (wrapper: ReturnType<typeof monter>, ligne = 0) =>
+        wrapper.findAll('tbody tr')[ligne].findAll('td');
+
+    it('affiche neuf colonnes distinctes, dans cet ordre, sans en fusionner aucune', () => {
+        const entetes = monter([])
+            .findAll('thead th')
+            .map((th) => th.text());
+
+        expect(entetes).toEqual([
+            'Référence',
+            'Type',
+            'Origine',
+            'Destination',
+            'Montant',
+            'Envoyé par',
+            'Reçu par',
+            'Statut',
+            'Actions',
+        ]);
+    });
+
+    it('la colonne Référence ne contient plus que la référence, jamais le type ni les acteurs', () => {
+        const wrapper = monter([
+            mouvement({
+                reference: 'MVT-2026-00007',
+                expediteur: 'Moussa sidibé',
+                receptionnaire: 'Ibrahima Caissier',
+            }),
+        ]);
+
+        expect(cellules(wrapper)[0].text()).toBe('MVT-2026-00007');
+    });
+
+    it('la colonne Type affiche le libellé de la nature et, si présent, le commentaire en dessous', () => {
+        const wrapper = monter([
+            mouvement({
+                nature_label: 'Versement de caisse',
+                commentaire: 'Avance sur salaire',
+            }),
+        ]);
+
+        expect(wrapper.get('[data-testid="mouvement-type"]').text()).toBe(
+            'Versement de caisse Avance sur salaire',
+        );
+    });
+
+    it("n'affiche aucun commentaire sous Type quand il est absent", () => {
+        const wrapper = monter([
+            mouvement({ nature_label: 'Entre agences', commentaire: null }),
+        ]);
+
+        expect(wrapper.get('[data-testid="mouvement-type"]').text()).toBe(
+            'Entre agences',
+        );
+    });
+
+    it('la colonne « Envoyé par » affiche le nom de l’expéditeur, ou un tiret sans envoi', () => {
+        const [envoye, pasEnvoye] = monter([
+            mouvement({
+                id: 'a',
+                expediteur: 'Moussa sidibé',
+                date_envoi: '2026-09-20',
+            }),
+            mouvement({ id: 'b', expediteur: null, date_envoi: null }),
+        ]).findAll('[data-testid="mouvement-envoye-par"]');
+
+        expect(envoye.text()).toContain('Moussa sidibé');
+        expect(pasEnvoye.text()).toBe('—');
+    });
+
+    it('la colonne « Reçu par » affiche le nom du réceptionnaire, ou un tiret sans réception', () => {
+        const [recu, pasRecu] = monter([
+            mouvement({
+                id: 'a',
+                receptionnaire: 'Ibrahima Caissier',
+                date_reception: '2026-09-21',
+            }),
+            mouvement({ id: 'b', receptionnaire: null, date_reception: null }),
+        ]).findAll('[data-testid="mouvement-recu-par"]');
+
+        expect(recu.text()).toContain('Ibrahima Caissier');
+        expect(pasRecu.text()).toBe('—');
+    });
+
+    it("l'état vide couvre les neuf colonnes", () => {
+        const vide = monter([]).find('tbody tr td');
+
+        expect(vide.attributes('colspan')).toBe('9');
+    });
+});
+
 describe('Mouvements de fonds — filtres de la barre', () => {
     const sites = [
         { value: 's1', label: 'Matoto' },
@@ -158,7 +254,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         { value: 'c2', label: 'Caisse Agence' },
     ];
 
-    it('garde Caisse, Référence, Nature et Origine / Destination directement dans la barre', () => {
+    it('garde Caisse, Référence et Nature directement dans la barre', () => {
         const champs = monter([], { caisses_filtre: caisses })
             .findComponent(DataFilters)
             .props('fields');
@@ -176,11 +272,6 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         });
         expect(parCle.nature).toMatchObject({
             label: 'Nature',
-            type: 'select',
-            inline: true,
-        });
-        expect(parCle.caisse_role).toMatchObject({
-            label: 'Origine / Destination',
             type: 'select',
             inline: true,
         });
@@ -209,17 +300,16 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             { value: 'destination', label: 'Destination' },
         ]);
         // Sans choix : origine OU destination (placeholder), c'est le comportement par défaut du backend.
-        expect(position?.placeholder).toBe('Origine ou destination');
-        // Les listes d'agences d'origine et de destination ne sont plus dans la barre principale.
+        expect(position?.placeholder).toBe('Les deux');
+        // Origine / Destination est un filtre avancé (tiroir « Filtres »), plus dans la barre principale.
         expect(champs.filter((c) => c.inline).map((c) => c.key)).toEqual([
             'caisse_id',
             'search',
             'nature',
-            'caisse_role',
         ]);
     });
 
-    it('range Statut, agences d’origine/destination et Montant min/max dans le tiroir du bouton « Filtres »', () => {
+    it('range Origine / Destination, Statut, agences d’origine/destination et Montant min/max dans le tiroir du bouton « Filtres »', () => {
         const wrapper = monter([], { sites_mouvements: sites });
         const filtres = wrapper.findComponent(DataFilters);
         const parCle = Object.fromEntries(
@@ -227,6 +317,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         );
 
         // Un champ sans `inline` va dans le tiroir ; DataFilters affiche alors le bouton « Filtres ».
+        expect(parCle.caisse_role.inline).toBeFalsy();
         expect(parCle.statut.inline).toBeFalsy();
         // Fonctionnalité conservée (mêmes paramètres d'URL), libellés distincts de « Origine / Destination ».
         expect(parCle.site_origine_id).toMatchObject({
@@ -478,5 +569,93 @@ describe('Mouvements de fonds — un seul envoi à la fois', () => {
         await terminerRequete();
 
         expect(envoyer.attributes('disabled')).toBeUndefined();
+    });
+});
+
+// Le support de trésorerie reçu est obligatoire (validé côté serveur) : l'interface ne doit pas
+// laisser croire que « Confirmer » est possible tant qu'aucun support n'est sélectionné — un
+// mouvement entre agences (contrairement à un versement de caisse, dont la destination est déjà
+// fixée à l'envoi) ouvre le dialogue avec le select vide.
+describe('Mouvements de fonds — Confirmer désactivé sans support sélectionné', () => {
+    const post = vi.mocked(router.post);
+
+    beforeEach(() => post.mockClear());
+
+    const comptes = [
+        { id: 'c1', site_id: 's1', libelle: 'Caisse Agence', type: 'caisse' },
+    ];
+
+    const ouvrirReceptionEntreAgences = async () => {
+        const wrapper = monter(
+            [
+                mouvement({
+                    nature: 'inter_sites',
+                    nature_label: 'Entre agences',
+                    peut_recevoir: true,
+                    compte_destination_id: null,
+                }),
+            ],
+            { comptes_tresorerie: comptes },
+        );
+        await wrapper
+            .findAll('button')
+            .find((b) => b.text() === 'Confirmer réception')!
+            .trigger('click');
+
+        return wrapper;
+    };
+
+    const confirmerBtn = (
+        wrapper: Awaited<ReturnType<typeof ouvrirReceptionEntreAgences>>,
+    ) => wrapper.get('[data-testid="reception-confirmer"]');
+
+    it('désactive « Confirmer » à l’ouverture du dialogue, sans support sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('empêche la confirmation tant qu’aucun support n’est sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        // Un bouton disabled ne déclenche pas @click côté navigateur — le contrôle côté client
+        // existant (« Le support de trésorerie est obligatoire ») reste la garantie de fond.
+        await confirmerBtn(wrapper).trigger('click');
+
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it('active « Confirmer » dès qu’un support valide est sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        await wrapper.get('#compte-reception').setValue('c1');
+
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('redevient désactivé si la sélection est retirée', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+        const select = wrapper.get('#compte-reception');
+
+        await select.setValue('c1');
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeUndefined();
+
+        await select.setValue('');
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('confirme normalement une fois un support valide sélectionné (comportement inchangé)', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+        await wrapper.get('#compte-reception').setValue('c1');
+
+        await confirmerBtn(wrapper).trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/recevoir',
+        );
+        expect(post.mock.calls[0][1]).toEqual({
+            compte_tresorerie_destination_id: 'c1',
+        });
     });
 });

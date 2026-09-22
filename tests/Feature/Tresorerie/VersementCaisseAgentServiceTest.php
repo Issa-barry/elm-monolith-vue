@@ -453,6 +453,8 @@ class VersementCaisseAgentServiceTest extends TestCase
         // Témoin : un vrai envoi du siège vers l'agence, en transit, est bien compté.
         $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
         $caisseSiege = $this->creerCaisseAgence($siege, 'Caisse Siège');
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi.
+        $this->alimenterCaisse($caisseSiege, 50_000);
         $financement = $this->service->envoyer($this->service->creerBrouillon($this->org->id, [
             'site_origine_id' => $siege->id,
             'site_destination_id' => $this->site->id,
