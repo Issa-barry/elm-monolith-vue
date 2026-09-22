@@ -2,8 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\NatureMouvementFonds;
+use App\Enums\StatutMouvementFonds;
 use App\Enums\StatutTransfert;
 use App\Models\ContactMessage;
+use App\Models\MouvementFonds;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -111,6 +114,50 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $query->whereIn('site_destination_id', $siteIds)->count();
+    }
+
+    /**
+     * Mouvements de fonds ENVOYÉS entre agences (nature `inter_sites` — un versement de caisse
+     * dédiée `interne_caisses` suit son propre workflow, déjà traité par sa page dédiée) destinés
+     * à un site de l'utilisateur et qu'il est habilité à confirmer. Affiché comme badge sur le
+     * menu Mouvements (Comptabilité > Trésorerie). Le badge disparaît de lui-même dès la
+     * confirmation (ENVOYE -> RECU) : ce compteur relit l'état réel du mouvement, il ne mémorise
+     * aucun état de lecture séparé.
+     *
+     * Un admin (`isAdmin()`) voit le compteur org-wide, sans restriction de site — pas seulement
+     * pour ses propres sites rattachés. C'est nécessaire pour rester cohérent avec le reste de la
+     * fonctionnalité : `MouvementFondsPolicy::recevoir()` laisse déjà un admin confirmer un
+     * mouvement même sans y être personnellement affecté, et `MouvementFondsController::
+     * mouvementsVisibles()` lui montre déjà tous les mouvements de l'organisation. Un admin
+     * pourrait donc déjà AGIR sur un mouvement sans jamais être PRÉVENU qu'une action l'attend —
+     * incident constaté le 22/09/2026 (super admin rattaché uniquement au siège, mouvement envoyé
+     * vers une autre agence, badge resté à 0). Volontairement différent de
+     * transfertsAReceptionner() ci-dessus, qui n'a pas cette dérogation (non corrigé, hors
+     * périmètre de ce chantier).
+     */
+    private function mouvementsFondsAConfirmer(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+        if (! $user->can('tresorerie.recevoir')) {
+            return 0;
+        }
+
+        $query = MouvementFonds::where('organization_id', $user->organization_id)
+            ->where('nature', NatureMouvementFonds::INTER_SITES->value)
+            ->where('statut', StatutMouvementFonds::ENVOYE->value);
+
+        if (! $user->isAdmin()) {
+            $siteIds = $user->sites()->pluck('sites.id');
+            if ($siteIds->isEmpty()) {
+                return 0;
+            }
+            $query->whereIn('site_destination_id', $siteIds);
+        }
+
+        return $query->count();
     }
 
     private function propositionsATraiter(Request $request): int
@@ -304,6 +351,7 @@ class HandleInertiaRequests extends Middleware
             'stock_alertes' => $this->stockAlertes($request),
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
+            'mouvements_fonds_a_confirmer' => $this->mouvementsFondsAConfirmer($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),

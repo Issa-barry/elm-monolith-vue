@@ -146,7 +146,7 @@ Pour une plage (montant, quantité…), déclarer **deux** champs `number` : le 
 { key: 'montant_max', label: 'Montant max', type: 'number', placeholder: '0' },
 ```
 Exemple en production : `Comptabilite/MouvementsFonds/Index.vue` (barre : Agence → **Caisse** (recherche par
-nom) → Référence → Nature → **Origine / Destination** (position de la caisse) ; **Statut, agences d'origine et
+nom) → Référence → Nature ; **Origine / Destination** (position de la caisse), **Statut, agences d'origine et
 de destination et Montant min/max dans le tiroir « Filtres »**, dont le bouton est placé dans l'en-tête à côté
 de « Nouveau mouvement » ; backend dans `MouvementFondsController::index`).
 

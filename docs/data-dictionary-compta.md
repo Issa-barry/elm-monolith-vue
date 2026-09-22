@@ -399,6 +399,49 @@ mouvements entre agences).
 
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
 
+## Notification — mouvements de fonds à confirmer
+
+Livré le 22/09/2026. Un mouvement de fonds **entre agences** (nature `inter_sites` — remise au
+siège ou financement, jamais un versement `interne_caisses`, déjà signalé « En attente de
+confirmation » sur l'écran Mouvements, cf. ci-dessus) passé à l'état **Envoyé** doit se voir sans
+que le site destinataire ait à consulter la liste : mêmes deux surfaces que
+`transferts_a_receptionner` (Logistique > Réceptions), réutilisées à l'identique plutôt qu'un
+nouveau mécanisme de notification.
+
+- **Calcul** : `HandleInertiaRequests::mouvementsFondsAConfirmer()` — compte les `MouvementFonds`
+  `organization_id` de l'utilisateur, `nature = inter_sites`, `statut = envoye`, pour un
+  utilisateur ayant la permission **`tresorerie.recevoir`** (celle vérifiée par
+  `MouvementFondsPolicy::recevoir()`). Un **admin** (`isAdmin()`) voit le compteur **org-wide**,
+  sans filtre de site ; un **non-admin** ne voit que les mouvements dont `site_destination_id` est
+  l'un de ses sites (`user_sites`). Partagé à chaque page via Inertia comme
+  `mouvements_fonds_a_confirmer`.
+- **Pas de notification persistée** : ce n'est ni une ligne en base ni un événement — un compteur
+  live, relu à chaque navigation. Il n'y a donc rien à marquer « lu » : le badge disparaît de
+  lui-même dès que le mouvement change de statut (confirmation `Envoyé → Reçu`, ou contestation).
+- **Dérogation admin, contrairement à `transferts_a_receptionner`** : incident constaté le
+  22/09/2026 — un super admin rattaché uniquement au Siège avait envoyé un mouvement vers une
+  autre agence et ne voyait aucun badge, alors que l'écran Mouvements lui permettait déjà de
+  cliquer « Confirmer réception » sur ce même mouvement (`MouvementFondsPolicy::recevoir()` laisse
+  un admin agir même sans y être personnellement affecté, et `mouvementsVisibles()` lui montre déjà
+  tous les mouvements de l'organisation). Sans la dérogation, un admin pouvait donc AGIR sur un
+  mouvement sans jamais être PRÉVENU. Corrigé en alignant le compteur sur ces deux comportements
+  admin déjà existants. `transferts_a_receptionner` (Logistique > Réceptions), lui, n'a **pas**
+  cette dérogation — limite pré-existante, non corrigée ici (hors périmètre de ce chantier).
+- **Affichage** :
+  - Badge rouge sur le menu **Comptabilité > Trésorerie > Mouvements** (`AppSidebar.vue`),
+    agrégé automatiquement vers les niveaux parents (« Trésorerie », « Comptabilité ») par
+    `NavMainItem.vue::parentBadge()` — aucune logique d'agrégation propre à ajouter.
+  - Bloc dédié dans la cloche de notifications (`AppSidebarHeader.vue`), même gabarit que les
+    blocs « Rupture de stock » / « Messages contact » déjà présents, comptabilisé dans le total
+    affiché sur l'icône. Le lien mène vers
+    `/backoffice/comptabilite/tresorerie/mouvements?statut=envoye` (filtre `statut` déjà existant
+    de l'écran Mouvements) ; la portée par agence de l'utilisateur reste appliquée côté serveur
+    par `MouvementFondsController::mouvementsVisibles()`.
+- **Exclusions explicites** : `interne_caisses` (a son propre affichage « En attente de
+  confirmation »), tout statut autre qu'Envoyé (Brouillon, Reçu, Annulé, Contesté, Retourné —
+  Contesté n'est volontairement pas compté ici : la destination a déjà agi en contestant, la
+  balle est côté origine via `tresorerie.confirmer_retour`), et toute autre organisation.
+
 ## Journal financier — vue de lecture
 
 L'écran "Journal financier" (`/backoffice/comptabilite/journal`,
