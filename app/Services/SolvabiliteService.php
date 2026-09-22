@@ -63,17 +63,26 @@ use Illuminate\Validation\ValidationException;
  * dette, dès que son montant dépassait le plafond dérogatoire — cf. cas ABDOULAYE, 0 GNF de
  * dette, plafond 500 000 GNF, vente de 10 800 000 GNF refusée à tort).
  *
- * Verrou absolu « première régularisation » (décision produit du 20/08/2026) — indépendant du
- * calcul de dette ci-dessus et du paramètre « contrôle des impayés » : un véhicule possédant
- * déjà une facture n'ayant reçu STRICTEMENT AUCUN encaissement (montant_encaisse <= 0 ET
+ * Verrou « première régularisation » (décision produit du 20/08/2026, ASSOUPLI le 22/09/2026) —
+ * indépendant du calcul de dette ci-dessus et du paramètre « contrôle des impayés » : un véhicule
+ * possédant déjà une facture n'ayant reçu STRICTEMENT AUCUN encaissement (montant_encaisse <= 0 ET
  * montant_restant > 0, jamais un test sur le libellé du statut — un statut CREEE compte autant
  * qu'un statut IMPAYEE, cf. premiereFactureNonEncaisseeVehicule()) ne peut recevoir aucune
  * nouvelle commande tant que cette facture n'a pas reçu au moins un encaissement, quel que soit
- * le paramétrage du contrôle de seuil — AUCUN plafond dérogatoire, même très élevé, ne permet de
- * le contourner. Dès qu'un encaissement — même partiel — existe sur TOUTES les factures non
- * soldées du véhicule, ce verrou n'a plus prise et seul le contrôle de seuil habituel
- * (ci-dessous) s'applique. Ne concerne que la cible 'vehicule' : un client seul (repli, sans
- * véhicule) n'est jamais soumis à ce verrou, uniquement au contrôle de seuil.
+ * le paramétrage du contrôle de seuil — SAUF si une dérogation est active sur le véhicule/client
+ * ET que l'exposition totale (dette déjà comptée au sens du seuil + la facture bloquante
+ * elle-même si son statut ne l'y faisait pas déjà entrer, ex. encore CREEE) reste dans son
+ * plafond dérogatoire : dans ce cas précis, ce verrou n'a plus prise et seul le contrôle de
+ * seuil habituel s'applique (qui, par construction, est alors déjà respecté). Un véhicule/client
+ * SANS dérogation active reste bloqué exactement comme avant — ce verrou ne s'assouplit jamais
+ * pour le seuil standard, seulement pour une dérogation explicitement configurée (décision
+ * produit du 22/09/2026, EN CORRECTION de la version du 20/08/2026 qui l'excluait totalement :
+ * un véhicule dérogatoire à 15 000 000 GNF avec une facture jamais encaissée restait bloqué
+ * même largement sous son propre plafond — cf. rapport du 22/09/2026). Dès qu'un encaissement —
+ * même partiel — existe sur TOUTES les factures non soldées du véhicule, ce verrou n'a de toute
+ * façon plus prise (avec ou sans dérogation) et seul le contrôle de seuil habituel (ci-dessous)
+ * s'applique. Ne concerne que la cible 'vehicule' : un client seul (repli, sans véhicule) n'est
+ * jamais soumis à ce verrou, uniquement au contrôle de seuil.
  */
 class SolvabiliteService
 {
@@ -132,6 +141,24 @@ class SolvabiliteService
         // 22/08/2026).
         $blockedSeuil = $controleActif && $totalRemaining > $seuil;
         $blockedPremiereFacture = $factureBloquante !== null;
+
+        // Assouplissement du 22/09/2026 (cf. docblock de classe) : une dérogation active peut
+        // lever le verrou « première régularisation » si l'exposition totale — la dette déjà
+        // comptée ci-dessus PLUS la facture bloquante elle-même si son statut ne l'y faisait pas
+        // déjà entrer (ex. encore CREEE, jamais compté par facturesImpayeesVehicule()) — reste
+        // dans le plafond dérogatoire. Jamais pour le seuil standard : sans dérogation active, ce
+        // verrou reste absolu, comportement inchangé.
+        if ($blockedPremiereFacture && $seuilOrigine === 'derogation') {
+            $dejaCompteeDansLaDette = $factures->contains(fn (FactureVente $f) => $f->is($factureBloquante));
+            $expositionFactureBloquante = $dejaCompteeDansLaDette
+                ? 0
+                : (int) round((float) $factureBloquante->montant_restant);
+            $expositionTotale = $totalRemaining + $expositionFactureBloquante;
+
+            if ($expositionTotale <= $seuil) {
+                $blockedPremiereFacture = false;
+            }
+        }
 
         return [
             'cible' => $cible,

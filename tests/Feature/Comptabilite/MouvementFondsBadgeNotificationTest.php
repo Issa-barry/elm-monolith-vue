@@ -14,6 +14,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -25,7 +26,7 @@ use Tests\TestCase;
  */
 class MouvementFondsBadgeNotificationTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private Site $siege;
 
@@ -53,6 +54,10 @@ class MouvementFondsBadgeNotificationTest extends TestCase
             'organization_id' => $this->org->id, 'site_id' => $this->agence->id,
             'compte_comptable_id' => $compteCaisse->id, 'type' => 'caisse', 'libelle' => 'Caisse Agence',
         ]);
+
+        // Ce fichier teste le badge, pas le solde — garantirSoldeSuffisant() (règle du
+        // 22/09/2026) ne doit pas faire échouer test_apparait_des_l_envoi_via_la_route().
+        $this->alimenterCaisse($this->caisseSiege, 50_000_000);
     }
 
     private function creerMouvement(Site $origine, Site $destination, StatutMouvementFonds $statut, string $nature = 'inter_sites', ?Organization $org = null): MouvementFonds

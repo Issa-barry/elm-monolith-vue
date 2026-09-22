@@ -235,6 +235,9 @@ class FinancementAgenceServiceTest extends TestCase
             ['organization_id' => $this->org->id, 'site_id' => $siege->id, 'compte_comptable_id' => $compteCaisse->id],
             ['type' => 'caisse', 'libelle' => 'Caisse Siège'],
         );
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi ;
+        // montant confortablement au-dessus de tout $montant utilisé dans ce fichier.
+        $this->alimenterCaisse($caisseSiege, 10_000_000);
 
         $mvtService = app(MouvementFondsService::class);
         $mouvement = $mvtService->creerBrouillon($this->org->id, [

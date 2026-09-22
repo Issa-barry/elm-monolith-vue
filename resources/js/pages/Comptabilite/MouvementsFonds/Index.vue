@@ -25,6 +25,7 @@ import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowRightLeft, Info } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface Mouvement {
@@ -86,6 +87,7 @@ const props = defineProps<{
 }>();
 
 useFlashToast('top');
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -210,6 +212,20 @@ function envoyer(m: Mouvement) {
     poster(
         `/backoffice/comptabilite/tresorerie/mouvements/${m.id}/envoyer`,
         {},
+        {
+            // Pas de dialogue dédié pour « Envoyer » (contrairement à Confirmer réception/motif) :
+            // un solde insuffisant (règle backend, cf. MouvementFondsService::garantirSoldeSuffisant())
+            // doit quand même être visible, pas juste ravaler l'erreur en silence.
+            onError: (errors) =>
+                toast.add({
+                    group: 'top',
+                    severity: 'error',
+                    summary: 'Envoi impossible',
+                    detail:
+                        Object.values(errors)[0] ?? 'Une erreur est survenue.',
+                    life: 6000,
+                }),
+        },
     );
 }
 
@@ -712,7 +728,7 @@ function confirmerMotif() {
                     <button
                         type="button"
                         data-testid="reception-confirmer"
-                        :disabled="enCours"
+                        :disabled="enCours || !receptionCompteId"
                         :aria-busy="enCours"
                         class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         @click="confirmerReception"

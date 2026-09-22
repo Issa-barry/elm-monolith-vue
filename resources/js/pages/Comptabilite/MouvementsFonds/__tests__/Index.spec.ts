@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 vi.mock('@/composables/useFlashToast', () => ({ useFlashToast: vi.fn() }));
+vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }));
 vi.mock('@/layouts/AppLayout.vue', async () => {
     const { defineComponent, h } = await import('vue');
 
@@ -568,5 +569,93 @@ describe('Mouvements de fonds — un seul envoi à la fois', () => {
         await terminerRequete();
 
         expect(envoyer.attributes('disabled')).toBeUndefined();
+    });
+});
+
+// Le support de trésorerie reçu est obligatoire (validé côté serveur) : l'interface ne doit pas
+// laisser croire que « Confirmer » est possible tant qu'aucun support n'est sélectionné — un
+// mouvement entre agences (contrairement à un versement de caisse, dont la destination est déjà
+// fixée à l'envoi) ouvre le dialogue avec le select vide.
+describe('Mouvements de fonds — Confirmer désactivé sans support sélectionné', () => {
+    const post = vi.mocked(router.post);
+
+    beforeEach(() => post.mockClear());
+
+    const comptes = [
+        { id: 'c1', site_id: 's1', libelle: 'Caisse Agence', type: 'caisse' },
+    ];
+
+    const ouvrirReceptionEntreAgences = async () => {
+        const wrapper = monter(
+            [
+                mouvement({
+                    nature: 'inter_sites',
+                    nature_label: 'Entre agences',
+                    peut_recevoir: true,
+                    compte_destination_id: null,
+                }),
+            ],
+            { comptes_tresorerie: comptes },
+        );
+        await wrapper
+            .findAll('button')
+            .find((b) => b.text() === 'Confirmer réception')!
+            .trigger('click');
+
+        return wrapper;
+    };
+
+    const confirmerBtn = (
+        wrapper: Awaited<ReturnType<typeof ouvrirReceptionEntreAgences>>,
+    ) => wrapper.get('[data-testid="reception-confirmer"]');
+
+    it('désactive « Confirmer » à l’ouverture du dialogue, sans support sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('empêche la confirmation tant qu’aucun support n’est sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        // Un bouton disabled ne déclenche pas @click côté navigateur — le contrôle côté client
+        // existant (« Le support de trésorerie est obligatoire ») reste la garantie de fond.
+        await confirmerBtn(wrapper).trigger('click');
+
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it('active « Confirmer » dès qu’un support valide est sélectionné', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+
+        await wrapper.get('#compte-reception').setValue('c1');
+
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('redevient désactivé si la sélection est retirée', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+        const select = wrapper.get('#compte-reception');
+
+        await select.setValue('c1');
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeUndefined();
+
+        await select.setValue('');
+        expect(confirmerBtn(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('confirme normalement une fois un support valide sélectionné (comportement inchangé)', async () => {
+        const wrapper = await ouvrirReceptionEntreAgences();
+        await wrapper.get('#compte-reception').setValue('c1');
+
+        await confirmerBtn(wrapper).trigger('click');
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe(
+            '/backoffice/comptabilite/tresorerie/mouvements/m1/recevoir',
+        );
+        expect(post.mock.calls[0][1]).toEqual({
+            compte_tresorerie_destination_id: 'c1',
+        });
     });
 });
