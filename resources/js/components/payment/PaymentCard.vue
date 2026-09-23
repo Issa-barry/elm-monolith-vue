@@ -31,6 +31,10 @@ interface ModeOption {
     /** Envoyé dans `operateur_mobile_money` uniquement quand mode_paiement = mobile_money. */
     operateur_mobile_money?: string;
     requiresReference: boolean;
+    /** Ce mode n'est possible que si l'utilisateur a une caisse dédiée active sur le site de la
+     * facture (espèces uniquement, cf. CaisseAgentResolver::garantirCaissePourEspeces()) : sans
+     * elle, l'option est désactivée et un message l'explique, cf. prop `especesDisponibles`. */
+    requiresCaisse?: boolean;
     icon: LucideIcon;
     /** Classes Tailwind du badge icône (fond + couleur) — juste pour distinguer visuellement
      * les options entre elles, pas un logo de marque. */
@@ -56,7 +60,16 @@ interface Props {
     processing?: boolean;
     errors?: Record<string, string>;
     modes?: ModeOption[];
+    /** L'utilisateur peut-il encaisser en espèces sur cette facture ? Fourni par le backend
+     * (`peut_encaisser_especes`) : caisse dédiée active sur le site de la facture. Défaut `true` :
+     * un écran qui l'oublierait ne masque rien, la garantie réelle reste côté serveur. */
+    especesDisponibles?: boolean;
 }
+
+// Texte identique à CaisseAgentResolver::MESSAGE_SANS_CAISSE (renvoyé aussi par le backend si le
+// bouton était contourné) — visible directement sous la liste, pas seulement au survol.
+const MESSAGE_ESPECES_INDISPONIBLE =
+    "Vous ne disposez pas d'une caisse active : impossible d'encaisser en espèces. Contactez votre responsable pour qu'il vous en crée une.";
 
 // Une seule liste déroulante "Mode de paiement" — l'opérateur Mobile Money (Orange Money, Kulu,
 // Soutra Money, MOMO, PayCard) apparaît comme option directe, jamais comme un second select.
@@ -73,6 +86,7 @@ const DEFAULT_MODES: ModeOption[] = [
         label: 'Espèces',
         mode_paiement: 'especes',
         requiresReference: false,
+        requiresCaisse: true,
         icon: Wallet,
         badgeClass:
             'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -161,9 +175,27 @@ const props = withDefaults(defineProps<Props>(), {
     maxMontant: undefined,
     processing: false,
     errors: () => ({}),
+    especesDisponibles: true,
 });
 
 const modeOptions = computed(() => props.modes ?? DEFAULT_MODES);
+
+function modeIndisponible(mode: ModeOption): boolean {
+    return !!mode.requiresCaisse && !props.especesDisponibles;
+}
+
+const especesBloquees = computed(() =>
+    modeOptions.value.some((m) => modeIndisponible(m)),
+);
+
+// Mode présélectionné à l'ouverture : le premier, sauf s'il est indisponible — jamais un autre mode
+// choisi à la place de l'utilisateur (un Mobile Money enregistré par erreur serait un encaissement
+// mal classé) : la liste reste vide et il choisit lui-même.
+function modeInitial(): string {
+    const premier = modeOptions.value[0];
+
+    return premier && !modeIndisponible(premier) ? premier.key : '';
+}
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
@@ -185,7 +217,7 @@ const localVisible = computed({
 });
 
 const montant = ref<number | null>(null);
-const selectedKey = ref(modeOptions.value[0]?.key ?? 'especes');
+const selectedKey = ref(modeInitial());
 const referencePaiement = ref('');
 
 function modeByKey(key: string): ModeOption | undefined {
@@ -207,11 +239,23 @@ watch(
     (open) => {
         if (open) {
             montant.value = props.solde > 0 ? props.solde : null;
-            selectedKey.value = modeOptions.value[0]?.key ?? 'especes';
+            selectedKey.value = modeInitial();
             referencePaiement.value = '';
         }
     },
     { immediate: true },
+);
+
+// La disponibilité des espèces peut changer pendant que la fenêtre est ouverte (rafraîchissement
+// des données de la page) : une sélection devenue impossible est retirée, jamais soumise.
+watch(
+    () => props.especesDisponibles,
+    () => {
+        const actif = modeActif.value;
+        if (actif && modeIndisponible(actif)) {
+            selectedKey.value = '';
+        }
+    },
 );
 
 // Effacer la référence dès qu'on quitte un mode qui l'exige, pour ne jamais soumettre une
@@ -235,7 +279,7 @@ function close() {
 function handleSubmit() {
     if (!montant.value || montant.value <= 0) return;
     const mode = modeActif.value;
-    if (!mode) return;
+    if (!mode || modeIndisponible(mode)) return;
     if (mode.requiresReference && !referencePaiement.value) return;
     emit('submit', {
         montant: montant.value,
@@ -341,6 +385,8 @@ function handleSubmit() {
                     :options="modeOptions"
                     option-label="label"
                     option-value="key"
+                    :option-disabled="modeIndisponible"
+                    placeholder="Choisir un mode de paiement"
                     class="w-full"
                     :class="{ 'p-invalid': errors?.mode_paiement }"
                 >
@@ -360,6 +406,9 @@ function handleSubmit() {
                             </span>
                             <span>{{ modeByKey(value)!.label }}</span>
                         </div>
+                        <span v-else class="text-muted-foreground"
+                            >Choisir un mode de paiement</span
+                        >
                     </template>
                     <template #option="{ option }">
                         <div class="flex items-center gap-2">
@@ -373,9 +422,24 @@ function handleSubmit() {
                                 />
                             </span>
                             <span>{{ option.label }}</span>
+                            <span
+                                v-if="modeIndisponible(option)"
+                                class="text-xs text-muted-foreground"
+                                >— caisse requise</span
+                            >
                         </div>
                     </template>
                 </Select>
+                <!-- Espèces impossibles (aucune caisse dédiée active sur ce site) : message visible en
+                     permanence sous la liste, pas seulement au survol. Ambre (attention, les autres
+                     modes restent possibles) — jamais rouge : rien n'est bloqué pour eux. -->
+                <p
+                    v-if="especesBloquees"
+                    class="mt-1.5 text-xs text-amber-700 dark:text-amber-400"
+                    data-testid="especes-indisponible"
+                >
+                    {{ MESSAGE_ESPECES_INDISPONIBLE }}
+                </p>
                 <p
                     v-if="errors?.mode_paiement"
                     class="mt-1 text-xs text-destructive"
@@ -419,6 +483,7 @@ function handleSubmit() {
                 :disabled="
                     processing ||
                     !montant ||
+                    !modeActif ||
                     (referencePaiementRequise && !referencePaiement)
                 "
                 @click="handleSubmit"

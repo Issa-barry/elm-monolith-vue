@@ -6,6 +6,8 @@ use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
@@ -31,7 +33,9 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
- * rétroactivement (cf. CLAUDE.md / spec §7).
+ * rétroactivement (cf. CLAUDE.md / spec §7). Seule exception métier : un retour de livraison
+ * avant encaissement réajuste la commission d'une vente standard encore CREEE, cf.
+ * onRetourEnregistre().
  */
 class CommissionTriggerService
 {
@@ -146,6 +150,96 @@ class CommissionTriggerService
                 $commission->update(['statut' => StatutCommission::ANNULEE->value]);
             }
         }
+    }
+
+    /**
+     * Une commission de vente ne peut être recalculée par un retour de livraison (cf.
+     * CommandeVenteRetourService) que tant qu'elle n'a encore fait l'objet d'aucune décision
+     * humaine : encore CREEE (jamais entrée dans une période de paiement validée), sans montant
+     * ajusté, sans validation, sans versement. Passé ce cap, recalculer effacerait ou dupliquerait
+     * un engagement déjà pris envers un bénéficiaire — le retour est alors refusé et la commission
+     * doit être régularisée d'abord. Retourne le motif du refus, ou null si le retour peut avoir lieu
+     * (y compris quand aucune commission n'existe encore).
+     */
+    public static function raisonCommissionsNonRegularisables(CommandeVente $commande): ?string
+    {
+        $enveloppes = $commande->commissions()->with('parts')->get();
+
+        foreach ($enveloppes as $enveloppe) {
+            if ($enveloppe->statut === StatutCommission::ANNULEE) {
+                continue;
+            }
+
+            $figee = $enveloppe->statut !== StatutCommission::CREEE
+                || $enveloppe->parts->contains(
+                    fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
+                        || (float) $part->montant_verse > 0
+                        || $part->montant_actuel !== null
+                        || $part->validated_at !== null
+                );
+
+            if ($figee) {
+                return 'Retour impossible : la commission de cette commande a déjà été validée, ajustée ou payée dans une période de paiement. Régularisez d\'abord cette commission avant d\'enregistrer le retour.';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Appelé après l'enregistrement d'un retour de livraison (cf.
+     * CommandeVenteRetourService::enregistrer()) : la commission d'une vente standard est calculée
+     * sur la quantité facturée (chargée nette des retours) — un retour qui la diminue doit donc la
+     * réajuster. Décision produit du 23/09/2026 : révise la règle antérieure « jamais recalculée
+     * après le chargement », qui ne tient plus pour un retour avant encaissement.
+     *
+     *  - Aucune commission générée à ce stade (déclencheur FACTURE_ENCAISSEE, ou génération en
+     *    échec) : rien à faire — la génération à venir se base déjà sur la quantité nette.
+     *  - Retour partiel : les enveloppes encore CREEE sont supprimées puis régénérées sur les
+     *    quantités nettes, en conservant leur date de gain d'origine (donc la même période de
+     *    paiement). Suppression plutôt que « annulée + nouvelle » : l'unicité (source, cible) des
+     *    enveloppes interdit d'en garder deux pour la même cible ; l'historique des tentatives de
+     *    génération (commission_generation_attempts) reste conservé.
+     *  - Retour total : toutes les parts et enveloppes sont ANNULEES, sans régénération (même
+     *    traitement que l'annulation d'une commande, cf. CommandeVenteService::
+     *    annulerCommissionsAssociees()).
+     *
+     * Suppose raisonCommissionsNonRegularisables() déjà vérifiée par l'appelant, avant toute
+     * écriture.
+     */
+    public static function onRetourEnregistre(CommandeVente $commande, bool $retourTotal): void
+    {
+        $enveloppes = $commande->commissions()->with('parts')->get()
+            ->reject(fn (CommissionEnveloppe $enveloppe) => $enveloppe->statut === StatutCommission::ANNULEE);
+
+        if ($enveloppes->isEmpty()) {
+            return;
+        }
+
+        $earnedAt = $enveloppes->first()->earned_at;
+
+        foreach ($enveloppes as $enveloppe) {
+            if ($retourTotal) {
+                $enveloppe->parts()->update(['statut' => StatutCommission::ANNULEE->value]);
+                $enveloppe->update(['statut' => StatutCommission::ANNULEE->value]);
+
+                continue;
+            }
+
+            $enveloppe->lignes()->delete();
+            $enveloppe->parts()->delete();
+            $enveloppe->delete();
+        }
+
+        if (! $retourTotal) {
+            CommissionEnveloppeGenerator::genererPourCommandeVente(
+                CommandeVente::findOrFail($commande->id),
+                declencheurUserId: auth()->id(),
+                earnedAt: $earnedAt,
+            );
+        }
+
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($commande->organization_id, $earnedAt);
     }
 
     /**

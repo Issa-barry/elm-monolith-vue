@@ -421,6 +421,50 @@ class MouvementStockService
     }
 
     /**
+     * Réintègre au stock disponible du site la marchandise revenue d'une livraison (retour avant
+     * encaissement, cf. CommandeVenteRetourService) : une ENTRÉE distincte, rattachée à la ligne de
+     * retour — jamais une annulation de la sortie du chargement, qui reste intacte dans le journal
+     * (SORTIE chargement, puis ENTRÉE retour). Idempotent sur (source_type, source_id, site_id,
+     * type) — un second appel pour la même ligne de retour est un no-op. Décision produit du
+     * 23/09/2026 : contrairement à l'écart de réception (distribution/Grossiste livré), un retour
+     * remet toujours la marchandise en stock.
+     */
+    public static function reintegrerRetour(
+        string $varianteId,
+        string $siteId,
+        string $orgId,
+        int $quantite,
+        string $sourceType,
+        string $sourceId,
+        ?string $userId,
+    ): void {
+        if ($quantite <= 0) {
+            return;
+        }
+
+        $dejaTraite = MouvementStock::where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('site_id', $siteId)
+            ->where('type', 'entree')
+            ->exists();
+
+        if ($dejaTraite) {
+            return;
+        }
+
+        self::appliquer(
+            varianteId: $varianteId,
+            siteId: $siteId,
+            orgId: $orgId,
+            type: 'entree',
+            quantite: $quantite,
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            userId: $userId,
+        );
+    }
+
+    /**
      * Annule la sortie de stock précédemment enregistrée par sortirStock() pour une source
      * donnée, en inversant symétriquement son effet sur VarianteStock (cf. annulerMouvement()).
      * Idempotent : no-op si aucune sortie n'a jamais été enregistrée (rien à annuler) ou si elle

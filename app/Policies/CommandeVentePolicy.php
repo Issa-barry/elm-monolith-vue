@@ -108,6 +108,22 @@ class CommandeVentePolicy
             && $commande->requiertReceptionExplicite();
     }
 
+    /**
+     * Enregistrer un retour de livraison (marchandise revenue avec le livreur avant tout
+     * encaissement, cf. CommandeVenteRetourService). Permission dédiée `ventes.enregistrer_retour`,
+     * indépendante de `ventes.update` : un retour réduit la facture, réintègre le stock et réajuste
+     * la commission — une action financière à réserver aux profils qui constatent réellement la
+     * livraison. Les conditions métier (LIVRAISON_EN_COURS, rien d'encaissé, vente standard) sont
+     * portées par CommandeVente::isRetournable(), source unique aussi relue par le service (le
+     * Gate::before de super_admin contourne cette Policy, jamais le service).
+     */
+    public function enregistrerRetour(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.enregistrer_retour')
+            && $this->sameOrganization($user, $commande)
+            && $commande->isRetournable();
+    }
+
     /** Avancer d'une étape — agrège les quatre transitions ci-dessus */
     public function avancerStatut(User $user, CommandeVente $commande): bool
     {

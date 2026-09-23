@@ -3,9 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Enums\CategorieDepense;
+use App\Enums\EvenementComptable;
 use App\Enums\StatutDepense;
 use App\Enums\StatutFactureVente;
 use App\Enums\StatutPeriodePaiement;
+use App\Models\CommandeVenteRetour;
 use App\Models\Depense;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
@@ -13,6 +15,7 @@ use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Models\PieceComptable;
+use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -148,6 +151,8 @@ class ComptabiliteAuditCommand extends Command
             $org->id, FactureVente::class
         );
 
+        $lignes[] = $this->ligneRetours($org);
+
         $lignes[] = $this->ligneDomaine(
             'Encaissements clients',
             EncaissementVente::whereHas('facture', fn (Builder $q) => $q->where('organization_id', $org->id)),
@@ -185,6 +190,43 @@ class ComptabiliteAuditCommand extends Command
         $comptabilises = (clone $eligibles)->whereIn($eligibles->getModel()->getKeyName(), $idsComptabilises)->count();
 
         return [$label, $totalEligibles, $comptabilises, $totalEligibles - $comptabilises];
+    }
+
+    /**
+     * Retours de livraison dont la régularisation comptable est attendue (cf.
+     * VenteComptabilisationService::retourARegulariser(), source unique de l'éligibilité) mais
+     * absente — typiquement un échec en mode shadow à l'enregistrement du retour, signalé aussi dans
+     * le journal d'activité de la commande. `comptabilite:rattraper --type=retour` les régularise.
+     */
+    private function ligneRetours(Organization $org): array
+    {
+        $service = app(VenteComptabilisationService::class);
+        $eligibles = 0;
+        $comptabilises = 0;
+
+        CommandeVenteRetour::where('organization_id', $org->id)
+            ->with('commande.facture')
+            ->chunkById(100, function ($retours) use ($service, $org, &$eligibles, &$comptabilises) {
+                foreach ($retours as $retour) {
+                    if (! $service->retourARegulariser($retour)) {
+                        continue;
+                    }
+
+                    $eligibles++;
+
+                    $piece = PieceComptable::where('organization_id', $org->id)
+                        ->where('source_type', $retour->getMorphClass())
+                        ->where('source_id', $retour->getKey())
+                        ->where('type_evenement', EvenementComptable::VENTE_RETOUR->value)
+                        ->exists();
+
+                    if ($piece) {
+                        $comptabilises++;
+                    }
+                }
+            });
+
+        return ['Retours de livraison', $eligibles, $comptabilises, $eligibles - $comptabilises];
     }
 
     private function resolveOrganizations(): ?Collection

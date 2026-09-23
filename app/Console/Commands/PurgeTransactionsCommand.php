@@ -8,6 +8,7 @@ use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommandeVenteRetourLigne;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionPayment;
@@ -48,6 +49,7 @@ class PurgeTransactionsCommand extends Command
      */
     private const EVENEMENTS_COMPTA_A_EFFACER = [
         'vente_facturee',
+        'vente_retour',
         'encaissement_vente_recu',
         'paiement_commission_logistique_direct',
         'versement_cashback',
@@ -56,6 +58,7 @@ class PurgeTransactionsCommand extends Command
     /** Sources (mouvements_stock.source_type) à effacer : uniquement vente/achat, jamais transfert. */
     private const SOURCES_STOCK_A_EFFACER = [
         CommandeVenteLigne::class,
+        CommandeVenteRetourLigne::class,
         CommandeAchatLigne::class,
     ];
 

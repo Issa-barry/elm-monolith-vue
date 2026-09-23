@@ -31,6 +31,7 @@ import {
     Pencil,
     Printer,
     Receipt,
+    RotateCcw,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -41,6 +42,7 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
+import RetourDialog from './partials/RetourDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -93,6 +95,10 @@ interface LigneCommande {
     quantite_demandee: number;
     quantite_chargee: number | null;
     quantite_livree: number | null;
+    /** Cumul des retours de livraison de cette ligne (cf. CommandeVenteRetourService). */
+    quantite_retournee: number;
+    /** Ce qu'il reste à pouvoir retourner : chargé moins déjà retourné. */
+    quantite_retournable: number;
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
@@ -191,13 +197,20 @@ interface CommandeData {
     is_facturation: boolean;
     is_cloturee: boolean;
     is_annulee: boolean;
+    /** Retour TOTAL de la marchandise avant encaissement — statut terminal « Retournée ». */
+    is_retournee: boolean;
     can_modifier: boolean;
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
     can_valider_chargement: boolean;
     can_valider_reception: boolean;
+    /** Retour de livraison possible : en livraison, rien d'encaissé, permission dédiée. */
+    can_enregistrer_retour: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -218,6 +231,30 @@ interface CommissionGenerationStatut {
     motif: string | null;
 }
 
+interface RetourLigneEntry {
+    produit_nom: string | null;
+    quantite: number;
+    montant: number;
+}
+
+interface RetourEntry {
+    id: string;
+    created_at: string;
+    created_by: string;
+    motif: string;
+    motif_label: string;
+    commentaire: string | null;
+    quantite_totale: number;
+    montant_retourne: number;
+    retour_total: boolean;
+    lignes: RetourLigneEntry[];
+}
+
+interface MotifRetour {
+    value: string;
+    label: string;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
@@ -226,6 +263,8 @@ const props = defineProps<{
     commission_generation_statut: CommissionGenerationStatut | null;
     historiques: AuditEntry[];
     activites: ActiviteEntry[];
+    retours: RetourEntry[];
+    motifs_retour: MotifRetour[];
 }>();
 
 const toast = useToast();
@@ -404,6 +443,7 @@ const TYPES_ECART = [
 // ── Actions de transition ─────────────────────────────────────────────────────
 const actionProcessing = ref(false);
 const receptionDialogVisible = ref(false);
+const retourDialogVisible = ref(false);
 
 function confirmer() {
     if (actionProcessing.value) return;
@@ -587,8 +627,17 @@ const showChargeeCol = computed(
 const showRecueCol = computed(
     () => showChargeeCol.value && requiertReception.value,
 );
+// Colonnes "Retournée"/"Livrée" — dès qu'au moins un retour de livraison a été enregistré (vente
+// standard, cf. CommandeVenteRetourService) : livrée = chargée − retournée. Jamais pour une commande
+// à réception explicite, qui n'a pas de retour (elle a la colonne "Reçue" ci-dessus).
+const showRetourCols = computed(() => props.retours.length > 0);
 const chargeeEtEcartColspan = computed(
-    () => 2 + (showChargeeCol.value ? 3 : 0) + (showRecueCol.value ? 3 : 0) + 1,
+    () =>
+        2 +
+        (showChargeeCol.value ? 3 : 0) +
+        (showRecueCol.value ? 3 : 0) +
+        (showRetourCols.value ? 2 : 0) +
+        1,
 );
 
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
@@ -615,6 +664,20 @@ function ligneUnitPrice(ligne: LigneCommande): number {
 function ligneOrigineLabel(ligne: LigneCommande): string {
     return PRIX_ORIGINE_LABELS[ligneOrigine(ligne)] ?? '';
 }
+
+// Lignes transmises au dialogue de retour, avec le prix unitaire réellement facturé (même règle que
+// ligneUnitPrice) pour prévisualiser le montant retourné — le montant définitif est toujours
+// recalculé côté serveur.
+const lignesPourRetour = computed(() =>
+    props.commande.lignes.map((l) => ({
+        id: l.id,
+        produit_nom: l.produit_nom,
+        quantite_chargee: l.quantite_chargee,
+        quantite_retournee: l.quantite_retournee,
+        quantite_retournable: l.quantite_retournable,
+        prix_unitaire: ligneUnitPrice(l),
+    })),
+);
 
 // ── Ticket impression ─────────────────────────────────────────────────────────
 const page = usePage();
@@ -685,7 +748,7 @@ const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
 
 const currentStepIdx = computed(() => {
-    if (props.commande.is_annulee) return -1;
+    if (props.commande.is_annulee || props.commande.is_retournee) return -1;
     if (isCommandeDirecte.value) {
         if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
         if (props.facture?.statut === 'payee')
@@ -781,6 +844,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
                         commande.can_valider_reception ||
+                        commande.can_enregistrer_retour ||
                         commande.can_annuler
                     "
                     class="absolute right-4"
@@ -846,6 +910,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <PackageCheck class="h-4 w-4" />
                                 Valider la réception
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_enregistrer_retour"
+                                class="cursor-pointer text-orange-600 focus:text-orange-600"
+                                @click="retourDialogVisible = true"
+                            >
+                                <RotateCcw class="h-4 w-4" />
+                                Enregistrer un retour
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
@@ -853,7 +925,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
                                         commande.can_valider_chargement ||
-                                        commande.can_valider_reception)
+                                        commande.can_valider_reception ||
+                                        commande.can_enregistrer_retour)
                                 "
                             />
                             <DropdownMenuItem
@@ -971,6 +1044,18 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         Valider la réception
                     </Button>
 
+                    <!-- Retour de livraison (livraison_en_cours, avant tout encaissement) -->
+                    <Button
+                        v-if="commande.can_enregistrer_retour"
+                        variant="outline"
+                        size="sm"
+                        class="border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                        @click="retourDialogVisible = true"
+                    >
+                        <RotateCcw class="mr-2 h-4 w-4" />
+                        Retour
+                    </Button>
+
                     <!-- Annuler -->
                     <template v-if="commande.can_annuler">
                         <Button
@@ -996,6 +1081,18 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     <XCircle class="h-5 w-5" />
                     <span class="font-semibold"
                         >Cette commande a été annulée.</span
+                    >
+                </div>
+
+                <!-- Retournée : retour TOTAL de la marchandise avant encaissement -->
+                <div
+                    v-else-if="commande.is_retournee"
+                    class="flex items-center gap-2 text-orange-600 dark:text-orange-400"
+                >
+                    <RotateCcw class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >La marchandise de cette commande est intégralement
+                        revenue : commande retournée, facture annulée.</span
                     >
                 </div>
 
@@ -1375,6 +1472,20 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         Motif d'écart
                                     </th>
                                     <th
+                                        v-if="showRetourCols"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 90px"
+                                    >
+                                        Retournée
+                                    </th>
+                                    <th
+                                        v-if="showRetourCols"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Livrée
+                                    </th>
+                                    <th
                                         v-if="showRecueCol"
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 80px"
@@ -1459,6 +1570,27 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        v-if="showRetourCols"
+                                        class="px-4 py-3 text-center tabular-nums"
+                                        :class="
+                                            ligne.quantite_retournee > 0
+                                                ? 'font-semibold text-orange-600'
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{ ligne.quantite_retournee }}
+                                    </td>
+                                    <td
+                                        v-if="showRetourCols"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            ligne.quantite_livree ??
+                                            ligne.quantite_chargee ??
+                                            '—'
+                                        }}
+                                    </td>
+                                    <td
                                         v-if="showRecueCol"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
@@ -1534,6 +1666,69 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             </tfoot>
                         </table>
                     </div>
+                </div>
+
+                <!-- Retours de livraison enregistrés sur cette commande -->
+                <div
+                    v-if="retours.length > 0"
+                    class="mt-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+                >
+                    <h3
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Retours de livraison
+                    </h3>
+                    <ol class="space-y-4">
+                        <li
+                            v-for="retour in retours"
+                            :key="retour.id"
+                            class="rounded-lg border px-4 py-3"
+                        >
+                            <div
+                                class="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                            >
+                                <div>
+                                    <strong>{{ retour.motif_label }}</strong>
+                                    <span
+                                        v-if="retour.retour_total"
+                                        class="ml-2 text-xs font-medium text-orange-600"
+                                        >Retour total</span
+                                    >
+                                    <p
+                                        v-if="retour.commentaire"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{ retour.commentaire }}
+                                    </p>
+                                </div>
+                                <span class="text-xs text-muted-foreground"
+                                    >{{ retour.created_by }} —
+                                    {{ retour.created_at }}</span
+                                >
+                            </div>
+                            <ul class="mt-2 space-y-1 text-sm">
+                                <li
+                                    v-for="(rl, i) in retour.lignes"
+                                    :key="i"
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <span
+                                        >{{ rl.produit_nom ?? '—' }} ×
+                                        {{ rl.quantite }}</span
+                                    >
+                                    <span class="tabular-nums">{{
+                                        formatGNF(rl.montant)
+                                    }}</span>
+                                </li>
+                            </ul>
+                            <p
+                                class="mt-2 border-t pt-2 text-right text-sm font-semibold tabular-nums"
+                            >
+                                {{ retour.quantite_totale }} retournée(s) —
+                                {{ formatGNF(retour.montant_retourne) }}
+                            </p>
+                        </li>
+                    </ol>
                 </div>
             </div>
 
@@ -1866,6 +2061,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             v-model:visible="encaisserDialogVisible"
             title="Encaisser un paiement"
             :solde="facture?.montant_restant ?? 0"
+            :especes-disponibles="commande.peut_encaisser_especes"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
             @submit="submitEncaisser"
@@ -2269,6 +2465,15 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :commande-id="commande.id"
             :lignes="commande.lignes"
             :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Retour de livraison (vente standard en livraison, avant tout encaissement) -->
+        <RetourDialog
+            v-model:visible="retourDialogVisible"
+            :commande-id="commande.id"
+            :lignes="lignesPourRetour"
+            :motifs="motifs_retour"
+            :montant-facture="facture ? facture.montant_net : null"
         />
     </AppLayout>
 </template>

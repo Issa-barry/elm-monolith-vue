@@ -84,6 +84,7 @@ final class PermissionCatalog
         'ventes.demarrer_chargement' => 'Ventes — démarrer le chargement',
         'ventes.valider_chargement' => 'Ventes — valider le chargement',
         'ventes.valider_reception' => 'Ventes — valider la réception',
+        'ventes.enregistrer_retour' => 'Ventes — enregistrer un retour de livraison',
         'ventes.exporter' => 'Ventes — exporter',
         'factures.encaisser' => 'Factures — encaisser',
         'factures.annuler' => 'Factures — annuler',
@@ -125,7 +126,7 @@ final class PermissionCatalog
             'standalone' => [
                 'Cycle de vente' => [
                     'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement',
-                    'ventes.valider_chargement', 'ventes.valider_reception',
+                    'ventes.valider_chargement', 'ventes.valider_reception', 'ventes.enregistrer_retour',
                     'ventes.qte.update', 'ventes.prix.update',
                 ],
                 'Facturation' => ['factures.encaisser', 'factures.annuler'],

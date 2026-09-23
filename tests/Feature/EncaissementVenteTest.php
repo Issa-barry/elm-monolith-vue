@@ -13,11 +13,12 @@ use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\TestCase;
 
 class EncaissementVenteTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasCaissesDediees, RefreshDatabase;
 
     private function utilisateur(Organization $org): User
     {
@@ -58,6 +59,12 @@ class EncaissementVenteTest extends TestCase
             'montant_net' => 5000,
         ]);
         $user = $this->utilisateur($org);
+
+        // Espèces = caisse dédiée active de l'auteur sur le site de la facture (règle du 23/09/2026 ;
+        // le refus est couvert par Tresorerie/EncaissementEspecesCaisseObligatoireTest).
+        $siteId = $user->sites()->firstOrFail()->id;
+        $facture->update(['site_id' => $siteId]);
+        $this->creerCaisseActivePour($user, $siteId);
 
         return compact('org', 'vehicule', 'commande', 'facture', 'user');
     }
@@ -191,6 +198,8 @@ class EncaissementVenteTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        $facture->update(['site_id' => $site->id]);
+        $this->creerCaisseActivePour($user, $site->id);
 
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),

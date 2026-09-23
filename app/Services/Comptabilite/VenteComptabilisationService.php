@@ -4,6 +4,7 @@ namespace App\Services\Comptabilite;
 
 use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Models\CommandeVenteRetour;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\PieceComptable;
@@ -24,6 +25,9 @@ use Illuminate\Support\Carbon;
  *    réellement chargées) — cf. CommandeVenteService::activerFacture()
  *    et ::creerFactureDirecte(). Créance client constatée : débit Client,
  *    crédit Ventes.
+ *  - VENTE_RETOUR : un retour de livraison avant encaissement diminue une facture déjà
+ *    comptabilisée — écriture inverse sur la valeur retournée : débit Ventes, crédit Client (cf.
+ *    comptabiliserRetourVente()).
  *  - ENCAISSEMENT_VENTE_RECU : chaque EncaissementVente créé (partiel ou
  *    total) — règlement de la créance : débit Trésorerie, crédit Client. La
  *    trésorerie débitée est le compte du moyen de paiement (compta_mappings), ou le
@@ -92,6 +96,76 @@ class VenteComptabilisationService
             ],
             siteId: $facture->site_id,
         );
+    }
+
+    /**
+     * Régularise la créance client après un retour de livraison avant encaissement (cf.
+     * CommandeVenteRetourService) : la facture avait déjà été comptabilisée pour la marchandise
+     * chargée (VENTE_FACTUREE), le retour en diminue le montant — écriture inverse sur la seule
+     * valeur retournée (débit Ventes, crédit Client). Une pièce PAR retour, jamais une
+     * contrepassation de la pièce d'origine : des retours partiels successifs se cumuleraient
+     * sinon en double. Sans effet si la facture n'a jamais été comptabilisée (montant nul, échec de
+     * comptabilisation en amont) — il n'y a alors rien à régulariser.
+     */
+    public function comptabiliserRetourVente(CommandeVenteRetour $retour): ?PieceComptable
+    {
+        if (! $this->retourARegulariser($retour)) {
+            return null;
+        }
+
+        $montant = round((float) $retour->montant_retourne, 2);
+        $commande = $retour->commande;
+        $facture = $commande->facture;
+
+        $ligneClient = [
+            'role' => 'client',
+            'sens' => 'credit',
+            'montant' => $montant,
+        ];
+        if ($commande->client) {
+            $ligneClient['tiers_type'] = 'client';
+            $ligneClient['tiers_model'] = $commande->client;
+        }
+
+        return $this->ecritures->comptabiliser(
+            evenement: EvenementComptable::VENTE_RETOUR,
+            source: $retour,
+            organizationId: $facture->organization_id,
+            dateComptable: Carbon::parse($retour->created_at ?? now()),
+            libelle: 'Retour de livraison — facture '.$facture->reference,
+            lignes: [
+                ['role' => 'produit_vente', 'sens' => 'debit', 'montant' => $montant],
+                $ligneClient,
+            ],
+            siteId: $facture->site_id,
+            createdBy: $retour->created_by,
+        );
+    }
+
+    /**
+     * Un retour n'appelle une écriture de régularisation que si la pièce VENTE_FACTUREE de sa
+     * facture existait DÉJÀ quand il a été enregistré : elle porte alors le montant d'avant retour.
+     * Une pièce postée après (rattrapage d'une comptabilisation en échec, cf. ComptabiliteRattrapage
+     * Command) est déjà calculée sur le montant net de la facture — y ajouter la régularisation
+     * compterait le retour deux fois. Aussi faux sans facture, sans pièce de vente (montant nul,
+     * échec en amont — le rattrapage de la vente la comptabilisera alors au net) ou à montant nul.
+     * Source unique partagée par la comptabilisation, le rattrapage et l'audit.
+     */
+    public function retourARegulariser(CommandeVenteRetour $retour): bool
+    {
+        if (round((float) $retour->montant_retourne, 2) <= 0) {
+            return false;
+        }
+
+        $retour->loadMissing('commande.facture', 'commande.client');
+        $facture = $retour->commande?->facture;
+        if (! $facture) {
+            return false;
+        }
+
+        $pieceVente = $this->ecritures->pieceExistantePour($facture->organization_id, $facture, EvenementComptable::VENTE_FACTUREE);
+
+        return $pieceVente !== null && $pieceVente->created_at->lte($retour->created_at);
     }
 
     public function comptabiliserEncaissementVente(EncaissementVente $encaissement): ?PieceComptable

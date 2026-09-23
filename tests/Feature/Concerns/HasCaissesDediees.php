@@ -45,6 +45,19 @@ trait HasCaissesDediees
     }
 
     /**
+     * Caisse dédiée active pour l'agent donné, sans dépendre de `$this->org`/`$this->user` : pour
+     * les tests d'encaissement (l'espèce exige une caisse active de l'auteur sur le site de la
+     * facture, cf. CaisseAgentResolver::garantirCaissePourEspeces()) qui montent leur propre contexte.
+     * L'agent valide sa propre caisse — le service ne contrôle pas « créateur ≠ validateur » (ADR 0002).
+     */
+    private function creerCaisseActivePour(User $agent, string $siteId): CompteTresorerie
+    {
+        $brouillon = app(CaisseAgentService::class)->creer($agent->organization_id, $siteId, $agent->id);
+
+        return app(SupportTresorerieValidationService::class)->valider($brouillon, $agent);
+    }
+
+    /**
      * Utilisateur NON admin (rôle « manager », sans bypass de site) avec exactement ces
      * permissions, rattaché au site — pour tester les portées par site et par permission.
      *

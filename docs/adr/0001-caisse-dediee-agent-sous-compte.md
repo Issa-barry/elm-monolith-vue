@@ -96,6 +96,19 @@ Le modèle existant ne le permet pas :
 - **Garde-fous liés** : les indicateurs `peut_*` de l'écran Mouvements vérifient l'état du
   mouvement explicitement (corrige l'affichage de toutes les actions sur les lignes terminées pour
   un super admin) ; une caisse ne peut pas être désactivée pendant un versement Envoyé ou Contesté.
+- **Espèces : caisse dédiée obligatoire (décision du 2026-09-23).** Le repli sur le compte partagé
+  571000 permettait à un agent sans caisse d'encaisser en espèces sans que personne ne soit
+  responsable de l'argent (cas constaté en exploitation : un manager sans caisse encaissait et la
+  destination était introuvable). Un **nouvel** encaissement en espèces est désormais refusé côté
+  serveur (`CaisseAgentResolver::garantirCaissePourEspeces()`, appelée par
+  `StoreEncaissementVenteController`) tant que son auteur n'a pas de caisse dédiée active sur le
+  site de la facture — pour tous les rôles, sans contournement. Mobile Money, virement et chèque ne
+  sont pas concernés (ils ne touchent pas la caisse de l'agent). L'interface reflète la règle
+  (`peut_encaisser_especes`, option Espèces désactivée + message dans `PaymentCard`) sans jamais en
+  être la seule garantie. **Historique inchangé** : les encaissements déjà enregistrés ne sont pas
+  reclassés (règle « jamais de reclassement rétroactif » maintenue) ; ils se lisent avec
+  `php artisan encaissements:diagnostiquer-destination` (lecture seule), qui liste les espèces
+  hors caisse dédiée par agent et indique lesquels n'ont toujours pas de caisse.
 - **Points ouverts pour la suite** : sens inverse (fonds de caisse agence → agent), désactivation
   d'un utilisateur qui détient une caisse (non traitée), absence de contrôle de solde sur les
   mouvements entre agences, encaissements enregistrés par un utilisateur qui n'est pas l'agent (ils
@@ -109,10 +122,13 @@ Le modèle existant ne le permet pas :
   `App\Services\Tresorerie\TresorerieDisponibiliteService`,
   `App\Services\Comptabilite\VenteComptabilisationService`,
   `App\Http\Controllers\Comptabilite\CompteTresorerieController`,
-  `App\Http\Controllers\Comptabilite\VerserCaisseAgentController`.
+  `App\Http\Controllers\Comptabilite\VerserCaisseAgentController`,
+  `App\Services\Tresorerie\EncaissementDestinationDiagnostic` (commande
+  `encaissements:diagnostiquer-destination`).
 - Tests : `CaisseAgentServiceTest`, `CompteTresorerieCaisseDedieeControllerTest`,
   `CaisseAgentImpactTresorerieTest`, `CaisseAgentEncaissementTest`,
   `VersementCaisseAgentServiceTest`, `VersementCaisseAgentControllerTest`,
-  `FinancementAgenceServiceTest`.
+  `FinancementAgenceServiceTest`, `EncaissementEspecesCaisseObligatoireTest`,
+  `EncaissementsDiagnostiquerDestinationCommandTest`.
 - Documentation : `docs/data-dictionary-compta.md` (« Caisses dédiées à un agent »),
   `docs/encaissements.md` (« Comptabilisation : caisse dédiée de l'agent »).

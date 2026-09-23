@@ -70,6 +70,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
+    // Vente retournée (retour total avant encaissement) : attention, pas une erreur — cf.
+    // StatutCommandeVente::RETOURNEE. À ne pas confondre avec `retourne` (rouge, mouvement de fonds).
+    retournee: 'bg-orange-500',
     conteste: 'bg-orange-500',
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',

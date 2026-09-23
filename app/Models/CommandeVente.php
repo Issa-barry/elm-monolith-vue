@@ -146,6 +146,11 @@ class CommandeVente extends Model
         return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
+    public function retours(): HasMany
+    {
+        return $this->hasMany(CommandeVenteRetour::class)->latest();
+    }
+
     public function activites(): HasMany
     {
         return $this->hasMany(CommandeVenteActivite::class)->latest();
@@ -267,6 +272,50 @@ class CommandeVente extends Model
     public function isAnnulee(): bool
     {
         return $this->statut === StatutCommandeVente::ANNULEE;
+    }
+
+    public function isRetournee(): bool
+    {
+        return $this->statut === StatutCommandeVente::RETOURNEE;
+    }
+
+    /**
+     * Source de vérité unique de « un retour de livraison peut être enregistré maintenant » (cf.
+     * CommandeVenteRetourService) : renvoie la raison du refus, ou null si le retour est possible.
+     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé — le premier
+     * encaissement d'une vente standard fait passer la commande en LIVREE (cf.
+     * CommandeVenteService::passerEnLivree()), mais le montant encaissé est aussi contrôlé
+     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API).
+     * Réservé aux ventes sans réception explicite : une commande à réception explicite (distribution,
+     * Grossiste livré) constate déjà ce que le client a accepté via l'écart de réception (cf.
+     * CommandeVenteService::validerReception()), avec ses propres règles de stock et de commission.
+     */
+    public function raisonRetourImpossible(): ?string
+    {
+        if (! $this->isLivraisonEnCours()) {
+            return 'Un retour ne peut être enregistré que pendant la livraison, avant tout encaissement.';
+        }
+
+        if ($this->requiertReceptionExplicite()) {
+            return 'Cette commande constate ce que le client a accepté à la validation de réception : utilisez l\'écart de réception, pas un retour.';
+        }
+
+        $this->loadMissing('lignes', 'facture');
+
+        if ($this->facture && ($this->facture->isAnnulee() || (float) $this->facture->montant_encaisse > 0)) {
+            return 'Un retour n\'est plus possible : la facture est annulée ou a déjà reçu un encaissement.';
+        }
+
+        if ($this->lignes->every(fn (CommandeVenteLigne $l) => $l->quantite_retournable <= 0)) {
+            return 'Toute la marchandise chargée a déjà été retournée.';
+        }
+
+        return null;
+    }
+
+    public function isRetournable(): bool
+    {
+        return $this->raisonRetourImpossible() === null;
     }
 
     public function isEncaissable(): bool

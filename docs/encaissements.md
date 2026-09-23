@@ -88,7 +88,7 @@ Mobile Money → 561xxx). Elle devient le **sous-compte de la caisse dédiée de
 | Condition | Pourquoi |
 |---|---|
 | `mode_paiement = especes` | Seul l'argent physiquement détenu par l'agent alimente sa caisse. Mobile Money, virement et chèque gardent leurs supports habituels. |
-| L'auteur de l'encaissement (`created_by`) a une caisse dédiée **active** (donc validée — un brouillon ne reçoit rien) | Un encaissement sans auteur, ou d'un agent sans caisse, suit le comportement historique. |
+| L'auteur de l'encaissement (`created_by`) a une caisse dédiée **active** (donc validée — un brouillon ne reçoit rien) | Sans caisse, un **nouvel** encaissement en espèces est refusé (cf. « Espèces : caisse dédiée obligatoire »). Seuls les encaissements déjà enregistrés, ou sans auteur, suivent encore le comportement historique (571000). |
 | La caisse est celle du **site de la facture** | La pièce est déjà rattachée au site de la facture ; l'agent a au plus une caisse active par site, donc jamais d'ambiguïté. |
 | Date de l'encaissement **≥** date de **mise en service** de la caisse (sa validation, `valide_le`) | Pas de reclassement d'un encaissement antidaté. |
 | L'encaissement a été enregistré **après** la mise en service de la caisse | Filet pour les rattrapages comptables (`ComptabiliteRattrapageCommand`), qui repassent sur d'anciens encaissements : l'historique n'est jamais reclassé — y compris ceux enregistrés pendant que la caisse était encore en brouillon. |
@@ -106,6 +106,46 @@ Mobile Money → 561xxx). Elle devient le **sous-compte de la caisse dédiée de
 - Aucune colonne n'a été ajoutée à `encaissements_ventes` : la caisse destinataire se lit dans la
   pièce comptable (Journal financier, filtre par compte).
 
+## Espèces : caisse dédiée obligatoire
+
+Décision du 2026-09-23 (ADR [0001](adr/0001-caisse-dediee-agent-sous-compte.md)). Avant elle, un agent
+sans caisse dédiée pouvait encaisser en espèces : l'argent retombait sur le compte partagé 571000 et
+personne n'en était responsable. **Un encaissement en espèces exige désormais une caisse dédiée
+active de l'auteur sur le site de la facture.**
+
+| Point | Règle |
+|---|---|
+| Périmètre | `mode_paiement = especes` uniquement. Mobile Money, virement et chèque ne touchent jamais la caisse de l'agent et restent possibles sans caisse. |
+| Qui | Tous les rôles, administrateurs et super admin compris : aucun contournement par le rôle (la caisse est celle de l'auteur de l'encaissement, `created_by`). |
+| Garde serveur | `CaisseAgentResolver::garantirCaissePourEspeces()`, appelée par `StoreEncaissementVenteController` avant toute écriture. Erreur sur `mode_paiement` (aucune caisse active sur le site de la facture : brouillon, désactivée, autre site ou caisse d'un autre agent) ou sur `date_encaissement` (date antérieure à la mise en service de la caisse). |
+| Cohérence | La garde réutilise les conditions du routage comptable : « accepté » ⇔ « comptabilisé dans une caisse dédiée ». Les deux ne peuvent pas diverger. |
+| Interface | Le backend expose `peut_encaisser_especes` (fiche vente/distribution : `commande.peut_encaisser_especes` ; listes Ventes et Factures : par ligne). `PaymentCard` reçoit `:especes-disponibles` : l'option Espèces est désactivée, un message ambre permanent l'explique, et aucun autre mode n'est présélectionné à la place. |
+| Message | « Vous ne disposez pas d'une caisse active … Contactez votre responsable pour qu'il vous en crée une. » |
+
+- **Créer la caisse** reste une action manuelle : écran Trésorerie → Supports (création en
+  brouillon puis validation, permission `tresorerie.valider_supports`, cf. ADR 0002).
+- **Historique** : aucun encaissement déjà enregistré n'est reclassé. Le diagnostic des encaissements
+  existants est en lecture seule (`php artisan encaissements:diagnostiquer-destination`, options
+  `--organization`, `--depuis`, `--detail`, `--tout`, `--csv=`). Il lit la pièce comptable de chaque
+  encaissement (compte de trésorerie réellement débité) et range chacun dans **une** catégorie, la
+  première qui s'applique :
+
+  | Catégorie | Signification | Statut |
+  |---|---|---|
+  | Aucun mouvement comptable / écriture contrepassée | Pas de pièce `encaissement_vente_recu` (rattrapage : `comptabilite:rattraper`) | À traiter |
+  | Destination non identifiable | Pièce sans ligne de trésorerie débitée | À traiter |
+  | Compte incohérent avec le moyen de paiement | Ex. espèces débitées sur un compte Mobile Money (attendu : espèces 571, Mobile Money 561, virement/chèque 521) | À traiter |
+  | Montant comptabilisé ≠ montant encaissé | Autre anomalie | À traiter |
+  | Espèces hors caisse dédiée | Espèces débitées sur un compte 571 partagé — cas d'avant la règle du 23/09/2026 ou encaissé avant la mise en service de la caisse | À traiter |
+  | Compte sans support de trésorerie | Le solde existe au grand livre mais reste invisible dans Situation/Financement (les supports se lisent par compte **et** par site) | À traiter |
+  | Mobile Money sur compte générique | Débité sur 561000 : un support existe mais l'opérateur n'est pas distingué | À traiter |
+  | Caisse dédiée de l'agent / support identifié | Destination claire et cohérente | Conforme |
+
+  La sortie donne les totaux, les ventilations par agent, agence et moyen de paiement (avec le compte
+  réellement débité), et la liste des agents à équiper d'une caisse. Toute régularisation (contrepassation,
+  réaffectation) est une décision métier explicite, jamais automatique : elle doit être tracée
+  (auteur, date, ancienne et nouvelle destination, motif).
+
 ## Backend comme source de vérité
 
 La validation (référence/opérateur obligatoires selon le mode) est portée exclusivement par
@@ -113,6 +153,17 @@ La validation (référence/opérateur obligatoires selon le mode) est portée ex
 création unique (`$facture->encaissements()->create()`), quel que soit l'écran appelant. Chaque
 frontend reproduit ces règles pour l'UX (champs conditionnels, bouton désactivé) mais n'est jamais
 la seule protection.
+
+## Retour de livraison avant encaissement
+
+Cf. [retour-commande.md](retour-commande.md). Tant qu'aucun encaissement n'a eu lieu, un utilisateur
+habilité (`ventes.enregistrer_retour`) peut enregistrer le retour de tout ou partie de la marchandise
+chargée : la facture est recalculée sur la quantité **livrée** (chargée − retournée), donc le restant
+dû et le plafond d'un encaissement (`montant ≤ montant_restant`) suivent automatiquement. Un retour
+**total** passe la commande en `retournee` et **annule** sa facture : plus aucun encaissement n'est
+possible (`StoreEncaissementVenteController` refuse une facture annulée), et `isEncaissable()` exclut
+ce statut. Un retour est refusé dès le premier encaissement (commande `livree`, ou montant encaissé
+non nul) — il n'existe pas de mécanisme d'avoir/remboursement pour un retour **après** encaissement.
 
 ## Historique affiché
 

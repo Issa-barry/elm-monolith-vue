@@ -39,6 +39,9 @@ class ElmV2DemoSeeder extends Seeder
             ElmV2DemoFleetSeeder::class,
             ElmV2DemoStockSeeder::class,
             ElmV2DemoCommissionSmokeFixturesSeeder::class,
+            // Le compte « V2 Demo » encaisse en espèces dans les specs E2E : il lui faut une caisse
+            // dédiée active (règle du 23/09/2026).
+            CaissesEncaissementDemoSeeder::class,
         ]);
     }
 }
