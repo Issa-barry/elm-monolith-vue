@@ -11,6 +11,7 @@ use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -208,7 +209,8 @@ class IndexCommandeVenteController extends Controller
 
         // Une seule requête pour toute la page (indicateur peut_encaisser_especes de chaque ligne).
         $sitesAvecCaisse = app(CaisseAgentResolver::class)->sitesAvecCaisseActive($orgId, (string) $user->id);
-        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $sitesAvecCaisse));
+        $moyensParSite = app(MoyensEncaissementResolver::class)->parSite($orgId, $commandes->map(fn (CommandeVente $c) => $c->facture?->site_id));
+        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $sitesAvecCaisse, $moyensParSite));
 
         $sites = $user->isAdmin()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get()
@@ -272,8 +274,11 @@ class IndexCommandeVenteController extends Controller
         ]);
     }
 
-    /** @param  list<string>  $sitesAvecCaisse  sites où l'utilisateur a une caisse dédiée active */
-    private function mapCommandeForIndex(CommandeVente $c, mixed $user, array $sitesAvecCaisse = []): array
+    /**
+     * @param  list<string>  $sitesAvecCaisse  sites où l'utilisateur a une caisse dédiée active
+     * @param  array<string, list<array<string, mixed>>>  $moyensParSite  moyens d'encaissement hors espèces par agence
+     */
+    private function mapCommandeForIndex(CommandeVente $c, mixed $user, array $sitesAvecCaisse = [], array $moyensParSite = []): array
     {
         // Identité de processus de commission (Vente / Distribution client / Transfert grossiste),
         // calculée via la même source unique que la génération réelle (cf.
@@ -315,6 +320,7 @@ class IndexCommandeVenteController extends Controller
             // Espèces : possibles seulement avec une caisse dédiée active sur le site de la facture
             // (cf. CaisseAgentResolver::garantirCaissePourEspeces(), garantie côté serveur).
             'peut_encaisser_especes' => (bool) ($c->facture?->site_id && in_array($c->facture->site_id, $sitesAvecCaisse, true)),
+            'moyens_encaissement' => $moyensParSite[$c->facture?->site_id ?? ''] ?? [],
             'encaissements' => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
                 'id' => $e->id,
                 'montant' => (float) $e->montant,

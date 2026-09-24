@@ -20,9 +20,7 @@ defineEmits<{ voirFactures: [] }>();
         <div class="flex flex-wrap items-center justify-between gap-2">
             <StatusDot
                 :status="status"
-                :label="
-                    `${status === 'impaye' ? 'Factures impayées' : 'Paiement partiel'} (${nombreFactures})`
-                "
+                :label="`${status === 'impaye' ? 'Factures impayées' : 'Paiement partiel'} (${nombreFactures})`"
                 class="text-sm font-semibold whitespace-normal text-amber-950 dark:text-amber-100"
             />
             <button

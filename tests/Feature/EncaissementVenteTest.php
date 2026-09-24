@@ -221,109 +221,179 @@ class EncaissementVenteTest extends TestCase
         ]);
     }
 
-    // ── Référence/opérateur obligatoires selon le mode de paiement (2026-09-15) ────────
+    // ── Moyens hors espèces : un support actif de l'agence (décision du 24/09/2026) ──────────
     // mode_paiement reste l'une des 4 valeurs stables attendues par la comptabilisation
-    // (especes/mobile_money/virement/cheque — cf. PlanComptableBootstrapService,
-    // CompteMappingResolver). L'opérateur Mobile Money (Orange Money, Kulu, Soutra Money, MOMO,
-    // PayCard) est un champ séparé `operateur_mobile_money`, présenté comme une seule liste
-    // déroulante côté UI (cf. PaymentCard.vue) mais jamais fusionné dans mode_paiement — un
-    // encaissement mode_paiement="orange_money" ferait échouer la résolution du compte de
-    // trésorerie (retomberait sur le compte Caisse par défaut).
+    // (especes/mobile_money/virement/cheque). Hors espèces, l'utilisateur choisit un SUPPORT de
+    // trésorerie de l'agence de la facture (`compte_tresorerie_id`) : un moyen sans support actif
+    // n'existe pas, et l'opérateur Mobile Money est celui du support, jamais une saisie libre.
 
-    public function test_encaissement_mobile_money_sans_operateur_est_refuse(): void
+    /** @param  array<string, mixed>  $donnees */
+    private function poster(User $user, FactureVente $facture, array $donnees)
+    {
+        return $this->actingAs($user)->post(route('encaissements.store', $facture), array_merge([
+            'montant' => 1000,
+            'date_encaissement' => now()->toDateString(),
+        ], $donnees));
+    }
+
+    public function test_encaissement_mobile_money_sans_support_est_refuse(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
 
-        $response = $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 1000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'mobile_money',
-                'reference_paiement' => 'OM-123456',
-            ]
-        );
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'reference_paiement' => 'OM-123456',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
 
-        $response->assertSessionHasErrors('operateur_mobile_money');
         $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
     }
 
     public function test_encaissement_mobile_money_sans_reference_est_refuse(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
 
-        $response = $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 1000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'mobile_money',
-                'operateur_mobile_money' => 'orange_money',
-            ]
-        );
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'compte_tresorerie_id' => $orange->id,
+        ])->assertSessionHasErrors('reference_paiement');
 
-        $response->assertSessionHasErrors('reference_paiement');
         $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
     }
 
     public function test_encaissement_virement_sans_reference_est_refuse(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000');
 
-        $response = $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 1000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'virement',
-            ]
-        );
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'virement',
+            'compte_tresorerie_id' => $banque->id,
+        ])->assertSessionHasErrors('reference_paiement');
 
-        $response->assertSessionHasErrors('reference_paiement');
         $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
     }
 
     public function test_encaissement_cheque_sans_reference_est_accepte(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000');
 
-        $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 1000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'cheque',
-            ]
-        )->assertRedirect();
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'cheque',
+            'compte_tresorerie_id' => $banque->id,
+        ])->assertSessionHasNoErrors()->assertRedirect();
 
         $this->assertDatabaseHas('encaissements_ventes', [
             'facture_vente_id' => $facture->id,
             'mode_paiement' => 'cheque',
+            'compte_tresorerie_id' => $banque->id,
             'reference_paiement' => null,
         ]);
     }
 
-    public function test_encaissement_mobile_money_avec_operateur_et_reference_est_enregistre(): void
+    public function test_l_operateur_enregistre_est_celui_du_support_jamais_la_saisie(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $kulu = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561400', 'kulu');
 
-        $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 1000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'mobile_money',
-                'operateur_mobile_money' => 'kulu',
-                'reference_paiement' => 'KUL-987654',
-            ]
-        )->assertRedirect();
+        // Requête forgée : l'opérateur envoyé contredit le support choisi — il est ignoré.
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'operateur_mobile_money' => 'orange_money',
+            'compte_tresorerie_id' => $kulu->id,
+            'reference_paiement' => 'KUL-987654',
+        ])->assertSessionHasNoErrors()->assertRedirect();
 
         $this->assertDatabaseHas('encaissements_ventes', [
             'facture_vente_id' => $facture->id,
             'mode_paiement' => 'mobile_money',
             'operateur_mobile_money' => 'kulu',
+            'compte_tresorerie_id' => $kulu->id,
             'reference_paiement' => 'KUL-987654',
         ]);
+    }
+
+    public function test_un_support_d_une_autre_agence_est_refuse(): void
+    {
+        ['org' => $org, 'facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $autreAgence = Site::create(['organization_id' => $org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
+        $kuluKindia = $this->creerSupportAgence($autreAgence->id, 'mobile_money', '561400', 'kulu');
+
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'compte_tresorerie_id' => $kuluKindia->id,
+            'reference_paiement' => 'KUL-1',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
+
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_un_support_d_une_autre_organisation_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $autre = $this->creerContexte();
+        $orangeAutreOrg = $this->creerSupportAgence($autre['facture']->site_id, 'mobile_money', '561100', 'orange_money');
+
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'compte_tresorerie_id' => $orangeAutreOrg->id,
+            'reference_paiement' => 'OM-1',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
+
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_un_support_inactif_ou_en_brouillon_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $inactif = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
+        $inactif->update(['actif' => false]);
+        $brouillon = CompteTresorerie::create([
+            'organization_id' => $facture->organization_id,
+            'site_id' => $facture->site_id,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $facture->organization_id)->where('numero', '561400')->firstOrFail()->id,
+            'type' => 'mobile_money',
+            'operateur_mobile_money' => 'kulu',
+            'actif' => false,
+        ]);
+
+        foreach ([$inactif, $brouillon] as $support) {
+            $this->poster($user, $facture, [
+                'mode_paiement' => 'mobile_money',
+                'compte_tresorerie_id' => $support->id,
+                'reference_paiement' => 'REF-1',
+            ])->assertSessionHasErrors('compte_tresorerie_id');
+        }
+
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_un_mode_incoherent_avec_le_support_est_refuse(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
+
+        // Un wallet Mobile Money ne reçoit jamais un virement.
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'virement',
+            'compte_tresorerie_id' => $orange->id,
+            'reference_paiement' => 'VIR-1',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
+
+        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+    }
+
+    public function test_un_mobile_money_sans_operateur_renseigne_n_est_jamais_accepte(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $sansOperateur = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561000');
+
+        $this->poster($user, $facture, [
+            'mode_paiement' => 'mobile_money',
+            'compte_tresorerie_id' => $sansOperateur->id,
+            'reference_paiement' => 'REF-1',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
     }
 
     public function test_encaissement_sans_date_utilise_date_du_jour(): void
@@ -427,69 +497,101 @@ class EncaissementVenteTest extends TestCase
         $this->assertEquals(1000.0, (float) $facture->fresh()->montant_encaisse);
     }
 
-    // ── Mobile Money : wallet de l'opérateur (bug préprod 24/09/2026) ─────────────────
-    // Avant correctif, tout encaissement Mobile Money allait sur 561000 : un support
-    // « Mobile Money » pointé sur 561100 (Orange Money) restait figé.
+    // ── Mobile Money : l'argent arrive sur le compte du support choisi (bug préprod 24/09/2026) ──
+    // Avant correctif, un encaissement Kulu (sans wallet dédié) partait sur 561000, qu'aucun support
+    // n'affichait : le solde du support Mobile Money de l'agence restait figé.
 
-    private function supportMobileMoney(FactureVente $facture, string $numero): CompteTresorerie
+    private function encaisserSur(User $user, FactureVente $facture, float $montant, CompteTresorerie $support): void
     {
-        return CompteTresorerie::create([
-            'organization_id' => $facture->organization_id,
-            'site_id' => $facture->site_id,
-            'compte_comptable_id' => CompteComptable::where('organization_id', $facture->organization_id)
-                ->where('numero', $numero)->firstOrFail()->id,
-            'type' => 'mobile_money',
-            'libelle' => 'Mobile Money '.$numero,
-            'actif' => true,
-            'valide_le' => now()->subDay(),
-        ]);
-    }
-
-    private function encaisserMobileMoney(User $user, FactureVente $facture, float $montant, string $operateur): void
-    {
-        $this->actingAs($user)->post(route('encaissements.store', $facture), [
+        $this->poster($user, $facture, [
             'montant' => $montant,
-            'date_encaissement' => now()->toDateString(),
             'mode_paiement' => 'mobile_money',
-            'operateur_mobile_money' => $operateur,
-            'reference_paiement' => 'REF-'.$operateur.'-'.$montant,
+            'compte_tresorerie_id' => $support->id,
+            'reference_paiement' => 'REF-'.$support->id.'-'.$montant,
         ])->assertSessionHasNoErrors()->assertRedirect();
     }
 
-    public function test_encaissement_orange_money_alimente_le_support_561100_et_pas_561000(): void
+    public function test_chaque_mobile_money_alimente_son_propre_support(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
         $facture->update(['montant_net' => 10_000_000]);
-        $orange = $this->supportMobileMoney($facture, '561100');
-        $generique = $this->supportMobileMoney($facture, '561000');
+        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
+        $kulu = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561400', 'kulu');
         $soldes = app(TresorerieDisponibiliteService::class);
 
-        $this->encaisserMobileMoney($user, $facture, 4_000_000, 'orange_money');
-        $this->assertEqualsWithDelta(4_000_000.0, $soldes->soldePourSupport($orange), 0.01);
+        $this->encaisserSur($user, $facture, 1_000_000, $orange);
+        $this->encaisserSur($user, $facture, 500_000, $kulu);
 
-        $this->encaisserMobileMoney($user, $facture, 1_000_000, 'orange_money');
+        $this->assertEqualsWithDelta(1_000_000.0, $soldes->soldePourSupport($orange), 0.01);
+        $this->assertEqualsWithDelta(500_000.0, $soldes->soldePourSupport($kulu), 0.01);
 
-        $this->assertEqualsWithDelta(5_000_000.0, $soldes->soldePourSupport($orange), 0.01);
-        $this->assertEqualsWithDelta(0.0, $soldes->soldePourSupport($generique), 0.01);
-
-        $dernier = EncaissementVente::where('facture_vente_id', $facture->id)->latest('id')->firstOrFail();
+        $dernier = EncaissementVente::where('facture_vente_id', $facture->id)->where('operateur_mobile_money', 'kulu')->firstOrFail();
         $lignes = PieceComptable::where('source_id', $dernier->id)->firstOrFail()->lignes()->with('compte')->get();
-        $this->assertEqualsWithDelta(1_000_000.0, (float) $lignes->firstWhere('compte.numero', '561100')->debit, 0.01);
-        $this->assertEqualsWithDelta(1_000_000.0, (float) $lignes->firstWhere('compte.numero', '411000')->credit, 0.01);
-        $this->assertNull($lignes->firstWhere('compte.numero', '561000'));
+        $this->assertEqualsWithDelta(500_000.0, (float) $lignes->firstWhere('compte.numero', '561400')->debit, 0.01);
+        $this->assertEqualsWithDelta(500_000.0, (float) $lignes->firstWhere('compte.numero', '411000')->credit, 0.01);
+        $this->assertNull($lignes->firstWhere('compte.numero', '561000'), 'Plus jamais de repli sur le Mobile Money générique');
     }
 
-    public function test_encaissement_momo_alimente_le_support_561200(): void
+    public function test_le_virement_alimente_la_banque_choisie(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
-        $facture->update(['montant_net' => 10_000_000]);
-        $momo = $this->supportMobileMoney($facture, '561200');
-        $generique = $this->supportMobileMoney($facture, '561000');
+        $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000', null, 'UBA');
 
-        $this->encaisserMobileMoney($user, $facture, 1_000_000, 'momo');
+        $this->poster($user, $facture, [
+            'montant' => 3000,
+            'mode_paiement' => 'virement',
+            'compte_tresorerie_id' => $banque->id,
+            'reference_paiement' => 'VIR-1',
+        ])->assertSessionHasNoErrors();
 
-        $soldes = app(TresorerieDisponibiliteService::class);
-        $this->assertEqualsWithDelta(1_000_000.0, $soldes->soldePourSupport($momo), 0.01);
-        $this->assertEqualsWithDelta(0.0, $soldes->soldePourSupport($generique), 0.01);
+        $this->assertEqualsWithDelta(3000.0, app(TresorerieDisponibiliteService::class)->soldePourSupport($banque), 0.01);
+    }
+
+    // ── Moyens proposés à l'écran : uniquement les supports actifs de l'agence ──────────
+
+    public function test_la_fiche_vente_ne_propose_que_les_moyens_des_supports_actifs_de_l_agence(): void
+    {
+        ['org' => $org, 'commande' => $commande, 'facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $commande->update(['site_id' => $facture->site_id]);
+        Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
+        $user->givePermissionTo('ventes.read');
+
+        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
+        $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000', null, 'UBA');
+        // Ni un support d'une autre agence, ni un support inactif, ni un Mobile Money sans opérateur.
+        $autreAgence = Site::create(['organization_id' => $org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
+        $this->creerSupportAgence($autreAgence->id, 'mobile_money', '561400', 'kulu');
+        $this->creerSupportAgence($facture->site_id, 'mobile_money', '561200', 'momo')->update(['actif' => false]);
+        $this->creerSupportAgence($facture->site_id, 'mobile_money', '561000');
+
+        $this->actingAs($user)->get(route('ventes.show', $commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('commande.moyens_encaissement', [
+                    [
+                        'key' => "mobile_money:{$orange->id}",
+                        'label' => 'Orange Money',
+                        'mode_paiement' => 'mobile_money',
+                        'operateur_mobile_money' => 'orange_money',
+                        'compte_tresorerie_id' => $orange->id,
+                        'reference_requise' => true,
+                    ],
+                    [
+                        'key' => "virement:{$banque->id}",
+                        'label' => 'Virement bancaire — UBA',
+                        'mode_paiement' => 'virement',
+                        'operateur_mobile_money' => null,
+                        'compte_tresorerie_id' => $banque->id,
+                        'reference_requise' => true,
+                    ],
+                    [
+                        'key' => "cheque:{$banque->id}",
+                        'label' => 'Chèque — UBA',
+                        'mode_paiement' => 'cheque',
+                        'operateur_mobile_money' => null,
+                        'compte_tresorerie_id' => $banque->id,
+                        'reference_requise' => false,
+                    ],
+                ]));
     }
 }

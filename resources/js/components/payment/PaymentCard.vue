@@ -2,46 +2,21 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { formatGNF } from '@/lib/utils';
-import {
-    FileText,
-    HandCoins,
-    Info,
-    Landmark,
-    type LucideIcon,
-    Receipt,
-    Smartphone,
-    Wallet,
-} from 'lucide-vue-next';
+import { HandCoins, Info, Receipt } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Tooltip from 'primevue/tooltip';
 import { computed, ref, watch } from 'vue';
+import {
+    construireOptions,
+    type EncaissementPayload,
+    type ModeOption,
+    type MoyenEncaissement,
+} from './moyensEncaissement';
 
 const vTooltip = Tooltip;
-
-interface ModeOption {
-    /** Clé de l'option dans le select — PAS forcément égale à mode_paiement (cf. Mobile Money). */
-    key: string;
-    label: string;
-    /** Valeur envoyée au backend dans `mode_paiement` (App\Enums\ModePaiement, 4 valeurs stables :
-     * especes/mobile_money/virement/cheque — jamais un opérateur, cf. docs/encaissements.md). */
-    mode_paiement: string;
-    /** Envoyé dans `operateur_mobile_money` uniquement quand mode_paiement = mobile_money. */
-    operateur_mobile_money?: string;
-    requiresReference: boolean;
-    /** Ce mode n'est possible que si l'utilisateur a une caisse dédiée active sur le site de la
-     * facture (espèces uniquement, cf. CaisseAgentResolver::garantirCaissePourEspeces()) : sans
-     * elle, l'option est désactivée et un message l'explique, cf. prop `especesDisponibles`. */
-    requiresCaisse?: boolean;
-    icon: LucideIcon;
-    /** Classes Tailwind du badge icône (fond + couleur) — juste pour distinguer visuellement
-     * les options entre elles, pas un logo de marque. */
-    badgeClass: string;
-    /** Exemple affiché en placeholder du champ Référence, propre à chaque mode. */
-    referencePlaceholder?: string;
-}
 
 interface InfoRow {
     label: string;
@@ -59,7 +34,11 @@ interface Props {
     maxMontant?: number;
     processing?: boolean;
     errors?: Record<string, string>;
-    modes?: ModeOption[];
+    /** Moyens hors espèces disponibles dans l'agence de la facture, fournis par le backend
+     * (`moyens_encaissement`, un par support de trésorerie actif) — jamais une liste fixe : un
+     * opérateur sans support dans l'agence n'est pas proposé. Défaut vide : un écran qui l'oublierait
+     * ne propose rien de plus que les espèces, jamais un moyen sans compte réel derrière. */
+    moyens?: MoyenEncaissement[];
     /** L'utilisateur peut-il encaisser en espèces sur cette facture ? Fourni par le backend
      * (`peut_encaisser_especes`) : caisse dédiée active sur le site de la facture. Défaut `true` :
      * un écran qui l'oublierait ne masque rien, la garantie réelle reste côté serveur. */
@@ -71,114 +50,21 @@ interface Props {
 const MESSAGE_ESPECES_INDISPONIBLE =
     "Vous ne disposez pas d'une caisse active : impossible d'encaisser en espèces. Contactez votre responsable pour qu'il vous en crée une.";
 
-// Une seule liste déroulante "Mode de paiement" — l'opérateur Mobile Money (Orange Money, Kulu,
-// Soutra Money, MOMO, PayCard) apparaît comme option directe, jamais comme un second select.
-// Sous le capot, chaque option Mobile Money envoie mode_paiement="mobile_money" +
-// operateur_mobile_money="<opérateur>" — mode_paiement reste l'une des 4 valeurs stables
-// attendues par la comptabilisation (App\Services\Comptabilite\VenteComptabilisationService,
-// PlanComptableBootstrapService, CompteMappingResolver) : y stocker directement "orange_money"
-// ferait retomber l'écriture sur le compte de trésorerie par défaut (Caisse) au lieu du compte
-// Mobile Money dédié — montant mal classé en comptabilité. Voir docs/encaissements.md.
-// Icônes/couleurs par option : simples repères visuels (pas des logos de marque officiels).
-const DEFAULT_MODES: ModeOption[] = [
-    {
-        key: 'especes',
-        label: 'Espèces',
-        mode_paiement: 'especes',
-        requiresReference: false,
-        requiresCaisse: true,
-        icon: Wallet,
-        badgeClass:
-            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    },
-    {
-        key: 'orange_money',
-        label: 'Orange Money',
-        mode_paiement: 'mobile_money',
-        operateur_mobile_money: 'orange_money',
-        requiresReference: true,
-        icon: Smartphone,
-        badgeClass:
-            'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300',
-        referencePlaceholder: 'Ex. OM123456789',
-    },
-    {
-        key: 'kulu',
-        label: 'Kulu',
-        mode_paiement: 'mobile_money',
-        operateur_mobile_money: 'kulu',
-        requiresReference: true,
-        icon: Smartphone,
-        badgeClass:
-            'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300',
-        referencePlaceholder: 'Ex. KU123456789',
-    },
-    {
-        key: 'soutra_money',
-        label: 'Soutra Money',
-        mode_paiement: 'mobile_money',
-        operateur_mobile_money: 'soutra_money',
-        requiresReference: true,
-        icon: Smartphone,
-        badgeClass:
-            'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/40 dark:text-cyan-300',
-        referencePlaceholder: 'Ex. SM123456789',
-    },
-    {
-        key: 'momo',
-        label: 'MOMO (MTN Mobile Money)',
-        mode_paiement: 'mobile_money',
-        operateur_mobile_money: 'momo',
-        requiresReference: true,
-        icon: Smartphone,
-        badgeClass:
-            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-        referencePlaceholder: 'Ex. MTN123456789',
-    },
-    {
-        key: 'paycard',
-        label: 'PayCard',
-        mode_paiement: 'mobile_money',
-        operateur_mobile_money: 'paycard',
-        requiresReference: true,
-        icon: Smartphone,
-        badgeClass:
-            'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300',
-        referencePlaceholder: 'Ex. PC123456789',
-    },
-    {
-        key: 'virement',
-        label: 'Virement bancaire',
-        mode_paiement: 'virement',
-        requiresReference: true,
-        icon: Landmark,
-        badgeClass:
-            'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300',
-        referencePlaceholder: 'Ex. VIR20260915001',
-    },
-    {
-        key: 'cheque',
-        label: 'Chèque',
-        mode_paiement: 'cheque',
-        requiresReference: false,
-        icon: FileText,
-        badgeClass:
-            'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-    },
-];
-
-// `defineProps()` est hissé hors du setup() par le compilateur : sa valeur par défaut ne peut
-// pas référencer une variable locale du module (DEFAULT_MODES) — d'où le fallback via un
-// computed séparé (modeOptions) plutôt que dans withDefaults.
+// Une seule liste déroulante : Espèces, puis chaque support de l'agence (un Mobile Money par
+// opérateur réellement configuré, virement/chèque par banque) — jamais un second select opérateur.
+// Le choix envoie mode_paiement (4 valeurs stables attendues par la comptabilisation) + le support
+// choisi (compte_tresorerie_id) ; l'opérateur est déduit du support côté serveur. Voir
+// docs/encaissements.md.
 const props = withDefaults(defineProps<Props>(), {
     infoRows: () => [],
     maxMontant: undefined,
     processing: false,
     errors: () => ({}),
+    moyens: () => [],
     especesDisponibles: true,
 });
 
-const modeOptions = computed(() => props.modes ?? DEFAULT_MODES);
+const modeOptions = computed(() => construireOptions(props.moyens));
 
 function modeIndisponible(mode: ModeOption): boolean {
     return !!mode.requiresCaisse && !props.especesDisponibles;
@@ -187,6 +73,8 @@ function modeIndisponible(mode: ModeOption): boolean {
 const especesBloquees = computed(() =>
     modeOptions.value.some((m) => modeIndisponible(m)),
 );
+
+const aucunAutreMoyen = computed(() => props.moyens.length === 0);
 
 // Mode présélectionné à l'ouverture : le premier, sauf s'il est indisponible — jamais un autre mode
 // choisi à la place de l'utilisateur (un Mobile Money enregistré par erreur serait un encaissement
@@ -199,15 +87,7 @@ function modeInitial(): string {
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
-    (
-        e: 'submit',
-        payload: {
-            montant: number;
-            mode_paiement: string;
-            operateur_mobile_money?: string;
-            reference_paiement?: string;
-        },
-    ): void;
+    (e: 'submit', payload: EncaissementPayload): void;
 }>();
 
 // Proxy v-model:visible vers le parent sans mutation de prop
@@ -284,7 +164,7 @@ function handleSubmit() {
     emit('submit', {
         montant: montant.value,
         mode_paiement: mode.mode_paiement,
-        operateur_mobile_money: mode.operateur_mobile_money,
+        compte_tresorerie_id: mode.compte_tresorerie_id,
         reference_paiement: referencePaiement.value || undefined,
     });
 }
@@ -374,7 +254,7 @@ function handleSubmit() {
                 </p>
             </div>
 
-            <!-- Mode de paiement — une seule liste, l'opérateur Mobile Money en fait partie -->
+            <!-- Mode de paiement — une seule liste : espèces + supports de l'agence -->
             <div>
                 <Label class="mb-1.5 block text-sm"
                     >Mode de paiement
@@ -446,11 +326,21 @@ function handleSubmit() {
                 >
                     {{ errors.mode_paiement }}
                 </p>
+                <!-- Aucun support Mobile Money/Banque actif dans l'agence : information (bleu), rien
+                     n'est cassé — c'est une configuration de Trésorerie > Supports. -->
                 <p
-                    v-if="errors?.operateur_mobile_money"
+                    v-if="aucunAutreMoyen"
+                    class="mt-1.5 text-xs text-blue-700 dark:text-blue-400"
+                    data-testid="aucun-autre-moyen"
+                >
+                    Aucun compte Mobile Money ni bancaire actif dans cette
+                    agence : seules les espèces sont proposées.
+                </p>
+                <p
+                    v-if="errors?.compte_tresorerie_id"
                     class="mt-1 text-xs text-destructive"
                 >
-                    {{ errors.operateur_mobile_money }}
+                    {{ errors.compte_tresorerie_id }}
                 </p>
             </div>
 

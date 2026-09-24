@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\CommandeVente;
 use App\Services\AnnulationExceptionnelleService;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
 use Inertia\Inertia;
@@ -235,6 +236,11 @@ class ShowCommandeVenteController extends Controller
                 // CaisseAgentResolver::garantirCaissePourEspeces(), côté serveur à l'enregistrement.
                 'peut_encaisser_especes' => (bool) ($facture?->site_id
                     && app(CaisseAgentResolver::class)->caisseActive($facture->organization_id, (string) $user->id, $facture->site_id)),
+                // Autres moyens : uniquement ceux qu'un support actif de l'agence de la facture peut
+                // recevoir (MoyensEncaissementResolver, rejoué côté serveur à l'enregistrement).
+                'moyens_encaissement' => $facture
+                    ? app(MoyensEncaissementResolver::class)->pourSite($facture->organization_id, $facture->site_id)
+                    : [],
                 'created_at' => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande->createdBy?->name,
                 'lignes' => $lignes,

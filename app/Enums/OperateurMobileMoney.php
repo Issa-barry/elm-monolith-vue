@@ -39,11 +39,47 @@ enum OperateurMobileMoney: string
         };
     }
 
+    /**
+     * Inverse de detailComptable() : l'opérateur dont le wallet est désigné par ce détail de
+     * compta_mappings ("orange" → Orange Money), null si aucun opérateur ne lui correspond (ex:
+     * "djomy", wallet d'exemple du plan comptable sans opérateur saisissable).
+     */
+    public static function fromDetailComptable(string $detail): ?self
+    {
+        foreach (self::cases() as $case) {
+            if ($case->detailComptable() === $detail) {
+                return $case;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Opérateurs pouvant porter un support de trésorerie (un wallet réel, donc un compte à part) —
+     * AUTRE n'en a jamais : un encaissement ne peut plus être rattaché à un opérateur indéterminé.
+     *
+     * @return list<self>
+     */
+    public static function avecWallet(): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $case) => $case !== self::AUTRE));
+    }
+
     public static function options(): array
     {
         return array_map(
             fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
             self::cases()
+        );
+    }
+
+    /** Options proposées à la création d'un support Mobile Money (cf. avecWallet()). */
+    public static function optionsAvecWallet(): array
+    {
+        return array_map(
+            fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
+            self::avecWallet()
         );
     }
 }

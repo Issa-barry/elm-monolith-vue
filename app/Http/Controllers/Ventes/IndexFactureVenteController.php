@@ -10,6 +10,7 @@ use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\Site;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -150,8 +151,11 @@ class IndexFactureVenteController extends Controller
         // Une seule requête pour toute la liste (indicateur peut_encaisser_especes de chaque ligne).
         $sitesAvecCaisse = app(CaisseAgentResolver::class)->sitesAvecCaisseActive($orgId, (string) $user->id);
 
-        $factures = $query->orderByDesc('created_at')
-            ->get()
+        $facturesTrouvees = $query->orderByDesc('created_at')->get();
+        // Moyens hors espèces par agence (supports actifs), une seule résolution pour la liste.
+        $moyensParSite = app(MoyensEncaissementResolver::class)->parSite($orgId, $facturesTrouvees->pluck('site_id'));
+
+        $factures = $facturesTrouvees
             ->map(fn (FactureVente $f) => [
                 'id' => $f->id,
                 'reference' => $f->reference,
@@ -171,6 +175,7 @@ class IndexFactureVenteController extends Controller
                 // Espèces : possibles seulement avec une caisse dédiée active sur le site de la
                 // facture (cf. CaisseAgentResolver::garantirCaissePourEspeces(), garantie serveur).
                 'peut_encaisser_especes' => (bool) ($f->site_id && in_array($f->site_id, $sitesAvecCaisse, true)),
+                'moyens_encaissement' => $moyensParSite[$f->site_id ?? ''] ?? [],
                 'created_at' => $f->created_at?->format('d/m/Y'),
                 'encaissements' => $f->encaissements
                     ->sortByDesc(fn ($e) => $e->created_at?->timestamp ?? 0)

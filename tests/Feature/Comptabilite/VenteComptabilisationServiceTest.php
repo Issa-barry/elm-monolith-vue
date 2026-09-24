@@ -208,8 +208,12 @@ class VenteComptabilisationServiceTest extends TestCase
         $cas = [
             OperateurMobileMoney::ORANGE_MONEY->value => '561100',
             OperateurMobileMoney::MOMO->value => '561200',
-            // Sans wallet dédié configuré, repli sur le Mobile Money générique.
-            OperateurMobileMoney::KULU->value => '561000',
+            // Un compte par opérateur saisissable depuis le 24/09/2026 (chaque Mobile Money est un
+            // compte à part) — ce chemin ne sert plus qu'aux encaissements sans support choisi.
+            OperateurMobileMoney::KULU->value => '561400',
+            OperateurMobileMoney::PAYCARD->value => '561500',
+            OperateurMobileMoney::SOUTRA_MONEY->value => '561600',
+            // Seul « Autre » n'a pas de wallet : repli sur le Mobile Money générique.
             OperateurMobileMoney::AUTRE->value => '561000',
         ];
 

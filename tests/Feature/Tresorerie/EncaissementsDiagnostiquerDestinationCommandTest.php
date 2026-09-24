@@ -37,9 +37,10 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
         $this->site = $this->user->sites()->firstOrFail();
     }
 
-    // Kulu n'a pas de wallet dédié dans le plan par défaut : l'encaissement Mobile Money reste
+    // « Autre » est le seul opérateur sans wallet dédié dans le plan par défaut (Kulu a le sien, 561400,
+    // depuis le 24/09/2026) : un encaissement historique sans support reste
     // sur le compte générique 561000 (Orange Money, lui, vise 561100).
-    private function encaisser(?User $auteur, string $mode = 'especes', float $montant = 100_000, ?Site $site = null, ?Organization $org = null, string $operateur = 'kulu'): EncaissementVente
+    private function encaisser(?User $auteur, string $mode = 'especes', float $montant = 100_000, ?Site $site = null, ?Organization $org = null, string $operateur = 'autre'): EncaissementVente
     {
         $facture = FactureVente::factory()->create([
             'organization_id' => ($org ?? $this->org)->id,
@@ -202,7 +203,7 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
 
         $this->assertStringContainsString('3 encaissement(s) analysé(s) — 170 000 GNF', $sortie);
         $this->assertStringContainsString('Conformes : 1 (50 000 GNF) — à traiter : 2 (120 000 GNF)', $sortie);
-        foreach (['Par agent', 'Par agence', 'Par moyen de paiement', 'Ousmane', 'Awa', 'Site Principal', 'Mobile Money / Kulu'] as $attendu) {
+        foreach (['Par agent', 'Par agence', 'Par moyen de paiement', 'Ousmane', 'Awa', 'Site Principal', 'Mobile Money / Autre'] as $attendu) {
             $this->assertStringContainsString($attendu, $sortie);
         }
     }
