@@ -25,6 +25,7 @@ class EncaissementVente extends Model
         'date_encaissement',
         'mode_paiement',
         'operateur_mobile_money',
+        'compte_tresorerie_id',
         'reference_paiement',
         'note',
         'created_by',
@@ -96,5 +97,11 @@ class EncaissementVente extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Support choisi à l'encaissement (Mobile Money, virement, chèque) — null pour les espèces et l'historique. */
+    public function compteTresorerie(): BelongsTo
+    {
+        return $this->belongsTo(CompteTresorerie::class, 'compte_tresorerie_id');
     }
 }

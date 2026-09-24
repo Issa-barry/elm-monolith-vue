@@ -17,6 +17,10 @@ export interface CompteTresorerie {
     site_id: string;
     type: string;
     type_label: string;
+    /** Opérateur d'un support Mobile Money (un wallet = un compte à part) — null sinon, ou tant
+     * qu'il n'est pas renseigné : le support n'est alors proposé à aucun encaissement. */
+    operateur_mobile_money: string | null;
+    operateur_label: string | null;
     libelle: string;
     nature: Nature;
     agent: { id: string; nom: string } | null;
@@ -51,7 +55,8 @@ export interface NatureAffichee {
 
 /** Nature affichée en badge : la caisse dédiée à un agent d'abord, sinon le type du support d'agence. */
 export function natureAffichee(
-    c: Pick<CompteTresorerie, 'nature' | 'type' | 'type_label'>,
+    c: Pick<CompteTresorerie, 'nature' | 'type' | 'type_label'> &
+        Partial<Pick<CompteTresorerie, 'operateur_label'>>,
 ): NatureAffichee {
     if (c.nature === 'dediee') {
         return {
@@ -72,8 +77,10 @@ export function natureAffichee(
             };
         case 'mobile_money':
             return {
-                label: 'Mobile Money',
-                titre: "Compte Mobile Money de l'agence",
+                label: c.operateur_label ?? 'Mobile Money',
+                titre: c.operateur_label
+                    ? `Compte ${c.operateur_label} de l'agence`
+                    : "Opérateur non renseigné : ce compte n'est proposé à aucun encaissement",
                 icone: Smartphone,
                 variante: 'outline',
             };

@@ -68,6 +68,7 @@ const props = defineProps<{
     };
     sites: { id: string; nom: string }[];
     type_options: { value: string; label: string }[];
+    operateur_options: { value: string; label: string }[];
     destinations_versement: { id: string; site_id: string; libelle: string }[];
     agents: Agent[];
     caisses_dediees_actives: { agent_id: string; site_id: string }[];
@@ -189,6 +190,7 @@ const form = useForm({
     site_id: '',
     agent_id: '',
     type: 'caisse',
+    operateur_mobile_money: '',
     compte_comptable_id: '',
     libelle: '',
     moyen_paiement_defaut: '',
@@ -244,7 +246,13 @@ const libellePreview = computed(() => {
     const site = props.sites.find((s) => s.id === form.site_id);
     const type = props.type_options.find((t) => t.value === form.type);
     if (!site || !type) return 'Libellé (optionnel)';
-    return `Automatique : ${type.label} de ${site.nom}`;
+    const operateur =
+        form.type === 'mobile_money'
+            ? props.operateur_options.find(
+                  (o) => o.value === form.operateur_mobile_money,
+              )
+            : undefined;
+    return `Automatique : ${operateur?.label ?? type.label} de ${site.nom}`;
 });
 
 function ouvrirCreation() {
@@ -267,6 +275,10 @@ function creerSupport() {
                   nature: data.nature,
                   site_id: data.site_id,
                   type: data.type,
+                  operateur_mobile_money:
+                      data.type === 'mobile_money'
+                          ? data.operateur_mobile_money
+                          : null,
                   compte_comptable_id: data.compte_comptable_id,
                   libelle: data.libelle,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
@@ -286,6 +298,7 @@ function creerSupport() {
 const editForm = useForm({
     libelle: '',
     type: '',
+    operateur_mobile_money: '',
     compte_comptable_id: '',
     moyen_paiement_defaut: '',
     actif: true,
@@ -326,6 +339,7 @@ function ouvrirEdition(compte: CompteTresorerie) {
     editForm.clearErrors();
     editForm.libelle = compte.libelle;
     editForm.type = compte.type;
+    editForm.operateur_mobile_money = compte.operateur_mobile_money ?? '';
     editForm.compte_comptable_id = compte.compte_comptable_id;
     editForm.moyen_paiement_defaut = compte.moyen_paiement_defaut ?? '';
     editForm.actif = compte.actif;
@@ -337,7 +351,15 @@ function enregistrerEdition() {
     const dediee = editEstDediee.value;
     editForm
         .transform((data) =>
-            dediee ? { libelle: data.libelle, actif: data.actif } : data,
+            dediee
+                ? { libelle: data.libelle, actif: data.actif }
+                : {
+                      ...data,
+                      operateur_mobile_money:
+                          data.type === 'mobile_money'
+                              ? data.operateur_mobile_money
+                              : null,
+                  },
         )
         .put(`${URL_SUPPORTS}/${editDialogPour.value.id}`, {
             preserveScroll: true,
@@ -360,6 +382,7 @@ function basculerActif(compte: CompteTresorerie) {
             : {
                   libelle: compte.libelle,
                   type: compte.type,
+                  operateur_mobile_money: compte.operateur_mobile_money,
                   compte_comptable_id: compte.compte_comptable_id,
                   moyen_paiement_defaut: compte.moyen_paiement_defaut ?? '',
                   actif,
@@ -1323,6 +1346,41 @@ const selectClass =
                 </div>
             </template>
 
+            <div
+                v-if="form.nature !== 'dediee' && form.type === 'mobile_money'"
+            >
+                <Label
+                    for="sup-operateur"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Opérateur <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="sup-operateur"
+                    v-model="form.operateur_mobile_money"
+                    :class="selectClass"
+                >
+                    <option value="" disabled>Opérateur…</option>
+                    <option
+                        v-for="o in operateur_options"
+                        :key="o.value"
+                        :value="o.value"
+                    >
+                        {{ o.label }}
+                    </option>
+                </select>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Chaque opérateur a son propre compte : ce support le rend
+                    proposable à l'encaissement dans cette agence.
+                </p>
+                <p
+                    v-if="form.errors.operateur_mobile_money"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.operateur_mobile_money }}
+                </p>
+            </div>
+
             <div>
                 <Label
                     for="sup-libelle"
@@ -1463,6 +1521,33 @@ const selectClass =
                     >
                         Verrouillé : un solde d'ouverture existe déjà pour ce
                         support.
+                    </p>
+                </div>
+                <div v-if="editForm.type === 'mobile_money'">
+                    <Label
+                        for="edit-operateur"
+                        class="mb-1.5 block text-xs font-medium"
+                        >Opérateur</Label
+                    >
+                    <select
+                        id="edit-operateur"
+                        v-model="editForm.operateur_mobile_money"
+                        :class="selectClass"
+                    >
+                        <option value="" disabled>Opérateur…</option>
+                        <option
+                            v-for="o in operateur_options"
+                            :key="o.value"
+                            :value="o.value"
+                        >
+                            {{ o.label }}
+                        </option>
+                    </select>
+                    <p
+                        v-if="editForm.errors.operateur_mobile_money"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ editForm.errors.operateur_mobile_money }}
                     </p>
                 </div>
             </template>

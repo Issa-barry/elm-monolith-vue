@@ -10,6 +10,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
+import SolvabiliteAlert from '@/pages/Ventes/partials/SolvabiliteAlert.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
@@ -1189,120 +1190,54 @@ function confirmerEtCreer() {
                                  exclusivement au bloc "Commande bloquée" ci-dessous, jamais à la
                                  seule existence d'une dette (cf. principe SUCCESS/WARNING/DANGER,
                                  audit du 28/08/2026). -->
-                                <div
+                                <SolvabiliteAlert
                                     v-else-if="
                                         vehiculeSolvabilite &&
                                         vehiculeSolvabilite.has_debt &&
                                         !vehiculeSolvabilite.blocked
                                     "
-                                    class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
-                                >
-                                    <div
-                                        class="flex items-start justify-between gap-3"
-                                    >
-                                        <div class="flex items-start gap-2.5">
-                                            <span
-                                                class="mt-0.5 text-base text-amber-500"
-                                                >⚠</span
-                                            >
-                                            <div>
-                                                <p
-                                                    class="text-sm font-semibold text-amber-800 dark:text-amber-300"
-                                                >
-                                                    {{
-                                                        vehiculeSolvabilite.status ===
-                                                        'impaye'
-                                                            ? 'Factures impayées détectées'
-                                                            : 'Paiement partiel'
-                                                    }}
-                                                </p>
-                                                <p
-                                                    v-if="
-                                                        vehiculeSolvabilite.seuil_origine ===
-                                                        'derogation'
-                                                    "
-                                                    class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-                                                >
-                                                    Commande autorisée par
-                                                    dérogation (plafond :
-                                                    {{
-                                                        formatGNF(
-                                                            vehiculeSolvabilite.seuil_impayes,
-                                                        )
-                                                    }})
-                                                </p>
-                                                <p
-                                                    class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
-                                                >
-                                                    Montant total impayé
-                                                </p>
-                                                <p
-                                                    class="text-xl font-bold text-amber-800 dark:text-amber-300"
-                                                >
-                                                    {{
-                                                        formatGNF(
-                                                            vehiculeSolvabilite.total_remaining,
-                                                        )
-                                                    }}
-                                                </p>
-                                                <p
-                                                    class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
-                                                >
-                                                    Nombre de factures :
-                                                    {{
-                                                        vehiculeSolvabilite.unpaid_invoices_count
-                                                    }}
-                                                </p>
-                                                <p
-                                                    v-if="
-                                                        vehiculeSolvabilite.last_invoice_reference
-                                                    "
-                                                    class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
-                                                >
-                                                    Dernière :
-                                                    {{
-                                                        vehiculeSolvabilite.last_invoice_reference
-                                                    }}
-                                                    ·
-                                                    {{
-                                                        formatDate(
-                                                            vehiculeSolvabilite.last_invoice_date,
-                                                        )
-                                                    }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                                            @click="
-                                                ouvrirDialogFactures(
-                                                    vehiculeSolvabilite,
-                                                    {
-                                                        type: 'vehicule',
-                                                        titre: vehiculeSelected
-                                                            ? vehiculeLabel(
-                                                                  vehiculeSelected,
-                                                              )
-                                                            : 'Véhicule',
-                                                        chauffeur:
-                                                            vehiculeSelected?.livreur_nom
-                                                                ? vehiculeSelected.livreur_nom +
-                                                                  (vehiculeSelected.livreur_telephone
-                                                                      ? ' — ' +
-                                                                        formatPhoneDisplay(
-                                                                            vehiculeSelected.livreur_telephone,
-                                                                        )
-                                                                      : '')
-                                                                : undefined,
-                                                    },
-                                                )
-                                            "
-                                        >
-                                            Voir les factures
-                                        </button>
-                                    </div>
-                                </div>
+                                    :status="vehiculeSolvabilite.status"
+                                    :derogation="
+                                        vehiculeSolvabilite.seuil_origine ===
+                                        'derogation'
+                                    "
+                                    :montant="
+                                        formatGNF(
+                                            vehiculeSolvabilite.total_remaining,
+                                        )
+                                    "
+                                    :plafond="
+                                        formatGNF(
+                                            vehiculeSolvabilite.seuil_impayes,
+                                        )
+                                    "
+                                    :nombre-factures="
+                                        vehiculeSolvabilite.unpaid_invoices_count
+                                    "
+                                    @voir-factures="
+                                        ouvrirDialogFactures(
+                                            vehiculeSolvabilite,
+                                            {
+                                                type: 'vehicule',
+                                                titre: vehiculeSelected
+                                                    ? vehiculeLabel(
+                                                          vehiculeSelected,
+                                                      )
+                                                    : 'Véhicule',
+                                                chauffeur:
+                                                    vehiculeSelected?.livreur_nom
+                                                        ? vehiculeSelected.livreur_nom +
+                                                          (vehiculeSelected.livreur_telephone
+                                                              ? ' — ' +
+                                                                formatPhoneDisplay(
+                                                                    vehiculeSelected.livreur_telephone,
+                                                                )
+                                                              : '')
+                                                        : undefined,
+                                            },
+                                        )
+                                    "
+                                />
 
                                 <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
                                 <div
@@ -1539,116 +1474,40 @@ function confirmerEtCreer() {
                                  Le rouge est réservé exclusivement au bloc "Commande bloquée"
                                  ci-dessous (cf. principe SUCCESS/WARNING/DANGER, audit du
                                  28/08/2026). -->
-                            <div
+                            <SolvabiliteAlert
                                 v-else-if="
                                     clientSolvabilite &&
                                     clientSolvabilite.has_debt &&
                                     !clientSolvabilite.blocked
                                 "
-                                class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
-                            >
-                                <div
-                                    class="flex items-start justify-between gap-3"
-                                >
-                                    <div class="flex items-start gap-2.5">
-                                        <span
-                                            class="mt-0.5 text-base text-amber-500"
-                                            >⚠</span
-                                        >
-                                        <div>
-                                            <p
-                                                class="text-sm font-semibold text-amber-800 dark:text-amber-300"
-                                            >
-                                                {{
-                                                    clientSolvabilite.status ===
-                                                    'impaye'
-                                                        ? 'Factures impayées détectées'
-                                                        : 'Paiement partiel'
-                                                }}
-                                            </p>
-                                            <p
-                                                v-if="
-                                                    clientSolvabilite.seuil_origine ===
-                                                    'derogation'
-                                                "
-                                                class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-                                            >
-                                                Commande autorisée par
-                                                dérogation (plafond :
-                                                {{
-                                                    formatGNF(
-                                                        clientSolvabilite.seuil_impayes,
-                                                    )
-                                                }})
-                                            </p>
-                                            <p
-                                                class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
-                                            >
-                                                Montant total impayé
-                                            </p>
-                                            <p
-                                                class="text-xl font-bold text-amber-800 dark:text-amber-300"
-                                            >
-                                                {{
-                                                    formatGNF(
-                                                        clientSolvabilite.total_remaining,
-                                                    )
-                                                }}
-                                            </p>
-                                            <p
-                                                class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
-                                            >
-                                                Nombre de factures :
-                                                {{
-                                                    clientSolvabilite.unpaid_invoices_count
-                                                }}
-                                            </p>
-                                            <p
-                                                v-if="
-                                                    clientSolvabilite.last_invoice_reference
-                                                "
-                                                class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
-                                            >
-                                                Dernière :
-                                                {{
-                                                    clientSolvabilite.last_invoice_reference
-                                                }}
-                                                ·
-                                                {{
-                                                    formatDate(
-                                                        clientSolvabilite.last_invoice_date,
-                                                    )
-                                                }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                                        @click="
-                                            ouvrirDialogFactures(
-                                                clientSolvabilite,
-                                                {
-                                                    type: 'client',
-                                                    titre: clientSelected
-                                                        ? clientLabel(
-                                                              clientSelected,
-                                                          )
-                                                        : 'Client',
-                                                    sousTitre:
-                                                        clientSelected?.telephone
-                                                            ? formatPhoneDisplay(
-                                                                  clientSelected.telephone,
-                                                              )
-                                                            : undefined,
-                                                },
-                                            )
-                                        "
-                                    >
-                                        Voir les factures
-                                    </button>
-                                </div>
-                            </div>
+                                :status="clientSolvabilite.status"
+                                :derogation="
+                                    clientSolvabilite.seuil_origine ===
+                                    'derogation'
+                                "
+                                :montant="
+                                    formatGNF(clientSolvabilite.total_remaining)
+                                "
+                                :plafond="
+                                    formatGNF(clientSolvabilite.seuil_impayes)
+                                "
+                                :nombre-factures="
+                                    clientSolvabilite.unpaid_invoices_count
+                                "
+                                @voir-factures="
+                                    ouvrirDialogFactures(clientSolvabilite, {
+                                        type: 'client',
+                                        titre: clientSelected
+                                            ? clientLabel(clientSelected)
+                                            : 'Client',
+                                        sousTitre: clientSelected?.telephone
+                                            ? formatPhoneDisplay(
+                                                  clientSelected.telephone,
+                                              )
+                                            : undefined,
+                                    })
+                                "
+                            />
 
                             <!-- 🚫 Commande bloquée -->
                             <div

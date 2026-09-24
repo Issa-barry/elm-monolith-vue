@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -97,6 +98,14 @@ class Parametre extends Model
     public const CLE_DECLENCHEUR_COMMISSION_VENTE = 'ventes_declencheur_commission_vente';
 
     public const CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE = 'ventes_declencheur_commission_logistique';
+
+    /**
+     * Niveau de confirmation des annulations exceptionnelles (cf. AnnulationExceptionnelleService,
+     * ModeConfirmationAnnulationExceptionnelle) — défaut EMAIL_CODE (décision produit du
+     * 24/09/2026) : une organisation qui n'a jamais configuré ce paramètre exige le code envoyé
+     * par e-mail. Modifiable uniquement avec `parametres.update` ET `ventes.annuler_exceptionnel`.
+     */
+    public const CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION = 'ventes_annulation_exceptionnelle_confirmation';
 
     /**
      * Sous déclencheur RECEPTION_EFFECTUEE : gouverne si l'admin doit explicitement cliquer
@@ -204,6 +213,7 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_STOCK_NEGATIF,
             self::CLE_DECLENCHEUR_COMMISSION_VENTE,
             self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE,
+            self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION,
             self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE,
             self::CLE_MAX_PHOTOS_PRODUIT,
             self::CLE_MAX_OPTIONS_PRODUIT,
@@ -384,6 +394,27 @@ class Parametre extends Model
         $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE->value);
 
         return DeclencheurCommissionLogistique::tryFrom($valeur) ?? DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE;
+    }
+
+    public static function getModeConfirmationAnnulationExceptionnelle(string $orgId): ModeConfirmationAnnulationExceptionnelle
+    {
+        $valeur = self::get($orgId, self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION, ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE->value);
+
+        return ModeConfirmationAnnulationExceptionnelle::tryFrom((string) $valeur) ?? ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE;
+    }
+
+    public static function setModeConfirmationAnnulationExceptionnelle(string $orgId, ModeConfirmationAnnulationExceptionnelle $mode): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION],
+            [
+                'valeur' => $mode->value,
+                'type' => self::TYPE_STRING,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Niveau de confirmation des annulations exceptionnelles (code e-mail ou confirmation simple)',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION));
     }
 
     public static function setDeclencheurCommissionLogistique(string $orgId, DeclencheurCommissionLogistique $declencheur): void

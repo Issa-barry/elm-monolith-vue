@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\OperateurMobileMoney;
 use App\Enums\TypeSupportTresorerie;
 use App\Http\Controllers\Controller;
 use App\Models\CompteComptable;
@@ -123,6 +124,8 @@ class CompteTresorerieController extends Controller
                     'site_id' => $c->site_id,
                     'type' => $c->type->value,
                     'type_label' => $c->type->label(),
+                    'operateur_mobile_money' => $c->operateur_mobile_money?->value,
+                    'operateur_label' => $c->operateur_mobile_money?->label(),
                     'libelle' => $c->libelle,
                     'nature' => $c->isDediee() ? 'dediee' : 'agence',
                     'agent' => $c->agent ? ['id' => $c->agent->id, 'nom' => $c->agent->name] : null,
@@ -164,6 +167,7 @@ class CompteTresorerieController extends Controller
                 ->orderBy('nom')
                 ->get(['id', 'nom']),
             'type_options' => TypeSupportTresorerie::options(),
+            'operateur_options' => OperateurMobileMoney::optionsAvecWallet(),
             'destinations_versement' => $destinationsVersement->map(fn (CompteTresorerie $c) => [
                 'id' => $c->id,
                 'site_id' => $c->site_id,
@@ -223,7 +227,10 @@ class CompteTresorerieController extends Controller
             // CompteTresorerie::boot() si laissé vide — cf. revue du 2026-08-22.
             'libelle' => ['nullable', 'string', 'max:150'],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
+            ...$this->reglesOperateur(),
         ]);
+
+        $data['operateur_mobile_money'] = $this->verifierMobileMoney($orgId, $data, null);
 
         // Cohérence type ↔ compte comptable (ex: refuser Caisse + 561300 Mobile
         // Money) — déduite de compta_mappings, jamais d'un numéro codé en dur.
@@ -271,7 +278,10 @@ class CompteTresorerieController extends Controller
             'compte_comptable_id' => ['required', Rule::exists('compta_comptes', 'id')->where('organization_id', $orgId)],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
             'actif' => ['required', 'boolean'],
+            ...$this->reglesOperateur(),
         ]);
+
+        $data['operateur_mobile_money'] = $this->verifierMobileMoney($orgId, [...$data, 'site_id' => $compteTresorerie->site_id], $compteTresorerie);
 
         $typeOuCompteChange = $data['type'] !== $compteTresorerie->type->value
             || $data['compte_comptable_id'] !== $compteTresorerie->compte_comptable_id;
@@ -370,6 +380,69 @@ class CompteTresorerieController extends Controller
      *
      * @return Collection<int, string>
      */
+    /** @return array<string, array<int, mixed>> */
+    private function reglesOperateur(): array
+    {
+        return [
+            'operateur_mobile_money' => [
+                'nullable',
+                'required_if:type,'.TypeSupportTresorerie::MOBILE_MONEY->value,
+                Rule::in(array_map(fn (OperateurMobileMoney $o) => $o->value, OperateurMobileMoney::avecWallet())),
+            ],
+        ];
+    }
+
+    /**
+     * Chaque Mobile Money est un compte à part (décision du 24/09/2026, cf. docs/encaissements.md) :
+     * c'est le support qui rend un opérateur proposable à l'encaissement, et son compte reçoit
+     * l'argent de CET opérateur seulement. Refuse donc (1) un compte réservé à un autre opérateur
+     * (compta_mappings « mobile_money:<detail> » — jamais un numéro codé en dur ; un compte sans
+     * opérateur connu reste accepté) et (2) un compte déjà porté par un autre support Mobile Money
+     * de la même agence — le solde se calculant par (agence, compte), deux wallets partageant un
+     * compte seraient indiscernables. Retourne l'opérateur à enregistrer (null hors Mobile Money).
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    private function verifierMobileMoney(string $orgId, array $data, ?CompteTresorerie $courant): ?string
+    {
+        if ($data['type'] !== TypeSupportTresorerie::MOBILE_MONEY->value) {
+            return null;
+        }
+
+        $operateur = OperateurMobileMoney::from($data['operateur_mobile_money']);
+
+        $operateursDuCompte = CompteMapping::where('organization_id', $orgId)
+            ->where('compte_comptable_id', $data['compte_comptable_id'])
+            ->where('moyen_paiement', 'like', 'mobile_money:%')
+            ->pluck('moyen_paiement')
+            ->map(fn (string $moyen) => OperateurMobileMoney::fromDetailComptable(substr($moyen, strlen('mobile_money:'))))
+            ->filter()
+            ->unique();
+
+        if ($operateursDuCompte->isNotEmpty() && ! $operateursDuCompte->contains($operateur)) {
+            throw ValidationException::withMessages([
+                'compte_comptable_id' => "Ce compte comptable est celui de {$operateursDuCompte->map->label()->implode(', ')}, pas de {$operateur->label()}.",
+            ]);
+        }
+
+        $dejaPris = CompteTresorerie::forOrg($orgId)
+            ->where('site_id', $data['site_id'])
+            ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
+            ->where('compte_comptable_id', $data['compte_comptable_id'])
+            ->when($courant, fn ($q) => $q->whereKeyNot($courant->id))
+            ->first();
+
+        if ($dejaPris) {
+            throw ValidationException::withMessages([
+                'compte_comptable_id' => "Ce compte est déjà celui du support « {$dejaPris->libelle} » dans cette agence : chaque Mobile Money doit avoir son propre compte.",
+            ]);
+        }
+
+        return $operateur->value;
+    }
+
     private function comptesDeTresorerieDisponibles(string $orgId): Collection
     {
         return CompteMapping::where('organization_id', $orgId)

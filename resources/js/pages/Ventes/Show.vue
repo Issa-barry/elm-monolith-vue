@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
 import StatusDot from '@/components/StatusDot.vue';
@@ -32,6 +36,7 @@ import {
     Printer,
     Receipt,
     RotateCcw,
+    ShieldAlert,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -40,6 +45,7 @@ import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import AnnulationExceptionnelleDialog from './partials/AnnulationExceptionnelleDialog.vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
 import RetourDialog from './partials/RetourDialog.vue';
@@ -199,6 +205,15 @@ interface CommandeData {
     is_annulee: boolean;
     /** Retour TOTAL de la marchandise avant encaissement — statut terminal « Retournée ». */
     is_retournee: boolean;
+    /** Annulée exceptionnellement (saisie par erreur) — statut terminal distinct d'« Annulée ». */
+    is_annulee_erreur_saisie: boolean;
+    annulation_exceptionnelle: {
+        par: string | null;
+        le: string | null;
+        motif: string;
+        montant_encaisse: number;
+        code_envoye_a: string | null;
+    } | null;
     can_modifier: boolean;
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
@@ -207,10 +222,14 @@ interface CommandeData {
     /** Retour de livraison possible : en livraison, rien d'encaissé, permission dédiée. */
     can_enregistrer_retour: boolean;
     can_annuler: boolean;
+    /** Permission `ventes.annuler_exceptionnel` et commande éligible (cf. AnnulationExceptionnelleService). */
+    can_annuler_exceptionnel: boolean;
     can_encaisser: boolean;
     /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
      * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
     peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -557,6 +576,8 @@ function submitAnnuler() {
     });
 }
 
+const annulationExceptionnelleVisible = ref(false);
+
 const annulerDisabled = computed(
     () =>
         annulerForm.processing ||
@@ -571,10 +592,9 @@ const activeTab = ref<
 >('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-// Un seul choix "mode de paiement" côté UI, porté par PaymentCard (Espèces, Orange Money, Kulu,
-// Soutra Money, MOMO, PayCard, Virement bancaire, Chèque). Sous le capot, PaymentCard envoie
-// mode_paiement + operateur_mobile_money séparément (cf. commentaire dans PaymentCard.vue —
-// mode_paiement doit rester l'une des 4 valeurs stables attendues par la comptabilisation).
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard : espèces + les moyens que les
+// supports de trésorerie actifs de l'agence de la facture peuvent recevoir (`moyens_encaissement`,
+// fourni par le backend — jamais une liste fixe, cf. docs/encaissements.md).
 const encaisserDialogVisible = ref(false);
 const encaisserProcessing = ref(false);
 const encaisserErrors = ref<Record<string, string>>({});
@@ -584,12 +604,7 @@ function openEncaisserDialog() {
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser(payload: {
-    montant: number;
-    mode_paiement: string;
-    operateur_mobile_money?: string;
-    reference_paiement?: string;
-}) {
+function submitEncaisser(payload: EncaissementPayload) {
     if (!props.facture) return;
     encaisserProcessing.value = true;
     encaisserErrors.value = {};
@@ -748,7 +763,12 @@ const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
 
 const currentStepIdx = computed(() => {
-    if (props.commande.is_annulee || props.commande.is_retournee) return -1;
+    if (
+        props.commande.is_annulee ||
+        props.commande.is_retournee ||
+        props.commande.is_annulee_erreur_saisie
+    )
+        return -1;
     if (isCommandeDirecte.value) {
         if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
         if (props.facture?.statut === 'payee')
@@ -845,7 +865,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_valider_chargement ||
                         commande.can_valider_reception ||
                         commande.can_enregistrer_retour ||
-                        commande.can_annuler
+                        commande.can_annuler ||
+                        commande.can_annuler_exceptionnel
                     "
                     class="absolute right-4"
                 >
@@ -936,6 +957,26 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             >
                                 <XCircle class="h-4 w-4" />
                                 Annuler la commande
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    commande.can_annuler_exceptionnel &&
+                                    (commande.can_modifier ||
+                                        commande.can_confirmer ||
+                                        commande.can_demarrer_chargement ||
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception ||
+                                        commande.can_enregistrer_retour ||
+                                        commande.can_annuler)
+                                "
+                            />
+                            <DropdownMenuItem
+                                v-if="commande.can_annuler_exceptionnel"
+                                class="cursor-pointer text-red-600 focus:text-red-600"
+                                @click="annulationExceptionnelleVisible = true"
+                            >
+                                <ShieldAlert class="h-4 w-4" />
+                                Annulation exceptionnelle
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -1068,6 +1109,18 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             Annuler
                         </Button>
                     </template>
+
+                    <!-- Annulation exceptionnelle (commande saisie par erreur, même encaissée) -->
+                    <Button
+                        v-if="commande.can_annuler_exceptionnel"
+                        variant="outline"
+                        size="sm"
+                        class="border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                        @click="annulationExceptionnelleVisible = true"
+                    >
+                        <ShieldAlert class="mr-2 h-4 w-4" />
+                        Annulation exceptionnelle
+                    </Button>
                 </div>
             </div>
 
@@ -1081,6 +1134,19 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     <XCircle class="h-5 w-5" />
                     <span class="font-semibold"
                         >Cette commande a été annulée.</span
+                    >
+                </div>
+
+                <!-- Annulée exceptionnellement : saisie par erreur, régularisations effectuées -->
+                <div
+                    v-else-if="commande.is_annulee_erreur_saisie"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
+                    <ShieldAlert class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Commande annulée exceptionnellement (erreur de saisie)
+                        : encaissements contrepassés, facture annulée, stock
+                        réintégré.</span
                     >
                 </div>
 
@@ -1422,6 +1488,32 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             Motif d'annulation
                         </p>
                         <p class="text-sm">{{ commande.motif_annulation }}</p>
+                    </div>
+
+                    <!-- Trace de l'annulation exceptionnelle -->
+                    <div
+                        v-if="commande.annulation_exceptionnelle"
+                        class="mt-4 rounded-lg border border-red-200 p-4 dark:border-red-900"
+                    >
+                        <p
+                            class="mb-1 text-xs font-medium tracking-wider text-red-600 uppercase dark:text-red-400"
+                        >
+                            Annulation exceptionnelle
+                        </p>
+                        <p class="text-sm">
+                            {{ commande.annulation_exceptionnelle.motif }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Par
+                            {{ commande.annulation_exceptionnelle.par ?? '—' }}
+                            le
+                            {{ commande.annulation_exceptionnelle.le ?? '—' }}
+                            · confirmée par code envoyé à
+                            {{
+                                commande.annulation_exceptionnelle
+                                    .code_envoye_a ?? '—'
+                            }}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -2061,6 +2153,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             v-model:visible="encaisserDialogVisible"
             title="Encaisser un paiement"
             :solde="facture?.montant_restant ?? 0"
+            :moyens="commande.moyens_encaissement"
             :especes-disponibles="commande.peut_encaisser_especes"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
@@ -2474,6 +2567,13 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :lignes="lignesPourRetour"
             :motifs="motifs_retour"
             :montant-facture="facture ? facture.montant_net : null"
+        />
+
+        <!-- Dialog Annulation exceptionnelle (commande saisie par erreur) -->
+        <AnnulationExceptionnelleDialog
+            v-if="commande.can_annuler_exceptionnel"
+            v-model:visible="annulationExceptionnelleVisible"
+            :commande-id="commande.id"
         />
     </AppLayout>
 </template>

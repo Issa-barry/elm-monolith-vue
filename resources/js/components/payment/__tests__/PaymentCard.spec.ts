@@ -36,6 +36,34 @@ const InputNumberFactice = defineComponent({
     template: '<input data-testid="montant" />',
 });
 
+// Moyens hors espèces tels que le backend les fournit (un par support actif de l'agence).
+const MOYENS_AGENCE = [
+    {
+        key: 'mobile_money:s-orange',
+        label: 'Orange Money',
+        mode_paiement: 'mobile_money',
+        operateur_mobile_money: 'orange_money',
+        compte_tresorerie_id: 's-orange',
+        reference_requise: true,
+    },
+    {
+        key: 'virement:s-uba',
+        label: 'Virement bancaire — UBA',
+        mode_paiement: 'virement',
+        operateur_mobile_money: null,
+        compte_tresorerie_id: 's-uba',
+        reference_requise: true,
+    },
+    {
+        key: 'cheque:s-uba',
+        label: 'Chèque — UBA',
+        mode_paiement: 'cheque',
+        operateur_mobile_money: null,
+        compte_tresorerie_id: 's-uba',
+        reference_requise: false,
+    },
+];
+
 const monter = (props: Record<string, unknown> = {}) =>
     mount(PaymentCard, {
         props: { visible: true, title: 'Encaisser', solde: 100_000, ...props },
@@ -100,19 +128,14 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
         expect(message.classes().join(' ')).toContain('amber');
     });
 
-    it('laisse les autres modes de paiement disponibles sans caisse', () => {
-        const wrapper = monter({ especesDisponibles: false });
+    it('laisse les autres moyens de l’agence disponibles sans caisse', () => {
+        const wrapper = monter({
+            especesDisponibles: false,
+            moyens: MOYENS_AGENCE,
+        });
 
-        for (const key of [
-            'orange_money',
-            'kulu',
-            'soutra_money',
-            'momo',
-            'paycard',
-            'virement',
-            'cheque',
-        ]) {
-            expect(optionDesactivee(wrapper, key)).toBe(false);
+        for (const moyen of MOYENS_AGENCE) {
+            expect(optionDesactivee(wrapper, moyen.key)).toBe(false);
         }
     });
 
@@ -126,10 +149,13 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
         expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
     });
 
-    it('permet d’encaisser en Mobile Money sans caisse, avec l’opérateur et la référence', async () => {
-        const wrapper = monter({ especesDisponibles: false });
+    it('permet d’encaisser en Mobile Money sans caisse, sur le support choisi avec la référence', async () => {
+        const wrapper = monter({
+            especesDisponibles: false,
+            moyens: MOYENS_AGENCE,
+        });
 
-        select(wrapper).vm.$emit('update:modelValue', 'orange_money');
+        select(wrapper).vm.$emit('update:modelValue', 'mobile_money:s-orange');
         await nextTick();
         wrapper
             .findComponent(InputTexteFactice)
@@ -144,7 +170,7 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
                 {
                     montant: 100_000,
                     mode_paiement: 'mobile_money',
-                    operateur_mobile_money: 'orange_money',
+                    compte_tresorerie_id: 's-orange',
                     reference_paiement: 'OM-123',
                 },
             ],
@@ -171,7 +197,7 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
                 {
                     montant: 100_000,
                     mode_paiement: 'especes',
-                    operateur_mobile_money: undefined,
+                    compte_tresorerie_id: undefined,
                     reference_paiement: undefined,
                 },
             ],
@@ -190,25 +216,55 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
             wrapper.find('[data-testid="especes-indisponible"]').exists(),
         ).toBe(true);
     });
+});
 
-    it('ne touche pas à une liste de modes personnalisée sans exigence de caisse', () => {
-        const wrapper = monter({
-            especesDisponibles: false,
-            modes: [
+describe('PaymentCard — moyens issus des supports de l’agence', () => {
+    it('ne propose que les espèces et les moyens reçus, jamais une liste fixe d’opérateurs', () => {
+        const wrapper = monter({ moyens: MOYENS_AGENCE });
+
+        const libelles = (
+            select(wrapper).props('options') as { label: string }[]
+        ).map((o) => o.label);
+        expect(libelles).toEqual([
+            'Espèces',
+            'Orange Money',
+            'Virement bancaire — UBA',
+            'Chèque — UBA',
+        ]);
+        expect(libelles).not.toContain('Kulu');
+        expect(wrapper.find('[data-testid="aucun-autre-moyen"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it('signale en information qu’aucun compte Mobile Money ni bancaire n’est actif dans l’agence', () => {
+        const wrapper = monter();
+
+        const options = select(wrapper).props('options') as { key: string }[];
+        expect(options.map((o) => o.key)).toEqual(['especes']);
+
+        const info = wrapper.find('[data-testid="aucun-autre-moyen"]');
+        expect(info.exists()).toBe(true);
+        // Information (bleu), jamais une erreur : c'est une configuration de l'agence.
+        expect(info.classes().join(' ')).toContain('blue');
+    });
+
+    it('soumet le chèque sur la banque choisie, sans référence exigée', async () => {
+        const wrapper = monter({ moyens: MOYENS_AGENCE });
+
+        select(wrapper).vm.$emit('update:modelValue', 'cheque:s-uba');
+        await nextTick();
+        await confirmer(wrapper).trigger('click');
+
+        expect(wrapper.emitted('submit')).toEqual([
+            [
                 {
-                    key: 'cheque',
-                    label: 'Chèque',
+                    montant: 100_000,
                     mode_paiement: 'cheque',
-                    requiresReference: false,
-                    icon: {},
-                    badgeClass: '',
+                    compte_tresorerie_id: 's-uba',
+                    reference_paiement: undefined,
                 },
             ],
-        });
-
-        expect(select(wrapper).props('modelValue')).toBe('cheque');
-        expect(
-            wrapper.find('[data-testid="especes-indisponible"]').exists(),
-        ).toBe(false);
+        ]);
     });
 });

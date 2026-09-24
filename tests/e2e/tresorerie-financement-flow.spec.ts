@@ -205,6 +205,14 @@ test('le compte comptable proposé est filtré selon le type de support sélecti
     expect(optionTexts.some((t) => t.includes('571000'))).toBe(false);
     expect(optionTexts.some((t) => t.includes('521000'))).toBe(false);
     expect(optionTexts.some((t) => t.includes('561'))).toBe(true);
+
+    // Chaque Mobile Money est un compte à part : l'opérateur est demandé (ADR 0005).
+    await expect(creation.locator('#sup-operateur')).toBeVisible();
+    const operateurs = await creation
+        .locator('#sup-operateur option')
+        .allTextContents();
+    expect(operateurs).toContain('Kulu');
+    expect(operateurs).not.toContain('Autre');
 });
 
 test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {

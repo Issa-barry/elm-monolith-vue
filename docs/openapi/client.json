@@ -2558,7 +2558,8 @@
                                                         "\u00c0 encaisser",
                                                         "Cl\u00f4tur\u00e9e",
                                                         "Annul\u00e9e",
-                                                        "Retourn\u00e9e"
+                                                        "Retourn\u00e9e",
+                                                        "Annul\u00e9e (erreur de saisie)"
                                                     ]
                                                 },
                                                 "site_source": {
@@ -3370,6 +3371,7 @@
                                 "cloturee",
                                 "annulee",
                                 "retournee",
+                                "annulee_erreur_saisie",
                                 null
                             ]
                         }

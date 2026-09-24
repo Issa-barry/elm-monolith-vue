@@ -84,9 +84,10 @@ class UserTest extends TestCase
      * de l'agence — cf. CompteTresoreriePolicy) = 197, puis `tresorerie.valider_supports`
      * (19/09/2026, validation d'un support de trésorerie avant usage — cf. CompteTresoreriePolicy) = 198,
      * puis `ventes.enregistrer_retour` (23/09/2026, retour de livraison avant encaissement — cf.
-     * CommandeVentePolicy::enregistrerRetour()) = 199.
+     * CommandeVentePolicy::enregistrerRetour()) = 199, puis `ventes.annuler_exceptionnel` (24/09/2026,
+     * annulation exceptionnelle d'une commande saisie par erreur — cf. AnnulationExceptionnelleService) = 200.
      */
-    public function test_permissions_map_returns_199_keys(): void
+    public function test_permissions_map_returns_200_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -94,7 +95,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(199, $map);
+        $this->assertCount(200, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

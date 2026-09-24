@@ -47,6 +47,7 @@ class CommandeVenteActivite extends Model
         'livree' => 'a marqué la commande comme livrée',
         'cloturee' => 'a clôturé la commande',
         'annulee' => 'a annulé la commande',
+        'annulee_erreur_saisie' => 'a annulé exceptionnellement la commande (erreur de saisie)',
         'retour_enregistre' => 'a enregistré un retour de livraison',
         'retournee' => 'a enregistré le retour total de la commande',
         'comptabilisation_retour_echouee' => 'Comptabilisation du retour en échec — à régulariser (comptabilite:rattraper)',

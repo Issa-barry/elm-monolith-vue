@@ -54,5 +54,6 @@ return [
         OtpPurpose::EMAIL_VERIFICATION->value => ['email'],
         OtpPurpose::PASSWORD_RESET->value => ['email', 'whatsapp', 'sms'],
         OtpPurpose::INVITATION->value => ['email'],
+        OtpPurpose::ANNULATION_EXCEPTIONNELLE->value => ['email'],
     ],
 ];

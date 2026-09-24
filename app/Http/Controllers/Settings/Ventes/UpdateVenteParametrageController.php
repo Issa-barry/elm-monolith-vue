@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings\Ventes;
 
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use App\Http\Controllers\Controller;
 use App\Models\Parametre;
 use App\Support\Permissions\RoleVisibility;
@@ -31,7 +32,25 @@ class UpdateVenteParametrageController extends Controller
             'controle_impayes_actif' => ['required', 'boolean'],
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
             'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
+            'annulation_exceptionnelle_confirmation' => ['sometimes', Rule::enum(ModeConfirmationAnnulationExceptionnelle::class)],
         ]);
+
+        $orgId = $user->organization_id;
+
+        // Niveau de confirmation des annulations exceptionnelles : le CHANGER exige en plus
+        // `ventes.annuler_exceptionnel` (décision du 24/09/2026) — administrer les paramètres de
+        // vente ne permet pas d'abaisser la protection d'une opération qu'on ne peut pas effectuer.
+        // Vérifié avant toute écriture : un refus ne laisse aucun autre paramètre à moitié modifié.
+        $modeConfirmation = isset($validated['annulation_exceptionnelle_confirmation'])
+            ? ModeConfirmationAnnulationExceptionnelle::from($validated['annulation_exceptionnelle_confirmation'])
+            : null;
+        if ($modeConfirmation !== null && $modeConfirmation !== Parametre::getModeConfirmationAnnulationExceptionnelle($orgId)) {
+            abort_unless(
+                $user->can('ventes.annuler_exceptionnel'),
+                403,
+                'Seul un utilisateur autorisé à effectuer les annulations exceptionnelles peut modifier leur niveau de confirmation.',
+            );
+        }
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
             ->values()
@@ -39,8 +58,6 @@ class UpdateVenteParametrageController extends Controller
         $enabledPriceRoleNames = collect($validated['price_edit_role_names'] ?? [])
             ->values()
             ->all();
-
-        $orgId = $user->organization_id;
 
         // Scopé + restreint à ce qui est réellement modifiable par cet acteur : un rôle
         // système (organization_id null) reste visible dans la liste (cf. EditVenteParametrageController)
@@ -78,6 +95,10 @@ class UpdateVenteParametrageController extends Controller
             $orgId,
             DeclencheurCommissionVente::from($validated['declencheur_commission_vente']),
         );
+
+        if ($modeConfirmation !== null) {
+            Parametre::setModeConfirmationAnnulationExceptionnelle($orgId, $modeConfirmation);
+        }
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
         Parametre::clearCache($orgId);

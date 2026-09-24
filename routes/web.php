@@ -200,7 +200,9 @@ use App\Http\Controllers\Ventes\AnnulerStatutVenteController;
 use App\Http\Controllers\Ventes\AvancerStatutVenteController;
 use App\Http\Controllers\Ventes\CheckoutPdvController;
 use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
+use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\CreateCommandeVenteController;
+use App\Http\Controllers\Ventes\DemanderCodeAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
 use App\Http\Controllers\Ventes\EditCommandeVenteController;
@@ -210,6 +212,7 @@ use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
 use App\Http\Controllers\Ventes\RelancerCommissionsCommandeVenteController;
+use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\ShowCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
@@ -392,6 +395,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/statut/avancer', AvancerStatutVenteController::class)->name('ventes.statut.avancer');
             Route::post('ventes/{commande_vente}/statut/annuler', AnnulerStatutVenteController::class)->name('ventes.statut.annuler');
             Route::post('ventes/{commande_vente}/retour', EnregistrerRetourCommandeVenteController::class)->name('ventes.retour.store');
+            Route::get('ventes/{commande_vente}/annulation-exceptionnelle', ShowAnnulationExceptionnelleController::class)->name('ventes.annulation-exceptionnelle.show');
+            Route::post('ventes/{commande_vente}/annulation-exceptionnelle/code', DemanderCodeAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.code');
+            Route::post('ventes/{commande_vente}/annulation-exceptionnelle', ConfirmerAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.confirmer');
             Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
             Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OperateurMobileMoney;
 use App\Enums\StatutSupportTresorerie;
 use App\Enums\TypeSupportTresorerie;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -37,6 +38,7 @@ class CompteTresorerie extends Model
         'agent_id',
         'compte_comptable_id',
         'type',
+        'operateur_mobile_money',
         'libelle',
         'moyen_paiement_defaut',
         'actif',
@@ -48,6 +50,7 @@ class CompteTresorerie extends Model
     {
         return [
             'type' => TypeSupportTresorerie::class,
+            'operateur_mobile_money' => OperateurMobileMoney::class,
             'actif' => 'boolean',
             'valide_le' => 'datetime',
         ];
@@ -92,7 +95,7 @@ class CompteTresorerie extends Model
                 : TypeSupportTresorerie::from((string) $support->type);
             $base = $support->agent_id
                 ? self::libelleBaseAgent((string) User::with('personne')->find($support->agent_id)?->name)
-                : self::libelleBase($type, Site::whereKey($support->site_id)->value('nom') ?? '');
+                : self::libelleBase($type, Site::whereKey($support->site_id)->value('nom') ?? '', $support->operateur_mobile_money);
 
             $candidat = $base;
             $suffixe = 2;
@@ -110,13 +113,18 @@ class CompteTresorerie extends Model
 
     /**
      * Libellé de base généré automatiquement quand l'utilisateur n'en saisit
-     * pas : "{Type} de {Site}" (ex: "Caisse de Cba"). Pure, testable sans BDD
-     * — le dédoublonnage (suffixe " (2)", " (3)"...) est géré par le hook
-     * creating() ci-dessus, qui a besoin d'interroger la base.
+     * pas : "{Type} de {Site}" (ex: "Caisse de Cba"), ou "{Opérateur} de {Site}" pour un
+     * Mobile Money dont l'opérateur est connu (ex: "Kulu de Matoto") — chaque opérateur ayant son
+     * propre support, "Mobile Money de Matoto" ne dirait pas lequel. Pure, testable sans BDD — le
+     * dédoublonnage (suffixe " (2)", " (3)"...) est géré par le hook creating() ci-dessus, qui a
+     * besoin d'interroger la base.
      */
-    public static function libelleBase(TypeSupportTresorerie $type, string $siteNom): string
+    public static function libelleBase(TypeSupportTresorerie $type, string $siteNom, OperateurMobileMoney|string|null $operateur = null): string
     {
-        return trim("{$type->label()} de {$siteNom}");
+        $operateur = is_string($operateur) ? OperateurMobileMoney::tryFrom($operateur) : $operateur;
+        $nom = $type === TypeSupportTresorerie::MOBILE_MONEY && $operateur ? $operateur->label() : $type->label();
+
+        return trim("{$nom} de {$siteNom}");
     }
 
     /** Libellé de base d'une caisse dédiée : « Caisse {nom de l'agent} ». */

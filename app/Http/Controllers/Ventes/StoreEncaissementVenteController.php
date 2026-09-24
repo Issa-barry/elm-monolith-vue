@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Ventes;
 
 use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
-use App\Enums\OperateurMobileMoney;
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Controller;
 use App\Models\FactureVente;
@@ -14,10 +13,12 @@ use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Laravel\Pennant\Feature;
 
 class StoreEncaissementVenteController extends Controller
@@ -49,23 +50,19 @@ class StoreEncaissementVenteController extends Controller
 
         $montantRestant = $facture_vente->montant_restant;
 
-        // mode_paiement reste la valeur générique attendue par la comptabilisation
-        // (App\Services\Comptabilite\VenteComptabilisationService, PlanComptableBootstrapService,
-        // CompteMappingResolver — mappings et comptes 561xxx déjà configurés autour de
-        // especes/mobile_money/virement/cheque, jamais autour d'un opérateur précis). L'opérateur
-        // Mobile Money (Orange Money, Kulu, Soutra Money, MOMO, PayCard) est un champ séparé,
-        // uniquement présenté comme un seul select côté UI (cf. PaymentCard.vue) — le stocker
-        // directement dans mode_paiement casserait la résolution du compte de trésorerie
-        // (retomberait sur le compte Caisse par défaut, montant mal classé en comptabilité).
-        // Référence obligatoire pour Mobile Money et Virement (rapprochement) — Chèque et
-        // Espèces n'en ont pas.
+        // mode_paiement reste l'une des 4 valeurs génériques (especes/mobile_money/virement/cheque)
+        // attendues par la comptabilisation — jamais un opérateur (cf. docs/encaissements.md).
+        // Hors espèces, l'utilisateur choisit un SUPPORT de trésorerie de l'agence de la facture
+        // (`compte_tresorerie_id`, décision du 24/09/2026) : c'est lui qui détermine le compte
+        // débité et, pour le Mobile Money, l'opérateur — jamais une valeur libre venue du
+        // navigateur. Référence obligatoire pour Mobile Money et Virement (rapprochement).
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
             'date_encaissement' => 'nullable|date',
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'operateur_mobile_money' => [
-                'nullable', Rule::in(array_column(OperateurMobileMoney::cases(), 'value')),
-                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value,
+            'compte_tresorerie_id' => [
+                'nullable', 'string',
+                'required_unless:mode_paiement,'.ModePaiement::ESPECES->value,
             ],
             'reference_paiement' => [
                 'nullable', 'string', 'max:190',
@@ -78,10 +75,31 @@ class StoreEncaissementVenteController extends Controller
             'montant.max' => 'Le montant ne peut pas depasser le restant du.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
             'mode_paiement.in' => 'Mode de paiement invalide.',
-            'operateur_mobile_money.required_if' => 'L\'operateur Mobile Money est obligatoire.',
-            'operateur_mobile_money.in' => 'Operateur Mobile Money invalide.',
+            'compte_tresorerie_id.required_unless' => 'Choisissez le compte qui reçoit ce paiement.',
             'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
         ]);
+
+        // Un moyen n'est accepté que s'il figure dans la liste proposée pour l'agence de la facture
+        // (support actif de cette agence, du bon type/opérateur) — même source que PaymentCard.
+        $data['operateur_mobile_money'] = null;
+        if ($data['mode_paiement'] === ModePaiement::ESPECES->value) {
+            $data['compte_tresorerie_id'] = null;
+        } else {
+            $support = app(MoyensEncaissementResolver::class)->supportPour(
+                $facture_vente->organization_id,
+                $facture_vente->site_id,
+                $data['compte_tresorerie_id'],
+                $data['mode_paiement'],
+            );
+
+            if (! $support) {
+                throw ValidationException::withMessages([
+                    'compte_tresorerie_id' => "Ce moyen de paiement n'est pas disponible dans l'agence de cette facture : aucun support de trésorerie actif ne peut le recevoir.",
+                ]);
+            }
+
+            $data['operateur_mobile_money'] = $support->operateur_mobile_money?->value;
+        }
 
         $data['date_encaissement'] ??= now()->toDateString();
 
@@ -126,7 +144,8 @@ class StoreEncaissementVenteController extends Controller
                     'montant' => $data['montant'],
                     'date_encaissement' => $data['date_encaissement'],
                     'mode_paiement' => $data['mode_paiement'],
-                    'operateur_mobile_money' => $data['operateur_mobile_money'] ?? null,
+                    'operateur_mobile_money' => $data['operateur_mobile_money'],
+                    'compte_tresorerie_id' => $data['compte_tresorerie_id'],
                     'reference_paiement' => $data['reference_paiement'] ?? null,
                     'note' => $data['note'] ?? null,
                     'created_by' => auth()->id(),
@@ -142,7 +161,8 @@ class StoreEncaissementVenteController extends Controller
                         [
                             'montant' => (float) $data['montant'],
                             'mode_paiement' => $data['mode_paiement'],
-                            'operateur_mobile_money' => $data['operateur_mobile_money'] ?? null,
+                            'operateur_mobile_money' => $data['operateur_mobile_money'],
+                            'compte_tresorerie_id' => $data['compte_tresorerie_id'],
                             'reference_paiement' => $data['reference_paiement'] ?? null,
                             'date_encaissement' => $data['date_encaissement'],
                         ],

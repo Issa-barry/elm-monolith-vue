@@ -2,6 +2,10 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -65,6 +69,8 @@ interface FactureItem {
     /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
      * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
     peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
     created_at: string;
     encaissements: EncaissementItem[];
 }
@@ -256,12 +262,7 @@ function openDialog(facture: FactureItem) {
     dialogVisible.value = true;
 }
 
-function handleEncaissSubmit(payload: {
-    montant: number;
-    mode_paiement: string;
-    operateur_mobile_money?: string;
-    reference_paiement?: string;
-}) {
+function handleEncaissSubmit(payload: EncaissementPayload) {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
     encaissErrors.value = {};
@@ -939,6 +940,7 @@ function _progressPercent(f: FactureItem): number {
                     : 'Encaisser'
             "
             :solde="factureActive?.montant_restant ?? 0"
+            :moyens="factureActive?.moyens_encaissement ?? []"
             :especes-disponibles="factureActive?.peut_encaisser_especes ?? true"
             :processing="encaissProcessing"
             :errors="encaissErrors"

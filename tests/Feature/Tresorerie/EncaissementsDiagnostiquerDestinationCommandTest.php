@@ -37,7 +37,10 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
         $this->site = $this->user->sites()->firstOrFail();
     }
 
-    private function encaisser(?User $auteur, string $mode = 'especes', float $montant = 100_000, ?Site $site = null, ?Organization $org = null): EncaissementVente
+    // « Autre » est le seul opérateur sans wallet dédié dans le plan par défaut (Kulu a le sien, 561400,
+    // depuis le 24/09/2026) : un encaissement historique sans support reste
+    // sur le compte générique 561000 (Orange Money, lui, vise 561100).
+    private function encaisser(?User $auteur, string $mode = 'especes', float $montant = 100_000, ?Site $site = null, ?Organization $org = null, string $operateur = 'autre'): EncaissementVente
     {
         $facture = FactureVente::factory()->create([
             'organization_id' => ($org ?? $this->org)->id,
@@ -50,7 +53,7 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
             'montant' => $montant,
             'date_encaissement' => now()->toDateString(),
             'mode_paiement' => $mode,
-            'operateur_mobile_money' => $mode === 'mobile_money' ? 'orange_money' : null,
+            'operateur_mobile_money' => $mode === 'mobile_money' ? $operateur : null,
             'reference_paiement' => in_array($mode, ['mobile_money', 'virement'], true) ? 'REF-TEST' : null,
             'created_by' => $auteur?->id,
         ]);
@@ -131,6 +134,23 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
         $this->assertStringNotContainsString(EncaissementDestinationDiagnostic::LIBELLES[EncaissementDestinationDiagnostic::COMPTE_SANS_SUPPORT], $sortie);
     }
 
+    public function test_un_encaissement_orange_money_sur_son_wallet_dedie_est_conforme(): void
+    {
+        CompteTresorerie::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'compte_comptable_id' => $this->compte('561100')->id,
+            'type' => 'mobile_money',
+            'libelle' => 'Orange Money agence',
+        ]);
+        $this->encaisser($this->creerAgent($this->site), 'mobile_money', 100_000, operateur: 'orange_money');
+
+        $sortie = $this->lancer();
+
+        $this->assertStringContainsString(EncaissementDestinationDiagnostic::LIBELLES[EncaissementDestinationDiagnostic::SUPPORT_IDENTIFIE], $sortie);
+        $this->assertStringNotContainsString('⚠ à traiter', $sortie);
+    }
+
     public function test_un_virement_sur_un_support_bancaire_du_site_est_conforme(): void
     {
         CompteTresorerie::create([
@@ -183,7 +203,7 @@ class EncaissementsDiagnostiquerDestinationCommandTest extends TestCase
 
         $this->assertStringContainsString('3 encaissement(s) analysé(s) — 170 000 GNF', $sortie);
         $this->assertStringContainsString('Conformes : 1 (50 000 GNF) — à traiter : 2 (120 000 GNF)', $sortie);
-        foreach (['Par agent', 'Par agence', 'Par moyen de paiement', 'Ousmane', 'Awa', 'Site Principal', 'Mobile Money / Orange Money'] as $attendu) {
+        foreach (['Par agent', 'Par agence', 'Par moyen de paiement', 'Ousmane', 'Awa', 'Site Principal', 'Mobile Money / Autre'] as $attendu) {
             $this->assertStringContainsString($attendu, $sortie);
         }
     }
