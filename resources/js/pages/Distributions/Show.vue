@@ -198,6 +198,9 @@ interface CommandeData {
     can_valider_reception: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -1751,6 +1754,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             v-model:visible="encaisserDialogVisible"
             title="Encaisser un paiement"
             :solde="facture?.montant_restant ?? 0"
+            :especes-disponibles="commande.peut_encaisser_especes"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
             @submit="submitEncaisser"

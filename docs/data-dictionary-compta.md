@@ -149,6 +149,7 @@ Ce document distingue deux couches, volontairement séparées :
 | Événement | Déclencheur | Type | Comptes (rôles) |
 |---|---|---|---|
 | `vente_facturee` | Facture quitte le statut CREEE | Engagement, shadow (try/catch, ne bloque jamais la vente) | `client` (411) / `produit_vente` (701) |
+| `vente_retour` | Retour de livraison avant encaissement (`CommandeVenteRetour`), cf. `retour-commande.md` | Régularisation de la facture déjà comptabilisée, shadow (try/catch, ne bloque jamais le retour) — une pièce par retour, écriture inverse de `vente_facturee` sur la valeur retournée ; échec tracé dans le journal d'activité de la commande, repris par `comptabilite:rattraper --type=retour`, contrôlé par `comptabilite:auditer` | `produit_vente` (701, débit) / `client` (411, crédit) — mêmes comptes que `vente_facturee` |
 | `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`) |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
@@ -307,6 +308,12 @@ un agent (`agent_id`) et à un site, destinée à recevoir les encaissements en 
 - **Pas de solde d'ouverture** : la caisse démarre à 0, et l'enregistrement d'un solde d'ouverture
   est refusé. L'argent y arrive par les encaissements en espèces de l'agent (phase 2) ou par un
   transfert depuis la caisse de l'agence (phase 3).
+- **Sans caisse dédiée active sur le site de la facture, un encaissement en espèces est refusé**
+  (règle du 2026-09-23, `CaisseAgentResolver::garantirCaissePourEspeces()`) : plus aucun espèce ne
+  peut arriver sur le compte partagé 571000 sans responsable. Mobile Money, virement et chèque ne
+  sont pas concernés. Les encaissements antérieurs ne sont pas reclassés — les lister avec
+  `php artisan encaissements:diagnostiquer-destination` (lecture seule ; cf. `docs/encaissements.md`,
+  « Espèces : caisse dédiée obligatoire »).
 - La suppression d'un utilisateur qui est responsable d'une caisse dédiée **active ou en brouillon** est refusée
   (`DestroyUserController`) : sinon la FK `nullOnDelete` la transformerait silencieusement en
   support d'agence et son argent entrerait dans le disponible. Une caisse déjà désactivée (donc

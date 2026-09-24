@@ -199,6 +199,12 @@ class PlanComptableBootstrapService
             ['vente_facturee', 'client', null, '411000', 'VE'],
             ['vente_facturee', 'produit_vente', null, '701000', 'VE'],
 
+            // Retour de livraison avant encaissement (régularisation d'une facture déjà
+            // comptabilisée, cf. VenteComptabilisationService::comptabiliserRetourVente()) —
+            // mêmes comptes que vente_facturee, sens inverse.
+            ['vente_retour', 'client', null, '411000', 'VE'],
+            ['vente_retour', 'produit_vente', null, '701000', 'VE'],
+
             // Encaissement client (règlement — solde tout ou partie de la créance).
             // Journal résolu via la ligne trésorerie (moyen_paiement réel), comme pour
             // paiement_proprietaire/paiement_livreur ci-dessus — mêmes 4 valeurs

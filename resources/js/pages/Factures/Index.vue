@@ -62,6 +62,9 @@ interface FactureItem {
     is_annulee: boolean;
     is_payee: boolean;
     is_encaissable: boolean;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
     created_at: string;
     encaissements: EncaissementItem[];
 }
@@ -936,6 +939,7 @@ function _progressPercent(f: FactureItem): number {
                     : 'Encaisser'
             "
             :solde="factureActive?.montant_restant ?? 0"
+            :especes-disponibles="factureActive?.peut_encaisser_especes ?? true"
             :processing="encaissProcessing"
             :errors="encaissErrors"
             @submit="handleEncaissSubmit"

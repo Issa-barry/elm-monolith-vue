@@ -204,6 +204,7 @@ use App\Http\Controllers\Ventes\CreateCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
 use App\Http\Controllers\Ventes\EditCommandeVenteController;
+use App\Http\Controllers\Ventes\EnregistrerRetourCommandeVenteController;
 use App\Http\Controllers\Ventes\ExportCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
@@ -390,6 +391,7 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('ventes/{commande_vente}/annuler', AnnulerCommandeVenteController::class)->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', AvancerStatutVenteController::class)->name('ventes.statut.avancer');
             Route::post('ventes/{commande_vente}/statut/annuler', AnnulerStatutVenteController::class)->name('ventes.statut.annuler');
+            Route::post('ventes/{commande_vente}/retour', EnregistrerRetourCommandeVenteController::class)->name('ventes.retour.store');
             Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
             Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
 

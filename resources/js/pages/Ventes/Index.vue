@@ -60,6 +60,9 @@ interface Commande extends VenteMobile {
     quantite_totale: number;
     processus_code: string;
     facture_id: number | null;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
     encaissements: {
         id: number;
         montant: number;
@@ -1410,6 +1413,9 @@ function confirmDelete(c: Commande) {
             v-model:visible="encaisserDialogVisible"
             title="Encaisser un paiement"
             :solde="encaisserCommande?.facture_montant_restant ?? 0"
+            :especes-disponibles="
+                encaisserCommande?.peut_encaisser_especes ?? true
+            "
             :info-rows="encaisserInfoRows"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"

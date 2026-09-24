@@ -10,6 +10,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Tresorerie\CaisseAgentResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -205,7 +206,9 @@ class IndexCommandeVenteController extends Controller
             'montant_cloturees' => (float) $cloturees->sum('total_commande'),
         ];
 
-        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user));
+        // Une seule requête pour toute la page (indicateur peut_encaisser_especes de chaque ligne).
+        $sitesAvecCaisse = app(CaisseAgentResolver::class)->sitesAvecCaisseActive($orgId, (string) $user->id);
+        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $sitesAvecCaisse));
 
         $sites = $user->isAdmin()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get()
@@ -269,7 +272,8 @@ class IndexCommandeVenteController extends Controller
         ]);
     }
 
-    private function mapCommandeForIndex(CommandeVente $c, mixed $user): array
+    /** @param  list<string>  $sitesAvecCaisse  sites où l'utilisateur a une caisse dédiée active */
+    private function mapCommandeForIndex(CommandeVente $c, mixed $user, array $sitesAvecCaisse = []): array
     {
         // Identité de processus de commission (Vente / Distribution client / Transfert grossiste),
         // calculée via la même source unique que la génération réelle (cf.
@@ -308,6 +312,9 @@ class IndexCommandeVenteController extends Controller
             'facture_statut_label' => $c->facture?->statut_facture?->label(),
             'facture_montant_encaisse' => $c->facture ? (float) $c->facture->montant_encaisse : null,
             'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
+            // Espèces : possibles seulement avec une caisse dédiée active sur le site de la facture
+            // (cf. CaisseAgentResolver::garantirCaissePourEspeces(), garantie côté serveur).
+            'peut_encaisser_especes' => (bool) ($c->facture?->site_id && in_array($c->facture->site_id, $sitesAvecCaisse, true)),
             'encaissements' => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
                 'id' => $e->id,
                 'montant' => (float) $e->montant,

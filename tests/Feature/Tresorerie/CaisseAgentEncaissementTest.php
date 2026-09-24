@@ -36,6 +36,11 @@ use Tests\TestCase;
  * historique. Règles verrouillées ici : espèces uniquement, caisse du site de la facture,
  * caisse active, jamais de reclassement de l'historique, contrepassation sur la même caisse,
  * isolation entre organisations.
+ *
+ * Ce fichier exerce la couche comptable en créant les encaissements directement : les cas « comportement
+ * historique » sont ceux des encaissements déjà enregistrés et des rattrapages. Le refus d'un NOUVEL
+ * encaissement en espèces sans caisse active (23/09/2026) est porté par le contrôleur — cf.
+ * EncaissementEspecesCaisseObligatoireTest.
  */
 class CaisseAgentEncaissementTest extends TestCase
 {

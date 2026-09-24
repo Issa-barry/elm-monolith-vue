@@ -82,9 +82,11 @@ class UserTest extends TestCase
      * (15/09/2026, bouton "Exporter" de Ventes/Index.vue — cf. ExportCommandeVenteController) = 196,
      * puis `tresorerie.verser` (19/09/2026, versement d'une caisse dédiée à un agent vers la caisse
      * de l'agence — cf. CompteTresoreriePolicy) = 197, puis `tresorerie.valider_supports`
-     * (19/09/2026, validation d'un support de trésorerie avant usage — cf. CompteTresoreriePolicy) = 198.
+     * (19/09/2026, validation d'un support de trésorerie avant usage — cf. CompteTresoreriePolicy) = 198,
+     * puis `ventes.enregistrer_retour` (23/09/2026, retour de livraison avant encaissement — cf.
+     * CommandeVentePolicy::enregistrerRetour()) = 199.
      */
-    public function test_permissions_map_returns_198_keys(): void
+    public function test_permissions_map_returns_199_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -92,7 +94,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(198, $map);
+        $this->assertCount(199, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

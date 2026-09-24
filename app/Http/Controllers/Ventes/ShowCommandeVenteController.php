@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Ventes;
 
+use App\Enums\MotifRetourCommande;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CommandeVente;
+use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
 use Inertia\Inertia;
@@ -23,7 +25,7 @@ class ShowCommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
@@ -43,6 +45,8 @@ class ShowCommandeVenteController extends Controller
             'quantite_demandee' => $l->quantite_demandee,
             'quantite_chargee' => $l->quantite_chargee,
             'quantite_livree' => $l->quantite_livree,
+            'quantite_retournee' => (int) $l->quantite_retournee,
+            'quantite_retournable' => $l->quantite_retournable,
             'type_ecart' => $l->type_ecart?->value,
             'type_ecart_label' => $l->type_ecart?->label(),
             'commentaire_ecart' => $l->commentaire_ecart,
@@ -72,6 +76,23 @@ class ShowCommandeVenteController extends Controller
                 'created_at' => $log->created_at->format('d/m/Y H:i'),
             ]);
 
+        $retours = $commande->retours->map(fn ($r) => [
+            'id' => $r->id,
+            'created_at' => $r->created_at->format('d/m/Y H:i'),
+            'created_by' => $r->createdBy?->name ?? 'Système',
+            'motif' => $r->motif->value,
+            'motif_label' => $r->motif->label(),
+            'commentaire' => $r->commentaire,
+            'quantite_totale' => $r->quantite_totale,
+            'montant_retourne' => (float) $r->montant_retourne,
+            'retour_total' => $r->retour_total,
+            'lignes' => $r->lignes->map(fn ($rl) => [
+                'produit_nom' => $rl->libelle_snapshot,
+                'quantite' => $rl->quantite_retournee,
+                'montant' => (float) $rl->montant_retourne,
+            ])->values(),
+        ])->values();
+
         $activites = $commande->activites->map(fn ($a) => [
             'id' => $a->id,
             'action' => $a->action,
@@ -90,6 +111,8 @@ class ShowCommandeVenteController extends Controller
         return Inertia::render($component, [
             'historiques' => $historiques,
             'activites' => $activites,
+            'retours' => $retours,
+            'motifs_retour' => MotifRetourCommande::options(),
             'commande' => [
                 'id' => $commande->id,
                 'reference' => $commande->reference,
@@ -159,6 +182,7 @@ class ShowCommandeVenteController extends Controller
                 'is_facturation' => $commande->isFacturation(),
                 'is_cloturee' => $commande->isCloturee(),
                 'is_annulee' => $commande->isAnnulee(),
+                'is_retournee' => $commande->isRetournee(),
                 // Même garde-fou que can_valider_reception ci-dessous : Gate::before bypasse
                 // modifierContenu() (donc isEditable()) pour super_admin, ce flag doit rester
                 // explicite pour ne pas afficher "Modifier" passé le brouillon.
@@ -173,6 +197,11 @@ class ShowCommandeVenteController extends Controller
                 'can_valider_reception' => $commande->isLivraisonEnCours()
                     && $commande->requiertReceptionExplicite()
                     && $user->can('validerReception', $commande),
+                // Condition métier explicite (isRetournable()) en plus de $user->can(), pour la même
+                // raison que can_valider_reception : le Gate::before de super_admin bypasse la
+                // Policy — sans elle ce bouton s'afficherait à un super_admin hors livraison.
+                'can_enregistrer_retour' => $commande->isRetournable()
+                    && $user->can('enregistrerRetour', $commande),
                 'can_annuler' => $commande->statut->isAnnulable()
                     && (! $facture || (float) $facture->montant_encaisse === 0.0)
                     && $user->can('annuler', $commande),
@@ -184,6 +213,11 @@ class ShowCommandeVenteController extends Controller
                     && (float) $facture->montant_restant > 0
                     && $commande->isEncaissable()
                     && $user->can('factures.encaisser'),
+                // Espèces : possibles seulement avec une caisse dédiée active de l'utilisateur sur le
+                // site de la facture. Indicateur d'affichage (PaymentCard) — la garantie réelle reste
+                // CaisseAgentResolver::garantirCaissePourEspeces(), côté serveur à l'enregistrement.
+                'peut_encaisser_especes' => (bool) ($facture?->site_id
+                    && app(CaisseAgentResolver::class)->caisseActive($facture->organization_id, (string) $user->id, $facture->site_id)),
                 'created_at' => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande->createdBy?->name,
                 'lignes' => $lignes,

@@ -58,6 +58,10 @@ class CommandeVenteService
      *
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
      *
+     * Retour de livraison (vente standard, avant tout encaissement) : LIVRAISON_EN_COURS →
+     * RETOURNEE quand toute la marchandise chargée revient, cf. CommandeVenteRetourService — un
+     * retour partiel ne change pas le statut.
+     *
      * @throws ValidationException si les pré-conditions ne sont pas satisfaites
      */
     public static function avancerStatut(CommandeVente $commande, array $lignesData = []): CommandeVente
@@ -315,9 +319,10 @@ class CommandeVenteService
 
     /**
      * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS.
-     * Enregistre les quantités chargées par ligne — quantités qui déterminent
-     * définitivement le calcul de la commission de VENTE STANDARD, quel que soit le
-     * déclencheur configuré (jamais recalculée plus tard). Sous CHARGEMENT_VALIDE
+     * Enregistre les quantités chargées par ligne — quantités qui déterminent le calcul de la
+     * commission de VENTE STANDARD, quel que soit le déclencheur configuré ; seul un retour de
+     * livraison avant encaissement la réajuste ensuite, sur la quantité chargée nette des retours
+     * (cf. CommandeVenteRetourService, CommissionTriggerService::onRetourEnregistre()). Sous CHARGEMENT_VALIDE
      * (déclencheur par défaut), c'est ici que la commission naît, en statut
      * CREEE — elle ne devient payable qu'à la validation de la période de
      * paiement qui la couvre (cf. CommissionTriggerService::onChargementValide(),
@@ -506,11 +511,12 @@ class CommandeVenteService
     }
 
     /**
-     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées, ou
-     * réceptionnées — commandes à réception explicite — depuis validerReception()) et répercute
-     * le nouveau montant sur la facture associée si elle existe.
+     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées,
+     * réceptionnées — commandes à réception explicite, depuis validerReception() — ou nettes des
+     * retours de livraison, depuis CommandeVenteRetourService) et répercute le nouveau montant sur
+     * la facture associée si elle existe.
      */
-    private static function recalculerTotaux(CommandeVente $commande): void
+    public static function recalculerTotaux(CommandeVente $commande): void
     {
         $commande->load('lignes', 'facture');
 
