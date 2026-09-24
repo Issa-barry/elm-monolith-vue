@@ -4,12 +4,17 @@ namespace Tests\Feature;
 
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
+use App\Models\CompteComptable;
+use App\Models\CompteTresorerie;
+use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
+use App\Models\PieceComptable;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -364,7 +369,8 @@ class EncaissementVenteTest extends TestCase
         $enc = $facture->encaissements()->create([
             'montant' => 1000, 'date_encaissement' => now()->toDateString(), 'mode_paiement' => 'especes',
         ]);
-        $autreUser = $this->utilisateur(Organization::factory()->create());
+        // Avec la permission : c'est bien l'isolation entre organisations qui refuse ici.
+        $autreUser = $this->avecPermissionSuppression($this->utilisateur(Organization::factory()->create()));
 
         $this->actingAs($autreUser)
             ->delete(route('encaissements.destroy', $enc))
@@ -373,9 +379,35 @@ class EncaissementVenteTest extends TestCase
         $this->assertNotNull($enc->fresh());
     }
 
+    /**
+     * Non-régression (24/09/2026) : la route n'exigeait aucune permission — tout utilisateur du
+     * module Ventes pouvait supprimer un encaissement de son organisation par requête directe.
+     */
+    public function test_destroy_returns_403_sans_permission_annulation_exceptionnelle(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $enc = $facture->encaissements()->create([
+            'montant' => 1000, 'date_encaissement' => now()->toDateString(), 'mode_paiement' => 'especes',
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('encaissements.destroy', $enc))
+            ->assertStatus(403);
+
+        $this->assertNotNull($enc->fresh());
+    }
+
+    private function avecPermissionSuppression(User $user): User
+    {
+        $user->givePermissionTo(Permission::firstOrCreate(['name' => 'ventes.annuler_exceptionnel', 'guard_name' => 'web']));
+
+        return $user;
+    }
+
     public function test_suppression_encaissement_recalcule_statut_facture(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $this->avecPermissionSuppression($user);
 
         // Ajouter deux encaissements partiels
         $enc1 = $facture->encaissements()->create([
@@ -393,5 +425,71 @@ class EncaissementVenteTest extends TestCase
 
         $this->assertEquals(StatutFactureVente::PARTIEL, $facture->fresh()->statut_facture);
         $this->assertEquals(1000.0, (float) $facture->fresh()->montant_encaisse);
+    }
+
+    // ── Mobile Money : wallet de l'opérateur (bug préprod 24/09/2026) ─────────────────
+    // Avant correctif, tout encaissement Mobile Money allait sur 561000 : un support
+    // « Mobile Money » pointé sur 561100 (Orange Money) restait figé.
+
+    private function supportMobileMoney(FactureVente $facture, string $numero): CompteTresorerie
+    {
+        return CompteTresorerie::create([
+            'organization_id' => $facture->organization_id,
+            'site_id' => $facture->site_id,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $facture->organization_id)
+                ->where('numero', $numero)->firstOrFail()->id,
+            'type' => 'mobile_money',
+            'libelle' => 'Mobile Money '.$numero,
+            'actif' => true,
+            'valide_le' => now()->subDay(),
+        ]);
+    }
+
+    private function encaisserMobileMoney(User $user, FactureVente $facture, float $montant, string $operateur): void
+    {
+        $this->actingAs($user)->post(route('encaissements.store', $facture), [
+            'montant' => $montant,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'mobile_money',
+            'operateur_mobile_money' => $operateur,
+            'reference_paiement' => 'REF-'.$operateur.'-'.$montant,
+        ])->assertSessionHasNoErrors()->assertRedirect();
+    }
+
+    public function test_encaissement_orange_money_alimente_le_support_561100_et_pas_561000(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $facture->update(['montant_net' => 10_000_000]);
+        $orange = $this->supportMobileMoney($facture, '561100');
+        $generique = $this->supportMobileMoney($facture, '561000');
+        $soldes = app(TresorerieDisponibiliteService::class);
+
+        $this->encaisserMobileMoney($user, $facture, 4_000_000, 'orange_money');
+        $this->assertEqualsWithDelta(4_000_000.0, $soldes->soldePourSupport($orange), 0.01);
+
+        $this->encaisserMobileMoney($user, $facture, 1_000_000, 'orange_money');
+
+        $this->assertEqualsWithDelta(5_000_000.0, $soldes->soldePourSupport($orange), 0.01);
+        $this->assertEqualsWithDelta(0.0, $soldes->soldePourSupport($generique), 0.01);
+
+        $dernier = EncaissementVente::where('facture_vente_id', $facture->id)->latest('id')->firstOrFail();
+        $lignes = PieceComptable::where('source_id', $dernier->id)->firstOrFail()->lignes()->with('compte')->get();
+        $this->assertEqualsWithDelta(1_000_000.0, (float) $lignes->firstWhere('compte.numero', '561100')->debit, 0.01);
+        $this->assertEqualsWithDelta(1_000_000.0, (float) $lignes->firstWhere('compte.numero', '411000')->credit, 0.01);
+        $this->assertNull($lignes->firstWhere('compte.numero', '561000'));
+    }
+
+    public function test_encaissement_momo_alimente_le_support_561200(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+        $facture->update(['montant_net' => 10_000_000]);
+        $momo = $this->supportMobileMoney($facture, '561200');
+        $generique = $this->supportMobileMoney($facture, '561000');
+
+        $this->encaisserMobileMoney($user, $facture, 1_000_000, 'momo');
+
+        $soldes = app(TresorerieDisponibiliteService::class);
+        $this->assertEqualsWithDelta(1_000_000.0, $soldes->soldePourSupport($momo), 0.01);
+        $this->assertEqualsWithDelta(0.0, $soldes->soldePourSupport($generique), 0.01);
     }
 }

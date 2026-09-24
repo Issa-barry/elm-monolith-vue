@@ -198,7 +198,7 @@ class IndexDashboardController extends Controller
             ->whereNull('cv.deleted_at')
             ->whereNull('pv.deleted_at')
             ->whereNull('p.deleted_at')
-            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value);
+            ->whereNotIn('cv.statut', [StatutCommandeVente::ANNULEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value]);
         if ($start && $end) {
             $caParProduit->whereBetween('cv.created_at', [$start, $end]);
         }

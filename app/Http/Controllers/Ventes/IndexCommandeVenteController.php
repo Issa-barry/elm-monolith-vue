@@ -190,7 +190,7 @@ class IndexCommandeVenteController extends Controller
         $query->where('nature_operation', $natureFiltree->value);
 
         $commandes = $query->get();
-        $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee());
+        $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee() && ! $c->isAnnuleeErreurSaisie());
         $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
 
         $totaux = [

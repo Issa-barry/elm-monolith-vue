@@ -23,6 +23,22 @@ enum OperateurMobileMoney: string
         };
     }
 
+    /**
+     * Étiquette "detail" des lignes compta_mappings "mobile_money:<detail>" (cf.
+     * PlanComptableBootstrapService, CompteMappingResolver) — les clés du plan comptable
+     * ("orange", "mtn") diffèrent des valeurs de cet enum. Sans compte dédié configuré pour
+     * l'étiquette, le resolver retombe sur le Mobile Money générique. AUTRE n'a pas de wallet.
+     */
+    public function detailComptable(): ?string
+    {
+        return match ($this) {
+            self::ORANGE_MONEY => 'orange',
+            self::MOMO => 'mtn',
+            self::AUTRE => null,
+            default => $this->value,
+        };
+    }
+
     public static function options(): array
     {
         return array_map(

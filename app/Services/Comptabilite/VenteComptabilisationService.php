@@ -203,7 +203,7 @@ class VenteComptabilisationService
                 'role' => 'tresorerie',
                 'sens' => 'debit',
                 'montant' => $montant,
-                'moyen_paiement' => $encaissement->mode_paiement?->value,
+                'moyen_paiement' => $this->moyenPaiementComptable($encaissement),
             ]
             : [
                 'compte_comptable_id' => $caisse->compte_comptable_id,
@@ -253,5 +253,20 @@ class VenteComptabilisationService
         }
 
         return $this->ecritures->contrepasser($piece, $motif);
+    }
+
+    /**
+     * "mobile_money:<detail>" quand l'opérateur est connu, pour que CompteMappingResolver
+     * vise le wallet dédié (ex: Orange Money → 561100) avant de retomber sur le Mobile Money
+     * générique — même pattern que FicheComptabilisationService (moyen_paiement_detail).
+     */
+    private function moyenPaiementComptable(EncaissementVente $encaissement): ?string
+    {
+        $mode = $encaissement->mode_paiement?->value;
+        $detail = $encaissement->mode_paiement === ModePaiement::MOBILE_MONEY
+            ? $encaissement->operateur_mobile_money?->detailComptable()
+            : null;
+
+        return $detail ? $mode.':'.$detail : $mode;
     }
 }

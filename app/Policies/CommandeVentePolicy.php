@@ -149,6 +149,18 @@ class CommandeVentePolicy
             && $commande->statut->isAnnulable();
     }
 
+    /**
+     * Annulation exceptionnelle d'une commande saisie par erreur (cf. AnnulationExceptionnelleService)
+     * — permission dédiée, accordée au seul super_admin par défaut. L'état de la commande n'est pas
+     * vérifié ici : le Gate::before du super admin court-circuiterait ce contrôle, il est donc porté
+     * par AnnulationExceptionnelleService::raisonStatutNonEligible(), appelé explicitement.
+     */
+    public function annulerExceptionnel(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.annuler_exceptionnel')
+            && $this->sameOrganization($user, $commande);
+    }
+
     private function sameOrganization(User $user, CommandeVente $commande): bool
     {
         return $user->organization_id === $commande->organization_id;

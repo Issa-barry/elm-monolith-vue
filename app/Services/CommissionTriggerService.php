@@ -163,6 +163,19 @@ class CommissionTriggerService
      */
     public static function raisonCommissionsNonRegularisables(CommandeVente $commande): ?string
     {
+        return self::aDesCommissionsFigees($commande)
+            ? 'Retour impossible : la commission de cette commande a déjà été validée, ajustée ou payée dans une période de paiement. Régularisez d\'abord cette commission avant d\'enregistrer le retour.'
+            : null;
+    }
+
+    /**
+     * Une commission non annulée de cette commande a-t-elle déjà fait l'objet d'une décision
+     * humaine (sortie de CREEE, montant ajusté, validation, versement) ? Règle partagée par le
+     * retour de livraison et l'annulation exceptionnelle : ni l'un ni l'autre n'efface jamais un
+     * engagement déjà pris envers un bénéficiaire.
+     */
+    public static function aDesCommissionsFigees(CommandeVente $commande): bool
+    {
         $enveloppes = $commande->commissions()->with('parts')->get();
 
         foreach ($enveloppes as $enveloppe) {
@@ -179,11 +192,11 @@ class CommissionTriggerService
                 );
 
             if ($figee) {
-                return 'Retour impossible : la commission de cette commande a déjà été validée, ajustée ou payée dans une période de paiement. Régularisez d\'abord cette commission avant d\'enregistrer le retour.';
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
 
     /**

@@ -10,6 +10,7 @@ import {
     HandCoins,
     Lock,
     PackageCheck,
+    ShieldAlert,
     ShieldCheck,
 } from 'lucide-vue-next';
 import RadioButton from 'primevue/radiobutton';
@@ -29,6 +30,12 @@ interface DeclencheurOption {
     label: string;
 }
 
+interface ModeConfirmationOption {
+    value: string;
+    label: string;
+    description: string;
+}
+
 const props = defineProps<{
     roles: RoleQuantite[];
     autoriser_saisie_dessous_qte_max: boolean;
@@ -36,6 +43,10 @@ const props = defineProps<{
     seuil_impayes_max: number;
     declencheur_commission_vente: string;
     declencheurs_commission_vente_options: DeclencheurOption[];
+    annulation_exceptionnelle_confirmation: string;
+    annulation_exceptionnelle_confirmation_options: ModeConfirmationOption[];
+    /** `parametres.update` ET `ventes.annuler_exceptionnel` — cf. UpdateVenteParametrageController. */
+    peut_modifier_confirmation_annulation: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -60,6 +71,8 @@ const form = useForm({
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
     declencheur_commission_vente: props.declencheur_commission_vente,
+    annulation_exceptionnelle_confirmation:
+        props.annulation_exceptionnelle_confirmation,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
@@ -469,6 +482,89 @@ function onSeuilBlur() {
                                 >
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <ShieldAlert class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Confirmation des annulations exceptionnelles
+                        </h3>
+                    </div>
+
+                    <div class="space-y-3 px-5 py-4">
+                        <p class="text-xs text-muted-foreground">
+                            Choisissez le niveau de confirmation requis pour les
+                            annulations exceptionnelles.
+                        </p>
+
+                        <label
+                            v-for="option in annulation_exceptionnelle_confirmation_options"
+                            :key="`annulation-${option.value}`"
+                            class="flex items-start gap-3"
+                            :class="
+                                peut_modifier_confirmation_annulation
+                                    ? 'cursor-pointer'
+                                    : 'cursor-not-allowed opacity-70'
+                            "
+                        >
+                            <RadioButton
+                                :model-value="
+                                    form.annulation_exceptionnelle_confirmation
+                                "
+                                :value="option.value"
+                                :input-id="`annulation-confirmation-${option.value}`"
+                                :disabled="
+                                    form.processing ||
+                                    !peut_modifier_confirmation_annulation
+                                "
+                                class="mt-0.5"
+                                @update:model-value="
+                                    form.annulation_exceptionnelle_confirmation =
+                                        option.value
+                                "
+                            />
+                            <span>
+                                <span
+                                    class="block text-sm font-medium text-foreground"
+                                    >{{ option.label }}</span
+                                >
+                                <span
+                                    class="block text-xs text-muted-foreground"
+                                    >{{ option.description }}</span
+                                >
+                            </span>
+                        </label>
+
+                        <p
+                            v-if="
+                                form.annulation_exceptionnelle_confirmation ===
+                                'email_code'
+                            "
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            Attention : cette option nécessite un service
+                            d'envoi d'e-mails fonctionnel.
+                        </p>
+                        <p
+                            v-else
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            La confirmation simple réduit le niveau de contrôle
+                            de cette opération sensible.
+                        </p>
+
+                        <p
+                            v-if="!peut_modifier_confirmation_annulation"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Seul un utilisateur autorisé à effectuer les
+                            annulations exceptionnelles peut modifier ce
+                            réglage.
+                        </p>
                     </div>
                 </div>
 

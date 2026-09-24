@@ -142,10 +142,9 @@ class CommandeVenteService
     }
 
     /**
-     * Libère les réservations actives de chaque ligne (annulation avant chargement) — no-op pour
-     * une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée (n'arrive jamais
-     * ici : annuler() n'est permis que depuis BROUILLON/A_CHARGER/FACTURATION, cf.
-     * StatutCommandeVente::isAnnulable()).
+     * Libère les réservations actives de chaque ligne (annulation avant la fin du chargement) —
+     * no-op pour une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée par la
+     * validation du chargement (la sortie physique est alors annulée par annulerSortiesStock()).
      */
     private static function libererLignesReservees(CommandeVente $commande): void
     {
@@ -157,12 +156,14 @@ class CommandeVenteService
     }
 
     /**
-     * Symétrique de decrementerStockDirect() : annule au besoin la sortie physique enregistrée
-     * pour une vente directe (chemin véhicule non concerné — decrementerStock() n'intervient
-     * qu'à validerChargement(), qui mène à LIVRAISON_EN_COURS, jamais annulable ; no-op ici dans
-     * ce cas puisqu'aucune sortie n'existe encore).
+     * Annule par contre-mouvement (jamais par suppression) toute sortie physique enregistrée pour
+     * les lignes : celle d'une vente directe (decrementerStockDirect()) comme celle du chargement
+     * d'un véhicule (decrementerStock(), à validerChargement()). Idempotent, no-op sans sortie.
+     * L'annulation normale n'atteint que le premier cas (jamais après le départ du véhicule) ;
+     * l'annulation exceptionnelle pour erreur de saisie atteint aussi le second — la marchandise
+     * n'a jamais réellement quitté le stock.
      */
-    private static function annulerSortieStockDirecte(CommandeVente $commande): void
+    private static function annulerSortiesStock(CommandeVente $commande): void
     {
         $commande->loadMissing('lignes');
 
@@ -626,25 +627,45 @@ class CommandeVenteService
             'Impossible d\'annuler une commande ayant reçu au moins un encaissement.'
         );
 
-        DB::transaction(function () use ($commande, $motif) {
-            $commande->update([
-                'statut' => StatutCommandeVente::ANNULEE,
-                'motif_annulation' => $motif,
-                'annulee_at' => now(),
-                'annulee_par' => Auth::id(),
-            ]);
+        DB::transaction(fn () => self::appliquerAnnulation($commande, StatutCommandeVente::ANNULEE, $motif));
+    }
 
-            self::libererLignesReservees($commande);
-            self::annulerSortieStockDirecte($commande);
+    /**
+     * Annulation exceptionnelle d'une commande saisie par erreur — seul point d'entrée :
+     * AnnulationExceptionnelleService::confirmer(), qui a déjà vérifié les garde-fous et supprimé
+     * les encaissements (contrepassés) dans la même transaction. Aucune condition de statut ici :
+     * la commande peut avoir été chargée, livrée, facturée ou clôturée.
+     */
+    public static function annulerPourErreurSaisie(CommandeVente $commande, string $motif): void
+    {
+        self::appliquerAnnulation($commande, StatutCommandeVente::ANNULEE_ERREUR_SAISIE, $motif);
+    }
 
-            $commande->loadMissing('facture');
-            if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
-                $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
-                self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
-            }
+    /**
+     * Effets communs aux deux annulations, à exécuter dans une transaction : statut, réservations
+     * libérées, sorties de stock contre-passées, facture annulée (écriture de vente contrepassée)
+     * et commissions non soldées annulées. La facture est relue : un encaissement supprimé juste
+     * avant (annulation exceptionnelle) a pu faire évoluer son statut sur une autre instance.
+     */
+    private static function appliquerAnnulation(CommandeVente $commande, StatutCommandeVente $statut, string $motif): void
+    {
+        $commande->update([
+            'statut' => $statut,
+            'motif_annulation' => $motif,
+            'annulee_at' => now(),
+            'annulee_par' => Auth::id(),
+        ]);
 
-            self::annulerCommissionsAssociees($commande);
-        });
+        self::libererLignesReservees($commande);
+        self::annulerSortiesStock($commande);
+
+        $commande->load('facture', 'commissions');
+        if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
+            $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+            self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
+        }
+
+        self::annulerCommissionsAssociees($commande);
     }
 
     /**

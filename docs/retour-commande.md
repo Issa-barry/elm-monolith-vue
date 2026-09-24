@@ -167,7 +167,9 @@ recalculé côté serveur.
 
 - Application mobile livreur : l'enregistrement se fait depuis le back-office.
 - Retour **après** encaissement (avoir / remboursement) : il n'existe aucun mécanisme d'avoir ; hors
-  périmètre de cette règle.
+  périmètre de cette règle. Une commande **saisie par erreur** (aucune vente réelle) se défait par
+  l'annulation exceptionnelle, pas par un retour — cf. [annulation-exceptionnelle.md](annulation-exceptionnelle.md).
+  Elle est refusée sur une commande qui a déjà un retour enregistré.
 - Étiquette de retour sur le ticket imprimé et l'export des ventes.
 - Le raccourci `VehiculeSituationVentesService` exclut les commandes `retournee` (comme `annulee`) ;
   « quantité vendue » y lit `quantite_livree` et reflète donc les retours partiels.

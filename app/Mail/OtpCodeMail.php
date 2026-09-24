@@ -50,6 +50,7 @@ class OtpCodeMail extends Mailable
             OtpPurpose::EMAIL_VERIFICATION => 'Votre code de vérification',
             OtpPurpose::PASSWORD_RESET => 'Votre code de réinitialisation de mot de passe',
             OtpPurpose::INVITATION => 'Votre code de confirmation',
+            OtpPurpose::ANNULATION_EXCEPTIONNELLE => 'Code de confirmation — Annulation exceptionnelle',
         };
     }
 
@@ -61,6 +62,7 @@ class OtpCodeMail extends Mailable
             OtpPurpose::EMAIL_VERIFICATION => 'Entrez ce code pour confirmer votre adresse email.',
             OtpPurpose::PASSWORD_RESET => 'Vous avez demandé la réinitialisation de votre mot de passe. Entrez ce code pour continuer.',
             OtpPurpose::INVITATION => 'Entrez ce code pour confirmer votre invitation.',
+            OtpPurpose::ANNULATION_EXCEPTIONNELLE => "Une demande d'annulation exceptionnelle nécessite votre confirmation.",
         };
     }
 }

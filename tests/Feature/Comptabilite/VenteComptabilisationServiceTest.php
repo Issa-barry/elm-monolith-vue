@@ -4,6 +4,7 @@ namespace Tests\Feature\Comptabilite;
 
 use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Enums\OperateurMobileMoney;
 use App\Enums\StatutPieceComptable;
 use App\Models\Client;
 use App\Models\CommandeVente;
@@ -197,6 +198,39 @@ class VenteComptabilisationServiceTest extends TestCase
 
             $numeros = $piece->lignes()->with('compte')->get()->pluck('compte.numero')->all();
             $this->assertContains($compteAttendu, $numeros, "moyen de paiement testé : {$modePaiement}");
+        }
+    }
+
+    public function test_encaissement_mobile_money_vise_le_wallet_de_l_operateur(): void
+    {
+        $org = $this->makeOrg();
+
+        $cas = [
+            OperateurMobileMoney::ORANGE_MONEY->value => '561100',
+            OperateurMobileMoney::MOMO->value => '561200',
+            // Sans wallet dédié configuré, repli sur le Mobile Money générique.
+            OperateurMobileMoney::KULU->value => '561000',
+            OperateurMobileMoney::AUTRE->value => '561000',
+        ];
+
+        foreach ($cas as $operateur => $compteAttendu) {
+            $facture = FactureVente::factory()->create(['organization_id' => $org->id, 'montant_net' => 10000]);
+            $encaissement = EncaissementVente::create([
+                'facture_vente_id' => $facture->id,
+                'montant' => 10000,
+                'date_encaissement' => '2026-08-14',
+                'mode_paiement' => ModePaiement::MOBILE_MONEY->value,
+                'operateur_mobile_money' => $operateur,
+                'reference_paiement' => 'REF-'.$operateur,
+            ]);
+
+            $piece = PieceComptable::query()
+                ->where('source_type', $encaissement->getMorphClass())
+                ->where('source_id', $encaissement->id)
+                ->first();
+
+            $numeros = $piece->lignes()->with('compte')->get()->pluck('compte.numero')->all();
+            $this->assertContains($compteAttendu, $numeros, "opérateur testé : {$operateur}");
         }
     }
 

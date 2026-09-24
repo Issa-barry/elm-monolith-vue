@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\User;
@@ -319,5 +320,121 @@ class VenteParametrageTest extends TestCase
                 'declencheur_commission_vente' => 'valeur_invalide',
             ])
             ->assertSessionHasErrors('declencheur_commission_vente');
+    }
+
+    // ── Confirmation des annulations exceptionnelles (24/09/2026) ─────────────
+
+    /** @return array<string, mixed> */
+    private function payload(array $surcharges = []): array
+    {
+        return array_merge([
+            'quantity_edit_role_names' => [],
+            'price_edit_role_names' => [],
+            'autoriser_saisie_dessous_qte_max' => true,
+            'controle_impayes_actif' => false,
+            'seuil_impayes_max' => 0,
+            'declencheur_commission_vente' => 'chargement_valide',
+        ], $surcharges);
+    }
+
+    private function donnerPermissions(User $user, array $permissions): User
+    {
+        foreach ($permissions as $permission) {
+            $user->givePermissionTo(Permission::findOrCreate($permission, 'web'));
+        }
+
+        return $user;
+    }
+
+    public function test_confirmation_des_annulations_exceptionnelles_par_code_email_par_defaut(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('annulation_exceptionnelle_confirmation', 'email_code')
+                ->where('peut_modifier_confirmation_annulation', false)
+                ->has('annulation_exceptionnelle_confirmation_options', 2));
+    }
+
+    public function test_modifier_le_mode_exige_aussi_la_permission_d_annulation_exceptionnelle(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload([
+                'annulation_exceptionnelle_confirmation' => 'simple',
+                'seuil_impayes_max' => 5000,
+            ]))
+            ->assertStatus(403);
+
+        // Refus avant toute écriture : ni le mode ni les autres paramètres n'ont bougé.
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+        $this->assertSame(0, Parametre::getVentesSeuilImpayesMax($user->organization_id));
+    }
+
+    public function test_sans_la_permission_d_annulation_les_autres_parametres_restent_modifiables(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        // Le formulaire renvoie la valeur courante, inchangée : aucun refus.
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload([
+                'annulation_exceptionnelle_confirmation' => 'email_code',
+                'declencheur_commission_vente' => 'facture_encaissee',
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertSame('facture_encaissee', Parametre::getDeclencheurCommissionVente($user->organization_id)->value);
+    }
+
+    public function test_avec_les_deux_permissions_le_mode_simple_est_enregistre(): void
+    {
+        $this->createRoles();
+        $user = $this->donnerPermissions(
+            $this->createAuthorizedUser('parametres.update'),
+            ['parametres.read', 'ventes.annuler_exceptionnel'],
+        );
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload(['annulation_exceptionnelle_confirmation' => 'simple']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::SIMPLE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('annulation_exceptionnelle_confirmation', 'simple')
+                ->where('peut_modifier_confirmation_annulation', true));
+    }
+
+    public function test_une_valeur_de_mode_de_confirmation_invalide_est_rejetee(): void
+    {
+        $this->createRoles();
+        $user = $this->donnerPermissions(
+            $this->createAuthorizedUser('parametres.update'),
+            ['ventes.annuler_exceptionnel'],
+        );
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload(['annulation_exceptionnelle_confirmation' => 'totp']))
+            ->assertSessionHasErrors('annulation_exceptionnelle_confirmation');
     }
 }

@@ -36,13 +36,24 @@ Volontairement séparé de `mode_paiement`, pour deux raisons cumulées :
 2. Voir la section précédente : la comptabilisation attend `mode_paiement` ∈ {especes,
    mobile_money, virement, cheque}.
 
-**Non câblé dans la comptabilisation pour l'instant** : `VenteComptabilisationService` transmet
-toujours `mode_paiement` seul (générique `"mobile_money"`) à `CompteMappingResolver`, qui résout
-donc le compte Mobile Money générique (561000), jamais un wallet dédié (561100 Orange Money...)
-même si `operateur_mobile_money` est renseigné. Composer un `moyen_paiement` du type
-`"mobile_money:".$operateur` (comme le fait déjà `FicheComptabilisationService` pour
-`PaiementFichePaiement.moyen_paiement_detail`) est une amélioration possible, non traitée ici —
-nécessite une revue dédiée de `VenteComptabilisationService` avant d'être appliquée.
+**Comptabilisation par wallet (depuis le 24/09/2026)** : `VenteComptabilisationService` transmet
+`"mobile_money:<detail>"` à `CompteMappingResolver` (même pattern que `FicheComptabilisationService`
+pour `PaiementFichePaiement.moyen_paiement_detail`). Le `<detail>` vient de
+`OperateurMobileMoney::detailComptable()`, car les clés du plan comptable diffèrent des valeurs de
+l'enum :
+
+| Opérateur (`operateur_mobile_money`) | Clé `compta_mappings` | Compte par défaut |
+|---|---|---|
+| `orange_money` | `mobile_money:orange` | 561100 Orange Money |
+| `momo` | `mobile_money:mtn` | 561200 MTN MoMo |
+| `kulu`, `soutra_money`, `paycard` | `mobile_money:<valeur>` | aucun mapping dédié → repli 561000 |
+| `autre` | `mobile_money` | 561000 générique |
+
+Pour que l'argent soit visible dans la trésorerie, le support Mobile Money du site doit pointer
+sur le compte de l'opérateur (ex. « Mobile Money de Matoto » sur 561100 reçoit l'Orange Money).
+Les encaissements comptabilisés **avant** ce changement restent sur 561000 : aucun reclassement
+automatique (cf. `encaissements:diagnostiquer-destination`, catégorie « Mobile Money sur compte
+générique »).
 
 ## Référence de paiement obligatoire
 
@@ -99,7 +110,11 @@ Mobile Money → 561xxx). Elle devient le **sous-compte de la caisse dédiée de
   `journal_role` (compte imposé, journal tiré du mapping de ce rôle) ; sans effet pour les autres
   appelants.
 - **Suppression d'un encaissement** : la contrepassation reprend les comptes de la pièce d'origine,
-  donc l'extourne vise le même sous-compte.
+  donc l'extourne vise le même sous-compte. Depuis le 24/09/2026, la route
+  `DELETE /encaissements/{id}` exige la permission `ventes.annuler_exceptionnel` (auparavant : aucune
+  permission, seulement l'organisation). Pour défaire une commande saisie par erreur, utiliser
+  l'annulation exceptionnelle (cf. [annulation-exceptionnelle.md](annulation-exceptionnelle.md)),
+  qui ajoute les garde-fous caisse/commission/cashback absents de la suppression unitaire.
 - **Situation vs Financement** : l'argent ainsi encaissé apparaît dans la Situation (solde de la
   caisse de l'agent) mais n'entre pas dans le « disponible » du Financement tant qu'il n'est pas
   versé à la caisse de l'agence (phase 3).
