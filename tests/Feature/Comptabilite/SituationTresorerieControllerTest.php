@@ -11,12 +11,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class SituationTresorerieControllerTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private Site $siege;
 
@@ -45,6 +46,10 @@ class SituationTresorerieControllerTest extends TestCase
         ]);
 
         $this->user->sites()->attach($this->siege->id, ['role' => 'employe', 'is_default' => false]);
+
+        // garantirSoldeSuffisant() (règle du 22/09/2026) ne doit pas faire échouer les tests de
+        // ce fichier, qui portent sur l'affichage de la Situation, pas sur le solde.
+        $this->alimenterCaisse($this->caisseSiege, 50_000_000);
     }
 
     public function test_index_refuse_non_authentifie(): void
@@ -69,9 +74,10 @@ class SituationTresorerieControllerTest extends TestCase
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
             ->component('Comptabilite/Tresorerie/Situation/Index')
-            // Matoto -361 000 + Kouria +361 000 = 0 au global (PHP encode un float
-            // 0.0 sans fraction par défaut, d'où l'entier ici).
-            ->where('total_general.total', 0)
+            // Matoto -361 000 + Kouria +361 000 = neutre au global : le total org-wide reste celui
+            // de l'alimentation de setUp (50 000 000), le mouvement ne fait que déplacer l'argent
+            // en interne — ni en créer ni en détruire.
+            ->where('total_general.total', 50_000_000)
         );
 
         $rows = $response->viewData('page')['props']['rows'];

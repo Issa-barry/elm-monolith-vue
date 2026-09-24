@@ -902,3 +902,36 @@ câblé nulle part côté commission).
   enveloppe déjà générée), `tests/Feature/SiteTest.php` (persistance du champ via
   `StoreSiteController`/`UpdateSiteController`), `tests/e2e/site-flow.spec.ts` (toggle visible et
   fonctionnel sur le formulaire).
+
+## Retour de livraison avant encaissement — commission réajustée (23/09/2026)
+
+Cf. [retour-commande.md](retour-commande.md) et [ADR 0003](adr/0003-retour-de-livraison-avant-encaissement.md).
+
+- **COMM-014** — La commission d'une **vente standard** (sans réception explicite) est calculée sur la
+  **quantité facturée** : la quantité chargée **nette des retours de livraison**
+  (`CommandeVenteLigne::quantite_nette_chargee = quantite_chargee − quantite_retournee`, lue par
+  `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()`). Elle est identique à
+  `quantite_chargee` tant qu'aucun retour n'a eu lieu.
+  - **Révise** la règle antérieure « quantités chargées figées, jamais recalculées plus tard » : un
+    **retour de livraison avant encaissement** réajuste la commission
+    (`CommissionTriggerService::onRetourEnregistre()`). Aucun autre événement ne recalcule une
+    commission déjà générée : un paramètre d'organisation modifié, un écart constaté ailleurs ou une
+    modification ultérieure du barème restent **non rétroactifs** (COMM-013, principe inchangé).
+  - **Retour partiel** : les enveloppes `creee` de la commande sont supprimées puis régénérées sur les
+    quantités nettes (mêmes barèmes, partage Livreur, cibles Site/Consultant), **avec leur date de gain
+    d'origine** — donc le barème en vigueur à cette date et la même période de paiement. Une nouvelle
+    tentative de génération est tracée (`commission_generation_attempts`, `declenchee_par = systeme`).
+  - **Retour total** : parts et enveloppes `annulee`, sans régénération (une part déjà payée n'est
+    jamais reprise — elle ne peut pas exister ici, voir le garde-fou).
+  - **Aucune commission encore générée** (déclencheur `FACTURE_ENCAISSEE`, ou génération en échec) :
+    rien à réajuster ; la génération à venir (encaissement complet, ou « Relancer la génération »)
+    utilise déjà la quantité nette.
+  - **Garde-fou** : le retour est refusé si une part de la commande est sortie de `creee`, a un montant
+    ajusté, est validée ou a un montant versé
+    (`CommissionTriggerService::raisonCommissionsNonRegularisables()`).
+  - **Ne concerne pas** les commandes à réception explicite (COMM-004 : commission sur `quantite_livree`
+    à la validation de réception) ni les transferts logistiques (COMM-007/008 : montant figé au
+    déclencheur, écart de réception jamais rétroactif).
+- Tests : `tests/Feature/CommandeVenteRetourTest.php` (recalcul sur 7 packs après retour de 3 sur 10 ;
+  date de gain conservée ; retour total → `annulee` ; retour refusé si commission validée/ajustée ;
+  déclencheur `FACTURE_ENCAISSEE`).

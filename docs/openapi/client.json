@@ -2557,7 +2557,8 @@
                                                         "Livr\u00e9e",
                                                         "\u00c0 encaisser",
                                                         "Cl\u00f4tur\u00e9e",
-                                                        "Annul\u00e9e"
+                                                        "Annul\u00e9e",
+                                                        "Retourn\u00e9e"
                                                     ]
                                                 },
                                                 "site_source": {
@@ -3368,6 +3369,7 @@
                                 "facturation",
                                 "cloturee",
                                 "annulee",
+                                "retournee",
                                 null
                             ]
                         }

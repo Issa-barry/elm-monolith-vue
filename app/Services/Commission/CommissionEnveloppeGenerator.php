@@ -73,6 +73,7 @@ class CommissionEnveloppeGenerator
         CommandeVente $commande,
         CommissionGenerationDeclenchePar $declenchePar = CommissionGenerationDeclenchePar::SYSTEME,
         ?string $declencheurUserId = null,
+        ?Carbon $earnedAt = null,
     ): void {
         // Chantier 2A (05/09/2026, généralisation de l'ancien correctif Grossiste) : il n'y a
         // plus de verrou global ici. commission_eligible_snapshot (dérivé de
@@ -92,7 +93,7 @@ class CommissionEnveloppeGenerator
             $commande->mode_remise_grossiste,
         );
 
-        $ctx = self::contexteDepuisCommandeVente($commande);
+        $ctx = self::contexteDepuisCommandeVente($commande, $earnedAt);
 
         self::executerAvecTentative(
             $ctx, $processusCode, $declenchePar, $declencheurUserId,
@@ -126,7 +127,7 @@ class CommissionEnveloppeGenerator
 
     // ── Adaptateurs source → contexte générique ──────────────────────────────
 
-    private static function contexteDepuisCommandeVente(CommandeVente $commande): CommissionOperationContext
+    private static function contexteDepuisCommandeVente(CommandeVente $commande, ?Carbon $earnedAt = null): CommissionOperationContext
     {
         $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
 
@@ -135,11 +136,13 @@ class CommissionEnveloppeGenerator
         // quantités réellement RÉCEPTIONNÉES (quantite_livree), jamais chargées — la validation
         // de réception est son unique déclencheur (cf.
         // CommissionTriggerService::onReceptionValidee()), décision produit du 30/08/2026 qui
-        // révise COMM-004. Les autres commandes (chargement = seul jalon disponible) restent
-        // inchangées.
+        // révise COMM-004. Les autres commandes (chargement = seul jalon disponible) se calculent
+        // sur la quantité chargée NETTE des retours de livraison (quantite_nette_chargee, cf.
+        // CommandeVenteRetourService) — identique à quantite_chargee tant qu'aucun retour n'a eu
+        // lieu.
         $quantiteField = $commande->requiertReceptionExplicite()
             ? 'quantite_livree'
-            : 'quantite_chargee';
+            : 'quantite_nette_chargee';
 
         return new CommissionOperationContext(
             organizationId: $commande->organization_id,
@@ -149,7 +152,7 @@ class CommissionEnveloppeGenerator
             montantReference: (float) $commande->total_commande,
             vehicule: $commande->vehicule,
             site: $commande->site,
-            earnedAt: Carbon::today(),
+            earnedAt: $earnedAt ?? Carbon::today(),
             sourceLigneType: CommandeVenteLigne::class,
             quantiteField: $quantiteField,
             lignes: $commande->lignes,
@@ -508,7 +511,7 @@ class CommissionEnveloppeGenerator
             // COMM-008/COMM-009 (cf. docs/commissions.md) qui garantissent ces cibles pour tout
             // type de client, avec ou sans véhicule. Jamais appliqué à quantite_livree (réception
             // explicite) : là, null signifie légitimement "pas encore réceptionné" (COMM-004).
-            if ($quantiteBrute === null && $vehicule === null && $ctx->quantiteField === 'quantite_chargee') {
+            if ($quantiteBrute === null && $vehicule === null && in_array($ctx->quantiteField, ['quantite_chargee', 'quantite_nette_chargee'], true)) {
                 $quantiteBrute = $ligne->quantite_demandee;
             }
 

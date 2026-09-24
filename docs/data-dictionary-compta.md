@@ -149,6 +149,7 @@ Ce document distingue deux couches, volontairement séparées :
 | Événement | Déclencheur | Type | Comptes (rôles) |
 |---|---|---|---|
 | `vente_facturee` | Facture quitte le statut CREEE | Engagement, shadow (try/catch, ne bloque jamais la vente) | `client` (411) / `produit_vente` (701) |
+| `vente_retour` | Retour de livraison avant encaissement (`CommandeVenteRetour`), cf. `retour-commande.md` | Régularisation de la facture déjà comptabilisée, shadow (try/catch, ne bloque jamais le retour) — une pièce par retour, écriture inverse de `vente_facturee` sur la valeur retournée ; échec tracé dans le journal d'activité de la commande, repris par `comptabilite:rattraper --type=retour`, contrôlé par `comptabilite:auditer` | `produit_vente` (701, débit) / `client` (411, crédit) — mêmes comptes que `vente_facturee` |
 | `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`) |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
@@ -307,6 +308,12 @@ un agent (`agent_id`) et à un site, destinée à recevoir les encaissements en 
 - **Pas de solde d'ouverture** : la caisse démarre à 0, et l'enregistrement d'un solde d'ouverture
   est refusé. L'argent y arrive par les encaissements en espèces de l'agent (phase 2) ou par un
   transfert depuis la caisse de l'agence (phase 3).
+- **Sans caisse dédiée active sur le site de la facture, un encaissement en espèces est refusé**
+  (règle du 2026-09-23, `CaisseAgentResolver::garantirCaissePourEspeces()`) : plus aucun espèce ne
+  peut arriver sur le compte partagé 571000 sans responsable. Mobile Money, virement et chèque ne
+  sont pas concernés. Les encaissements antérieurs ne sont pas reclassés — les lister avec
+  `php artisan encaissements:diagnostiquer-destination` (lecture seule ; cf. `docs/encaissements.md`,
+  « Espèces : caisse dédiée obligatoire »).
 - La suppression d'un utilisateur qui est responsable d'une caisse dédiée **active ou en brouillon** est refusée
   (`DestroyUserController`) : sinon la FK `nullOnDelete` la transformerait silencieusement en
   support d'agence et son argent entrerait dans le disponible. Une caisse déjà désactivée (donc
@@ -398,6 +405,49 @@ mouvements entre agences).
   contrôle de solde pour les mouvements entre agences (il n'en existe toujours pas).
 
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
+
+## Notification — mouvements de fonds à confirmer
+
+Livré le 22/09/2026. Un mouvement de fonds **entre agences** (nature `inter_sites` — remise au
+siège ou financement, jamais un versement `interne_caisses`, déjà signalé « En attente de
+confirmation » sur l'écran Mouvements, cf. ci-dessus) passé à l'état **Envoyé** doit se voir sans
+que le site destinataire ait à consulter la liste : mêmes deux surfaces que
+`transferts_a_receptionner` (Logistique > Réceptions), réutilisées à l'identique plutôt qu'un
+nouveau mécanisme de notification.
+
+- **Calcul** : `HandleInertiaRequests::mouvementsFondsAConfirmer()` — compte les `MouvementFonds`
+  `organization_id` de l'utilisateur, `nature = inter_sites`, `statut = envoye`, pour un
+  utilisateur ayant la permission **`tresorerie.recevoir`** (celle vérifiée par
+  `MouvementFondsPolicy::recevoir()`). Un **admin** (`isAdmin()`) voit le compteur **org-wide**,
+  sans filtre de site ; un **non-admin** ne voit que les mouvements dont `site_destination_id` est
+  l'un de ses sites (`user_sites`). Partagé à chaque page via Inertia comme
+  `mouvements_fonds_a_confirmer`.
+- **Pas de notification persistée** : ce n'est ni une ligne en base ni un événement — un compteur
+  live, relu à chaque navigation. Il n'y a donc rien à marquer « lu » : le badge disparaît de
+  lui-même dès que le mouvement change de statut (confirmation `Envoyé → Reçu`, ou contestation).
+- **Dérogation admin, contrairement à `transferts_a_receptionner`** : incident constaté le
+  22/09/2026 — un super admin rattaché uniquement au Siège avait envoyé un mouvement vers une
+  autre agence et ne voyait aucun badge, alors que l'écran Mouvements lui permettait déjà de
+  cliquer « Confirmer réception » sur ce même mouvement (`MouvementFondsPolicy::recevoir()` laisse
+  un admin agir même sans y être personnellement affecté, et `mouvementsVisibles()` lui montre déjà
+  tous les mouvements de l'organisation). Sans la dérogation, un admin pouvait donc AGIR sur un
+  mouvement sans jamais être PRÉVENU. Corrigé en alignant le compteur sur ces deux comportements
+  admin déjà existants. `transferts_a_receptionner` (Logistique > Réceptions), lui, n'a **pas**
+  cette dérogation — limite pré-existante, non corrigée ici (hors périmètre de ce chantier).
+- **Affichage** :
+  - Badge rouge sur le menu **Comptabilité > Trésorerie > Mouvements** (`AppSidebar.vue`),
+    agrégé automatiquement vers les niveaux parents (« Trésorerie », « Comptabilité ») par
+    `NavMainItem.vue::parentBadge()` — aucune logique d'agrégation propre à ajouter.
+  - Bloc dédié dans la cloche de notifications (`AppSidebarHeader.vue`), même gabarit que les
+    blocs « Rupture de stock » / « Messages contact » déjà présents, comptabilisé dans le total
+    affiché sur l'icône. Le lien mène vers
+    `/backoffice/comptabilite/tresorerie/mouvements?statut=envoye` (filtre `statut` déjà existant
+    de l'écran Mouvements) ; la portée par agence de l'utilisateur reste appliquée côté serveur
+    par `MouvementFondsController::mouvementsVisibles()`.
+- **Exclusions explicites** : `interne_caisses` (a son propre affichage « En attente de
+  confirmation »), tout statut autre qu'Envoyé (Brouillon, Reçu, Annulé, Contesté, Retourné —
+  Contesté n'est volontairement pas compté ici : la destination a déjà agi en contestant, la
+  balle est côté origine via `tresorerie.confirmer_retour`), et toute autre organisation.
 
 ## Journal financier — vue de lecture
 

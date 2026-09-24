@@ -36,8 +36,12 @@ use Illuminate\Validation\ValidationException;
  * Deux natures (NatureMouvementFonds). Le versement d'une caisse dédiée à un agent vers la caisse
  * de l'agence (`interne_caisses`, même site, cf. verserCaisseAgent()) suit le même workflow et les
  * mêmes écritures via le compte de transit, avec des règles propres : destination fixée à
- * l'envoi, solde suffisant contrôlé sous verrou à l'envoi, et l'envoyeur ne confirme pas
- * lui-même la réception (MouvementFonds::separationEnvoiReceptionRespectee()).
+ * l'envoi, et l'envoyeur ne confirme pas lui-même la réception
+ * (MouvementFonds::separationEnvoiReceptionRespectee()).
+ *
+ * Solde suffisant contrôlé sous verrou À L'ENVOI, pour les DEUX natures (garantirSoldeSuffisant(),
+ * revue produit du 22/09/2026) : une caisse dont le solde disponible est nul ou insuffisant ne
+ * peut envoyer aucun montant, entre agences comme en versement de caisse dédiée.
  */
 class MouvementFondsService
 {
@@ -181,12 +185,22 @@ class MouvementFondsService
     }
 
     /**
-     * Le solde de la caisse source (grand livre, source de vérité) doit couvrir le montant. Appelé
-     * sous verrou de la caisse : le solde lu est celui d'AVANT ce versement, jamais en concurrence
-     * avec un autre.
+     * Le solde de la caisse source (grand livre, source de vérité) doit couvrir le montant —
+     * qu'il s'agisse d'un versement de caisse dédiée (`interne_caisses`) ou d'un mouvement entre
+     * agences (`inter_sites`, cf. revue produit du 22/09/2026 : rien n'empêchait jusque-là un
+     * envoi entre agences depuis une caisse à sec, seul le versement de caisse dédiée l'avait).
+     * Appelé sous verrou de la caisse (`lockForUpdate()`) : le solde est relu ici, jamais transmis
+     * par l'appelant ni mis en cache — deux envois qui se succèdent (concurremment ou non) relisent
+     * chacun le solde déjà diminué par le précédent, jamais le solde d'avant.
      */
     private function garantirSoldeSuffisant(MouvementFonds $mouvement, ?\DateTimeInterface $dateEnvoi): void
     {
+        if ((float) $mouvement->montant <= 0) {
+            throw ValidationException::withMessages([
+                'montant' => 'Le montant du mouvement doit être positif.',
+            ]);
+        }
+
         $source = CompteTresorerie::whereKey($mouvement->compte_tresorerie_origine_id)->lockForUpdate()->firstOrFail();
 
         if (! $source->actif) {
@@ -199,8 +213,9 @@ class MouvementFondsService
 
         if ((float) $mouvement->montant > $solde + 0.004) {
             $disponible = number_format(max($solde, 0), 0, ',', ' ');
+            $demande = number_format((float) $mouvement->montant, 0, ',', ' ');
             throw ValidationException::withMessages([
-                'montant' => "Solde insuffisant : {$disponible} GNF disponible dans « {$source->libelle} ».",
+                'montant' => "Solde insuffisant : {$disponible} GNF disponible dans « {$source->libelle} » pour un envoi de {$demande} GNF.",
             ]);
         }
     }
@@ -268,9 +283,9 @@ class MouvementFondsService
                 throw TransitionMouvementFondsInvalideException::pour($verrouille, 'envoyer', [StatutMouvementFonds::BROUILLON]);
             }
 
-            if ($verrouille->isInterne()) {
-                $this->garantirSoldeSuffisant($verrouille, $dateEnvoi);
-            }
+            // Toute nature de mouvement : une caisse à sec ou insuffisamment garnie ne peut pas
+            // envoyer, cf. docblock de garantirSoldeSuffisant().
+            $this->garantirSoldeSuffisant($verrouille, $dateEnvoi);
 
             $verrouille->date_envoi = $dateEnvoi ?? now();
             $verrouille->sent_by = $userId;

@@ -243,6 +243,35 @@ test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {
     await creerSupportSiNecessaire('Matoto', 'Caisse Matoto E2E 2');
     await creerSupportSiNecessaire('Kouria', 'Caisse Kouria E2E 2');
 
+    // Une caisse à sec ne peut plus envoyer (garantirSoldeSuffisant(), règle du 22/09/2026) :
+    // solde d'ouverture nécessaire avant l'envoi de 150 000 ci-dessous. Idempotent comme
+    // creerSupportSiNecessaire() ci-dessus : si un solde existe déjà (essai précédent), le menu
+    // « Saisir le solde d'ouverture » n'est plus proposé et l'étape est ignorée.
+    const ligneMatoto = page
+        .locator('tbody tr', { hasText: 'Caisse Matoto E2E 2' })
+        .first();
+    await ligneMatoto.getByTestId('support-actions').click();
+    const saisirSolde = page.getByRole('menuitem', {
+        name: /saisir le solde d'ouverture/i,
+    });
+    if (await saisirSolde.count()) {
+        await saisirSolde.click();
+        const soldeDialog = page.getByRole('dialog');
+        await soldeDialog.locator('input[inputmode="numeric"]').fill('500000');
+        await soldeDialog
+            .getByRole('button', { name: /^enregistrer$/i })
+            .click();
+        await expect(
+            page.getByText(/solde d'ouverture enregistré/i),
+        ).toBeVisible({ timeout: 10_000 });
+        await actionDuMenu(ligneMatoto, /valider le solde d'ouverture/i);
+        await expect(
+            ligneMatoto.getByTestId('support-alerte-solde'),
+        ).toHaveCount(0, { timeout: 10_000 });
+    } else {
+        await page.keyboard.press('Escape');
+    }
+
     // ── Création du mouvement ──────────────────────────────────────────────
     await page.goto('/backoffice/comptabilite/tresorerie/mouvements/create');
     await expect(

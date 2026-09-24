@@ -49,6 +49,9 @@ const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
 const transfertsAReceptionner = computed(
     () => ((page.props as any).transferts_a_receptionner as number) ?? 0,
 );
+const mouvementsFondsAConfirmer = computed(
+    () => ((page.props as any).mouvements_fonds_a_confirmer as number) ?? 0,
+);
 
 /** Guard combiné permission + module actif */
 const canSee = (permission: PermissionKey, module: string): boolean =>
@@ -318,6 +321,10 @@ const mainNavItems = computed((): NavItem[] => {
                         {
                             title: 'Mouvements',
                             href: '/backoffice/comptabilite/tresorerie/mouvements',
+                            badge:
+                                mouvementsFondsAConfirmer.value > 0
+                                    ? mouvementsFondsAConfirmer.value
+                                    : undefined,
                         },
                         {
                             title: 'Supports',

@@ -25,6 +25,7 @@ import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowRightLeft, Info } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface Mouvement {
@@ -86,6 +87,7 @@ const props = defineProps<{
 }>();
 
 useFlashToast('top');
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -93,10 +95,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Mouvements de fonds', href: '#' },
 ];
 
-// Barre : Agence → Caisse → Référence → Nature → Origine / Destination. Le reste (Statut, agences d'origine
-// et de destination, montants) est dans le tiroir du bouton « Filtres », lui-même placé dans l'en-tête à côté
-// de « Nouveau mouvement ». « Origine / Destination » ne remplace pas deux listes : c'est la POSITION de la
-// caisse choisie dans le mouvement (sans choix : origine ou destination).
+// Barre : Agence → Caisse → Référence → Nature. Le reste (Origine / Destination, Statut, agences
+// d'origine et de destination, montants) est dans le tiroir du bouton « Filtres », lui-même placé
+// dans l'en-tête à côté de « Nouveau mouvement ». « Origine / Destination » ne remplace pas deux
+// listes : c'est la POSITION de la caisse choisie dans le mouvement (sans choix : origine ou
+// destination) — un filtre avancé, pas un besoin de premier niveau.
 const filterFields: FilterField[] = [
     {
         key: 'caisse_id',
@@ -126,8 +129,7 @@ const filterFields: FilterField[] = [
         key: 'caisse_role',
         label: 'Origine / Destination',
         type: 'select',
-        inline: true,
-        placeholder: 'Origine ou destination',
+        placeholder: 'Les deux',
         options: [
             { value: 'origine', label: 'Origine' },
             { value: 'destination', label: 'Destination' },
@@ -210,6 +212,20 @@ function envoyer(m: Mouvement) {
     poster(
         `/backoffice/comptabilite/tresorerie/mouvements/${m.id}/envoyer`,
         {},
+        {
+            // Pas de dialogue dédié pour « Envoyer » (contrairement à Confirmer réception/motif) :
+            // un solde insuffisant (règle backend, cf. MouvementFondsService::garantirSoldeSuffisant())
+            // doit quand même être visible, pas juste ravaler l'erreur en silence.
+            onError: (errors) =>
+                toast.add({
+                    group: 'top',
+                    severity: 'error',
+                    summary: 'Envoi impossible',
+                    detail:
+                        Object.values(errors)[0] ?? 'Une erreur est survenue.',
+                    life: 6000,
+                }),
+        },
     );
 }
 
@@ -389,15 +405,18 @@ function confirmerMotif() {
             />
 
             <div class="overflow-x-auto rounded-xl border bg-card">
-                <table class="w-full min-w-[880px] text-sm">
+                <table class="w-full min-w-[960px] text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40 text-left">
                             <th class="px-4 py-3 font-medium">Référence</th>
+                            <th class="px-4 py-3 font-medium">Type</th>
                             <th class="px-4 py-3 font-medium">Origine</th>
                             <th class="px-4 py-3 font-medium">Destination</th>
                             <th class="px-4 py-3 text-right font-medium">
                                 Montant
                             </th>
+                            <th class="px-4 py-3 font-medium">Envoyé par</th>
+                            <th class="px-4 py-3 font-medium">Reçu par</th>
                             <th class="px-4 py-3 text-left font-medium">
                                 Statut
                             </th>
@@ -412,37 +431,16 @@ function confirmerMotif() {
                             :key="m.id"
                             class="hover:bg-muted/30"
                         >
-                            <td class="px-4 py-3">
-                                <div class="font-medium">
-                                    {{ m.reference }}
-                                </div>
+                            <td class="px-4 py-3 font-medium whitespace-nowrap">
+                                {{ m.reference }}
+                            </td>
+                            <td class="px-4 py-3" data-testid="mouvement-type">
+                                {{ m.nature_label }}
                                 <div
-                                    v-if="estVersement(m)"
+                                    v-if="m.commentaire"
                                     class="text-xs text-muted-foreground"
-                                    data-testid="mouvement-nature"
                                 >
-                                    {{ m.nature_label }}
-                                    <template v-if="m.commentaire">
-                                        · {{ m.commentaire }}
-                                    </template>
-                                </div>
-                                <div
-                                    v-if="m.expediteur || m.receptionnaire"
-                                    class="text-xs text-muted-foreground"
-                                    data-testid="mouvement-acteurs"
-                                >
-                                    <template v-if="m.expediteur">
-                                        Envoyé par {{ m.expediteur }}
-                                        <template v-if="m.date_envoi">
-                                            le {{ dateFr(m.date_envoi) }}
-                                        </template>
-                                    </template>
-                                    <template v-if="m.receptionnaire">
-                                        · Reçu par {{ m.receptionnaire }}
-                                        <template v-if="m.date_reception">
-                                            le {{ dateFr(m.date_reception) }}
-                                        </template>
-                                    </template>
+                                    {{ m.commentaire }}
                                 </div>
                             </td>
                             <td class="px-4 py-3">
@@ -473,6 +471,36 @@ function confirmerMotif() {
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(m.montant) }}
+                            </td>
+                            <td
+                                class="px-4 py-3"
+                                data-testid="mouvement-envoye-par"
+                            >
+                                <template v-if="m.expediteur">
+                                    <div>{{ m.expediteur }}</div>
+                                    <div
+                                        v-if="m.date_envoi"
+                                        class="text-xs text-muted-foreground"
+                                    >
+                                        {{ dateFr(m.date_envoi) }}
+                                    </div>
+                                </template>
+                                <template v-else>—</template>
+                            </td>
+                            <td
+                                class="px-4 py-3"
+                                data-testid="mouvement-recu-par"
+                            >
+                                <template v-if="m.receptionnaire">
+                                    <div>{{ m.receptionnaire }}</div>
+                                    <div
+                                        v-if="m.date_reception"
+                                        class="text-xs text-muted-foreground"
+                                    >
+                                        {{ dateFr(m.date_reception) }}
+                                    </div>
+                                </template>
+                                <template v-else>—</template>
                             </td>
                             <td class="px-4 py-3">
                                 <StatusDot
@@ -546,7 +574,7 @@ function confirmerMotif() {
                         </tr>
                         <tr v-if="mouvements.data.length === 0">
                             <td
-                                colspan="6"
+                                colspan="9"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
                                 Aucun mouvement de fonds.
@@ -700,7 +728,7 @@ function confirmerMotif() {
                     <button
                         type="button"
                         data-testid="reception-confirmer"
-                        :disabled="enCours"
+                        :disabled="enCours || !receptionCompteId"
                         :aria-busy="enCours"
                         class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         @click="confirmerReception"

@@ -35,6 +35,11 @@ enum EvenementComptable: string
     // chargées), jamais la création de la facture (encore une estimation) ni la
     // livraison physique (statut LIVREE, purement logistique).
     case VENTE_FACTUREE = 'vente_facturee';
+    // Régularisation d'une facture déjà comptabilisée après un retour de livraison avant
+    // encaissement (App\Models\CommandeVenteRetour) — écriture inverse de VENTE_FACTUREE sur la
+    // seule valeur retournée (débit Ventes, crédit Client), une pièce par retour, jamais une
+    // contrepassation de la pièce d'origine (des retours partiels successifs se cumuleraient).
+    case VENTE_RETOUR = 'vente_retour';
     // Fait générateur = EncaissementVente créé (chaque encaissement, partiel ou total).
     case ENCAISSEMENT_VENTE_RECU = 'encaissement_vente_recu';
     // Paiement de salaire (PaiePaiement) — jambe trésorerie uniquement (pas
@@ -76,6 +81,7 @@ enum EvenementComptable: string
             self::DEPENSE_AVANCE_TIERS_VALIDEE => 'Dépense imputée à un tiers (avance)',
             self::REGULARISATION_CLOTURE_FICHE => 'Régularisation de clôture (fiche non validée)',
             self::VENTE_FACTUREE => 'Vente facturée',
+            self::VENTE_RETOUR => 'Retour de livraison (régularisation de facture)',
             self::ENCAISSEMENT_VENTE_RECU => 'Encaissement client reçu',
             self::PAIEMENT_SALAIRE => 'Paiement salaire',
             self::MOUVEMENT_FONDS_ENVOYE => 'Mouvement de fonds — envoi',

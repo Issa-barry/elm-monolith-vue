@@ -67,6 +67,9 @@ class TresorerieDisponibiliteServiceTest extends TestCase
      */
     public function test_situation_par_support_reflete_un_mouvement_recu(): void
     {
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi.
+        $this->validerSoldeOuverture($this->caisseSiege, 361_000);
+
         $mvtService = app(MouvementFondsService::class);
         $mouvement = $mvtService->creerBrouillon($this->org->id, [
             'site_origine_id' => $this->siege->id,
@@ -84,8 +87,10 @@ class TresorerieDisponibiliteServiceTest extends TestCase
         $this->assertSame(361_000.0, $ligneAgence['solde']);
         $this->assertSame($this->agence->id, $ligneAgence['site_id']);
 
+        // Financé exactement à hauteur du montant envoyé (garantirSoldeSuffisant()) : le solde
+        // revient à 0, jamais négatif — c'est précisément ce que la règle du 22/09/2026 empêche.
         $ligneSiege = $situation->firstWhere('compte_tresorerie_id', $this->caisseSiege->id);
-        $this->assertSame(-361_000.0, $ligneSiege['solde']);
+        $this->assertSame(0.0, $ligneSiege['solde']);
     }
 
     public function test_situation_par_support_inclut_le_solde_d_ouverture(): void

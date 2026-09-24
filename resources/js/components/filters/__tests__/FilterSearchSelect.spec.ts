@@ -79,4 +79,11 @@ describe('FilterSearchSelect', () => {
         expect(select.props('placeholder')).toBe('Rechercher une caisse…');
         expect(select.props('disabled')).toBe(true);
     });
+
+    it('donne le nom complet du choix en infobulle, et rien sans choix', () => {
+        expect(monter(['c1']).select.attributes('title')).toBe(
+            'Caisse Moussa sidibé',
+        );
+        expect(monter([]).select.attributes('title')).toBeUndefined();
+    });
 });

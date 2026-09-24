@@ -38,6 +38,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\TestCase;
 
 /**
@@ -52,7 +53,7 @@ use Tests\TestCase;
  */
 class VenteRevendeurDerogationIntegrationTest extends TestCase
 {
-    use HasAdminSetup, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasProduitVariante, RefreshDatabase;
 
     private Organization $org;
 
@@ -389,6 +390,9 @@ class VenteRevendeurDerogationIntegrationTest extends TestCase
         $facture = $commande->fresh('facture')->facture;
         // Aucun cashback avant le paiement complet de la facture.
         $this->assertDatabaseCount('cashback_transactions', 0);
+
+        // Espèces = caisse dédiée active de l'auteur sur le site de la facture (règle du 23/09/2026).
+        $this->creerCaisseActive($facture->site_id, $this->user->id);
 
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [

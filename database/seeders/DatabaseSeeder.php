@@ -43,6 +43,9 @@ class DatabaseSeeder extends Seeder
 
             // ── Paramétrage métier ────────────────────────────────────────────
             DepenseTypesSeeder::class,          // 5 types de dépense par défaut
+
+            // ── Trésorerie ────────────────────────────────────────────────────
+            CaissesEncaissementDemoSeeder::class, // Caisse dédiée des comptes de démo qui encaissent (espèces impossibles sans)
         ]);
     }
 }

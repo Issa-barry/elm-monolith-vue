@@ -13,6 +13,7 @@ use App\Services\AuditLogService;
 use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Tresorerie\CaisseAgentResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -83,6 +84,18 @@ class StoreEncaissementVenteController extends Controller
         ]);
 
         $data['date_encaissement'] ??= now()->toDateString();
+
+        // Espèces = argent physiquement détenu par l'auteur : il doit atterrir dans SA caisse
+        // dédiée, jamais sur le compte partagé de l'agence (règle du 23/09/2026 — avant elle, un
+        // agent sans caisse pouvait encaisser et l'argent retombait sur 571000 sans responsable).
+        // Vérifié ici, côté serveur, quel que soit l'état du bouton désactivé dans PaymentCard :
+        // le frontend n'est jamais la seule protection (CLAUDE.md §9).
+        app(CaisseAgentResolver::class)->garantirCaissePourEspeces(
+            $data['mode_paiement'],
+            (string) auth()->id(),
+            $facture_vente,
+            $data['date_encaissement'],
+        );
 
         // Transaction : l'encaissement, la transition de statut de la facture (donc la
         // naissance éventuelle de la commission de vente sous FACTURE_ENCAISSEE — cf.

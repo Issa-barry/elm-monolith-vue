@@ -21,6 +21,7 @@ class CommandeVenteLigne extends Model
         'quantite_demandee',
         'quantite_chargee',
         'quantite_livree',
+        'quantite_retournee',
         'type_ecart',
         'commentaire_ecart',
         'type_ecart_reception',
@@ -38,6 +39,7 @@ class CommandeVenteLigne extends Model
             'quantite_demandee' => 'integer',
             'quantite_chargee' => 'integer',
             'quantite_livree' => 'integer',
+            'quantite_retournee' => 'integer',
             'type_ecart' => TypeEcartLogistique::class,
             'type_ecart_reception' => TypeEcartLogistique::class,
             'prix_usine_snapshot' => 'decimal:2',
@@ -71,6 +73,26 @@ class CommandeVenteLigne extends Model
     public function getQuantiteEffectiveAttribute(): int
     {
         return (int) ($this->quantite_livree ?? $this->quantite_chargee ?? $this->quantite_demandee ?? 0);
+    }
+
+    /**
+     * Quantité chargée nette des retours de livraison (cf. CommandeVenteRetourService) — base de
+     * calcul de la commission d'une vente standard et de la facture ; null tant que rien n'est
+     * chargé. Égale à quantite_chargee quand aucun retour n'a eu lieu.
+     */
+    public function getQuantiteNetteChargeeAttribute(): ?int
+    {
+        if ($this->quantite_chargee === null) {
+            return null;
+        }
+
+        return max(0, $this->quantite_chargee - (int) $this->quantite_retournee);
+    }
+
+    /** Ce qu'il reste à pouvoir retourner : chargé moins déjà retourné (0 tant que rien n'est chargé). */
+    public function getQuantiteRetournableAttribute(): int
+    {
+        return (int) $this->quantite_nette_chargee;
     }
 
     public function getEcartChargementAttribute(): ?int

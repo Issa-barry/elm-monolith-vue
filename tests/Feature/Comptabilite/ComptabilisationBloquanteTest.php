@@ -25,6 +25,7 @@ use App\Services\PaieCalculService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -38,7 +39,7 @@ use Tests\TestCase;
  */
 class ComptabilisationBloquanteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -169,6 +170,10 @@ class ComptabilisationBloquanteTest extends TestCase
             'reference' => 'FACT-TEST-'.uniqid(),
             'montant_brut' => 200_000, 'montant_net' => 200_000,
         ]);
+
+        // Les espèces exigent une caisse dédiée active (règle du 23/09/2026) : sans elle, le refus
+        // tomberait avant même la comptabilisation que ce test veut faire échouer.
+        $this->creerCaisseActive($site->id, $this->user->id);
 
         $this->casserMapping('encaissement_vente_recu');
 

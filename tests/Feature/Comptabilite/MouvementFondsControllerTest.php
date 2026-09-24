@@ -14,12 +14,13 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class MouvementFondsControllerTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private Site $siege;
 
@@ -48,6 +49,11 @@ class MouvementFondsControllerTest extends TestCase
         ]);
 
         $this->user->sites()->attach($this->siege->id, ['role' => 'employe', 'is_default' => false]);
+
+        // La plupart des tests de ce fichier portent sur le workflow/les filtres, pas sur le
+        // solde — garantirSoldeSuffisant() (règle du 22/09/2026, cf. MouvementFondsServiceTest
+        // pour les tests dédiés) ne doit pas les faire échouer par manque de fonds.
+        $this->alimenterCaisse($this->caisseSiege, 50_000_000);
     }
 
     private function storePayload(): array
@@ -132,6 +138,41 @@ class MouvementFondsControllerTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('comptabilite.tresorerie.mouvements.envoyer', $mouvement))
             ->assertStatus(403);
+    }
+
+    /**
+     * Bout en bout HTTP de la règle du 22/09/2026 (cf. les tests dédiés de
+     * MouvementFondsServiceTest pour la matrice complète) : un solde insuffisant renvoie un 302
+     * avec l'erreur de session `montant`, jamais un 500 ni un envoi silencieusement accepté.
+     */
+    public function test_envoyer_refuse_avec_un_message_explicite_quand_la_caisse_est_a_sec(): void
+    {
+        // Site dédié : le solde se calcule par (compte_comptable_id, site_id), jamais par
+        // compte_tresorerie_id (compta_ecritures n'a pas cette colonne) — réutiliser le site du
+        // siège aurait hérité des 50 000 000 déjà alimentés sur caisseSiege dans setUp().
+        $autreSiege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Autre siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $caisseVide = CompteTresorerie::create([
+            'organization_id' => $this->org->id, 'site_id' => $autreSiege->id,
+            'compte_comptable_id' => $this->caisseSiege->compte_comptable_id, 'type' => 'caisse', 'libelle' => 'Caisse à sec',
+        ]);
+        $this->actingAs($this->user)->post(route('comptabilite.tresorerie.mouvements.store'), [
+            'site_origine_id' => $autreSiege->id,
+            'site_destination_id' => $this->agence->id,
+            'compte_tresorerie_origine_id' => $caisseVide->id,
+            'montant' => 500_000,
+        ]);
+        $mouvement = MouvementFonds::where('compte_tresorerie_origine_id', $caisseVide->id)->firstOrFail();
+
+        $response = $this->actingAs($this->user)
+            ->post(route('comptabilite.tresorerie.mouvements.envoyer', $mouvement))
+            ->assertRedirect()
+            ->assertSessionHasErrors('montant');
+
+        $erreur = session('errors')->get('montant')[0];
+        $this->assertStringContainsString('0 GNF', $erreur);
+        $this->assertStringContainsString('500 000 GNF', $erreur);
+        $this->assertSame(StatutMouvementFonds::BROUILLON, $mouvement->fresh()->statut);
+        $this->assertNull($mouvement->fresh()->piece_comptable_envoi_id);
     }
 
     public function test_annuler_requiert_un_motif(): void

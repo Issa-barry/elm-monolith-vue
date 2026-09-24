@@ -237,6 +237,10 @@ class VersementEnCoursAffichageTest extends TestCase
         $this->assertSame(NatureMouvementFonds::INTERNE_CAISSES, $recu->nature);
 
         // Un mouvement entre agences envoyé, non reçu : il n'a rien à voir avec un versement de caisse.
+        // Alimentation nécessaire depuis la règle du 22/09/2026 (garantirSoldeSuffisant() s'applique
+        // désormais aussi aux mouvements entre agences) : seuls 200 000 ont réellement été crédités
+        // à caisseAgence via recevoir() ci-dessus, le versement de 100 000 restant en transit.
+        $this->alimenterCaisse($this->caisseAgence, 999_000);
         $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kouria', 'type' => 'agence', 'localisation' => 'Coyah']);
         $entreAgences = $this->service->creerBrouillon($this->org->id, [
             'site_origine_id' => $this->site->id,

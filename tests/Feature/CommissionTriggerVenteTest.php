@@ -36,6 +36,7 @@ use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -54,7 +55,7 @@ use Tests\TestCase;
  */
 class CommissionTriggerVenteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -78,6 +79,10 @@ class CommissionTriggerVenteTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        // Les encaissements de ce fichier sont en espèces : elles exigent une caisse dédiée active de
+        // l'auteur sur le site de la facture (règle du 23/09/2026).
+        $this->creerCaisseActive($this->defaultSite->id, $this->user->id);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

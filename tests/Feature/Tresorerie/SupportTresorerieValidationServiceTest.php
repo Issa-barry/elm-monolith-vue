@@ -305,6 +305,8 @@ class SupportTresorerieValidationServiceTest extends TestCase
     {
         $siege = $this->siteSecondaire('Siège');
         $caisseSiege = $this->validation->valider($this->brouillonAgence($siege, 'Caisse Siège'), $this->user);
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi.
+        $this->alimenterCaisse($caisseSiege, 100_000);
         $brouillonAgence = $this->brouillonAgence($this->site, 'Caisse Agence en brouillon');
         $service = app(MouvementFondsService::class);
 
