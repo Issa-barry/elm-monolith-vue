@@ -14,6 +14,12 @@ class DestroyEncaissementVenteController extends Controller
 
     public function __invoke(EncaissementVente $encaissement_vente): RedirectResponse
     {
+        // Jusqu'au 24/09/2026 cette route n'exigeait AUCUNE permission (seule l'organisation était
+        // contrôlée) : tout utilisateur du module Ventes pouvait supprimer un encaissement par une
+        // requête directe. Supprimer un encaissement contrepasse de l'argent reçu — même niveau
+        // d'exception que l'annulation exceptionnelle d'une commande, même permission.
+        abort_unless(auth()->user()->can('ventes.annuler_exceptionnel'), 403, 'Action non autorisee.');
+
         $facture = $encaissement_vente->facture;
 
         abort_unless(

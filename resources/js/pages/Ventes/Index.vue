@@ -7,6 +7,10 @@ import DataFilters, {
 } from '@/components/filters/DataFilters.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -63,6 +67,8 @@ interface Commande extends VenteMobile {
     /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
      * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
     peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
     encaissements: {
         id: number;
         montant: number;
@@ -605,10 +611,9 @@ const annulerDisabled = computed(
 );
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-// Un seul choix "mode de paiement" côté UI, porté par PaymentCard (Espèces, Orange Money, Kulu,
-// Soutra Money, MOMO, PayCard, Virement bancaire, Chèque). Sous le capot, PaymentCard envoie
-// mode_paiement + operateur_mobile_money séparément (cf. commentaire dans PaymentCard.vue —
-// mode_paiement doit rester l'une des 4 valeurs stables attendues par la comptabilisation).
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard : espèces + les moyens que les
+// supports de trésorerie actifs de l'agence de la facture peuvent recevoir (`moyens_encaissement`,
+// fourni par le backend — jamais une liste fixe, cf. docs/encaissements.md).
 const encaisserDialogVisible = ref(false);
 const encaisserCommande = ref<Commande | null>(null);
 const encaisserProcessing = ref(false);
@@ -632,12 +637,7 @@ function openEncaisserDialog(commande: Commande) {
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser(payload: {
-    montant: number;
-    mode_paiement: string;
-    operateur_mobile_money?: string;
-    reference_paiement?: string;
-}) {
+function submitEncaisser(payload: EncaissementPayload) {
     if (!encaisserCommande.value?.facture_id) return;
     encaisserProcessing.value = true;
     encaisserErrors.value = {};
@@ -1413,6 +1413,7 @@ function confirmDelete(c: Commande) {
             v-model:visible="encaisserDialogVisible"
             title="Encaisser un paiement"
             :solde="encaisserCommande?.facture_montant_restant ?? 0"
+            :moyens="encaisserCommande?.moyens_encaissement ?? []"
             :especes-disponibles="
                 encaisserCommande?.peut_encaisser_especes ?? true
             "

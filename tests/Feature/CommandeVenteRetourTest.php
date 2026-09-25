@@ -23,10 +23,13 @@ use App\Models\CommissionCibleType;
 use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\CompteComptable;
 use App\Models\CompteMapping;
+use App\Models\CompteTresorerie;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
+use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\MouvementStock;
 use App\Models\Organization;
@@ -217,6 +220,28 @@ class CommandeVenteRetourTest extends TestCase
     }
 
     /** @param  list<array{id: string, quantite: int}>  $lignes */
+    /**
+     * Paiement par chèque : depuis le 24/09/2026, un moyen hors espèces n'est accepté que s'il vise
+     * un support actif de l'agence de la facture (cf. MoyensEncaissementResolver) — la banque de
+     * l'agence est créée à la première demande.
+     *
+     * @return array<string, mixed>
+     */
+    private function paiementCheque(FactureVente $facture, int $montant): array
+    {
+        $banque = CompteTresorerie::firstOrCreate(
+            ['organization_id' => $facture->organization_id, 'site_id' => $facture->site_id, 'type' => 'banque'],
+            [
+                'compte_comptable_id' => CompteComptable::where('organization_id', $facture->organization_id)
+                    ->where('numero', '521000')->firstOrFail()->id,
+                'libelle' => 'Banque test',
+                'actif' => true,
+            ],
+        );
+
+        return ['montant' => $montant, 'mode_paiement' => 'cheque', 'compte_tresorerie_id' => $banque->id];
+    }
+
     private function posterRetour(CommandeVente $commande, array $lignes, string $motif = 'client_absent', ?string $commentaire = null, ?User $user = null)
     {
         return $this->actingAs($user ?? $this->user)->post(route('ventes.retour.store', $commande), array_filter([
@@ -447,11 +472,11 @@ class CommandeVenteRetourTest extends TestCase
 
         // Au-delà du restant dû (14 000) : refusé.
         $this->actingAs($this->user)
-            ->post(route('encaissements.store', $facture), ['montant' => 20000, 'mode_paiement' => 'cheque'])
+            ->post(route('encaissements.store', $facture), $this->paiementCheque($facture, 20000))
             ->assertSessionHasErrors('montant');
 
         $this->actingAs($this->user)
-            ->post(route('encaissements.store', $facture), ['montant' => 14000, 'mode_paiement' => 'cheque'])
+            ->post(route('encaissements.store', $facture), $this->paiementCheque($facture, 14000))
             ->assertSessionHasNoErrors();
 
         $this->assertEquals(StatutFactureVente::PAYEE, $facture->fresh()->statut_facture);
@@ -485,7 +510,7 @@ class CommandeVenteRetourTest extends TestCase
         ['commande' => $commande, 'lignes' => [$ligne]] = $this->commandeEnLivraison([10]);
 
         $this->actingAs($this->user)
-            ->post(route('encaissements.store', $commande->facture), ['montant' => 2000, 'mode_paiement' => 'cheque'])
+            ->post(route('encaissements.store', $commande->facture), $this->paiementCheque($commande->facture, 2000))
             ->assertSessionHasNoErrors();
         // Le premier encaissement fait passer une vente standard en LIVREE.
         $this->assertEquals(StatutCommandeVente::LIVREE, $commande->fresh()->statut);
@@ -723,7 +748,7 @@ class CommandeVenteRetourTest extends TestCase
 
         $facture = $commande->fresh()->facture;
         $this->actingAs($this->user)
-            ->post(route('encaissements.store', $facture), ['montant' => 14000, 'mode_paiement' => 'cheque'])
+            ->post(route('encaissements.store', $facture), $this->paiementCheque($facture, 14000))
             ->assertSessionHasNoErrors();
 
         $this->assertEquals(350, (float) $this->enveloppe($commande, CommissionCibleType::CODE_PROPRIETAIRE)->montant_total);

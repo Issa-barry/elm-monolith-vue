@@ -60,6 +60,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rejetee: 'bg-red-500',
     annule: 'bg-red-500',
     annulee: 'bg-red-500',
+    // Vente annulée exceptionnellement (saisie par erreur) — cf. StatutCommandeVente::ANNULEE_ERREUR_SAISIE.
+    annulee_erreur_saisie: 'bg-red-500',
     retourne: 'bg-red-500',
     ko: 'bg-red-500',
     expiree: 'bg-red-500',

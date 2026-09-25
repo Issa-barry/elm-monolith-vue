@@ -83,6 +83,12 @@ class PlanComptableBootstrapService
             '561100' => 'Mobile Money — Orange Money',
             '561200' => 'Mobile Money — MTN MoMo',
             '561300' => 'Mobile Money — Djomy',
+            // Un compte par opérateur saisissable (App\Enums\OperateurMobileMoney::avecWallet()) :
+            // chaque Mobile Money est un compte à part, jamais regroupé sur 561000 (décision du
+            // 24/09/2026, cf. docs/encaissements.md).
+            '561400' => 'Mobile Money — Kulu',
+            '561500' => 'Mobile Money — PayCard',
+            '561600' => 'Mobile Money — Soutra Money',
             '628800' => 'Charges diverses de gestion courante',
             // Chantier Financement des agences (2026-08) — cf. docblock de
             // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
@@ -277,6 +283,19 @@ class PlanComptableBootstrapService
             ['regularisation_cloture_fiche', 'dette_tiers_provisoire_livreur', null, '467160', 'OD'],
             ['regularisation_cloture_fiche', 'avance_tiers_livreur', null, '467140', 'OD'],
         ];
+
+        // Chaque événement qui connaît le wallet Orange Money connaît aussi ceux des autres
+        // opérateurs : sans ces lignes, le compte d'un opérateur ne serait proposé nulle part à la
+        // création d'un support (cf. CompteTresorerieController::comptesDeTresorerieDisponibles()).
+        $walletsSupplementaires = ['kulu' => '561400', 'paycard' => '561500', 'soutra_money' => '561600'];
+        foreach ($lignes as [$evenement, $role, $moyenPaiement, , $journalCode]) {
+            if ($moyenPaiement !== 'mobile_money:orange') {
+                continue;
+            }
+            foreach ($walletsSupplementaires as $detail => $numero) {
+                $lignes[] = [$evenement, $role, 'mobile_money:'.$detail, $numero, $journalCode];
+            }
+        }
 
         foreach ($lignes as [$evenement, $role, $moyenPaiement, $numeroCompte, $journalCode]) {
             CompteMapping::query()->firstOrCreate(

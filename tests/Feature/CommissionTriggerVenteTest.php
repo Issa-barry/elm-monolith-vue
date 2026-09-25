@@ -34,6 +34,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -573,6 +574,8 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertNotEmpty($enveloppesAvant, 'précondition : commission générée');
 
         $encaissement = $facture->encaissements()->sole();
+        // Supprimer un encaissement exige `ventes.annuler_exceptionnel` depuis le 24/09/2026.
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'ventes.annuler_exceptionnel', 'guard_name' => 'web']));
         $this->actingAs($this->user)
             ->delete(route('encaissements.destroy', $encaissement))
             ->assertRedirect();

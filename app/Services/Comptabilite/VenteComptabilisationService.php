@@ -197,15 +197,33 @@ class VenteComptabilisationService
         // déjà résolu, comme pour la charge d'une dépense) au lieu du compte 571000 partagé —
         // cf. CaisseAgentResolver pour les conditions exactes. Le crédit reste sur le compte
         // client : le produit est déjà constaté à la facturation (VENTE_FACTUREE).
+        //
+        // Mobile Money, virement, chèque : l'utilisateur a choisi le support de l'agence qui reçoit
+        // l'argent (`compte_tresorerie_id`, décision du 24/09/2026) — la ligne débite SON compte,
+        // jamais un compte déduit du seul opérateur (un wallet sans support retombait sur 561000,
+        // invisible dans Trésorerie > Supports). Le journal reste résolu par le moyen de paiement.
+        // Un encaissement antérieur (sans support) garde la résolution par compta_mappings :
+        // l'historique n'est jamais reclassé (ADR 0001).
         $caisse = $this->caisses->pourEncaissement($encaissement, $facture);
-        $ligneTresorerie = $caisse === null
-            ? [
+        $support = $caisse === null && $encaissement->compte_tresorerie_id
+            ? $encaissement->compteTresorerie
+            : null;
+        $ligneTresorerie = match (true) {
+            $support !== null => [
+                'compte_comptable_id' => $support->compte_comptable_id,
+                'journal_role' => 'tresorerie',
+                'moyen_paiement' => $this->moyenPaiementComptable($encaissement),
+                'sens' => 'debit',
+                'montant' => $montant,
+                'libelle' => 'Encaissement facture '.$facture->reference.' — '.$support->libelle,
+            ],
+            $caisse === null => [
                 'role' => 'tresorerie',
                 'sens' => 'debit',
                 'montant' => $montant,
-                'moyen_paiement' => $encaissement->mode_paiement?->value,
-            ]
-            : [
+                'moyen_paiement' => $this->moyenPaiementComptable($encaissement),
+            ],
+            default => [
                 'compte_comptable_id' => $caisse->compte_comptable_id,
                 // Le journal reste celui d'un encaissement en espèces (« Caisse ») : la ligne
                 // client n'en porte pas, cf. EcritureComptableService (option journal_role).
@@ -214,7 +232,8 @@ class VenteComptabilisationService
                 'sens' => 'debit',
                 'montant' => $montant,
                 'libelle' => 'Encaissement facture '.$facture->reference.' — '.$caisse->libelle,
-            ];
+            ],
+        };
 
         return $this->ecritures->comptabiliser(
             evenement: EvenementComptable::ENCAISSEMENT_VENTE_RECU,
@@ -253,5 +272,20 @@ class VenteComptabilisationService
         }
 
         return $this->ecritures->contrepasser($piece, $motif);
+    }
+
+    /**
+     * "mobile_money:<detail>" quand l'opérateur est connu, pour que CompteMappingResolver
+     * vise le wallet dédié (ex: Orange Money → 561100) avant de retomber sur le Mobile Money
+     * générique — même pattern que FicheComptabilisationService (moyen_paiement_detail).
+     */
+    private function moyenPaiementComptable(EncaissementVente $encaissement): ?string
+    {
+        $mode = $encaissement->mode_paiement?->value;
+        $detail = $encaissement->mode_paiement === ModePaiement::MOBILE_MONEY
+            ? $encaissement->operateur_mobile_money?->detailComptable()
+            : null;
+
+        return $detail ? $mode.':'.$detail : $mode;
     }
 }

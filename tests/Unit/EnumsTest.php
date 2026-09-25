@@ -164,13 +164,17 @@ class EnumsTest extends TestCase
         $this->assertSame('Clôturée', StatutCommandeVente::CLOTUREE->label());
         $this->assertSame('Annulée', StatutCommandeVente::ANNULEE->label());
         $this->assertSame('Retournée', StatutCommandeVente::RETOURNEE->label());
+        $this->assertSame('Annulée (erreur de saisie)', StatutCommandeVente::ANNULEE_ERREUR_SAISIE->label());
     }
 
-    /** 8 statuts jusqu'au 23/09/2026, puis `retournee` (retour total de livraison, cf. CommandeVenteRetourService) = 9. */
+    /**
+     * 8 statuts jusqu'au 23/09/2026, puis `retournee` (retour total de livraison, cf. CommandeVenteRetourService) = 9,
+     * puis `annulee_erreur_saisie` (24/09/2026, cf. AnnulationExceptionnelleService) = 10.
+     */
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        $this->assertCount(9, $options);
+        $this->assertCount(10, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);

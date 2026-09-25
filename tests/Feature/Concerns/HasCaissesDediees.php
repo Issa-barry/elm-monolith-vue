@@ -3,6 +3,7 @@
 namespace Tests\Feature\Concerns;
 
 use App\Enums\EvenementComptable;
+use App\Models\CompteComptable;
 use App\Models\CompteTresorerie;
 use App\Models\PieceComptable;
 use App\Models\Site;
@@ -55,6 +56,27 @@ trait HasCaissesDediees
         $brouillon = app(CaisseAgentService::class)->creer($agent->organization_id, $siteId, $agent->id);
 
         return app(SupportTresorerieValidationService::class)->valider($brouillon, $agent);
+    }
+
+    /**
+     * Support d'AGENCE actif (Mobile Money, Banque, Caisse) sur le compte du plan par défaut donné —
+     * c'est lui qui rend un moyen de paiement proposable à l'encaissement dans cette agence (cf.
+     * MoyensEncaissementResolver). Ne dépend pas de `$this->org` : l'organisation est celle du site.
+     */
+    private function creerSupportAgence(string $siteId, string $type, string $numeroCompte, ?string $operateur = null, ?string $libelle = null): CompteTresorerie
+    {
+        $organizationId = Site::whereKey($siteId)->value('organization_id');
+
+        return CompteTresorerie::create([
+            'organization_id' => $organizationId,
+            'site_id' => $siteId,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $organizationId)
+                ->where('numero', $numeroCompte)->firstOrFail()->id,
+            'type' => $type,
+            'operateur_mobile_money' => $operateur,
+            'libelle' => $libelle,
+            'actif' => true,
+        ]);
     }
 
     /**

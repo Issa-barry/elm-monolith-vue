@@ -109,7 +109,7 @@ class OtpService
         $code = config('otp.fixed_code')
             ?? str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-        Cache::put($this->key($identifier, $purpose, $context), $code, now()->addMinutes(self::TTL_MINUTES));
+        Cache::put($this->key($identifier, $purpose, $context), self::empreinteCode($code), now()->addMinutes(self::TTL_MINUTES));
         Cache::forget($this->verifiedKey($identifier, $purpose, $context));
         Cache::forget($this->attemptsKey($identifier, $purpose, $context));
 
@@ -228,7 +228,7 @@ class OtpService
         }
 
         $stored = Cache::get($this->key($identifier, $purpose, $context));
-        $matches = is_string($stored) && hash_equals($stored, $code);
+        $matches = is_string($stored) && hash_equals($stored, self::empreinteCode($code));
 
         if ($matches) {
             Cache::forget($this->key($identifier, $purpose, $context));
@@ -343,7 +343,18 @@ class OtpService
     }
 
     /** Masque un identifiant (téléphone ou email) pour les journaux d'audit. */
-    private static function mask(string $identifier): string
+    /**
+     * Seule forme sous laquelle un code est conservé en cache (24/09/2026) : jamais le code en
+     * clair, qui serait lisible par quiconque accède au store de cache. HMAC avec la clé de
+     * l'application plutôt qu'un simple sha256 : un code à 6 chiffres se retrouverait sinon par
+     * force brute instantanée à partir de sa seule empreinte.
+     */
+    private static function empreinteCode(string $code): string
+    {
+        return hash_hmac('sha256', $code, (string) config('app.key'));
+    }
+
+    public static function mask(string $identifier): string
     {
         $len = strlen($identifier);
 

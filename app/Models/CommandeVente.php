@@ -280,6 +280,21 @@ class CommandeVente extends Model
     }
 
     /**
+     * Annulée exceptionnellement pour erreur de saisie (cf. AnnulationExceptionnelleService).
+     * Volontairement distinct d'isAnnulee() : une telle commande n'est jamais supprimable
+     * (DestroyCommandeVenteController), sa trace doit rester consultable.
+     */
+    public function isAnnuleeErreurSaisie(): bool
+    {
+        return $this->statut === StatutCommandeVente::ANNULEE_ERREUR_SAISIE;
+    }
+
+    public function annulationExceptionnelle(): HasOne
+    {
+        return $this->hasOne(AnnulationExceptionnelle::class, 'commande_vente_id');
+    }
+
+    /**
      * Source de vérité unique de « un retour de livraison peut être enregistré maintenant » (cf.
      * CommandeVenteRetourService) : renvoie la raison du refus, ou null si le retour est possible.
      * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé — le premier

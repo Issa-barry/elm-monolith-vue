@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings\Ventes;
 
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use App\Http\Controllers\Controller;
 use App\Models\Parametre;
 use App\Support\Permissions\RoleVisibility;
@@ -49,6 +50,13 @@ class EditVenteParametrageController extends Controller
             'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
             'declencheur_commission_vente' => Parametre::getDeclencheurCommissionVente($orgId)->value,
             'declencheurs_commission_vente_options' => DeclencheurCommissionVente::options(),
+            'annulation_exceptionnelle_confirmation' => Parametre::getModeConfirmationAnnulationExceptionnelle($orgId)->value,
+            'annulation_exceptionnelle_confirmation_options' => ModeConfirmationAnnulationExceptionnelle::options(),
+            // Même double condition que UpdateVenteParametrageController : administrer les
+            // paramètres de vente ne suffit pas pour abaisser la protection d'une opération qu'on
+            // n'est pas soi-même autorisé à effectuer.
+            'peut_modifier_confirmation_annulation' => $user->can('parametres.update')
+                && $user->can('ventes.annuler_exceptionnel'),
         ]);
     }
 }

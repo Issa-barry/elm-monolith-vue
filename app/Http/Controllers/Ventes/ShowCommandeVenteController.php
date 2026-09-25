@@ -8,7 +8,9 @@ use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CommandeVente;
+use App\Services\AnnulationExceptionnelleService;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
 use Inertia\Inertia;
@@ -183,6 +185,16 @@ class ShowCommandeVenteController extends Controller
                 'is_cloturee' => $commande->isCloturee(),
                 'is_annulee' => $commande->isAnnulee(),
                 'is_retournee' => $commande->isRetournee(),
+                'is_annulee_erreur_saisie' => $commande->isAnnuleeErreurSaisie(),
+                'annulation_exceptionnelle' => $commande->isAnnuleeErreurSaisie() && $commande->annulationExceptionnelle
+                    ? [
+                        'par' => $commande->annulationExceptionnelle->user?->name,
+                        'le' => $commande->annulationExceptionnelle->confirmee_at?->format(self::DATE_DISPLAY_FORMAT),
+                        'motif' => $commande->annulationExceptionnelle->motif,
+                        'montant_encaisse' => (float) $commande->annulationExceptionnelle->montant_encaisse,
+                        'code_envoye_a' => $commande->annulationExceptionnelle->code_envoye_a,
+                    ]
+                    : null,
                 // Même garde-fou que can_valider_reception ci-dessous : Gate::before bypasse
                 // modifierContenu() (donc isEditable()) pour super_admin, ce flag doit rester
                 // explicite pour ne pas afficher "Modifier" passé le brouillon.
@@ -205,6 +217,12 @@ class ShowCommandeVenteController extends Controller
                 'can_annuler' => $commande->statut->isAnnulable()
                     && (! $facture || (float) $facture->montant_encaisse === 0.0)
                     && $user->can('annuler', $commande),
+                // Condition d'état explicite (raisonStatutNonEligible()) en plus de la permission, même
+                // raison que can_enregistrer_retour : le Gate::before du super admin bypasse la Policy.
+                // Les garde-fous fins (commission traitée, caisse versée…) sont affichés dans le
+                // récapitulatif du dialogue, pas ici.
+                'can_annuler_exceptionnel' => AnnulationExceptionnelleService::raisonStatutNonEligible($commande) === null
+                    && $user->can('annulerExceptionnel', $commande),
                 // Permission dédiée `factures.encaisser` depuis le 13/09/2026, indépendante de
                 // ventes.update — même séparation que demarrerChargement/validerChargement/
                 // validerReception dans CommandeVentePolicy (cf. docs/grossiste.md). L'org est
@@ -218,6 +236,11 @@ class ShowCommandeVenteController extends Controller
                 // CaisseAgentResolver::garantirCaissePourEspeces(), côté serveur à l'enregistrement.
                 'peut_encaisser_especes' => (bool) ($facture?->site_id
                     && app(CaisseAgentResolver::class)->caisseActive($facture->organization_id, (string) $user->id, $facture->site_id)),
+                // Autres moyens : uniquement ceux qu'un support actif de l'agence de la facture peut
+                // recevoir (MoyensEncaissementResolver, rejoué côté serveur à l'enregistrement).
+                'moyens_encaissement' => $facture
+                    ? app(MoyensEncaissementResolver::class)->pourSite($facture->organization_id, $facture->site_id)
+                    : [],
                 'created_at' => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande->createdBy?->name,
                 'lignes' => $lignes,
