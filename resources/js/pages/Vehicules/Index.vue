@@ -73,6 +73,8 @@ interface Vehicule {
     livraison_vente: boolean;
     livraison_logistique: boolean;
     usage_label: string;
+    /** processus_code → fait | a_faire | non_requis | sans_equipe | non_applicable */
+    partages_commission: Record<string, string>;
 }
 
 const props = defineProps<{ vehicules: Vehicule[] }>();
@@ -92,6 +94,7 @@ const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
 const filterUsage = ref<string | null>(null);
 const filterAgence = ref<string | null>(null);
+const filterPartage = ref<string | null>(null);
 
 function resetFilters() {
     search.value = '';
@@ -99,6 +102,35 @@ function resetFilters() {
     filterStatut.value = null;
     filterUsage.value = null;
     filterAgence.value = null;
+    filterPartage.value = null;
+}
+
+// Partage Livreur par processus (cf. PartageConformiteVehiculesService) — un partage « à faire »
+// bloque les commandes/transferts du véhicule sur la catégorie concernée (ADR 0006).
+const PARTAGE_PROCESSUS: Array<{ code: string; label: string }> = [
+    { code: 'vente', label: 'Vente' },
+    { code: 'logistique_transfert', label: 'Logistique' },
+    { code: 'transfert_grossiste', label: 'Grossiste' },
+];
+
+const PARTAGE_LABEL: Record<string, string> = {
+    fait: 'Fait',
+    a_faire: 'À faire',
+    sans_equipe: 'Sans équipe',
+    non_requis: 'Non requis',
+};
+
+function partagesAffiches(v: Vehicule) {
+    return PARTAGE_PROCESSUS.map((p) => ({
+        ...p,
+        statut: v.partages_commission?.[p.code] ?? 'non_applicable',
+    })).filter((p) => p.statut !== 'non_applicable');
+}
+
+function partageAFaire(v: Vehicule): boolean {
+    return Object.values(v.partages_commission ?? {}).some(
+        (s) => s === 'a_faire' || s === 'sans_equipe',
+    );
 }
 
 const typeOptions = computed(() =>
@@ -158,6 +190,15 @@ const filterFields = computed<FilterField[]>(() => [
             { value: '__none__', label: 'Non rattachée' },
         ],
     },
+    {
+        key: 'partage',
+        label: 'Partages commission',
+        type: 'select',
+        options: [
+            { value: 'a_faire', label: 'Au moins un partage à faire' },
+            { value: 'fait', label: 'Tous les partages faits' },
+        ],
+    },
 ]);
 
 function matchesUsageFilter(v: Vehicule, value: string): boolean {
@@ -194,8 +235,18 @@ const filteredVehicules = computed(() =>
             (filterAgence.value === '__none__'
                 ? !v.agence_nom
                 : v.agence_nom === filterAgence.value);
+        const matchPartage =
+            !filterPartage.value ||
+            (filterPartage.value === 'a_faire'
+                ? partageAFaire(v)
+                : !partageAFaire(v));
         return (
-            matchSearch && matchType && matchStatut && matchUsage && matchAgence
+            matchSearch &&
+            matchType &&
+            matchStatut &&
+            matchUsage &&
+            matchAgence &&
+            matchPartage
         );
     }),
 );
@@ -315,6 +366,7 @@ function confirmDelete(v: Vehicule) {
                         usage: filterUsage ?? '',
                         statut: filterStatut ?? '',
                         agence: filterAgence ?? '',
+                        partage: filterPartage ?? '',
                     }"
                     :fields="filterFields"
                     :result-count="filteredVehicules.length"
@@ -325,6 +377,7 @@ function confirmDelete(v: Vehicule) {
                             filterUsage = (vals.usage as string) || null;
                             filterStatut = (vals.statut as string) || null;
                             filterAgence = (vals.agence as string) || null;
+                            filterPartage = (vals.partage as string) || null;
                         }
                     "
                     @reset="resetFilters"
@@ -586,6 +639,7 @@ function confirmDelete(v: Vehicule) {
                                 usage: filterUsage ?? '',
                                 statut: filterStatut ?? '',
                                 agence: filterAgence ?? '',
+                                partage: filterPartage ?? '',
                             }"
                             :fields="filterFields"
                             :result-count="filteredVehicules.length"
@@ -599,6 +653,8 @@ function confirmDelete(v: Vehicule) {
                                         (vals.statut as string) || null;
                                     filterAgence =
                                         (vals.agence as string) || null;
+                                    filterPartage =
+                                        (vals.partage as string) || null;
                                 }
                             "
                             @reset="resetFilters"
@@ -880,6 +936,35 @@ function confirmDelete(v: Vehicule) {
                                 <TriangleAlert class="h-3.5 w-3.5" />
                                 {{ data.usage_label }}
                             </span>
+                        </template>
+                    </Column>
+
+                    <!-- Partages commission (Livreur) par processus exercé -->
+                    <Column header="Partages" style="width: 170px">
+                        <template #body="{ data }">
+                            <div
+                                v-if="partagesAffiches(data).length"
+                                class="flex flex-col gap-1"
+                                :data-testid="`partages-${data.id}`"
+                            >
+                                <div
+                                    v-for="p in partagesAffiches(data)"
+                                    :key="p.code"
+                                    class="flex items-center justify-between gap-2 text-xs"
+                                >
+                                    <span class="text-muted-foreground">{{
+                                        p.label
+                                    }}</span>
+                                    <StatusDot
+                                        :status="p.statut"
+                                        :label="PARTAGE_LABEL[p.statut]"
+                                        size="sm"
+                                    />
+                                </div>
+                            </div>
+                            <span v-else class="text-sm text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 

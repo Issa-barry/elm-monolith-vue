@@ -4,14 +4,18 @@ namespace App\Console\Commands;
 
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\Categorie;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
+use App\Models\Vehicule;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\PartageLivraisonVersionService;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Quelles équipes ne pourront plus prendre de commande ? Depuis le 24/09/2026, une commande (et
@@ -21,15 +25,19 @@ use Illuminate\Support\Collection;
  * l'avance plutôt que de découvrir les blocages au comptoir.
  *
  * Même juge que la commande (CommissionPartageLivraisonCategorieChecker::nonConformites()) :
- * aucune règle recalculée ici. Lecture seule, ne modifie jamais rien.
+ * aucune règle recalculée ici. Lecture seule par défaut ; seule l'option explicite
+ * `--aligner-livreur-unique` écrit : elle aligne le partage des équipes à UN SEUL livreur actif
+ * sur le barème en vigueur (rattrapage de la règle du 25/09/2026). Les équipes à plusieurs
+ * livreurs ne sont jamais modifiées : leur répartition reste une décision explicite.
  */
 class CommissionsDiagnostiquerPartagesCommand extends Command
 {
     protected $signature = 'commissions:diagnostiquer-partages
         {--organization=* : ID, code ou slug d\'organisation (répétable) ; toutes si omis}
-        {--csv= : Exporte les non-conformités dans ce fichier CSV}';
+        {--csv= : Exporte les non-conformités dans ce fichier CSV}
+        {--aligner-livreur-unique : ÉCRIT : aligne sur le barème en vigueur le partage des équipes à un seul livreur actif}';
 
-    protected $description = 'Diagnostic en lecture seule : équipes de livraison dont le partage Livreur n\'est pas conforme au barème en vigueur (commandes bloquées).';
+    protected $description = 'Diagnostic des équipes dont le partage Livreur n\'est pas conforme au barème en vigueur (commandes bloquées) ; lecture seule sauf --aligner-livreur-unique.';
 
     /** @var list<array<string, string|int>> */
     private array $export = [];
@@ -92,6 +100,13 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
                     Carbon::today(),
                 );
 
+                $requis = CommissionPartageLivraisonCategorieChecker::membresRequis($equipe);
+                if ($this->option('aligner-livreur-unique') && $requis->count() === 1 && $nonConformites->isNotEmpty()) {
+                    $this->alignerLivreurUnique($organization->id, $equipe, $vehicule, $code, (string) $requis->keys()->first(), $nonConformites);
+
+                    continue;
+                }
+
                 foreach ($nonConformites as $nc) {
                     $ligne = [
                         'organisation' => $organization->name,
@@ -124,6 +139,39 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
         );
 
         return count($lignes);
+    }
+
+    /**
+     * Rattrapage de la règle « un seul livreur actif = 100 % du barème » (décision du 25/09/2026)
+     * pour les équipes restées non conformes après un barème appliqué AVANT cette règle. Nouvelle
+     * version de partage datée selon l'option A (date d'effet du barème qui l'a rendue nécessaire),
+     * ancienne version conservée, aucune commission déjà générée touchée.
+     *
+     * @param  Collection<int, array<string, mixed>>  $nonConformites
+     */
+    private function alignerLivreurUnique(string $orgId, EquipeLivraison $equipe, Vehicule $vehicule, string $code, string $livreurId, Collection $nonConformites): void
+    {
+        $processus = CommissionProcessus::where('organization_id', $orgId)->where('code', $code)->firstOrFail();
+
+        foreach ($nonConformites as $nc) {
+            DB::transaction(function () use ($orgId, $equipe, $vehicule, $processus, $livreurId, $nc) {
+                $versionActive = CommissionPartageLivraisonCategorieChecker::partagesActifs($processus->id, $equipe->id, $nc['categorie_id'], Carbon::today());
+                $dateEffet = CommissionPartageLivraisonCategorieChecker::dateEffetNouvelleVersion(
+                    $orgId, $processus->id, $nc['categorie_id'], $vehicule->type_vehicule_id, $versionActive, Carbon::today(),
+                );
+
+                PartageLivraisonVersionService::versionner($equipe->id, $processus->id, $nc['categorie_id'], [$livreurId => $nc['bareme']], $dateEffet);
+            });
+
+            $this->line(sprintf(
+                '  <fg=green>✓</> %s · %s · %s : aligné sur %d GNF/pack (effet au %s).',
+                $vehicule->nom_vehicule,
+                CommissionRegleController::processusLabel($code),
+                $nc['categorie_nom'],
+                $nc['bareme'],
+                Carbon::today()->toDateString(),
+            ));
+        }
     }
 
     private function exporterCsv(string $chemin): void

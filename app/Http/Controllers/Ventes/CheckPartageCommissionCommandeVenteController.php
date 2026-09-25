@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ventes;
 
 use App\Enums\NatureOperation;
+use App\Exceptions\PartageCommissionNonConformeException;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Support\Ventes\CommandeVenteFormBuilder;
@@ -58,6 +59,7 @@ class CheckPartageCommissionCommandeVenteController extends Controller
             return response()->json([
                 'bloquant' => true,
                 'message' => collect($e->errors())->flatten()->first(),
+                'details' => $e instanceof PartageCommissionNonConformeException ? $e->details : null,
             ]);
         }
 

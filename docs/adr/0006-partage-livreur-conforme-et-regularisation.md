@@ -45,6 +45,11 @@ création ne vérifiait que l'existence d'un partage), la cible Livreur échouai
    même date d'effet — refusée tant qu'un partage concerné n'est pas conforme, si une équipe a
    changé depuis sa préparation, ou si la configuration a été modifiée par un autre chemin. Un
    barème sans impact sur les partages reste appliqué immédiatement.
+7. **Équipe à un seul livreur actif** (décision du 25/09/2026) : sa part suit automatiquement le
+   barème (version de partage écrite par le système, même date d'effet), sans grille ni
+   brouillon — il n'y a aucune répartition à décider. Seules les équipes à plusieurs livreurs
+   actifs exigent un partage explicite. Choix d'une écriture matérialisée plutôt que d'une règle
+   implicite à la génération : moteur inchangé, partage affiché = partage payé, historique daté.
 
 Options écartées : désactiver les véhicules concernés (mélange un indicateur structurel —
 véhicule doté d'une équipe — et une configuration de commission ; arrêt des ventes) ; recalculer

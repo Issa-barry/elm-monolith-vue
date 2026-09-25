@@ -24,6 +24,7 @@ use App\Models\VehiculeFrais;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
@@ -173,11 +174,17 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
-            ->where('organization_id', auth()->user()->organization_id)
+        $orgId = auth()->user()->organization_id;
+        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
+            ->where('organization_id', $orgId)
             ->orderBy('nom_vehicule')
-            ->get()
-            ->map(fn (Vehicule $v) => $this->vehiculeData($v));
+            ->get();
+        $partages = PartageConformiteVehiculesService::statuts($orgId, $modeles);
+
+        $vehicules = $modeles->map(fn (Vehicule $v) => [
+            ...$this->vehiculeData($v),
+            'partages_commission' => $partages[$v->id] ?? [],
+        ]);
 
         return Inertia::render('Vehicules/Index', [
             'vehicules' => $vehicules,

@@ -966,6 +966,11 @@ rattraper.
     membre sans ligne n'y change rien, la génération ne doit jamais échouer pour une raison sans
     effet financier.
   - Fiche véhicule : « fait » / « à faire » suit exactement la même règle.
+  - Liste des véhicules (25/09/2026) : colonne « Partages » — un état par processus exercé par le
+    véhicule (Vente, Logistique, Grossiste) : Fait, À faire, Sans équipe (barème Livreur positif
+    mais aucune équipe), Non requis (aucun barème Livreur positif) ; un processus que l'usage du
+    véhicule n'exerce pas n'est pas affiché. Filtre « Partages commission » (au moins un à faire /
+    tous faits). Calcul groupé : `PartageConformiteVehiculesService`, même juge que la commande.
 - **COMM-016 — Contrôle de sécurité au chargement.** `AvancerStatutVenteController` rejoue le même
   contrôle avant CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS (erreur `partage_commission`), sur les
   seules catégories réellement chargées (> 0) et les instantanés figés de la commande
@@ -1027,6 +1032,27 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   que COMM-015 : somme exacte + chaque membre actif). Une catégorie inchangée n'est jamais
   concernée (ses éventuels partages déjà non conformes relèvent de COMM-015 et du diagnostic).
   Seules les équipes actives dont le véhicule exerce le processus sont examinées.
+- **Équipe à un seul livreur actif (25/09/2026)** : aucune répartition à décider — sa part est
+  alignée **automatiquement** sur le nouveau barème (nouvelle version de partage, même date d'effet
+  que le barème), au moment où le barème est appliqué (directement, ou à la publication du
+  brouillon). Elle n'apparaît jamais dans la grille et ne déclenche jamais, seule, un brouillon ;
+  l'aperçu l'annonce (« N équipe(s) n'ont qu'un seul livreur… »). Un membre désactivé n'est pas
+  compté. Les équipes à **plusieurs** livreurs actifs gardent un partage explicite obligatoire
+  (grille, proposition jamais appliquée seule).
+  - **Équipes examinées** : toute équipe rattachée à un véhicule, **quel que soit
+    `equipes_livraison.is_active`** (drapeau lu seulement par le contrôle des distributions, jamais
+    par la vente, COMM-015 ni la génération). Correctif du 25/09/2026 : filtrer sur ce drapeau
+    excluait des équipes en service (76 sur 78 en base de dev) — le compteur annonçait 2 équipes et
+    seules ces 2 étaient ajustées.
+  - **Signalées, jamais ajustées ni bloquantes** : équipe **sans** livreur actif (non conforme,
+    refusée à la commande) ; véhicule **inactif** à plusieurs livreurs (partage à revoir avant sa
+    remise en service, refusé à la commande tant qu'il n'est pas corrigé). L'aperçu les compte.
+  - Tous les compteurs de l'aperçu (en équipes) et toutes les écritures viennent du même calcul
+    (`ReconfigurationPartagesService::analyser()`).
+  - **Rattrapage** d'un barème appliqué avant cette règle :
+    `php artisan commissions:diagnostiquer-partages --aligner-livreur-unique` (seule option qui
+    écrit) aligne les équipes à un seul livreur actif restées non conformes, en version datée selon
+    l'option A ; les équipes à plusieurs livreurs ne sont jamais modifiées.
 - **Reconfiguration groupée** (`settings/commissions/brouillons/{id}`, page
   `settings/CommissionRegles/Reconfiguration.vue`) : une ligne par membre, groupée par
   (véhicule, catégorie), avec rôle, montant actuel, nouveau montant éditable, proposition, total /

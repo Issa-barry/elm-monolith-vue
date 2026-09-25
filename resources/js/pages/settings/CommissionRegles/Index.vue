@@ -68,6 +68,9 @@ interface ResumeBrouillon {
 interface ApercuImpact {
     nb_groupes: number;
     nb_equipes: number;
+    nb_automatiques: number;
+    nb_sans_livreur: number;
+    nb_vehicules_inactifs: number;
     par_categorie: Array<{ categorie: string; nb: number }>;
 }
 
@@ -1487,6 +1490,37 @@ function submitConfiguration(): void {
                         en une seule fois.
                     </p>
                 </div>
+            </div>
+            <!-- Information (bleu, rule 10) : rien à décider pour ces équipes. -->
+            <p
+                v-if="!impactChargement && (impact?.nb_automatiques ?? 0) > 0"
+                class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100"
+                data-testid="commission-impact-automatiques"
+            >
+                {{ impact?.nb_automatiques }} équipe(s) n’ont qu’un seul livreur
+                actif : sa part sera alignée automatiquement sur le nouveau
+                barème, à la même date.
+            </p>
+            <!-- Attention (orange) : non conformes, ni ajustées ni bloquantes pour l'enregistrement. -->
+            <div
+                v-if="
+                    !impactChargement &&
+                    ((impact?.nb_sans_livreur ?? 0) > 0 ||
+                        (impact?.nb_vehicules_inactifs ?? 0) > 0)
+                "
+                class="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                data-testid="commission-impact-signales"
+            >
+                <p v-if="(impact?.nb_sans_livreur ?? 0) > 0">
+                    {{ impact?.nb_sans_livreur }} équipe(s) sans livreur actif :
+                    non conformes, leurs commandes resteront refusées tant qu’un
+                    livreur n’est pas ajouté.
+                </p>
+                <p v-if="(impact?.nb_vehicules_inactifs ?? 0) > 0">
+                    {{ impact?.nb_vehicules_inactifs }} véhicule(s) inactif(s) à
+                    plusieurs livreurs : leur partage sera à revoir avant leur
+                    remise en service.
+                </p>
             </div>
 
             <div class="flex justify-end gap-2">

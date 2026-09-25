@@ -10,6 +10,7 @@ use App\Enums\ModeTarification;
 use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
+use App\Exceptions\PartageCommissionNonConformeException;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionProcessus;
@@ -579,7 +580,7 @@ final class CommandeVenteFormBuilder
             return;
         }
 
-        throw ValidationException::withMessages([
+        $exception = PartageCommissionNonConformeException::withMessages([
             $champErreur => sprintf(
                 'Impossible de %s : le partage de commission du véhicule %s n\'est pas conforme pour le processus « %s ». %s Corrigez la répartition de l\'équipe avant de continuer.',
                 $action,
@@ -588,6 +589,14 @@ final class CommandeVenteFormBuilder
                 $nonConformites->map(fn (array $nc) => CommissionPartageLivraisonCategorieChecker::libelleNonConformite($nc))->implode(' '),
             ),
         ]);
+        $exception->details = [
+            'vehicule_nom' => $vehicule->nom_vehicule,
+            'processus_libelle' => $processusIdentite->libelle,
+            'processus_code' => $processusBareme->code,
+            'categories' => $nonConformites->all(),
+        ];
+
+        throw $exception;
     }
 
     /**

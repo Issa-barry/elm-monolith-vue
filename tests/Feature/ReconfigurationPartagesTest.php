@@ -10,6 +10,7 @@ use App\Models\Categorie;
 use App\Models\CommissionBaremeBrouillon;
 use App\Models\CommissionBaremeBrouillonPartage;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -93,7 +94,7 @@ class ReconfigurationPartagesTest extends TestCase
     }
 
     /** @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreurs: list<Livreur>} */
-    private function equipe(array $montants, ?string $typeVehiculeId = null, string $nom = 'V'): array
+    private function equipe(array $montants, ?string $typeVehiculeId = null, string $nom = 'V', bool $equipeActive = true, bool $vehiculeActif = true): array
     {
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
@@ -102,13 +103,13 @@ class ReconfigurationPartagesTest extends TestCase
             'type_vehicule_id' => $typeVehiculeId,
             'livraison_vente' => true,
             'livraison_logistique' => false,
-            'is_active' => true,
+            'is_active' => $vehiculeActif,
         ]);
         $equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe',
-            'is_active' => true,
+            'is_active' => $equipeActive,
         ]);
 
         $livreurs = [];
@@ -409,6 +410,185 @@ class ReconfigurationPartagesTest extends TestCase
         $this->actingAs($this->user)->post(route('settings.commissions.brouillons.publier', $this->brouillon()))
             ->assertSessionHasErrors('publication');
         $this->assertStringContainsString('modifiée depuis la préparation', session('errors')->first('publication'));
+    }
+
+    // ── Équipes à un seul livreur actif (décision du 25/09/2026) ───────────────
+
+    private function montantsActifs(array $e, string $date = '2026-09-25'): array
+    {
+        return CommissionPartageLivraisonCategorieChecker::partagesActifs($this->processus->id, $e['equipe']->id, $this->bouteille->id, Carbon::parse($date))
+            ->pluck('montant_unitaire', 'livreur_id')->map(fn ($m) => (int) $m)->all();
+    }
+
+    public function test_un_seul_livreur_suit_le_bareme_automatiquement_sans_brouillon(): void
+    {
+        $solo = $this->equipe([800], nom: 'Solo');
+
+        $this->enregistrerBareme($this->lignes(1000))
+            ->assertRedirect(route('settings.commissions.index', ['processus' => 'vente']));
+
+        $this->assertSame(0, CommissionBaremeBrouillon::count(), 'Aucune répartition à décider : pas de brouillon.');
+        $this->assertSame(1000, $this->baremeLivreurEnVigueur());
+        $this->assertSame([$solo['livreurs'][0]->id => 1000], $this->montantsActifs($solo));
+        $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo, '2026-09-24'), 'Historique intact.');
+    }
+
+    public function test_un_seul_livreur_actif_meme_avec_un_membre_desactive(): void
+    {
+        $e = $this->equipe([800, null], nom: 'Duo');
+        $e['livreurs'][1]->update(['is_active' => false]);
+
+        $this->enregistrerBareme($this->lignes(1000));
+
+        $this->assertSame(0, CommissionBaremeBrouillon::count());
+        $this->assertSame([$e['livreurs'][0]->id => 1000], $this->montantsActifs($e));
+    }
+
+    public function test_equipes_mixtes_seules_les_equipes_a_plusieurs_livreurs_vont_dans_la_grille(): void
+    {
+        $solo = $this->equipe([800], nom: 'Solo');
+        $duo = $this->equipe([500, 300], nom: 'Duo');
+
+        $this->actingAs($this->user)
+            ->postJson(route('settings.commissions.impact'), ['processus_code' => 'vente', 'lignes' => $this->lignes(1000)])
+            ->assertJson(['nb_groupes' => 1, 'nb_automatiques' => 1]);
+
+        $this->enregistrerBareme($this->lignes(1000));
+        $groupes = ReconfigurationPartagesService::groupes($this->org->id, $this->processus, $this->brouillon()->lignes, $this->brouillon());
+        $this->assertSame([$duo['equipe']->id], $groupes->pluck('equipe_id')->all());
+        $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo), 'Rien avant la publication.');
+
+        $this->enregistrerPartages($this->brouillon(), [$this->saisie($duo, [600, 400])]);
+        $this->actingAs($this->user)->post(route('settings.commissions.brouillons.publier', $this->brouillon()))->assertSessionHasNoErrors();
+
+        $this->assertSame([$solo['livreurs'][0]->id => 1000], $this->montantsActifs($solo), 'Aligné à la publication, même date.');
+        $this->assertSame(1000, array_sum($this->montantsActifs($duo)));
+    }
+
+    /**
+     * Régression du 25/09/2026 : le calcul ne retenait que les équipes à is_active=true — en base,
+     * 76 équipes sur 78 (en service) étaient à false : le compteur annonçait 2 équipes et seules
+     * ces 2 étaient ajustées. Le compteur et les écritures viennent du même calcul.
+     */
+    public function test_toutes_les_equipes_a_un_seul_livreur_sont_comptees_et_reellement_ajustees(): void
+    {
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 400);
+        CommissionRegle::where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->where('montant', 800)->update(['statut' => 'remplacee', 'effective_to' => '2026-07-31']);
+        $solos = [
+            $this->equipe([400], nom: 'A'),
+            $this->equipe([400], nom: 'B', equipeActive: false),
+            $this->equipe([400], nom: 'C', equipeActive: false),
+            $this->equipe([300], nom: 'Faux', equipeActive: false), // partage déjà incorrect
+        ];
+
+        $this->actingAs($this->user)
+            ->postJson(route('settings.commissions.impact'), ['processus_code' => 'vente', 'lignes' => $this->lignes(800)])
+            ->assertJson(['nb_groupes' => 0, 'nb_automatiques' => 4]);
+
+        $this->enregistrerBareme($this->lignes(800))
+            ->assertRedirect(route('settings.commissions.index', ['processus' => 'vente']));
+
+        foreach ($solos as $e) {
+            $this->assertSame([$e['livreurs'][0]->id => 800], $this->montantsActifs($e), 'Part réellement enregistrée en base.');
+        }
+        $this->assertSame([$solos[3]['livreurs'][0]->id => 300], $this->montantsActifs($solos[3], '2026-09-24'), 'Ancienne version conservée.');
+    }
+
+    public function test_alignement_automatique_categorie_par_categorie(): void
+    {
+        $sachet = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet', 'statut' => 'actif']);
+        $solo = $this->equipe([800], nom: 'Solo');
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $solo['equipe']->id, 'processus_id' => $this->processus->id, 'categorie_id' => $sachet->id,
+            'livreur_id' => $solo['livreurs'][0]->id, 'part_pourcentage' => 0, 'montant_unitaire' => 200, 'effective_from' => '2026-08-01',
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id, 'processus_id' => $this->processus->id, 'libelle' => 'Livreur — Sachet',
+            'scope_type' => CommissionScopeType::CATEGORIE->value, 'scope_id' => $sachet->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON, 'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value, 'montant' => 200,
+            'effective_from' => '2026-08-01', 'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+
+        $lignes = [...$this->lignes(1000), [
+            'categorie_id' => $sachet->id,
+            'beneficiaires' => [CommissionCibleType::CODE_EQUIPE_LIVRAISON],
+            'consultant_id' => null,
+            'montants_standard' => [CommissionCibleType::CODE_EQUIPE_LIVRAISON => 250],
+            'exceptions' => [],
+        ]];
+        $this->enregistrerBareme($lignes)->assertSessionHasNoErrors();
+
+        $actifs = fn (Categorie $c) => CommissionPartageLivraisonCategorieChecker::partagesActifs($this->processus->id, $solo['equipe']->id, $c->id, Carbon::today())->sum('montant_unitaire');
+        $this->assertSame(1000, (int) $actifs($this->bouteille));
+        $this->assertSame(250, (int) $actifs($sachet));
+    }
+
+    public function test_equipes_sans_livreur_actif_et_vehicules_inactifs_sont_signales_jamais_ajustes(): void
+    {
+        $vide = $this->equipe([800], nom: 'Vide');
+        $vide['livreurs'][0]->update(['is_active' => false]);
+        $inactif = $this->equipe([500, 300], nom: 'Garage', vehiculeActif: false);
+
+        $this->actingAs($this->user)
+            ->postJson(route('settings.commissions.impact'), ['processus_code' => 'vente', 'lignes' => $this->lignes(1000)])
+            ->assertJson(['nb_groupes' => 0, 'nb_automatiques' => 0, 'nb_sans_livreur' => 1, 'nb_vehicules_inactifs' => 1]);
+
+        $this->enregistrerBareme($this->lignes(1000));
+
+        $this->assertSame(0, CommissionBaremeBrouillon::count(), 'Ne bloquent pas l\'application du barème.');
+        $this->assertSame(800, array_sum($this->montantsActifs($vide)));
+        $this->assertSame(800, array_sum($this->montantsActifs($inactif)), 'Plusieurs livreurs : jamais modifié silencieusement.');
+        $this->assertFalse(CommissionPartageLivraisonCategorieChecker::nonConformites(
+            $this->org->id, $inactif['equipe'], 'vente', null, [$this->bouteille->id], Carbon::today(),
+        )->isEmpty(), 'Reste non conforme : refusé à la commande à sa remise en service.');
+    }
+
+    public function test_une_commission_deja_generee_nest_jamais_modifiee(): void
+    {
+        $solo = $this->equipe([800], nom: 'Solo');
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id, 'source_type' => 'test', 'source_id' => 'cmd-1',
+            'processus_id' => $this->processus->id, 'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => $solo['equipe']->id, 'montant_total' => 8000, 'earned_at' => '2026-09-20', 'statut' => 'creee',
+        ]);
+
+        $this->enregistrerBareme($this->lignes(1000));
+
+        $this->assertSame(8000.0, (float) $enveloppe->fresh()->montant_total);
+        $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo, '2026-09-20'), 'Date d\'origine : configuration d\'alors.');
+    }
+
+    public function test_diagnostic_aligne_les_equipes_a_un_seul_livreur_restees_non_conformes(): void
+    {
+        // État laissé par un barème appliqué AVANT la règle du 25/09 : barème 400, équipes à 800.
+        $solo = $this->equipe([800], nom: 'Solo');
+        $duo = $this->equipe([500, 300], nom: 'Duo');
+        CommissionRegle::where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->update(['statut' => 'remplacee', 'effective_to' => '2026-09-19']);
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 400)->update(['effective_from' => '2026-09-20']);
+
+        $this->artisan('commissions:diagnostiquer-partages', ['--organization' => [$this->org->id], '--aligner-livreur-unique' => true])
+            ->assertSuccessful();
+
+        $this->assertSame([$solo['livreurs'][0]->id => 400], $this->montantsActifs($solo));
+        $this->assertSame([$solo['livreurs'][0]->id => 400], $this->montantsActifs($solo, '2026-09-20'), 'Option A : effet à la date du barème.');
+        $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo, '2026-09-19'));
+        $this->assertSame(800, array_sum($this->montantsActifs($duo)), 'Plusieurs livreurs : jamais modifié.');
+    }
+
+    public function test_une_equipe_sans_livreur_actif_ne_bloque_pas_la_publication(): void
+    {
+        $vide = $this->equipe([800], nom: 'Vide');
+        $vide['livreurs'][0]->update(['is_active' => false]);
+        $duo = $this->equipe([500, 300], nom: 'Duo');
+
+        $this->enregistrerBareme($this->lignes(1000));
+        $groupes = ReconfigurationPartagesService::groupes($this->org->id, $this->processus, $this->brouillon()->lignes, $this->brouillon());
+        $this->assertSame([$duo['equipe']->id], $groupes->pluck('equipe_id')->all());
+
+        $this->enregistrerPartages($this->brouillon(), [$this->saisie($duo, [600, 400])]);
+        $this->actingAs($this->user)->post(route('settings.commissions.brouillons.publier', $this->brouillon()))->assertSessionHasNoErrors();
+        $this->assertSame([$vide['livreurs'][0]->id => 800], $this->montantsActifs($vide), 'Jamais modifiée automatiquement.');
     }
 
     public function test_abandon_laisse_le_bareme_en_vigueur_intact(): void

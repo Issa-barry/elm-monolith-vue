@@ -172,6 +172,12 @@ export async function configurerBareme(
         timeout: 10_000,
     });
 
+    // Barème déjà identique (état laissé par une spec précédente) : rien à enregistrer, le bouton
+    // reste désactivé (« Configuration à jour ») — cliquer attendrait indéfiniment.
+    if (await page.getByTestId('commission-save').isDisabled()) {
+        return;
+    }
+
     await page.getByTestId('commission-save').click();
     await page.getByTestId('commission-confirm-save').click();
 

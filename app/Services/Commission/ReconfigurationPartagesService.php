@@ -28,6 +28,11 @@ use InvalidArgumentException;
  * concernée, même si son partage était déjà non conforme (ce cas relève du blocage à la commande
  * et du diagnostic `commissions:diagnostiquer-partages`, pas de ce brouillon).
  *
+ * Seules les équipes à PLUSIEURS livreurs actifs sont à reconfigurer à la main (décision du
+ * 25/09/2026) : une équipe à un seul livreur actif n'a aucune répartition à décider, sa part est
+ * alignée automatiquement sur le nouveau barème, à la même date d'effet, au moment où le barème
+ * est appliqué (directement ou à la publication). Une équipe sans livreur actif est ignorée.
+ *
  * Le brouillon ne change RIEN à l'opérationnel : barème et partages en vigueur restent ceux
  * utilisés par les commandes et la génération jusqu'à la publication, qui écrit barème + partages
  * dans une seule transaction, à la même date d'effet (aujourd'hui).
@@ -59,10 +64,11 @@ class ReconfigurationPartagesService
                 ->lockForUpdate()
                 ->first();
 
-            $groupes = self::groupes($orgId, $processus, $lignes, $brouillon);
+            ['groupes' => $groupes, 'automatiques' => $automatiques] = self::analyser($orgId, $processus, $lignes, $brouillon);
 
             if ($groupes->isEmpty()) {
                 CommissionBaremeConfigurationService::appliquer($orgId, $processusCode, $lignes, $userId);
+                self::appliquerAutomatiques($processus->id, $automatiques);
                 $brouillon?->update([
                     'lignes' => $lignes,
                     'statut' => CommissionBaremeBrouillon::STATUT_PUBLIE,
@@ -101,19 +107,25 @@ class ReconfigurationPartagesService
      * calcul que enregistrerConfiguration(), sans aucune écriture.
      *
      * @param  array<int, array<string, mixed>>  $lignes
-     * @return array{nb_groupes: int, nb_equipes: int, par_categorie: list<array{categorie: string, nb: int}>}
+     * @return array{nb_groupes: int, nb_equipes: int, nb_automatiques: int, nb_sans_livreur: int, nb_vehicules_inactifs: int, par_categorie: list<array{categorie: string, nb: int}>}
      */
     public static function apercu(string $orgId, string $processusCode, array $lignes): array
     {
         $processus = CommissionProcessus::where('organization_id', $orgId)->where('code', $processusCode)->first();
         if (! $processus) {
-            return ['nb_groupes' => 0, 'nb_equipes' => 0, 'par_categorie' => []];
+            return ['nb_groupes' => 0, 'nb_equipes' => 0, 'nb_automatiques' => 0, 'nb_sans_livreur' => 0, 'nb_vehicules_inactifs' => 0, 'par_categorie' => []];
         }
 
-        $groupes = self::groupes($orgId, $processus, $lignes, CommissionBaremeBrouillon::enCoursPour($orgId, $processus->id));
+        ['groupes' => $groupes, 'automatiques' => $automatiques, 'signales' => $signales] = self::analyser(
+            $orgId, $processus, $lignes, CommissionBaremeBrouillon::enCoursPour($orgId, $processus->id),
+        );
 
+        // Compteurs en ÉQUIPES (une équipe peut être concernée sur plusieurs catégories).
         return [
             'nb_groupes' => $groupes->count(),
+            'nb_automatiques' => $automatiques->pluck('equipe_id')->unique()->count(),
+            'nb_sans_livreur' => $signales->where('motif', 'sans_livreur')->pluck('equipe_id')->unique()->count(),
+            'nb_vehicules_inactifs' => $signales->where('motif', 'vehicule_inactif')->pluck('equipe_id')->unique()->count(),
             'nb_equipes' => $groupes->pluck('equipe_id')->unique()->count(),
             'par_categorie' => $groupes->groupBy('categorie_nom')
                 ->map(fn (Collection $g, string $nom) => ['categorie' => $nom, 'nb' => $g->count()])
@@ -123,15 +135,32 @@ class ReconfigurationPartagesService
     }
 
     /**
-     * (Équipe, catégorie) concernées par la configuration $lignes, avec leur état de préparation
-     * dans $brouillon. Chargement groupé (équipes, membres, partages réels et préparés en quelques
-     * requêtes), pour rester exploitable avec plusieurs centaines de véhicules.
+     * (Équipe, catégorie) à reconfigurer À LA MAIN pour la configuration $lignes (équipes à
+     * plusieurs livreurs actifs), avec leur état de préparation dans $brouillon.
      *
      * @param  array<int, array<string, mixed>>  $lignes
      * @return Collection<int, array<string, mixed>>
      */
     public static function groupes(string $orgId, CommissionProcessus $processus, array $lignes, ?CommissionBaremeBrouillon $brouillon): Collection
     {
+        return self::analyser($orgId, $processus, $lignes, $brouillon)['groupes'];
+    }
+
+    /**
+     * Analyse de l'impact de $lignes sur les partages — SOURCE UNIQUE des compteurs affichés et des
+     * écritures : `groupes` (plusieurs livreurs actifs sur un véhicule actif, répartition à décider
+     * dans la grille), `automatiques` (un seul livreur actif, sa part suit le barème) et `signales`
+     * (sans livreur actif, ou véhicule inactif à plusieurs livreurs : non conformes, ni ajustés ni
+     * bloquants).
+     * Chargement groupé (équipes, membres, partages réels et préparés en quelques requêtes), pour
+     * rester exploitable avec plusieurs centaines de véhicules.
+     *
+     * @param  array<int, array<string, mixed>>  $lignes
+     * @return array{groupes: Collection<int, array<string, mixed>>, automatiques: Collection<int, array{equipe_id: string, categorie_id: string, livreur_id: string, montant: int}>, signales: Collection<int, array{equipe_id: string, vehicule_nom: string, categorie_nom: string, motif: string}>}
+     */
+    public static function analyser(string $orgId, CommissionProcessus $processus, array $lignes, ?CommissionBaremeBrouillon $brouillon): array
+    {
+        $vide = ['groupes' => collect(), 'automatiques' => collect(), 'signales' => collect()];
         $categorieIds = collect($lignes)
             ->filter(fn (array $l) => in_array(CommissionCibleType::CODE_EQUIPE_LIVRAISON, $l['beneficiaires'] ?? [], true))
             ->pluck('categorie_id')
@@ -139,12 +168,15 @@ class ReconfigurationPartagesService
             ->values();
 
         if ($categorieIds->isEmpty()) {
-            return collect();
+            return $vide;
         }
 
+        // Toute équipe rattachée à un véhicule, quel que soit EquipeLivraison::is_active : ce drapeau
+        // n'est lu que par le contrôle des distributions, jamais par la vente, le contrôle de partage
+        // (COMM-015) ni la génération — le filtrer ici excluait des équipes en service (incident du
+        // 25/09/2026 : 76 équipes sur 78 à is_active=false, dont des véhicules actifs qui vendent).
         $equipes = EquipeLivraison::with(['vehicule.typeVehicule', 'vehicule.site', 'membres.livreur'])
             ->where('organization_id', $orgId)
-            ->where('is_active', true)
             ->whereHas('vehicule')
             ->get()
             ->filter(fn (EquipeLivraison $e) => in_array(
@@ -155,7 +187,7 @@ class ReconfigurationPartagesService
             ->values();
 
         if ($equipes->isEmpty()) {
-            return collect();
+            return $vide;
         }
 
         $aujourdhui = Carbon::today();
@@ -172,6 +204,8 @@ class ReconfigurationPartagesService
 
         $baremesEnVigueur = [];
         $groupes = [];
+        $automatiques = [];
+        $signales = [];
 
         foreach ($equipes as $equipe) {
             $vehicule = $equipe->vehicule;
@@ -196,6 +230,35 @@ class ReconfigurationPartagesService
                 $cle = $equipe->id.'|'.$categorieId;
                 $reel = $partagesReels->get($cle, collect());
                 if (self::conforme($reel->map(fn ($p) => [$p->livreur_id, $p->montant_unitaire]), $cible, $requis) === null) {
+                    continue;
+                }
+
+                // Décision du 25/09/2026 : un seul livreur actif → aucune répartition à décider, sa
+                // part suit automatiquement le barème (versionnée à l'application du barème, cf.
+                // appliquerAutomatiques()), quel que soit son partage actuel, même déjà faux.
+                if (count($requis) === 1) {
+                    $automatiques[] = [
+                        'equipe_id' => $equipe->id,
+                        'categorie_id' => $categorieId,
+                        'livreur_id' => $requis[0],
+                        'montant' => $cible,
+                    ];
+
+                    continue;
+                }
+
+                // Aucun livreur actif : anomalie (non conforme, bloquée à la commande) — signalée,
+                // jamais ajustée. Plusieurs livreurs sur un véhicule INACTIF : il ne peut prendre
+                // aucune commande ; signalé sans bloquer la publication, il restera refusé à la
+                // commande (COMM-015) tant que son partage n'est pas corrigé.
+                if (count($requis) === 0 || ! $vehicule->is_active) {
+                    $signales[] = [
+                        'equipe_id' => $equipe->id,
+                        'vehicule_nom' => $vehicule->nom_vehicule,
+                        'categorie_nom' => $categories->get($categorieId, $categorieId),
+                        'motif' => count($requis) === 0 ? 'sans_livreur' : 'vehicule_inactif',
+                    ];
+
                     continue;
                 }
 
@@ -249,9 +312,31 @@ class ReconfigurationPartagesService
             }
         }
 
-        return collect($groupes)
-            ->sortBy(fn (array $g) => [$g['vehicule_nom'], $g['categorie_nom']])
-            ->values();
+        return [
+            'groupes' => collect($groupes)
+                ->sortBy(fn (array $g) => [$g['vehicule_nom'], $g['categorie_nom']])
+                ->values(),
+            'automatiques' => collect($automatiques),
+            'signales' => collect($signales),
+        ];
+    }
+
+    /**
+     * Partage des équipes à un seul livreur actif, aligné sur le barème qui vient d'être appliqué
+     * (même date d'effet) — jamais une équipe à plusieurs membres, dont la répartition reste une
+     * décision explicite.
+     *
+     * @param  Collection<int, array{equipe_id: string, categorie_id: string, livreur_id: string, montant: int}>  $automatiques
+     */
+    private static function appliquerAutomatiques(string $processusId, Collection $automatiques): void
+    {
+        $dateEffet = Carbon::today();
+
+        foreach ($automatiques as $a) {
+            PartageLivraisonVersionService::versionner(
+                $a['equipe_id'], $processusId, $a['categorie_id'], [$a['livreur_id'] => $a['montant']], $dateEffet,
+            );
+        }
     }
 
     /**
@@ -354,7 +439,7 @@ class ReconfigurationPartagesService
                 ]);
             }
 
-            $groupes = self::groupes($orgId, $processus, $brouillon->lignes, $brouillon);
+            ['groupes' => $groupes, 'automatiques' => $automatiques] = self::analyser($orgId, $processus, $brouillon->lignes, $brouillon);
             $nonConformes = $groupes->reject(fn (array $g) => $g['statut'] === self::STATUT_CONFORME);
 
             if ($nonConformes->isNotEmpty()) {
@@ -369,6 +454,7 @@ class ReconfigurationPartagesService
             }
 
             CommissionBaremeConfigurationService::appliquer($orgId, $processus->code, $brouillon->lignes, $userId);
+            self::appliquerAutomatiques($processus->id, $automatiques);
 
             $dateEffet = Carbon::today();
             foreach ($groupes as $groupe) {

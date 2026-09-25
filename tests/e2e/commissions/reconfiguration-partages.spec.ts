@@ -105,7 +105,11 @@ test('barème Livreur 800 → 1 000 : reconfiguration groupée, publication, rel
 
     await page.getByTestId('commission-save').click();
     const impact = page.getByTestId('commission-impact');
-    await expect(impact).toContainText('4 partage(s) Livreur sur 4 équipe(s)');
+    await expect(impact).toContainText('3 partage(s) Livreur sur 3 équipe(s)');
+    await expect(
+        page.getByTestId('commission-impact-automatiques'),
+    ).toContainText('1 équipe(s) n’ont qu’un seul livreur actif');
+    // V3 n'a qu'un livreur : sa part suivra le barème automatiquement (jamais dans la grille).
     await expect(page.getByTestId('commission-confirm-save')).toHaveText(
         /préparer la reconfiguration/i,
     );
@@ -113,7 +117,10 @@ test('barème Livreur 800 → 1 000 : reconfiguration groupée, publication, rel
 
     // ── Grille de reconfiguration ───────────────────────────────────────────────────
     await page.waitForURL(/\/settings\/commissions\/brouillons\//);
-    await expect(page.getByTestId('reconfiguration-resume')).toContainText('4');
+    await expect(page.getByTestId('reconfiguration-resume')).toContainText('3');
+    await expect(
+        page.getByTestId(`reconfiguration-statut-${V3.nom}-${cat}`),
+    ).toHaveCount(0);
     // Rien n'est appliqué avant publication : V1 reste acceptée au barème 800.
     expect(await apercuBloquant(page, V1.id, f.produit_id)).toBe(false);
 
@@ -151,9 +158,6 @@ test('barème Livreur 800 → 1 000 : reconfiguration groupée, publication, rel
         .getByRole('checkbox', { name: `Sélectionner ${V2.nom} ${cat}` })
         .uncheck();
 
-    // V3 (un seul membre) : saisie directe.
-    await cellule(page, V3.nom, cat, 0).fill('1000');
-
     // V4 : proposition proportionnelle (500/200 → 715/285, reliquat au chauffeur).
     await page
         .getByRole('checkbox', { name: `Sélectionner ${V4.nom} ${cat}` })
@@ -162,12 +166,12 @@ test('barème Livreur 800 → 1 000 : reconfiguration groupée, publication, rel
     await expect(cellule(page, V4.nom, cat, 0)).toHaveValue('715');
     await expect(cellule(page, V4.nom, cat, 1)).toHaveValue('285');
 
-    // Enregistrement groupé (4 équipes), puis tout est conforme.
+    // Enregistrement groupé (3 équipes), puis tout est conforme.
     await expect(page.getByTestId('reconfiguration-enregistrer')).toContainText(
-        '(4)',
+        '(3)',
     );
     await page.getByTestId('reconfiguration-enregistrer').click();
-    for (const v of [V1, V2, V3, V4]) {
+    for (const v of [V1, V2, V4]) {
         await expect(
             page.getByTestId(`reconfiguration-statut-${v.nom}-${cat}`),
         ).toContainText('Conforme');
@@ -181,6 +185,13 @@ test('barème Livreur 800 → 1 000 : reconfiguration groupée, publication, rel
     for (const v of [V1, V2, V3, V4]) {
         expect(await apercuBloquant(page, v.id, f.produit_id)).toBe(false);
     }
+
+    // V3 (un seul livreur, équipe à is_active=false) : sa part est réellement passée à 1 000 —
+    // vérifiée sur sa fiche véhicule, pas seulement annoncée.
+    await page.goto(`/backoffice/vehicules/${V3.id}?tab=equipe`);
+    await expect(
+        page.locator('tr', { hasText: 'Chauffeur V3' }).first(),
+    ).toContainText(new RegExp(`${montantPattern(1000)}\\s*GNF`));
 
     // ── Régularisation de la commission partielle ───────────────────────────────────
     await page.goto(`/backoffice/ventes/${f.commande_partielle_id}`);

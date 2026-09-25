@@ -137,7 +137,9 @@ class CommissionE2eFixturesController extends Controller
                     'livraison_logistique' => false,
                     'is_active' => true,
                 ]);
-                $equipe = EquipeLivraison::create(['organization_id' => $orgId, 'vehicule_id' => $vehicule->id, 'is_active' => true]);
+                // V3 : équipe à is_active=false comme la plupart des équipes en service (drapeau lu
+                // seulement par les distributions) — cas réel de la régression du 25/09/2026.
+                $equipe = EquipeLivraison::create(['organization_id' => $orgId, 'vehicule_id' => $vehicule->id, 'is_active' => $code !== 'V3']);
 
                 foreach ($parts as $ordre => $montant) {
                     $livreur = Livreur::factory()->create([

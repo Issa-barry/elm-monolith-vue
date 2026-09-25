@@ -389,7 +389,15 @@ class CommissionPartageLivreurConformiteTest extends TestCase
         $this->actingAs($this->user)
             ->getJson(route('ventes.check-partage-commission', ['vehicule_id' => $vehicule->id, 'produit_ids' => [$produit->id]]))
             ->assertOk()
-            ->assertJson(['bloquant' => true, 'message' => $this->messageAttendu($vehicule)]);
+            ->assertJson(['bloquant' => true, 'message' => $this->messageAttendu($vehicule)])
+            ->assertJsonPath('details.vehicule_nom', $vehicule->nom_vehicule)
+            ->assertJsonPath('details.processus_code', $this->processus->code)
+            ->assertJsonPath('details.processus_libelle', $this->processus->libelle)
+            ->assertJsonPath('details.categories.0.categorie_id', $this->bouteille->id)
+            ->assertJsonPath('details.categories.0.bareme', 800)
+            ->assertJsonPath('details.categories.0.total_configure', 700)
+            ->assertJsonPath('details.categories.0.ecart', 100)
+            ->assertJsonPath('details.categories.0.membres_manquants', []);
 
         $this->actingAs($this->user)
             ->getJson(route('ventes.check-partage-commission', ['vehicule_id' => $vehicule->id, 'produit_ids' => []]))
