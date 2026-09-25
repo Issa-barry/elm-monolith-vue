@@ -150,4 +150,49 @@ class CommissionPartageLivraisonValidatorTest extends TestCase
 
         $this->addToAssertionCount(1); // Aucune exception levée.
     }
+
+    // ── Membres requis (décision du 24/09/2026) ─────────────────────────────
+
+    /** @test */
+    public function rejette_un_membre_requis_sans_ligne_meme_si_la_somme_est_exacte(): void
+    {
+        $membres = new Collection([$this->membre('a', 800)]);
+
+        try {
+            CommissionPartageLivraisonValidator::valider($membres, 800, ['a', 'b']);
+            $this->fail('InvalidArgumentException attendue.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('sans part : b', $e->getMessage());
+        }
+    }
+
+    /** @test */
+    public function accepte_une_ligne_a_zero_pour_un_membre_requis(): void
+    {
+        $membres = new Collection([
+            $this->membre('a', 800),
+            $this->membre('b', 0),
+        ]);
+
+        CommissionPartageLivraisonValidator::valider($membres, 800, ['a', 'b']);
+
+        $this->addToAssertionCount(1);
+    }
+
+    /** @test */
+    public function nexige_aucun_membre_quand_le_bareme_vaut_zero(): void
+    {
+        CommissionPartageLivraisonValidator::valider(new Collection, 0, ['a', 'b']);
+
+        $this->addToAssertionCount(1);
+    }
+
+    /** @test */
+    public function sans_membres_requis_le_comportement_de_generation_est_inchange(): void
+    {
+        // La génération n'exige pas la présence de chaque membre (aucun effet sur les montants).
+        CommissionPartageLivraisonValidator::valider(new Collection([$this->membre('a', 800)]), 800);
+
+        $this->addToAssertionCount(1);
+    }
 }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -57,6 +58,19 @@ interface Ligne {
     exceptions: ExceptionLigne[];
 }
 
+interface ResumeBrouillon {
+    id: string;
+    total: number;
+    conformes: number;
+    updated_at: string | null;
+}
+
+interface ApercuImpact {
+    nb_groupes: number;
+    nb_equipes: number;
+    par_categorie: Array<{ categorie: string; nb: number }>;
+}
+
 const props = defineProps<{
     processus_actif: string;
     processus_options: Option[];
@@ -65,7 +79,11 @@ const props = defineProps<{
     cibles: Cible[];
     typesVehicules: Option[];
     consultantsEligibles: Option[];
+    brouillon: ResumeBrouillon | null;
 }>();
+
+const { can } = usePermissions();
+const canModifier = computed(() => can('parametres.update'));
 
 // Changer d'onglet recharge intégralement la page (nouveau processus = nouvelles lignes/
 // catégories configurées côté serveur) — cohérent avec le fait que la sauvegarde recharge déjà
@@ -500,6 +518,47 @@ const configurationForm = useForm({
     lignes: [] as PayloadLigne[],
 });
 
+// Aperçu des partages d'équipe que ce barème rendrait non conformes (ADR 0006) : s'il y en a,
+// l'enregistrement prépare un brouillon au lieu d'appliquer le barème tout de suite.
+const impact = ref<ApercuImpact | null>(null);
+const impactChargement = ref(false);
+
+function getCsrfToken(): string {
+    return decodeURIComponent(
+        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+    );
+}
+
+async function chargerImpact(): Promise<void> {
+    impact.value = null;
+    impactChargement.value = true;
+    try {
+        const response = await fetch('/settings/commissions/impact', {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                processus_code: props.processus_actif,
+                lignes: draftLignes.value.map(toPayloadLigne),
+            }),
+        });
+        if (response.ok) {
+            impact.value = (await response.json()) as ApercuImpact;
+        }
+    } catch {
+        // Aperçu indisponible : le serveur refait de toute façon le calcul à l'enregistrement.
+    } finally {
+        impactChargement.value = false;
+    }
+}
+
+const prepareBrouillon = computed(
+    () => props.brouillon !== null || (impact.value?.nb_groupes ?? 0) > 0,
+);
+
 function openConfirmation(): void {
     if (draftLignes.value.length === 0) {
         globalError.value = 'Ajoutez au moins une catégorie autorisée.';
@@ -507,6 +566,7 @@ function openConfirmation(): void {
     }
     globalError.value = '';
     confirmationVisible.value = true;
+    void chargerImpact();
 }
 
 function submitConfiguration(): void {
@@ -519,6 +579,8 @@ function submitConfiguration(): void {
         onSuccess: () => {
             confirmationVisible.value = false;
             globalError.value = '';
+            // Brouillon préparé : la redirection vers la reconfiguration affiche son propre message.
+            if (prepareBrouillon.value) return;
             toast.add({
                 severity: 'success',
                 summary: 'Commissions enregistrées',
@@ -558,6 +620,37 @@ function submitConfiguration(): void {
                     @update:model-value="onProcessusChange"
                 />
 
+                <!-- Brouillon en cours (ADR 0006) : attention, rien n'est encore appliqué. -->
+                <div
+                    v-if="brouillon"
+                    class="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                    data-testid="commission-brouillon-bandeau"
+                >
+                    <div class="flex items-start gap-2">
+                        <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p class="font-medium">
+                                Nouveau barème en préparation — pas encore
+                                appliqué
+                            </p>
+                            <p class="mt-0.5 text-xs">
+                                {{ brouillon.conformes }} /
+                                {{ brouillon.total }} partage(s) d’équipe
+                                reconfiguré(s). Le barème ci-dessous est celui
+                                du brouillon ; les commandes utilisent toujours
+                                le barème en vigueur jusqu’à la publication.
+                            </p>
+                        </div>
+                    </div>
+                    <Link
+                        :href="`/settings/commissions/brouillons/${brouillon.id}`"
+                    >
+                        <Button type="button" variant="outline" size="sm">
+                            Reprendre la reconfiguration
+                        </Button>
+                    </Link>
+                </div>
+
                 <section class="overflow-hidden rounded-xl border bg-card">
                     <div
                         class="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
@@ -572,6 +665,7 @@ function submitConfiguration(): void {
                             </p>
                         </div>
                         <Button
+                            v-if="canModifier"
                             type="button"
                             variant="outline"
                             :disabled="!canAddCategory"
@@ -690,6 +784,7 @@ function submitConfiguration(): void {
                                     </div>
 
                                     <div
+                                        v-if="canModifier"
                                         class="flex items-center justify-end gap-1"
                                     >
                                         <Button
@@ -713,6 +808,7 @@ function submitConfiguration(): void {
                                             <Trash2 class="h-4 w-4" />
                                         </Button>
                                     </div>
+                                    <span v-else aria-hidden="true"></span>
                                 </div>
 
                                 <div
@@ -812,6 +908,7 @@ function submitConfiguration(): void {
                             droit à une commission.
                         </p>
                         <Button
+                            v-if="canModifier"
                             type="button"
                             variant="outline"
                             class="mt-4"
@@ -858,6 +955,7 @@ function submitConfiguration(): void {
                         Configuration à jour
                     </div>
                     <Button
+                        v-if="canModifier"
                         type="button"
                         :disabled="configurationForm.processing || !hasChanges"
                         data-testid="commission-save"
@@ -1350,6 +1448,47 @@ function submitConfiguration(): void {
                 </p>
             </div>
 
+            <p
+                v-if="impactChargement"
+                class="text-xs text-muted-foreground"
+                data-testid="commission-impact-chargement"
+            >
+                Vérification des partages d’équipe…
+            </p>
+            <div
+                v-else-if="prepareBrouillon"
+                class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                data-testid="commission-impact"
+            >
+                <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                    <p class="font-medium">
+                        <template v-if="impact && impact.nb_groupes > 0">
+                            Ce changement rend non conformes
+                            {{ impact.nb_groupes }} partage(s) Livreur sur
+                            {{ impact.nb_equipes }} équipe(s)
+                            <span v-if="impact.par_categorie.length">
+                                ({{
+                                    impact.par_categorie
+                                        .map((c) => `${c.categorie} : ${c.nb}`)
+                                        .join(', ')
+                                }})</span
+                            >.
+                        </template>
+                        <template v-else>
+                            Un brouillon de barème est déjà en cours pour ce
+                            processus.
+                        </template>
+                    </p>
+                    <p class="mt-1">
+                        Le nouveau barème sera préparé dans un brouillon, sans
+                        rien changer au barème en vigueur. Vous reconfigurerez
+                        ensuite les partages concernés, puis publierez le tout
+                        en une seule fois.
+                    </p>
+                </div>
+            </div>
+
             <div class="flex justify-end gap-2">
                 <Button
                     type="button"
@@ -1361,7 +1500,7 @@ function submitConfiguration(): void {
                 </Button>
                 <Button
                     type="button"
-                    :disabled="configurationForm.processing"
+                    :disabled="configurationForm.processing || impactChargement"
                     data-testid="commission-confirm-save"
                     @click="submitConfiguration"
                 >
@@ -1369,7 +1508,9 @@ function submitConfiguration(): void {
                     {{
                         configurationForm.processing
                             ? 'Enregistrement…'
-                            : 'Confirmer et enregistrer'
+                            : prepareBrouillon
+                              ? 'Préparer la reconfiguration'
+                              : 'Confirmer et enregistrer'
                     }}
                 </Button>
             </div>

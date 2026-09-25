@@ -26,13 +26,38 @@ use InvalidArgumentException;
 class CommissionPartageLivraisonValidator
 {
     /**
+     * $membresRequis (décision du 24/09/2026) : identifiants des membres actifs de l'équipe qui
+     * DOIVENT chacun avoir une ligne de partage — 0 GNF reste une ligne valide, seule l'absence de
+     * ligne est refusée. Passé par tous les contrôles de CONFIGURATION (enregistrement de l'équipe,
+     * création/modification de commande, chargement, diagnostic) ; volontairement omis (null) par
+     * la génération elle-même, qui ne contrôle que ce qui détermine les montants versés — un
+     * membre sans ligne n'y change aucun montant, et la génération ne doit jamais échouer pour
+     * une raison sans effet financier.
+     *
      * @param  Collection<int, object{beneficiaire_id: mixed, montant_unitaire: int|float|string|null}>  $membres
+     * @param  iterable<string>|null  $membresRequis
      *
      * @throws InvalidArgumentException si un montant est invalide, un bénéficiaire apparaît en
-     *                                  double, ou si la somme ne correspond pas exactement à l'enveloppe
+     *                                  double, un membre requis n'a pas de ligne, ou si la somme ne
+     *                                  correspond pas exactement à l'enveloppe
      */
-    public static function valider(Collection $membres, int $enveloppeUnitaire): void
+    public static function valider(Collection $membres, int $enveloppeUnitaire, ?iterable $membresRequis = null): void
     {
+        if ($membresRequis !== null && $enveloppeUnitaire > 0) {
+            $presents = $membres->map(fn ($m) => (string) $m->beneficiaire_id)->all();
+            $manquants = collect($membresRequis)
+                ->map(fn ($id) => (string) $id)
+                ->reject(fn (string $id) => in_array($id, $presents, true))
+                ->values();
+
+            if ($manquants->isNotEmpty()) {
+                throw new InvalidArgumentException(sprintf(
+                    'Chaque membre de l\'équipe doit avoir une part (0 GNF accepté) — sans part : %s.',
+                    $manquants->implode(', '),
+                ));
+            }
+        }
+
         if ($enveloppeUnitaire < 0) {
             throw new InvalidArgumentException("L'enveloppe Livreur ({$enveloppeUnitaire} GNF) ne peut pas être négative.");
         }

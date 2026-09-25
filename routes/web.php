@@ -175,6 +175,7 @@ use App\Http\Controllers\Sites\ShowSiteController;
 use App\Http\Controllers\Sites\StoreSiteController;
 use App\Http\Controllers\Sites\UpdateSiteController;
 use App\Http\Controllers\Testing\CommissionE2eDiagnosticController;
+use App\Http\Controllers\Testing\CommissionE2eFixturesController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
@@ -199,6 +200,7 @@ use App\Http\Controllers\Ventes\AnnulerCommandeVenteController;
 use App\Http\Controllers\Ventes\AnnulerStatutVenteController;
 use App\Http\Controllers\Ventes\AvancerStatutVenteController;
 use App\Http\Controllers\Ventes\CheckoutPdvController;
+use App\Http\Controllers\Ventes\CheckPartageCommissionCommandeVenteController;
 use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
 use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\CreateCommandeVenteController;
@@ -368,6 +370,7 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Ventes ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
             Route::get('ventes/check-solvabilite', CheckSolvabiliteCommandeVenteController::class)->name('ventes.check-solvabilite');
+            Route::get('ventes/check-partage-commission', CheckPartageCommissionCommandeVenteController::class)->name('ventes.check-partage-commission');
             Route::get('ventes', IndexCommandeVenteController::class)->name('ventes.index');
             Route::get('ventes/create', CreateCommandeVenteController::class)->name('ventes.create');
             // Avant ventes/{vente} : un segment statique doit toujours être déclaré avant la route
@@ -968,6 +971,9 @@ if (app()->environment('e2e')) {
         Route::get('e2e/diagnostics/commandes-vente/{commandeId}/commissions', [CommissionE2eDiagnosticController::class, 'commande'])
             ->name('e2e.diagnostics.commande-vente-commissions');
     });
+    // Crée sa propre organisation et y connecte la session : aucun utilisateur préalable requis.
+    Route::post('e2e/fixtures/partages-livreur', [CommissionE2eFixturesController::class, 'partagesLivreur'])
+        ->name('e2e.fixtures.partages-livreur');
 }
 
 require __DIR__.'/settings.php';

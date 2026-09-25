@@ -16,6 +16,7 @@ use App\Models\VehiculeCapacite;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\PartageLivraisonVersionService;
 use Illuminate\Contracts\Validation\ImplicitRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -71,12 +72,14 @@ class EquipeLivraisonController extends Controller
             $orgId,
             $vehiculeSelectionne?->type_vehicule_id,
             $data['processus_code'],
+            $this->membresRequisDepuisPayload($data['membres'], $orgId),
         );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
         $equipe = null;
-        DB::transaction(function () use ($data, $orgId, $proprietaireId, $nomVehicule, &$equipe) {
+        $typeVehiculeId = $vehiculeSelectionne?->type_vehicule_id;
+        DB::transaction(function () use ($data, $orgId, $proprietaireId, $nomVehicule, $typeVehiculeId, &$equipe) {
             $equipe = EquipeLivraison::create([
                 'organization_id' => $orgId,
                 'vehicule_id' => $data['vehicule_id'],
@@ -101,7 +104,7 @@ class EquipeLivraisonController extends Controller
                 ]);
             }
 
-            $this->syncPartagesCategorie($equipe->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code']);
+            $this->syncPartagesCategorie($equipe->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code'], $typeVehiculeId);
         });
 
         return redirect()->route('vehicules.show', $equipe->vehicule_id)
@@ -135,11 +138,13 @@ class EquipeLivraisonController extends Controller
             $orgId,
             $vehiculeSelectionne?->type_vehicule_id,
             $data['processus_code'],
+            $this->membresRequisDepuisPayload($data['membres'], $orgId),
         );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
-        DB::transaction(function () use ($data, $orgId, $proprietaireId, $equipes_livraison, $oldVehiculeId, $nomVehicule) {
+        $typeVehiculeId = $vehiculeSelectionne?->type_vehicule_id;
+        DB::transaction(function () use ($data, $orgId, $proprietaireId, $equipes_livraison, $oldVehiculeId, $nomVehicule, $typeVehiculeId) {
             $equipes_livraison->update([
                 'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $proprietaireId,
@@ -168,7 +173,7 @@ class EquipeLivraisonController extends Controller
                 ]);
             }
 
-            $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code']);
+            $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code'], $typeVehiculeId);
         });
 
         return redirect()->route('vehicules.show', $equipes_livraison->vehicule_id)
@@ -381,6 +386,7 @@ class EquipeLivraisonController extends Controller
                 $orgId,
                 $equipeDepart->vehicule->type_vehicule_id,
                 $processusCode,
+                $this->membresRequisTransfert($equipeDepart, $livreur, null),
             );
         }
 
@@ -391,6 +397,7 @@ class EquipeLivraisonController extends Controller
                 $orgId,
                 $vehiculeCible->type_vehicule_id,
                 $processusCode,
+                $this->membresRequisTransfert($equipeArriveeExistante, null, $livreur),
             );
         }
 
@@ -417,6 +424,7 @@ class EquipeLivraisonController extends Controller
                         $this->livreurIdParOrdreIdentite($partages),
                         $orgId,
                         $processusCode,
+                        $equipeDepart->vehicule->type_vehicule_id,
                     );
                 }
             }
@@ -449,6 +457,7 @@ class EquipeLivraisonController extends Controller
                     $this->livreurIdParOrdreIdentite($partages),
                     $orgId,
                     $processusCode,
+                    $vehiculeCible->type_vehicule_id,
                 );
             }
 
@@ -882,11 +891,21 @@ class EquipeLivraisonController extends Controller
      * préventifs à la création d'une opération (CommandeVenteFormBuilder,
      * TransfertLogistiqueController) — jamais de formule dupliquée entre ces points d'entrée.
      */
+    /**
+     * $membresRequis (décision du 24/09/2026) : membre_ordre => nom affiché des membres ACTIFS de
+     * l'équipe telle qu'elle sera après enregistrement — chacun doit avoir une part dans chaque
+     * catégorie soumise (0 GNF accepté), y compris un membre tout juste ajouté. Même juge que la
+     * commande/le chargement (CommissionPartageLivraisonValidator) : une équipe enregistrée ici ne
+     * peut donc jamais bloquer ensuite ses propres commandes pour une part manquante.
+     *
+     * @param  array<string, string>  $membresRequis
+     */
     private function validatePartagesCategorie(
         array $partagesCategorie,
         string $orgId,
         ?string $typeVehiculeId,
         string $processusCode = CommissionProcessus::CODE_VENTE,
+        array $membresRequis = [],
     ): void {
         if (empty($partagesCategorie)) {
             return;
@@ -895,6 +914,8 @@ class EquipeLivraisonController extends Controller
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->where('code', $processusCode)
             ->first();
+
+        $categories = Categorie::whereIn('id', collect($partagesCategorie)->pluck('categorie_id'))->pluck('nom', 'id');
 
         foreach ($partagesCategorie as $pc) {
             $enveloppe = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
@@ -911,11 +932,65 @@ class EquipeLivraisonController extends Controller
             ]);
 
             try {
-                CommissionPartageLivraisonValidator::valider($membres, $enveloppe);
+                CommissionPartageLivraisonValidator::valider($membres, $enveloppe, array_map('strval', array_keys($membresRequis)));
             } catch (InvalidArgumentException $e) {
-                abort(422, $e->getMessage());
+                $presents = $membres->map(fn ($m) => (string) $m->beneficiaire_id)->all();
+                $sansPart = collect($membresRequis)
+                    ->reject(fn (string $nom, $cle) => in_array((string) $cle, $presents, true))
+                    ->values();
+                $categorie = $categories->get($pc['categorie_id'], 'catégorie');
+
+                abort(422, $enveloppe > 0 && $sansPart->isNotEmpty()
+                    ? "{$categorie} : chaque membre de l'équipe doit avoir une part (0 GNF accepté) — sans part : {$sansPart->implode(', ')}."
+                    : "{$categorie} : {$e->getMessage()}");
             }
         }
+    }
+
+    /**
+     * Membres requis d'un payload store()/update() : clé membre_ordre (même convention que
+     * $livreurIdParOrdre), sauf un livreur existant désactivé — jamais exigé.
+     *
+     * @return array<string, string>
+     */
+    private function membresRequisDepuisPayload(array $membres, string $orgId): array
+    {
+        $inactifs = Livreur::where('organization_id', $orgId)
+            ->whereIn('id', collect($membres)->pluck('livreur_id')->filter())
+            ->where('is_active', false)
+            ->pluck('id')
+            ->all();
+
+        $requis = [];
+        foreach ($membres as $index => $m) {
+            if (! empty($m['livreur_id']) && in_array($m['livreur_id'], $inactifs, true)) {
+                continue;
+            }
+            $requis[(string) ($m['ordre'] ?? $index)] = $m['nom_complet'] ?? ('Membre '.(((int) ($m['ordre'] ?? $index)) + 1));
+        }
+
+        return $requis;
+    }
+
+    /**
+     * Membres requis d'une équipe existante dans le wizard de transfert (parts identifiées par
+     * livreur_id) : membres actuels actifs, moins $exclure (livreur qui part), plus $ajouter
+     * (livreur qui arrive).
+     *
+     * @return array<string, string>
+     */
+    private function membresRequisTransfert(EquipeLivraison $equipe, ?Livreur $exclure, ?Livreur $ajouter): array
+    {
+        $requis = CommissionPartageLivraisonCategorieChecker::membresRequis($equipe)->all();
+
+        if ($exclure) {
+            unset($requis[$exclure->id]);
+        }
+        if ($ajouter && $ajouter->is_active) {
+            $requis[$ajouter->id] = $ajouter->nom_complet ?? $ajouter->id;
+        }
+
+        return $requis;
     }
 
     /**
@@ -932,6 +1007,11 @@ class EquipeLivraisonController extends Controller
      * réellement en vigueur à la date du fait générateur, pas la config
      * courante. part_pourcentage reçoit un placeholder 0 (colonne legacy en
      * cours de retrait, plus jamais lue par ce flux).
+     *
+     * Date d'effet par catégorie (option A, 24/09/2026) : une version qui CORRIGE un partage non
+     * conforme au barème en vigueur prend effet à la date d'effet de ce barème (cf.
+     * CommissionPartageLivraisonCategorieChecker::dateEffetNouvelleVersion()), la version remplacée
+     * étant bornée à cette même date — sinon effet immédiat, comme avant.
      */
     private function syncPartagesCategorie(
         string $equipeId,
@@ -939,30 +1019,44 @@ class EquipeLivraisonController extends Controller
         array $livreurIdParOrdre,
         string $orgId,
         string $processusCode = CommissionProcessus::CODE_VENTE,
+        ?string $typeVehiculeId = null,
     ): void {
-        $maintenant = now();
+        $maintenant = now()->startOfDay();
         $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
 
         // Scopée par processus : sans ce filtre, enregistrer le partage Vente fermerait aussi
         // silencieusement les partages Distribution/Transfert logistique de la même équipe.
-        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+        $versionsActives = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
             ->where('processus_id', $processus->id)
             ->whereNull('effective_to')
-            ->update(['effective_to' => $maintenant]);
+            ->get()
+            ->groupBy('categorie_id');
+
+        // Catégories retirées du payload : leur partage est clos aujourd'hui, jamais supprimé.
+        $categoriesSoumises = collect($partagesCategorie)->pluck('categorie_id')->all();
+        foreach ($versionsActives as $categorieId => $lignes) {
+            if (! in_array($categorieId, $categoriesSoumises, true)) {
+                EquipeLivraisonPartageCategorie::whereIn('id', $lignes->pluck('id'))
+                    ->update(['effective_to' => $maintenant->toDateString()]);
+            }
+        }
 
         foreach ($partagesCategorie as $pc) {
+            $dateEffet = CommissionPartageLivraisonCategorieChecker::dateEffetNouvelleVersion(
+                $orgId,
+                $processus->id,
+                $pc['categorie_id'],
+                $typeVehiculeId,
+                $versionsActives->get($pc['categorie_id'], collect()),
+                $maintenant,
+            );
+
+            $montants = [];
             foreach ($pc['parts'] as $p) {
-                EquipeLivraisonPartageCategorie::create([
-                    'equipe_id' => $equipeId,
-                    'processus_id' => $processus->id,
-                    'categorie_id' => $pc['categorie_id'],
-                    'livreur_id' => $livreurIdParOrdre[$p['membre_ordre']],
-                    'part_pourcentage' => 0,
-                    'montant_unitaire' => (int) $p['montant_unitaire'],
-                    'effective_from' => $maintenant,
-                    'effective_to' => null,
-                ]);
+                $montants[$livreurIdParOrdre[$p['membre_ordre']]] = (int) $p['montant_unitaire'];
             }
+
+            PartageLivraisonVersionService::versionner($equipeId, $processus->id, $pc['categorie_id'], $montants, $dateEffet);
         }
     }
 

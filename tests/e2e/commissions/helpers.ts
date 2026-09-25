@@ -132,7 +132,11 @@ export async function configurerBareme(
         const consultantSelect = page.locator(
             '[aria-label="Consultant bénéficiaire"]',
         );
-        if (await consultantSelect.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        if (
+            await consultantSelect
+                .isVisible({ timeout: 3_000 })
+                .catch(() => false)
+        ) {
             await selectOptionFromCombobox(
                 page,
                 consultantSelect,
@@ -170,9 +174,59 @@ export async function configurerBareme(
 
     await page.getByTestId('commission-save').click();
     await page.getByTestId('commission-confirm-save').click();
-    await expect(
-        page.getByText(/commissions enregistrées/i),
-    ).toBeVisible({ timeout: 15_000 });
+
+    // Depuis le 25/09/2026 (ADR 0006), un barème Livreur qui rend non conformes des partages
+    // d'équipe n'est plus appliqué directement : il ouvre la reconfiguration groupée. Ces specs
+    // ne testent pas ce parcours (cf. reconfiguration-partages.spec.ts) — on le termine ici.
+    await expect(async () => {
+        const brouillon = page
+            .url()
+            .includes('/settings/commissions/brouillons/');
+        const enregistre = await page
+            .getByText(/commissions enregistrées/i)
+            .isVisible();
+        expect(brouillon || enregistre).toBe(true);
+    }).toPass({ timeout: 15_000 });
+
+    if (page.url().includes('/settings/commissions/brouillons/')) {
+        await terminerReconfiguration(page);
+    }
+}
+
+/**
+ * Termine une reconfiguration groupée : pour chaque (véhicule, catégorie) concerné, tout le
+ * nouveau barème au premier membre (chauffeur), 0 aux autres ; enregistre puis publie.
+ */
+export async function terminerReconfiguration(page: Page): Promise<void> {
+    const totaux = page.locator('[data-testid^="reconfiguration-total-"]');
+    const nbGroupes = await totaux.count();
+
+    for (let i = 0; i < nbGroupes; i++) {
+        const total = totaux.nth(i);
+        const suffixe = (await total.getAttribute('data-testid'))!.replace(
+            'reconfiguration-total-',
+            '',
+        );
+        const cible = (await total.innerText())
+            .split('/')[1]
+            .replace(/\D/g, '');
+
+        for (let k = 0; ; k++) {
+            const cellule = page
+                .getByTestId(`reconfiguration-ligne-${suffixe}-${k}`)
+                .locator('input[data-cellule]');
+            if ((await cellule.count()) === 0) break;
+            await cellule.fill(k === 0 ? cible : '0');
+        }
+    }
+
+    await page.getByTestId('reconfiguration-enregistrer').click();
+    await expect(page.getByTestId('reconfiguration-publier')).toBeEnabled({
+        timeout: 15_000,
+    });
+    await page.getByTestId('reconfiguration-publier').click();
+    await page.getByTestId('reconfiguration-confirmer-publication').click();
+    await page.waitForURL(/\/settings\/commissions(\?|$)/, { timeout: 15_000 });
 }
 
 /** Paramètres → Ventes : bascule le déclencheur de commission de vente. */
@@ -294,16 +348,21 @@ export async function supprimerEncaissement(
     const cookies = await page.context().cookies();
     const xsrfCookie = cookies.find((c) => c.name === 'XSRF-TOKEN');
     if (!xsrfCookie) {
-        throw new Error('supprimerEncaissement: cookie XSRF-TOKEN introuvable — session non authentifiée ?');
+        throw new Error(
+            'supprimerEncaissement: cookie XSRF-TOKEN introuvable — session non authentifiée ?',
+        );
     }
 
-    const response = await page.request.delete(`/encaissements/${encaissementId}`, {
-        headers: {
-            'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value),
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
+    const response = await page.request.delete(
+        `/encaissements/${encaissementId}`,
+        {
+            headers: {
+                'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value),
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
         },
-    });
+    );
 
     if (![200, 204, 302].includes(response.status())) {
         throw new Error(
