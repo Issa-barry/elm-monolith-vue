@@ -195,4 +195,15 @@ class CommissionPartageLivraisonValidatorTest extends TestCase
 
         $this->addToAssertionCount(1);
     }
+
+    /** @test */
+    public function rejette_une_equipe_sans_membre_actif_meme_si_danciennes_lignes_totalisent_le_bareme(): void
+    {
+        try {
+            CommissionPartageLivraisonValidator::valider(new Collection([$this->membre('ancien', 800)]), 800, []);
+            $this->fail('InvalidArgumentException attendue.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('Aucun membre actif', $e->getMessage());
+        }
+    }
 }

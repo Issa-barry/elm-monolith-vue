@@ -517,6 +517,12 @@ Détail du comportement `showLivreur()` (inchangé depuis le 31/08/2026) :
   exactement comme avant sur l'ensemble des parts effectivement affichées (toutes si « tous », un
   seul processus si filtré) — aucun changement de la logique financière, seulement de ce qui est
   montré par défaut et de la transparence sur l'origine.
+- **Commission annulée (25/09/2026)** — fiches Livreur (`showLivreur()`) et Propriétaire (`show()`) :
+  une part `annulee` reste listée dans le détail par commande (traçabilité, point rouge, montant
+  d'origine barré), mais avec `reste = 0` et `annulee = true`. Elle est exclue de tous les montants :
+  KPI (net validé, reste à payer, déjà payé), stats de période et ligne TOTAL du tableau
+  (`CommissionDetailTable.vue`). Même règle que la liste, les exports et `CommissionKpiBuckets` :
+  une part annulée ne représente plus de créance réelle.
 
 ## Vente directe sans véhicule — mouvement de stock (correctif du 30/08/2026)
 
@@ -1052,7 +1058,18 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   - **Rattrapage** d'un barème appliqué avant cette règle :
     `php artisan commissions:diagnostiquer-partages --aligner-livreur-unique` (seule option qui
     écrit) aligne les équipes à un seul livreur actif restées non conformes, en version datée selon
-    l'option A ; les équipes à plusieurs livreurs ne sont jamais modifiées.
+    l'option A ; les équipes à plusieurs livreurs ne sont jamais modifiées. **Idempotente** : une
+    équipe alignée devient conforme, une seconde exécution ne crée aucune version. Chaque
+    (équipe, processus, catégorie) est écrite dans sa propre transaction.
+  - **Procédure recommandée** : 1) diagnostic sans option (lecture seule, résumé : équipes
+    analysées, conformes, non conformes dont sans membre actif / plusieurs membres / un seul membre
+    alignable) ; 2) `--aligner-livreur-unique` ; 3) nouveau diagnostic pour vérifier qu'il ne reste
+    plus d'équipe à un seul membre non conforme ; 4) corriger les équipes à plusieurs membres (fiche
+    véhicule ou grille lors du prochain changement de barème).
+- **Membres exigés** (précision du 25/09/2026) : tout membre de l'équipe — chauffeur **et**
+  convoyeur (`equipe_livreurs.role`) — dont le livreur est actif doit avoir une ligne (0 GNF
+  accepté). Une équipe **sans aucun membre actif** est non conforme dès qu'un barème Livreur positif
+  s'applique, même si d'anciennes lignes (livreurs désactivés) totalisent le barème.
 - **Reconfiguration groupée** (`settings/commissions/brouillons/{id}`, page
   `settings/CommissionRegles/Reconfiguration.vue`) : une ligne par membre, groupée par
   (véhicule, catégorie), avec rôle, montant actuel, nouveau montant éditable, proposition, total /

@@ -44,6 +44,12 @@ class CommissionPartageLivraisonValidator
     public static function valider(Collection $membres, int $enveloppeUnitaire, ?iterable $membresRequis = null): void
     {
         if ($membresRequis !== null && $enveloppeUnitaire > 0) {
+            // Aucun membre actif : personne ne peut légitimement recevoir l'enveloppe — non conforme,
+            // même si d'anciennes lignes (livreurs désactivés) totalisent le barème.
+            if (collect($membresRequis)->isEmpty()) {
+                throw new InvalidArgumentException('Aucun membre actif dans l\'équipe pour recevoir l\'enveloppe Livreur.');
+            }
+
             $presents = $membres->map(fn ($m) => (string) $m->beneficiaire_id)->all();
             $manquants = collect($membresRequis)
                 ->map(fn ($id) => (string) $id)

@@ -82,6 +82,9 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
             ->sortBy(fn (EquipeLivraison $e) => $e->vehicule?->nom_vehicule)
             ->values();
 
+        $aligner = (bool) $this->option('aligner-livreur-unique');
+        $stats = ['conformes' => 0, 'sans_membre' => 0, 'plusieurs' => 0, 'un_seul' => 0];
+
         $lignes = [];
         foreach ($equipes as $equipe) {
             $vehicule = $equipe->vehicule;
@@ -89,6 +92,9 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
                 $vehicule,
                 CommissionRegleController::processusCodesDisponibles(),
             );
+            // Membres de l'équipe (chauffeur ET convoyeur) dont le livreur est actif.
+            $requis = CommissionPartageLivraisonCategorieChecker::membresRequis($equipe);
+            $equipeNonConforme = false;
 
             foreach ($codes as $code) {
                 $nonConformites = CommissionPartageLivraisonCategorieChecker::nonConformites(
@@ -99,9 +105,9 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
                     $categorieIds,
                     Carbon::today(),
                 );
+                $equipeNonConforme = $equipeNonConforme || $nonConformites->isNotEmpty();
 
-                $requis = CommissionPartageLivraisonCategorieChecker::membresRequis($equipe);
-                if ($this->option('aligner-livreur-unique') && $requis->count() === 1 && $nonConformites->isNotEmpty()) {
+                if ($aligner && $requis->count() === 1 && $nonConformites->isNotEmpty()) {
                     $this->alignerLivreurUnique($organization->id, $equipe, $vehicule, $code, (string) $requis->keys()->first(), $nonConformites);
 
                     continue;
@@ -125,18 +131,35 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
                     $this->export[] = $ligne;
                 }
             }
+
+            $stats[match (true) {
+                ! $equipeNonConforme => 'conformes',
+                $requis->count() === 0 => 'sans_membre',
+                $requis->count() === 1 => 'un_seul',
+                default => 'plusieurs',
+            }]++;
         }
 
-        if (empty($lignes)) {
+        if (! empty($lignes)) {
+            $this->table(
+                ['Véhicule', 'Processus', 'Détail'],
+                array_map(fn (array $l) => [$l['vehicule'], $l['processus'], $l['detail']], $lignes),
+            );
+        }
+
+        $nonConformes = $stats['sans_membre'] + $stats['plusieurs'] + $stats['un_seul'];
+        $this->line("  Équipes analysées : {$equipes->count()}");
+        $this->line("    Conformes : {$stats['conformes']}");
+        $this->line('    Non conformes'.($aligner ? ' (avant alignement)' : '')." : {$nonConformes}");
+        $this->line("      dont sans membre actif : {$stats['sans_membre']}");
+        $this->line("      dont plusieurs membres à rééquilibrer (jamais modifiées automatiquement) : {$stats['plusieurs']}");
+        $this->line("      dont un seul membre actif : {$stats['un_seul']}".($aligner
+            ? ' — alignées sur le barème en vigueur.'
+            : ' — alignables avec --aligner-livreur-unique.'));
+
+        if ($nonConformes === 0) {
             $this->line('  <fg=green>✓</> Tous les partages sont conformes.');
-
-            return 0;
         }
-
-        $this->table(
-            ['Véhicule', 'Processus', 'Détail'],
-            array_map(fn (array $l) => [$l['vehicule'], $l['processus'], $l['detail']], $lignes),
-        );
 
         return count($lignes);
     }

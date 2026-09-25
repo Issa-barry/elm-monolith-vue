@@ -446,7 +446,9 @@ class ReconfigurationPartagesTest extends TestCase
 
     public function test_equipes_mixtes_seules_les_equipes_a_plusieurs_livreurs_vont_dans_la_grille(): void
     {
-        $solo = $this->equipe([800], nom: 'Solo');
+        // Cas Abarry : équipe à un seul livreur, EquipeLivraison::is_active = false, alignée à la
+        // PUBLICATION du brouillon (chemin distinct de l'application directe).
+        $solo = $this->equipe([800], nom: 'Solo', equipeActive: false);
         $duo = $this->equipe([500, 300], nom: 'Duo');
 
         $this->actingAs($this->user)
@@ -574,6 +576,43 @@ class ReconfigurationPartagesTest extends TestCase
         $this->assertSame([$solo['livreurs'][0]->id => 400], $this->montantsActifs($solo, '2026-09-20'), 'Option A : effet à la date du barème.');
         $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo, '2026-09-19'));
         $this->assertSame(800, array_sum($this->montantsActifs($duo)), 'Plusieurs livreurs : jamais modifié.');
+    }
+
+    public function test_diagnostic_resume_sans_ecrire_puis_alignement_idempotent(): void
+    {
+        $solo = $this->equipe([800], nom: 'Solo', equipeActive: false);
+        $duo = $this->equipe([500, 200], nom: 'Duo');
+        $vide = $this->equipe([800], nom: 'Vide');
+        $vide['livreurs'][0]->update(['is_active' => false]);
+        $this->equipe([500, 300], nom: 'Ok');
+        CommissionRegle::where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->update(['statut' => 'remplacee', 'effective_to' => '2026-09-19']);
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 800)->update(['effective_from' => '2026-09-20']);
+        // Solo resté à un ancien montant faux (300 ≠ 800).
+        EquipeLivraisonPartageCategorie::where('equipe_id', $solo['equipe']->id)->update(['montant_unitaire' => 300]);
+        $versions = fn () => EquipeLivraisonPartageCategorie::count();
+        $avant = $versions();
+
+        // 1. Lecture seule : résumé, aucune écriture.
+        $this->artisan('commissions:diagnostiquer-partages', ['--organization' => [$this->org->id]])
+            ->expectsOutputToContain('Équipes analysées : 4')
+            ->expectsOutputToContain('Conformes : 1')
+            ->expectsOutputToContain('dont sans membre actif : 1')
+            ->expectsOutputToContain('dont plusieurs membres à rééquilibrer (jamais modifiées automatiquement) : 1')
+            ->expectsOutputToContain('dont un seul membre actif : 1 — alignables avec --aligner-livreur-unique.')
+            ->assertSuccessful();
+        $this->assertSame($avant, $versions(), 'Sans option : aucune écriture.');
+
+        // 2. Alignement : seule l'équipe à un membre reçoit une nouvelle version.
+        $this->artisan('commissions:diagnostiquer-partages', ['--organization' => [$this->org->id], '--aligner-livreur-unique' => true])->assertSuccessful();
+        $this->assertSame($avant + 1, $versions());
+        $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo));
+        $this->assertSame(700, array_sum($this->montantsActifs($duo)), 'Plusieurs membres : jamais modifiées.');
+
+        // 3. Idempotent : une seconde exécution ne crée aucune version.
+        $this->artisan('commissions:diagnostiquer-partages', ['--organization' => [$this->org->id], '--aligner-livreur-unique' => true])
+            ->expectsOutputToContain('dont un seul membre actif : 0')
+            ->assertSuccessful();
+        $this->assertSame($avant + 1, $versions());
     }
 
     public function test_une_equipe_sans_livreur_actif_ne_bloque_pas_la_publication(): void
