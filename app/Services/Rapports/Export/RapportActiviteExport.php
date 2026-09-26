@@ -66,7 +66,7 @@ class RapportActiviteExport implements WithMultipleSheets
         foreach ($e['par_moyen'] as $moyen) {
             $lignes[] = ['  dont '.$moyen['libelle'], $moyen['montant']];
         }
-        $lignes[] = ['Créances en cours (état actuel, toutes dates)', $c['nombre']];
+        $lignes[] = ['Dettes clients en cours (état actuel, toutes dates)', $c['nombre']];
         $lignes[] = ['  dont impayées', $c['impayees']];
         $lignes[] = ['  dont partielles', $c['partielles']];
         $lignes[] = ['Reste dû', $c['reste']];
@@ -107,7 +107,7 @@ class RapportActiviteExport implements WithMultipleSheets
     private function creances(): RapportFeuille
     {
         return new RapportFeuille(
-            'Créances',
+            'Dettes clients',
             ['Facture', 'Date', 'Ancienneté (jours)', 'Client', 'Agent', 'Agence', 'Montant', 'Encaissé', 'Reste', 'Statut'],
             array_map(fn (array $l) => [
                 $l['reference'], $l['date'], $l['anciennete_jours'], $l['client'], $l['agent'], $l['site_nom'],

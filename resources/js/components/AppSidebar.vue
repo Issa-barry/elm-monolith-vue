@@ -30,7 +30,6 @@ import {
     Receipt,
     ShoppingCart,
     Truck,
-    UserRound,
     UsersRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -122,14 +121,6 @@ const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
         { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
     ];
-
-    if (can('rapports.read_own')) {
-        items.push({
-            title: 'Ma situation',
-            href: '/backoffice/ma-situation',
-            icon: UserRound,
-        });
-    }
 
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
@@ -397,20 +388,26 @@ const mainNavItems = computed((): NavItem[] => {
             group: 'Organisation',
         });
 
-    // Rapports (docs/rapports.md) : le lot 1 ne contient que le rapport d'activité ; Stock, Achats
-    // et Dépenses viendront s'ajouter ici.
+    // Rapports (docs/rapports.md) : « Ma situation » (agent imposé) et le rapport d'activité ;
+    // Stock, Achats et Dépenses viendront s'ajouter ici (lot 2).
+    const rapportsSousItems: NavItem[] = [];
+    if (can('rapports.read_own'))
+        rapportsSousItems.push({
+            title: 'Ma situation',
+            href: '/backoffice/ma-situation',
+        });
     if (can('rapports.read'))
+        rapportsSousItems.push({
+            title: "Rapport d'activité",
+            href: '/backoffice/rapports/activite',
+        });
+    if (rapportsSousItems.length > 0)
         items.push({
             title: 'Rapports',
-            href: '/backoffice/rapports/activite',
+            href: rapportsSousItems[0].href,
             icon: ChartColumn,
             group: 'Pilotage',
-            items: [
-                {
-                    title: "Rapport d'activité",
-                    href: '/backoffice/rapports/activite',
-                },
-            ],
+            items: rapportsSousItems,
         });
 
     return items;

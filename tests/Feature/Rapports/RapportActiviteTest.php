@@ -229,7 +229,10 @@ class RapportActiviteTest extends TestCase
         Excel::assertDownloaded('ma-situation-2026-09-26.xlsx', function (RapportActiviteExport $export) {
             $ventes = $export->sheets()[1]->array();
 
-            return count($ventes) === 1 && $ventes[0][3] === 'Moussa Sidibé';
+            $titres = array_map(fn ($feuille) => $feuille->title(), $export->sheets());
+
+            return count($ventes) === 1 && $ventes[0][3] === 'Moussa Sidibé'
+                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse'];
         });
     }
 

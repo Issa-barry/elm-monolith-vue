@@ -456,7 +456,7 @@ const hasActiveFilters = computed(
             <div
                 v-else-if="field.type === 'period'"
                 :data-testid="`filter-inline-${field.key}`"
-                class="flex shrink-0 flex-wrap items-end gap-2"
+                class="flex max-w-full basis-full flex-wrap items-end gap-2 sm:shrink-0 sm:basis-auto"
             >
                 <div class="flex flex-col gap-1">
                     <span class="text-xs font-medium text-muted-foreground">{{

@@ -84,11 +84,11 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
     <tr>
         <td><div class="lbl">Ventes de la période</div><div class="val">{{ $v['resume']['nombre'] }} — {{ $gnf($v['resume']['facture']) }} GNF</div></td>
         <td><div class="lbl">Encaissements de la période</div><div class="val">{{ $gnf($e['resume']['montant']) }} GNF</div></td>
-        <td><div class="lbl">Créances en cours (toutes dates)</div><div class="val">{{ $gnf($c['resume']['reste']) }} GNF</div></td>
+        <td><div class="lbl">Dettes clients (toutes dates)</div><div class="val">{{ $gnf($c['resume']['reste']) }} GNF</div></td>
         <td><div class="lbl">Caisse — solde actuel (théorique)</div><div class="val">{{ $gnf($k['resume']['solde_actuel']) }} GNF</div></td>
     </tr>
 </table>
-<p class="note">Chaque bloc est calculé indépendamment : ventes = factures créées dans la période ; encaissements = paiements reçus dans la période, quelle que soit la date de la vente ; créances = état actuel, toutes dates confondues.</p>
+<p class="note">Chaque bloc est calculé indépendamment : ventes = factures créées dans la période ; encaissements = paiements reçus dans la période, quelle que soit la date de la vente ; dettes clients = ce que les clients doivent encore, état actuel, toutes dates confondues.</p>
 
 <h2>Ventes</h2>
 <p class="note">Encaissé {{ $gnf($v['resume']['encaisse']) }} GNF et reste {{ $gnf($v['resume']['reste']) }} GNF sur ces ventes (état actuel).
@@ -130,7 +130,7 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
     </tbody>
 </table>
 
-<h2>Créances en cours</h2>
+<h2>Dettes clients</h2>
 <p class="note">{{ $c['resume']['impayees'] }} impayée(s), {{ $c['resume']['partielles'] }} partielle(s) — état au moment de l'export, toutes dates confondues.</p>
 <table class="data">
     <thead><tr><th>Facture</th><th>Date</th><th class="right">Jours</th><th>Client</th><th>Agent</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
@@ -139,7 +139,7 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
         <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td class="right">{{ $l['anciennete_jours'] }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td>
             <td class="right">{{ $gnf($l['montant']) }}</td><td class="right">{{ $gnf($l['encaisse']) }}</td><td class="right">{{ $gnf($l['reste']) }}</td><td>{{ $l['statut_label'] }}</td></tr>
     @empty
-        <tr><td colspan="9" class="vide">Aucune créance en cours.</td></tr>
+        <tr><td colspan="9" class="vide">Aucune dette client en cours.</td></tr>
     @endforelse
     @if (count($c['lignes']) > 0)
         <tr class="total"><td colspan="7" class="right">RESTE DÛ</td><td class="right">{{ $gnf($c['resume']['reste']) }}</td><td></td></tr>
