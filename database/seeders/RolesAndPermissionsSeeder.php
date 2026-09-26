@@ -128,6 +128,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
             'tresorerie.confirmer_retour', 'tresorerie.verser',
             'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
+            // Rapports
+            'rapports.read_own',        'rapports.read',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',       'rh-employes.delete',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
@@ -190,6 +192,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.read',
             'tresorerie.create',        'tresorerie.read',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.verser',
+            // Rapports
+            'rapports.read_own',        'rapports.read',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
@@ -222,6 +226,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'factures.read',
             'cashback.read',
             'pdv.create',          'pdv.read',          'pdv.update',
+            'rapports.read_own',
         ]);
 
         $comptable->syncPermissions([
@@ -242,6 +247,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
+            'rapports.read_own',      'rapports.read',
         ]);
     }
 }

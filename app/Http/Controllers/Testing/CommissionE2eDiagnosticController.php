@@ -88,7 +88,7 @@ class CommissionE2eDiagnosticController extends Controller
             ],
             'facture' => $commande->facture ? [
                 'id' => $commande->facture->id,
-                'statut' => $commande->facture->statut?->value ?? (string) $commande->facture->statut,
+                'statut' => $commande->facture->statut_facture?->value ?? (string) $commande->facture->statut_facture,
                 'encaissements' => $commande->facture->encaissements->map(fn ($e) => [
                     'id' => $e->id,
                     'montant' => (float) $e->montant,

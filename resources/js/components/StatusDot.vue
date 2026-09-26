@@ -24,6 +24,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     couvert: 'bg-emerald-500',
     recu: 'bg-emerald-500',
     verse: 'bg-emerald-500',
+    // Partage préparé conforme au nouveau barème (reconfiguration groupée, ADR 0006).
+    conforme: 'bg-emerald-500',
+    // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
+    fait: 'bg-emerald-500',
+    non_requis: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -83,6 +88,14 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',
+    // Reconfiguration groupée des partages (ADR 0006) : partage à saisir/corriger, équipe modifiée
+    // depuis la préparation, ou saisie non encore enregistrée dans le brouillon.
+    a_corriger: 'bg-orange-500',
+    a_revalider: 'bg-orange-500',
+    // Partage Livreur à faire / véhicule sans équipe : commandes refusées sur la catégorie.
+    a_faire: 'bg-orange-500',
+    sans_equipe: 'bg-orange-500',
+    modifie: 'bg-blue-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',
     expire_bientot: 'bg-amber-500',

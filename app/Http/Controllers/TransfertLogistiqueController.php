@@ -899,24 +899,26 @@ class TransfertLogistiqueController extends Controller
 
         $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($data['lignes'] ?? []);
 
-        $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
+        // Partage CONFORME exigé (somme exacte + chaque membre actif présent), plus seulement
+        // existant — décision du 24/09/2026, même juge que la vente.
+        $nonConformites = CommissionPartageLivraisonCategorieChecker::nonConformites(
             $orgId,
-            $vehicule->equipe->id,
+            $vehicule->equipe,
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
             $vehicule->type_vehicule_id,
             $categorieIds,
             Carbon::today(),
         );
 
-        if ($manquantes->isEmpty()) {
+        if ($nonConformites->isEmpty()) {
             return;
         }
 
         throw ValidationException::withMessages([
             'vehicule_id' => sprintf(
-                'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « Transfert logistique » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
+                'Impossible de créer ce transfert : le partage de commission du véhicule %s n\'est pas conforme pour le processus « Transfert logistique ». %s Corrigez la répartition de l\'équipe avant de continuer.',
                 $vehicule->nom_vehicule,
-                $manquantes->pluck('nom')->implode(', '),
+                $nonConformites->map(fn (array $nc) => CommissionPartageLivraisonCategorieChecker::libelleNonConformite($nc))->implode(' '),
             ),
         ]);
     }

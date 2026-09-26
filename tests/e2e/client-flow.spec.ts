@@ -14,6 +14,24 @@ test.setTimeout(180_000);
 
 registerCleanup('/backoffice/clients', PREFIX);
 
+// Fiche détail d'un client créé : exclut /clients/create (même forme d'URL).
+const CLIENT_SHOW_URL = /\/clients\/(?!create$)[a-z0-9]+$/;
+
+/**
+ * Un Revendeur (nature par défaut) est obligatoirement éligible au cashback, avec un
+ * montant par pack > 0 (CashbackEligibiliteService::validerCoherence) : sans lui, la
+ * création est refusée. InputNumber ne committe son v-model qu'au blur.
+ */
+async function fillCashbackMontant(
+    page: Parameters<typeof login>[0],
+    montant = '100',
+): Promise<void> {
+    const input = page.locator('#cashback_montant_par_pack');
+    await input.click();
+    await input.pressSequentially(montant);
+    await input.blur();
+}
+
 async function createClientInApp(
     page: Parameters<typeof login>[0],
     params: {
@@ -40,6 +58,7 @@ async function createClientInApp(
     }
 
     await page.locator('#telephone').fill(params.tel);
+    await fillCashbackMontant(page);
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
@@ -47,7 +66,7 @@ async function createClientInApp(
 
     // La création redirige désormais vers la fiche détail (Clients/Show.vue), jamais vers
     // l'édition — même pattern que Vehicules (store() -> show(), update() -> edit()).
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
     await page.waitForLoadState('networkidle');
 }
 
@@ -108,13 +127,14 @@ test('create client with Guinea and empty ville -> defaults to Conakry', async (
 
     await page.locator('#nom_complet').fill(nomComplet);
     await page.locator('#telephone').fill(tel);
+    await fillCashbackMontant(page);
 
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
     await expect(page.getByTestId('client-location')).toHaveText('Conakry');
 });
 
@@ -149,7 +169,7 @@ test('edit client -> update ville and adresse -> persists', async ({
     await expect(page.locator('#adresse')).toHaveValue('Rue Principale');
 });
 
-test('view client from list -> readonly form -> modifier redirects to edit', async ({
+test('view client from list -> detail page -> modifier redirects to edit', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -174,18 +194,12 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
-    await expect(page.locator('#nom_complet')).toBeDisabled();
+    // "Voir" ouvre la fiche détail (lecture seule, sans formulaire) ; l'édition
+    // passe par le bouton Modifier de l'onglet Informations.
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
+    await expect(page.getByTestId('client-name')).toBeVisible();
 
-    const editTrigger = page
-        .locator(
-            'a:has-text("Modifier"):visible,button:has-text("Modifier"):visible',
-        )
-        .first();
-    await expect(editTrigger).toBeVisible();
-    await editTrigger.click();
-
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
+    await goToEditFromShow(page);
     await expect(page.locator('#nom_complet')).toBeEnabled();
 });
 
@@ -233,14 +247,18 @@ test('create client with duplicate telephone -> stays on create with field error
         .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#telephone').fill(tel);
+    await fillCashbackMontant(page);
 
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
 
+    // Doublon signalé sous le champ (détection à la saisie ou refus serveur), jamais créé.
     await expect(page).toHaveURL(/\/clients\/create$/);
-    await expect(page.locator('#telephone')).toHaveClass(/p-invalid/);
+    await expect(
+        page.getByText(/déjà utilisé par un autre client/i),
+    ).toBeVisible();
 });
 
 test('delete client -> no longer visible in list', async ({ page }) => {

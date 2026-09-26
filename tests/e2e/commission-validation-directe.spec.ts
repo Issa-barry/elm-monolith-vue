@@ -81,10 +81,18 @@ test('Commissions > Ventes — ajuster une commission (motif obligatoire, montan
 }) => {
     const row = await amenerCommissionAValider(page);
 
-    const genereCell = row.locator('td').nth(4);
-    const genereText = (await genereCell.innerText()).trim();
-    const montantCalcule = Number(genereText.replace(/[^\d]/g, ''));
-    expect(montantCalcule).toBeGreaterThan(0);
+    // Colonnes : sélection, Livreur, Véhicule, Agence, Processus, Généré (5), Brut (6), Dépenses,
+    // Net à payer (8). Le livreur peut cumuler des commissions de specs précédentes : on raisonne
+    // en écarts, pas en valeurs absolues.
+    const montantDe = async (cell: import('@playwright/test').Locator) =>
+        Number((await cell.innerText()).replace(/[^\d]/g, ''));
+    // Montants de départ lus sur une liste stabilisée (sinon la ligne peut encore être partielle).
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    const genereAvant = await montantDe(row.locator('td').nth(5));
+    const brutAvant = await montantDe(row.locator('td').nth(6));
+    expect(genereAvant).toBeGreaterThan(0);
 
     await row.locator('button').last().click();
     await page.getByRole('menuitem', { name: /^ajuster$/i }).click();
@@ -94,9 +102,11 @@ test('Commissions > Ventes — ajuster une commission (motif obligatoire, montan
         .filter({ hasText: /^ajuster/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    await expect(
-        dialog.getByText(new RegExp(montantPattern(montantCalcule))),
-    ).toBeVisible();
+    // Montant calculé = parts encore ajustables (hors déjà validées/payées).
+    const montantCalcule = await montantDe(
+        dialog.getByText('Montant calculé', { exact: true }).locator('xpath=following-sibling::*[1]'),
+    );
+    expect(montantCalcule).toBeGreaterThan(100);
 
     const ajusterSubmit = dialog.getByRole('button', { name: /^ajuster$/i });
 
@@ -120,13 +130,10 @@ test('Commissions > Ventes — ajuster une commission (motif obligatoire, montan
     await ajusterSubmit.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 
-    // Le montant "Généré" (théorique) reste inchangé — seul le montant retenu (Net à payer)
-    // bouge : c'est exactement la garantie backend testée dans
-    // CommissionValidationDirecteTest::ajuster_directement_conserve_le_montant_theorique_...
-    await expect(row.locator('td').nth(4)).toContainText(
-        new RegExp(montantPattern(montantCalcule)),
-    );
-    await expect(row.locator('td').nth(7)).toContainText(
-        new RegExp(montantPattern(montantRetenuAttendu)),
+    // Le montant théorique (colonne Brut = Σ montant_brut) reste inchangé ; seul le montant
+    // retenu bouge (vérifié dans le dialog ci-dessus). Garantie backend : CommissionValidationDirecteTest::
+    // ajuster_directement_conserve_le_montant_theorique_et_change_le_montant_retenu.
+    await expect(row.locator('td').nth(6)).toContainText(
+        new RegExp(montantPattern(brutAvant)),
     );
 });

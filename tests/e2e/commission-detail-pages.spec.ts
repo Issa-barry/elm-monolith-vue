@@ -262,7 +262,7 @@ test('Commission propriètaire — compteur compact et fenêtre des véhicules c
     await expect(dialog).toBeHidden();
 });
 
-test('détail Commission livreur (transfert logistique) — 4 cartes, tabs, dialog paiement', async ({
+test('détail Commission livreur (transfert logistique) — 4 cartes, tabs, jamais de paiement direct', async ({
     page,
 }) => {
     await login(page);
@@ -287,17 +287,10 @@ test('détail Commission livreur (transfert logistique) — 4 cartes, tabs, dial
     await page.getByRole('tab', { name: 'Dépenses', exact: false }).click();
     await expect(page.locator('body')).toBeVisible();
 
-    // Bouton Payer présent (solde impayé) et ouvre le dialog partagé.
-    const payButton = page.getByRole('button', { name: /^payer/i });
-    await expect(payButton).toBeVisible({ timeout: 10_000 });
-    await payButton.click();
-
-    const dialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /Thierno/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.getByText(/solde à payer/i)).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Jamais de bouton Payer ici, même avec un reste à payer : le paiement passe uniquement
+    // par Comptabilité > Fiches de paiement (cf. CommissionVenteController::showLivreur()).
+    await expect(page.getByText(/reste à payer/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^payer/i })).toHaveCount(0);
 });
 
 test('détail Commission vente — 4 cartes et tabs identiques', async ({

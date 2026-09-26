@@ -11,18 +11,21 @@ use App\Http\Requests\Settings\StoreCommissionConfigurationRequest;
 use App\Http\Requests\Settings\StoreCommissionConsultantAffectationRequest;
 use App\Http\Requests\Settings\StoreCommissionRegleRequest;
 use App\Models\Categorie;
+use App\Models\CommissionBaremeBrouillon;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Prestataire;
 use App\Models\TypeVehicule;
+use App\Services\Commission\CommissionBaremeConfigurationService;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\ReconfigurationPartagesService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -167,8 +170,26 @@ class CommissionRegleController extends Controller
             ->values()
             ->all();
 
+        // Brouillon en cours (lot 2, ADR 0006) : l'écran reprend SA configuration — toute nouvelle
+        // saisie s'y ajoute (cf. ReconfigurationPartagesService::enregistrerConfiguration()),
+        // jamais une modification du barème en vigueur tant qu'il n'est pas publié.
+        $brouillon = $processus ? CommissionBaremeBrouillon::enCoursPour($orgId, $processus->id) : null;
+        $resumeBrouillon = null;
+        if ($brouillon) {
+            $lignes = $this->lignesDepuisBrouillon($brouillon->lignes, $categories, $typesVehicules);
+            $groupes = ReconfigurationPartagesService::groupes($orgId, $processus, $brouillon->lignes, $brouillon);
+            $resumeBrouillon = [
+                'id' => $brouillon->id,
+                'total' => $groupes->count(),
+                'conformes' => $groupes->where('statut', ReconfigurationPartagesService::STATUT_CONFORME)->count(),
+                'updated_at' => $brouillon->updated_at?->toIso8601String(),
+            ];
+        }
+
         return Inertia::render('settings/CommissionRegles/Index', [
             'processus_actif' => $processusCode,
+            'brouillon' => $resumeBrouillon,
+            'can_modifier' => auth()->user()->can('parametres.update'),
             'processus_options' => array_map(
                 fn (string $code) => ['value' => $code, 'label' => self::processusLabel($code)],
                 self::processusCodesDisponibles(),
@@ -194,6 +215,44 @@ class CommissionRegleController extends Controller
                 ])
                 ->values(),
         ]);
+    }
+
+    /**
+     * Reconstitue, depuis la configuration d'un brouillon (format du payload
+     * storeConfiguration()), les lignes affichées par l'écran — même forme que
+     * configurationPourCategorie(), sans règle en base (regle_id vide).
+     *
+     * @param  array<int, array<string, mixed>>  $lignesBrouillon
+     */
+    private function lignesDepuisBrouillon(array $lignesBrouillon, Collection $categories, Collection $typesVehicules): array
+    {
+        $consultants = Prestataire::whereIn('id', collect($lignesBrouillon)->pluck('consultant_id')->filter())
+            ->with(['personne', 'entrepriseTierce'])
+            ->get()
+            ->keyBy('id');
+        $info = fn ($montant) => ['montant' => (float) $montant, 'effective_from' => '', 'regle_id' => ''];
+
+        return collect($lignesBrouillon)
+            ->map(function (array $ligne) use ($categories, $typesVehicules, $consultants, $info) {
+                $consultant = $consultants->get($ligne['consultant_id'] ?? null);
+
+                return [
+                    'scope_type' => 'categorie',
+                    'scope_id' => $ligne['categorie_id'],
+                    'libelle' => $categories->firstWhere('id', $ligne['categorie_id'])?->nom ?? '—',
+                    'beneficiaires' => $ligne['beneficiaires'],
+                    'montants_standard' => collect($ligne['montants_standard'] ?? [])->map($info)->all(),
+                    'consultant_id' => $ligne['consultant_id'] ?? null,
+                    'consultant_label' => $consultant?->nom_complet ?? $consultant?->reference,
+                    'exceptions' => collect($ligne['exceptions'] ?? [])->map(fn (array $e) => [
+                        'type_vehicule_id' => $e['type_vehicule_id'],
+                        'type_vehicule_label' => $typesVehicules->firstWhere('id', $e['type_vehicule_id'])?->nom ?? '—',
+                        'montants' => collect($e['montants'] ?? [])->map($info)->all(),
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -286,182 +345,57 @@ class CommissionRegleController extends Controller
     }
 
     /**
-     * Enregistre atomiquement toute la configuration visible après confirmation :
-     * bénéficiaires cochés, consultant, barème général et exceptions véhicule.
-     * Une catégorie absente du payload voit toutes ses règles closes
-     * (retrait complet) ; c'est aussi le mécanisme utilisé par le bouton
-     * "Supprimer" du front, qui renvoie la configuration complète moins la
-     * catégorie retirée.
+     * Enregistre toute la configuration visible après confirmation (bénéficiaires cochés,
+     * consultant, barème général et exceptions véhicule). Une catégorie absente du payload voit
+     * toutes ses règles closes (retrait complet) ; c'est aussi le mécanisme utilisé par le bouton
+     * "Supprimer" du front, qui renvoie la configuration complète moins la catégorie retirée.
+     *
+     * Lot 2 (ADR 0006) : appliquée immédiatement seulement si aucun partage d'équipe n'en devient
+     * non conforme ; sinon versée dans le brouillon du processus, publié plus tard avec les
+     * partages reconfigurés (ReconfigurationPartagesService) — jamais une fenêtre où barème et
+     * partages divergent.
      */
     public function storeConfiguration(StoreCommissionConfigurationRequest $request): RedirectResponse
     {
         $this->authorize('create', CommissionRegle::class);
 
-        $orgId = auth()->user()->organization_id;
         $data = $request->validated();
         $processusCode = $data['processus_code'];
-        $today = Carbon::today()->toDateString();
-        $hier = Carbon::parse($today)->subDay()->toDateString();
 
-        DB::transaction(function () use ($orgId, $processusCode, $data, $today, $hier): void {
-            $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
+        $resultat = ReconfigurationPartagesService::enregistrerConfiguration(
+            auth()->user()->organization_id,
+            $processusCode,
+            $data['lignes'],
+            auth()->id(),
+        );
 
-            $categorieIds = collect($data['lignes'])->pluck('categorie_id')->all();
-
-            // Retirer une catégorie retire réellement son droit à commission (toutes
-            // cibles et tous types de véhicule confondus). Les anciennes règles
-            // globales legacy sont closes pour éviter tout repli silencieux.
-            CommissionRegle::where('organization_id', $orgId)
-                ->where('processus_id', $processus->id)
-                ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
-                ->where('statut', CommissionRegleStatut::ACTIVE->value)
-                ->where(function ($query) use ($categorieIds): void {
-                    $query->where('scope_type', 'global')
-                        ->orWhere(function ($categoryQuery) use ($categorieIds): void {
-                            $categoryQuery->where('scope_type', 'categorie')
-                                ->whereNotIn('scope_id', $categorieIds);
-                        });
-                })
-                ->update([
-                    'effective_to' => $hier,
-                    'statut' => CommissionRegleStatut::REMPLACEE->value,
-                ]);
-
-            foreach ($data['lignes'] as $ligne) {
-                $this->enregistrerConfigurationCategorie($orgId, $processus, $ligne, $today);
-            }
-        });
+        if ($resultat['brouillon']) {
+            return to_route('settings.commissions.brouillons.show', $resultat['brouillon'])
+                ->with('success', sprintf(
+                    "Nouveau barème préparé : %d partage(s) d'équipe à reconfigurer avant publication.",
+                    $resultat['nb_groupes'],
+                ));
+        }
 
         return to_route('settings.commissions.index', ['processus' => $processusCode])
             ->with('success', 'Configuration des commissions enregistrée.');
     }
 
     /**
-     * Traduit une ligne du payload en un ensemble désiré de règles
-     * (cible_type, type_vehicule_id) et
-     * fait converger l'état actif de la catégorie vers cet ensemble : ferme ce qui
-     * n'est plus désiré, verse (no-op si inchangé, sinon clôture + nouvelle
-     * version) ce qui l'est. Les règles sans type constituent le barème général ;
-     * les règles typées sont ses exceptions.
+     * Aperçu, dans la fenêtre « Vérifier avant d'enregistrer », du nombre d'équipes dont le
+     * partage devra être reconfiguré — aucune écriture.
      */
-    private function enregistrerConfigurationCategorie(
-        string $orgId,
-        CommissionProcessus $processus,
-        array $ligne,
-        string $today,
-    ): void {
-        $categorieId = $ligne['categorie_id'];
-        $beneficiaires = $ligne['beneficiaires'];
-        $consultantId = in_array(CommissionCibleType::CODE_CONSULTANT, $beneficiaires, true)
-            ? $ligne['consultant_id']
-            : null;
+    public function apercuImpact(StoreCommissionConfigurationRequest $request): JsonResponse
+    {
+        $this->authorize('create', CommissionRegle::class);
 
-        $desired = [];
-        foreach ($beneficiaires as $cibleType) {
-            $desired[$cibleType]['std'] = (int) $ligne['montants_standard'][$cibleType];
-        }
-        foreach ($ligne['exceptions'] ?? [] as $tarifVehicule) {
-            $typeVehiculeId = $tarifVehicule['type_vehicule_id'];
-            foreach ($tarifVehicule['montants'] as $cibleType => $montant) {
-                $desired[$cibleType][$typeVehiculeId] = (int) $montant;
-            }
-        }
+        $data = $request->validated();
 
-        $reglesActuelles = CommissionRegle::where('organization_id', $orgId)
-            ->where('processus_id', $processus->id)
-            ->where('scope_type', 'categorie')
-            ->where('scope_id', $categorieId)
-            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
-            ->where('statut', CommissionRegleStatut::ACTIVE->value)
-            ->get();
-
-        $idsAFermer = $reglesActuelles
-            ->reject(fn (CommissionRegle $r) => isset($desired[$r->cible_type][$r->type_vehicule_id ?? 'std']))
-            ->pluck('id');
-
-        if ($idsAFermer->isNotEmpty()) {
-            CommissionRegle::whereIn('id', $idsAFermer)->update([
-                'effective_to' => Carbon::parse($today)->subDay()->toDateString(),
-                'statut' => CommissionRegleStatut::REMPLACEE->value,
-            ]);
-        }
-
-        foreach ($desired as $cibleType => $parVehicule) {
-            foreach ($parVehicule as $cle => $montant) {
-                $this->enregistrerRegleCategorie(
-                    $orgId,
-                    $processus,
-                    $categorieId,
-                    $cibleType,
-                    $montant,
-                    $today,
-                    $cibleType === CommissionCibleType::CODE_CONSULTANT ? $consultantId : null,
-                    $cle === 'std' ? null : $cle,
-                );
-            }
-        }
-    }
-
-    private function enregistrerRegleCategorie(
-        string $orgId,
-        CommissionProcessus $processus,
-        string $categorieId,
-        string $cibleType,
-        int $montant,
-        string $effectiveFrom,
-        ?string $consultantId = null,
-        ?string $typeVehiculeId = null,
-    ): void {
-        $ancienne = CommissionRegle::where('organization_id', $orgId)
-            ->where('processus_id', $processus->id)
-            ->where('cible_type', $cibleType)
-            ->where('scope_type', 'categorie')
-            ->where('scope_id', $categorieId)
-            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
-            ->where('statut', CommissionRegleStatut::ACTIVE->value)
-            ->when(
-                $typeVehiculeId === null,
-                fn ($q) => $q->whereNull('type_vehicule_id'),
-                fn ($q) => $q->where('type_vehicule_id', $typeVehiculeId),
-            )
-            ->first();
-
-        if ($ancienne
-            && (int) $ancienne->montant === $montant
-            && $ancienne->consultant_id === $consultantId) {
-            return;
-        }
-
-        $mode = in_array($cibleType, [
-            CommissionCibleType::CODE_PROPRIETAIRE,
-            CommissionCibleType::CODE_SITE,
-            CommissionCibleType::CODE_CONSULTANT,
-        ], true) ? CommissionMode::DIRECT : CommissionMode::A_REPARTIR;
-
-        CommissionRegle::create([
-            'organization_id' => $orgId,
-            'processus_id' => $processus->id,
-            'libelle' => $this->libelleAuto($cibleType, 'categorie', $categorieId, $typeVehiculeId),
-            'scope_type' => 'categorie',
-            'scope_id' => $categorieId,
-            'type_vehicule_id' => $typeVehiculeId,
-            'cible_type' => $cibleType,
-            'mode' => $mode->value,
-            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
-            'montant' => $montant,
-            'consultant_id' => $consultantId,
-            'effective_from' => $effectiveFrom,
-            'remplace_regle_id' => $ancienne?->id,
-            'statut' => CommissionRegleStatut::ACTIVE->value,
-            'created_by' => auth()->id(),
-        ]);
-
-        if ($ancienne) {
-            $ancienne->update([
-                'effective_to' => Carbon::parse($effectiveFrom)->subDay()->toDateString(),
-                'statut' => CommissionRegleStatut::REMPLACEE->value,
-            ]);
-        }
+        return response()->json(ReconfigurationPartagesService::apercu(
+            auth()->user()->organization_id,
+            $data['processus_code'],
+            $data['lignes'],
+        ));
     }
 
     /**
@@ -542,7 +476,7 @@ class CommissionRegleController extends Controller
         $nouvelle = CommissionRegle::create([
             'organization_id' => $orgId,
             'processus_id' => $processus->id,
-            'libelle' => $this->libelleAuto($data['cible_type'], $scopeType, $scopeId),
+            'libelle' => CommissionBaremeConfigurationService::libelleAuto($data['cible_type'], $scopeType, $scopeId),
             'scope_type' => $scopeType,
             'scope_id' => $scopeId,
             'cible_type' => $data['cible_type'],
@@ -563,27 +497,5 @@ class CommissionRegleController extends Controller
         }
 
         return back()->with('success', 'Barème enregistré.');
-    }
-
-    private function libelleAuto(string $cibleType, string $scopeType, ?string $scopeId, ?string $typeVehiculeId = null): string
-    {
-        $cibleLabel = match ($cibleType) {
-            CommissionCibleType::CODE_PROPRIETAIRE => 'Propriétaire',
-            CommissionCibleType::CODE_SITE => 'Site',
-            CommissionCibleType::CODE_CONSULTANT => 'Consultant',
-            default => 'Livreur',
-        };
-        $scopeLabel = $scopeType === 'global'
-            ? 'toutes catégories'
-            : (Categorie::find($scopeId)?->nom ?? 'catégorie');
-
-        $libelle = "{$cibleLabel} — {$scopeLabel}";
-
-        if ($typeVehiculeId) {
-            $vehiculeNom = TypeVehicule::find($typeVehiculeId)?->nom ?? 'véhicule';
-            $libelle .= " ({$vehiculeNom})";
-        }
-
-        return $libelle;
     }
 }
