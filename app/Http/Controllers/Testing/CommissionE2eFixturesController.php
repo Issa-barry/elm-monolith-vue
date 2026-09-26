@@ -100,7 +100,7 @@ class CommissionE2eFixturesController extends Controller
 
         $resultat = DB::transaction(function () use ($orgId, $site, $suffixe, $user) {
             $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, CommissionProcessus::CODE_VENTE);
-            $type =TypeVehicule::create(['organization_id' => $orgId, 'nom' => "E2E Type {$suffixe}", 'is_active' => true]);
+            $type = TypeVehicule::create(['organization_id' => $orgId, 'nom' => "E2E Type {$suffixe}", 'is_active' => true]);
             $categorie = Categorie::create(['organization_id' => $orgId, 'nom' => "E2E Partage {$suffixe}", 'statut' => 'actif']);
 
             $regle = fn (string $cible, int $montant, ?string $typeId = null) => CommissionRegle::create([
