@@ -42,7 +42,8 @@ graphique, non filtrée par agence.
   agences), avec le détail limité au périmètre de l'utilisateur.
 - `SituationPeriode` devient partagée (paramètre d'URL et période par défaut configurables) ; le
   comportement de la fiche véhicule est inchangé.
-- Le tableau de bord reste non filtré par agence : correction prévue dans un chantier séparé.
+- Le tableau de bord, non filtré par agence lors du lot 1, applique le même périmètre depuis un
+  chantier séparé du 26/09/2026 (rapports.md, RAP-010).
 
 ## Alternatives écartées
 

@@ -1,7 +1,8 @@
 import DataFilters from '@/components/filters/DataFilters.vue';
 import Activite from '@/pages/Rapports/Activite.vue';
+import ListeFactures from '@/pages/Rapports/partials/ListeFactures.vue';
 import type { RapportActivite } from '@/types/rapports';
-import { shallowMount } from '@vue/test-utils';
+import { mount, shallowMount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
 const url = vi.hoisted(() => ({
@@ -29,7 +30,7 @@ vi.mock('@inertiajs/vue3', async () => {
         usePage: () => ({
             url: url.valeur,
             component: 'Rapports/Activite',
-            props: {},
+            props: { auth: { user_sites: [{ id: 's1', nom: 'Matoto' }] } },
         }),
     };
 });
@@ -94,6 +95,16 @@ const rapportVide = (): RapportActivite => ({
     },
 });
 
+// Composants propres à la page rendus pour de vrai (cartes, sections, listes) ; seuls
+// DataFilters et AppLayout restent des bouchons.
+const composantsReels = {
+    CarteSection: false,
+    EnTeteSection: false,
+    ListeFactures: false,
+    ListeEncaissements: false,
+    SectionCaisse: false,
+};
+
 const monter = (mode: 'ma_situation' | 'rapport') =>
     shallowMount(Activite, {
         props: {
@@ -126,7 +137,7 @@ const monter = (mode: 'ma_situation' | 'rapport') =>
             limite_lignes: 300,
             rapport: rapportVide(),
         },
-        global: { renderStubDefaultSlot: true },
+        global: { renderStubDefaultSlot: true, stubs: composantsReels },
     });
 
 describe('Rapports/Activite', () => {
@@ -159,6 +170,20 @@ describe('Rapports/Activite', () => {
         );
     });
 
+    it('parle de « Dettes clients », jamais de « créances », dans l’interface', () => {
+        url.valeur = '/backoffice/ma-situation?tab=creances';
+        const wrapper = monter('ma_situation');
+
+        expect(
+            wrapper.get('[data-testid="rapport-tab-creances"]').text(),
+        ).toContain('Dettes clients');
+        expect(wrapper.text()).toContain('Aucune dette client en cours.');
+        expect(wrapper.text()).not.toMatch(/créance/i);
+
+        url.valeur = '/backoffice/ma-situation?tab=ventes';
+        expect(monter('rapport').text()).not.toMatch(/créance/i);
+    });
+
     it("les exports reprennent les filtres de l'écran, sans l'onglet", () => {
         url.valeur = '/backoffice/ma-situation?periode=hier&tab=caisse';
         const wrapper = monter('ma_situation');
@@ -168,5 +193,71 @@ describe('Rapports/Activite', () => {
                 .get('[data-testid="rapport-export-pdf"]')
                 .attributes('href'),
         ).toBe('/backoffice/ma-situation/export?periode=hier&format=pdf');
+    });
+
+    it('en-tête : identité et agence pour Ma situation, périmètre en clair pour le rapport', () => {
+        url.valeur = '/backoffice/ma-situation';
+        expect(
+            monter('ma_situation')
+                .get('[data-testid="rapport-perimetre"]')
+                .text(),
+        ).toBe('Moussa Sidibé · Matoto');
+
+        url.valeur = '/backoffice/rapports/activite';
+        expect(
+            monter('rapport').get('[data-testid="rapport-perimetre"]').text(),
+        ).toBe('Toutes les agences · Tous les agents');
+    });
+
+    it('les cartes sont les onglets : une seule carte active, reconnaissable sans la couleur', async () => {
+        url.valeur = '/backoffice/rapports/activite?tab=creances';
+        const wrapper = monter('rapport');
+        const cartes = wrapper.findAll('[role="tab"]');
+
+        expect(cartes.map((c) => c.attributes('data-testid'))).toEqual([
+            'rapport-tab-ventes',
+            'rapport-tab-encaissements',
+            'rapport-tab-creances',
+            'rapport-tab-mobile_money',
+            'rapport-tab-caisse',
+        ]);
+        const actives = cartes.filter(
+            (c) => c.attributes('aria-selected') === 'true',
+        );
+        expect(actives).toHaveLength(1);
+        expect(actives[0].text()).toContain('(détail affiché)');
+        expect(wrapper.text()).not.toContain('Encaissé sur ces ventes');
+    });
+
+    it('sur téléphone, les lignes sont une liste empilée et le tableau est réservé aux écrans larges', () => {
+        const wrapper = mount(ListeFactures, {
+            props: {
+                afficherAgent: false,
+                vide: 'Aucune vente.',
+                lignes: [
+                    {
+                        id: 'f1',
+                        reference: 'FAC-001',
+                        date: '2026-09-26',
+                        client: 'Client A',
+                        agent: null,
+                        site_nom: 'Matoto',
+                        montant: 800_000,
+                        encaisse: 550_000,
+                        reste: 250_000,
+                        statut: 'partiel',
+                        statut_label: 'Partiellement payée',
+                    },
+                ],
+            },
+        });
+
+        const liste = wrapper.get('[data-testid="liste-mobile"]');
+        expect(liste.classes()).toContain('sm:hidden');
+        expect(liste.text()).toContain('FAC-001');
+        expect(liste.text()).toContain('Reste à payer');
+        expect(wrapper.get('table').element.parentElement?.className).toContain(
+            'hidden',
+        );
     });
 });

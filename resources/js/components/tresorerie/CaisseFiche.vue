@@ -50,7 +50,7 @@ function anciennete(jours: number): string {
             </div>
             <div class="text-right">
                 <p class="text-xs text-muted-foreground">
-                    Solde actuel — à remettre (théorique)
+                    À remettre — solde théorique
                 </p>
                 <p
                     class="text-lg font-bold tabular-nums"
@@ -179,8 +179,36 @@ function anciennete(jours: number): string {
             <p class="mb-1 text-xs font-medium text-muted-foreground">
                 Détail des écritures
             </p>
-            <div class="overflow-x-auto rounded-lg border">
-                <table class="w-full min-w-[640px] text-sm">
+            <!-- Téléphone : liste empilée -->
+            <ul class="divide-y rounded-lg border sm:hidden">
+                <li
+                    v-for="(e, i) in fiche.ecritures"
+                    :key="`m-${e.piece_id}-${i}`"
+                    class="space-y-0.5 px-3 py-2 text-sm"
+                >
+                    <div class="flex items-baseline justify-between gap-3">
+                        <span>{{ e.categorie_libelle }}</span>
+                        <span
+                            class="font-medium tabular-nums"
+                            :class="e.sortie > 0 ? 'text-muted-foreground' : ''"
+                            >{{ e.sortie > 0 ? '−' : '+' }}
+                            {{
+                                formatGNF(e.entree > 0 ? e.entree : e.sortie)
+                            }}</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between gap-3 text-xs text-muted-foreground"
+                    >
+                        <span>{{ dateFr(e.date) }} · {{ e.numero }}</span>
+                        <span class="tabular-nums"
+                            >solde {{ formatGNF(e.solde) }}</span
+                        >
+                    </div>
+                </li>
+            </ul>
+            <div class="hidden overflow-x-auto rounded-lg border sm:block">
+                <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40 text-left">
                             <th class="px-3 py-2 font-medium">Date</th>

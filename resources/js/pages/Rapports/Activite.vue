@@ -2,14 +2,12 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import StatusDot from '@/components/StatusDot.vue';
-import CaisseFiche from '@/components/tresorerie/CaisseFiche.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import type { AnomalieMobileMoney, RapportActivite } from '@/types/rapports';
+import type { RapportActivite } from '@/types/rapports';
 import { Head, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
@@ -20,10 +18,17 @@ import {
     UserRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
+import CarteSection from './partials/CarteSection.vue';
+import EnTeteSection from './partials/EnTeteSection.vue';
+import { dateFr, pluriel } from './partials/format';
+import ListeEncaissements from './partials/ListeEncaissements.vue';
+import ListeFactures from './partials/ListeFactures.vue';
+import SectionCaisse from './partials/SectionCaisse.vue';
 
 // Même page pour « Ma situation » (agent imposé par le serveur) et le rapport d'activité (agences
-// et agents selon les droits) — cf. RapportActivitePresenter. Chaque onglet est un bloc calculé
-// indépendamment : jamais de « reste » déduit par différence entre deux blocs.
+// et agents selon les droits) — cf. RapportActivitePresenter. Les cartes du haut SONT les onglets :
+// une carte résume un bloc et ouvre son détail. Chaque bloc est calculé indépendamment : jamais de
+// « reste » déduit par différence entre deux blocs.
 const props = defineProps<{
     mode: 'ma_situation' | 'rapport';
     url: string;
@@ -70,35 +75,122 @@ const ONGLETS = [
 type Onglet = (typeof ONGLETS)[number];
 const { onglet, choisir } = useUrlTab<Onglet>(ONGLETS, 'ventes');
 
+// ── En-tête : qui / quel périmètre, et quelle période ─────────────────────────
+
+interface AuthAgences {
+    user_sites?: { nom: string }[];
+    default_site?: { nom: string } | null;
+}
+
+const agencesUtilisateur = computed((): string | null => {
+    const auth = ((page.props as Record<string, unknown>).auth ??
+        {}) as AuthAgences;
+    const sites = Array.isArray(auth.user_sites) ? auth.user_sites : [];
+    if (sites.length > 0) return sites.map((s) => s.nom).join(', ');
+
+    return auth.default_site?.nom ?? null;
+});
+
+const perimetre = computed(() => {
+    if (maSituation.value) {
+        return [props.agent?.nom, agencesUtilisateur.value]
+            .filter(Boolean)
+            .join(' · ');
+    }
+    const agences =
+        props.filters.site_ids.length > 0
+            ? props.sites
+                  .filter((s) => props.filters.site_ids.includes(s.id))
+                  .map((s) => s.nom)
+                  .join(', ')
+            : 'Toutes les agences';
+    const agent = props.filters.agent_id
+        ? (props.agents.find((a) => a.value === props.filters.agent_id)
+              ?.label ?? 'Agent choisi')
+        : 'Tous les agents';
+
+    return `${agences} · ${agent}`;
+});
+
+// ── Cartes-onglets ────────────────────────────────────────────────────────────
+
 const anomaliesMobileMoney = computed(
     () =>
         props.rapport.mobile_money.resume.reference_absente +
         props.rapport.mobile_money.resume.reference_dupliquee,
 );
 
-const onglets = computed(() => [
-    {
-        cle: 'ventes' as Onglet,
-        libelle: 'Ventes',
-        compte: props.rapport.ventes.resume.nombre,
-    },
-    {
-        cle: 'encaissements' as Onglet,
-        libelle: 'Encaissements',
-        compte: props.rapport.encaissements.resume.nombre,
-    },
-    {
-        cle: 'creances' as Onglet,
-        libelle: 'Créances',
-        compte: props.rapport.creances.resume.nombre,
-    },
-    {
-        cle: 'mobile_money' as Onglet,
-        libelle: 'Mobile Money',
-        compte: props.rapport.mobile_money.resume.nombre,
-    },
-    { cle: 'caisse' as Onglet, libelle: 'Caisse', compte: null },
-]);
+interface Carte {
+    cle: Onglet;
+    libelle: string;
+    valeur: string;
+    detail: string;
+    avertissement: string | null;
+}
+
+const cartes = computed((): Carte[] => {
+    const r = props.rapport;
+    const liste: Carte[] = [
+        {
+            cle: 'ventes',
+            libelle: maSituation.value ? 'Mes ventes' : 'Ventes',
+            valeur: formatGNF(r.ventes.resume.facture),
+            detail: pluriel(r.ventes.resume.nombre, 'vente'),
+            avertissement: null,
+        },
+        {
+            cle: 'encaissements',
+            libelle: maSituation.value ? 'Mes encaissements' : 'Encaissé',
+            valeur: formatGNF(r.encaissements.resume.montant),
+            detail: pluriel(r.encaissements.resume.nombre, 'paiement'),
+            avertissement: null,
+        },
+        {
+            cle: 'creances',
+            libelle: 'Dettes clients',
+            valeur: formatGNF(r.creances.resume.reste),
+            detail: `${pluriel(r.creances.resume.nombre, 'facture')} · toutes dates`,
+            avertissement: null,
+        },
+        {
+            cle: 'mobile_money',
+            libelle: 'Mobile Money',
+            valeur: formatGNF(r.mobile_money.resume.montant),
+            detail: pluriel(r.mobile_money.resume.nombre, 'paiement'),
+            avertissement:
+                anomaliesMobileMoney.value > 0
+                    ? `${anomaliesMobileMoney.value} à vérifier`
+                    : null,
+        },
+    ];
+    if (!maSituation.value) {
+        liste.push({
+            cle: 'caisse',
+            libelle: 'Caisses dédiées',
+            valeur: r.caisse.aucune_caisse
+                ? '—'
+                : formatGNF(r.caisse.resume.solde_actuel),
+            detail: r.caisse.aucune_caisse
+                ? 'Aucune caisse dédiée'
+                : 'À remettre — solde théorique',
+            avertissement: null,
+        });
+    }
+
+    return liste;
+});
+
+const dernierVersement = computed(() => {
+    const versements = props.rapport.caisse.fiches
+        .map((f) => f.dernier_versement)
+        .filter((v) => v !== null)
+        .sort((a, b) => b.date_envoi.localeCompare(a.date_envoi));
+    if (versements.length === 0) return 'Aucun versement enregistré';
+
+    return `Dernier versement : ${dateFr(versements[0].date_envoi)} · ${formatGNF(versements[0].montant)}`;
+});
+
+// ── Filtres et exports ────────────────────────────────────────────────────────
 
 const filterFields = computed<FilterField[]>(() => [
     ...(maSituation.value
@@ -138,32 +230,61 @@ function exportHref(format: 'xlsx' | 'pdf'): string {
     return `${props.export_url}?${params.toString()}`;
 }
 
-function dateFr(iso: string | null | undefined): string {
-    return iso ? iso.slice(0, 10).split('-').reverse().join('/') : '—';
-}
-
-function heureFr(dateHeure: string | null): string {
-    return dateHeure ? `${dateFr(dateHeure)} ${dateHeure.slice(11, 16)}` : '—';
-}
-
-const LIBELLES_ANOMALIE: Record<AnomalieMobileMoney, string> = {
-    reference_absente: 'Référence absente',
-    reference_dupliquee: 'Référence déjà utilisée',
-    anterieure_obligation: "Sans référence (avant l'obligation)",
-};
-
 function tronque(section: { lignes: unknown[]; total_lignes: number }) {
     return section.total_lignes > section.lignes.length;
 }
+
+const chiffresVentes = computed(() => {
+    const v = props.rapport.ventes.resume;
+
+    return [
+        { libelle: 'Facturé', valeur: formatGNF(v.facture) },
+        { libelle: 'Encaissé sur ces ventes', valeur: formatGNF(v.encaisse) },
+        { libelle: 'Reste à payer', valeur: formatGNF(v.reste) },
+        {
+            libelle: 'Annulées / retournées (hors CA)',
+            valeur:
+                v.annulees_nombre === 0
+                    ? 'aucune'
+                    : `${v.annulees_nombre} · ${formatGNF(v.annulees_montant)}`,
+        },
+    ];
+});
+
+const chiffresEncaissements = computed(() =>
+    props.rapport.encaissements.par_moyen.map((m) => ({
+        libelle: m.libelle,
+        valeur: formatGNF(m.montant),
+    })),
+);
+
+const chiffresDettes = computed(() => {
+    const c = props.rapport.creances.resume;
+
+    return [
+        { libelle: 'Impayées', valeur: String(c.impayees) },
+        { libelle: 'Partiellement payées', valeur: String(c.partielles) },
+        { libelle: 'Reste dû', valeur: formatGNF(c.reste) },
+        { libelle: 'Plus ancienne', valeur: dateFr(c.plus_ancienne) },
+    ];
+});
+
+const chiffresMobileMoney = computed(() =>
+    props.rapport.mobile_money.par_operateur.map((o) => ({
+        libelle: o.libelle,
+        valeur: formatGNF(o.montant),
+    })),
+);
 </script>
 
 <template>
     <Head :title="titre" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-4 sm:p-6">
+        <div class="w-full space-y-5 p-4 sm:p-6">
+            <!-- En-tête : où je suis, quel périmètre, quelle période -->
             <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="flex flex-col gap-1">
+                <div class="min-w-0 space-y-0.5">
                     <h1 class="flex items-center gap-2 text-xl font-semibold">
                         <UserRound
                             v-if="maSituation"
@@ -175,8 +296,13 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
                         />
                         {{ titre }}
                     </h1>
-                    <p class="text-sm text-muted-foreground">
-                        <span v-if="agent">{{ agent.nom }} — </span>
+                    <p
+                        class="text-sm font-medium"
+                        data-testid="rapport-perimetre"
+                    >
+                        {{ perimetre }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
                         {{ periode.libelle }}
                     </p>
                 </div>
@@ -208,235 +334,65 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
                 hide-result-count
             />
 
-            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground sm:text-sm">
-                        {{ maSituation ? 'Mes ventes' : 'Ventes' }}
-                    </p>
-                    <p
-                        class="mt-1 text-lg font-bold tabular-nums sm:text-2xl"
-                        data-testid="kpi-ventes"
+            <!-- Cartes-onglets : chaque carte résume un bloc et en ouvre le détail -->
+            <div role="tablist" class="space-y-2 sm:space-y-3">
+                <template v-if="maSituation">
+                    <CarteSection
+                        v-if="!rapport.caisse.aucune_caisse"
+                        testid="rapport-tab-caisse"
+                        libelle="Ma caisse · À remettre — solde théorique"
+                        :valeur="formatGNF(rapport.caisse.resume.solde_actuel)"
+                        :detail="dernierVersement"
+                        :active="onglet === 'caisse'"
+                        large
+                        class="w-full"
+                        @choisir="choisir('caisse')"
+                    />
+                    <div
+                        v-else
+                        class="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-sm dark:border-blue-900 dark:bg-blue-950/30"
                     >
-                        {{ formatGNF(rapport.ventes.resume.facture) }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ rapport.ventes.resume.nombre }} vente(s) sur la
-                        période
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground sm:text-sm">
-                        {{ maSituation ? 'Mes encaissements' : 'Encaissé' }}
-                    </p>
-                    <p
-                        class="mt-1 text-lg font-bold tabular-nums sm:text-2xl"
-                        data-testid="kpi-encaissements"
-                    >
-                        {{ formatGNF(rapport.encaissements.resume.montant) }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ rapport.encaissements.resume.nombre }}
-                        encaissement(s) sur la période
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground sm:text-sm">
-                        Créances en cours
-                    </p>
-                    <p
-                        class="mt-1 text-lg font-bold tabular-nums sm:text-2xl"
-                        data-testid="kpi-creances"
-                    >
-                        {{ formatGNF(rapport.creances.resume.reste) }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ rapport.creances.resume.nombre }} facture(s), toutes
-                        dates
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground sm:text-sm">
-                        {{ maSituation ? 'Ma caisse' : 'Caisses dédiées' }}
-                    </p>
-                    <template v-if="rapport.caisse.aucune_caisse">
-                        <p
-                            class="mt-1 text-sm font-medium text-muted-foreground"
-                            data-testid="kpi-caisse"
+                        <Info class="h-4 w-4 shrink-0 text-blue-500" />
+                        <span data-testid="kpi-caisse"
+                            >Aucune caisse dédiée</span
                         >
-                            Aucune caisse dédiée
-                        </p>
-                    </template>
-                    <template v-else>
-                        <p
-                            class="mt-1 text-lg font-bold tabular-nums sm:text-2xl"
-                            data-testid="kpi-caisse"
-                        >
-                            {{ formatGNF(rapport.caisse.resume.solde_actuel) }}
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            À remettre (solde théorique actuel)
-                        </p>
-                    </template>
-                </div>
-            </div>
+                    </div>
+                </template>
 
-            <p class="flex items-start gap-1.5 text-xs text-muted-foreground">
-                <Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Ventes : factures créées dans la période. Encaissements :
-                paiements reçus dans la période, quelle que soit la date de la
-                vente. Créances : état actuel, toutes dates confondues.
-            </p>
-
-            <!-- Onglets -->
-            <div class="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <div class="flex min-w-max gap-1 border-b" role="tablist">
-                    <button
-                        v-for="o in onglets"
-                        :key="o.cle"
-                        type="button"
-                        role="tab"
-                        :aria-selected="onglet === o.cle"
-                        :data-testid="`rapport-tab-${o.cle}`"
-                        class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors"
-                        :class="
-                            onglet === o.cle
-                                ? 'border-primary text-foreground'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        "
-                        @click="choisir(o.cle)"
-                    >
-                        {{ o.libelle }}
-                        <span
-                            v-if="o.compte !== null"
-                            class="text-xs text-muted-foreground tabular-nums"
-                            >{{ o.compte }}</span
-                        >
-                        <AlertTriangle
-                            v-if="
-                                o.cle === 'mobile_money' &&
-                                anomaliesMobileMoney > 0
-                            "
-                            class="h-3.5 w-3.5 text-amber-500"
-                        />
-                    </button>
+                <div
+                    class="grid grid-cols-2 gap-2 sm:gap-3"
+                    :class="
+                        maSituation
+                            ? 'lg:grid-cols-4'
+                            : 'sm:grid-cols-3 lg:grid-cols-5'
+                    "
+                >
+                    <CarteSection
+                        v-for="c in cartes"
+                        :key="c.cle"
+                        :testid="`rapport-tab-${c.cle}`"
+                        :libelle="c.libelle"
+                        :valeur="c.valeur"
+                        :detail="c.detail"
+                        :avertissement="c.avertissement"
+                        :active="onglet === c.cle"
+                        @choisir="choisir(c.cle)"
+                    />
                 </div>
             </div>
 
             <!-- ── Ventes ─────────────────────────────────────────────────── -->
             <section v-if="onglet === 'ventes'" class="space-y-3">
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">Facturé</p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(rapport.ventes.resume.facture) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">
-                            Encaissé sur ces ventes
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(rapport.ventes.resume.encaisse) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">
-                            Reste à payer sur ces ventes
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(rapport.ventes.resume.reste) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">
-                            Annulées / retournées (hors CA)
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ rapport.ventes.resume.annulees_nombre }} ·
-                            {{
-                                formatGNF(
-                                    rapport.ventes.resume.annulees_montant,
-                                )
-                            }}
-                        </p>
-                    </div>
-                </div>
-                <p class="text-xs text-muted-foreground">
-                    Encaissé et reste : état actuel de ces factures, y compris
-                    les paiements reçus après la période.
-                </p>
-                <div class="overflow-x-auto rounded-xl border bg-card">
-                    <table class="w-full min-w-[720px] text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40 text-left">
-                                <th class="px-3 py-2 font-medium">Facture</th>
-                                <th class="px-3 py-2 font-medium">Date</th>
-                                <th class="px-3 py-2 font-medium">Client</th>
-                                <th
-                                    v-if="!maSituation"
-                                    class="px-3 py-2 font-medium"
-                                >
-                                    Agent
-                                </th>
-                                <th class="px-3 py-2 font-medium">Agence</th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Montant
-                                </th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Encaissé
-                                </th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Reste
-                                </th>
-                                <th class="px-3 py-2 font-medium">Statut</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="l in rapport.ventes.lignes"
-                                :key="l.id"
-                                class="hover:bg-muted/30"
-                            >
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.reference }}
-                                </td>
-                                <td class="px-3 py-2 whitespace-nowrap">
-                                    {{ dateFr(l.date) }}
-                                </td>
-                                <td class="px-3 py-2">{{ l.client ?? '—' }}</td>
-                                <td v-if="!maSituation" class="px-3 py-2">
-                                    {{ l.agent ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2">
-                                    {{ l.site_nom ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.montant) }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.encaisse) }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.reste) }}
-                                </td>
-                                <td class="px-3 py-2">
-                                    <StatusDot
-                                        :status="l.statut"
-                                        :label="l.statut_label"
-                                    />
-                                </td>
-                            </tr>
-                            <tr v-if="rapport.ventes.lignes.length === 0">
-                                <td
-                                    colspan="9"
-                                    class="px-3 py-8 text-center text-muted-foreground"
-                                >
-                                    Aucune vente sur la période.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <EnTeteSection
+                    :titre="maSituation ? 'Mes ventes' : 'Ventes de la période'"
+                    aide="Factures créées sur la période. Encaissé et reste : état actuel de ces factures, paiements reçus après la période compris."
+                    :chiffres="chiffresVentes"
+                />
+                <ListeFactures
+                    :lignes="rapport.ventes.lignes"
+                    :afficher-agent="!maSituation"
+                    vide="Aucune vente sur la période."
+                />
                 <p
                     v-if="tronque(rapport.ventes)"
                     class="text-xs text-muted-foreground"
@@ -449,120 +405,21 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
 
             <!-- ── Encaissements ──────────────────────────────────────────── -->
             <section v-if="onglet === 'encaissements'" class="space-y-3">
-                <div
-                    v-if="rapport.encaissements.par_moyen.length > 0"
-                    class="grid grid-cols-2 gap-3 sm:grid-cols-4"
-                >
-                    <div
-                        v-for="m in rapport.encaissements.par_moyen"
-                        :key="m.cle"
-                        class="rounded-lg border p-3"
-                        :data-testid="`encaissement-moyen-${m.cle}`"
-                    >
-                        <p class="text-xs text-muted-foreground">
-                            {{ m.libelle }} ({{ m.nombre }})
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(m.montant) }}
-                        </p>
-                    </div>
-                </div>
-                <div class="overflow-x-auto rounded-xl border bg-card">
-                    <table class="w-full min-w-[760px] text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40 text-left">
-                                <th class="px-3 py-2 font-medium">Date</th>
-                                <th class="px-3 py-2 font-medium">Saisi le</th>
-                                <th class="px-3 py-2 font-medium">Facture</th>
-                                <th class="px-3 py-2 font-medium">Client</th>
-                                <th
-                                    v-if="!maSituation"
-                                    class="px-3 py-2 font-medium"
-                                >
-                                    Agent
-                                </th>
-                                <th class="px-3 py-2 font-medium">Moyen</th>
-                                <th class="px-3 py-2 font-medium">Référence</th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Montant
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="l in rapport.encaissements.lignes"
-                                :key="l.id"
-                                class="hover:bg-muted/30"
-                            >
-                                <td class="px-3 py-2 whitespace-nowrap">
-                                    {{ dateFr(l.date_encaissement) }}
-                                </td>
-                                <td
-                                    class="px-3 py-2 whitespace-nowrap"
-                                    :class="
-                                        l.saisie_differee
-                                            ? 'text-amber-700 dark:text-amber-400'
-                                            : 'text-muted-foreground'
-                                    "
-                                    :title="
-                                        l.saisie_differee
-                                            ? 'Saisi un autre jour que la date d\'encaissement'
-                                            : undefined
-                                    "
-                                >
-                                    {{ heureFr(l.saisi_le) }}
-                                </td>
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.facture_reference }}
-                                </td>
-                                <td class="px-3 py-2">{{ l.client ?? '—' }}</td>
-                                <td v-if="!maSituation" class="px-3 py-2">
-                                    {{ l.agent ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2">{{ l.moyen_libelle }}</td>
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.reference_paiement ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.montant) }}
-                                </td>
-                            </tr>
-                            <tr
-                                v-if="rapport.encaissements.lignes.length === 0"
-                            >
-                                <td
-                                    colspan="8"
-                                    class="px-3 py-8 text-center text-muted-foreground"
-                                >
-                                    Aucun encaissement sur la période.
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot v-if="rapport.encaissements.lignes.length > 0">
-                            <tr class="border-t bg-muted/20 font-semibold">
-                                <td
-                                    :colspan="maSituation ? 6 : 7"
-                                    class="px-3 py-2"
-                                >
-                                    Total de la période
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{
-                                        formatGNF(
-                                            rapport.encaissements.resume
-                                                .montant,
-                                        )
-                                    }}
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                <p class="text-xs text-muted-foreground">
-                    « Saisi le » est l'heure d'enregistrement dans
-                    l'application, pas l'heure du paiement. En orange : saisi un
-                    autre jour que la date d'encaissement.
-                </p>
+                <EnTeteSection
+                    :titre="
+                        maSituation
+                            ? 'Mes encaissements'
+                            : 'Encaissements de la période'
+                    "
+                    aide="Paiements reçus sur la période, quelle que soit la date de la vente. « Saisi le » est l'heure d'enregistrement (en orange : saisi un autre jour)."
+                    :chiffres="chiffresEncaissements"
+                />
+                <ListeEncaissements
+                    :lignes="rapport.encaissements.lignes"
+                    :afficher-agent="!maSituation"
+                    :total="rapport.encaissements.resume.montant"
+                    vide="Aucun encaissement sur la période."
+                />
                 <p
                     v-if="tronque(rapport.encaissements)"
                     class="text-xs text-muted-foreground"
@@ -573,121 +430,19 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
                 </p>
             </section>
 
-            <!-- ── Créances ───────────────────────────────────────────────── -->
+            <!-- ── Dettes clients ─────────────────────────────────────────── -->
             <section v-if="onglet === 'creances'" class="space-y-3">
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">Impayées</p>
-                        <p class="font-semibold tabular-nums">
-                            {{ rapport.creances.resume.impayees }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">
-                            Partiellement payées
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ rapport.creances.resume.partielles }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">Reste dû</p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(rapport.creances.resume.reste) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-3">
-                        <p class="text-xs text-muted-foreground">
-                            Plus ancienne
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ dateFr(rapport.creances.resume.plus_ancienne) }}
-                        </p>
-                    </div>
-                </div>
-                <p class="text-xs text-muted-foreground">
-                    État actuel des factures restant dues, toutes dates
-                    confondues : la période choisie ne s'applique pas aux
-                    créances.
-                </p>
-                <div class="overflow-x-auto rounded-xl border bg-card">
-                    <table class="w-full min-w-[760px] text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40 text-left">
-                                <th class="px-3 py-2 font-medium">Facture</th>
-                                <th class="px-3 py-2 font-medium">Date</th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Ancienneté
-                                </th>
-                                <th class="px-3 py-2 font-medium">Client</th>
-                                <th
-                                    v-if="!maSituation"
-                                    class="px-3 py-2 font-medium"
-                                >
-                                    Agent
-                                </th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Montant
-                                </th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Encaissé
-                                </th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Reste
-                                </th>
-                                <th class="px-3 py-2 font-medium">Statut</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="l in rapport.creances.lignes"
-                                :key="l.id"
-                                class="hover:bg-muted/30"
-                            >
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.reference }}
-                                </td>
-                                <td class="px-3 py-2 whitespace-nowrap">
-                                    {{ dateFr(l.date) }}
-                                </td>
-                                <td
-                                    class="px-3 py-2 text-right whitespace-nowrap tabular-nums"
-                                >
-                                    {{ l.anciennete_jours }} j
-                                </td>
-                                <td class="px-3 py-2">{{ l.client ?? '—' }}</td>
-                                <td v-if="!maSituation" class="px-3 py-2">
-                                    {{ l.agent ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.montant) }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.encaisse) }}
-                                </td>
-                                <td
-                                    class="px-3 py-2 text-right font-medium tabular-nums"
-                                >
-                                    {{ formatGNF(l.reste) }}
-                                </td>
-                                <td class="px-3 py-2">
-                                    <StatusDot
-                                        :status="l.statut"
-                                        :label="l.statut_label"
-                                    />
-                                </td>
-                            </tr>
-                            <tr v-if="rapport.creances.lignes.length === 0">
-                                <td
-                                    colspan="9"
-                                    class="px-3 py-8 text-center text-muted-foreground"
-                                >
-                                    Aucune créance en cours.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <EnTeteSection
+                    titre="Dettes clients"
+                    aide="Ce que les clients doivent encore : état actuel, toutes dates confondues — la période choisie ne s'applique pas ici."
+                    :chiffres="chiffresDettes"
+                />
+                <ListeFactures
+                    :lignes="rapport.creances.lignes"
+                    :afficher-agent="!maSituation"
+                    afficher-anciennete
+                    vide="Aucune dette client en cours."
+                />
                 <p
                     v-if="tronque(rapport.creances)"
                     class="text-xs text-muted-foreground"
@@ -700,24 +455,11 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
 
             <!-- ── Mobile Money ───────────────────────────────────────────── -->
             <section v-if="onglet === 'mobile_money'" class="space-y-3">
-                <div
-                    v-if="rapport.mobile_money.par_operateur.length > 0"
-                    class="grid grid-cols-2 gap-3 sm:grid-cols-4"
-                >
-                    <div
-                        v-for="o in rapport.mobile_money.par_operateur"
-                        :key="o.operateur ?? 'aucun'"
-                        class="rounded-lg border p-3"
-                    >
-                        <p class="text-xs text-muted-foreground">
-                            {{ o.libelle }} ({{ o.nombre }})
-                        </p>
-                        <p class="font-semibold tabular-nums">
-                            {{ formatGNF(o.montant) }}
-                        </p>
-                    </div>
-                </div>
-
+                <EnTeteSection
+                    titre="Mobile Money"
+                    aide="Rapprochez chaque référence du relevé de l'opérateur."
+                    :chiffres="chiffresMobileMoney"
+                />
                 <Alert
                     v-if="anomaliesMobileMoney > 0"
                     data-testid="mobile-money-anomalies"
@@ -731,120 +473,15 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
                         absente(s),
                         {{ rapport.mobile_money.resume.reference_dupliquee }}
                         déjà utilisée(s) pour le même opérateur dans
-                        l'organisation. Rapprochez-les du relevé de l'opérateur.
+                        l'organisation.
                     </AlertDescription>
                 </Alert>
-
-                <div class="overflow-x-auto rounded-xl border bg-card">
-                    <table class="w-full min-w-[760px] text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40 text-left">
-                                <th class="px-3 py-2 font-medium">Date</th>
-                                <th class="px-3 py-2 font-medium">Opérateur</th>
-                                <th class="px-3 py-2 font-medium">Référence</th>
-                                <th class="px-3 py-2 text-right font-medium">
-                                    Montant
-                                </th>
-                                <th class="px-3 py-2 font-medium">Facture</th>
-                                <th class="px-3 py-2 font-medium">Client</th>
-                                <th
-                                    v-if="!maSituation"
-                                    class="px-3 py-2 font-medium"
-                                >
-                                    Agent
-                                </th>
-                                <th class="px-3 py-2 font-medium">Contrôle</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="l in rapport.mobile_money.lignes"
-                                :key="l.id"
-                                class="hover:bg-muted/30"
-                                :data-testid="`mobile-money-ligne-${l.id}`"
-                            >
-                                <td class="px-3 py-2 whitespace-nowrap">
-                                    {{ dateFr(l.date_encaissement) }}
-                                </td>
-                                <td class="px-3 py-2">{{ l.moyen_libelle }}</td>
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.reference_paiement ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2 text-right tabular-nums">
-                                    {{ formatGNF(l.montant) }}
-                                </td>
-                                <td class="px-3 py-2 font-mono text-xs">
-                                    {{ l.facture_reference }}
-                                </td>
-                                <td class="px-3 py-2">{{ l.client ?? '—' }}</td>
-                                <td v-if="!maSituation" class="px-3 py-2">
-                                    {{ l.agent ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2 text-xs">
-                                    <span
-                                        v-if="l.anomalie === null"
-                                        class="text-muted-foreground"
-                                        >OK</span
-                                    >
-                                    <span
-                                        v-else-if="
-                                            l.anomalie ===
-                                            'anterieure_obligation'
-                                        "
-                                        class="text-muted-foreground"
-                                        >{{
-                                            LIBELLES_ANOMALIE[l.anomalie]
-                                        }}</span
-                                    >
-                                    <span
-                                        v-else
-                                        class="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400"
-                                    >
-                                        <AlertTriangle class="h-3.5 w-3.5" />
-                                        {{ LIBELLES_ANOMALIE[l.anomalie] }}
-                                    </span>
-                                    <div
-                                        v-if="
-                                            l.autres_utilisations.length > 0 ||
-                                            l.autres_hors_perimetre > 0
-                                        "
-                                        class="mt-0.5 text-muted-foreground"
-                                    >
-                                        Aussi sur
-                                        <span
-                                            v-for="(
-                                                a, i
-                                            ) in l.autres_utilisations"
-                                            :key="a.id"
-                                            class="font-mono"
-                                            >{{ i > 0 ? ', ' : ''
-                                            }}{{ a.facture_reference }} ({{
-                                                dateFr(a.date_encaissement)
-                                            }})</span
-                                        >
-                                        <span v-if="l.autres_hors_perimetre > 0"
-                                            >{{
-                                                l.autres_utilisations.length > 0
-                                                    ? ' + '
-                                                    : ''
-                                            }}{{ l.autres_hors_perimetre }} hors
-                                            de votre périmètre</span
-                                        >
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr v-if="rapport.mobile_money.lignes.length === 0">
-                                <td
-                                    colspan="8"
-                                    class="px-3 py-8 text-center text-muted-foreground"
-                                >
-                                    Aucun encaissement Mobile Money sur la
-                                    période.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <ListeEncaissements
+                    :lignes="rapport.mobile_money.lignes"
+                    :afficher-agent="!maSituation"
+                    controle
+                    vide="Aucun encaissement Mobile Money sur la période."
+                />
                 <p
                     v-if="tronque(rapport.mobile_money)"
                     class="text-xs text-muted-foreground"
@@ -856,217 +493,13 @@ function tronque(section: { lignes: unknown[]; total_lignes: number }) {
             </section>
 
             <!-- ── Caisse ─────────────────────────────────────────────────── -->
-            <section v-if="onglet === 'caisse'" class="space-y-3">
-                <Alert
-                    v-if="rapport.caisse.aucune_caisse"
-                    data-testid="caisse-aucune"
-                >
-                    <Info class="text-blue-500" />
-                    <AlertTitle>Aucune caisse dédiée</AlertTitle>
-                    <AlertDescription>
-                        {{
-                            maSituation
-                                ? "Vous n'avez pas de caisse dédiée : vos encaissements en espèces ne peuvent pas être suivis ici."
-                                : 'Aucune caisse dédiée à un agent dans ce périmètre.'
-                        }}
-                    </AlertDescription>
-                </Alert>
-
-                <template v-else>
-                    <p class="text-xs text-muted-foreground">
-                        Tableau de caisse tiré du grand livre : solde de début +
-                        mouvements = solde de fin. Le solde actuel est le
-                        montant théorique à remettre — aucun comptage physique
-                        n'est enregistré.
-                    </p>
-
-                    <!-- Vue agence : une ligne par caisse -->
-                    <div
-                        v-if="!rapport.caisse.detail"
-                        class="overflow-x-auto rounded-xl border bg-card"
-                    >
-                        <table class="w-full min-w-[860px] text-sm">
-                            <thead>
-                                <tr class="border-b bg-muted/40 text-left">
-                                    <th class="px-3 py-2 font-medium">Agent</th>
-                                    <th class="px-3 py-2 font-medium">
-                                        Agence
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium"
-                                    >
-                                        Solde début
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium"
-                                    >
-                                        Entrées
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium"
-                                    >
-                                        Sorties
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium"
-                                    >
-                                        Solde fin
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium"
-                                    >
-                                        Solde actuel
-                                    </th>
-                                    <th class="px-3 py-2 font-medium">
-                                        Dernier versement
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                <tr
-                                    v-for="f in rapport.caisse.fiches"
-                                    :key="f.caisse.id"
-                                    class="hover:bg-muted/30"
-                                    data-testid="caisse-ligne"
-                                >
-                                    <td class="px-3 py-2 font-medium">
-                                        {{ f.caisse.agent_nom ?? '—' }}
-                                    </td>
-                                    <td class="px-3 py-2">
-                                        {{ f.caisse.site_nom ?? '—' }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{ formatGNF(f.solde_debut) }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{ formatGNF(f.total_entrees) }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{ formatGNF(f.total_sorties) }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{ formatGNF(f.solde_fin) }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right font-semibold tabular-nums"
-                                    >
-                                        {{ formatGNF(f.solde_actuel) }}
-                                        <div
-                                            v-if="f.en_cours.montant > 0"
-                                            class="text-xs font-medium text-blue-600 dark:text-blue-400"
-                                        >
-                                            En cours :
-                                            {{ formatGNF(f.en_cours.montant) }}
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-2 text-xs">
-                                        <template v-if="f.dernier_versement">
-                                            {{
-                                                dateFr(
-                                                    f.dernier_versement
-                                                        .date_envoi,
-                                                )
-                                            }}
-                                            <span class="text-muted-foreground">
-                                                ({{
-                                                    f.dernier_versement
-                                                        .anciennete_jours
-                                                }}
-                                                j)</span
-                                            >
-                                        </template>
-                                        <span
-                                            v-else
-                                            class="text-muted-foreground"
-                                            >Aucun</span
-                                        >
-                                    </td>
-                                </tr>
-                            </tbody>
-                            <tfoot>
-                                <tr class="border-t bg-muted/20 font-semibold">
-                                    <td colspan="2" class="px-3 py-2">Total</td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                rapport.caisse.resume
-                                                    .solde_debut,
-                                            )
-                                        }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                rapport.caisse.resume.entrees,
-                                            )
-                                        }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                rapport.caisse.resume.sorties,
-                                            )
-                                        }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                rapport.caisse.resume.solde_fin,
-                                            )
-                                        }}
-                                    </td>
-                                    <td
-                                        class="px-3 py-2 text-right tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                rapport.caisse.resume
-                                                    .solde_actuel,
-                                            )
-                                        }}
-                                    </td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    <p
-                        v-if="!rapport.caisse.detail"
-                        class="text-xs text-muted-foreground"
-                    >
-                        Choisissez un agent pour voir le détail des écritures de
-                        sa caisse.
-                    </p>
-
-                    <!-- Agent ciblé : fiche complète de chaque caisse -->
-                    <template v-else>
-                        <CaisseFiche
-                            v-for="f in rapport.caisse.fiches"
-                            :key="f.caisse.id"
-                            :fiche="f"
-                            :debut="periode.date_debut"
-                            :fin="periode.date_fin"
-                            :afficher-agent="!maSituation"
-                        />
-                    </template>
-                </template>
-            </section>
+            <SectionCaisse
+                v-if="onglet === 'caisse'"
+                :caisse="rapport.caisse"
+                :ma-situation="maSituation"
+                :debut="periode.date_debut"
+                :fin="periode.date_fin"
+            />
         </div>
     </AppLayout>
 </template>

@@ -10,9 +10,12 @@ Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-pe
 | **Rapport d'activité** | `GET /backoffice/rapports/activite` (`rapports.activite`) | `rapports.read` | Responsables : agences accessibles, tous les agents ou un agent |
 | Exports | `…/export?format=xlsx\|pdf` (`ma-situation.export`, `rapports.activite.export`) | idem écran | Mêmes filtres, même périmètre que l'écran |
 
-Menu : **Tableau de bord** reste en tête et inchangé. **Ma situation** est juste en dessous (et dans
-le menu mobile `MobileQuickMenu`). **Rapports › Rapport d'activité** est dans le groupe « Pilotage ».
-Stock, Achats et Dépenses viendront s'ajouter au groupe Rapports (lot 2).
+Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Groupe
+« Pilotage » : **Rapports › Ma situation** et **Rapports › Rapport d'activité** (chaque sous-entrée
+selon sa permission ; le menu Rapports n'apparaît que si l'une des deux est accordée). « Ma situation »
+reste en accès direct dans le menu mobile `MobileQuickMenu`. Ce n'est jamais un filtre du rapport
+d'activité : c'est une vue distincte dont l'agent est imposé côté serveur. Stock, Achats et Dépenses
+viendront s'ajouter au menu Rapports (lot 2).
 
 Les deux écrans sont la **même page** (`Rapports/Activite.vue`) alimentée par le **même moteur**
 (`App\Services\Rapports\RapportActiviteService`) ; seul le périmètre change.
@@ -72,8 +75,11 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   (`StoreEncaissementVenteController`) : un encaissement saisi un autre jour est **signalé** (orange),
   et peut modifier après coup la situation d'un jour passé.
 
-### Créances (RAP-006)
+### Dettes clients — créances (RAP-006)
 
+- Libellé affiché à l'écran et dans les exports : **« Dettes clients »** (ce que les clients doivent
+  encore à l'entreprise), terme compris sur le terrain ; « créance » reste le terme du code et de la
+  comptabilité (décision du 26/09/2026, simple changement de libellé, aucune règle modifiée).
 - Factures **impayées** ou **partielles**, **état actuel, toutes dates confondues** : la période ne
   s'y applique pas, pour que les vieilles dettes restent visibles. Agent = créateur de la vente.
 - Une facture « Créée » n'est pas encore une créance (elle devient impayée à la livraison).
@@ -140,9 +146,18 @@ Clôture journalière, comptage de caisse, billetage, écart de caisse officiel 
 (lot 3 : écart = espèces comptées − solde théorique **figé au moment du comptage**) ; import des relevés
 Mobile Money ; rapports Stock / Achats / Dépenses (lot 2) ; créances reconstituées à une date passée.
 
-## Problème connu — tableau de bord non filtré par agence
+## Tableau de bord — périmètre d'agence (RAP-010, corrigé le 2026-09-26)
 
-`IndexDashboardController` ne filtre que sur `organization_id` : un utilisateur limité à une agence y
-voit le chiffre d'affaires de toute l'organisation. **Non corrigé dans ce lot** (chantier séparé : la
-correction changera ce que certains utilisateurs voient). Les rapports, eux, appliquent le périmètre
-d'agence dès maintenant.
+Jusqu'au 26/09/2026, `IndexDashboardController` ne filtrait que sur `organization_id` : un utilisateur
+limité à une agence voyait le chiffre d'affaires de toute l'organisation. Corrigé dans un chantier
+séparé du lot 1 : le tableau de bord applique le même périmètre que les rapports (`SiteScopeService`) :
+
+- **Administrateur** (super admin, administrateur entreprise) : toute l'organisation, inchangé.
+- **Autre utilisateur** : uniquement ses agences (`user_sites`) — statistiques de factures, encaissé,
+  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par type de véhicule et par
+  produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
+- Une facture sans agence n'apparaît que dans la vue organisation.
+- Pas de filtre Agence sur le tableau de bord : le périmètre découle des droits.
+
+**Changement visible** dès la mise en production : un responsable qui voyait l'organisation entière
+ne voit plus que ses agences.
