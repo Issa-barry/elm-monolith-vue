@@ -48,6 +48,17 @@ export interface CommissionDetailRow {
     reste: number;
     statut: string | null;
     statut_dot_class?: string | null;
+    /** Origine (Vente/Distribution client/Transfert logistique) — absent sur les écrans qui ne
+     * ventilent pas encore par processus (Logistique/Propriétaire/Consultant/Site/Cashback/
+     * Salaire) ; CommissionDetailTable n'affiche la colonne Origine que si au moins une ligne la
+     * fournit. */
+    processus?: string | null;
+    processus_label?: string | null;
+}
+
+export interface CommissionProcessusOption {
+    value: string;
+    label: string;
 }
 
 export interface CommissionExpenseRow {
@@ -96,4 +107,7 @@ export interface CommissionGlobalFiltersValue {
     vehicule_ids: (string | number)[];
     site_ids: (string | number)[];
     periode_range?: { debut: string | null; fin: string | null };
+    /** Optionnel : seules les pages qui fournissent processusOptions à CommissionGlobalFilters
+     * en font usage (fiche détail bénéficiaire). '' = tous les processus. */
+    processus?: string;
 }

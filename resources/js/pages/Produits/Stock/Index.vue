@@ -48,13 +48,15 @@ interface StockRow {
     qte_bloquee: number | null;
     qte_entrante: number | null;
     seuil_effectif: number;
-    statut: 'disponible' | 'stock_faible' | 'rupture';
+    disponible_sur_site: boolean;
+    statut: 'disponible' | 'stock_faible' | 'rupture' | 'stock_negatif';
     statut_label: string;
     dernier_mouvement: {
         type: 'entree' | 'sortie';
         quantite: number;
         motif_label: string | null;
-        created_at: string;
+        /** Date métier de l'opération (jamais l'horodatage technique de création). */
+        date: string;
     } | null;
     can_ajuster: boolean;
 }
@@ -88,6 +90,7 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    date: string;
     created_at: string;
 }
 
@@ -460,12 +463,22 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ formatNombre(row.seuil_effectif) }}
+                                    {{
+                                        row.disponible_sur_site
+                                            ? formatNombre(row.seuil_effectif)
+                                            : '—'
+                                    }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <StatusDot
+                                        v-if="row.disponible_sur_site"
                                         :status="row.statut"
                                         :label="row.statut_label"
+                                    />
+                                    <StatusDot
+                                        v-else
+                                        label="Non disponible"
+                                        dot-class="bg-zinc-400 dark:bg-zinc-500"
                                     />
                                 </td>
                                 <td class="px-4 py-3">
@@ -514,9 +527,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         <div
                                             class="text-xs whitespace-nowrap text-muted-foreground"
                                         >
-                                            {{
-                                                row.dernier_mouvement.created_at
-                                            }}
+                                            {{ row.dernier_mouvement.date }}
                                         </div>
                                     </div>
                                     <span v-else class="text-muted-foreground"
@@ -625,8 +636,14 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                             </div>
                         </div>
                         <StatusDot
+                            v-if="row.disponible_sur_site"
                             :status="row.statut"
                             :label="row.statut_label"
+                        />
+                        <StatusDot
+                            v-else
+                            label="Non disponible"
+                            dot-class="bg-zinc-400 dark:bg-zinc-500"
                         />
                     </div>
 
@@ -684,10 +701,11 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     <div
                         class="mt-3 flex items-center justify-between text-xs text-muted-foreground"
                     >
-                        <span
+                        <span v-if="row.disponible_sur_site"
                             >Alerte à
                             {{ formatNombre(row.seuil_effectif) }}</span
                         >
+                        <span v-else>Non disponible sur cette agence</span>
                         <span v-if="row.dernier_mouvement" class="text-right">
                             <span
                                 class="font-medium"
@@ -700,7 +718,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                     mouvementSigneLabel(row.dernier_mouvement)
                                 }}</span
                             >
-                            · {{ row.dernier_mouvement.created_at }}
+                            · {{ row.dernier_mouvement.date }}
                         </span>
                         <span v-else>Aucun mouvement</span>
                     </div>

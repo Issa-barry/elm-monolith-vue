@@ -56,6 +56,13 @@ class ProduitTypeTest extends TestCase
         // les deux tarifs usine sont deux décisions distinctes, jamais l'une déduite de l'autre.
         $this->assertSame(['prix_usine', 'prix_usine_tricycle', 'prix_vente'], $fabricable->requiredPrices());
         $this->assertSame('prix_usine', $fabricable->champPrixReference());
+
+        // Non vendable => aucun champ de référence de marge (cf. correctif du 30/08/2026 :
+        // un champ_prix_reference non nul comparerait un prix_vente jamais saisi pour ce type).
+        $matiereProduction = ProduitType::where('organization_id', $this->org->id)->where('code', 'matiere_production')->firstOrFail();
+        $this->assertFalse($matiereProduction->isVendable());
+        $this->assertSame(['prix_achat'], $matiereProduction->requiredPrices());
+        $this->assertNull($matiereProduction->champPrixReference());
     }
 
     public function test_provisioning_est_idempotent(): void
@@ -75,7 +82,25 @@ class ProduitTypeTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_index_returns_403_without_permission(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($sansDroit)
+            ->get($this->produitTypesRoute())
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->post($this->produitTypesRoute(), ['nom' => 'Nouveau type'])
+            ->assertStatus(403);
+    }
 
     public function test_store_creates_type(): void
     {
@@ -126,6 +151,28 @@ class ProduitTypeTest extends TestCase
                 'prix_achat_requis' => false,
                 'prix_usine_requis' => false,
                 'prix_vente_requis' => true,
+                'champ_prix_reference' => 'prix_achat',
+            ])
+            ->assertSessionHasErrors('champ_prix_reference');
+    }
+
+    /**
+     * Correctif du 30/08/2026 : un champ_prix_reference défini sur un type dont le prix de vente
+     * n'est pas requis (ex. type non vendable, comme « Matière de production ») fait comparer
+     * ProduitService un prix de vente jamais saisi (toujours 0) au champ de référence — rejetant
+     * systématiquement toute création. Refusé désormais dès la configuration du type.
+     */
+    public function test_store_refuse_reference_prix_si_prix_de_vente_non_requis(): void
+    {
+        $this->actingAs($this->user)
+            ->post($this->produitTypesRoute(), [
+                'nom' => 'Type non vendable incohérent',
+                'gere_stock' => true,
+                'vendable' => false,
+                'achetable' => true,
+                'prix_achat_requis' => true,
+                'prix_usine_requis' => false,
+                'prix_vente_requis' => false,
                 'champ_prix_reference' => 'prix_achat',
             ])
             ->assertSessionHasErrors('champ_prix_reference');
@@ -205,6 +252,17 @@ class ProduitTypeTest extends TestCase
         $this->assertFalse($type->fresh()->gere_stock);
     }
 
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'materiel')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->put($this->produitTypesRoute("/{$type->id}"), ['nom' => 'Test'])
+            ->assertStatus(403);
+    }
+
     public function test_destroy_refuse_si_type_utilise(): void
     {
         $type = $this->makeTypeUtilise();
@@ -228,6 +286,28 @@ class ProduitTypeTest extends TestCase
         $this->assertSoftDeleted('produit_types', ['id' => $type->id]);
     }
 
+    public function test_destroy_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($autreOrg->id);
+        $type = ProduitType::where('organization_id', $autreOrg->id)->where('code', 'materiel')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->delete($this->produitTypesRoute("/{$type->id}"))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->delete($this->produitTypesRoute("/{$type->id}"))
+            ->assertStatus(403);
+    }
+
     public function test_toggle_desactive_puis_reactive_le_type(): void
     {
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
@@ -238,6 +318,28 @@ class ProduitTypeTest extends TestCase
 
         $this->actingAs($this->user)->patch($this->produitTypesRoute("/{$type->id}/toggle"));
         $this->assertSame('actif', $type->fresh()->statut->value);
+    }
+
+    public function test_toggle_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($autreOrg->id);
+        $type = ProduitType::where('organization_id', $autreOrg->id)->where('code', 'materiel')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch($this->produitTypesRoute("/{$type->id}/toggle"))
+            ->assertStatus(403);
+    }
+
+    public function test_toggle_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'materiel')->firstOrFail();
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['type-produits.read']);
+
+        $this->actingAs($sansDroit)
+            ->patch($this->produitTypesRoute("/{$type->id}/toggle"))
+            ->assertStatus(403);
     }
 
     public function test_type_desactive_nest_plus_proposable_a_la_creation_dun_produit(): void

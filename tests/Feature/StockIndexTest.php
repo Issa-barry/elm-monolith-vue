@@ -2,15 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Enums\StockStatut;
 use App\Models\Categorie;
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
+use App\Models\ProduitSeuilAlerte;
 use App\Models\ProduitType;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
+use App\Services\ProduitSeuilAlerteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -68,9 +71,18 @@ class StockIndexTest extends TestCase
     {
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Bidon premium',
-            'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 5,
         ], ['sku' => 'BIDON-001']);
+        // Activation ET seuil PAR SITE (remplacent les anciennes colonnes globales
+        // produits.alerte_stock_active/seuil_alerte_stock, désormais historiques/figées) — ici
+        // uniquement sur Agence Alpha, cf. StockStatutService::alerteActivePourSite()/
+        // seuilEffectifPourSite().
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->siteA->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 5,
+        ]);
         $variante = $produit->variantePrincipale()->first();
         $secondeVariante = $this->makeVariante($produit, [
             'sku' => 'BIDON-002',
@@ -101,7 +113,144 @@ class StockIndexTest extends TestCase
                 ->where('stocks.data.0.seuil_effectif', 5)
                 ->where('stocks.data.1.site_nom', 'Agence Beta')
                 ->where('stocks.data.1.qte_disponible', 0)
+                // Agence Beta n'a aucune ligne produit_seuils_alerte (jamais configurée) :
+                // disponible par défaut (mode "Tous les sites") — statutPour() étant une
+                // fonction pure, l'état réel (Rupture, quantité 0) reste affiché tel quel, que
+                // l'alerte soit active ou non sur ce site (décision du 02/09/2026 après-midi).
                 ->where('stocks.data.1.statut', 'rupture')
+            );
+    }
+
+    /**
+     * Une alerte désactivée (actif=false) n'exclut PLUS ce site du filtre "Rupture de stock" —
+     * le stock physique reste réel indépendamment de l'alerte (décision du 02/09/2026
+     * après-midi) : seule la DISPONIBILITÉ gouverne ces filtres, jamais l'alerte.
+     */
+    public function test_le_filtre_rupture_inclut_un_site_disponible_meme_sans_alerte_active(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit sans alerte mais disponible',
+        ], ['sku' => 'RUPT-SANS-ALERTE-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->siteA->id,
+            'actif' => false,
+            'seuil_alerte_stock' => 10,
+        ]);
+        $this->stock($produit->variantePrincipale()->first(), $this->siteA, 0);
+
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['rupture'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 1)
+                ->where('stocks.data.0.produit_nom', 'Produit sans alerte mais disponible')
+            );
+    }
+
+    /**
+     * Régression 02/09/2026 après-midi : les filtres de statut (Rupture/Stock faible/Stock
+     * négatif/Disponible) doivent exclure un site NON DISPONIBLE pour ce produit — aucune
+     * rupture "métier" ne peut exister là où le produit n'est pas vendu/géré.
+     */
+    public function test_le_filtre_rupture_exclut_un_site_non_disponible(): void
+    {
+        $produitDisponible = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible',
+        ], ['sku' => 'RUPT-DISPO-001']);
+        $this->stock($produitDisponible->variantePrincipale()->first(), $this->siteA, 0);
+
+        $produitNonDisponible = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit non disponible',
+        ], ['sku' => 'RUPT-NON-DISPO-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produitNonDisponible->id,
+            'site_id' => $this->siteA->id,
+            'disponible' => false,
+        ]);
+        $this->stock($produitNonDisponible->variantePrincipale()->first(), $this->siteA, 0);
+
+        // Scopé sur siteA (site_ids) : la page croise chaque variante avec CHAQUE site
+        // consultable (cf. stockQuery()), donc sans ce filtre siteB apparaîtrait aussi — hors
+        // sujet ici, où seul siteA porte une configuration explicite pour les deux produits.
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['rupture'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 1)
+                ->where('stocks.data.0.produit_nom', 'Produit disponible')
+            );
+    }
+
+    /**
+     * Garde-fou de couverture (régression 04/09/2026 : `stock_statut=disponible` — et
+     * `stock_negatif` — n'étaient exercés par AUCUN test avant ce correctif, seule branche du
+     * match() de stockQuery() jamais atteinte par la suite). Garantit que chaque valeur de
+     * l'enum reste au moins EXÉCUTÉE (colonnes/jointures valides, pas d'exception PHP). Ne
+     * détecte PAS un mismatch placeholders/bindings dans un whereRaw() : la suite tourne sur
+     * SQLite (phpunit.xml), qui — contrairement à MySQL/HY093 — complète silencieusement un `?`
+     * non lié par NULL au lieu de lever une erreur (vérifié empiriquement en rejouant ce test
+     * contre le bug d'origine : il passait toujours). Le seul test qui détecte réellement ce
+     * mismatch est celui ci-dessous, car il inclut un produit SANS ligne produit_seuils_alerte —
+     * c'est exactement ce cas qui fait basculer le `?` non lié sur NULL et fausse le résultat.
+     */
+    public function test_chaque_valeur_de_stock_statut_sexecute_sans_erreur_sql(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, [], ['sku' => 'SMOKE-STATUT-001']);
+        $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
+
+        foreach (StockStatut::cases() as $statut) {
+            $this->actingAs($this->admin)
+                ->get(route('produits.stock.index', ['stock_statut' => [$statut->value], 'site_ids' => [$this->siteA->id]]))
+                ->assertOk();
+        }
+    }
+
+    /**
+     * Régression 04/09/2026 (SQLSTATE[HY093] en production sur MySQL) : {$seuil} apparaît deux
+     * fois dans la même expression whereRaw ("(seuil <= 0 OR quantite > seuil)") donc deux `?` à
+     * lier, mais un seul binding était fourni. En local/CI (SQLite), ce mismatch ne lève PAS
+     * d'erreur — le `?` non lié est silencieusement traité comme NULL — d'où l'assertion sur les
+     * DONNÉES retournées plutôt que sur l'absence d'exception : `produitSansSeuil` (aucune ligne
+     * produit_seuils_alerte) est le cas précis où le `?` non lié fausse le résultat, car c'est le
+     * seul chemin qui dépend de la valeur de repli portée par ce second placeholder.
+     */
+    public function test_le_filtre_disponible_ne_leve_pas_derreur_sql_et_retourne_les_lignes_attendues(): void
+    {
+        $produitSansSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible sans seuil configuré',
+        ], ['sku' => 'DISPO-SANS-SEUIL-001']);
+        // Sans ligne produit_seuils_alerte, le seuil effectif retombe sur le seuil organisation
+        // (10 par défaut, cf. Parametre::getSeuilStockFaible()) : le stock doit le dépasser pour
+        // tomber dans "Disponible" plutôt que "Stock faible".
+        $this->stock($produitSansSeuil->variantePrincipale()->first(), $this->siteA, 15);
+
+        $produitAvecSeuil = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit disponible au-dessus du seuil',
+        ], ['sku' => 'DISPO-AVEC-SEUIL-001']);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produitAvecSeuil->id,
+            'site_id' => $this->siteA->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 5,
+        ]);
+        $this->stock($produitAvecSeuil->variantePrincipale()->first(), $this->siteA, 20);
+
+        $produitRupture = $this->makeProduitAvecVariante($this->organization, [
+            'nom' => 'Produit en rupture',
+        ], ['sku' => 'DISPO-RUPTURE-001']);
+        $this->stock($produitRupture->variantePrincipale()->first(), $this->siteA, 0);
+
+        $this->actingAs($this->admin)
+            ->get(route('produits.stock.index', ['stock_statut' => ['disponible'], 'site_ids' => [$this->siteA->id]]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('stocks.data', 2)
+                ->where('stocks.data.0.produit_nom', 'Produit disponible au-dessus du seuil')
+                ->where('stocks.data.1.produit_nom', 'Produit disponible sans seuil configuré')
             );
     }
 
@@ -114,9 +263,8 @@ class StockIndexTest extends TestCase
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Eau minérale',
             'categorie_id' => $categorie->id,
-            'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 10,
         ], ['sku' => 'EAU-FILTRE-001']);
+        app(ProduitSeuilAlerteService::class)->definir($produit, $this->siteA->id, true, 10);
         $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
 
         $autre = $this->makeProduitAvecVariante($this->organization, [

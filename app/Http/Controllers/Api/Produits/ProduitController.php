@@ -252,8 +252,6 @@ class ProduitController extends Controller
             'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
-            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
-            'alerte_stock_active' => $produit->alerte_stock_active,
             'description' => $produit->description,
             'code_barres' => $variante?->code_barres,
             'fournisseur' => $produit->fournisseur?->nom_complet,

@@ -48,6 +48,7 @@ class TransfertActivite extends Model
         'versement_effectue' => 'a effectué un versement',
         'validation_admin_accord' => 'a approuvé la réception (commission générée)',
         'validation_admin_refus' => 'a refusé la réception',
+        'validation_admin_auto' => 'a réceptionné le transfert (commission générée automatiquement, approbation non requise)',
     ];
 
     public function getActionLabelAttribute(): string

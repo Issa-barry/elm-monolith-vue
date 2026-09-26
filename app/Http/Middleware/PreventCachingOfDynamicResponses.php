@@ -28,8 +28,8 @@ use Symfony\Component\HttpFoundation\Response;
  * respecter Vary — chaque réponse dynamique porte elle-même une interdiction
  * de cache explicite et standard (Cache-Control), qu'un cache HTTP conforme
  * doit respecter indépendamment de Vary. Ne s'applique jamais à une réponse
- * qui déclare déjà sa propre politique de cache (ex: ClientDashboardController,
- * ParametreController) — simple filet de sécurité par défaut, jamais une
+ * qui déclare déjà sa propre politique de cache (ex: QrCodeClientDashboardController,
+ * DownloadTemplateParametreController) — simple filet de sécurité par défaut, jamais une
  * substitution à un choix explicite du contrôleur.
  */
 class PreventCachingOfDynamicResponses

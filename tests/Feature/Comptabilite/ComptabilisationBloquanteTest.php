@@ -14,6 +14,7 @@ use App\Models\CompteMapping;
 use App\Models\Contrat;
 use App\Models\Depense;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\FactureVente;
 use App\Models\Livreur;
@@ -24,6 +25,7 @@ use App\Services\PaieCalculService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -37,12 +39,25 @@ use Tests\TestCase;
  */
 class ComptabilisationBloquanteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['comptabilite.payer', 'depenses.valider', 'rh-paie.pay']);
+        $this->initOrgAndUser(['comptabilite.payer', 'depenses.valider', 'rh-paie.pay', 'factures.encaisser']);
+
+        // Admin Entreprise ($this->user) reste soumis au plafond de montant
+        // depuis le 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001).
+        // Plafond très haut ici : test_validation_depense_echoue_si_comptabilisation_impossible
+        // doit échouer à cause du mapping comptable cassé, pas d'un plafond.
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 999_999_999,
+        ]);
     }
 
     private function casserMapping(string $evenement): void
@@ -155,6 +170,10 @@ class ComptabilisationBloquanteTest extends TestCase
             'reference' => 'FACT-TEST-'.uniqid(),
             'montant_brut' => 200_000, 'montant_net' => 200_000,
         ]);
+
+        // Les espèces exigent une caisse dédiée active (règle du 23/09/2026) : sans elle, le refus
+        // tomberait avant même la comptabilisation que ce test veut faire échouer.
+        $this->creerCaisseActive($site->id, $this->user->id);
 
         $this->casserMapping('encaissement_vente_recu');
 

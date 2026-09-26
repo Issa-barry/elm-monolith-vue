@@ -1,24 +1,44 @@
 <?php
 
 use App\Features\ModuleFeature;
-use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Account\IndexAccountController;
+use App\Http\Controllers\Account\ToggleActiveAccountController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
-use App\Http\Controllers\Auth\AcceptInvitationController;
-use App\Http\Controllers\Auth\ForcePasswordChangeController;
-use App\Http\Controllers\Auth\LivreurRegistrationController;
+use App\Http\Controllers\Auth\AcceptInvitation\AcceptAcceptInvitationController;
+use App\Http\Controllers\Auth\AcceptInvitation\CheckPhoneAcceptInvitationController;
+use App\Http\Controllers\Auth\AcceptInvitation\ResendOtpAcceptInvitationController;
+use App\Http\Controllers\Auth\AcceptInvitation\ShowAcceptInvitationController;
+use App\Http\Controllers\Auth\AcceptInvitation\VerifyOtpAcceptInvitationController;
+use App\Http\Controllers\Auth\ForcePasswordChange\ShowForcePasswordChangeController;
+use App\Http\Controllers\Auth\ForcePasswordChange\UpdateForcePasswordChangeController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
+use App\Http\Controllers\Auth\StoreLivreurRegistrationController;
 use App\Http\Controllers\CashbackController;
-use App\Http\Controllers\CategorieController;
-use App\Http\Controllers\Client\ClientDashboardController;
-use App\Http\Controllers\ClientController;
-use App\Http\Controllers\ClientVehicleController;
+use App\Http\Controllers\Client\EarningsClientDashboardController;
+use App\Http\Controllers\Client\IndexClientDashboardController;
+use App\Http\Controllers\Client\ProfileClientDashboardController;
+use App\Http\Controllers\Client\ProposalsClientDashboardController;
+use App\Http\Controllers\Client\QrCodeClientDashboardController;
+use App\Http\Controllers\Client\StoreVehicleProposalClientDashboardController;
+use App\Http\Controllers\Client\VehicleBalanceClientDashboardController;
+use App\Http\Controllers\Client\VehiclesClientDashboardController;
+use App\Http\Controllers\Clients\CreateClientController;
+use App\Http\Controllers\Clients\DestroyClientController;
+use App\Http\Controllers\Clients\DestroyVehiculeClientController;
+use App\Http\Controllers\Clients\EditClientController;
+use App\Http\Controllers\Clients\IndexClientController;
+use App\Http\Controllers\Clients\ShowClientController;
+use App\Http\Controllers\Clients\ShowTarifsGrossisteClientController;
+use App\Http\Controllers\Clients\StoreClientController;
+use App\Http\Controllers\Clients\StoreVehiculeClientController;
+use App\Http\Controllers\Clients\UpdateCashbackClientController;
+use App\Http\Controllers\Clients\UpdateClientController;
+use App\Http\Controllers\Clients\UpdateDerogationClientController;
+use App\Http\Controllers\Clients\UpdateTarifsGrossisteClientController;
+use App\Http\Controllers\Clients\UpdateVehiculeClientController;
+use App\Http\Controllers\Clients\VerifierTelephoneClientController;
 use App\Http\Controllers\CommandeAchatController;
-use App\Http\Controllers\CommandeVenteController;
-use App\Http\Controllers\CommandeVenteStatutController;
-use App\Http\Controllers\CommissionLogistiqueController;
-use App\Http\Controllers\CommissionPaymentController;
-use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -34,51 +54,170 @@ use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
-use App\Http\Controllers\ContactController;
+use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
 use App\Http\Controllers\ContratController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\DepenseController;
-use App\Http\Controllers\DepenseTypeController;
-use App\Http\Controllers\DepenseTypeImportController;
+use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
+use App\Http\Controllers\Depenses\CreateDepenseController;
+use App\Http\Controllers\Depenses\DestroyDepenseController;
+use App\Http\Controllers\Depenses\EditDepenseController;
+use App\Http\Controllers\Depenses\ExportCsvDepenseController;
+use App\Http\Controllers\Depenses\HistoriqueDepenseController;
+use App\Http\Controllers\Depenses\ImprimerDepenseController;
+use App\Http\Controllers\Depenses\IndexDepenseController;
+use App\Http\Controllers\Depenses\RejeterDepenseController;
+use App\Http\Controllers\Depenses\ShowDepenseController;
+use App\Http\Controllers\Depenses\SoumettreDepenseController;
+use App\Http\Controllers\Depenses\StoreDepenseController;
+use App\Http\Controllers\Depenses\SuggestionsDepenseController;
+use App\Http\Controllers\Depenses\Types\DestroyDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\ExportExcelDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\ExportPdfDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\Import\AnalyserDepenseTypeImportController;
+use App\Http\Controllers\Depenses\Types\Import\ConfirmerDepenseTypeImportController;
+use App\Http\Controllers\Depenses\Types\Import\ModeleDepenseTypeImportController;
+use App\Http\Controllers\Depenses\Types\IndexDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\StoreDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\ToggleDepenseTypeController;
+use App\Http\Controllers\Depenses\Types\UpdateDepenseTypeController;
+use App\Http\Controllers\Depenses\UpdateDepenseController;
+use App\Http\Controllers\Depenses\ValiderDepenseController;
+use App\Http\Controllers\Depenses\VehiculeDetailDepenseController;
+use App\Http\Controllers\Divers\IndexCommunicationController;
+use App\Http\Controllers\Divers\IndexDashboardController;
+use App\Http\Controllers\Divers\MarkReadContactController;
+use App\Http\Controllers\Divers\UnreadCountContactController;
 use App\Http\Controllers\EmployeController;
-use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
-use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FonctionRhController;
 use App\Http\Controllers\FournisseurController;
-use App\Http\Controllers\ImportProduitsController;
-use App\Http\Controllers\InstallWizardController;
+use App\Http\Controllers\ImportVehiculesMajController;
+use App\Http\Controllers\InstallWizard\ResolvePhoneInstallWizardController;
+use App\Http\Controllers\InstallWizard\SendEmailCodeInstallWizardController;
+use App\Http\Controllers\InstallWizard\ShowInstallWizardController;
+use App\Http\Controllers\InstallWizard\StoreInstallWizardController;
+use App\Http\Controllers\InstallWizard\VerifyEmailCodeInstallWizardController;
+use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
-use App\Http\Controllers\MediaController;
-use App\Http\Controllers\OnboardingSiteController;
-use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
-use App\Http\Controllers\PdvController;
 use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
-use App\Http\Controllers\ProduitController;
-use App\Http\Controllers\ProduitTypeController;
+use App\Http\Controllers\Produits\AjusterStockProduitController;
+use App\Http\Controllers\Produits\ArchiverProduitController;
+use App\Http\Controllers\Produits\Categories\DestroyCategorieController;
+use App\Http\Controllers\Produits\Categories\IndexCategorieController;
+use App\Http\Controllers\Produits\Categories\StoreCategorieController;
+use App\Http\Controllers\Produits\Categories\ToggleCategorieController;
+use App\Http\Controllers\Produits\Categories\UpdateCategorieController;
+use App\Http\Controllers\Produits\CreateProduitController;
+use App\Http\Controllers\Produits\DestroyProduitController;
+use App\Http\Controllers\Produits\EditProduitController;
+use App\Http\Controllers\Produits\HistoriqueProduitController;
+use App\Http\Controllers\Produits\Imports\ConfirmImportProduitsController;
+use App\Http\Controllers\Produits\Imports\CreateImportProduitsController;
+use App\Http\Controllers\Produits\Imports\IndexImportProduitsController;
+use App\Http\Controllers\Produits\Imports\RepriseImportProduitsController;
+use App\Http\Controllers\Produits\Imports\RetryImportProduitsController;
+use App\Http\Controllers\Produits\Imports\ShowImportProduitsController;
+use App\Http\Controllers\Produits\Imports\StoreImportProduitsController;
+use App\Http\Controllers\Produits\Imports\TemplateImportProduitsController;
+use App\Http\Controllers\Produits\IndexProduitController;
+use App\Http\Controllers\Produits\Medias\AssignerVariantesMediaController;
+use App\Http\Controllers\Produits\Medias\DefinirPrincipaleMediaController;
+use App\Http\Controllers\Produits\Medias\DestroyMediaController;
+use App\Http\Controllers\Produits\Medias\ReordonnerMediaController;
+use App\Http\Controllers\Produits\Medias\StoreMediaController;
+use App\Http\Controllers\Produits\Options\DestroyOptionCatalogueController;
+use App\Http\Controllers\Produits\Options\DestroyValeurOptionCatalogueController;
+use App\Http\Controllers\Produits\Options\IndexOptionCatalogueController;
+use App\Http\Controllers\Produits\Options\StoreOptionCatalogueController;
+use App\Http\Controllers\Produits\Options\StoreValeurOptionCatalogueController;
+use App\Http\Controllers\Produits\Options\UpdateOptionCatalogueController;
+use App\Http\Controllers\Produits\ShowProduitController;
+use App\Http\Controllers\Produits\Stock\IndexStockController;
+use App\Http\Controllers\Produits\StoreProduitController;
+use App\Http\Controllers\Produits\Types\DestroyProduitTypeController;
+use App\Http\Controllers\Produits\Types\IndexProduitTypeController;
+use App\Http\Controllers\Produits\Types\StoreProduitTypeController;
+use App\Http\Controllers\Produits\Types\ToggleProduitTypeController;
+use App\Http\Controllers\Produits\Types\UpdateProduitTypeController;
+use App\Http\Controllers\Produits\UpdateProduitController;
+use App\Http\Controllers\Produits\Variantes\BulkUpdateProduitVarianteController;
+use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
+use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\ReceptionValidationAdminController;
-use App\Http\Controllers\RoleController;
+use App\Http\Controllers\Role\CreateRoleController;
+use App\Http\Controllers\Role\DestroyRoleController;
+use App\Http\Controllers\Role\EditRoleController;
+use App\Http\Controllers\Role\IndexRoleController;
+use App\Http\Controllers\Role\StoreRoleController;
+use App\Http\Controllers\Role\UpdateRoleController;
 use App\Http\Controllers\ScanLivraisonController;
+use App\Http\Controllers\ScanProduitController;
 use App\Http\Controllers\ScanUserController;
-use App\Http\Controllers\SiteController;
-use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
-use App\Http\Controllers\StockController;
+use App\Http\Controllers\Sites\CreateSiteController;
+use App\Http\Controllers\Sites\DestroySiteController;
+use App\Http\Controllers\Sites\EditSiteController;
+use App\Http\Controllers\Sites\Import\AnalyserSiteImportController;
+use App\Http\Controllers\Sites\Import\ConfirmerSiteImportController;
+use App\Http\Controllers\Sites\Import\ModeleSiteImportController;
+use App\Http\Controllers\Sites\IndexSiteController;
+use App\Http\Controllers\Sites\Onboarding\ShowOnboardingSiteController;
+use App\Http\Controllers\Sites\Onboarding\StoreOnboardingSiteController;
+use App\Http\Controllers\Sites\ShowSiteController;
+use App\Http\Controllers\Sites\StoreSiteController;
+use App\Http\Controllers\Sites\UpdateSiteController;
 use App\Http\Controllers\Testing\CommissionE2eDiagnosticController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\UserInvitationController;
+use App\Http\Controllers\User\CreateUserController;
+use App\Http\Controllers\User\DestroyUserController;
+use App\Http\Controllers\User\EditUserController;
+use App\Http\Controllers\User\IndexUserController;
+use App\Http\Controllers\User\RejectAccountUserController;
+use App\Http\Controllers\User\StoreUserController;
+use App\Http\Controllers\User\UpdatePasswordUserController;
+use App\Http\Controllers\User\UpdateUserController;
+use App\Http\Controllers\User\ValidateAccountUserController;
+use App\Http\Controllers\UserInvitation\DestroyUserInvitationController;
+use App\Http\Controllers\UserInvitation\ForceDestroyUserInvitationController;
+use App\Http\Controllers\UserInvitation\ResendUserInvitationController;
+use App\Http\Controllers\UserInvitation\StoreUserInvitationController;
 use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\Vehicules\Parrain\RechercherTelephoneParrainController;
+use App\Http\Controllers\Vehicules\Parrain\StoreParrainController;
+use App\Http\Controllers\Vehicules\Parrain\UpdateParrainController;
+use App\Http\Controllers\Ventes\AnnulerCommandeVenteController;
+use App\Http\Controllers\Ventes\AnnulerStatutVenteController;
+use App\Http\Controllers\Ventes\AvancerStatutVenteController;
+use App\Http\Controllers\Ventes\CheckoutPdvController;
+use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
+use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
+use App\Http\Controllers\Ventes\CreateCommandeVenteController;
+use App\Http\Controllers\Ventes\DemanderCodeAnnulationExceptionnelleController;
+use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
+use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
+use App\Http\Controllers\Ventes\EditCommandeVenteController;
+use App\Http\Controllers\Ventes\EnregistrerRetourCommandeVenteController;
+use App\Http\Controllers\Ventes\ExportCommandeVenteController;
+use App\Http\Controllers\Ventes\IndexCommandeVenteController;
+use App\Http\Controllers\Ventes\IndexFactureVenteController;
+use App\Http\Controllers\Ventes\IndexPdvController;
+use App\Http\Controllers\Ventes\RelancerCommissionsCommandeVenteController;
+use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
+use App\Http\Controllers\Ventes\ShowCommandeVenteController;
+use App\Http\Controllers\Ventes\StoreCommandeVenteController;
+use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
+use App\Http\Controllers\Ventes\UpdateCommandeVenteController;
+use App\Http\Controllers\Ventes\ValiderCommandeVenteController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Support\AuthRedirects;
@@ -93,7 +232,7 @@ Route::middleware('guest')->group(function () {
         ->name('register.lookup');
     Route::post('/register/otp/verify', RegisterOtpController::class)
         ->name('register.otp.verify');
-    Route::post('/register/livreur', [LivreurRegistrationController::class, 'store'])
+    Route::post('/register/livreur', StoreLivreurRegistrationController::class)
         ->name('livreur.register.store');
 });
 
@@ -108,38 +247,38 @@ Route::get('/register/livreur', function () {
 })->name('livreur.register');
 
 // ── Onboarding via lien d'invitation ─────────────────────────────────────────
-Route::get('/invitations/accept/{token}', [AcceptInvitationController::class, 'show'])
+Route::get('/invitations/accept/{token}', ShowAcceptInvitationController::class)
     ->name('invitations.accept')
     ->middleware('throttle:20,1');
-Route::post('/invitations/accept/{token}/phone', [AcceptInvitationController::class, 'checkPhone'])
+Route::post('/invitations/accept/{token}/phone', CheckPhoneAcceptInvitationController::class)
     ->name('invitations.accept.phone')
     ->middleware('throttle:otp-send');
-Route::post('/invitations/accept/{token}/otp', [AcceptInvitationController::class, 'verifyOtp'])
+Route::post('/invitations/accept/{token}/otp', VerifyOtpAcceptInvitationController::class)
     ->name('invitations.accept.otp')
     ->middleware('throttle:otp-verify');
-Route::post('/invitations/accept/{token}/otp/resend', [AcceptInvitationController::class, 'resendOtp'])
+Route::post('/invitations/accept/{token}/otp/resend', ResendOtpAcceptInvitationController::class)
     ->name('invitations.accept.otp.resend')
     ->middleware('throttle:otp-send');
-Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, 'accept'])
+Route::post('/invitations/accept/{token}', AcceptAcceptInvitationController::class)
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');
 
 // ── Assistant d'installation ──────────────────────────────────────────────────
 // Public (pas de middleware 'auth') mais fortement gardé côté contrôleur — voir
-// InstallWizardController pour les 3 niveaux de protection (déjà installé, token, rate limit).
+// App\Support\Auth\InstallWizardGuard pour les 3 niveaux de protection (déjà installé, token, rate limit).
 Route::middleware('throttle:install')->group(function () {
-    Route::get('install', [InstallWizardController::class, 'show'])->name('install.show');
-    Route::post('install/token', [InstallWizardController::class, 'verifyToken'])->name('install.token');
-    Route::post('install/phone-info', [InstallWizardController::class, 'resolvePhone'])->name('install.phone-info');
-    Route::post('install', [InstallWizardController::class, 'store'])->name('install.store');
+    Route::get('install', ShowInstallWizardController::class)->name('install.show');
+    Route::post('install/token', VerifyTokenInstallWizardController::class)->name('install.token');
+    Route::post('install/phone-info', ResolvePhoneInstallWizardController::class)->name('install.phone-info');
+    Route::post('install', StoreInstallWizardController::class)->name('install.store');
 });
-// Vérification de l'email du Super Admin par code (facultatif — cf. InstallWizardController) :
+// Vérification de l'email du Super Admin par code (facultatif — cf. InstallWizard\*) :
 // throttle dédié email+IP, distinct de `install` (10/min/IP tout court) pour rester cohérent
-// avec le anti-spam OTP déjà en place ailleurs (otp-send/otp-verify, cf. AcceptInvitationController).
-Route::post('install/email/send-code', [InstallWizardController::class, 'sendEmailCode'])
+// avec le anti-spam OTP déjà en place ailleurs (otp-send/otp-verify, cf. Auth\AcceptInvitation\*).
+Route::post('install/email/send-code', SendEmailCodeInstallWizardController::class)
     ->name('install.email.send-code')
     ->middleware('throttle:otp-email-send');
-Route::post('install/email/verify-code', [InstallWizardController::class, 'verifyEmailCode'])
+Route::post('install/email/verify-code', VerifyEmailCodeInstallWizardController::class)
     ->name('install.email.verify-code')
     ->middleware('throttle:otp-email-verify');
 
@@ -171,58 +310,100 @@ Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 // organisation qui amène ici, cf. EnsureOrganizationHasSite — l'appliquer ici créerait une
 // boucle de redirection) mais toujours authentifié.
 Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
-    Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
-    Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
+    Route::get('site', ShowOnboardingSiteController::class)->name('site.show');
+    Route::post('site', StoreOnboardingSiteController::class)->name('site.store');
 });
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
-    Route::get('dashboard', [DashboardController::class, 'index'])
+    Route::get('dashboard', IndexDashboardController::class)
         ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'staff', 'org.site.required', 'require.site'])
         ->name('dashboard');
 
     Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
 
         // Messages de contact
-        Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
-        Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');
+        Route::get('contact-messages/unread-count', UnreadCountContactController::class)->name('contact-messages.unread-count');
+        Route::patch('contact-messages/{contactMessage}/read', MarkReadContactController::class)->name('contact-messages.read');
 
         // Clients
-        Route::resource('clients', ClientController::class);
-        Route::patch('clients/{client}/cashback', [ClientController::class, 'updateCashback'])
+        // Déclarée avant Route::resource() : sinon "verifier-telephone" serait interprété comme
+        // le paramètre {client} de la route GET clients/{client} (show), même raison que
+        // categories/options avant produits/{produit} plus bas dans ce fichier.
+        Route::get('clients/verifier-telephone', VerifierTelephoneClientController::class)
+            ->name('clients.verifier-telephone');
+        Route::get('clients', IndexClientController::class)->name('clients.index');
+        Route::get('clients/create', CreateClientController::class)->name('clients.create');
+        Route::post('clients', StoreClientController::class)->name('clients.store');
+        Route::get('clients/{client}', ShowClientController::class)->name('clients.show');
+        Route::get('clients/{client}/edit', EditClientController::class)->name('clients.edit');
+        Route::match(['put', 'patch'], 'clients/{client}', UpdateClientController::class)->name('clients.update');
+        Route::delete('clients/{client}', DestroyClientController::class)->name('clients.destroy');
+        Route::patch('clients/{client}/cashback', UpdateCashbackClientController::class)
             ->name('clients.cashback.update');
-        Route::patch('clients/{client}/derogation-impayes', [ClientController::class, 'updateDerogation'])
+        Route::patch('clients/{client}/derogation-impayes', UpdateDerogationClientController::class)
             ->name('clients.derogation-impayes.update');
+        // Tarifs Grossiste — propres à ce client (cf. CategorieTarifGrossisteController), jamais
+        // une page d'administration globale.
+        Route::get('clients/{client}/tarifs-grossiste', ShowTarifsGrossisteClientController::class)
+            ->name('clients.tarifs-grossiste.show');
+        Route::put('clients/{client}/tarifs-grossiste', UpdateTarifsGrossisteClientController::class)
+            ->name('clients.tarifs-grossiste.update');
         // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
-        Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
+        Route::post('clients/{client}/vehicules', StoreVehiculeClientController::class)
             ->name('clients.vehicules.store');
-        Route::put('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'update'])
+        Route::put('clients/{client}/vehicules/{vehicule}', UpdateVehiculeClientController::class)
             ->name('clients.vehicules.update');
-        Route::delete('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'destroy'])
+        Route::delete('clients/{client}/vehicules/{vehicule}', DestroyVehiculeClientController::class)
             ->name('clients.vehicules.destroy');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune
         // devant pouvoir etre activee/desactivee independamment des Ventes.
         Route::middleware('module:'.ModuleFeature::PDV)->group(function () {
-            Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
-            Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
+            Route::get('pdv', IndexPdvController::class)->name('pdv.index');
+            Route::post('pdv/checkout', CheckoutPdvController::class)->name('pdv.checkout');
         });
 
         // ── Module : Ventes ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
-            Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
-            Route::resource('ventes', CommandeVenteController::class)->except([]);
-            Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
-            Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
-            Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
-            Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
-            Route::post('ventes/{commande_vente}/commissions/relancer', [CommandeVenteController::class, 'relancerCommissions'])->name('ventes.commissions.relancer');
-            Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
+            Route::get('ventes/check-solvabilite', CheckSolvabiliteCommandeVenteController::class)->name('ventes.check-solvabilite');
+            Route::get('ventes', IndexCommandeVenteController::class)->name('ventes.index');
+            Route::get('ventes/create', CreateCommandeVenteController::class)->name('ventes.create');
+            // Avant ventes/{vente} : un segment statique doit toujours être déclaré avant la route
+            // paramétrée correspondante, sous peine d'être capturé par {vente} (cf. show()).
+            Route::get('ventes/export', ExportCommandeVenteController::class)->name('ventes.export');
+            Route::post('ventes', StoreCommandeVenteController::class)->name('ventes.store');
+            Route::get('ventes/{vente}', ShowCommandeVenteController::class)->name('ventes.show');
+            Route::get('ventes/{vente}/edit', EditCommandeVenteController::class)->name('ventes.edit');
+            Route::match(['put', 'patch'], 'ventes/{vente}', UpdateCommandeVenteController::class)->name('ventes.update');
+            Route::delete('ventes/{vente}', DestroyCommandeVenteController::class)->name('ventes.destroy');
+            // Même liste que ventes.index, filtrée sur nature_operation=distribution_client côté
+            // contrôleur (déterminé par le nom de route, jamais un paramètre client) — la création
+            // reste sur ventes.create/ventes.store, avec le choix de nature sur le formulaire.
+            Route::get('distributions', IndexCommandeVenteController::class)->name('distributions.index');
+            // Même contrôleur d'export que ventes.export — cf. sa docblock.
+            Route::get('distributions/export', ExportCommandeVenteController::class)->name('distributions.export');
+            // Même contrôleur/données que ventes.show — seul le composant Inertia rendu diffère
+            // (Distributions/Show au lieu de Ventes/Show), choisi côté contrôleur selon
+            // nature_operation, jamais par ce nom de route lui-même. Le paramètre {vente} doit
+            // rester identique à celui de ventes.show : show(CommandeVente $vente) résout le
+            // binding implicite par nom de paramètre, pas par position.
+            Route::get('distributions/{vente}', ShowCommandeVenteController::class)->name('distributions.show');
+            Route::patch('ventes/{commande_vente}/valider', ValiderCommandeVenteController::class)->name('ventes.valider');
+            Route::patch('ventes/{commande_vente}/annuler', AnnulerCommandeVenteController::class)->name('ventes.annuler');
+            Route::post('ventes/{commande_vente}/statut/avancer', AvancerStatutVenteController::class)->name('ventes.statut.avancer');
+            Route::post('ventes/{commande_vente}/statut/annuler', AnnulerStatutVenteController::class)->name('ventes.statut.annuler');
+            Route::post('ventes/{commande_vente}/retour', EnregistrerRetourCommandeVenteController::class)->name('ventes.retour.store');
+            Route::get('ventes/{commande_vente}/annulation-exceptionnelle', ShowAnnulationExceptionnelleController::class)->name('ventes.annulation-exceptionnelle.show');
+            Route::post('ventes/{commande_vente}/annulation-exceptionnelle/code', DemanderCodeAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.code');
+            Route::post('ventes/{commande_vente}/annulation-exceptionnelle', ConfirmerAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.confirmer');
+            Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
+            Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
 
             // Encaissements factures
-            Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
-            Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
+            Route::post('factures/{facture_vente}/encaissements', StoreEncaissementVenteController::class)->name('encaissements.store');
+            Route::delete('encaissements/{encaissement_vente}', DestroyEncaissementVenteController::class)->name('encaissements.destroy');
         });
 
         // ── Module : Achats ───────────────────────────────────────────────────────
@@ -262,12 +443,33 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
             });
 
+            // Import de mise à jour en masse (site, capacités, usages) — doit être avant
+            // Route::resource('vehicules') pour la même raison que "propositions" ci-dessus :
+            // sinon vehicules/{vehicule} intercepterait vehicules/imports-maj, vehicules/export
+            // et vehicules/export-maj. Entièrement séparé de l'import flotte (création) —
+            // cf. ImportVehiculesMajController.
+            Route::prefix('vehicules/imports-maj')->name('vehicules.imports-maj.')->group(function () {
+                Route::get('/', [ImportVehiculesMajController::class, 'index'])->name('index');
+                Route::get('/nouveau', [ImportVehiculesMajController::class, 'create'])->name('create');
+                Route::post('/', [ImportVehiculesMajController::class, 'store'])->name('store');
+                Route::get('/{importVehiculesMaj}', [ImportVehiculesMajController::class, 'show'])->name('show');
+                Route::post('/{importVehiculesMaj}/confirmer', [ImportVehiculesMajController::class, 'confirm'])->name('confirm');
+                Route::post('/{importVehiculesMaj}/relancer', [ImportVehiculesMajController::class, 'retry'])->name('retry');
+            });
+            Route::get('vehicules/export', [VehiculeController::class, 'export'])->name('vehicules.export');
+            Route::get('vehicules/export-maj', [VehiculeController::class, 'exportMaj'])->name('vehicules.export-maj');
+
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
             Route::resource('vehicules', VehiculeController::class);
             Route::patch('vehicules/{vehicule}/derogation-impayes', [VehiculeController::class, 'updateDerogation'])->name('vehicules.derogation-impayes.update');
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
+            // Parrainage (phase 1, cf. docs/parrainage-vehicule.md) : protégé par les mêmes
+            // permissions que le véhicule (vehicules.update), pas de permission dédiée.
+            Route::get('vehicules/{vehicule}/parrain/rechercher', RechercherTelephoneParrainController::class)->name('vehicules.parrain.rechercher');
+            Route::post('vehicules/{vehicule}/parrain', StoreParrainController::class)->name('vehicules.parrain.store');
+            Route::put('vehicules/{vehicule}/parrain', UpdateParrainController::class)->name('vehicules.parrain.update');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');
@@ -293,39 +495,54 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
             Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
+            // Déclarée avant le resource() : sinon "verifier-telephone" est capturé par
+            // equipes-livraison/{equipes_livraison} (route "show") et tente une résolution
+            // de modèle avec cette chaîne comme identifiant.
+            Route::get('equipes-livraison/verifier-telephone', [EquipeLivraisonController::class, 'verifierTelephone'])
+                ->name('equipes-livraison.verifier-telephone');
+
+            // Transfert de véhicule d'un livreur (changement d'équipe) — déclarées avant le
+            // resource() pour la même raison que verifier-telephone ci-dessus.
+            Route::get('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transfertDonnees'])
+                ->name('equipes-livraison.transfert.donnees');
+            Route::get('equipes-livraison/transfert-livreur/{livreur}/vehicule/{vehicule}', [EquipeLivraisonController::class, 'transfertDonneesArrivee'])
+                ->name('equipes-livraison.transfert.donnees-arrivee');
+            Route::post('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transferer'])
+                ->name('equipes-livraison.transfert.store');
+
             Route::resource('equipes-livraison', EquipeLivraisonController::class)
                 ->only(['index', 'store', 'show', 'update', 'destroy']);
         });
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
-            Route::get('produits/stock', [StockController::class, 'index'])->name('produits.stock.index');
+            Route::get('produits/stock', IndexStockController::class)->name('produits.stock.index');
 
             // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
             // avec le littéral "categories", mais garde l'ordre explicite).
-            Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
-            Route::post('produits/categories', [CategorieController::class, 'store'])->name('produits.categories.store');
-            Route::put('produits/categories/{categorie}', [CategorieController::class, 'update'])->name('produits.categories.update');
-            Route::patch('produits/categories/{categorie}/toggle', [CategorieController::class, 'toggle'])->name('produits.categories.toggle');
-            Route::delete('produits/categories/{categorie}', [CategorieController::class, 'destroy'])->name('produits.categories.destroy');
+            Route::get('produits/categories', IndexCategorieController::class)->name('produits.categories.index');
+            Route::post('produits/categories', StoreCategorieController::class)->name('produits.categories.store');
+            Route::put('produits/categories/{categorie}', UpdateCategorieController::class)->name('produits.categories.update');
+            Route::patch('produits/categories/{categorie}/toggle', ToggleCategorieController::class)->name('produits.categories.toggle');
+            Route::delete('produits/categories/{categorie}', DestroyCategorieController::class)->name('produits.categories.destroy');
 
             // Catalogue d'options réutilisables — indépendant des options réellement portées
             // par chaque produit (cf. ProduitOption), déclarées avant produits/{produit} pour
             // la même raison de lisibilité que categories ci-dessus.
-            Route::get('produits/options', [OptionCatalogueController::class, 'index'])->name('produits.options.index');
-            Route::post('produits/options', [OptionCatalogueController::class, 'store'])->name('produits.options.store');
-            Route::put('produits/options/{option}', [OptionCatalogueController::class, 'update'])->name('produits.options.update');
-            Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
-            Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
-            Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
+            Route::get('produits/options', IndexOptionCatalogueController::class)->name('produits.options.index');
+            Route::post('produits/options', StoreOptionCatalogueController::class)->name('produits.options.store');
+            Route::put('produits/options/{option}', UpdateOptionCatalogueController::class)->name('produits.options.update');
+            Route::delete('produits/options/{option}', DestroyOptionCatalogueController::class)->name('produits.options.destroy');
+            Route::post('produits/options/{option}/valeurs', StoreValeurOptionCatalogueController::class)->name('produits.options.valeurs.store');
+            Route::delete('produits/options/{option}/valeurs/{valeur}', DestroyValeurOptionCatalogueController::class)->name('produits.options.valeurs.destroy');
 
             // Types de produit — CRUD par organisation (remplace l'ancien enum figé), même
             // pattern que categories/options ci-dessus, déclarées avant produits/{produit}.
-            Route::get('produits/types', [ProduitTypeController::class, 'index'])->name('produits.types.index');
-            Route::post('produits/types', [ProduitTypeController::class, 'store'])->name('produits.types.store');
-            Route::put('produits/types/{type}', [ProduitTypeController::class, 'update'])->name('produits.types.update');
-            Route::patch('produits/types/{type}/toggle', [ProduitTypeController::class, 'toggle'])->name('produits.types.toggle');
-            Route::delete('produits/types/{type}', [ProduitTypeController::class, 'destroy'])->name('produits.types.destroy');
+            Route::get('produits/types', IndexProduitTypeController::class)->name('produits.types.index');
+            Route::post('produits/types', StoreProduitTypeController::class)->name('produits.types.store');
+            Route::put('produits/types/{type}', UpdateProduitTypeController::class)->name('produits.types.update');
+            Route::patch('produits/types/{type}/toggle', ToggleProduitTypeController::class)->name('produits.types.toggle');
+            Route::delete('produits/types/{type}', DestroyProduitTypeController::class)->name('produits.types.destroy');
 
             // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
             // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit
@@ -336,76 +553,102 @@ Route::prefix('backoffice')->group(function () {
 
             // Import Excel en masse (création + mise à jour), déclarées avant produits/{produit}
             // par lisibilité — même raison que categories/options/types ci-dessus.
-            Route::get('produits/imports', [ImportProduitsController::class, 'index'])->name('produits.imports.index');
-            Route::get('produits/imports/nouveau', [ImportProduitsController::class, 'create'])->name('produits.imports.create');
-            Route::post('produits/imports', [ImportProduitsController::class, 'store'])->name('produits.imports.store');
-            Route::get('produits/imports/modele', [ImportProduitsController::class, 'template'])->name('produits.imports.modele');
-            Route::get('produits/imports/{importProduits}', [ImportProduitsController::class, 'show'])->name('produits.imports.show');
-            Route::post('produits/imports/{importProduits}/confirmer', [ImportProduitsController::class, 'confirm'])->name('produits.imports.confirm');
-            Route::post('produits/imports/{importProduits}/reessayer', [ImportProduitsController::class, 'retry'])->name('produits.imports.retry');
-            Route::get('produits/imports/{importProduits}/reprise', [ImportProduitsController::class, 'reprise'])->name('produits.imports.reprise');
+            Route::get('produits/imports', IndexImportProduitsController::class)->name('produits.imports.index');
+            Route::get('produits/imports/nouveau', CreateImportProduitsController::class)->name('produits.imports.create');
+            Route::post('produits/imports', StoreImportProduitsController::class)->name('produits.imports.store');
+            Route::get('produits/imports/modele', TemplateImportProduitsController::class)->name('produits.imports.modele');
+            Route::get('produits/imports/{importProduits}', ShowImportProduitsController::class)->name('produits.imports.show');
+            Route::post('produits/imports/{importProduits}/confirmer', ConfirmImportProduitsController::class)->name('produits.imports.confirm');
+            Route::post('produits/imports/{importProduits}/reessayer', RetryImportProduitsController::class)->name('produits.imports.retry');
+            Route::get('produits/imports/{importProduits}/reprise', RepriseImportProduitsController::class)->name('produits.imports.reprise');
 
-            Route::resource('produits', ProduitController::class);
-            Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
+            Route::get('produits', IndexProduitController::class)->name('produits.index');
+            Route::get('produits/create', CreateProduitController::class)->name('produits.create');
+            Route::post('produits', StoreProduitController::class)->name('produits.store');
+            Route::get('produits/{produit}', ShowProduitController::class)->name('produits.show');
+            Route::get('produits/{produit}/edit', EditProduitController::class)->name('produits.edit');
+            Route::match(['put', 'patch'], 'produits/{produit}', UpdateProduitController::class)->name('produits.update');
+            Route::delete('produits/{produit}', DestroyProduitController::class)->name('produits.destroy');
+            Route::post('produits/{produit}/ajuster-stock', AjusterStockProduitController::class)
                 ->name('produits.ajuster-stock');
-            Route::get('produits/{produit}/historique', [ProduitController::class, 'historique'])
+            Route::get('produits/{produit}/historique', HistoriqueProduitController::class)
                 ->name('produits.historique');
-            Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
+            Route::patch('produits/{produit}/archiver', ArchiverProduitController::class)
                 ->name('produits.archiver');
-            Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
+            Route::put('produits/{produit}/variantes/{variante}', UpdateProduitVarianteController::class)
                 ->name('produits.variantes.update');
-            Route::get('produits/{produit}/variantes', [ProduitController::class, 'variantesIndex'])
+            Route::get('produits/{produit}/variantes', IndexProduitVarianteController::class)
                 ->name('produits.variantes.index');
-            Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
+            Route::put('produits/{produit}/variantes', BulkUpdateProduitVarianteController::class)
                 ->name('produits.variantes.bulk-update');
 
-            // Galerie photo produit — indépendante du formulaire principal, cf. MediaController.
-            Route::post('produits/{produit}/medias', [MediaController::class, 'store'])
+            // Galerie photo produit — indépendante du formulaire principal, cf.
+            // Produits\Medias\*.
+            Route::post('produits/{produit}/medias', StoreMediaController::class)
                 ->name('produits.medias.store');
-            Route::patch('produits/{produit}/medias/reordonner', [MediaController::class, 'reordonner'])
+            Route::patch('produits/{produit}/medias/reordonner', ReordonnerMediaController::class)
                 ->name('produits.medias.reordonner');
-            Route::patch('produits/{produit}/medias/{media}/principale', [MediaController::class, 'definirPrincipale'])
+            Route::patch('produits/{produit}/medias/{media}/principale', DefinirPrincipaleMediaController::class)
                 ->name('produits.medias.principale');
-            Route::delete('produits/{produit}/medias/{media}', [MediaController::class, 'destroy'])
+            Route::delete('produits/{produit}/medias/{media}', DestroyMediaController::class)
                 ->name('produits.medias.destroy');
-            Route::post('produits/{produit}/medias/{media}/variantes', [MediaController::class, 'assignerVariantes'])
+            Route::post('produits/{produit}/medias/{media}/variantes', AssignerVariantesMediaController::class)
                 ->name('produits.medias.assigner-variantes');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
-            Route::resource('sites', SiteController::class);
-            Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
+            Route::get('sites', IndexSiteController::class)->name('sites.index');
+            Route::get('sites/create', CreateSiteController::class)->name('sites.create');
+            Route::post('sites', StoreSiteController::class)->name('sites.store');
+            Route::get('sites/{site}', ShowSiteController::class)->name('sites.show');
+            Route::get('sites/{site}/edit', EditSiteController::class)->name('sites.edit');
+            Route::match(['put', 'patch'], 'sites/{site}', UpdateSiteController::class)->name('sites.update');
+            Route::delete('sites/{site}', DestroySiteController::class)->name('sites.destroy');
+            Route::post('sites/{site}/invitations', StoreUserInvitationController::class)
                 ->name('sites.invitations.store')
                 ->middleware('throttle:10,1');
 
-            // Import en masse — Dialog depuis Sites/Index.vue, cf. SiteImportController.
-            Route::get('sites/import/modele', [SiteImportController::class, 'modele'])
+            // Import en masse — Dialog depuis Sites/Index.vue, cf. app/Http/Controllers/Sites/Import.
+            Route::get('sites/import/modele', ModeleSiteImportController::class)
                 ->name('sites.import.modele');
-            Route::post('sites/import/analyser', [SiteImportController::class, 'analyser'])
+            Route::post('sites/import/analyser', AnalyserSiteImportController::class)
                 ->name('sites.import.analyser');
-            Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
+            Route::post('sites/import/confirmer', ConfirmerSiteImportController::class)
                 ->name('sites.import.confirmer');
         });
 
+        // ── Communications — monitoring SMS/WhatsApp (cf. rapport 07/09/2026, P1) ──
+        Route::get('communications', IndexCommunicationController::class)->name('communications.index');
+
         // ── Comptes — point d'entrée unique de navigation pour la gestion des comptes ──────
         // (super_admin : console plateforme multi-organisation ; autres : délègue à la liste
-        // organisation-scopée de UserController, cf. AccountController::index).
-        Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
-        Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
+        // organisation-scopée de UserController, cf. Account\IndexAccountController).
+        Route::get('comptes', IndexAccountController::class)->name('comptes.index');
+        Route::patch('comptes/{user}/toggle-active', ToggleActiveAccountController::class)->name('comptes.toggle-active');
 
         // ── Module : Utilisateurs ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
-            Route::resource('users', UserController::class)->except(['show']);
-            Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
-            Route::patch('users/{user}/validate', [UserController::class, 'validateAccount'])->name('users.validate');
-            Route::patch('users/{user}/reject', [UserController::class, 'rejectAccount'])->name('users.reject');
-            Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
-            Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
+            Route::get('users', IndexUserController::class)->name('users.index');
+            Route::get('users/create', CreateUserController::class)->name('users.create');
+            Route::post('users', StoreUserController::class)->name('users.store');
+            Route::get('users/{user}/edit', EditUserController::class)->name('users.edit');
+            Route::match(['put', 'patch'], 'users/{user}', UpdateUserController::class)->name('users.update');
+            Route::delete('users/{user}', DestroyUserController::class)->name('users.destroy');
+            Route::put('users/{user}/password', UpdatePasswordUserController::class)->name('users.update-password');
+            Route::patch('users/{user}/validate', ValidateAccountUserController::class)->name('users.validate');
+            Route::patch('users/{user}/reject', RejectAccountUserController::class)->name('users.reject');
+            Route::get('roles', IndexRoleController::class)->name('roles.index');
+            Route::get('roles/create', CreateRoleController::class)->name('roles.create');
+            Route::post('roles', StoreRoleController::class)->name('roles.store');
+            Route::get('roles/{role}/edit', EditRoleController::class)->name('roles.edit');
+            Route::match(['put', 'patch'], 'roles/{role}', UpdateRoleController::class)->name('roles.update');
+            Route::delete('roles/{role}', DestroyRoleController::class)->name('roles.destroy');
+            Route::post('invitations/{invitation}/resend', ResendUserInvitationController::class)
                 ->name('invitations.resend');
-            Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])
+            Route::delete('invitations/{invitation}', DestroyUserInvitationController::class)
                 ->name('invitations.destroy');
-            Route::delete('invitations/{invitation}/force', [UserInvitationController::class, 'forceDestroy'])
+            Route::delete('invitations/{invitation}/force', ForceDestroyUserInvitationController::class)
                 ->name('invitations.force-destroy');
         });
 
@@ -418,32 +661,38 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Dépenses opérationnelles ────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
-            Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
-            Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
-            Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
-            Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
-            Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
+            Route::get('depenses/export/excel', ExportCsvDepenseController::class)->name('depenses.export.excel');
+            Route::get('depenses/imprimer', ImprimerDepenseController::class)->name('depenses.imprimer');
+            Route::get('depenses/suggestions', SuggestionsDepenseController::class)->name('depenses.suggestions');
+            Route::get('depenses/concerne-detail', ConcerneDetailDepenseController::class)->name('depenses.concerne-detail');
+            Route::get('depenses/vehicule-detail', VehiculeDetailDepenseController::class)->name('depenses.vehicule-detail');
 
             // ── Types de dépense — sous-page du module Dépenses (déménagée des
             // Paramètres, cf. routes/settings.php pour la redirection de l'ancienne
             // URL). Déclarée avant Route::resource('depenses', ...) ci-dessous pour
             // ne jamais être capturée par son wildcard {depense}.
-            Route::get('depenses/types', [DepenseTypeController::class, 'index'])->name('depenses.types.index');
-            Route::post('depenses/types', [DepenseTypeController::class, 'store'])->name('depenses.types.store');
-            Route::put('depenses/types/{depense_type}', [DepenseTypeController::class, 'update'])->name('depenses.types.update');
-            Route::patch('depenses/types/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('depenses.types.toggle');
-            Route::delete('depenses/types/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('depenses.types.destroy');
-            Route::get('depenses/types/export/excel', [DepenseTypeController::class, 'exportExcel'])->name('depenses.types.export.excel');
-            Route::get('depenses/types/export/pdf', [DepenseTypeController::class, 'exportPdf'])->name('depenses.types.export.pdf');
-            Route::get('depenses/types/import/modele', [DepenseTypeImportController::class, 'modele'])->name('depenses.types.import.modele');
-            Route::post('depenses/types/import/analyser', [DepenseTypeImportController::class, 'analyser'])->name('depenses.types.import.analyser');
-            Route::post('depenses/types/import/confirmer', [DepenseTypeImportController::class, 'confirmer'])->name('depenses.types.import.confirmer');
+            Route::get('depenses/types', IndexDepenseTypeController::class)->name('depenses.types.index');
+            Route::post('depenses/types', StoreDepenseTypeController::class)->name('depenses.types.store');
+            Route::put('depenses/types/{depense_type}', UpdateDepenseTypeController::class)->name('depenses.types.update');
+            Route::patch('depenses/types/{depense_type}/toggle', ToggleDepenseTypeController::class)->name('depenses.types.toggle');
+            Route::delete('depenses/types/{depense_type}', DestroyDepenseTypeController::class)->name('depenses.types.destroy');
+            Route::get('depenses/types/export/excel', ExportExcelDepenseTypeController::class)->name('depenses.types.export.excel');
+            Route::get('depenses/types/export/pdf', ExportPdfDepenseTypeController::class)->name('depenses.types.export.pdf');
+            Route::get('depenses/types/import/modele', ModeleDepenseTypeImportController::class)->name('depenses.types.import.modele');
+            Route::post('depenses/types/import/analyser', AnalyserDepenseTypeImportController::class)->name('depenses.types.import.analyser');
+            Route::post('depenses/types/import/confirmer', ConfirmerDepenseTypeImportController::class)->name('depenses.types.import.confirmer');
 
-            Route::resource('depenses', DepenseController::class);
-            Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
-            Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
-            Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
-            Route::get('depenses/{depense}/historique', [DepenseController::class, 'historique'])->name('depenses.historique');
+            Route::get('depenses', IndexDepenseController::class)->name('depenses.index');
+            Route::get('depenses/create', CreateDepenseController::class)->name('depenses.create');
+            Route::post('depenses', StoreDepenseController::class)->name('depenses.store');
+            Route::get('depenses/{depense}', ShowDepenseController::class)->name('depenses.show');
+            Route::get('depenses/{depense}/edit', EditDepenseController::class)->name('depenses.edit');
+            Route::match(['put', 'patch'], 'depenses/{depense}', UpdateDepenseController::class)->name('depenses.update');
+            Route::delete('depenses/{depense}', DestroyDepenseController::class)->name('depenses.destroy');
+            Route::patch('depenses/{depense}/soumettre', SoumettreDepenseController::class)->name('depenses.soumettre');
+            Route::patch('depenses/{depense}/valider', ValiderDepenseController::class)->name('depenses.valider');
+            Route::patch('depenses/{depense}/rejeter', RejeterDepenseController::class)->name('depenses.rejeter');
+            Route::get('depenses/{depense}/historique', HistoriqueDepenseController::class)->name('depenses.historique');
         });
 
         // ── Module : RH (Ressources humaines) ────────────────────────────────────
@@ -453,7 +702,7 @@ Route::prefix('backoffice')->group(function () {
                 ->name('employes.transferer-site');
             // Pas de create()/edit() : la création/modification se fait exclusivement en popup
             // (écran Fonctions RH ou sélecteur embarqué Employé/validation de compte), mirroring
-            // CategorieController — jamais de navigation vers une page dédiée.
+            // les routes produits/categories — jamais de navigation vers une page dédiée.
             // ->parameters(...) : Laravel générerait {fonctions_rh} (pluriel) par défaut pour ce
             // nom de ressource composé — ne correspond pas au paramètre {fonction_rh} (singulier)
             // attendu par FonctionRhController (et déjà utilisé par la route toggle ci-dessous),
@@ -483,6 +732,13 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
 
+            Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
+                Route::get('commissions/cashback', [CashbackController::class, 'index'])
+                    ->name('commissions.cashback.index');
+                Route::get('commissions/cashback/{client}', [CashbackController::class, 'show'])
+                    ->name('commissions.cashback.show');
+            });
+
             // ── Trésorerie : Financement des agences + Mouvements de fonds ──────────
             // Remplace l'ancien "Besoin de trésorerie" (BesoinTresorerieController) —
             // cf. compte-rendu du chantier Financement des agences (2026-08-22).
@@ -502,6 +758,11 @@ Route::prefix('backoffice')->group(function () {
                 Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
+                Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
+                Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
+
+                Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
+                Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');
 
                 Route::post('soldes-ouverture', [SoldeOuvertureTresorerieController::class, 'store'])->name('soldes-ouverture.store');
                 Route::post('soldes-ouverture/{soldeOuverture}/valider', [SoldeOuvertureTresorerieController::class, 'valider'])->name('soldes-ouverture.valider');
@@ -540,6 +801,14 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
+            // Ajustement/validation directement depuis la liste, sans passer par une période
+            // (cf. CommissionAjustementController::ajusterParts()/validerParts()).
+            Route::patch('commissions/ajustements/ajuster', [CommissionAjustementController::class, 'ajusterParts'])
+                ->name('commissions.ajustements.ajuster');
+            Route::post('commissions/ajustements/valider', [CommissionAjustementController::class, 'validerParts'])
+                ->name('commissions.ajustements.valider');
+            Route::get('commissions/vehicules/{vehiculeId}/repartir', [CommissionAjustementController::class, 'repartirVehicule'])
+                ->name('commissions.vehicules.repartir');
 
             // ── Commission sites ────────────────────────────────────────────────────
             Route::get('commissions/sites', [CommissionSiteController::class, 'index'])
@@ -626,25 +895,12 @@ Route::prefix('backoffice')->group(function () {
             Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
             Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
 
-            // Commissions logistiques — par livreur (système global)
-            Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
-                ->name('logistique.commissions.index');
-            Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
-                ->name('logistique.commissions.livreur');
-            Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
-                ->name('logistique.commissions.livreur.paiements');
-
-            // Rétro-compat : accès par véhicule (depuis page transfert Show)
-            Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
-                ->name('logistique.commissions.vehicule');
-            Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
-                ->name('logistique.commissions.releve');
-            Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
-                ->name('logistique.commissions.paiements.store');
-
-            // Rétro-compat : accès direct par commission (page transfert Show)
-            Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
-                ->name('logistique.commissions.show');
+            // Écran de paiement direct « /logistique/commissions » retiré le 04/09/2026 (moteur
+            // legacy CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026,
+            // cf. docs/commissions.md COMM-007 et section Historique/héritage) : les commissions
+            // de transfert logistique apparaissent désormais dans les écrans Commission
+            // vente/sites/propriétaires/consultants (filtre Processus = Transfert logistique,
+            // cible Livreur) et se paient via Comptabilité > Fiches — jamais plus par ici.
 
             Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
             Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
@@ -660,9 +916,6 @@ Route::prefix('backoffice')->group(function () {
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
 
-            // Commission logistique (accès direct, backward compat)
-            Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
-
             // Versements de parts de commission
             Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
                 ->name('logistique.commission.versements.store');
@@ -677,22 +930,22 @@ Route::prefix('backoffice')->group(function () {
 // ── Espace client ─────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur'])->prefix('client')->name('client.')->group(function () {
     Route::get('/pending', fn () => Inertia::render('client/Pending'))->name('pending');
-    Route::get('/dashboard', [ClientDashboardController::class, 'index'])->name('dashboard');
-    Route::get('/vehicules', [ClientDashboardController::class, 'vehicles'])->name('vehicles');
-    Route::get('/gains', [ClientDashboardController::class, 'earnings'])->name('earnings');
-    Route::get('/vehicules/{vehiculeId}/solde', [ClientDashboardController::class, 'vehicleBalance'])->name('vehicules.solde');
-    Route::get('/qr-code', [ClientDashboardController::class, 'qrCode'])->name('qr-code');
-    Route::get('/proposer-vehicule', [ClientDashboardController::class, 'proposals'])->name('propositions.index');
-    Route::get('/profile', [ClientDashboardController::class, 'profile'])->name('profile');
-    Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');
+    Route::get('/dashboard', IndexClientDashboardController::class)->name('dashboard');
+    Route::get('/vehicules', VehiclesClientDashboardController::class)->name('vehicles');
+    Route::get('/gains', EarningsClientDashboardController::class)->name('earnings');
+    Route::get('/vehicules/{vehiculeId}/solde', VehicleBalanceClientDashboardController::class)->name('vehicules.solde');
+    Route::get('/qr-code', QrCodeClientDashboardController::class)->name('qr-code');
+    Route::get('/proposer-vehicule', ProposalsClientDashboardController::class)->name('propositions.index');
+    Route::get('/profile', ProfileClientDashboardController::class)->name('profile');
+    Route::post('/propositions-vehicules', StoreVehicleProposalClientDashboardController::class)->name('propositions.store');
 });
 
 // ── Mot de passe provisoire (cf. app:install / must_change_password) ──────────
 // Volontairement hors du groupe backoffice ('role:...', 'org.site.required', 'require.site') :
 // un compte tout juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
 Route::middleware(['auth', 'account.active'])->group(function () {
-    Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
-    Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])->name('password.force-change.update');
+    Route::get('password/force-change', ShowForcePasswordChangeController::class)->name('password.force-change');
+    Route::post('password/force-change', UpdateForcePasswordChangeController::class)->name('password.force-change.update');
 });
 
 // ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────
@@ -702,6 +955,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('scan/user/{userId}', ScanUserController::class)->name('scan.user');
     // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
     Route::get('scan/livraison/{reference}', ScanLivraisonController::class)->name('scan.livraison');
+    // Résolution code-barres/SKU produit → URL fiche (scanner caméra du dashboard mobile) —
+    // gardée par produits.read en interne (ProduitPolicy), contrairement aux deux routes
+    // ci-dessus qui ne gardent rien ici (la protection vient de la page de destination).
+    Route::get('scan/produit/{code}', ScanProduitController::class)->name('scan.produit');
 });
 
 // Support de test E2E uniquement — la route n'existe même pas hors APP_ENV=e2e

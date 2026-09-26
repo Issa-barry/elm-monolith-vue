@@ -7,6 +7,7 @@ use App\Enums\EvenementComptable;
 use App\Enums\StatutDepense;
 use App\Enums\StatutFactureVente;
 use App\Enums\StatutPeriodePaiement;
+use App\Models\CommandeVenteRetour;
 use App\Models\Depense;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
@@ -46,14 +47,14 @@ class ComptabiliteRattrapageCommand extends Command
 {
     protected $signature = 'comptabilite:rattraper
         {--organization=* : ID, code ou slug d\'organisation (répétable) ; toutes si omis}
-        {--type=* : depense,fiche,paiement-fiche,vente,encaissement (répétable) ; tous si omis}
+        {--type=* : depense,fiche,paiement-fiche,vente,retour,encaissement (répétable) ; tous si omis}
         {--depuis= : date de début (YYYY-MM-DD), filtre sur la date métier}
         {--jusqua= : date de fin (YYYY-MM-DD), filtre sur la date métier}
         {--dry-run : simule sans rien écrire en base}';
 
-    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/encaissements historiques éligibles. Idempotent.';
+    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/retours de livraison/encaissements historiques éligibles. Idempotent.';
 
-    private const TYPES_VALIDES = ['depense', 'fiche', 'paiement-fiche', 'vente', 'encaissement'];
+    private const TYPES_VALIDES = ['depense', 'fiche', 'paiement-fiche', 'vente', 'retour', 'encaissement'];
 
     public function handle(
         DepenseComptabilisationService $depenseService,
@@ -103,6 +104,9 @@ class ComptabiliteRattrapageCommand extends Command
             }
             if (in_array('vente', $types, true)) {
                 $lignes[] = $this->traiterVentes($organization, $depuis, $jusqua, $dryRun, $venteService, $ecritures, $erreursDetail);
+            }
+            if (in_array('retour', $types, true)) {
+                $lignes[] = $this->traiterRetours($organization, $depuis, $jusqua, $dryRun, $venteService, $ecritures, $erreursDetail);
             }
             if (in_array('encaissement', $types, true)) {
                 $lignes[] = $this->traiterEncaissements($organization, $depuis, $jusqua, $dryRun, $venteService, $ecritures, $erreursDetail);
@@ -253,6 +257,36 @@ class ComptabiliteRattrapageCommand extends Command
         });
 
         return $this->ligneRapport('Ventes facturées', $compteurs, $dryRun);
+    }
+
+    /**
+     * Retours de livraison (cf. CommandeVenteRetourService) dont la régularisation comptable a
+     * échoué à l'enregistrement (mode shadow). Ceux qui n'appellent aucune écriture — facture non
+     * comptabilisée avant le retour, montant nul — ressortent en « ignorés » :
+     * VenteComptabilisationService::retourARegulariser() est la source unique de cette règle,
+     * jamais dupliquée ici. À lancer APRÈS `vente` (ordre par défaut) : une facture rattrapée
+     * après son retour est déjà comptabilisée au montant net, le retour n'y ajoute rien.
+     */
+    private function traiterRetours(
+        Organization $org, ?Carbon $depuis, ?Carbon $jusqua, bool $dryRun,
+        VenteComptabilisationService $service, EcritureComptableService $ecritures, array &$erreursDetail
+    ): array {
+        $query = CommandeVenteRetour::where('organization_id', $org->id)
+            ->when($depuis, fn (Builder $q) => $q->where('created_at', '>=', $depuis))
+            ->when($jusqua, fn (Builder $q) => $q->where('created_at', '<=', $jusqua->copy()->endOfDay()));
+
+        $compteurs = $this->compteursVides();
+        $query->chunkById(100, function (Collection $retours) use ($org, $service, $ecritures, $dryRun, &$compteurs, &$erreursDetail) {
+            foreach ($retours as $retour) {
+                $this->traiterUn(
+                    $retour, $org->id, EvenementComptable::VENTE_RETOUR,
+                    fn (Model $r) => $service->comptabiliserRetourVente($r),
+                    'CommandeVenteRetour', $dryRun, $ecritures, $compteurs, $erreursDetail
+                );
+            }
+        });
+
+        return $this->ligneRapport('Retours de livraison', $compteurs, $dryRun);
     }
 
     private function traiterEncaissements(

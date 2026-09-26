@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\UserController;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\MatriculeService;
+use App\Support\User\UserFormOptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
@@ -48,7 +48,7 @@ class MatriculeTest extends TestCase
 
     private function ensureRoles(): void
     {
-        foreach (UserController::STAFF_ROLES as $role) {
+        foreach (UserFormOptions::STAFF_ROLES as $role) {
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }
     }

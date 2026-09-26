@@ -38,6 +38,7 @@ const props = defineProps<{
     periodes_disponibles: PeriodeOption[];
     filters: CommissionGlobalFiltersValue;
     can_payer: boolean;
+    filtre_processus: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -56,7 +57,12 @@ function reload(next: string) {
     filters.value = { ...filters.value, periode: next };
     router.get(
         `/backoffice/comptabilite/commissions/sites/${props.site.id}`,
-        { periode: next || undefined },
+        {
+            periode: next || undefined,
+            // Préserve le processus sélectionné depuis l'Index (Vente/Distribution client/
+            // Transfert logistique) — sinon changer de période ici le perdrait silencieusement.
+            processus: props.filtre_processus || undefined,
+        },
         { preserveScroll: true, preserveState: true, replace: true },
     );
 }
@@ -66,6 +72,13 @@ const activePeriodeLabel = () =>
         ?.label ?? '';
 
 const activeTab = ref<CommissionDetailTab>('informations');
+
+const PROCESSUS_LABELS: Record<string, string> = {
+    vente: 'Site',
+    distribution_client: 'Site — distribution client',
+    logistique_transfert: 'Site — transfert logistique',
+};
+const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Site';
 </script>
 
 <template>
@@ -73,8 +86,8 @@ const activeTab = ref<CommissionDetailTab>('informations');
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="'/backoffice/comptabilite/commissions/sites'"
-                eyebrow="Site"
+                :back-href="`/backoffice/comptabilite/commissions/sites?processus=${filtre_processus}`"
+                :eyebrow="eyebrowLabel"
                 :title="site.nom"
                 :telephone="null"
                 :active-filters-label="activePeriodeLabel()"

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\NatureOperation;
 use App\Models\CommandeVente;
 use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
@@ -14,12 +15,20 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Rapprochement dédié aux commissions de vente — liste toute commande
- * éligible (commission_eligible_snapshot) ayant déjà atteint son déclencheur
- * configuré (chargement validé / facture encaissée) mais sans tentative de
- * génération SUCCES : soit une tentative ERREUR ("à régulariser"), soit
- * aucune tentative du tout alors qu'il aurait dû y en avoir une — cf.
- * incident CMD-230826-004, où ce cas restait invisible faute d'outil.
+ * Rapprochement dédié aux commissions de vente — liste toute commande vente_standard ayant
+ * déjà atteint son déclencheur (chargement validé / facture encaissée pour un véhicule
+ * éligible, ou facture directe créée pour une commande sans véhicule) mais sans tentative de
+ * génération SUCCES : une tentative ERREUR ou PARTIEL ("à régulariser"), soit aucune tentative
+ * du tout alors qu'il aurait dû y en avoir une — cf. incident CMD-230826-004, où ce cas restait
+ * invisible faute d'outil.
+ *
+ * Ne filtre plus sur commission_eligible_snapshot = true (retiré le 05/09/2026, chantier 2A) :
+ * ce champ ne conditionne plus que les cibles PROPRIETAIRE/EQUIPE_LIVRAISON — une commande sans
+ * véhicule peut désormais générer une commission SITE/CONSULTANT (cf.
+ * CommissionEnveloppeGenerator) et doit donc aussi être auditée, sous peine de reproduire
+ * l'angle mort qui existait déjà pour Grossiste + Enlèvement avant cette généralisation. Une
+ * commande distribution_client (déclencheur = réception validée, jamais chargement/encaissement,
+ * cf. CommissionTriggerService) reste hors périmètre de cet audit, comme avant.
  *
  * Ne modifie jamais rien : lecture seule, jumelle de comptabilite:auditer.
  */
@@ -71,11 +80,23 @@ class CommissionsAuditerVentesCommand extends Command
         $declencheur = Parametre::getDeclencheurCommissionVente($org->id);
 
         $commandesEligibles = CommandeVente::where('organization_id', $org->id)
-            ->where('commission_eligible_snapshot', true)
+            ->where('nature_operation', NatureOperation::VENTE_STANDARD->value)
             ->where(function (Builder $q) use ($declencheur) {
-                $declencheur === DeclencheurCommissionVente::CHARGEMENT_VALIDE
-                    ? $q->whereNotNull('chargement_valide_at')
-                    : $q->whereHas('facture', fn (Builder $f) => $f->where('statut_facture', 'payee'));
+                // Véhicule éligible : suit le déclencheur configuré pour l'organisation, comme
+                // avant le chantier 2A (05/09/2026).
+                $q->where(function (Builder $avecVehicule) use ($declencheur) {
+                    $avecVehicule->where('commission_eligible_snapshot', true)
+                        ->where(fn (Builder $d) => $declencheur === DeclencheurCommissionVente::CHARGEMENT_VALIDE
+                            ? $d->whereNotNull('chargement_valide_at')
+                            : $d->whereHas('facture', fn (Builder $f) => $f->where('statut_facture', 'payee')));
+                })
+                // Sans véhicule (Grossiste + Enlèvement ou tout autre client, cf.
+                // CommissionEnveloppeGenerator::genererPourCommandeVente()) : le déclencheur est
+                // la création de la facture directe elle-même (CommandeVenteService::
+                // creerFactureDirecte()), inconditionnel — jamais chargement/encaissement.
+                    ->orWhere(function (Builder $sansVehicule) {
+                        $sansVehicule->whereNull('vehicule_id')->whereHas('facture');
+                    });
             })
             ->get();
 

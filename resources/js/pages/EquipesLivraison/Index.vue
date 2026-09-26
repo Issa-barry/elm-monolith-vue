@@ -131,6 +131,31 @@ function resetFilters() {
     proprietaire.value = 'tous';
 }
 
+// Mini stats — calculées sur l'ensemble des équipes (indépendantes des
+// filtres actifs), même pattern que Vehicules/Index.vue.
+const equipeStats = computed(() => {
+    const total = props.equipes.length;
+    const actives = props.equipes.filter((e) => e.is_active).length;
+    const sansChauffeur = props.equipes.filter(
+        (e) => !e.premier_chauffeur_nom,
+    ).length;
+
+    // Rôle binaire côté membre d'équipe (cf. Livreur::designationParDefaut) :
+    // tout membre non "chauffeur" est un convoyeur.
+    const membres = props.equipes.flatMap((e) => e.membres);
+    const chauffeurs = membres.filter((m) => m.role === 'chauffeur').length;
+    const convoyeurs = membres.length - chauffeurs;
+
+    return {
+        total,
+        actives,
+        inactives: total - actives,
+        sansChauffeur,
+        chauffeurs,
+        convoyeurs,
+    };
+});
+
 function applyFilters(vals: Record<string, unknown>) {
     search.value = (vals.search as string) || '';
     statut.value = (vals.statut as typeof statut.value) || 'tous';
@@ -213,6 +238,93 @@ function confirmDelete(equipe: Equipe) {
                 <p class="mt-1 text-sm text-muted-foreground">
                     Gérez les équipes et leurs taux de commission.
                 </p>
+            </div>
+
+            <!-- Mini stats — vue d'ensemble indépendante des filtres -->
+            <div class="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ equipeStats.total }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Équipes
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ equipeStats.actives }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Actives
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-muted-foreground tabular-nums"
+                    >
+                        {{ equipeStats.inactives }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Inactives
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold tabular-nums"
+                        :class="
+                            equipeStats.sansChauffeur > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
+                    >
+                        {{ equipeStats.sansChauffeur }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Sans chauffeur
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ equipeStats.chauffeurs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Chauffeurs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ equipeStats.convoyeurs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Convoyeurs
+                    </p>
+                </div>
             </div>
 
             <!-- Barre de recherche + filtres -->

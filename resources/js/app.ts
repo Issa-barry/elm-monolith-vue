@@ -32,6 +32,25 @@ const appName = import.meta.env.VITE_APP_NAME || 'Eau-la-maman';
 // Apply light/dark class before the app mounts to avoid a flash of wrong theme.
 initializeTheme();
 
+// PWA — service worker minimal (cf. public/sw.js, docs/pwa.md). Jamais en
+// développement/HMR (import.meta.env.PROD exclut `vite dev`), désactivé par
+// défaut sur le build E2E (__PWA_ENABLED__, cf. vite.config.ts) pour ne pas
+// perturber la suite fonctionnelle existante. L'échec d'enregistrement ne
+// doit jamais empêcher l'application web de fonctionner : erreurs avalées
+// silencieusement, jamais de rechargement forcé (pas de skipWaiting côté SW).
+if (
+    import.meta.env.PROD &&
+    __PWA_ENABLED__ &&
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator
+) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker
+            .register(`/sw.js?build=${__PWA_BUILD_DIR__}`, { scope: '/' })
+            .catch(() => {});
+    });
+}
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) =>

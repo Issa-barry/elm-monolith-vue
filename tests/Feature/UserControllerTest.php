@@ -144,6 +144,48 @@ class UserControllerTest extends TestCase
         $this->assertNotContains($userOtherOrg->id, $ids);
     }
 
+    /**
+     * indexProps() filtrait auparavant sur whereIn('name', STAFF_ROLES) — un utilisateur
+     * affecté à un rôle personnalisé d'organisation (désormais assignable, cf. tests store()
+     * ci-dessus) disparaissait donc silencieusement de la liste. Le filtre "staff" est
+     * maintenant "n'importe quel rôle qui n'est pas un rôle externe", même définition que
+     * User::hasBackofficeAccess().
+     */
+    public function test_index_includes_a_user_with_a_custom_organization_role(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+
+        $customRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $org->id]);
+        $userWithCustomRole = User::factory()->create(['organization_id' => $org->id]);
+        $userWithCustomRole->assignRole($customRole);
+
+        $response = $this->actingAs($admin)->get(route('users.index'));
+
+        $response->assertStatus(200);
+        $ids = array_column($response->original->getData()['page']['props']['users'], 'id');
+
+        $this->assertContains($userWithCustomRole->id, $ids);
+    }
+
+    /**
+     * `pending_registrations` liste TOUS les comptes en attente de la plateforme (whereNull
+     * organization_id), sans scoping par organisation — réservé au super_admin. Un
+     * admin_entreprise n'y a jamais accès, même indirectement via cette prop, pour ne jamais
+     * exposer les inscriptions en attente d'autres organisations à un acteur non-plateforme.
+     */
+    public function test_index_hides_pending_registrations_from_non_super_admin(): void
+    {
+        $admin = $this->adminUser(Organization::factory()->create());
+        User::factory()->create(['organization_id' => null]);
+
+        $response = $this->actingAs($admin)->get(route('users.index'));
+
+        $response->assertStatus(200);
+        $pending = $response->original->getData()['page']['props']['pending_registrations'];
+        $this->assertCount(0, $pending);
+    }
+
     // ── create ────────────────────────────────────────────────────────────────
 
     public function test_create_returns_200_for_super_admin(): void
@@ -242,6 +284,48 @@ class UserControllerTest extends TestCase
         $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
         $this->assertNotNull($created);
         $this->assertTrue($created->hasRole('manager'));
+    }
+
+    /**
+     * Verrou central de la refonte "rôles personnalisés réellement affectables" (2026-09-06) :
+     * avant cette règle, `Rule::in(STAFF_ROLES)` rejetait tout rôle créé via le CRUD
+     * self-service (contrôleurs Role\*) — un rôle personnalisé d'organisation, correctement scopé
+     * à celle-ci, doit désormais être assignable comme n'importe quel rôle historique.
+     */
+    public function test_store_assigns_a_custom_organization_role_to_user(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $customRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $org->id]);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['role' => $customRole->name, 'site_id' => $site->id]))
+            ->assertRedirect();
+
+        $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
+        $this->assertNotNull($created);
+        $this->assertTrue($created->hasRole('chef_agence'));
+    }
+
+    /**
+     * Isolation organisationnelle : un rôle personnalisé de l'organisation B ne doit jamais être
+     * assignable par l'organisation A, y compris en POSTant directement le nom technique (le
+     * <select> ne le proposerait déjà pas, mais la validation serveur doit le refuser aussi).
+     */
+    public function test_store_refuses_a_custom_role_from_another_organization(): void
+    {
+        $org = Organization::factory()->create();
+        $otherOrg = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $otherOrgRole = Role::create(['name' => 'chef_agence', 'label' => "Chef d'agence", 'guard_name' => 'web', 'organization_id' => $otherOrg->id]);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['role' => $otherOrgRole->name, 'site_id' => $site->id]))
+            ->assertSessionHasErrors('role');
+
+        $this->assertNull(User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first());
     }
 
     public function test_store_attaches_site_to_user(): void
@@ -401,6 +485,36 @@ class UserControllerTest extends TestCase
         $this->actingAs($user)
             ->get(route('users.edit', $target))
             ->assertStatus(200);
+    }
+
+    /**
+     * Un super_admin ouvre "Modifier" depuis la console plateforme /backoffice/comptes,
+     * qui liste des agents de toutes les organisations — la liste de sites proposée doit
+     * refléter l'organisation du compte CIBLE, pas celle de l'acteur (régression du
+     * 2026-09-02 : editer() utilisait auth()->user()->organization_id).
+     */
+    public function test_edit_scopes_site_options_to_the_target_users_organization(): void
+    {
+        $this->createRole('manager');
+
+        $org1 = Organization::factory()->create();
+        $org2 = Organization::factory()->create();
+        $admin = $this->superAdmin($org1);
+        $adminSite = Site::where('organization_id', $org1->id)->first();
+
+        $targetSite = $this->createSite($org2);
+        $target = User::factory()->create(['organization_id' => $org2->id]);
+        $target->assignRole('manager');
+        $target->sites()->attach($targetSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $response = $this->actingAs($admin)
+            ->get(route('users.edit', $target))
+            ->assertStatus(200);
+
+        $siteIds = array_column($response->original->getData()['page']['props']['sites'], 'value');
+
+        $this->assertContains($targetSite->id, $siteIds);
+        $this->assertNotContains($adminSite->id, $siteIds);
     }
 
     // ── update ────────────────────────────────────────────────────────────────
@@ -572,6 +686,73 @@ class UserControllerTest extends TestCase
         $defaultSite = $target->fresh()->sites()->wherePivot('is_default', true)->first();
         $this->assertNotNull($defaultSite);
         $this->assertEquals($site2->id, $defaultSite->id);
+    }
+
+    /**
+     * Un site n'appartenant pas à l'organisation du compte CIBLE doit être rejeté même si
+     * l'acteur est super_admin — sans ce scope, `exists:sites,id` seul laisserait passer
+     * n'importe quel site d'une autre organisation (faille multi-tenant, cf. edit() ci-dessus).
+     */
+    public function test_update_rejects_a_site_from_a_different_organization(): void
+    {
+        $this->createRole('manager');
+
+        $org1 = Organization::factory()->create();
+        $org2 = Organization::factory()->create();
+        $admin = $this->superAdmin($org1);
+        $adminSite = Site::where('organization_id', $org1->id)->first();
+
+        $targetSite = $this->createSite($org2);
+        $target = User::factory()->create(['organization_id' => $org2->id]);
+        $target->assignRole('manager');
+        $target->sites()->attach($targetSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($admin)
+            ->put(route('users.update', $target), [
+                'prenom' => $target->prenom,
+                'nom' => $target->nom,
+                'email' => null,
+                'telephone' => $target->telephone,
+                'role' => 'manager',
+                'site_id' => $adminSite->id,
+                'password' => '',
+                'password_confirmation' => '',
+            ])
+            ->assertSessionHasErrors('site_id');
+
+        $defaultSite = $target->fresh()->sites()->wherePivot('is_default', true)->first();
+        $this->assertEquals($targetSite->id, $defaultSite->id, 'affectation inchangée après le rejet');
+    }
+
+    public function test_update_allows_super_admin_to_assign_a_site_from_the_targets_own_organization(): void
+    {
+        $this->createRole('manager');
+
+        $org1 = Organization::factory()->create();
+        $org2 = Organization::factory()->create();
+        $admin = $this->superAdmin($org1);
+
+        $targetSite1 = $this->createSite($org2);
+        $targetSite2 = Site::create(['organization_id' => $org2->id, 'nom' => 'Agence Nord', 'type' => 'agence']);
+        $target = User::factory()->create(['organization_id' => $org2->id]);
+        $target->assignRole('manager');
+        $target->sites()->attach($targetSite1->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($admin)
+            ->put(route('users.update', $target), [
+                'prenom' => $target->prenom,
+                'nom' => $target->nom,
+                'email' => null,
+                'telephone' => $target->telephone,
+                'role' => 'manager',
+                'site_id' => $targetSite2->id,
+                'password' => '',
+                'password_confirmation' => '',
+            ])
+            ->assertRedirect(route('users.edit', $target));
+
+        $defaultSite = $target->fresh()->sites()->wherePivot('is_default', true)->first();
+        $this->assertEquals($targetSite2->id, $defaultSite->id);
     }
 
     // ── update password ───────────────────────────────────────────────────────

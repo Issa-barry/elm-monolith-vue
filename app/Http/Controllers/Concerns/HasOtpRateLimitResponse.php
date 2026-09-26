@@ -8,7 +8,8 @@ use Illuminate\Http\JsonResponse;
  * Réponse 429 uniforme pour tout envoi/renvoi de code OTP bloqué par une limite anti-spam
  * (cf. App\Services\OtpService::resendWaitSeconds()) — ne précise jamais laquelle des limites
  * exactes a été atteinte (cooldown, plafond horaire ou journalier), seulement le délai d'attente.
- * Partagé par AcceptInvitationController (OTP téléphone) et InstallWizardController (OTP email) :
+ * Partagé par Auth\AcceptInvitation\{CheckPhone,ResendOtp}AcceptInvitationController (OTP
+ * téléphone) et InstallWizard\SendEmailCodeInstallWizardController (OTP email) :
  * même contrat de réponse, indépendant de ce qui est vérifié.
  */
 trait HasOtpRateLimitResponse

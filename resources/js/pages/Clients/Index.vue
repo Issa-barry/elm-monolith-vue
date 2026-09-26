@@ -12,7 +12,7 @@ import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { showEntityStatsCards } from '@/composables/useEntityConfig';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatPhoneDisplay } from '@/lib/utils';
+import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -59,7 +59,10 @@ interface Client {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
+    type: string;
+    type_label: string;
     cashback_eligible: boolean;
+    cashback_montant_par_pack: number | null;
 }
 
 const props = defineProps<{ clients: Client[] }>();
@@ -504,6 +507,21 @@ function confirmDelete(c: Client) {
                         </template>
                     </Column>
 
+                    <!-- Nature -->
+                    <Column
+                        field="type_label"
+                        header="Nature"
+                        style="width: 130px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ data.type_label }}
+                            </span>
+                        </template>
+                    </Column>
+
                     <!-- Cashback -->
                     <Column
                         field="cashback_eligible"
@@ -524,6 +542,27 @@ function confirmDelete(c: Client) {
                                 "
                                 class="text-muted-foreground"
                             />
+                        </template>
+                    </Column>
+
+                    <!-- Montant cashback -->
+                    <Column
+                        field="cashback_montant_par_pack"
+                        header="Montant cashback"
+                        style="width: 160px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="
+                                    data.cashback_eligible &&
+                                    data.cashback_montant_par_pack
+                                "
+                                class="text-muted-foreground tabular-nums"
+                            >
+                                {{ formatGNF(data.cashback_montant_par_pack) }}
+                                / pack
+                            </span>
+                            <span v-else class="text-muted-foreground">-</span>
                         </template>
                     </Column>
 

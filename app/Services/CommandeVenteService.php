@@ -23,7 +23,7 @@ class CommandeVenteService
     /**
      * Décide si une NOUVELLE commande peut être créée pour ce site — bouton « Nouvelle
      * commande » de la page Ventes et route de création elle-même (les deux appellent cette
-     * même méthode, cf. CommandeVenteController::index()/create()/store()). Toujours vrai si
+     * même méthode, cf. Ventes\{Index,Create,Store}CommandeVenteController). Toujours vrai si
      * la politique globale autorise la vente sans stock (Parametre::
      * isVentesAutoriseesSansStock()) ; sinon délègue à StockStatutService::
      * sitePossedeStockVendable() — une EXISTENCE ("ce site a-t-il au moins un produit
@@ -43,8 +43,24 @@ class CommandeVenteService
     }
 
     /**
-     * Workflow : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE → CLOTUREE
+     * Workflow standard (pas de réception explicite requise, cf.
+     * CommandeVente::requiertReceptionExplicite()) : BROUILLON → A_CHARGER →
+     * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE (1er encaissement, cf.
+     * passerEnLivree()) → CLOTUREE.
+     *
+     * Workflow avec réception explicite — distribution_client (décision produit du 30/08/2026,
+     * révise COMM-004) et, depuis le 06/09/2026, Grossiste + Livraison (cf. docs/grossiste.md,
+     * chantier « Réception Grossiste ») : même tronc commun jusqu'à LIVRAISON_EN_COURS, puis une
+     * étape logistique supplémentaire — LIVRAISON_EN_COURS → LIVREE exige une validation de
+     * réception explicite (cf. validerReception()), jamais l'encaissement. Commercialement
+     * inchangé : même CommandeVente/FactureVente, même créance/paiement, indépendants de la
+     * réception.
+     *
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
+     *
+     * Retour de livraison (vente standard, avant tout encaissement) : LIVRAISON_EN_COURS →
+     * RETOURNEE quand toute la marchandise chargée revient, cf. CommandeVenteRetourService — un
+     * retour partiel ne change pas le statut.
      *
      * @throws ValidationException si les pré-conditions ne sont pas satisfaites
      */
@@ -54,6 +70,7 @@ class CommandeVenteService
             StatutCommandeVente::BROUILLON => self::confirmer($commande),
             StatutCommandeVente::A_CHARGER => self::demarrerChargement($commande),
             StatutCommandeVente::CHARGEMENT_EN_COURS => self::validerChargement($commande, $lignesData),
+            StatutCommandeVente::LIVRAISON_EN_COURS => self::validerReception($commande, $lignesData),
             default => abort(422, 'Impossible d\'avancer depuis ce statut.'),
         };
 
@@ -125,10 +142,9 @@ class CommandeVenteService
     }
 
     /**
-     * Libère les réservations actives de chaque ligne (annulation avant chargement) — no-op pour
-     * une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée (n'arrive jamais
-     * ici : annuler() n'est permis que depuis BROUILLON/A_CHARGER/FACTURATION, cf.
-     * StatutCommandeVente::isAnnulable()).
+     * Libère les réservations actives de chaque ligne (annulation avant la fin du chargement) —
+     * no-op pour une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée par la
+     * validation du chargement (la sortie physique est alors annulée par annulerSortiesStock()).
      */
     private static function libererLignesReservees(CommandeVente $commande): void
     {
@@ -136,6 +152,23 @@ class CommandeVenteService
 
         foreach ($commande->lignes as $ligne) {
             StockReservationService::liberer(CommandeVenteLigne::class, $ligne->id, $commande->site_id, $commande->organization_id);
+        }
+    }
+
+    /**
+     * Annule par contre-mouvement (jamais par suppression) toute sortie physique enregistrée pour
+     * les lignes : celle d'une vente directe (decrementerStockDirect()) comme celle du chargement
+     * d'un véhicule (decrementerStock(), à validerChargement()). Idempotent, no-op sans sortie.
+     * L'annulation normale n'atteint que le premier cas (jamais après le départ du véhicule) ;
+     * l'annulation exceptionnelle pour erreur de saisie atteint aussi le second — la marchandise
+     * n'a jamais réellement quitté le stock.
+     */
+    private static function annulerSortiesStock(CommandeVente $commande): void
+    {
+        $commande->loadMissing('lignes');
+
+        foreach ($commande->lignes as $ligne) {
+            MouvementStockService::annulerSortieStock(CommandeVenteLigne::class, $ligne->id, $commande->site_id);
         }
     }
 
@@ -166,6 +199,15 @@ class CommandeVenteService
     /**
      * Vente directe client (sans véhicule) : BROUILLON → FACTURATION + création facture.
      * Aucune commission n'est générée.
+     *
+     * Correctif du 30/08/2026 : ce chemin ne passe jamais par confirmer()/reserverLignes()
+     * (pas d'étape « à charger » pour une vente sans véhicule — la facture est immédiate), et
+     * jusqu'ici ne décrémentait donc AUCUN stock physique — une facture pouvait être émise et
+     * encaissée sans qu'aucun mouvement de stock correspondant n'existe. decrementerStockDirect()
+     * décrémente désormais le stock physique directement (pas de réservation intermédiaire à
+     * consommer, contrairement à decrementerStock() du chemin véhicule), sous le même verrou et
+     * le même garde-fou anti-survente que le reste de l'application (MouvementStockService::
+     * appliquer()).
      */
     public static function creerFactureDirecte(CommandeVente $commande): void
     {
@@ -185,6 +227,8 @@ class CommandeVenteService
                 'statut' => StatutCommandeVente::FACTURATION,
             ]);
 
+            self::decrementerStockDirect($commande);
+
             $facture = FactureVente::create([
                 'organization_id' => $commande->organization_id,
                 'site_id' => $commande->site_id,
@@ -197,7 +241,45 @@ class CommandeVenteService
             ]);
 
             self::comptabiliserVenteFacturee($facture);
+            // Sans effet pour l'immense majorité des ventes directes (Externe) : voir le
+            // docblock de CommissionTriggerService::onVenteDirecteFacturee(). Nécessaire pour
+            // qu'un Grossiste en Enlèvement génère sa commission consultant (cf.
+            // docs/grossiste.md) — ce chemin n'a pas d'étape de chargement à déclencher.
+            CommissionTriggerService::onVenteDirecteFacturee($commande->fresh());
         });
+    }
+
+    /**
+     * Décrément physique direct du stock pour la vente sans véhicule — sans réservation
+     * préalable à consommer, contrairement à decrementerStock() (chemin véhicule, réservée dès
+     * confirmer()). Même convention que decrementerStock()/reserverLignes() : ignore les lignes
+     * dont le produit ne gère pas de stock (type service), respecte la politique d'organisation
+     * de vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock()). Idempotent
+     * (MouvementStockService::sortirStock()) : un second appel sur la même commande est un no-op.
+     */
+    private static function decrementerStockDirect(CommandeVente $commande): void
+    {
+        $commande->load('lignes.variante.produit.produitType');
+        $userId = Auth::id();
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
+
+        foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            MouvementStockService::sortirStock(
+                varianteId: $ligne->variante_id,
+                siteId: $commande->site_id,
+                orgId: $commande->organization_id,
+                quantite: $ligne->quantite_demandee,
+                sourceType: CommandeVenteLigne::class,
+                sourceId: $ligne->id,
+                userId: $userId,
+                allowNegative: $autoriseVenteStockNegatif,
+            );
+        }
     }
 
     /**
@@ -238,13 +320,17 @@ class CommandeVenteService
 
     /**
      * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS.
-     * Enregistre les quantités chargées par ligne — quantités qui déterminent
-     * définitivement le calcul de la commission de vente, quel que soit le
-     * déclencheur configuré (jamais recalculée plus tard). Sous CHARGEMENT_VALIDE
+     * Enregistre les quantités chargées par ligne — quantités qui déterminent le calcul de la
+     * commission de VENTE STANDARD, quel que soit le déclencheur configuré ; seul un retour de
+     * livraison avant encaissement la réajuste ensuite, sur la quantité chargée nette des retours
+     * (cf. CommandeVenteRetourService, CommissionTriggerService::onRetourEnregistre()). Sous CHARGEMENT_VALIDE
      * (déclencheur par défaut), c'est ici que la commission naît, en statut
      * CREEE — elle ne devient payable qu'à la validation de la période de
      * paiement qui la couvre (cf. CommissionTriggerService::onChargementValide(),
-     * CommissionAdjustmentService::activerCommissionsCreees()).
+     * CommissionAdjustmentService::activerCommissionsCreees()). Pour une commande à réception
+     * explicite (cf. CommandeVente::requiertReceptionExplicite() : distribution_client, Grossiste
+     * + Livraison), onChargementValide() est un no-op : sa commission naît exclusivement à la
+     * validation de réception, cf. validerReception().
      *
      * @param  array<array{id: string, quantite_chargee?: int|null, type_ecart?: string|null, commentaire_ecart?: string|null}>  $lignesData
      */
@@ -327,10 +413,111 @@ class CommandeVenteService
     }
 
     /**
-     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées)
-     * et répercute le nouveau montant sur la facture associée si elle existe.
+     * LIVRAISON_EN_COURS → LIVREE, réservée aux commandes nécessitant une réception explicite
+     * (cf. CommandeVente::requiertReceptionExplicite() : distribution_client depuis le
+     * 30/08/2026 — décision produit révisant COMM-004, distribution devient un hybride
+     * vente/logistique — puis Grossiste + Livraison depuis le 06/09/2026, cf. docs/grossiste.md,
+     * chantier « Réception Grossiste »). Les autres commandes (vente standard sans réception,
+     * Grossiste + Enlèvement compris) continuent de passer en LIVREE automatiquement au premier
+     * encaissement, cf. passerEnLivree(). Enregistre les quantités réellement réceptionnées par
+     * le client (quantite_livree, écart éventuel vs quantite_chargee), recalcule la facture sur
+     * la base du réceptionné — le client n'est jamais facturé au-delà de ce qu'il a accepté
+     * (décision produit) — puis déclenche la commission associée, dont la réception validée est
+     * désormais l'UNIQUE déclencheur (cf. CommissionTriggerService::onReceptionValidee(), jamais
+     * conditionné au paramètre organisation qui ne régit plus que les commandes sans réception).
+     *
+     * Un écart de réception ne réajuste jamais le stock physique (décision produit du
+     * 30/08/2026) : les unités refusées par le client restent sorties du stock, déjà décrémenté
+     * au chargement — leur sort physique est traité hors de ce système.
+     *
+     * @param  array<array{id: string, quantite_livree?: int|null, type_ecart_reception?: string|null, commentaire_ecart_reception?: string|null}>  $lignesData
      */
-    private static function recalculerTotaux(CommandeVente $commande): void
+    public static function validerReception(CommandeVente $commande, array $lignesData = []): void
+    {
+        abort_if(
+            ! $commande->requiertReceptionExplicite(),
+            422,
+            'Cette étape ne s\'applique qu\'aux commandes nécessitant une validation de réception (distribution ou Grossiste livré).'
+        );
+        abort_if(! $commande->isLivraisonEnCours(), 422, 'La commande doit être en livraison.');
+
+        DB::transaction(function () use ($commande, $lignesData) {
+            self::appliquerQuantitesRecues($commande, $lignesData);
+            self::recalculerTotaux($commande);
+
+            $commande->update([
+                'statut' => StatutCommandeVente::LIVREE,
+                'livree_at' => now(),
+                'reception_validee_at' => now(),
+            ]);
+
+            CommissionTriggerService::onReceptionValidee($commande->fresh());
+        });
+    }
+
+    /**
+     * @param  array<array{id: string, quantite_livree?: int|null, type_ecart_reception?: string|null, commentaire_ecart_reception?: string|null}>  $lignesData
+     */
+    private static function appliquerQuantitesRecues(CommandeVente $commande, array $lignesData): void
+    {
+        if (empty($lignesData)) {
+            return;
+        }
+
+        $commande->loadMissing('lignes');
+
+        foreach ($lignesData as $ligneData) {
+            $ligne = $commande->lignes->find($ligneData['id'] ?? null);
+            if (! $ligne) {
+                continue;
+            }
+
+            $update = array_intersect_key($ligneData, array_flip([
+                'quantite_livree',
+                'type_ecart_reception',
+                'commentaire_ecart_reception',
+            ]));
+
+            if (array_key_exists('quantite_livree', $update) && $update['quantite_livree'] !== null) {
+                $prixUnitaire = $commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE
+                    ? (float) $ligne->prix_usine_snapshot
+                    : (float) $ligne->prix_vente_snapshot;
+                $update['total_ligne'] = $update['quantite_livree'] * $prixUnitaire;
+            }
+
+            if (! empty($update)) {
+                $ligne->update($update);
+            }
+        }
+
+        // Garde-fou : un encaissement (total ou partiel) a pu avoir lieu AVANT la validation de
+        // réception — l'ordre inverse du cas nominal (« réception aujourd'hui, paiement la
+        // semaine prochaine ») reste possible puisqu'une facture d'une commande à réception
+        // explicite (distribution, Grossiste livré) est encaissable dès LIVRAISON_EN_COURS,
+        // comme toute vente. Un écart de réception ne doit jamais faire repasser la facture sous
+        // ce qui a déjà été réellement encaissé.
+        $commande->load('lignes', 'facture');
+        $nouveauTotal = (float) $commande->lignes->sum('total_ligne');
+        $montantEncaisse = (float) ($commande->facture?->montant_encaisse ?? 0);
+
+        if ($montantEncaisse > $nouveauTotal) {
+            throw ValidationException::withMessages([
+                'lignes' => 'Impossible de valider cette réception : '
+                    .number_format($montantEncaisse, 0, ',', ' ')
+                    .' GNF déjà encaissés dépasseraient le nouveau montant facturé ('
+                    .number_format($nouveauTotal, 0, ',', ' ')
+                    .' GNF). Régularisez l\'encaissement avant de continuer.',
+            ]);
+        }
+    }
+
+    /**
+     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées,
+     * réceptionnées — commandes à réception explicite, depuis validerReception() — ou nettes des
+     * retours de livraison, depuis CommandeVenteRetourService) et répercute le nouveau montant sur
+     * la facture associée si elle existe.
+     */
+    public static function recalculerTotaux(CommandeVente $commande): void
     {
         $commande->load('lignes', 'facture');
 
@@ -440,24 +627,45 @@ class CommandeVenteService
             'Impossible d\'annuler une commande ayant reçu au moins un encaissement.'
         );
 
-        DB::transaction(function () use ($commande, $motif) {
-            $commande->update([
-                'statut' => StatutCommandeVente::ANNULEE,
-                'motif_annulation' => $motif,
-                'annulee_at' => now(),
-                'annulee_par' => Auth::id(),
-            ]);
+        DB::transaction(fn () => self::appliquerAnnulation($commande, StatutCommandeVente::ANNULEE, $motif));
+    }
 
-            self::libererLignesReservees($commande);
+    /**
+     * Annulation exceptionnelle d'une commande saisie par erreur — seul point d'entrée :
+     * AnnulationExceptionnelleService::confirmer(), qui a déjà vérifié les garde-fous et supprimé
+     * les encaissements (contrepassés) dans la même transaction. Aucune condition de statut ici :
+     * la commande peut avoir été chargée, livrée, facturée ou clôturée.
+     */
+    public static function annulerPourErreurSaisie(CommandeVente $commande, string $motif): void
+    {
+        self::appliquerAnnulation($commande, StatutCommandeVente::ANNULEE_ERREUR_SAISIE, $motif);
+    }
 
-            $commande->loadMissing('facture');
-            if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
-                $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
-                self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
-            }
+    /**
+     * Effets communs aux deux annulations, à exécuter dans une transaction : statut, réservations
+     * libérées, sorties de stock contre-passées, facture annulée (écriture de vente contrepassée)
+     * et commissions non soldées annulées. La facture est relue : un encaissement supprimé juste
+     * avant (annulation exceptionnelle) a pu faire évoluer son statut sur une autre instance.
+     */
+    private static function appliquerAnnulation(CommandeVente $commande, StatutCommandeVente $statut, string $motif): void
+    {
+        $commande->update([
+            'statut' => $statut,
+            'motif_annulation' => $motif,
+            'annulee_at' => now(),
+            'annulee_par' => Auth::id(),
+        ]);
 
-            self::annulerCommissionsAssociees($commande);
-        });
+        self::libererLignesReservees($commande);
+        self::annulerSortiesStock($commande);
+
+        $commande->load('facture', 'commissions');
+        if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
+            $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+            self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
+        }
+
+        self::annulerCommissionsAssociees($commande);
     }
 
     /**
@@ -518,8 +726,8 @@ class CommandeVenteService
      * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver). Recontrôle aussi
      * la disponibilité (24/08/2026, cf. reserverLignes()) : le stock a pu changer depuis la
      * création du brouillon (une autre commande confirmée entre-temps a pu le réserver) — jamais
-     * suffisant de ne compter que sur le contrôle fait à la création (CommandeVenteController::
-     * store()/update()).
+     * suffisant de ne compter que sur le contrôle fait à la création (Ventes\{Store,Update}
+     * CommandeVenteController).
      */
     private static function checkConfirmer(CommandeVente $commande, array &$errors): void
     {
@@ -559,7 +767,7 @@ class CommandeVenteService
     /**
      * Vérifie, ligne par ligne et sur le site de la commande, que la quantité chargée ne
      * dépasse pas le stock disponible — cf. verifierDisponibiliteLignes() ci-dessous, point
-     * d'entrée unique réutilisé par CommandeVenteController::store()/update() (création et
+     * d'entrée unique réutilisé par Ventes\{Store,Update}CommandeVenteController (création et
      * modification, 24/08/2026), checkConfirmer() (confirmation — réservation) ET ce contrôle au
      * chargement. Le stock a pu changer entre chaque étape (autre vente entre-temps,
      * ajustement...) : chaque contrôle reste indispensable même si le précédent a déjà validé la
@@ -590,7 +798,7 @@ class CommandeVenteService
      * explicitement la vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock(),
      * paramètre DSI, réservé au PDV et aux commandes vente — jamais aux transferts/
      * ajustements, et jamais un réglage par produit). Appelée par :
-     *  - CommandeVenteController::store()/update() (création/modification d'une commande,
+     *  - Ventes\{Store,Update}CommandeVenteController (création/modification d'une commande,
      *    24/08/2026 — avant cette date, une commande pouvait être créée avec une quantité
      *    supérieure au stock, le seul contrôle existant était au chargement) ;
      *  - checkDisponibiliteStock() ci-dessus (chargement) ;

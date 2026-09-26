@@ -39,6 +39,7 @@ class NotificationResource extends JsonResource
         'depense_validee' => 'expense.validated',
         'transfert_cree' => 'transfer.created',
         'transfert_receptionne' => 'transfer.received',
+        'stock_alerte' => 'stock.alert',
     ];
 
     public function toArray(Request $request): array

@@ -8,7 +8,7 @@ import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,11 @@ interface ProduitOption {
     id: number;
     nom: string;
     categorie_id: string | null;
+    gere_stock: boolean;
+    // Clé = site_id (string, cf. Produit::stocks_par_site côté backend) ; absent = aucune
+    // ligne de stock connue pour ce site (traité comme 0 disponible, jamais un repli implicite
+    // sur un autre site).
+    stocks_par_site: Record<string, number>;
 }
 
 interface TransfertData {
@@ -163,25 +168,66 @@ function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
 }
 
-// ── Produit AutoComplete (par ligne) ─────────────────────────────────────────
+// ── Produit (par ligne) ───────────────────────────────────────────────────────
 
-const produitSuggests = ref<ProduitOption[]>([]);
+// Site dont le stock gouverne la disponibilité des produits : source libre (admin, réactif au
+// choix du formulaire) ou site verrouillé de l'utilisateur/du transfert existant (non-admin ou
+// édition, jamais modifiable après création — cf. update() : "le site source est immuable").
+const siteSourceIdActuel = computed(() =>
+    props.is_admin ? form.site_source_id : (props.site_source?.id ?? null),
+);
+const siteSourceNomActuel = computed(() =>
+    props.is_admin
+        ? (props.sites.find((s) => s.id === form.site_source_id)?.nom ?? null)
+        : (props.site_source?.nom ?? null),
+);
+
+/**
+ * Stock disponible d'un produit au site source actuel — null = produit non géré en stock
+ * (type service), jamais plafonné, à l'image de TransfertLogistiqueService::
+ * verifierDisponibiliteLignes() qui ignore ces lignes côté serveur. Aucune entrée pour ce site
+ * dans stocks_par_site = 0 disponible (jamais un repli sur l'agrégat d'un autre site).
+ */
+function disponibleAuSiteSource(p: ProduitOption | null): number | null {
+    if (!p || !p.gere_stock) return null;
+    if (siteSourceIdActuel.value === null) return null;
+    return p.stocks_par_site[String(siteSourceIdActuel.value)] ?? 0;
+}
+
+function produitIndisponible(p: ProduitOption): boolean {
+    const dispo = disponibleAuSiteSource(p);
+    return dispo !== null && dispo <= 0;
+}
+
 const produitSelected = ref<Array<ProduitOption | null>>(
     (
         props.transfert?.lignes ?? [{ produit_id: defaultProduit?.id ?? null }]
     ).map((l) => props.produits.find((p) => p.id === l.produit_id) ?? null),
 );
 
-function searchProduit(event: { query: string }) {
-    const q = event.query.toLowerCase().trim();
-    produitSuggests.value = q
-        ? props.produits.filter((p) => p.nom.toLowerCase().includes(q))
-        : [...props.produits];
+function onProduitChange(index: number, p: ProduitOption | null) {
+    form.lignes[index].produit_id = p?.id ?? null;
+    produitSelected.value[index] = p;
+    // Le stock disponible peut être inférieur à la quantité déjà saisie (changement de produit,
+    // ou changement de site source par un admin) — jamais laisser une quantité invalide en
+    // silence, on la ramène immédiatement au maximum permis.
+    const dispo = disponibleAuSiteSource(p);
+    if (dispo !== null && form.lignes[index].quantite_demandee > dispo) {
+        form.lignes[index].quantite_demandee = Math.max(dispo, 0);
+    }
 }
 
-function onProduitSelect(index: number, p: ProduitOption | null) {
-    form.lignes[index].produit_id = p?.id ?? null;
-}
+// Admin uniquement (site source modifiable) : un changement de site source change la
+// disponibilité de tous les produits déjà sélectionnés — jamais laisser une ligne dépasser
+// silencieusement le nouveau site.
+watch(siteSourceIdActuel, () => {
+    form.lignes.forEach((ligne, index) => {
+        const dispo = disponibleAuSiteSource(produitSelected.value[index]);
+        if (dispo !== null && ligne.quantite_demandee > dispo) {
+            ligne.quantite_demandee = Math.max(dispo, 0);
+        }
+    });
+});
 
 // ── Gestion des lignes ────────────────────────────────────────────────────────
 
@@ -256,6 +302,16 @@ const capaciteVehiculeConforme = computed(() => {
 
 // ── Validation locale ─────────────────────────────────────────────────────────
 
+// Plafond côté UI, informatif : le backend (verifierDisponibiliteLignes(), toujours strict pour
+// un transfert, jamais de dérogation par isVentesAutoriseesSansStock) reste la seule protection
+// réelle — cf. assertStockDisponiblePourLignes() dans TransfertLogistiqueController.
+const lignesDansLaLimiteDuStock = computed(() =>
+    form.lignes.every((l, index) => {
+        const dispo = disponibleAuSiteSource(produitSelected.value[index]);
+        return dispo === null || l.quantite_demandee <= dispo;
+    }),
+);
+
 const canSubmit = computed(
     () =>
         (props.is_admin
@@ -268,6 +324,7 @@ const canSubmit = computed(
             (l) => l.produit_id !== null && l.quantite_demandee >= 1,
         ) &&
         capaciteVehiculeConforme.value &&
+        lignesDansLaLimiteDuStock.value &&
         !form.processing,
 );
 
@@ -614,31 +671,69 @@ function submit() {
                                         class="hover:bg-muted/10"
                                     >
                                         <td class="px-4 py-3">
-                                            <AutoComplete
+                                            <Dropdown
                                                 v-model="produitSelected[index]"
-                                                :suggestions="produitSuggests"
+                                                :options="produits"
                                                 option-label="nom"
+                                                :option-disabled="
+                                                    produitIndisponible
+                                                "
                                                 placeholder="Rechercher un produit…"
                                                 class="w-full"
-                                                input-class="w-full"
-                                                dropdown
-                                                force-selection
-                                                @complete="searchProduit"
-                                                @item-select="
+                                                :class="{
+                                                    'p-invalid': (
+                                                        form.errors as any
+                                                    )[
+                                                        `lignes.${index}.produit_id`
+                                                    ],
+                                                }"
+                                                filter
+                                                @change="
                                                     (e) =>
-                                                        onProduitSelect(
+                                                        onProduitChange(
                                                             index,
                                                             e.value,
                                                         )
                                                 "
-                                                @clear="
-                                                    () => {
-                                                        ligne.produit_id = null;
-                                                        produitSelected[index] =
-                                                            null;
-                                                    }
-                                                "
-                                            />
+                                            >
+                                                <template #option="{ option }">
+                                                    <div
+                                                        class="flex w-full items-center justify-between gap-3 py-0.5"
+                                                    >
+                                                        <span>{{
+                                                            option.nom
+                                                        }}</span>
+                                                        <span
+                                                            v-if="
+                                                                option.gere_stock
+                                                            "
+                                                            class="shrink-0 text-xs"
+                                                            :class="
+                                                                produitIndisponible(
+                                                                    option,
+                                                                )
+                                                                    ? 'text-destructive'
+                                                                    : 'text-muted-foreground'
+                                                            "
+                                                        >
+                                                            {{
+                                                                produitIndisponible(
+                                                                    option,
+                                                                )
+                                                                    ? 'Rupture de stock'
+                                                                    : `Disponible : ${disponibleAuSiteSource(option)}`
+                                                            }}
+                                                        </span>
+                                                    </div>
+                                                </template>
+                                                <template #empty>
+                                                    <span
+                                                        class="text-sm text-muted-foreground"
+                                                        >Aucun produit
+                                                        trouvé.</span
+                                                    >
+                                                </template>
+                                            </Dropdown>
                                             <p
                                                 v-if="
                                                     (form.errors as any)[
@@ -653,6 +748,34 @@ function submit() {
                                                     ]
                                                 }}
                                             </p>
+                                            <p
+                                                v-else-if="
+                                                    disponibleAuSiteSource(
+                                                        produitSelected[index],
+                                                    ) !== null
+                                                "
+                                                class="mt-1 text-xs"
+                                                :class="
+                                                    ligne.quantite_demandee >
+                                                    (disponibleAuSiteSource(
+                                                        produitSelected[index],
+                                                    ) ?? 0)
+                                                        ? 'text-destructive'
+                                                        : 'text-muted-foreground'
+                                                "
+                                            >
+                                                Stock disponible{{
+                                                    siteSourceNomActuel
+                                                        ? ` à ${siteSourceNomActuel}`
+                                                        : ''
+                                                }}
+                                                :
+                                                {{
+                                                    disponibleAuSiteSource(
+                                                        produitSelected[index],
+                                                    )
+                                                }}
+                                            </p>
                                         </td>
                                         <td class="px-4 py-3">
                                             <InputNumber
@@ -660,6 +783,11 @@ function submit() {
                                                     ligne.quantite_demandee
                                                 "
                                                 :min="1"
+                                                :max="
+                                                    disponibleAuSiteSource(
+                                                        produitSelected[index],
+                                                    ) ?? undefined
+                                                "
                                                 :use-grouping="false"
                                                 class="w-full"
                                                 input-class="w-full text-center"
@@ -691,26 +819,74 @@ function submit() {
                                 :key="index"
                                 class="rounded-xl border bg-muted/20 p-3"
                             >
-                                <AutoComplete
+                                <Dropdown
                                     v-model="produitSelected[index]"
-                                    :suggestions="produitSuggests"
+                                    :options="produits"
                                     option-label="nom"
+                                    :option-disabled="produitIndisponible"
                                     placeholder="Rechercher un produit…"
                                     class="w-full"
-                                    input-class="w-full"
-                                    dropdown
-                                    force-selection
-                                    @complete="searchProduit"
-                                    @item-select="
-                                        (e) => onProduitSelect(index, e.value)
+                                    filter
+                                    @change="
+                                        (e) => onProduitChange(index, e.value)
                                     "
-                                    @clear="
-                                        () => {
-                                            ligne.produit_id = null;
-                                            produitSelected[index] = null;
-                                        }
+                                >
+                                    <template #option="{ option }">
+                                        <div
+                                            class="flex w-full items-center justify-between gap-3 py-0.5"
+                                        >
+                                            <span>{{ option.nom }}</span>
+                                            <span
+                                                v-if="option.gere_stock"
+                                                class="shrink-0 text-xs"
+                                                :class="
+                                                    produitIndisponible(option)
+                                                        ? 'text-destructive'
+                                                        : 'text-muted-foreground'
+                                                "
+                                            >
+                                                {{
+                                                    produitIndisponible(option)
+                                                        ? 'Rupture de stock'
+                                                        : `Disponible : ${disponibleAuSiteSource(option)}`
+                                                }}
+                                            </span>
+                                        </div>
+                                    </template>
+                                    <template #empty>
+                                        <span
+                                            class="text-sm text-muted-foreground"
+                                            >Aucun produit trouvé.</span
+                                        >
+                                    </template>
+                                </Dropdown>
+                                <p
+                                    v-if="
+                                        disponibleAuSiteSource(
+                                            produitSelected[index],
+                                        ) !== null
                                     "
-                                />
+                                    class="mt-1 text-xs"
+                                    :class="
+                                        ligne.quantite_demandee >
+                                        (disponibleAuSiteSource(
+                                            produitSelected[index],
+                                        ) ?? 0)
+                                            ? 'text-destructive'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    Stock disponible{{
+                                        siteSourceNomActuel
+                                            ? ` à ${siteSourceNomActuel}`
+                                            : ''
+                                    }}:
+                                    {{
+                                        disponibleAuSiteSource(
+                                            produitSelected[index],
+                                        )
+                                    }}
+                                </p>
                                 <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                     <div>
                                         <p
@@ -721,6 +897,11 @@ function submit() {
                                         <InputNumber
                                             v-model="ligne.quantite_demandee"
                                             :min="1"
+                                            :max="
+                                                disponibleAuSiteSource(
+                                                    produitSelected[index],
+                                                ) ?? undefined
+                                            "
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"

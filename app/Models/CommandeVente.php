@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\CommissionGenerationStatut;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
-use App\Services\CommandeNumeroService;
+use App\Services\ReferenceNumeroService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +22,8 @@ class CommandeVente extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
+    public const STATUT_AFFICHAGE_COMMISSIONS_A_VERSER = 'commissions_a_verser';
+
     protected $table = 'commandes_ventes';
 
     protected $fillable = [
@@ -32,6 +36,8 @@ class CommandeVente extends Model
         'total_commande',
         'mode_tarification_snapshot',
         'commission_eligible_snapshot',
+        'nature_operation',
+        'mode_remise_grossiste',
         'statut',
         'motif_annulation',
         'annulee_at',
@@ -40,6 +46,7 @@ class CommandeVente extends Model
         'chargement_demarre_at',
         'chargement_valide_at',
         'livree_at',
+        'reception_validee_at',
         'validated_at',
         'closed_at',
         'created_by',
@@ -55,12 +62,15 @@ class CommandeVente extends Model
             'total_commande' => 'decimal:2',
             'mode_tarification_snapshot' => ModeTarification::class,
             'commission_eligible_snapshot' => 'boolean',
+            'nature_operation' => NatureOperation::class,
+            'mode_remise_grossiste' => ModeRemiseGrossiste::class,
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
             'a_charger_at' => 'datetime',
             'chargement_demarre_at' => 'datetime',
             'chargement_valide_at' => 'datetime',
             'livree_at' => 'datetime',
+            'reception_validee_at' => 'datetime',
             'validated_at' => 'datetime',
             'closed_at' => 'datetime',
         ];
@@ -70,7 +80,13 @@ class CommandeVente extends Model
     {
         static::creating(function (CommandeVente $c) {
             if (empty($c->reference)) {
-                [$c->reference, $c->numero] = app(CommandeNumeroService::class)->generer();
+                // Repli sur VENTE_STANDARD (même valeur que le défaut colonne) si nature_operation
+                // n'a pas été renseigné avant la création — jamais un null pointer ici : les deux
+                // points d'entrée réels (Ventes\StoreCommandeVenteController, PdvCheckoutService::
+                // checkout()) le renseignent toujours explicitement, ce repli ne sert qu'aux
+                // créations directes (tests, scripts) qui s'en remettent au défaut colonne.
+                $prefixe = ($c->nature_operation ?? NatureOperation::VENTE_STANDARD)->prefixeReference();
+                [$c->reference, $c->numero] = app(ReferenceNumeroService::class)->generer($c->organization_id, $prefixe);
             }
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeVente::BROUILLON;
@@ -130,6 +146,11 @@ class CommandeVente extends Model
         return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
+    public function retours(): HasMany
+    {
+        return $this->hasMany(CommandeVenteRetour::class)->latest();
+    }
+
     public function activites(): HasMany
     {
         return $this->hasMany(CommandeVenteActivite::class)->latest();
@@ -157,11 +178,49 @@ class CommandeVente extends Model
         return $this->statut instanceof StatutCommandeVente ? $this->statut->label() : '';
     }
 
+    /**
+     * Statut tel qu'affiché à l'écran (fiche, liste, export web) ; `statut` reste la valeur brute
+     * du workflow et `statut_label` (API, mobile) n'est pas modifié.
+     *
+     * FACTURATION ne veut dire « À encaisser » que tant que la facture n'est pas soldée : une fois
+     * PAYEE, la commande n'attend plus que le versement des commissions avant l'auto-clôture
+     * (cf. cloturerSiComplete()). Afficher « À encaisser » à côté d'une facture « Payée » serait
+     * contradictoire.
+     *
+     * @return array{value: string|null, label: string}
+     */
+    public function statutAffichage(): array
+    {
+        if ($this->isFacturation() && $this->facture?->isPayee()) {
+            return [
+                'value' => self::STATUT_AFFICHAGE_COMMISSIONS_A_VERSER,
+                'label' => 'Commissions à verser',
+            ];
+        }
+
+        return ['value' => $this->statut?->value, 'label' => $this->statut_label];
+    }
+
+    /**
+     * Total des unités de la commande (somme des CommandeVenteLigne::quantite_effective). Charger
+     * `lignes` en amont pour les listes : sans cela, chaque commande déclenche sa propre requête.
+     */
+    public function getQuantiteTotaleAttribute(): int
+    {
+        return (int) $this->lignes->sum(fn (CommandeVenteLigne $l) => $l->quantite_effective);
+    }
+
     // ── Méthodes d'état ───────────────────────────────────────────────────────
 
     public function isBrouillon(): bool
     {
         return $this->statut === StatutCommandeVente::BROUILLON;
+    }
+
+    /** Source de vérité unique pour « cette commande peut être modifiée » — cf. StatutCommandeVente::isEditable() */
+    public function isEditable(): bool
+    {
+        return $this->statut->isEditable();
     }
 
     public function isACharger(): bool
@@ -194,9 +253,84 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::CLOTUREE;
     }
 
+    /**
+     * Source de vérité unique de « cette commande a besoin d'une validation de réception
+     * explicite avant de passer en LIVREE » — jusqu'au 06/09/2026 réservé à distribution_client
+     * (cf. docs/commissions.md COMM-004) ; étendu ce jour-là à Grossiste + Livraison (cf.
+     * docs/grossiste.md, chantier « Réception Grossiste ») : une livraison Grossiste doit elle
+     * aussi être réceptionnée par le client avant clôture, la facture au Grossiste restant
+     * indépendante de la réception (montant recalculé sur le réceptionné, jamais au-delà). Une
+     * vente standard sans véhicule (Enlèvement, Externe/Revendeur…) n'a jamais de véhicule à
+     * réceptionner et reste donc toujours false.
+     */
+    public function requiertReceptionExplicite(): bool
+    {
+        return $this->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            || $this->mode_remise_grossiste === ModeRemiseGrossiste::LIVRAISON;
+    }
+
     public function isAnnulee(): bool
     {
         return $this->statut === StatutCommandeVente::ANNULEE;
+    }
+
+    public function isRetournee(): bool
+    {
+        return $this->statut === StatutCommandeVente::RETOURNEE;
+    }
+
+    /**
+     * Annulée exceptionnellement pour erreur de saisie (cf. AnnulationExceptionnelleService).
+     * Volontairement distinct d'isAnnulee() : une telle commande n'est jamais supprimable
+     * (DestroyCommandeVenteController), sa trace doit rester consultable.
+     */
+    public function isAnnuleeErreurSaisie(): bool
+    {
+        return $this->statut === StatutCommandeVente::ANNULEE_ERREUR_SAISIE;
+    }
+
+    public function annulationExceptionnelle(): HasOne
+    {
+        return $this->hasOne(AnnulationExceptionnelle::class, 'commande_vente_id');
+    }
+
+    /**
+     * Source de vérité unique de « un retour de livraison peut être enregistré maintenant » (cf.
+     * CommandeVenteRetourService) : renvoie la raison du refus, ou null si le retour est possible.
+     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé — le premier
+     * encaissement d'une vente standard fait passer la commande en LIVREE (cf.
+     * CommandeVenteService::passerEnLivree()), mais le montant encaissé est aussi contrôlé
+     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API).
+     * Réservé aux ventes sans réception explicite : une commande à réception explicite (distribution,
+     * Grossiste livré) constate déjà ce que le client a accepté via l'écart de réception (cf.
+     * CommandeVenteService::validerReception()), avec ses propres règles de stock et de commission.
+     */
+    public function raisonRetourImpossible(): ?string
+    {
+        if (! $this->isLivraisonEnCours()) {
+            return 'Un retour ne peut être enregistré que pendant la livraison, avant tout encaissement.';
+        }
+
+        if ($this->requiertReceptionExplicite()) {
+            return 'Cette commande constate ce que le client a accepté à la validation de réception : utilisez l\'écart de réception, pas un retour.';
+        }
+
+        $this->loadMissing('lignes', 'facture');
+
+        if ($this->facture && ($this->facture->isAnnulee() || (float) $this->facture->montant_encaisse > 0)) {
+            return 'Un retour n\'est plus possible : la facture est annulée ou a déjà reçu un encaissement.';
+        }
+
+        if ($this->lignes->every(fn (CommandeVenteLigne $l) => $l->quantite_retournable <= 0)) {
+            return 'Toute la marchandise chargée a déjà été retournée.';
+        }
+
+        return null;
+    }
+
+    public function isRetournable(): bool
+    {
+        return $this->raisonRetourImpossible() === null;
     }
 
     public function isEncaissable(): bool
@@ -249,8 +383,12 @@ class CommandeVente extends Model
 
     private function commissionsPretesPourCloture(): bool
     {
-        if (! $this->commission_eligible_snapshot) {
-            // Véhicule non éligible aux commissions : rien n'est dû, clôture légitime.
+        // Grossiste + Enlèvement (pas de véhicule) reste commission_eligible_snapshot=false —
+        // cette valeur ne reflète que l'éligibilité véhicule (propriétaire/équipe), jamais celle
+        // du consultant/site qui en sont indépendants (cf. CommissionEnveloppeGenerator). Ne
+        // conclure "rien n'est dû" que si AUCUNE enveloppe n'a effectivement été générée, sinon
+        // une commission consultant légitime pourrait être clôturée sans avoir été vérifiée/payée.
+        if (! $this->commission_eligible_snapshot && ! $this->commissions()->exists()) {
             return true;
         }
 

@@ -2,12 +2,12 @@
 
 namespace App\Services;
 
-use App\Enums\BaseCalculLogistique;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
-use App\Models\CommissionLogistique;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
@@ -21,19 +21,21 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
  *
  * Le déclencheur ne choisit QUE le moment de naissance de la commission,
  * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
- * CommissionEnveloppeGenerator / CommissionLogistiqueService) et ne devient
- * IMPAYE(E) qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionEnveloppeGenerator) et ne devient IMPAYE(E) qu'à la validation de
+ * la période de paiement qui la couvre (cf.
  * CommissionAdjustmentService::activerCommissionsCreees()).
  *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
- * CommissionEnveloppeGenerator / CommissionLogistiqueService, seules sources de
- * vérité du calcul (barèmes, parts). Chaque méthode est idempotente par
- * construction, via l'idempotence déjà portée par ces générateurs (existence
- * check + contrainte unique BDD sur source_id / transfert_logistique_id).
+ * CommissionEnveloppeGenerator, seule source de vérité du calcul (barèmes,
+ * parts). Chaque méthode est idempotente par construction, via l'idempotence
+ * déjà portée par ce générateur (existence check + contrainte unique BDD sur
+ * source_id).
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
- * rétroactivement (cf. CLAUDE.md / spec §7).
+ * rétroactivement (cf. CLAUDE.md / spec §7). Seule exception métier : un retour de livraison
+ * avant encaissement réajuste la commission d'une vente standard encore CREEE, cf.
+ * onRetourEnregistre().
  */
 class CommissionTriggerService
 {
@@ -44,6 +46,13 @@ class CommissionTriggerService
      * CommandeVenteService::validerChargement()), une fois les quantités
      * réellement chargées connues.
      *
+     * Réservé aux commandes sans réception explicite (cf.
+     * CommandeVente::requiertReceptionExplicite()) : distribution_client (décision produit du
+     * 30/08/2026) puis Grossiste + Livraison (depuis le 06/09/2026, cf. docs/grossiste.md) ne
+     * génèrent jamais de commission au chargement, quel que soit le déclencheur configuré pour
+     * l'organisation — leur commission naît exclusivement à la validation de réception, cf.
+     * onReceptionValidee().
+     *
      * Sous CHARGEMENT_VALIDE : génère la commission maintenant, en CREEE, sur
      * la base des quantités chargées.
      *
@@ -53,6 +62,10 @@ class CommissionTriggerService
      */
     public static function onChargementValide(CommandeVente $commande): void
     {
+        if ($commande->requiertReceptionExplicite()) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
             return;
         }
@@ -73,11 +86,20 @@ class CommissionTriggerService
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis
      * le chargement.
+     *
+     * Réservé aux commandes sans réception explicite, comme onChargementValide() :
+     * l'encaissement d'une facture de distribution ou de Grossiste livré ne déclenche jamais sa
+     * commission, même sous FACTURE_ENCAISSEE — seule la réception validée le fait (décision
+     * produit du 30/08/2026, étendue à Grossiste + Livraison le 06/09/2026).
      */
     public static function onFactureVenteEncaissee(FactureVente $facture): void
     {
         $commande = $facture->commande;
         if (! $commande) {
+            return;
+        }
+
+        if ($commande->requiertReceptionExplicite()) {
             return;
         }
 
@@ -90,7 +112,7 @@ class CommissionTriggerService
 
     /**
      * Appelé à chaque transition réelle de facture DEPUIS PAYEE vers un autre statut
-     * (encaissement supprimé — cf. EncaissementVenteController::destroy(), ou tout autre
+     * (encaissement supprimé — cf. Ventes\DestroyEncaissementVenteController, ou tout autre
      * chemin traversant FactureVente::recalculStatut()) — symétrique de
      * onFactureVenteEncaissee().
      *
@@ -111,6 +133,10 @@ class CommissionTriggerService
             return;
         }
 
+        if ($commande->requiertReceptionExplicite()) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::FACTURE_ENCAISSEE) {
             return;
         }
@@ -124,6 +150,152 @@ class CommissionTriggerService
                 $commission->update(['statut' => StatutCommission::ANNULEE->value]);
             }
         }
+    }
+
+    /**
+     * Une commission de vente ne peut être recalculée par un retour de livraison (cf.
+     * CommandeVenteRetourService) que tant qu'elle n'a encore fait l'objet d'aucune décision
+     * humaine : encore CREEE (jamais entrée dans une période de paiement validée), sans montant
+     * ajusté, sans validation, sans versement. Passé ce cap, recalculer effacerait ou dupliquerait
+     * un engagement déjà pris envers un bénéficiaire — le retour est alors refusé et la commission
+     * doit être régularisée d'abord. Retourne le motif du refus, ou null si le retour peut avoir lieu
+     * (y compris quand aucune commission n'existe encore).
+     */
+    public static function raisonCommissionsNonRegularisables(CommandeVente $commande): ?string
+    {
+        return self::aDesCommissionsFigees($commande)
+            ? 'Retour impossible : la commission de cette commande a déjà été validée, ajustée ou payée dans une période de paiement. Régularisez d\'abord cette commission avant d\'enregistrer le retour.'
+            : null;
+    }
+
+    /**
+     * Une commission non annulée de cette commande a-t-elle déjà fait l'objet d'une décision
+     * humaine (sortie de CREEE, montant ajusté, validation, versement) ? Règle partagée par le
+     * retour de livraison et l'annulation exceptionnelle : ni l'un ni l'autre n'efface jamais un
+     * engagement déjà pris envers un bénéficiaire.
+     */
+    public static function aDesCommissionsFigees(CommandeVente $commande): bool
+    {
+        $enveloppes = $commande->commissions()->with('parts')->get();
+
+        foreach ($enveloppes as $enveloppe) {
+            if ($enveloppe->statut === StatutCommission::ANNULEE) {
+                continue;
+            }
+
+            $figee = $enveloppe->statut !== StatutCommission::CREEE
+                || $enveloppe->parts->contains(
+                    fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
+                        || (float) $part->montant_verse > 0
+                        || $part->montant_actuel !== null
+                        || $part->validated_at !== null
+                );
+
+            if ($figee) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Appelé après l'enregistrement d'un retour de livraison (cf.
+     * CommandeVenteRetourService::enregistrer()) : la commission d'une vente standard est calculée
+     * sur la quantité facturée (chargée nette des retours) — un retour qui la diminue doit donc la
+     * réajuster. Décision produit du 23/09/2026 : révise la règle antérieure « jamais recalculée
+     * après le chargement », qui ne tient plus pour un retour avant encaissement.
+     *
+     *  - Aucune commission générée à ce stade (déclencheur FACTURE_ENCAISSEE, ou génération en
+     *    échec) : rien à faire — la génération à venir se base déjà sur la quantité nette.
+     *  - Retour partiel : les enveloppes encore CREEE sont supprimées puis régénérées sur les
+     *    quantités nettes, en conservant leur date de gain d'origine (donc la même période de
+     *    paiement). Suppression plutôt que « annulée + nouvelle » : l'unicité (source, cible) des
+     *    enveloppes interdit d'en garder deux pour la même cible ; l'historique des tentatives de
+     *    génération (commission_generation_attempts) reste conservé.
+     *  - Retour total : toutes les parts et enveloppes sont ANNULEES, sans régénération (même
+     *    traitement que l'annulation d'une commande, cf. CommandeVenteService::
+     *    annulerCommissionsAssociees()).
+     *
+     * Suppose raisonCommissionsNonRegularisables() déjà vérifiée par l'appelant, avant toute
+     * écriture.
+     */
+    public static function onRetourEnregistre(CommandeVente $commande, bool $retourTotal): void
+    {
+        $enveloppes = $commande->commissions()->with('parts')->get()
+            ->reject(fn (CommissionEnveloppe $enveloppe) => $enveloppe->statut === StatutCommission::ANNULEE);
+
+        if ($enveloppes->isEmpty()) {
+            return;
+        }
+
+        $earnedAt = $enveloppes->first()->earned_at;
+
+        foreach ($enveloppes as $enveloppe) {
+            if ($retourTotal) {
+                $enveloppe->parts()->update(['statut' => StatutCommission::ANNULEE->value]);
+                $enveloppe->update(['statut' => StatutCommission::ANNULEE->value]);
+
+                continue;
+            }
+
+            $enveloppe->lignes()->delete();
+            $enveloppe->parts()->delete();
+            $enveloppe->delete();
+        }
+
+        if (! $retourTotal) {
+            CommissionEnveloppeGenerator::genererPourCommandeVente(
+                CommandeVente::findOrFail($commande->id),
+                declencheurUserId: auth()->id(),
+                earnedAt: $earnedAt,
+            );
+        }
+
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($commande->organization_id, $earnedAt);
+    }
+
+    /**
+     * Appelé à la validation réelle de la réception d'une commande à réception explicite (cf.
+     * CommandeVenteService::validerReception()) — UNIQUE déclencheur de commission pour
+     * distribution_client (décision produit du 30/08/2026) et, depuis le 06/09/2026, pour
+     * Grossiste + Livraison (cf. docs/grossiste.md) — jamais conditionné au paramètre
+     * organisation Parametre::getDeclencheurCommissionVente() qui ne régit plus que les commandes
+     * sans réception explicite : la réception est la seule confirmation que la livraison a
+     * réellement eu lieu, contrairement au chargement (simple départ du véhicule) ou à
+     * l'encaissement (simple paiement, indépendant de la livraison effective). Génère sur la base
+     * des quantités réellement reçues (quantite_livree), jamais chargées — cf.
+     * CommissionEnveloppeGenerator::contexteDepuisCommandeVente().
+     */
+    public static function onReceptionValidee(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
+    }
+
+    /**
+     * Appelé à la création réelle d'une vente directe (cf.
+     * CommandeVenteService::creerFactureDirecte()), inconditionnel comme
+     * onReceptionValidee() — jamais conditionné à
+     * Parametre::getDeclencheurCommissionVente(), qui suppose une étape « chargement »
+     * inexistante sur ce chemin (pas de véhicule, décrément de stock immédiat). C'est le SEUL
+     * événement disponible pour une vente directe : sans lui, un Grossiste en Enlèvement (seul
+     * cas actuel où une vente directe peut générer une commission, cf.
+     * CommissionEnveloppeGenerator::genererPourCommandeVente()) ne déclencherait jamais sa
+     * commission consultant sous le déclencheur CHARGEMENT_VALIDE.
+     *
+     * Sans effet pour toute vente directe non-Grossiste (Externe) : commission_eligible_snapshot
+     * est déjà false et le client n'est pas GROSSISTE, donc genererPourCommandeVente() retourne
+     * immédiatement — aucun changement de comportement pour l'existant.
+     */
+    public static function onVenteDirecteFacturee(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
@@ -173,42 +345,43 @@ class CommissionTriggerService
             return;
         }
 
-        CommissionLogistiqueService::genererDepuisChargement($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_chargee',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
      * Appelé à la validation admin réelle de la réception (« accord ») — les deux
-     * points d'entrée existants : ReceptionValidationAdminController::store()
-     * (backoffice web, montant par pack saisi par l'admin) et
-     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (montant
-     * automatique 200 FG/pack, cf. CommissionLogistiqueService::genererAutomatique()).
+     * points d'entrée existants : ReceptionValidationAdminController::store() (backoffice web) et
+     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (API mobile).
      *
-     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la
-     * quantité réellement reçue — $montantParPack si fourni (saisie admin), sinon
-     * le montant automatique historique.
+     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la quantité
+     * réellement reçue, montant résolu par CommissionRegle (Paramètres > Commissions >
+     * Transferts logistiques).
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis le
-     * départ du transfert — retourne null.
+     * départ du transfert.
+     *
+     * Décision produit du 03/09/2026 : le moteur générique (CommissionEnveloppeGenerator) est
+     * désormais le SEUL moteur de commission logistique — l'ancien CommissionLogistiqueService et
+     * la bascule par organisation (estMigreVersMoteurGenerique(), retirée) sont abandonnés après
+     * vérification en production qu'aucun solde `commission_logistique_parts` n'existait plus. La
+     * saisie manuelle d'un montant par pack n'a donc plus de sens et n'est plus acceptée par ce
+     * point d'entrée (cf. ReceptionValidationAdminController).
      */
-    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert, ?float $montantParPack = null): ?CommissionLogistique
+    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert): void
     {
         if (self::declencheurLogistique($transfert->organization_id) !== DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE) {
-            return null;
+            return;
         }
 
-        if ($montantParPack !== null) {
-            $transfert->loadMissing('lignes');
-            $quantiteRecue = (int) $transfert->lignes->sum('quantite_recue');
-
-            return CommissionLogistiqueService::genererPourTransfert(
-                $transfert,
-                BaseCalculLogistique::PAR_PACK->value,
-                $montantParPack,
-                $quantiteRecue > 0 ? $quantiteRecue : 0,
-            );
-        }
-
-        return CommissionLogistiqueService::genererAutomatique($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_recue',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     // ── Lecture politique organisation ───────────────────────────────────────

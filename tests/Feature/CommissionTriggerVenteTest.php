@@ -32,9 +32,12 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -53,14 +56,14 @@ use Tests\TestCase;
  */
 class CommissionTriggerVenteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'factures.encaisser']);
 
         // Les tests de cette classe sans Parametre::set... explicite couvrent le déclencheur
         // CHARGEMENT_VALIDE (cf. docblock de classe) — fixé ici explicitement car ce n'est plus
@@ -77,6 +80,10 @@ class CommissionTriggerVenteTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        // Les encaissements de ce fichier sont en espèces : elles exigent une caisse dédiée active de
+        // l'auteur sur le site de la facture (règle du 23/09/2026).
+        $this->creerCaisseActive($this->defaultSite->id, $this->user->id);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -163,6 +170,7 @@ class CommissionTriggerVenteTest extends TestCase
         if ($montantChauffeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
                 'montant_unitaire' => $montantChauffeur,
                 'effective_from' => now()->subDay(),
@@ -171,6 +179,7 @@ class CommissionTriggerVenteTest extends TestCase
         if ($montantConvoyeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
                 'montant_unitaire' => $montantConvoyeur,
                 'effective_from' => now()->subDay(),
@@ -213,6 +222,7 @@ class CommissionTriggerVenteTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => 300,
             'effective_from' => now()->subDay(),
@@ -421,7 +431,7 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
-    public function test_vehicule_sans_equipe_ne_genere_aucune_commission_et_ne_bloque_pas(): void
+    public function test_vehicule_sans_equipe_ne_genere_pas_la_commission_equipe_mais_ne_prive_pas_le_proprietaire(): void
     {
         $this->ensureBareme($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -436,11 +446,17 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        // Tout-ou-rien sur l'ensemble des cibles de la commande (cf.
-        // CommissionEnveloppeGenerator::genererParReglesDansTransaction()) : la cible
-        // équipe_livraison échoue faute d'équipe, donc même la cible propriétaire
-        // (pourtant valide) n'est pas créée.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026 — révise l'ancienne décision AMOA #4
+        // "tout-ou-rien") : la cible équipe_livraison échoue faute d'équipe, mais la cible
+        // propriétaire, pourtant valide, reçoit malgré tout son enveloppe.
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
     }
 
     // ── Répartition d'équipe invalide : jamais bloquant pour l'opération commerciale ──
@@ -481,11 +497,20 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        // Tout-ou-rien : la cible propriétaire (valide) n'est pas non plus créée.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026) : la cible propriétaire, valide,
+        // reçoit malgré tout son enveloppe — seule la cible livraison échoue (statut PARTIEL,
+        // pas ERREUR, puisqu'une cible a bien été générée).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
         $this->assertDatabaseHas('commission_generation_attempts', [
             'source_id' => $commande->id,
-            'statut' => 'erreur',
+            'statut' => 'partiel',
         ]);
     }
 
@@ -549,6 +574,8 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertNotEmpty($enveloppesAvant, 'précondition : commission générée');
 
         $encaissement = $facture->encaissements()->sole();
+        // Supprimer un encaissement exige `ventes.annuler_exceptionnel` depuis le 24/09/2026.
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'ventes.annuler_exceptionnel', 'guard_name' => 'web']));
         $this->actingAs($this->user)
             ->delete(route('encaissements.destroy', $encaissement))
             ->assertRedirect();

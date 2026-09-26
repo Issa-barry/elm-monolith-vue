@@ -21,9 +21,11 @@ use Tests\TestCase;
 // ── Une CommissionEnveloppePart au statut "creee" (période de paiement pas
 // encore validée — cf. CommissionAdjustmentService::activerCommissionsCreees())
 // reste VISIBLE (décision produit du 20/08/2026 — « visible ne veut pas dire
-// payable ») mais n'entre jamais dans le montant réellement exigible tant que
-// sa période n'est pas validée : elle apparaît dans le compartiment
-// en_attente_periode, jamais dans net_a_payer/reste_a_payer/payable. ─────────
+// payable »). Depuis la décision produit du 29/08/2026, son montant entre
+// aussi dans net_a_payer/reste_a_payer (le montant retenu courant doit
+// toujours être affiché) — mais jamais dans `payable`, qui reste réservé aux
+// parts déjà rattachées à une période validée, et le statut affiché reste
+// "creee"/"À valider" tant qu'aucune part n'est payable. ─────────────────────
 
 class CommissionVenteStatutCreeeTest extends TestCase
 {
@@ -129,7 +131,7 @@ class CommissionVenteStatutCreeeTest extends TestCase
         return $livreur;
     }
 
-    public function test_index_compte_les_parts_creee_en_attente_periode_pas_dans_le_reste_a_payer(): void
+    public function test_index_le_solde_restant_inclut_les_parts_creee(): void
     {
         $livreur = $this->setupLivreurAvecPartCreee();
 
@@ -141,14 +143,16 @@ class CommissionVenteStatutCreeeTest extends TestCase
             ->firstWhere('beneficiaire_id', $livreur->id);
 
         $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est "creee" doit rester visible dans la liste.');
+        // Le statut affiché reste "creee" (rien n'est encore payable) même si le montant
+        // retenu, lui, est désormais visible au même titre que s'il était déjà payable.
         $this->assertEquals('creee', $beneficiaire['statut_global']);
         $this->assertEquals(45000, (float) $beneficiaire['total_genere']);
         $this->assertEquals(45000, (float) $beneficiaire['en_attente_periode']);
         $this->assertEquals(0.0, (float) $beneficiaire['payable']);
-        $this->assertEquals(0.0, (float) $beneficiaire['solde_restant']);
+        $this->assertEquals(45000, (float) $beneficiaire['solde_restant']);
     }
 
-    public function test_show_affiche_la_part_creee_visible_mais_hors_montant_exigible(): void
+    public function test_show_le_net_a_payer_inclut_les_parts_creee(): void
     {
         $livreur = $this->setupLivreurAvecPartCreee();
 
@@ -157,8 +161,8 @@ class CommissionVenteStatutCreeeTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->where('commission_summary.net_a_payer', 0)
-                ->where('commission_summary.reste_a_payer', 0)
+                ->where('commission_summary.net_a_payer', 45000)
+                ->where('commission_summary.reste_a_payer', 45000)
                 ->where('commission_summary.en_attente_periode', 45000)
                 ->where('commission_summary.payable', 0)
                 ->has('commission_details', 1)

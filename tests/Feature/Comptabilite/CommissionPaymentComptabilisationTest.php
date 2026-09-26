@@ -25,9 +25,11 @@ use Tests\TestCase;
 
 /**
  * Avant l'audit du 2026-08-22, CommissionPayment (paiement direct de
- * commission logistique — circuit actif, cf. Logistique/Commissions/*.vue,
- * distinct de PaiementFiche et verrouillé contre le double paiement par
- * PeriodePayabilityChecker::assertPartsNotClaimedByFiche) n'avait aucune
+ * commission logistique — circuit encore actif via
+ * Comptabilite\CommissionLogistiqueController (écran Comptabilité > Commissions >
+ * Logistique ; /backoffice/logistique/commissions a été retiré le 04/09/2026, cf.
+ * docs/commissions.md), distinct de PaiementFiche et verrouillé contre le double
+ * paiement par PeriodePayabilityChecker::assertPartsNotClaimedByFiche) n'avait aucune
  * écriture dans compta_ecritures. Ce test verrouille le raccordement.
  */
 class CommissionPaymentComptabilisationTest extends TestCase

@@ -110,7 +110,7 @@ class CommissionStatutEffectifTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('livreurs.0.commission_status', 'en_attente_validation')
                 ->where('livreurs.0.display_status', 'en_attente')
-                ->where('livreurs.0.display_label', 'En attente de validation')
+                ->where('livreurs.0.display_label', 'À valider')
                 ->where('livreurs.0.can_pay', false)
             );
     }
@@ -296,7 +296,7 @@ class CommissionStatutEffectifTest extends TestCase
             ->get('/backoffice/comptabilite/fiches/livreurs')
             ->assertInertia(fn ($page) => $page
                 ->where('fiches.data.0.display_status', 'en_attente')
-                ->where('fiches.data.0.display_label', 'En attente de validation')
+                ->where('fiches.data.0.display_label', 'À valider')
                 ->where('fiches.data.0.can_pay', false)
             );
     }

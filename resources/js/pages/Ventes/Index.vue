@@ -1,8 +1,17 @@
 ﻿<script setup lang="ts">
+import MobileVenteList from '@/components/commande-vente/MobileVenteList.vue';
+import ProcessusBadge from '@/components/commande-vente/ProcessusBadge.vue';
+import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,15 +21,20 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
+import type { KpiWidgetItem } from '@/types/kpi-widgets';
+import type { VenteMobile } from '@/types/vente-mobile';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
-    ChevronRight,
+    CircleAlert,
+    Download,
     HandCoins,
     History,
     MoreHorizontal,
@@ -33,44 +47,38 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import Tooltip from 'primevue/tooltip';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Commande {
-    id: number;
-    reference: string;
-    statut: string;
-    statut_label: string;
-    total_commande: number;
-    vehicule_nom: string | null;
-    vehicule_immatriculation: string | null;
-    chauffeur_nom: string | null;
-    client_nom: string | null;
-    client_telephone: string | null;
-    site_nom: string | null;
+interface Commande extends VenteMobile {
+    nature_operation: 'vente_standard' | 'distribution_client';
+    quantite_totale: number;
+    processus_code: string;
     facture_id: number | null;
-    facture_statut: string | null;
-    facture_statut_label: string | null;
-    facture_montant_encaisse: number | null;
-    facture_montant_restant: number | null;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
     encaissements: {
         id: number;
         montant: number;
         date_encaissement: string;
         heure: string | null;
         mode_paiement_label: string;
+        operateur_mobile_money_label: string | null;
+        reference_paiement: string | null;
         created_by: string | null;
     }[];
-    created_at: string;
     is_annulee: boolean;
     is_brouillon: boolean;
     can_modifier: boolean;
@@ -92,6 +100,16 @@ interface SiteOption {
     nom: string;
 }
 
+interface VehiculeOption {
+    id: string;
+    nom: string;
+}
+
+interface StatutOption {
+    value: string;
+    label: string;
+}
+
 interface Filters {
     site_ids: string[];
     date_debut: string | null;
@@ -109,9 +127,13 @@ interface Filters {
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
+    nature_filtree: 'vente_standard' | 'distribution_client';
+    page_title: string;
     periode: string;
     statuts_actifs: string[];
+    statuts: StatutOption[];
     sites: SiteOption[];
+    vehicules: VehiculeOption[];
     is_admin: boolean;
     can_creer_commande: boolean;
     raison_blocage_commande: string | null;
@@ -123,7 +145,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 // Accès direct à /backoffice/ventes/create bloqué (aucun stock disponible pour ce site) :
-// CommandeVenteController::create()/store() ne renvoient jamais une page 403, ils redirigent
+// Ventes\CreateCommandeVenteController / Ventes\StoreCommandeVenteController ne renvoient jamais une page 403, ils redirigent
 // ici avec un flash 'error' (partagé globalement par HandleInertiaRequests) — affiché en toast
 // top-right plutôt qu'en page d'erreur, cf. règle projet <Toast position="top-right">.
 onMounted(() => {
@@ -137,10 +159,16 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,
 );
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Ventes', href: '/backoffice/ventes' },
-];
+    {
+        title: props.page_title,
+        href:
+            props.nature_filtree === 'distribution_client'
+                ? '/backoffice/distributions'
+                : '/backoffice/ventes',
+    },
+]);
 
 // ── Options statique ──────────────────────────────────────────────────────────
 const filtresStatut = [
@@ -173,6 +201,28 @@ const filtresStatutCommission = [
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
 const mobileSearch = ref('');
+
+const mobileKpiItems = computed<KpiWidgetItem[]>(() => [
+    {
+        id: 'ventes-total',
+        title: 'Total',
+        value: formatGNF(props.totaux.total_montant),
+        subtitle: `${props.totaux.nb_total} commande${props.totaux.nb_total > 1 ? 's' : ''}`,
+        valueClass: 'text-foreground tabular-nums',
+    },
+    {
+        id: 'ventes-restant',
+        title: 'Restant à encaisser',
+        value: formatGNF(props.totaux.total_a_encaisser),
+        valueClass: 'text-foreground tabular-nums',
+    },
+    {
+        id: 'ventes-paye',
+        title: 'Déjà payé',
+        value: formatGNF(props.totaux.deja_paye),
+        valueClass: 'text-foreground tabular-nums',
+    },
+]);
 
 const filterFields: FilterField[] = [
     {
@@ -232,7 +282,7 @@ const filterFields: FilterField[] = [
         key: 'numero_commande',
         label: 'N° commande',
         type: 'text',
-        placeholder: 'CMD-…',
+        placeholder: 'VTE-…, DST-…',
         inline: true,
     },
 ];
@@ -257,16 +307,237 @@ const mobileFiltered = computed(() => {
                 c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
-            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.statut_affichage.label &&
+                c.statut_affichage.label.toLowerCase().includes(q)) ||
             (c.facture_statut_label &&
                 c.facture_statut_label.toLowerCase().includes(q)) ||
             (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+// ── Export ────────────────────────────────────────────────────────────────────
+// Colonnes proposées par ExportCommandeVenteController / VenteListExport (clés identiques
+// des deux côtés). "Agence" est le seul intitulé retenu pour le site — pas de colonne "Site"
+// distincte, cf. VenteListExport.
+const EXPORT_COLUMNS = [
+    { key: 'reference', label: 'Référence' },
+    { key: 'date', label: 'Date' },
+    { key: 'client', label: 'Client' },
+    { key: 'vehicule', label: 'Véhicule' },
+    { key: 'livreur', label: 'Livreur' },
+    { key: 'agence', label: 'Agence' },
+    { key: 'processus', label: 'Processus' },
+    { key: 'montant', label: 'Montant' },
+    { key: 'deja_paye', label: 'Déjà payé' },
+    { key: 'reste', label: 'Reste à encaisser' },
+    { key: 'statut', label: 'Statut' },
+];
+
+// Périodes rapides de la modale d'export — 'custom' seul affiche les deux calendriers Date
+// début/fin librement éditables, toutes les autres calculent date_debut/date_fin côté client
+// (semaine calée sur lundi, cf. firstDayOfWeek: 1 dans app.ts).
+const PERIODE_OPTIONS = [
+    { value: 'today', label: "Aujourd'hui" },
+    { value: 'yesterday', label: 'Hier' },
+    { value: 'week', label: 'Semaine en cours' },
+    { value: 'last_week', label: 'Semaine dernière' },
+    { value: 'month', label: 'Mois en cours' },
+    { value: 'last_month', label: 'Mois dernier' },
+    { value: 'last_3_months', label: '3 derniers mois' },
+    { value: 'last_6_months', label: '6 derniers mois' },
+    { value: 'year', label: 'Année en cours' },
+    { value: 'last_year', label: 'Année dernière' },
+    { value: 'custom', label: 'Choisir une période' },
+];
+
+const exportDialogVisible = ref(false);
+const exportPeriode = ref('today');
+const exportDateDebut = ref('');
+const exportDateFin = ref('');
+const exportSiteIds = ref<string[]>([]);
+const exportVehiculeIds = ref<string[]>([]);
+const exportStatuts = ref<string[]>([]);
+const exportColumns = ref<string[]>(EXPORT_COLUMNS.map((c) => c.key));
+const exportFormat = ref<'xlsx' | 'csv'>('xlsx');
+
+function pad2(n: number): string {
+    return String(n).padStart(2, '0');
+}
+
+function toIsoDate(d: Date): string {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function addDays(d: Date, n: number): Date {
+    const date = new Date(d);
+    date.setDate(date.getDate() + n);
+    return date;
+}
+
+// Lundi de la semaine contenant `d` (getDay() : 0=dimanche..6=samedi).
+function startOfWeekMonday(d: Date): Date {
+    const day = d.getDay();
+    return addDays(d, day === 0 ? -6 : 1 - day);
+}
+
+/** Calcule [date_debut, date_fin] (chaînes ISO) pour une période rapide — 'custom' exclu. */
+function computePeriodeRange(preset: string): { debut: string; fin: string } {
+    const today = new Date();
+
+    switch (preset) {
+        case 'today':
+            return { debut: toIsoDate(today), fin: toIsoDate(today) };
+        case 'yesterday': {
+            const hier = addDays(today, -1);
+            return { debut: toIsoDate(hier), fin: toIsoDate(hier) };
+        }
+        case 'week':
+            return {
+                debut: toIsoDate(startOfWeekMonday(today)),
+                fin: toIsoDate(today),
+            };
+        case 'last_week': {
+            const finDerniere = addDays(startOfWeekMonday(today), -1);
+            const debutDerniere = addDays(finDerniere, -6);
+            return {
+                debut: toIsoDate(debutDerniere),
+                fin: toIsoDate(finDerniere),
+            };
+        }
+        case 'month':
+            return {
+                debut: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth(), 1),
+                ),
+                fin: toIsoDate(today),
+            };
+        case 'last_month':
+            return {
+                debut: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth() - 1, 1),
+                ),
+                fin: toIsoDate(
+                    new Date(today.getFullYear(), today.getMonth(), 0),
+                ),
+            };
+        case 'last_3_months':
+            return {
+                debut: toIsoDate(
+                    new Date(
+                        today.getFullYear(),
+                        today.getMonth() - 3,
+                        today.getDate(),
+                    ),
+                ),
+                fin: toIsoDate(today),
+            };
+        case 'last_6_months':
+            return {
+                debut: toIsoDate(
+                    new Date(
+                        today.getFullYear(),
+                        today.getMonth() - 6,
+                        today.getDate(),
+                    ),
+                ),
+                fin: toIsoDate(today),
+            };
+        case 'year':
+            return {
+                debut: toIsoDate(new Date(today.getFullYear(), 0, 1)),
+                fin: toIsoDate(today),
+            };
+        case 'last_year':
+            return {
+                debut: toIsoDate(new Date(today.getFullYear() - 1, 0, 1)),
+                fin: toIsoDate(new Date(today.getFullYear() - 1, 11, 31)),
+            };
+        default:
+            return { debut: '', fin: '' };
+    }
+}
+
+// 'custom' laisse exportDateDebut/exportDateFin tels quels (édition libre via les deux
+// Calendar) ; toute autre valeur recalcule et écrase les deux dates.
+watch(exportPeriode, (preset) => {
+    if (preset === 'custom') return;
+    const { debut, fin } = computePeriodeRange(preset);
+    exportDateDebut.value = debut;
+    exportDateFin.value = fin;
+});
+
+// Calendar (PrimeVue) travaille en Date, nos refs restent des chaînes ISO (format envoyé au
+// serveur) — mêmes conversions que Packings/Show.vue.
+function toDate(val: string): Date | null {
+    if (!val) return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function fromDate(val: Date | null): string {
+    return val ? toIsoDate(val) : '';
+}
+
+const exportTitle = computed(() =>
+    props.nature_filtree === 'distribution_client'
+        ? 'Export des distributions'
+        : 'Export des ventes',
+);
+
+// ventes.export / distributions.export : même contrôleur, filtré par nom de route (cf.
+// ExportCommandeVenteController) — jamais un paramètre client, comme pour ventes.index.
+const exportUrl = computed(() =>
+    props.nature_filtree === 'distribution_client'
+        ? '/backoffice/distributions/export'
+        : '/backoffice/ventes/export',
+);
+
+const siteFilterOptions = computed(() =>
+    props.sites.map((s) => ({ value: s.id, label: s.nom })),
+);
+
+const vehiculeFilterOptions = computed(() =>
+    props.vehicules.map((v) => ({ value: v.id, label: v.nom })),
+);
+
+const statutFilterOptions = computed(() =>
+    props.statuts.map((s) => ({ value: s.value, label: s.label })),
+);
+
+function openExportDialog() {
+    // Période : toujours "Aujourd'hui" par défaut à l'ouverture — calculé directement ici (pas
+    // seulement via le watcher sur exportPeriode, qui ne se déclenche pas si la valeur ne change
+    // pas d'un ouverture à l'autre). Les autres filtres restent pré-remplis avec ce qui est déjà
+    // appliqué à la page.
+    exportPeriode.value = 'today';
+    const { debut, fin } = computePeriodeRange('today');
+    exportDateDebut.value = debut;
+    exportDateFin.value = fin;
+    exportSiteIds.value = [...(props.filters.site_ids ?? [])];
+    exportVehiculeIds.value = [];
+    exportStatuts.value = [...props.statuts_actifs];
+    exportColumns.value = EXPORT_COLUMNS.map((c) => c.key);
+    exportFormat.value = 'xlsx';
+    exportDialogVisible.value = true;
+}
+
+function submitExport() {
+    const params = new URLSearchParams();
+    if (exportDateDebut.value) params.set('date_debut', exportDateDebut.value);
+    if (exportDateFin.value) params.set('date_fin', exportDateFin.value);
+    exportSiteIds.value.forEach((id) => params.append('site_ids[]', id));
+    exportVehiculeIds.value.forEach((id) =>
+        params.append('vehicule_ids[]', id),
+    );
+    exportStatuts.value.forEach((s) => params.append('statuts[]', s));
+    exportColumns.value.forEach((c) => params.append('columns[]', c));
+    params.set('format', exportFormat.value);
+
+    // Navigation native (pas router.get d'Inertia) : le serveur répond en Content-Disposition
+    // attachment, le navigateur télécharge le fichier sans quitter la page — même mécanisme que
+    // le lien <a href="/backoffice/vehicules/export"> de Vehicules/Index.vue.
+    window.location.href = `${exportUrl.value}?${params.toString()}`;
+    exportDialogVisible.value = false;
 }
 
 // ── Confirmation commande (BROUILLON → A_CHARGER) ────────────────────────────
@@ -340,43 +611,55 @@ const annulerDisabled = computed(
 );
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-const modesPaiement = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-];
-
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard : espèces + les moyens que les
+// supports de trésorerie actifs de l'agence de la facture peuvent recevoir (`moyens_encaissement`,
+// fourni par le backend — jamais une liste fixe, cf. docs/encaissements.md).
 const encaisserDialogVisible = ref(false);
 const encaisserCommande = ref<Commande | null>(null);
-const encaisserForm = useForm({
-    montant: null as number | null,
-    mode_paiement: 'especes' as string | null,
-    date_encaissement: new Date().toISOString().slice(0, 10),
-});
+const encaisserProcessing = ref(false);
+const encaisserErrors = ref<Record<string, string>>({});
+
+const encaisserInfoRows = computed(() =>
+    encaisserCommande.value
+        ? [
+              { label: 'Commande', value: encaisserCommande.value.reference },
+              {
+                  label: 'Montant total',
+                  value: formatGNF(encaisserCommande.value.total_commande),
+              },
+          ]
+        : [],
+);
 
 function openEncaisserDialog(commande: Commande) {
     encaisserCommande.value = commande;
-    encaisserForm.reset();
-    encaisserForm.montant = commande.facture_montant_restant;
-    encaisserForm.mode_paiement = 'especes';
-    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserErrors.value = {};
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser() {
+function submitEncaisser(payload: EncaissementPayload) {
     if (!encaisserCommande.value?.facture_id) return;
-    encaisserForm.post(
+    encaisserProcessing.value = true;
+    encaisserErrors.value = {};
+    router.post(
         `/backoffice/factures/${encaisserCommande.value.facture_id}/encaissements`,
+        payload,
         {
+            preserveScroll: true,
             onSuccess: () => {
                 encaisserDialogVisible.value = false;
                 toast.add({
                     severity: 'success',
                     summary: 'Encaissement enregistré',
-                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    detail: `${formatGNF(payload.montant)} enregistré avec succès.`,
                     life: 3000,
                 });
+            },
+            onError: (e) => {
+                encaisserErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaisserProcessing.value = false;
             },
         },
     );
@@ -416,11 +699,11 @@ function confirmDelete(c: Commande) {
 </script>
 
 <template>
-    <Head title="Ventes" />
+    <Head :title="page_title" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
-        <div class="flex flex-col sm:hidden">
+        <div class="flex min-w-0 flex-1 flex-col bg-muted/20 sm:hidden">
             <!-- Sticky header -->
             <div
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
@@ -454,33 +737,36 @@ function confirmDelete(c: Commande) {
                 <div v-else class="w-8" />
             </div>
 
+            <div
+                v-if="can('ventes.create') && !can_creer_commande"
+                role="status"
+                class="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+            >
+                <span
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                >
+                    <CircleAlert class="h-4 w-4" />
+                </span>
+                <div>
+                    <p class="text-xs font-semibold">
+                        Création de commande indisponible
+                    </p>
+                    <p
+                        class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                    >
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour continuer.
+                    </p>
+                </div>
+            </div>
+
             <!-- KPI cards -->
-            <div class="grid grid-cols-3 gap-3 p-4">
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.total_montant) }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ totaux.nb_total }} commande{{
-                            totaux.nb_total > 1 ? 's' : ''
-                        }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">
-                        Restant à encaisser
-                    </p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.total_a_encaisser) }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Déjà payé</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ formatGNF(totaux.deja_paye) }}
-                    </p>
-                </div>
+            <div class="relative min-w-0 p-4">
+                <KpiCardsResponsive
+                    :items="mobileKpiItems"
+                    breakpoint="sm"
+                    mobile-slide-width-class="w-full min-w-full max-w-full"
+                />
             </div>
 
             <!-- Search + Filtres -->
@@ -508,52 +794,10 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Card list -->
-            <div class="divide-y">
-                <Link
-                    v-for="c in mobileFiltered"
-                    :key="c.id"
-                    :href="`/backoffice/ventes/${c.id}`"
-                    class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
-                >
-                    <div class="min-w-0 flex-1">
-                        <p
-                            class="font-mono text-sm font-semibold tracking-wide text-primary"
-                        >
-                            {{ c.reference }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ c.vehicule_nom ?? c.client_nom ?? '—' }}
-                        </p>
-                        <p class="mt-1 text-sm font-medium tabular-nums">
-                            {{ formatGNF(c.total_commande) }}
-                        </p>
-                        <p
-                            v-if="
-                                c.facture_montant_restant !== null &&
-                                c.facture_montant_restant > 0
-                            "
-                            class="text-xs font-semibold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
-                            Restant : {{ formatGNF(c.facture_montant_restant) }}
-                        </p>
-                    </div>
-                    <div class="flex shrink-0 items-center gap-2">
-                        <div class="flex flex-col items-end gap-1.5">
-                            <StatusDot
-                                :status="c.statut"
-                                :label="c.statut_label"
-                            />
-                            <span
-                                class="text-xs text-muted-foreground tabular-nums"
-                                >{{ c.created_at }}</span
-                            >
-                        </div>
-                        <ChevronRight
-                            class="h-4 w-4 shrink-0 text-muted-foreground/50"
-                        />
-                    </div>
-                </Link>
-            </div>
+            <MobileVenteList
+                v-if="mobileFiltered.length"
+                :commandes="mobileFiltered"
+            />
 
             <!-- Empty state -->
             <div
@@ -581,6 +825,20 @@ function confirmDelete(c: Commande) {
                     <Plus class="mr-2 h-4 w-4" />
                     Créer la première commande
                 </Button>
+                <div
+                    v-if="can('ventes.create') && !can_creer_commande"
+                    role="status"
+                    class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                >
+                    <CircleAlert
+                        class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    />
+                    <p class="text-xs leading-5">
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour créer une
+                        commande.
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -596,38 +854,71 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <ListPageActions>
-                    <template #filters>
-                        <DataFilters
-                            trigger-only
-                            url="/backoffice/ventes"
-                            :base-params="{ periode: 'all' }"
-                            :values="filterValues"
-                            :sites="sites"
-                            :result-count="commandesFiltrees.length"
-                            :fields="filterFields"
-                        />
-                    </template>
-                    <template #primary>
-                        <Link
-                            v-if="can('ventes.create') && can_creer_commande"
-                            href="/backoffice/ventes/create"
-                        >
-                            <Button>
+                <div class="flex flex-col items-end gap-2">
+                    <ListPageActions>
+                        <template v-if="can('ventes.exporter')" #export>
+                            <Button variant="outline" @click="openExportDialog">
+                                <Download class="mr-2 h-4 w-4" />
+                                Exporter
+                            </Button>
+                        </template>
+                        <template #filters>
+                            <DataFilters
+                                trigger-only
+                                url="/backoffice/ventes"
+                                :base-params="{ periode: 'all' }"
+                                :values="filterValues"
+                                :sites="sites"
+                                :result-count="commandesFiltrees.length"
+                                :fields="filterFields"
+                            />
+                        </template>
+                        <template #primary>
+                            <Link
+                                v-if="
+                                    can('ventes.create') && can_creer_commande
+                                "
+                                href="/backoffice/ventes/create"
+                            >
+                                <Button>
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Nouvelle commande
+                                </Button>
+                            </Link>
+                            <Button
+                                v-else-if="can('ventes.create')"
+                                disabled
+                                v-tooltip.left="raison_blocage_commande"
+                            >
                                 <Plus class="mr-2 h-4 w-4" />
                                 Nouvelle commande
                             </Button>
-                        </Link>
-                        <Button
-                            v-else-if="can('ventes.create')"
-                            disabled
-                            v-tooltip.left="raison_blocage_commande"
+                        </template>
+                    </ListPageActions>
+                    <div
+                        v-if="can('ventes.create') && !can_creer_commande"
+                        role="status"
+                        class="flex max-w-md items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                    >
+                        <span
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
                         >
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouvelle commande
-                        </Button>
-                    </template>
-                </ListPageActions>
+                            <CircleAlert class="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p class="text-xs font-semibold">
+                                Création de commande indisponible
+                            </p>
+                            <p
+                                class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                            >
+                                Aucun produit vendable n'est disponible pour
+                                votre agence. Réapprovisionnez le stock pour
+                                continuer.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- KPI cards -->
@@ -749,6 +1040,20 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Quantité -->
+                    <Column
+                        field="quantite_totale"
+                        header="Qté"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">{{
+                                formatQuantite(data.quantite_totale)
+                            }}</span>
+                        </template>
+                    </Column>
+
                     <!-- Montant -->
                     <Column
                         field="total_commande"
@@ -800,6 +1105,21 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Processus -->
+                    <Column
+                        field="processus_label"
+                        header="Processus"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <ProcessusBadge
+                                :processus="data.processus_code"
+                                :label="data.processus_label"
+                            />
+                        </template>
+                    </Column>
+
                     <!-- Statut commande -->
                     <Column
                         field="statut"
@@ -809,8 +1129,8 @@ function confirmDelete(c: Commande) {
                     >
                         <template #body="{ data }">
                             <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
+                                :status="data.statut_affichage.value"
+                                :label="data.statut_affichage.label"
                             />
                         </template>
                     </Column>
@@ -949,6 +1269,22 @@ function confirmDelete(c: Commande) {
                                 <Plus class="mr-2 h-4 w-4" />
                                 Créer la première commande
                             </Button>
+                            <div
+                                v-if="
+                                    can('ventes.create') && !can_creer_commande
+                                "
+                                role="status"
+                                class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                            >
+                                <CircleAlert
+                                    class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                                />
+                                <p class="text-xs leading-5">
+                                    Aucun produit vendable n'est disponible pour
+                                    votre agence. Réapprovisionnez le stock pour
+                                    créer une commande.
+                                </p>
+                            </div>
                         </div>
                     </template>
                 </DataTable>
@@ -964,7 +1300,7 @@ function confirmDelete(c: Commande) {
                     ? `Historique — ${historyCommande.reference}`
                     : 'Historique'
             "
-            :style="{ width: '560px' }"
+            :style="{ width: '880px', maxWidth: '95vw' }"
         >
             <div v-if="historyCommande">
                 <div
@@ -990,6 +1326,11 @@ function confirmDelete(c: Commande) {
                                 class="px-3 py-2 text-left font-medium text-muted-foreground"
                             >
                                 Mode
+                            </th>
+                            <th
+                                class="hidden px-3 py-2 text-left font-medium text-muted-foreground sm:table-cell"
+                            >
+                                Référence
                             </th>
                             <th
                                 class="px-3 py-2 text-right font-medium text-muted-foreground"
@@ -1020,7 +1361,15 @@ function confirmDelete(c: Commande) {
                                 {{ e.heure ?? '—' }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement_label }}
+                                {{
+                                    e.operateur_mobile_money_label ??
+                                    e.mode_paiement_label
+                                }}
+                            </td>
+                            <td
+                                class="hidden px-3 py-2 text-muted-foreground sm:table-cell"
+                            >
+                                {{ e.reference_paiement ?? '—' }}
                             </td>
                             <td
                                 class="px-3 py-2 text-right font-medium tabular-nums"
@@ -1035,7 +1384,7 @@ function confirmDelete(c: Commande) {
                     <tfoot>
                         <tr class="border-t">
                             <td
-                                colspan="3"
+                                colspan="4"
                                 class="px-3 py-2 text-sm font-semibold"
                             >
                                 Total encaissé
@@ -1060,113 +1409,19 @@ function confirmDelete(c: Commande) {
         </Dialog>
 
         <!-- Dialog Encaissement -->
-        <Dialog
+        <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            modal
-            header="Encaisser un paiement"
-            :style="{ width: '440px' }"
-        >
-            <div v-if="encaisserCommande" class="space-y-4">
-                <div class="space-y-1.5 rounded-lg bg-muted/40 p-4 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-muted-foreground">Commande</span>
-                        <span class="font-mono font-semibold">{{
-                            encaisserCommande.reference
-                        }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-muted-foreground">Montant total</span>
-                        <span class="tabular-nums">{{
-                            formatGNF(encaisserCommande.total_commande)
-                        }}</span>
-                    </div>
-                    <div class="flex justify-between border-t pt-1.5">
-                        <span class="font-semibold text-muted-foreground"
-                            >Restant dû</span
-                        >
-                        <span class="font-bold tabular-nums">{{
-                            formatGNF(
-                                encaisserCommande.facture_montant_restant ?? 0,
-                            )
-                        }}</span>
-                    </div>
-                </div>
-
-                <div>
-                    <Label class="mb-1.5 block text-sm"
-                        >Montant <span class="text-destructive">*</span></Label
-                    >
-                    <InputNumber
-                        v-model="encaisserForm.montant"
-                        :max="
-                            encaisserCommande.facture_montant_restant ??
-                            undefined
-                        "
-                        :min="1"
-                        :use-grouping="true"
-                        locale="fr-FR"
-                        suffix=" GNF"
-                        class="w-full"
-                        fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.montant"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.montant }}
-                    </p>
-                </div>
-
-                <div>
-                    <Label class="mb-1.5 block text-sm"
-                        >Mode de paiement
-                        <span class="text-destructive">*</span></Label
-                    >
-                    <Select
-                        v-model="encaisserForm.mode_paiement"
-                        :options="modesPaiement"
-                        option-label="label"
-                        option-value="value"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid': encaisserForm.errors.mode_paiement,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.mode_paiement"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.mode_paiement }}
-                    </p>
-                </div>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        @click="encaisserDialogVisible = false"
-                        >Annuler</Button
-                    >
-                    <Button
-                        :disabled="
-                            encaisserForm.processing ||
-                            !encaisserForm.montant ||
-                            !encaisserForm.mode_paiement
-                        "
-                        @click="submitEncaisser"
-                    >
-                        <HandCoins class="mr-2 h-4 w-4" />
-                        {{
-                            encaisserForm.processing
-                                ? 'Enregistrement…'
-                                : 'Confirmer'
-                        }}
-                    </Button>
-                </div>
-            </template>
-        </Dialog>
+            title="Encaisser un paiement"
+            :solde="encaisserCommande?.facture_montant_restant ?? 0"
+            :moyens="encaisserCommande?.moyens_encaissement ?? []"
+            :especes-disponibles="
+                encaisserCommande?.peut_encaisser_especes ?? true
+            "
+            :info-rows="encaisserInfoRows"
+            :processing="encaisserProcessing"
+            :errors="encaisserErrors"
+            @submit="submitEncaisser"
+        />
 
         <!-- Dialog Annulation -->
         <Dialog
@@ -1255,6 +1510,168 @@ function confirmDelete(c: Commande) {
                                 ? 'Annulation…'
                                 : "Confirmer l'annulation"
                         }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Export -->
+        <Dialog
+            v-model:visible="exportDialogVisible"
+            modal
+            :header="exportTitle"
+            :style="{ width: '560px' }"
+        >
+            <div class="space-y-5">
+                <!-- Période -->
+                <div>
+                    <Label class="mb-1.5 block text-sm">Période</Label>
+                    <Select
+                        v-model="exportPeriode"
+                        :options="PERIODE_OPTIONS"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                        fluid
+                    />
+                    <div
+                        v-if="exportPeriode === 'custom'"
+                        class="mt-2 grid grid-cols-2 gap-2"
+                    >
+                        <div>
+                            <Label
+                                for="export-date-debut"
+                                class="mb-1 block text-xs text-muted-foreground"
+                                >Date de début</Label
+                            >
+                            <DatePicker
+                                input-id="export-date-debut"
+                                :model-value="toDate(exportDateDebut)"
+                                @update:model-value="
+                                    exportDateDebut = fromDate(
+                                        $event as Date | null,
+                                    )
+                                "
+                                date-format="dd/mm/yy"
+                                show-icon
+                                fluid
+                            />
+                        </div>
+                        <div>
+                            <Label
+                                for="export-date-fin"
+                                class="mb-1 block text-xs text-muted-foreground"
+                                >Date de fin</Label
+                            >
+                            <DatePicker
+                                input-id="export-date-fin"
+                                :model-value="toDate(exportDateFin)"
+                                @update:model-value="
+                                    exportDateFin = fromDate(
+                                        $event as Date | null,
+                                    )
+                                "
+                                date-format="dd/mm/yy"
+                                show-icon
+                                fluid
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agence -->
+                <div v-if="sites.length > 0">
+                    <Label class="mb-1.5 block text-sm">Agence</Label>
+                    <FilterMultiSelect
+                        v-model="exportSiteIds"
+                        :options="siteFilterOptions"
+                        placeholder="Toutes les agences"
+                        empty-means-all
+                    />
+                </div>
+
+                <!-- Véhicules -->
+                <div v-if="vehicules.length > 0">
+                    <Label class="mb-1.5 block text-sm">Véhicules</Label>
+                    <FilterMultiSelect
+                        v-model="exportVehiculeIds"
+                        :options="vehiculeFilterOptions"
+                        placeholder="Tous les véhicules"
+                        empty-means-all
+                    />
+                </div>
+
+                <!-- Statut -->
+                <div>
+                    <Label class="mb-1.5 block text-sm">Statut</Label>
+                    <FilterMultiSelect
+                        v-model="exportStatuts"
+                        :options="statutFilterOptions"
+                        placeholder="Tous les statuts"
+                        empty-means-all
+                    />
+                </div>
+
+                <!-- Colonnes -->
+                <div>
+                    <Label class="mb-1.5 block text-sm"
+                        >Colonnes à exporter</Label
+                    >
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <label
+                            v-for="col in EXPORT_COLUMNS"
+                            :key="col.key"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <input
+                                v-model="exportColumns"
+                                type="checkbox"
+                                :value="col.key"
+                                class="h-4 w-4 rounded border-input"
+                            />
+                            {{ col.label }}
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Format -->
+                <div>
+                    <Label class="mb-1.5 block text-sm">Format</Label>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm">
+                            <input
+                                v-model="exportFormat"
+                                type="radio"
+                                value="xlsx"
+                                class="h-4 w-4 border-input"
+                            />
+                            Excel (.xlsx)
+                        </label>
+                        <label class="flex items-center gap-2 text-sm">
+                            <input
+                                v-model="exportFormat"
+                                type="radio"
+                                value="csv"
+                                class="h-4 w-4 border-input"
+                            />
+                            CSV
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        @click="exportDialogVisible = false"
+                        >Annuler</Button
+                    >
+                    <Button
+                        :disabled="exportColumns.length === 0"
+                        @click="submitExport"
+                    >
+                        <Download class="mr-2 h-4 w-4" />
+                        Exporter
                     </Button>
                 </div>
             </template>

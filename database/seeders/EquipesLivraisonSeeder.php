@@ -2,12 +2,21 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionUniteCalcul;
+use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\Proprietaire;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Database\Seeder;
 
 /**
@@ -158,6 +167,8 @@ class EquipesLivraisonSeeder extends Seeder
             ],
         ];
 
+        $equipesInternesCreees = [];
+
         foreach ($equipesInternes as $equipeData) {
             $equipe = EquipeLivraison::create([
                 'organization_id' => $org->id,
@@ -179,6 +190,60 @@ class EquipesLivraisonSeeder extends Seeder
                         'ordre' => $m['ordre'],
                     ]
                 );
+            }
+
+            $equipesInternesCreees[] = ['equipe' => $equipe, 'membres' => $equipeData['membres']];
+        }
+
+        // ── Barème "moteur générique" (commission logistique) ──────────────────
+        // Décision produit du 03/09/2026 (cf. CommissionTriggerService::onTransfertReceptionEffectuee) :
+        // CommissionEnveloppeGenerator est désormais le SEUL moteur de commission logistique — sans
+        // CommissionRegle + partages par catégorie, le montant résout silencieusement à 0 (décision
+        // AMOA #4, cf. CommissionEnveloppeGenerator::executerAvecTentative()). Ce bloc réexprime dans
+        // le nouveau schéma le même barème 200 GNF/pack déjà documenté ci-dessus pour les équipes
+        // INTERNES (100 % aux membres, aucune part propriétaire). Les équipes EXTERNES (part
+        // propriétaire à modéliser séparément, cf. pattern cible PROPRIETAIRE/EQUIPE_LIVRAISON de
+        // SeedCommissionsV2FondationsCommand pour la Vente) ne sont pas couvertes ici : aucun test ne
+        // les exerce actuellement pour la commission logistique.
+        $processusLogistique = CommissionProcessusDefaults::resoudreOuCreer($org->id, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+
+        CommissionRegle::firstOrCreate(
+            [
+                'organization_id' => $org->id,
+                'processus_id' => $processusLogistique->id,
+                'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                'scope_type' => CommissionScopeType::GLOBAL->value,
+                'statut' => 'active',
+            ],
+            [
+                'libelle' => 'Équipe de livraison — Transfert logistique',
+                'scope_id' => null,
+                'mode' => CommissionMode::A_REPARTIR->value,
+                'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+                'montant' => self::COMMISSION,
+                'effective_from' => now()->subDay()->toDateString(),
+            ],
+        );
+
+        $categories = Categorie::where('organization_id', $org->id)->get();
+
+        foreach ($equipesInternesCreees as ['equipe' => $equipe, 'membres' => $membres]) {
+            foreach ($categories as $categorie) {
+                foreach ($membres as $m) {
+                    EquipeLivraisonPartageCategorie::firstOrCreate(
+                        [
+                            'equipe_id' => $equipe->id,
+                            'processus_id' => $processusLogistique->id,
+                            'categorie_id' => $categorie->id,
+                            'livreur_id' => $lv($m['telephone'])->id,
+                        ],
+                        [
+                            'part_pourcentage' => 0,
+                            'montant_unitaire' => $m['montant'],
+                            'effective_from' => now()->subDay(),
+                        ],
+                    );
+                }
             }
         }
     }

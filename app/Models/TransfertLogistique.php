@@ -3,14 +3,15 @@
 namespace App\Models;
 
 use App\Enums\StatutTransfert;
+use App\Services\ReferenceNumeroService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class TransfertLogistique extends Model
 {
@@ -18,7 +19,8 @@ class TransfertLogistique extends Model
 
     protected $table = 'transferts_logistiques';
 
-    private const TEMP_PREFIX = 'TMP-TR-';
+    /** Décision produit du 31/08/2026 : remplace l'ancien format TR-NNNNN-XXX. */
+    private const REFERENCE_PREFIX = 'TRF';
 
     private const CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
@@ -72,9 +74,13 @@ class TransfertLogistique extends Model
     {
         static::creating(function (TransfertLogistique $t) {
             if (empty($t->reference)) {
-                $t->numero = (DB::table('transferts_logistiques')->max('numero') ?? 0) + 1;
+                // Remplace l'ancien MAX(numero)+1 non verrouillé (course possible entre deux
+                // workers) par une séquence journalière verrouillée, scopée par organisation —
+                // même générateur que CommandeVente (VTE-/DST-), cf. ReferenceNumeroService.
+                // code_confirmation reste un code de confirmation distinct (affiché au chauffeur),
+                // il n'entre plus dans la référence elle-même.
+                [$t->reference, $t->numero] = app(ReferenceNumeroService::class)->generer($t->organization_id, self::REFERENCE_PREFIX);
                 $t->code_confirmation = self::generateConfirmationCode();
-                $t->reference = self::TEMP_PREFIX.bin2hex(random_bytes(6));
             }
             if (empty($t->statut)) {
                 $t->statut = StatutTransfert::BROUILLON;
@@ -82,17 +88,6 @@ class TransfertLogistique extends Model
             if (Auth::check()) {
                 $t->created_by = Auth::id();
             }
-        });
-
-        static::created(function (TransfertLogistique $t) {
-            if (! str_starts_with((string) $t->reference, self::TEMP_PREFIX)) {
-                return;
-            }
-            $code = $t->code_confirmation ?? self::generateConfirmationCode();
-            $ref = 'TR-'.str_pad((string) $t->numero, 5, '0', STR_PAD_LEFT).'-'.$code;
-            $t->newQueryWithoutScopes()->whereKey($t->id)->update(['reference' => $ref, 'code_confirmation' => $code]);
-            $t->reference = $ref;
-            $t->syncOriginalAttribute('reference');
         });
     }
 
@@ -113,6 +108,22 @@ class TransfertLogistique extends Model
         return $this->belongsTo(Site::class, 'site_destination_id');
     }
 
+    /**
+     * Alias de siteSource() — jamais destination (même convention que
+     * CommissionOperationContext::contexteDepuisTransfertLogistique(), "le site cible toujours
+     * le site SOURCE du transfert"). Existe uniquement pour que les écrans de reporting
+     * Comptabilité (CommissionVenteController/CommissionSiteController/CommissionProprietaireController),
+     * qui eager-chargent `enveloppe.source.site` sur la relation polymorphe CommissionEnveloppe::source
+     * (CommandeVente OU TransfertLogistique), ne lèvent plus RelationNotFoundException dès qu'un
+     * TransfertLogistique apparaît dans le résultat (régression découverte le 02/09/2026 : jamais
+     * déclenchée avant faute de commission Livreur générique visible sur un transfert réel).
+     * CommandeVente::site() reste la relation "normale", inchangée.
+     */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class, 'site_source_id');
+    }
+
     public function vehicule(): BelongsTo
     {
         return $this->belongsTo(Vehicule::class);
@@ -128,9 +139,16 @@ class TransfertLogistique extends Model
         return $this->hasMany(TransfertLigne::class);
     }
 
+    /** @deprecated commission legacy (moteur CommissionLogistiqueService) — historique en lecture seule */
     public function commission(): HasOne
     {
         return $this->hasOne(CommissionLogistique::class);
+    }
+
+    /** Commissions générées par le moteur générique (CommissionEnveloppeGenerator), organisations migrées uniquement. */
+    public function commissions(): MorphMany
+    {
+        return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
     public function createur(): BelongsTo

@@ -12,7 +12,7 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions()) pilotent l'affichage
+// `required_prices`/`gere_stock` (cf. App\Support\Produits\ProduitFormOptions::types()) pilotent l'affichage
 // du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
 // `achetable`/`vendable` pilotent la visibilité (applicabilité) de prix_achat/prix_vente.
 interface ProduitTypeOption extends Option {
@@ -88,8 +88,13 @@ const form = useForm({
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
-    alerte_stock_active: false,
-    seuil_alerte_stock: null as number | null,
+    disponibilite_mode: 'tous' as 'tous' | 'selection',
+    sites_disponibles: [] as string[],
+    seuils_site: [] as {
+        site_id: string;
+        actif: boolean;
+        seuil: number | null;
+    }[],
     description: null as string | null,
     images: [] as File[],
     options: [] as {

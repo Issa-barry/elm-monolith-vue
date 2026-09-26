@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
+import UpdateProfileController from '@/actions/App/Http/Controllers/Settings/Profile/UpdateProfileController';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
@@ -12,6 +12,7 @@ import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -59,17 +60,10 @@ function formatDate(iso: string | null): string {
     }).format(new Date(iso));
 }
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin_entreprise: 'Admin entreprise',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-    client: 'Client',
-};
+const { roleLabel } = usePermissions();
 
 const roles = computed(() =>
-    (page.props.auth.roles as string[]).map((r) => ROLE_LABELS[r] ?? r),
+    (page.props.auth.roles as string[]).map(roleLabel),
 );
 </script>
 
@@ -85,7 +79,7 @@ const roles = computed(() =>
                 />
 
                 <Form
-                    v-bind="ProfileController.update.form()"
+                    v-bind="UpdateProfileController.form()"
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
                     @success="

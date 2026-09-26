@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
@@ -18,7 +19,7 @@ use Tests\TestCase;
 
 /**
  * Non-régression multi-agences : le stock d'une agence ne doit jamais être lu,
- * écrit, ou visible dans une autre — ni via l'affichage (ProduitController::index()),
+ * écrit, ou visible dans une autre — ni via l'affichage (IndexProduitController),
  * ni via l'ajustement manuel, ni via une vente/sortie générique. Couvre aussi le
  * cas du stock legacy (Produit::qte_stock) jamais hérité implicitement par la
  * première agence touchée.
@@ -53,6 +54,17 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->admin->assignRole('admin_entreprise');
         $this->admin->givePermissionTo('produits.read');
         $this->admin->sites()->attach($this->siteA->id, ['role' => 'employe', 'is_default' => true]);
+
+        // Depuis le 2026-09-06, admin_entreprise ne bypasse plus DroitAjustementStockService —
+        // reproduit ici le provisioning de continuité qu'InstallationService::install() pose
+        // désormais pour toute organisation réelle (cf. sa docblock de classe).
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
     }
 
     private function makeSite(string $nom): Site
@@ -119,6 +131,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -142,6 +155,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteB->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -234,6 +248,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
             ])
             ->assertSessionHasErrors('motif_type');
@@ -250,6 +265,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => '',
@@ -268,6 +284,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => '     ',
@@ -286,6 +303,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteA->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'autre',
                 'motif_detail' => 'Correction inventaire',
@@ -309,6 +327,7 @@ class StockIsolationMultiSiteTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $this->siteB->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\User;
@@ -37,6 +38,37 @@ class VenteParametrageTest extends TestCase
         return $user;
     }
 
+    public function test_edit_returns_403_without_permission(): void
+    {
+        $this->createRoles();
+        $organization = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $organization->id]);
+        $user->assignRole(Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']));
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(403);
+    }
+
+    public function test_update_returns_403_without_permission(): void
+    {
+        $this->createRoles();
+        $organization = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $organization->id]);
+        $user->assignRole(Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']));
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+            ])
+            ->assertStatus(403);
+    }
+
     public function test_edit_exposes_price_permission_flags_per_role(): void
     {
         $this->createRoles();
@@ -54,7 +86,58 @@ class VenteParametrageTest extends TestCase
             );
     }
 
+    /**
+     * `commerciale`/`manager` sont des rôles système partagés par toutes les organisations
+     * (organization_id null) — ce test cible donc désormais un rôle métier propre à
+     * l'organisation pour vérifier le mécanisme de sélection, plutôt qu'un rôle système (cf.
+     * test_update_does_not_change_permissions_of_a_system_role_for_non_super_admin ci-dessous
+     * pour la garantie inverse).
+     */
     public function test_update_applies_unit_price_permission_by_role_selection(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+        Permission::findOrCreate('parametres.read', 'web');
+        $user->givePermissionTo('parametres.read');
+
+        // Créées explicitement ici (état "déjà déployé") pour ne pas dépendre du bootstrap
+        // ponctuel ensureSalesPermissionsExist() (qui n'accorde par défaut qu'à la première
+        // création de ces permissions, jamais ensuite) — état réaliste d'une organisation qui
+        // n'en est pas à sa toute première configuration.
+        Permission::findOrCreate('ventes.prix.update', 'web');
+        Permission::findOrCreate('ventes.qte.update', 'web');
+
+        $orgRole = Role::create(['name' => 'chef_agence', 'label' => 'Chef agence', 'guard_name' => 'web', 'organization_id' => $user->organization_id]);
+        $managerRole = Role::query()->where('name', 'manager')->firstOrFail();
+        $managerHadPermissionBefore = $managerRole->hasPermissionTo('ventes.prix.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [$orgRole->name],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertTrue($orgRole->fresh()->hasPermissionTo('ventes.prix.update'));
+        // 'manager' est un rôle système (partagé, non sélectionné ici) : son état ne doit pas
+        // bouger, quel qu'il soit — ni forcé à false (ancien comportement, désormais dangereux
+        // en cross-tenant) ni affecté par la sélection d'un autre rôle.
+        $this->assertSame($managerHadPermissionBefore, $managerRole->fresh()->hasPermissionTo('ventes.prix.update'));
+    }
+
+    /**
+     * Verrou central de la refonte rôles/permissions (2026-09-06) : `commerciale` est un rôle
+     * système partagé par TOUTES les organisations — avant ce verrou, cocher "Commerciale"
+     * depuis l'écran de paramétrage ventes d'UNE organisation modifiait silencieusement le
+     * comportement de `commerciale` pour toutes les autres. Un admin_entreprise ne peut donc
+     * plus faire varier ses permissions depuis cet écran ; seul un super_admin le peut.
+     */
+    public function test_update_does_not_change_permissions_of_a_system_role_for_non_super_admin(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
@@ -69,16 +152,12 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
 
         $commercialeRole = Role::query()->where('name', 'commerciale')->firstOrFail();
-        $managerRole = Role::query()->where('name', 'manager')->firstOrFail();
-
-        $this->assertTrue($commercialeRole->hasPermissionTo('ventes.prix.update'));
-        $this->assertFalse($managerRole->hasPermissionTo('ventes.prix.update'));
+        $this->assertFalse($commercialeRole->hasPermissionTo('ventes.prix.update'));
     }
 
     public function test_edit_exposes_autoriser_saisie_dessous_qte_max_prop(): void
@@ -109,7 +188,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -135,7 +213,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -162,8 +239,8 @@ class VenteParametrageTest extends TestCase
     /**
      * Aucun Parametre::set... appelé : ces valeurs sont les défauts d'une organisation neuve
      * (décision produit du 18/08/2026) — commission vente à l'encaissement de la facture,
-     * commission logistique à la réception (comportement historique, inchangé), contrôle des
-     * impayés actif avec seuil 0.
+     * contrôle des impayés actif avec seuil 0. Le déclencheur logistique a son propre défaut,
+     * couvert par LogistiqueParametrageTest (page déplacée le 07/09/2026).
      */
     public function test_edit_exposes_les_nouveaux_defauts_dune_organisation_neuve(): void
     {
@@ -176,7 +253,6 @@ class VenteParametrageTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/Ventes')
                 ->where('declencheur_commission_vente', 'facture_encaissee')
-                ->where('declencheur_commission_logistique', 'reception_effectuee')
                 ->where('controle_impayes_actif', true)
                 ->where('seuil_impayes_max', 0)
             );
@@ -206,7 +282,7 @@ class VenteParametrageTest extends TestCase
             );
     }
 
-    public function test_update_persists_declencheurs_commission(): void
+    public function test_update_persists_declencheur_commission_vente(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
@@ -219,7 +295,6 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'facture_encaissee',
-                'declencheur_commission_logistique' => 'chargement_valide',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -227,10 +302,6 @@ class VenteParametrageTest extends TestCase
         $this->assertEquals(
             'facture_encaissee',
             Parametre::getDeclencheurCommissionVente($user->organization_id)->value,
-        );
-        $this->assertEquals(
-            'chargement_valide',
-            Parametre::getDeclencheurCommissionLogistique($user->organization_id)->value,
         );
     }
 
@@ -247,26 +318,123 @@ class VenteParametrageTest extends TestCase
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
                 'declencheur_commission_vente' => 'valeur_invalide',
-                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertSessionHasErrors('declencheur_commission_vente');
     }
 
-    public function test_update_rejette_une_valeur_de_declencheur_logistique_invalide(): void
+    // ── Confirmation des annulations exceptionnelles (24/09/2026) ─────────────
+
+    /** @return array<string, mixed> */
+    private function payload(array $surcharges = []): array
+    {
+        return array_merge([
+            'quantity_edit_role_names' => [],
+            'price_edit_role_names' => [],
+            'autoriser_saisie_dessous_qte_max' => true,
+            'controle_impayes_actif' => false,
+            'seuil_impayes_max' => 0,
+            'declencheur_commission_vente' => 'chargement_valide',
+        ], $surcharges);
+    }
+
+    private function donnerPermissions(User $user, array $permissions): User
+    {
+        foreach ($permissions as $permission) {
+            $user->givePermissionTo(Permission::findOrCreate($permission, 'web'));
+        }
+
+        return $user;
+    }
+
+    public function test_confirmation_des_annulations_exceptionnelles_par_code_email_par_defaut(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('annulation_exceptionnelle_confirmation', 'email_code')
+                ->where('peut_modifier_confirmation_annulation', false)
+                ->has('annulation_exceptionnelle_confirmation_options', 2));
+    }
+
+    public function test_modifier_le_mode_exige_aussi_la_permission_d_annulation_exceptionnelle(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
 
         $this->actingAs($user)
-            ->put(route('settings.ventes.update'), [
-                'quantity_edit_role_names' => [],
-                'price_edit_role_names' => [],
-                'autoriser_saisie_dessous_qte_max' => true,
-                'controle_impayes_actif' => false,
-                'seuil_impayes_max' => 0,
-                'declencheur_commission_vente' => 'chargement_valide',
-                'declencheur_commission_logistique' => 'valeur_invalide',
-            ])
-            ->assertSessionHasErrors('declencheur_commission_logistique');
+            ->put(route('settings.ventes.update'), $this->payload([
+                'annulation_exceptionnelle_confirmation' => 'simple',
+                'seuil_impayes_max' => 5000,
+            ]))
+            ->assertStatus(403);
+
+        // Refus avant toute écriture : ni le mode ni les autres paramètres n'ont bougé.
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+        $this->assertSame(0, Parametre::getVentesSeuilImpayesMax($user->organization_id));
+    }
+
+    public function test_sans_la_permission_d_annulation_les_autres_parametres_restent_modifiables(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        // Le formulaire renvoie la valeur courante, inchangée : aucun refus.
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload([
+                'annulation_exceptionnelle_confirmation' => 'email_code',
+                'declencheur_commission_vente' => 'facture_encaissee',
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertSame('facture_encaissee', Parametre::getDeclencheurCommissionVente($user->organization_id)->value);
+    }
+
+    public function test_avec_les_deux_permissions_le_mode_simple_est_enregistre(): void
+    {
+        $this->createRoles();
+        $user = $this->donnerPermissions(
+            $this->createAuthorizedUser('parametres.update'),
+            ['parametres.read', 'ventes.annuler_exceptionnel'],
+        );
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload(['annulation_exceptionnelle_confirmation' => 'simple']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ModeConfirmationAnnulationExceptionnelle::SIMPLE,
+            Parametre::getModeConfirmationAnnulationExceptionnelle($user->organization_id),
+        );
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('annulation_exceptionnelle_confirmation', 'simple')
+                ->where('peut_modifier_confirmation_annulation', true));
+    }
+
+    public function test_une_valeur_de_mode_de_confirmation_invalide_est_rejetee(): void
+    {
+        $this->createRoles();
+        $user = $this->donnerPermissions(
+            $this->createAuthorizedUser('parametres.update'),
+            ['ventes.annuler_exceptionnel'],
+        );
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), $this->payload(['annulation_exceptionnelle_confirmation' => 'totp']))
+            ->assertSessionHasErrors('annulation_exceptionnelle_confirmation');
     }
 }

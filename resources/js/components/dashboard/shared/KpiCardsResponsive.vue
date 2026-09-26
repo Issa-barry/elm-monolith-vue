@@ -18,7 +18,7 @@ const props = withDefaults(
         mobileSlideWidthClass: 'max-w-[88%] min-w-[88%]',
         desktopWrapperClass: 'grid grid-cols-3 gap-4',
         desktopItemDefaultClass: '',
-        mobileCardMinHeightClass: 'min-h-[176px]',
+        mobileCardMinHeightClass: 'min-h-[136px]',
         desktopCardMinHeightClass: 'min-h-[176px]',
     },
 );

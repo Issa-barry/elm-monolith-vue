@@ -15,13 +15,15 @@ use App\Http\Controllers\Api\Auth\RegisterController;
 use App\Http\Controllers\Api\Auth\RegisterLookupController;
 use App\Http\Controllers\Api\Auth\RegisterOtpController;
 use App\Http\Controllers\Api\Client\ActiviteController;
-use App\Http\Controllers\Api\Client\CommandesController;
+use App\Http\Controllers\Api\Client\Commandes\IndexCommandeController;
+use App\Http\Controllers\Api\Client\Commandes\ShowCommandeController;
 use App\Http\Controllers\Api\Client\DashboardController;
 use App\Http\Controllers\Api\Client\DepensesController;
 use App\Http\Controllers\Api\Client\GainsController;
 use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
 use App\Http\Controllers\Api\Client\ProfileController;
-use App\Http\Controllers\Api\Client\PropositionsVehiculeController;
+use App\Http\Controllers\Api\Client\PropositionsVehicule\IndexPropositionVehiculeController;
+use App\Http\Controllers\Api\Client\PropositionsVehicule\StorePropositionVehiculeController;
 use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
 use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
@@ -34,7 +36,9 @@ use App\Http\Controllers\Api\Mobile\Logistique\DemarrerChargementController;
 use App\Http\Controllers\Api\Mobile\Logistique\LivraisonDetailController;
 use App\Http\Controllers\Api\Mobile\Logistique\MesLivraisonsController;
 use App\Http\Controllers\Api\Mobile\Logistique\SaisirQuantitesChargeesController;
-use App\Http\Controllers\Api\Mobile\NotificationsController;
+use App\Http\Controllers\Api\Mobile\Notifications\MarkAllNotificationsReadController;
+use App\Http\Controllers\Api\Mobile\Notifications\MarkNotificationReadController;
+use App\Http\Controllers\Api\Mobile\Notifications\NotificationsIndexController;
 use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
 use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
@@ -115,13 +119,17 @@ class OpenApiServiceProvider extends ServiceProvider
         ActiviteController::class => 'Activity',
 
         // Orders
-        CommandesController::class => 'Orders',
+        IndexCommandeController::class => 'Orders',
+        ShowCommandeController::class => 'Orders',
 
         // Vehicle Proposals
-        PropositionsVehiculeController::class => 'Vehicle Proposals',
+        IndexPropositionVehiculeController::class => 'Vehicle Proposals',
+        StorePropositionVehiculeController::class => 'Vehicle Proposals',
 
         // Notifications
-        NotificationsController::class => 'Notifications',
+        NotificationsIndexController::class => 'Notifications',
+        MarkAllNotificationsReadController::class => 'Notifications',
+        MarkNotificationReadController::class => 'Notifications',
         PushTokenController::class => 'Notifications',
 
         // Logistics

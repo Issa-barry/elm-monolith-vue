@@ -5,6 +5,7 @@ namespace Tests\Feature\Notification;
 use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\Depense;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -52,12 +53,22 @@ class DepenseValideeNotificationTest extends TestCase
         }
     }
 
+    /**
+     * Admin Entreprise reste soumis au plafond de montant depuis le
+     * 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001) — plafond très
+     * haut ici car ces tests portent sur la notification, pas sur le plafond.
+     */
     private function adminUser(): User
     {
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo(['depenses.read', 'depenses.create', 'depenses.update']);
         $user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        DroitCreationDepense::updateOrCreate(
+            ['organization_id' => $this->org->id, 'role_name' => 'admin_entreprise'],
+            ['perimetre' => 'toutes_agences', 'sites' => null, 'peut_valider' => true, 'plafond_validation' => 999_999_999]
+        );
 
         return $user;
     }

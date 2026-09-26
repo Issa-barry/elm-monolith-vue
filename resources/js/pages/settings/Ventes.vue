@@ -10,6 +10,7 @@ import {
     HandCoins,
     Lock,
     PackageCheck,
+    ShieldAlert,
     ShieldCheck,
 } from 'lucide-vue-next';
 import RadioButton from 'primevue/radiobutton';
@@ -29,15 +30,23 @@ interface DeclencheurOption {
     label: string;
 }
 
+interface ModeConfirmationOption {
+    value: string;
+    label: string;
+    description: string;
+}
+
 const props = defineProps<{
     roles: RoleQuantite[];
     autoriser_saisie_dessous_qte_max: boolean;
     controle_impayes_actif: boolean;
     seuil_impayes_max: number;
     declencheur_commission_vente: string;
-    declencheur_commission_logistique: string;
     declencheurs_commission_vente_options: DeclencheurOption[];
-    declencheurs_commission_logistique_options: DeclencheurOption[];
+    annulation_exceptionnelle_confirmation: string;
+    annulation_exceptionnelle_confirmation_options: ModeConfirmationOption[];
+    /** `parametres.update` ET `ventes.annuler_exceptionnel` — cf. UpdateVenteParametrageController. */
+    peut_modifier_confirmation_annulation: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,13 +71,30 @@ const form = useForm({
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
     declencheur_commission_vente: props.declencheur_commission_vente,
-    declencheur_commission_logistique: props.declencheur_commission_logistique,
+    annulation_exceptionnelle_confirmation:
+        props.annulation_exceptionnelle_confirmation,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
 
 function roleEnabled(roleName: string, field: EditableRoleField): boolean {
     return form[field].includes(roleName);
+}
+
+/**
+ * `role.locked` ne veut plus seulement dire "super_admin, toujours vrai" : un rôle système
+ * (manager/commerciale/comptable/admin_entreprise) verrouillé pour cet acteur peut très bien
+ * valoir false — afficher son état réel (`can_update_quantite`/`can_update_prix_unitaire`)
+ * plutôt que de forcer "activé" comme le faisait l'ancien `role.locked || roleEnabled(...)`.
+ */
+function isRoleFieldOn(role: RoleQuantite, field: EditableRoleField): boolean {
+    if (role.locked) {
+        return field === 'quantity_edit_role_names'
+            ? role.can_update_quantite
+            : role.can_update_prix_unitaire;
+    }
+
+    return roleEnabled(role.name, field);
 }
 
 function toggleRole(role: RoleQuantite, field: EditableRoleField) {
@@ -169,18 +195,16 @@ function onSeuilBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                         ? 'bg-primary'
@@ -193,9 +217,8 @@ function onSeuilBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'quantity_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -236,20 +259,12 @@ function onSeuilBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                         ? 'bg-primary'
                                         : 'bg-input'
                                 "
@@ -260,9 +275,8 @@ function onSeuilBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'price_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -371,38 +385,6 @@ function onSeuilBlur() {
                             </label>
                         </div>
                     </div>
-
-                    <div class="space-y-2 border-t px-5 py-4">
-                        <p class="text-sm font-medium text-foreground">
-                            Commission logistique — générer la commission
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            Ce paramètre détermine à quel moment la commission
-                            logistique devient générable.
-                        </p>
-                        <div
-                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
-                        >
-                            <label
-                                v-for="option in declencheurs_commission_logistique_options"
-                                :key="`logistique-${option.value}`"
-                                class="flex cursor-pointer items-center gap-2"
-                            >
-                                <RadioButton
-                                    :model-value="
-                                        form.declencheur_commission_logistique
-                                    "
-                                    :value="option.value"
-                                    :disabled="form.processing"
-                                    @update:model-value="
-                                        form.declencheur_commission_logistique =
-                                            option.value
-                                    "
-                                />
-                                <span class="text-sm">{{ option.label }}</span>
-                            </label>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="overflow-hidden rounded-xl border bg-card">
@@ -500,6 +482,89 @@ function onSeuilBlur() {
                                 >
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <ShieldAlert class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Confirmation des annulations exceptionnelles
+                        </h3>
+                    </div>
+
+                    <div class="space-y-3 px-5 py-4">
+                        <p class="text-xs text-muted-foreground">
+                            Choisissez le niveau de confirmation requis pour les
+                            annulations exceptionnelles.
+                        </p>
+
+                        <label
+                            v-for="option in annulation_exceptionnelle_confirmation_options"
+                            :key="`annulation-${option.value}`"
+                            class="flex items-start gap-3"
+                            :class="
+                                peut_modifier_confirmation_annulation
+                                    ? 'cursor-pointer'
+                                    : 'cursor-not-allowed opacity-70'
+                            "
+                        >
+                            <RadioButton
+                                :model-value="
+                                    form.annulation_exceptionnelle_confirmation
+                                "
+                                :value="option.value"
+                                :input-id="`annulation-confirmation-${option.value}`"
+                                :disabled="
+                                    form.processing ||
+                                    !peut_modifier_confirmation_annulation
+                                "
+                                class="mt-0.5"
+                                @update:model-value="
+                                    form.annulation_exceptionnelle_confirmation =
+                                        option.value
+                                "
+                            />
+                            <span>
+                                <span
+                                    class="block text-sm font-medium text-foreground"
+                                    >{{ option.label }}</span
+                                >
+                                <span
+                                    class="block text-xs text-muted-foreground"
+                                    >{{ option.description }}</span
+                                >
+                            </span>
+                        </label>
+
+                        <p
+                            v-if="
+                                form.annulation_exceptionnelle_confirmation ===
+                                'email_code'
+                            "
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            Attention : cette option nécessite un service
+                            d'envoi d'e-mails fonctionnel.
+                        </p>
+                        <p
+                            v-else
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            La confirmation simple réduit le niveau de contrôle
+                            de cette opération sensible.
+                        </p>
+
+                        <p
+                            v-if="!peut_modifier_confirmation_annulation"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Seul un utilisateur autorisé à effectuer les
+                            annulations exceptionnelles peut modifier ce
+                            réglage.
+                        </p>
                     </div>
                 </div>
 

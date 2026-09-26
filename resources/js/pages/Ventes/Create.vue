@@ -2,28 +2,41 @@
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+    poolVehiculesPourClient,
+    vehiculeEstDansPool,
+} from '@/composables/useDistributionVehiculePool';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
+import SolvabiliteAlert from '@/pages/Ventes/partials/SolvabiliteAlert.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CheckCircle2,
+    ChevronRight,
     ExternalLink,
     Info,
     Lock,
+    MapPin,
+    Package,
     Phone,
     Plus,
     Save,
     Trash2,
+    Truck,
+    UserRound,
+    UsersRound,
 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
+import Popover from 'primevue/popover';
 import Tooltip from 'primevue/tooltip';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const vTooltip = Tooltip;
 
@@ -86,7 +99,13 @@ interface ProduitOption {
     prix_distributeur: number | null;
 }
 
-type PrixOrigine = 'usine' | 'vente' | 'externe' | 'revendeur' | 'distributeur';
+type PrixOrigine =
+    | 'usine'
+    | 'vente'
+    | 'externe'
+    | 'revendeur'
+    | 'distributeur'
+    | 'grossiste';
 
 const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     usine: 'Prix usine',
@@ -94,6 +113,7 @@ const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     externe: 'Prix externe',
     revendeur: 'Prix revendeur',
     distributeur: 'Prix distributeur',
+    grossiste: 'Prix grossiste',
 };
 
 interface CapaciteCategorie {
@@ -106,9 +126,18 @@ interface VehiculeOption {
     id: number;
     nom_vehicule: string;
     immatriculation: string;
+    type_vehicule_nom: string | null;
     capacites: CapaciteCategorie[];
     livreur_nom: string | null;
     livreur_telephone: string | null;
+    equipe_membres: EquipeMembreOption[];
+}
+
+interface EquipeMembreOption {
+    id: string;
+    nom: string;
+    telephone: string | null;
+    role: 'chauffeur' | 'convoyeur';
 }
 
 interface ClientVehiculeOption {
@@ -120,7 +149,8 @@ interface ClientOption {
     id: number;
     nom_complet: string;
     telephone: string | null;
-    type: 'externe' | 'revendeur' | 'distributeur';
+    type: 'externe' | 'revendeur' | 'distributeur' | 'grossiste';
+    type_label: string;
     vehicules: ClientVehiculeOption[];
 }
 
@@ -141,6 +171,11 @@ interface LigneForm {
 const props = defineProps<{
     produits: ProduitOption[];
     vehicules: VehiculeOption[];
+    // Pool séparé : uniquement des véhicules autorisés pour l'usage logistique
+    // (Vehicule::livraison_logistique = true) — jamais fusionné à `vehicules` ci-dessus, qui ne
+    // contient que des véhicules autorisés pour la vente (cf. règle métier distribution client
+    // du 31/08/2026, CommandeVenteFormBuilder::vehiculesLogistiques()).
+    vehicules_distribution: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
     can_modifier_qte: boolean;
@@ -163,6 +198,13 @@ const form = useForm({
     // Véhicule partenaire — toujours facultatif, jamais un substitut au véhicule de
     // flotte (cf. ClientVehicle). Ne s'affiche que pour un client type=externe.
     client_vehicule_id: null as number | null,
+    nature_operation: 'vente_standard' as
+        | 'vente_standard'
+        | 'distribution_client',
+    // Pas de champ mode_remise_grossiste ici : depuis le 05/09/2026, le mode de remise Grossiste
+    // n'est plus saisi par l'utilisateur, il est dérivé côté serveur de vehicule_id (cf.
+    // CommandeVenteFormBuilder::deriverModeRemiseGrossiste()) — voir le computed local
+    // `modeRemiseGrossiste` plus bas, purement un aperçu, jamais soumis.
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
     ] as LigneForm[],
@@ -174,16 +216,41 @@ const vehiculeSuggests = ref<VehiculeOption[]>([]);
 const vehiculeSolvabilite = ref<SolvabiliteResult | null>(null);
 const vehiculeSolvabiliteLoading = ref(false);
 
+// Pool proposé à la saisie — règle métier distribution client du 31/08/2026 : dès qu'un client
+// DISTRIBUTEUR est sélectionné, seuls les véhicules autorisés pour la logistique doivent être
+// proposables (jamais un filtre visuel sur la liste complète, qui la rendrait confuse — une
+// liste réellement filtrée). Piloté par le TYPE de client, jamais par nature_operation
+// elle-même : un distributeur sans véhicule reste vente_standard (retrait sur site), la nature
+// finale ne bascule qu'une fois un véhicule du pool distribution effectivement choisi (cf.
+// useVehiculeCommandeTarification::natureOperationParDefaut, inchangée).
+const vehiculesDisponibles = computed<VehiculeOption[]>(() =>
+    poolVehiculesPourClient(
+        clientSelected.value?.type,
+        props.vehicules,
+        props.vehicules_distribution,
+    ),
+);
+
+// Union des deux pools — sert uniquement à résoudre PAR ID le véhicule déjà sélectionné (capacité,
+// tarification, affichage), indépendamment du pool actuellement proposé à la saisie : un
+// changement de type de client ne doit jamais faire disparaître à tort les infos du véhicule
+// encore sélectionné avant que le watcher de désélection (plus bas) n'ait eu la main.
+const vehiculesPourLookup = computed<VehiculeOption[]>(() => [
+    ...props.vehicules,
+    ...props.vehicules_distribution,
+]);
+
 function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
+    const pool = vehiculesDisponibles.value;
     vehiculeSuggests.value = q
-        ? props.vehicules.filter(
+        ? pool.filter(
               (v) =>
                   v.nom_vehicule.toLowerCase().includes(q) ||
                   v.immatriculation.toLowerCase().includes(q) ||
                   (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
           )
-        : [...props.vehicules];
+        : [...pool];
 }
 
 /**
@@ -274,13 +341,31 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // partir de l'autre (cf. useVehiculeCommandeTarification). Source de vérité
 // côté serveur : VehiculeCommandeContextResolver — ce composable n'est qu'un
 // miroir d'affichage.
-const { modeTarification, commissionEligible } =
+const { modeTarification, commissionEligible, natureOperationParDefaut } =
     useVehiculeCommandeTarification(
-        () => props.vehicules,
+        () => vehiculesPourLookup.value,
         () => form.vehicule_id,
         () => props.clients,
         () => form.client_id,
     );
+
+// Purement informatif pour l'utilisateur (révision UX du 05/09/2026) : plus aucune
+// surcharge manuelle possible depuis ce formulaire, nature_operation reflète toujours
+// exactement natureOperationParDefaut (donc les règles métier existantes, jamais un choix
+// utilisateur) — voir le badge en lecture seule dans le template, à la place des anciens
+// boutons radio.
+watch(natureOperationParDefaut, (valeur) => (form.nature_operation = valeur), {
+    immediate: true,
+});
+
+const natureOperationLabel = computed(() =>
+    form.nature_operation === 'distribution_client' ? 'Distribution' : 'Vente',
+);
+
+// isGrossiste / modeRemiseGrossiste / grossisteTarifsClient sont déclarés plus bas, juste après
+// `clientSelected = ref(...)` — jamais ici : isGrossiste lit clientSelected.value, qui n'est pas
+// encore initialisé à ce point du fichier (TDZ garanti, cf. l'incident déjà documenté sur
+// vehiculesDisponibles/clientSelected plus bas dans ce même fichier).
 
 function produitPrixUsine(produitId: number | null): number {
     if (produitId === null) return 0;
@@ -302,14 +387,39 @@ function resoudrePrixLigne(ligne: LigneForm): {
 } {
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
 
+    // Grossiste : tarif catégorie × mode PROPRE À CE CLIENT (cf. GrossisteTarifResolver côté
+    // serveur, seule source de vérité — cette branche n'est qu'un aperçu, cf.
+    // grossisteTarifsClient ci-dessous). Le tarif spécial est une SURCHARGE facultative (révision
+    // du 05/09/2026) : sans catégorie sur le produit ou sans tarif configuré pour ce mode, repli
+    // sur le prix normal du produit — jamais un blocage.
+    if (isGrossiste.value && produit) {
+        const categorieId = produit.categorie_id;
+        const tarifSpecial =
+            categorieId !== null && categorieId !== undefined
+                ? grossisteTarifsClient.value[String(categorieId)]?.[
+                      modeRemiseGrossiste.value
+                  ]
+                : undefined;
+
+        return tarifSpecial !== undefined
+            ? { montant: tarifSpecial, origine: 'grossiste' }
+            : { montant: produit.prix_vente, origine: 'vente' };
+    }
+
     if (produit?.is_fabricable && clientSelected.value) {
-        const tarifsParNature: Record<ClientOption['type'], number | null> = {
+        const tarifsParNature: Record<
+            'externe' | 'revendeur' | 'distributeur',
+            number | null
+        > = {
             externe: produit.prix_externe,
             revendeur: produit.prix_revendeur,
             distributeur: produit.prix_distributeur,
         };
         const nature = clientSelected.value.type;
-        const tarif = tarifsParNature[nature];
+        // Grossiste déjà traité par la branche ci-dessus (toujours vraie avant celle-ci quand
+        // isGrossiste) — exclu ici uniquement pour satisfaire le typage strict de
+        // tarifsParNature, qui ne porte que les 3 natures historiques.
+        const tarif = nature === 'grossiste' ? null : tarifsParNature[nature];
         if (tarif !== null && tarif !== undefined) {
             return { montant: tarif, origine: nature };
         }
@@ -357,10 +467,14 @@ function ligneOrigineLabel(ligne: LigneForm): string {
 }
 /**
  * Une ligne au tarif de nature (fabricable + client) n'est jamais éditable — le serveur
- * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteController::
+ * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteFormBuilder::
  * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
  */
 function ligneUnitPriceEditable(ligne: LigneForm): boolean {
+    if (isGrossiste.value) {
+        return false;
+    }
+
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
     if (produit?.is_fabricable && clientSelected.value) {
         return false;
@@ -374,6 +488,84 @@ const clientSelected = ref<ClientOption | null>(null);
 const clientSuggests = ref<ClientOption[]>([]);
 const clientSolvabilite = ref<SolvabiliteResult | null>(null);
 const clientSolvabiliteLoading = ref(false);
+
+// ── Grossiste : mode de remise (Enlèvement/Livraison), par commande — jamais une
+// caractéristique du client (cf. docs/grossiste.md). Depuis le 05/09/2026, plus un choix
+// utilisateur indépendant : dérivé uniquement de la présence d'un véhicule (seule source de
+// vérité), exactement comme le calcule le serveur (cf. CommandeVenteFormBuilder::
+// deriverModeRemiseGrossiste()) — jamais un second champ à renseigner. Placé ICI (après
+// clientSelected, jamais avant) : isGrossiste lit clientSelected.value, et le watch() ci-dessous
+// évalue sa source dès son appel — même TDZ que vehiculesDisponibles plus bas, cf. son commentaire.
+const isGrossiste = computed(() => clientSelected.value?.type === 'grossiste');
+
+const modeRemiseGrossiste = computed<'enlevement' | 'livraison'>(() =>
+    form.vehicule_id ? 'livraison' : 'enlevement',
+);
+
+// ── Tarifs Grossiste du client sélectionné — PROPRES À CE CLIENT (cf. docs/grossiste.md),
+// jamais une grille organisation : fetch live au choix d'un client Grossiste, plutôt qu'une
+// grille envoyée systématiquement au chargement de page (qui exposerait les tarifs négociés de
+// TOUS les Grossistes de l'organisation à chaque création de vente, y compris pour un autre
+// client). Simple aperçu : GrossisteTarifResolver recalcule et valide toujours côté serveur.
+const grossisteTarifsClient = ref<Record<string, Record<string, number>>>({});
+
+watch(
+    () => (isGrossiste.value ? form.client_id : null),
+    async (clientId) => {
+        grossisteTarifsClient.value = {};
+        if (!clientId) {
+            recomputeAllTotals();
+
+            return;
+        }
+
+        try {
+            const res = await fetch(
+                `/backoffice/clients/${clientId}/tarifs-grossiste`,
+                {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                },
+            );
+            if (res.ok) {
+                const data = (await res.json()) as {
+                    tarifs: {
+                        categorie_id: string;
+                        mode: string;
+                        prix: number;
+                    }[];
+                };
+                const grille: Record<string, Record<string, number>> = {};
+                for (const t of data.tarifs) {
+                    grille[t.categorie_id] ??= {};
+                    grille[t.categorie_id][t.mode] = t.prix;
+                }
+                grossisteTarifsClient.value = grille;
+            }
+        } catch {
+            // Aperçu indisponible (réseau) : GrossisteTarifResolver reste l'autorité finale à la
+            // confirmation, jamais bloquant ici.
+        } finally {
+            recomputeAllTotals();
+        }
+    },
+);
+
+// Désélection automatique du véhicule dès qu'il quitte le pool proposé — couvre les deux sens :
+// passage à un client DISTRIBUTEUR alors qu'un véhicule vente-seulement était déjà choisi, ET
+// retour à un client non-distributeur alors qu'un véhicule logistique-seulement était choisi (le
+// pool "vente" ne le contient pas non plus). Un véhicule présent dans les deux pools reste
+// sélectionné dans les deux cas. Placé ICI (après clientSelected, jamais avant) : watch() lit la
+// valeur courante de sa source dès son appel, même sans { immediate: true } — la déclarer plus
+// haut, avant clientSelected, provoquait un ReferenceError (TDZ) qui cassait le montage de toute
+// la page /ventes/create (incident E2E facture-flow.spec.ts du 31/08/2026, cf. post-mortem).
+watch(vehiculesDisponibles, (pool) => {
+    if (!vehiculeEstDansPool(form.vehicule_id, pool)) {
+        onVehiculeClear();
+    }
+});
 
 function searchClient(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
@@ -415,7 +607,7 @@ function onClientClear() {
 }
 
 function clientLabel(c: ClientOption): string {
-    return c.nom_complet;
+    return `${c.nom_complet} (${c.type_label})`;
 }
 
 // ── Solvabilité — dialog ──────────────────────────────────────────────────────
@@ -529,7 +721,9 @@ const vehiculeSelectionne = computed(() => {
         return null;
     }
 
-    return props.vehicules.find((v) => v.id === form.vehicule_id) ?? null;
+    return (
+        vehiculesPourLookup.value.find((v) => v.id === form.vehicule_id) ?? null
+    );
 });
 
 // Plafonds par groupe de capacité du véhicule sélectionné (Sachets, Bouteilles, ...) — vide si
@@ -621,6 +815,22 @@ onMounted(() => {
 // ── Type de commande ──────────────────────────────────────────────────────────
 const isCommandeLogistique = computed(() => form.vehicule_id !== null);
 
+const confirmationNatureLabel = computed(() => {
+    if (form.nature_operation === 'distribution_client') {
+        return 'Distribution';
+    }
+
+    return isCommandeLogistique.value
+        ? 'Vente avec livraison'
+        : 'Vente directe';
+});
+
+const confirmationActionLabel = computed(() =>
+    form.nature_operation === 'distribution_client'
+        ? 'Créer la distribution'
+        : 'Créer la commande',
+);
+
 // ── Blocage impayés ───────────────────────────────────────────────────────────
 // Même règle que SolvabiliteService côté backend (client prioritaire — c'est lui qui porte la
 // facture dès qu'il est sélectionné — véhicule en repli uniquement si aucun client n'est
@@ -634,17 +844,30 @@ const commandeBloquee = computed(() =>
 );
 
 // ── Validation locale ────────────────────────────────────────────────────────
+// Distribution client = livreur obligatoire (règle métier du 31/08/2026). Aucun champ
+// "livreur_id" n'existe sur la commande : le livreur est dérivé de l'équipe du véhicule
+// (cf. CommandeVenteFormBuilder::ensureNatureOperationCoherente, source de vérité backend) — ici
+// on ne fait que refléter cette dérivation via livreur_nom, déjà résolu côté serveur.
+const livreurManquantPourDistribution = computed(
+    () =>
+        form.nature_operation === 'distribution_client' &&
+        !vehiculeSelectionne.value?.livreur_nom,
+);
+
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         capaciteVehiculeConforme.value &&
         !commandeBloquee.value &&
+        !livreurManquantPourDistribution.value &&
         !form.processing,
 );
 
 // ── Soumission ────────────────────────────────────────────────────────────────
 const showConfirmDialog = ref(false);
+const vehiculePopover = ref();
+const equipePopover = ref();
 
 const lignesVisibles = computed(() =>
     form.lignes.filter((l) => l.produit_id !== null),
@@ -653,6 +876,18 @@ const lignesVisibles = computed(() =>
 function nomProduit(produitId: number | null): string {
     if (!produitId) return '—';
     return props.produits.find((p) => p.id === produitId)?.nom ?? '—';
+}
+
+function toggleVehiculePopover(event: Event) {
+    vehiculePopover.value?.toggle(event);
+}
+
+function toggleEquipePopover(event: Event) {
+    equipePopover.value?.toggle(event);
+}
+
+function roleEquipeLabel(role: EquipeMembreOption['role']): string {
+    return role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur';
 }
 
 function submit() {
@@ -805,6 +1040,30 @@ function confirmerEtCreer() {
                             >
                                 {{ form.errors.vehicule_id }}
                             </p>
+                            <!-- Blocages réels (rule 10 CLAUDE.md : DANGER/rouge réservé à une
+                            opération effectivement empêchée) — jamais affichés ensemble, la liste
+                            vide rendant le second message sans objet. -->
+                            <!-- Le mode de remise Grossiste (Enlèvement/Livraison) n'est plus
+                            affiché ici sous le véhicule (révision du 06/09/2026) — il a son propre
+                            badge « Mode » dans le bloc Nature de l'opération/Client ci-dessous,
+                            au même niveau visuel que les autres informations de synthèse. -->
+                            <p
+                                v-else-if="
+                                    clientSelected?.type === 'distributeur' &&
+                                    vehiculesDisponibles.length === 0
+                                "
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                Aucun véhicule autorisé pour la distribution
+                                n'est disponible.
+                            </p>
+                            <p
+                                v-else-if="livreurManquantPourDistribution"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                Ce véhicule n'a aucun livreur actif assigné — la
+                                distribution nécessite un livreur.
+                            </p>
 
                             <!-- Solvabilité véhicule — n'est le facteur de blocage QUE si aucun
                             client n'est sélectionné (le client est alors prioritaire, cf.
@@ -931,120 +1190,54 @@ function confirmerEtCreer() {
                                  exclusivement au bloc "Commande bloquée" ci-dessous, jamais à la
                                  seule existence d'une dette (cf. principe SUCCESS/WARNING/DANGER,
                                  audit du 28/08/2026). -->
-                                <div
+                                <SolvabiliteAlert
                                     v-else-if="
                                         vehiculeSolvabilite &&
                                         vehiculeSolvabilite.has_debt &&
                                         !vehiculeSolvabilite.blocked
                                     "
-                                    class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
-                                >
-                                    <div
-                                        class="flex items-start justify-between gap-3"
-                                    >
-                                        <div class="flex items-start gap-2.5">
-                                            <span
-                                                class="mt-0.5 text-base text-amber-500"
-                                                >⚠</span
-                                            >
-                                            <div>
-                                                <p
-                                                    class="text-sm font-semibold text-amber-800 dark:text-amber-300"
-                                                >
-                                                    {{
-                                                        vehiculeSolvabilite.status ===
-                                                        'impaye'
-                                                            ? 'Factures impayées détectées'
-                                                            : 'Paiement partiel'
-                                                    }}
-                                                </p>
-                                                <p
-                                                    v-if="
-                                                        vehiculeSolvabilite.seuil_origine ===
-                                                        'derogation'
-                                                    "
-                                                    class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-                                                >
-                                                    Commande autorisée par
-                                                    dérogation (plafond :
-                                                    {{
-                                                        formatGNF(
-                                                            vehiculeSolvabilite.seuil_impayes,
-                                                        )
-                                                    }})
-                                                </p>
-                                                <p
-                                                    class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
-                                                >
-                                                    Montant total impayé
-                                                </p>
-                                                <p
-                                                    class="text-xl font-bold text-amber-800 dark:text-amber-300"
-                                                >
-                                                    {{
-                                                        formatGNF(
-                                                            vehiculeSolvabilite.total_remaining,
-                                                        )
-                                                    }}
-                                                </p>
-                                                <p
-                                                    class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
-                                                >
-                                                    Nombre de factures :
-                                                    {{
-                                                        vehiculeSolvabilite.unpaid_invoices_count
-                                                    }}
-                                                </p>
-                                                <p
-                                                    v-if="
-                                                        vehiculeSolvabilite.last_invoice_reference
-                                                    "
-                                                    class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
-                                                >
-                                                    Dernière :
-                                                    {{
-                                                        vehiculeSolvabilite.last_invoice_reference
-                                                    }}
-                                                    ·
-                                                    {{
-                                                        formatDate(
-                                                            vehiculeSolvabilite.last_invoice_date,
-                                                        )
-                                                    }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                                            @click="
-                                                ouvrirDialogFactures(
-                                                    vehiculeSolvabilite,
-                                                    {
-                                                        type: 'vehicule',
-                                                        titre: vehiculeSelected
-                                                            ? vehiculeLabel(
-                                                                  vehiculeSelected,
-                                                              )
-                                                            : 'Véhicule',
-                                                        chauffeur:
-                                                            vehiculeSelected?.livreur_nom
-                                                                ? vehiculeSelected.livreur_nom +
-                                                                  (vehiculeSelected.livreur_telephone
-                                                                      ? ' — ' +
-                                                                        formatPhoneDisplay(
-                                                                            vehiculeSelected.livreur_telephone,
-                                                                        )
-                                                                      : '')
-                                                                : undefined,
-                                                    },
-                                                )
-                                            "
-                                        >
-                                            Voir les factures
-                                        </button>
-                                    </div>
-                                </div>
+                                    :status="vehiculeSolvabilite.status"
+                                    :derogation="
+                                        vehiculeSolvabilite.seuil_origine ===
+                                        'derogation'
+                                    "
+                                    :montant="
+                                        formatGNF(
+                                            vehiculeSolvabilite.total_remaining,
+                                        )
+                                    "
+                                    :plafond="
+                                        formatGNF(
+                                            vehiculeSolvabilite.seuil_impayes,
+                                        )
+                                    "
+                                    :nombre-factures="
+                                        vehiculeSolvabilite.unpaid_invoices_count
+                                    "
+                                    @voir-factures="
+                                        ouvrirDialogFactures(
+                                            vehiculeSolvabilite,
+                                            {
+                                                type: 'vehicule',
+                                                titre: vehiculeSelected
+                                                    ? vehiculeLabel(
+                                                          vehiculeSelected,
+                                                      )
+                                                    : 'Véhicule',
+                                                chauffeur:
+                                                    vehiculeSelected?.livreur_nom
+                                                        ? vehiculeSelected.livreur_nom +
+                                                          (vehiculeSelected.livreur_telephone
+                                                              ? ' — ' +
+                                                                formatPhoneDisplay(
+                                                                    vehiculeSelected.livreur_telephone,
+                                                                )
+                                                              : '')
+                                                        : undefined,
+                                            },
+                                        )
+                                    "
+                                />
 
                                 <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
                                 <div
@@ -1176,6 +1369,10 @@ function confirmerEtCreer() {
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_complet }}
+                                            <span
+                                                class="font-normal text-muted-foreground"
+                                                >— {{ option.type_label }}</span
+                                            >
                                         </div>
                                         <div
                                             v-if="option.telephone"
@@ -1223,6 +1420,10 @@ function confirmerEtCreer() {
                                     show-clear
                                 />
                             </div>
+
+                            <!-- Grossiste : le mode de remise est déduit automatiquement du champ
+                            Véhicule ci-dessus (seule source de vérité, cf. docs/grossiste.md) —
+                            aucun champ supplémentaire à saisir ici. -->
 
                             <!-- Solvabilité client — c'est TOUJOURS le facteur de blocage dès
                             qu'un client est sélectionné (il porte la facture, cf.
@@ -1273,116 +1474,40 @@ function confirmerEtCreer() {
                                  Le rouge est réservé exclusivement au bloc "Commande bloquée"
                                  ci-dessous (cf. principe SUCCESS/WARNING/DANGER, audit du
                                  28/08/2026). -->
-                            <div
+                            <SolvabiliteAlert
                                 v-else-if="
                                     clientSolvabilite &&
                                     clientSolvabilite.has_debt &&
                                     !clientSolvabilite.blocked
                                 "
-                                class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
-                            >
-                                <div
-                                    class="flex items-start justify-between gap-3"
-                                >
-                                    <div class="flex items-start gap-2.5">
-                                        <span
-                                            class="mt-0.5 text-base text-amber-500"
-                                            >⚠</span
-                                        >
-                                        <div>
-                                            <p
-                                                class="text-sm font-semibold text-amber-800 dark:text-amber-300"
-                                            >
-                                                {{
-                                                    clientSolvabilite.status ===
-                                                    'impaye'
-                                                        ? 'Factures impayées détectées'
-                                                        : 'Paiement partiel'
-                                                }}
-                                            </p>
-                                            <p
-                                                v-if="
-                                                    clientSolvabilite.seuil_origine ===
-                                                    'derogation'
-                                                "
-                                                class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-                                            >
-                                                Commande autorisée par
-                                                dérogation (plafond :
-                                                {{
-                                                    formatGNF(
-                                                        clientSolvabilite.seuil_impayes,
-                                                    )
-                                                }})
-                                            </p>
-                                            <p
-                                                class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
-                                            >
-                                                Montant total impayé
-                                            </p>
-                                            <p
-                                                class="text-xl font-bold text-amber-800 dark:text-amber-300"
-                                            >
-                                                {{
-                                                    formatGNF(
-                                                        clientSolvabilite.total_remaining,
-                                                    )
-                                                }}
-                                            </p>
-                                            <p
-                                                class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
-                                            >
-                                                Nombre de factures :
-                                                {{
-                                                    clientSolvabilite.unpaid_invoices_count
-                                                }}
-                                            </p>
-                                            <p
-                                                v-if="
-                                                    clientSolvabilite.last_invoice_reference
-                                                "
-                                                class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
-                                            >
-                                                Dernière :
-                                                {{
-                                                    clientSolvabilite.last_invoice_reference
-                                                }}
-                                                ·
-                                                {{
-                                                    formatDate(
-                                                        clientSolvabilite.last_invoice_date,
-                                                    )
-                                                }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                                        @click="
-                                            ouvrirDialogFactures(
-                                                clientSolvabilite,
-                                                {
-                                                    type: 'client',
-                                                    titre: clientSelected
-                                                        ? clientLabel(
-                                                              clientSelected,
-                                                          )
-                                                        : 'Client',
-                                                    sousTitre:
-                                                        clientSelected?.telephone
-                                                            ? formatPhoneDisplay(
-                                                                  clientSelected.telephone,
-                                                              )
-                                                            : undefined,
-                                                },
-                                            )
-                                        "
-                                    >
-                                        Voir les factures
-                                    </button>
-                                </div>
-                            </div>
+                                :status="clientSolvabilite.status"
+                                :derogation="
+                                    clientSolvabilite.seuil_origine ===
+                                    'derogation'
+                                "
+                                :montant="
+                                    formatGNF(clientSolvabilite.total_remaining)
+                                "
+                                :plafond="
+                                    formatGNF(clientSolvabilite.seuil_impayes)
+                                "
+                                :nombre-factures="
+                                    clientSolvabilite.unpaid_invoices_count
+                                "
+                                @voir-factures="
+                                    ouvrirDialogFactures(clientSolvabilite, {
+                                        type: 'client',
+                                        titre: clientSelected
+                                            ? clientLabel(clientSelected)
+                                            : 'Client',
+                                        sousTitre: clientSelected?.telephone
+                                            ? formatPhoneDisplay(
+                                                  clientSelected.telephone,
+                                              )
+                                            : undefined,
+                                    })
+                                "
+                            />
 
                             <!-- 🚫 Commande bloquée -->
                             <div
@@ -1484,6 +1609,41 @@ function confirmerEtCreer() {
                     >
                         Sélectionnez au moins un véhicule ou un client.
                     </p>
+
+                    <!-- Nature de l'opération / Mode — TOUJOURS au même endroit et sous la même
+                    forme (révision UX du 05/09/2026, révisée le 06/09/2026 : la nature du client
+                    est retirée d'ici, déjà affichée entre parenthèses dans le sélecteur Client
+                    ci-dessus pour toutes les natures — l'afficher une seconde fois ici était
+                    redondant). « Mode » (Enlèvement/Livraison) la remplace, Grossiste uniquement —
+                    seul type de client concerné par ce champ (cf. docs/grossiste.md) — et n'est
+                    plus affiché sous le champ Véhicule. Deux simples badges en lecture seule,
+                    jamais des boutons : ces valeurs sont déterminées par les règles métier
+                    existantes (client + véhicule, cf. natureOperationParDefaut), jamais par une
+                    action de l'utilisateur sur ce formulaire. -->
+                    <div class="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+                        <div>
+                            <Label class="mb-1.5 block text-sm">
+                                Nature de l'opération
+                            </Label>
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ natureOperationLabel }}
+                            </span>
+                        </div>
+                        <div v-if="isGrossiste">
+                            <Label class="mb-1.5 block text-sm"> Mode </Label>
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{
+                                    form.vehicule_id
+                                        ? 'Livraison'
+                                        : 'Enlèvement'
+                                }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Lignes de commande -->
@@ -1631,9 +1791,9 @@ function confirmerEtCreer() {
                                 <tr
                                     v-for="(ligne, index) in form.lignes"
                                     :key="index"
-                                    class="hover:bg-muted/10"
+                                    class="hover:bg-muted/10 [&>td]:!align-top"
                                 >
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
                                             @update:model-value="
@@ -1667,7 +1827,7 @@ function confirmerEtCreer() {
                                             }}
                                         </p>
                                     </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <InputNumber
                                             :model-value="ligne.qte"
                                             @update:model-value="
@@ -1687,7 +1847,7 @@ function confirmerEtCreer() {
                                             input-class="w-full text-center"
                                         />
                                     </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <InputNumber
                                             :model-value="ligneUnitPrice(ligne)"
                                             @update:model-value="
@@ -1920,238 +2080,555 @@ function confirmerEtCreer() {
             v-model:visible="showConfirmDialog"
             modal
             :closable="true"
-            :style="{ width: '720px', maxWidth: '95vw' }"
+            :style="{ width: '960px', maxWidth: '96vw' }"
             :pt="{
-                root: { class: 'rounded-2xl shadow-2xl' },
-                header: {
-                    class: 'rounded-t-2xl border-b border-border px-6 py-4',
+                root: {
+                    class: 'max-h-[94vh] overflow-hidden rounded-3xl shadow-2xl',
                 },
-                content: { class: 'p-0' },
+                header: {
+                    class: 'rounded-t-3xl border-b border-border/70 px-5 py-5 sm:px-8',
+                },
+                content: {
+                    class: 'p-0',
+                    style: { overflow: 'hidden' },
+                },
+                closeButton: {
+                    class: 'rounded-full border-0 bg-transparent p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground',
+                    style: {
+                        width: '2.25rem',
+                        height: '2.25rem',
+                        padding: '0',
+                    },
+                },
             }"
         >
             <template #header>
-                <div>
-                    <div class="flex items-center gap-2.5">
-                        <h2 class="text-lg font-semibold">
-                            Confirmer la création de la commande
+                <div class="min-w-0 pr-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-lg font-semibold tracking-tight">
+                            Vérifier et confirmer
                         </h2>
                         <span
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                            class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold"
                             :class="
-                                isCommandeLogistique
+                                form.nature_operation === 'distribution_client'
                                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                                     : 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300'
                             "
                         >
-                            {{
-                                isCommandeLogistique
-                                    ? 'Vente avec livraison'
-                                    : 'Vente directe'
-                            }}
+                            <CheckCircle2 class="h-3.5 w-3.5" />
+                            {{ confirmationNatureLabel }}
                         </span>
                     </div>
-                    <p class="mt-0.5 text-sm text-muted-foreground">
-                        Vérifiez le récapitulatif avant de valider.
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Contrôlez les informations avant la création définitive.
                     </p>
                 </div>
             </template>
 
-            <!-- Informations générales -->
-            <div
-                class="grid grid-cols-2 gap-x-8 gap-y-4 border-b border-border p-5"
-            >
-                <div>
-                    <p class="text-xs text-muted-foreground">Site</p>
-                    <p class="mt-0.5 font-medium">{{ user_site.label }}</p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Véhicule</p>
-                    <p class="mt-0.5 font-medium">
-                        {{
-                            vehiculeSelected
-                                ? vehiculeLabel(vehiculeSelected)
-                                : '—'
-                        }}
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Client</p>
-                    <p class="mt-0.5 font-medium">
-                        {{ clientSelected ? clientLabel(clientSelected) : '—' }}
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Chauffeur</p>
-                    <template v-if="vehiculeSelected?.livreur_nom">
-                        <p class="mt-0.5 font-medium">
-                            {{ vehiculeSelected.livreur_nom }}
-                        </p>
-                        <p
-                            class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+            <div class="max-h-[calc(94vh-8.5rem)] overflow-y-auto">
+                <!-- Informations générales -->
+                <section class="border-b border-border/70 px-5 py-4 sm:px-8">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div
+                            class="flex min-w-0 items-start gap-3 rounded-xl border border-border/60 bg-muted/15 p-3.5"
                         >
-                            <Phone class="h-3 w-3 shrink-0" />
-                            {{
-                                vehiculeSelected.livreur_telephone
-                                    ? formatPhoneDisplay(
-                                          vehiculeSelected.livreur_telephone,
-                                      )
-                                    : 'Non renseigné'
-                            }}
-                        </p>
-                    </template>
-                    <p v-else class="mt-0.5 text-sm text-muted-foreground">
-                        Non affecté
-                    </p>
-                </div>
-            </div>
-
-            <!-- Produits -->
-            <div class="border-b border-border">
-                <table class="w-full text-sm">
-                    <thead class="bg-muted/50">
-                        <tr class="border-b border-border">
-                            <th
-                                class="px-5 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            <div
+                                class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
                             >
-                                Produit
-                            </th>
-                            <th
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
-                                Demandée
-                            </th>
-                            <th
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
-                                {{ prixUnitLabel }}
-                            </th>
-                            <th
-                                class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
-                                {{ totalColumnLabel }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border">
-                        <tr
-                            v-for="(ligne, i) in lignesVisibles"
-                            :key="i"
-                            class="hover:bg-muted/30"
-                        >
-                            <td class="px-5 py-3 font-medium">
-                                {{ nomProduit(ligne.produit_id) }}
-                            </td>
-                            <td class="px-4 py-3 text-right tabular-nums">
-                                {{ ligne.qte }}
-                            </td>
-                            <td
-                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ formatGNF(ligneUnitPrice(ligne)) }}
-                                <p class="text-[11px]">
-                                    {{ ligneOrigineLabel(ligne) }}
+                                <MapPin class="h-4 w-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs text-muted-foreground">
+                                    Site
                                 </p>
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right font-semibold tabular-nums"
-                            >
-                                {{ formatGNF(ligne.total) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                    <tfoot class="border-t border-border">
-                        <tr>
-                            <td colspan="2"></td>
-                            <td
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
-                                Qté totale
-                            </td>
-                            <td
-                                class="px-5 py-2.5 text-right font-semibold tabular-nums"
-                            >
-                                {{ quantiteTotale }} packs
-                            </td>
-                        </tr>
-                        <tr class="border-t border-border">
-                            <td colspan="2"></td>
-                            <td
-                                class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
-                                {{ totalCommandeLabel }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-xl font-bold tabular-nums"
-                            >
-                                {{ formatGNF(totalGeneral) }}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
+                                <p class="mt-0.5 truncate font-medium">
+                                    {{ user_site.label }}
+                                </p>
+                            </div>
+                        </div>
 
-            <!-- Alertes — le client est prioritaire dès qu'il est sélectionné (c'est lui qui
-            porte la facture, cf. commandeBloquee) ; le véhicule n'est affiché ici que s'il n'y a
-            aucun client, sinon il ne reste qu'un support logistique, jamais débiteur. -->
-            <div
-                v-if="
-                    (form.client_id && clientSolvabilite?.has_debt) ||
-                    (!form.client_id && vehiculeSolvabilite?.has_debt)
-                "
-                class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20"
-            >
-                <p
-                    class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
-                >
-                    Alertes
-                </p>
-                <div
-                    v-if="!form.client_id && vehiculeSolvabilite?.has_debt"
-                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
-                >
-                    <span>⚠</span>
-                    <span
-                        >Véhicule : factures impayées —
-                        <strong>{{
-                            formatGNF(vehiculeSolvabilite.total_remaining)
-                        }}</strong></span
-                    >
-                </div>
-                <div
-                    v-if="form.client_id && clientSolvabilite?.has_debt"
-                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
-                >
-                    <span>⚠</span>
-                    <span
-                        >Client : factures impayées —
-                        <strong>{{
-                            formatGNF(clientSolvabilite.total_remaining)
-                        }}</strong></span
-                    >
-                </div>
-            </div>
+                        <div
+                            class="flex min-w-0 items-start gap-3 rounded-xl border border-border/60 bg-muted/15 p-3.5"
+                        >
+                            <div
+                                class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
+                            >
+                                <Truck class="h-4 w-4" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Véhicule
+                                    </p>
+                                    <button
+                                        v-if="vehiculeSelected"
+                                        type="button"
+                                        class="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                                        @click="toggleVehiculePopover"
+                                    >
+                                        Voir les détails
+                                        <ChevronRight class="h-3 w-3" />
+                                    </button>
+                                </div>
+                                <p class="mt-0.5 truncate font-medium">
+                                    {{
+                                        vehiculeSelected
+                                            ? vehiculeLabel(vehiculeSelected)
+                                            : 'Non renseigné'
+                                    }}
+                                </p>
+                                <Popover
+                                    v-if="vehiculeSelected"
+                                    ref="vehiculePopover"
+                                    :pt="{ content: { class: 'p-0' } }"
+                                >
+                                    <div class="w-[22rem] max-w-[82vw] p-4">
+                                        <div
+                                            class="flex items-start gap-3 border-b border-border/70 pb-3"
+                                        >
+                                            <div
+                                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
+                                            >
+                                                <Truck class="h-4 w-4" />
+                                            </div>
+                                            <div class="min-w-0">
+                                                <p
+                                                    class="truncate font-semibold"
+                                                >
+                                                    {{
+                                                        vehiculeSelected.nom_vehicule
+                                                    }}
+                                                </p>
+                                                <p
+                                                    class="text-xs text-muted-foreground"
+                                                >
+                                                    {{
+                                                        vehiculeSelected.immatriculation
+                                                    }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <dl class="mt-3 space-y-3 text-sm">
+                                            <div
+                                                class="flex items-start justify-between gap-4"
+                                            >
+                                                <dt
+                                                    class="text-muted-foreground"
+                                                >
+                                                    Type
+                                                </dt>
+                                                <dd
+                                                    class="text-right font-medium"
+                                                >
+                                                    {{
+                                                        vehiculeSelected.type_vehicule_nom ??
+                                                        'Non renseigné'
+                                                    }}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt
+                                                    class="mb-1.5 text-muted-foreground"
+                                                >
+                                                    Capacités
+                                                </dt>
+                                                <dd
+                                                    v-if="
+                                                        vehiculeSelected
+                                                            .capacites.length
+                                                    "
+                                                    class="space-y-1"
+                                                >
+                                                    <div
+                                                        v-for="capacite in vehiculeSelected.capacites"
+                                                        :key="
+                                                            capacite.categorie_id
+                                                        "
+                                                        class="flex items-center justify-between gap-4 rounded-lg bg-muted/50 px-2.5 py-1.5"
+                                                    >
+                                                        <span>{{
+                                                            capacite.categorie_nom
+                                                        }}</span>
+                                                        <strong
+                                                            class="tabular-nums"
+                                                        >
+                                                            {{
+                                                                capacite.capacite_max
+                                                            }}
+                                                            packs
+                                                        </strong>
+                                                    </div>
+                                                </dd>
+                                                <dd
+                                                    v-else
+                                                    class="text-sm font-medium"
+                                                >
+                                                    Aucune limite configurée
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                </Popover>
+                            </div>
+                        </div>
 
-            <!-- Actions -->
-            <div class="flex items-center justify-between px-5 py-4">
-                <button
-                    type="button"
-                    class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
-                    @click="showConfirmDialog = false"
+                        <div
+                            class="flex min-w-0 items-start gap-3 rounded-xl border border-border/60 bg-muted/15 p-3.5"
+                        >
+                            <div
+                                class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
+                            >
+                                <UserRound class="h-4 w-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs text-muted-foreground">
+                                    Client
+                                </p>
+                                <p class="mt-0.5 truncate font-medium">
+                                    {{
+                                        clientSelected
+                                            ? clientLabel(clientSelected)
+                                            : 'Non renseigné'
+                                    }}
+                                </p>
+                                <p
+                                    v-if="clientSelected?.telephone"
+                                    class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
+                                >
+                                    <Phone class="h-3 w-3" />
+                                    {{
+                                        formatPhoneDisplay(
+                                            clientSelected.telephone,
+                                        )
+                                    }}
+                                </p>
+                                <p
+                                    v-else-if="clientSelected"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Téléphone non renseigné
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex min-w-0 items-start gap-3 rounded-xl border border-border/60 bg-muted/15 p-3.5"
+                        >
+                            <div
+                                class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
+                            >
+                                <UsersRound class="h-4 w-4" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Équipe de livraison
+                                    </p>
+                                    <button
+                                        v-if="
+                                            vehiculeSelected?.equipe_membres
+                                                .length
+                                        "
+                                        type="button"
+                                        class="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                                        @click="toggleEquipePopover"
+                                    >
+                                        Voir l’équipe ({{
+                                            vehiculeSelected.equipe_membres
+                                                .length
+                                        }})
+                                        <ChevronRight class="h-3 w-3" />
+                                    </button>
+                                </div>
+                                <template v-if="vehiculeSelected?.livreur_nom">
+                                    <p class="mt-0.5 truncate font-medium">
+                                        {{ vehiculeSelected.livreur_nom }}
+                                    </p>
+                                    <p
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{
+                                            vehiculeSelected.livreur_telephone
+                                                ? formatPhoneDisplay(
+                                                      vehiculeSelected.livreur_telephone,
+                                                  )
+                                                : 'Téléphone non renseigné'
+                                        }}
+                                    </p>
+                                    <Popover
+                                        ref="equipePopover"
+                                        :pt="{ content: { class: 'p-0' } }"
+                                    >
+                                        <div class="w-[22rem] max-w-[82vw] p-4">
+                                            <div
+                                                class="flex items-center justify-between gap-4 border-b border-border/70 pb-3"
+                                            >
+                                                <div>
+                                                    <p class="font-semibold">
+                                                        Équipe de livraison
+                                                    </p>
+                                                    <p
+                                                        class="mt-0.5 text-xs text-muted-foreground"
+                                                    >
+                                                        {{
+                                                            vehiculeSelected
+                                                                .equipe_membres
+                                                                .length
+                                                        }}
+                                                        membre{{
+                                                            vehiculeSelected
+                                                                .equipe_membres
+                                                                .length > 1
+                                                                ? 's'
+                                                                : ''
+                                                        }}
+                                                    </p>
+                                                </div>
+                                                <UsersRound
+                                                    class="h-4 w-4 text-muted-foreground"
+                                                />
+                                            </div>
+                                            <ul
+                                                class="mt-2 divide-y divide-border/60"
+                                            >
+                                                <li
+                                                    v-for="membre in vehiculeSelected.equipe_membres"
+                                                    :key="membre.id"
+                                                    class="flex items-start gap-3 py-3"
+                                                >
+                                                    <div
+                                                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                                                    >
+                                                        <UserRound
+                                                            class="h-3.5 w-3.5"
+                                                        />
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p
+                                                            class="truncate text-sm font-medium"
+                                                        >
+                                                            {{ membre.nom }}
+                                                        </p>
+                                                        <p
+                                                            class="text-xs text-muted-foreground"
+                                                        >
+                                                            {{
+                                                                roleEquipeLabel(
+                                                                    membre.role,
+                                                                )
+                                                            }}
+                                                            <template
+                                                                v-if="
+                                                                    membre.telephone
+                                                                "
+                                                            >
+                                                                ·
+                                                                {{
+                                                                    formatPhoneDisplay(
+                                                                        membre.telephone,
+                                                                    )
+                                                                }}
+                                                            </template>
+                                                        </p>
+                                                    </div>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </Popover>
+                                </template>
+                                <p
+                                    v-else
+                                    class="mt-0.5 text-sm text-muted-foreground"
+                                >
+                                    Non affecté
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Produits -->
+                <section class="border-b border-border/70 px-5 py-6 sm:px-8">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <Package class="h-4 w-4 text-muted-foreground" />
+                            <h3 class="text-sm font-semibold">Produits</h3>
+                        </div>
+                        <span class="text-xs text-muted-foreground">
+                            {{ lignesVisibles.length }}
+                            {{ lignesVisibles.length > 1 ? 'lignes' : 'ligne' }}
+                        </span>
+                    </div>
+
+                    <div
+                        class="overflow-hidden rounded-xl border border-border"
+                    >
+                        <div class="max-h-64 overflow-auto">
+                            <table class="w-full min-w-[640px] text-sm">
+                                <thead
+                                    class="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm"
+                                >
+                                    <tr class="border-b border-border">
+                                        <th
+                                            class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                        >
+                                            Produit
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                        >
+                                            Quantité
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                        >
+                                            {{ prixUnitLabel }}
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                        >
+                                            {{ totalColumnLabel }}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                    <tr
+                                        v-for="(ligne, i) in lignesVisibles"
+                                        :key="i"
+                                        class="transition-colors hover:bg-muted/30"
+                                    >
+                                        <td class="px-4 py-3 font-medium">
+                                            {{ nomProduit(ligne.produit_id) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right tabular-nums"
+                                        >
+                                            {{ ligne.qte }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                        >
+                                            {{
+                                                formatGNF(ligneUnitPrice(ligne))
+                                            }}
+                                            <p class="mt-0.5 text-[11px]">
+                                                {{ ligneOrigineLabel(ligne) }}
+                                            </p>
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatGNF(ligne.total) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div
+                            class="flex flex-col gap-3 border-t border-border bg-muted/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <div
+                                class="flex items-baseline justify-between gap-3 sm:block"
+                            >
+                                <p
+                                    class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Quantité totale
+                                </p>
+                                <p class="mt-0.5 font-semibold tabular-nums">
+                                    {{ quantiteTotale }} packs
+                                </p>
+                            </div>
+                            <div
+                                class="flex items-baseline justify-between gap-4 sm:block sm:text-right"
+                            >
+                                <p
+                                    class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                                >
+                                    {{ totalCommandeLabel }}
+                                </p>
+                                <p
+                                    class="mt-0.5 text-xl font-bold tracking-tight tabular-nums sm:text-2xl"
+                                >
+                                    {{ formatGNF(totalGeneral) }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Alertes — le client est prioritaire dès qu'il est sélectionné. -->
+                <div
+                    v-if="
+                        (form.client_id && clientSolvabilite?.has_debt) ||
+                        (!form.client_id && vehiculeSolvabilite?.has_debt)
+                    "
+                    class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 sm:px-6 dark:bg-amber-950/20"
                 >
-                    Retour à la saisie
-                </button>
-                <button
-                    type="button"
-                    class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                    :disabled="form.processing || commandeBloquee"
-                    @click="confirmerEtCreer"
+                    <p
+                        class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
+                    >
+                        Alertes
+                    </p>
+                    <div
+                        v-if="!form.client_id && vehiculeSolvabilite?.has_debt"
+                        class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                    >
+                        <span>⚠</span>
+                        <span
+                            >Véhicule : factures impayées —
+                            <strong>{{
+                                formatGNF(vehiculeSolvabilite.total_remaining)
+                            }}</strong></span
+                        >
+                    </div>
+                    <div
+                        v-if="form.client_id && clientSolvabilite?.has_debt"
+                        class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                    >
+                        <span>⚠</span>
+                        <span
+                            >Client : factures impayées —
+                            <strong>{{
+                                formatGNF(clientSolvabilite.total_remaining)
+                            }}</strong></span
+                        >
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div
+                    class="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-border bg-background/95 px-5 py-4 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
                 >
-                    {{
-                        form.processing
-                            ? 'Création en cours…'
-                            : 'Confirmer et créer'
-                    }}
-                </button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        class="w-full sm:w-auto"
+                        @click="showConfirmDialog = false"
+                    >
+                        <ArrowLeft class="mr-2 h-4 w-4" />
+                        Retour à la saisie
+                    </Button>
+                    <Button
+                        type="button"
+                        class="w-full sm:w-auto"
+                        :disabled="form.processing || commandeBloquee"
+                        @click="confirmerEtCreer"
+                    >
+                        <Save v-if="!form.processing" class="mr-2 h-4 w-4" />
+                        {{
+                            form.processing
+                                ? 'Création en cours…'
+                                : confirmationActionLabel
+                        }}
+                    </Button>
+                </div>
             </div>
         </Dialog>
 

@@ -8,6 +8,8 @@ use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Models\AppInstallation;
+use App\Models\DroitAjustementStock;
+use App\Models\DroitCreationDepense;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\Proprietaire;
@@ -26,14 +28,14 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Point d'entrée UNIQUE pour l'installation initiale de l'application — utilisé aussi bien par
- * `php artisan app:install` (InstallApp) que par l'assistant web (InstallWizardController).
+ * `php artisan app:install` (InstallApp) que par l'assistant web (InstallWizard\*).
  * Toute règle métier de l'installation (organisation, super_admin, catalogue de départ, premier
  * site, marquage installed_at) vit ici et nulle part ailleurs, pour que CLI et web ne puissent
  * jamais diverger.
  *
  * Le premier site de l'organisation est désormais créé DANS install() (cf. creerSite()), pour que
  * l'installation laisse l'entreprise réellement prête à l'emploi — plus d'état intermédiaire
- * "organisation installée mais sans site exploitable". OnboardingSiteController/creerPremierSite()
+ * "organisation installée mais sans site exploitable". StoreOnboardingSiteController/creerPremierSite()
  * restent un filet de sécurité pour les organisations historiques déjà sans site (avant ce
  * changement) ou toute anomalie de migration, gardé par le middleware EnsureOrganizationHasSite,
  * mais une installation neuve n'y passe plus jamais.
@@ -45,7 +47,8 @@ class InstallationService
     /**
      * Contexte OTP (App\Services\OtpService) pour la vérification de l'email du Super Admin
      * pendant l'installation — un code par email saisi, jamais lié à un User (qui n'existe pas
-     * encore à ce stade). Partagé par InstallWizardController (web) et InstallApp (CLI).
+     * encore à ce stade). Partagé par InstallWizard\SendEmailCodeInstallWizardController (web) et
+     * InstallApp (CLI).
      */
     public const EMAIL_OTP_CONTEXT = 'install-email';
 
@@ -227,8 +230,9 @@ class InstallationService
      * les CRUD. Valable en on_premise comme en saas.
      *
      * Verrou on-premise : "1 instance on-premise = 1 organisation" est désormais garanti ICI,
-     * pas seulement par InstallWizardController::isLocked() (web) — donc également respecté par
-     * `php artisan app:install`, qui n'a jamais été concerné par isLocked(). On ne peut pas se
+     * pas seulement par les contrôleurs InstallWizard\* (web) qui appellent isLocked() — donc
+     * également respecté par `php artisan app:install`, qui n'a jamais été concerné par
+     * isLocked(). On ne peut pas se
      * contenter de tester isInstalled() (qui ne bloquerait pas une deuxième organisation tant que
      * la première installation n'est pas allée à son terme) : on compare directement le nombre
      * d'organisations à celle qu'on vient de résoudre, pour aussi couvrir le cas d'une
@@ -303,8 +307,9 @@ class InstallationService
             // Email : facultatif en saas, OBLIGATOIRE en on_premise (cf. isSaas() — même mécanisme
             // que isLocked()/resolveOrganization(), jamais une deuxième lecture indépendante du
             // mode). Dans les deux modes, s'il est renseigné il doit avoir été réellement vérifié
-            // par code (cf. InstallWizardController::verifyEmailCode() / InstallApp) — jamais
-            // marqué vérifié du seul fait d'avoir été saisi. isVerified() ne lit que le cache OTP,
+            // par code (cf. InstallWizard\VerifyEmailCodeInstallWizardController / InstallApp) —
+            // jamais marqué vérifié du seul fait d'avoir été saisi. isVerified() ne lit que le
+            // cache OTP,
             // écrit uniquement après succès d'une vérification réelle : rien n'est jamais créé en
             // base tant que cette étape n'a pas réellement réussi (cf. docblock de classe).
             $emailFourni = trim((string) ($admin['email'] ?? '')) !== '';
@@ -404,6 +409,32 @@ class InstallationService
             OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
             TypeVehiculesSeeder::seedPourOrganisation($org->id);
 
+            // Droit de création + validation des dépenses par défaut pour admin_entreprise —
+            // depuis le 2026-09-06, DroitCreationDepenseService ne bypasse plus ce rôle nulle
+            // part (seul Super Admin reste illimité, cf. sa docblock de classe) : sans cette
+            // ligne, une organisation fraîche démarrerait avec un admin_entreprise incapable de
+            // créer ou valider la moindre dépense tant que personne n'aurait visité
+            // /settings/depenses. Plafond volontairement laissé à NULL (traité comme 0 GNF,
+            // deny-by-default, cf. DroitCreationDepenseService::peutValiderMontant()) : à
+            // configurer explicitement, comme pour tout rôle nouvellement actif.
+            DroitCreationDepense::create([
+                'organization_id' => $org->id,
+                'role_name' => 'admin_entreprise',
+                'perimetre' => 'toutes_agences',
+                'is_actif' => true,
+                'peut_valider' => true,
+            ]);
+
+            // Même besoin de continuité pour l'ajustement manuel de stock — DroitAjustementStockService
+            // ne bypasse plus admin_entreprise nulle part depuis le 2026-09-06 (cf. sa docblock).
+            DroitAjustementStock::create([
+                'organization_id' => $org->id,
+                'role_name' => 'admin_entreprise',
+                'perimetre' => 'toutes_agences',
+                'peut_augmenter' => true,
+                'peut_diminuer' => true,
+            ]);
+
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —
             // cette table sert alors d'historique/audit. En on_premise il n'y en aura jamais
@@ -420,7 +451,7 @@ class InstallationService
     /**
      * Filet de sécurité pour une organisation historique qui n'a encore aucun site (créée avant
      * que le premier site ne rejoigne install(), cf. docblock de classe) — utilisé par
-     * OnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite. Une installation
+     * StoreOnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite. Une installation
      * neuve n'y passe plus jamais.
      *
      * @param  array{type: string, ville: string, quartier: string}  $data
@@ -437,7 +468,7 @@ class InstallationService
 
     /**
      * Crée un site et l'attache à $user comme site par défaut — même pattern que
-     * UserController::store()/UserInvitationService::accepter() — sans ça, `default_site` resterait
+     * User\StoreUserController/UserInvitationService::accepter() — sans ça, `default_site` resterait
      * vide côté frontend (cf. HandleInertiaRequests::defaultSite()) alors qu'un site vient d'être
      * créé. Nom généré automatiquement (cf. SiteNamingService), téléphone et pays hérités de $user
      * (jamais redemandés : déjà connus à ce stade, que l'appelant soit install() ou

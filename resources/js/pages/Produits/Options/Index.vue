@@ -4,6 +4,7 @@ import DataFilters, {
 } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -35,6 +36,7 @@ const props = defineProps<{
 
 const toast = useToast();
 const confirm = useConfirm();
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -212,7 +214,11 @@ function supprimerValeur(
                         générées.
                     </p>
                 </div>
-                <Button size="sm" @click="openCreate">
+                <Button
+                    v-if="can('options.create')"
+                    size="sm"
+                    @click="openCreate"
+                >
                     <Plus class="mr-1.5 h-3.5 w-3.5" />
                     Nouvelle option
                 </Button>
@@ -245,7 +251,7 @@ function supprimerValeur(
                         }}
                     </p>
                     <Button
-                        v-if="options.length === 0"
+                        v-if="options.length === 0 && can('options.create')"
                         variant="outline"
                         size="sm"
                         @click="openCreate"
@@ -273,6 +279,7 @@ function supprimerValeur(
                         </h3>
                         <div class="flex gap-0.5">
                             <button
+                                v-if="can('options.update')"
                                 type="button"
                                 title="Renommer"
                                 class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -281,7 +288,9 @@ function supprimerValeur(
                                 <Pencil class="h-3.5 w-3.5" />
                             </button>
                             <button
-                                v-if="!option.is_system"
+                                v-if="
+                                    !option.is_system && can('options.delete')
+                                "
                                 type="button"
                                 title="Supprimer"
                                 class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -305,6 +314,7 @@ function supprimerValeur(
                             />
                             {{ valeur.valeur }}
                             <button
+                                v-if="can('options.update')"
                                 type="button"
                                 :aria-label="`Supprimer ${valeur.valeur}`"
                                 class="text-muted-foreground hover:text-destructive"
@@ -321,7 +331,10 @@ function supprimerValeur(
                         </span>
                     </div>
 
-                    <div class="mt-3 flex items-center gap-2">
+                    <div
+                        v-if="can('options.update')"
+                        class="mt-3 flex items-center gap-2"
+                    >
                         <input
                             v-if="estOptionCouleur(option)"
                             v-model="nouvellesHex[option.id]"

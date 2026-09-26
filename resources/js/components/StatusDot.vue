@@ -23,6 +23,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     disponible: 'bg-emerald-500',
     couvert: 'bg-emerald-500',
     recu: 'bg-emerald-500',
+    verse: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -34,6 +35,13 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     envoye: 'bg-blue-500',
     calculee: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
+    // Vente encaissée en totalité, en attente du versement des commissions avant clôture
+    // (CommandeVente::statutAffichage()).
+    commissions_a_verser: 'bg-blue-500',
+    // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
+    // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
+    // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
+    sent: 'bg-blue-500',
 
     // Gris — brouillon / créé / pas commencé / neutralisé
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
@@ -52,19 +60,28 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rejetee: 'bg-red-500',
     annule: 'bg-red-500',
     annulee: 'bg-red-500',
+    // Vente annulée exceptionnellement (saisie par erreur) — cf. StatutCommandeVente::ANNULEE_ERREUR_SAISIE.
+    annulee_erreur_saisie: 'bg-red-500',
     retourne: 'bg-red-500',
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
     erreur: 'bg-red-500',
+    // MessageLog.status — cf. commentaire "sent" plus haut.
+    failed: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
+    // Vente retournée (retour total avant encaissement) : attention, pas une erreur — cf.
+    // StatutCommandeVente::RETOURNEE. À ne pas confondre avec `retourne` (rouge, mouvement de fonds).
+    retournee: 'bg-orange-500',
     conteste: 'bg-orange-500',
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    // MessageLog.status — cf. commentaire "sent" ci-dessus.
+    pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',

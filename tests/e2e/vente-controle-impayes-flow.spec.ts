@@ -124,13 +124,18 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
             timeout: 20_000,
         });
 
+        // Les 2 options du déclencheur "commission de vente" (jamais "à la réception" — ce
+        // libellé appartient au déclencheur "commission logistique", paramétrable depuis son
+        // propre écran Paramètres > Logistique depuis que celui-ci a été séparé de cette page
+        // (auparavant réunis ici par réutilisation de contrôleur, cf. docs/commissions.md).
         await expect(page.locator('body')).toContainText(
             /l'encaissement de la facture/i,
             { timeout: 10_000 },
         );
-        await expect(page.locator('body')).toContainText(/à la réception/i, {
-            timeout: 10_000,
-        });
+        await expect(page.locator('body')).toContainText(
+            /à la validation du chargement/i,
+            { timeout: 10_000 },
+        );
     });
 
     test('le seuil configuré est persisté après rechargement', async ({
@@ -390,12 +395,23 @@ async function createClientInApp(
         .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
 
+    // Nature du client — défaut "Revendeur" depuis la migration
+    // migrate_client_type_standard_to_revendeur (28/08/2026) : ce type rend le cashback actif
+    // ET son montant par pack obligatoires (cf. ClientForm.vue::isRevendeur), ce dont ce test
+    // n'a rien à faire. "Externe" reste facultatif sur les deux, donc plus simple ici.
+    const natureCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .nth(1);
+    await selectOptionFromCombobox(page, natureCombo, /^externe$/i);
+
     await page.locator('#telephone').fill(tel);
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, {
+    // La création redirige vers la fiche détail (Clients/Show.vue), pas vers l'édition.
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/, {
         timeout: 15_000,
     });
 }
@@ -450,12 +466,13 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
         .first()
         .click();
 
-    // La soumission ouvre un dialog de confirmation — cliquer "Confirmer et créer" (cf.
+    // La soumission ouvre un dialog de confirmation — cliquer le bouton final (cf.
     // facture-flow.spec.ts) : sans ce clic, form.post() ne part jamais et l'URL reste sur
     // "/ventes/create", ce que le regex ci-dessous matcherait quand même à tort ("create"
-    // est alphanumérique) si on ne l'excluait pas explicitement.
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // est alphanumérique) si on ne l'excluait pas explicitement. Scopé au dialog : le bouton
+    // de soumission du formulaire sous-jacent porte désormais le même libellé.
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
@@ -538,19 +555,40 @@ async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
     const telInput = dialog.locator('[data-testid="telephone-0"]');
     await telInput.click();
     await telInput.pressSequentially(randomDigits(9), { delay: 20 });
-    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await telInput.blur();
+
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()) — cf.
+    // tests/e2e/equipe-flow.spec.ts::createVehiculeAvecEquipe pour le même
+    // correctif.
+    const suivantEtape1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantEtape1).toBeEnabled({ timeout: 10_000 });
+    await suivantEtape1.click();
 
     // Étape 2 (Partage) : aucun barème de commission configuré pour ce
     // véhicule (organisation "elm", partagée avec de nombreuses autres specs
     // — aucun CommissionRegle n'y est seedé par défaut). L'étape affiche donc
     // l'état vide ; seule l'activation du véhicule nous intéresse ici, pas la
-    // répartition elle-même (cf. commentaire de fonction ci-dessus).
+    // répartition elle-même (cf. commentaire de fonction ci-dessus). Le
+    // marqueur "aucun barème…" est unique à l'étape 2 (contrairement au texte
+    // de navigation du stepper, toujours présent dans le DOM) : il confirme
+    // qu'on a bien quitté l'étape 1 avant de cliquer à nouveau sur "Suivant".
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).toBeVisible({ timeout: 5_000 });
     const suivantEtape2 = dialog.getByRole('button', { name: /suivant/i });
     await expect(suivantEtape2).toBeEnabled({ timeout: 5_000 });
     await suivantEtape2.click();
 
     // Étape 3 (Récapitulatif) : enregistrer.
-    await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
+    const enregistrerBtn = dialog.getByRole('button', {
+        name: /enregistrer l'équipe/i,
+    });
+    await expect(enregistrerBtn).toBeVisible({ timeout: 5_000 });
+    await enregistrerBtn.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
@@ -615,8 +653,10 @@ test('un véhicule dont la commande précédente na reçu aucun paiement bloque 
     await expect(submit1).toBeEnabled({ timeout: 10_000 });
     await submit1.click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution"), scopé au dialog
+    // (régression E2E corrigée le 31/08/2026, cf. plus haut dans ce fichier).
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();

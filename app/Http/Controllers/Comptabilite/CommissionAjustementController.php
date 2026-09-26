@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\AuditEvent;
 use App\Enums\MotifAjustementCommission;
+use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
@@ -14,9 +15,13 @@ use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
+use App\Services\PeriodeCalculatorService;
+use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -24,6 +29,36 @@ use Inertia\Response;
 
 class CommissionAjustementController extends Controller
 {
+    /**
+     * Point d'entrée direct "Répartir" depuis Comptabilité > Commissions : le comptable clique
+     * sur un véhicule sans jamais passer par le menu Périodes. Contrairement à vehicule()
+     * ci-dessous (qui exige une période déjà CALCULEE via sa policy), cette action résout — et
+     * calcule si nécessaire — la période concernée avant de rediriger, exactement comme le fait
+     * PaiementPeriodeController::show() à l'ouverture normale de l'écran Périodes. `$periode`
+     * reprend le filtre période actif de la liste (même code que CommissionVenteController), ou
+     * la quinzaine courante si aucun filtre n'est actif.
+     */
+    public function repartirVehicule(Request $request, string $vehiculeId): RedirectResponse
+    {
+        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->isAdmin(), 403, 'Réservé aux administrateurs.');
+
+        $orgId = auth()->user()->organization_id;
+        $filtrePeriode = (string) $request->query('periode', '');
+        $date = $filtrePeriode !== '' && preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+
+        $periode = app(PeriodePaiementService::class)
+            ->getOrCreatePeriod($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($date), auth()->id());
+        app(PeriodeCalculatorService::class)->calculerSiNecessaire($periode);
+
+        return redirect()->route('comptabilite.periodes.ajustements.vehicule', [
+            'periode' => $periode->id,
+            'vehicule' => $vehiculeId,
+        ]);
+    }
+
     /**
      * Équipe globale d'un véhicule sur toute la période (1 ligne par bénéficiaire, montants
      * cumulés) + actions d'ajustement. Le métier raisonne "je traite le véhicule X pour la
@@ -367,6 +402,100 @@ class CommissionAjustementController extends Controller
         }
 
         return back()->with('success', 'Commission validée.');
+    }
+
+    /**
+     * Variante de ajusterGroupe() sans période : traite le montant d'un bénéficiaire
+     * directement depuis Comptabilité > Commissions, sans passer par l'écran Périodes. Chaque
+     * part est autorisée individuellement (authorizeSurPart, comme ajuster()/valider()) —
+     * ajusterMontantGroupe() n'a lui-même aucune dépendance à une PaiementPeriode calculée,
+     * seule la route période-liée ajusterGroupe() l'exigeait via sa policy de contrôleur.
+     */
+    public function ajusterParts(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'parts' => ['required', 'array', 'min:1'],
+            'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
+            'parts.*.id' => ['required', 'string'],
+            'montant' => ['required', 'numeric', 'min:0'],
+            'motif' => ['required', Rule::in(array_column(MotifAjustementCommission::cases(), 'value'))],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $parts = collect($data['parts'])->map(function (array $p) {
+            $part = $this->resolvePart($p['type'], $p['id']);
+            $this->authorizeSurPart($part);
+
+            return $part;
+        });
+
+        try {
+            if ($parts->first() instanceof CommissionEnveloppePart) {
+                CommissionAdjustmentService::ajusterMontantGroupe(
+                    $parts,
+                    (float) $data['montant'],
+                    MotifAjustementCommission::from($data['motif']),
+                    $data['commentaire'] ?? null,
+                    $request->user(),
+                );
+            } else {
+                CommissionAdjustmentService::ajusterMontantGroupeLogistique(
+                    $parts,
+                    (float) $data['montant'],
+                    MotifAjustementCommission::from($data['motif']),
+                    $data['commentaire'] ?? null,
+                    $request->user(),
+                );
+            }
+        } catch (\LogicException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Montant ajusté.');
+    }
+
+    /**
+     * Variante de validerLot() sans période : voir ajusterParts() ci-dessus pour le
+     * raisonnement. Écrit une entrée d'audit par bénéficiaire (attachée au livreur/
+     * propriétaire, pas à une période) pour rester visible dans son historique — même
+     * event AuditEvent::VALIDATED que validerLot(), qui l'attache à la période.
+     */
+    public function validerParts(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'parts' => ['required', 'array', 'min:1'],
+            'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
+            'parts.*.id' => ['required', 'string'],
+        ]);
+
+        $resolved = collect($data['parts'])->map(function (array $p) {
+            $part = $this->resolvePart($p['type'], $p['id']);
+            $this->authorizeSurPart($part);
+
+            return $part;
+        });
+
+        $partsVente = $resolved->filter(fn ($p) => $p instanceof CommissionEnveloppePart)->values();
+        $partsLogistique = $resolved->reject(fn ($p) => $p instanceof CommissionEnveloppePart)->values();
+
+        $count = CommissionAdjustmentService::validerLot($partsVente, $request->user())
+            + CommissionAdjustmentService::validerLotLogistique($partsLogistique, $request->user());
+
+        $auditLog = app(AuditLogService::class);
+        foreach ($partsVente->groupBy('beneficiaire_id') as $partsDuBeneficiaire) {
+            $beneficiaire = $partsDuBeneficiaire->first()->resoudreBeneficiaire();
+            if ($beneficiaire === null) {
+                continue;
+            }
+
+            $auditLog->record($beneficiaire, AuditEvent::VALIDATED, $request->user(), null, null, [
+                'module' => 'ajustements_commissions',
+                'nb_parts' => $partsDuBeneficiaire->count(),
+                'description' => "{$partsDuBeneficiaire->count()} commission(s) validée(s) depuis Commissions",
+            ]);
+        }
+
+        return back()->with('success', "{$count} commission(s) validée(s).");
     }
 
     public function validerLot(Request $request, PaiementPeriode $periode): RedirectResponse

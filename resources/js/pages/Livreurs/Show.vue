@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ClientLayout from '@/layouts/ClientLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
+import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    ArrowLeftRight,
     ChevronRight,
     FileText,
     ReceiptText,
@@ -54,6 +57,15 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const Layout = computed(() => (props.is_staff ? AppLayout : ClientLayout));
 const showInfo = ref(false);
+
+const { can } = usePermissions();
+const showTransfertDialog = ref(false);
+const peutChangerVehicule = computed(
+    () =>
+        props.is_staff &&
+        can('equipes-livraison.update') &&
+        props.livreur.equipes.length > 0,
+);
 </script>
 
 <template>
@@ -205,6 +217,33 @@ const showInfo = ref(false);
                         </div>
                     </button>
 
+                    <!-- Changer de véhicule (transfert d'équipe) -->
+                    <button
+                        v-if="peutChangerVehicule"
+                        type="button"
+                        class="block w-full text-left"
+                        @click="showTransfertDialog = true"
+                    >
+                        <div
+                            class="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 shadow-sm transition-colors hover:bg-muted/50"
+                        >
+                            <div
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
+                            >
+                                <ArrowLeftRight class="h-5 w-5" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="font-medium">Changer de véhicule</p>
+                                <p class="text-sm text-muted-foreground">
+                                    Déplacer ce livreur vers une autre équipe
+                                </p>
+                            </div>
+                            <ChevronRight
+                                class="h-4 w-4 shrink-0 text-muted-foreground"
+                            />
+                        </div>
+                    </button>
+
                     <!-- Commissions logistiques -->
                     <a :href="commissions_url" class="block">
                         <div
@@ -281,5 +320,11 @@ const showInfo = ref(false);
                 </div>
             </div>
         </div>
+
+        <TransfertVehiculeDialog
+            v-if="peutChangerVehicule"
+            v-model:visible="showTransfertDialog"
+            :livreur-id="livreur.id"
+        />
     </component>
 </template>

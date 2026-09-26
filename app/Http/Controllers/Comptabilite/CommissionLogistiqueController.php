@@ -57,7 +57,7 @@ class CommissionLogistiqueController extends Controller
 
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -258,7 +258,7 @@ class CommissionLogistiqueController extends Controller
 
     public function showLivreur(Request $request, string $livreurId): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $orgId = auth()->user()->organization_id;
         $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
@@ -529,7 +529,7 @@ class CommissionLogistiqueController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -572,7 +572,7 @@ class CommissionLogistiqueController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;

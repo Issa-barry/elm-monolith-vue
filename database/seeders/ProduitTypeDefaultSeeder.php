@@ -86,7 +86,11 @@ class ProduitTypeDefaultSeeder extends Seeder
             'prix_achat_requis' => true,
             'prix_usine_requis' => false,
             'prix_vente_requis' => false,
-            'champ_prix_reference' => 'prix_achat',
+            // null, jamais 'prix_achat' : ce type n'est pas vendable, donc son prix de vente
+            // n'est jamais saisi — un champ de référence non nul déclencherait le contrôle de
+            // marge de ProduitService (prix_vente > référence) contre un prix de vente toujours
+            // à 0, rejetant systématiquement toute création (bug réel, corrigé le 30/08/2026).
+            'champ_prix_reference' => null,
             'position' => 4,
         ],
     ];

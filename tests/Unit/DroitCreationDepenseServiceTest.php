@@ -26,11 +26,26 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->org = Organization::factory()->create();
     }
 
+    /**
+     * Admin Entreprise ne bypasse plus RIEN dans ce service depuis le 2026-09-06 (avant cette
+     * date, seul le plafond de montant lui était déjà appliqué, mais peutCreer/peutCreerSurSite/
+     * peutValider/peutValiderSurSite/sitesAutorises le bypassaient encore) — cf. superAdminUser()
+     * pour le seul rôle réellement bypassé (docs/depenses-validation.md, DEPVAL-001).
+     */
     private function adminUser(): User
     {
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('admin_entreprise');
+
+        return $user;
+    }
+
+    private function superAdminUser(): User
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('super_admin');
 
         return $user;
     }
@@ -56,9 +71,33 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── peutCreer ─────────────────────────────────────────────────────────────
 
-    public function test_admin_peut_toujours_creer(): void
+    public function test_super_admin_peut_toujours_creer(): void
     {
-        $this->assertTrue($this->service->peutCreer($this->adminUser(), $this->org->id));
+        $this->assertTrue($this->service->peutCreer($this->superAdminUser(), $this->org->id));
+    }
+
+    /**
+     * Verrou du 2026-09-06 : admin_entreprise ne bypasse plus peutCreer() — sans ligne
+     * DroitCreationDepense (is_actif=true), il ne peut plus créer de dépense, exactement comme
+     * n'importe quel autre rôle (cf. test_commerciale_sans_droit_ne_peut_pas_creer).
+     */
+    public function test_admin_entreprise_sans_droit_ne_peut_pas_creer(): void
+    {
+        $this->assertFalse($this->service->peutCreer($this->adminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_avec_droit_actif_peut_creer(): void
+    {
+        $user = $this->adminUser();
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'is_actif' => true,
+        ]);
+
+        $this->assertTrue($this->service->peutCreer($user, $this->org->id));
     }
 
     public function test_commerciale_avec_droit_actif_peut_creer(): void
@@ -98,10 +137,18 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── peutCreerSurSite ──────────────────────────────────────────────────────
 
-    public function test_admin_peut_creer_sur_nimporte_quel_site(): void
+    public function test_super_admin_peut_creer_sur_nimporte_quel_site(): void
     {
         $site = $this->site();
         $this->assertTrue(
+            $this->service->peutCreerSurSite($this->superAdminUser(), $this->org->id, $site->id)
+        );
+    }
+
+    public function test_admin_entreprise_sans_droit_ne_peut_creer_sur_aucun_site(): void
+    {
+        $site = $this->site();
+        $this->assertFalse(
             $this->service->peutCreerSurSite($this->adminUser(), $this->org->id, $site->id)
         );
     }
@@ -167,9 +214,16 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── sitesAutorises ────────────────────────────────────────────────────────
 
-    public function test_admin_sites_autorises_retourne_null(): void
+    public function test_super_admin_sites_autorises_retourne_null(): void
     {
-        $this->assertNull($this->service->sitesAutorises($this->adminUser(), $this->org->id));
+        $this->assertNull($this->service->sitesAutorises($this->superAdminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_sans_droit_sites_autorises_retourne_collection_vide(): void
+    {
+        $result = $this->service->sitesAutorises($this->adminUser(), $this->org->id);
+        $this->assertNotNull($result);
+        $this->assertCount(0, $result);
     }
 
     public function test_toutes_agences_sites_autorises_retourne_null(): void
@@ -211,11 +265,72 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertCount(0, $result);
     }
 
+    // ── peutValider (droit général, distinct du plafond) ─────────────────────
+
+    public function test_super_admin_peut_toujours_valider(): void
+    {
+        $this->assertTrue($this->service->peutValider($this->superAdminUser(), $this->org->id));
+    }
+
+    /**
+     * Verrou du 2026-09-06 : admin_entreprise ne bypasse plus peutValider() (droit général,
+     * distinct du plafond déjà non-bypassé depuis le 04/09/2026) — sans ligne
+     * DroitCreationDepense (peut_valider=true), il ne peut plus valider aucune dépense.
+     */
+    public function test_admin_entreprise_sans_droit_ne_peut_pas_valider(): void
+    {
+        $this->assertFalse($this->service->peutValider($this->adminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_avec_droit_peut_valider_peut_valider(): void
+    {
+        $user = $this->adminUser();
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+        ]);
+
+        $this->assertTrue($this->service->peutValider($user, $this->org->id));
+    }
+
+    public function test_commerciale_sans_droit_ne_peut_pas_valider(): void
+    {
+        $this->assertFalse($this->service->peutValider($this->commercialeUser(), $this->org->id));
+    }
+
     // ── droitValidationPour ───────────────────────────────────────────────────
 
-    public function test_admin_droit_validation_pour_retourne_null(): void
+    public function test_super_admin_droit_validation_pour_retourne_null(): void
     {
+        $this->assertNull($this->service->droitValidationPour($this->superAdminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_sans_droit_configure_droit_validation_pour_retourne_null(): void
+    {
+        // Contrairement à super_admin, ce null ne signifie pas "bypass" mais
+        // "aucun plafond configuré" — traité comme deny-by-default ailleurs
+        // (cf. peutValiderMontant).
         $this->assertNull($this->service->droitValidationPour($this->adminUser(), $this->org->id));
+    }
+
+    public function test_admin_entreprise_avec_droit_configure_droit_validation_pour_retourne_le_droit(): void
+    {
+        $user = $this->adminUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $result = $this->service->droitValidationPour($user, $this->org->id);
+        $this->assertNotNull($result);
+        $this->assertEquals($droit->id, $result->id);
     }
 
     public function test_non_admin_sans_droit_validation_retourne_null(): void
@@ -255,10 +370,21 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── peutValiderSurSite ────────────────────────────────────────────────────
 
-    public function test_admin_peut_valider_sur_site_retourne_true(): void
+    public function test_super_admin_peut_valider_sur_site_retourne_true(): void
     {
         $site = $this->site();
-        $this->assertTrue($this->service->peutValiderSurSite($this->adminUser(), null, $site->id));
+        $this->assertTrue($this->service->peutValiderSurSite($this->superAdminUser(), null, $site->id));
+    }
+
+    /**
+     * Verrou du 2026-09-06 : admin_entreprise ne bypasse plus peutValiderSurSite() — sans droit
+     * (`$droit` null, comme le renverrait droitValidationPour() sans ligne configurée), il ne
+     * peut plus valider sur aucun site.
+     */
+    public function test_admin_entreprise_sans_droit_peut_valider_sur_site_retourne_false(): void
+    {
+        $site = $this->site();
+        $this->assertFalse($this->service->peutValiderSurSite($this->adminUser(), null, $site->id));
     }
 
     public function test_sans_droit_peut_valider_sur_site_retourne_false(): void
@@ -358,5 +484,104 @@ class DroitCreationDepenseServiceTest extends TestCase
         ]);
 
         $this->assertFalse($this->service->peutValiderSurSite($user, $droit, $siteB->id));
+    }
+
+    // ── peutValiderMontant ────────────────────────────────────────────────────
+
+    public function test_super_admin_peut_valider_montant_retourne_toujours_true(): void
+    {
+        $this->assertTrue(
+            $this->service->peutValiderMontant($this->superAdminUser(), null, 50_000_000)
+        );
+    }
+
+    public function test_admin_entreprise_ne_bypasse_plus_le_plafond(): void
+    {
+        $user = $this->adminUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 500000));
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 500001));
+    }
+
+    public function test_admin_entreprise_sans_droit_ne_peut_rien_valider(): void
+    {
+        $this->assertFalse(
+            $this->service->peutValiderMontant($this->adminUser(), null, 1)
+        );
+    }
+
+    public function test_sans_droit_peut_valider_montant_retourne_false(): void
+    {
+        $this->assertFalse(
+            $this->service->peutValiderMontant($this->commercialeUser(), null, 1)
+        );
+    }
+
+    public function test_montant_egal_au_plafond_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 500000));
+    }
+
+    public function test_montant_sous_le_plafond_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderMontant($user, $droit, 499999));
+    }
+
+    public function test_montant_au_dessus_du_plafond_retourne_false(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => 500000,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 500001));
+    }
+
+    public function test_plafond_non_configure_est_traite_comme_zero(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+            'plafond_validation' => null,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderMontant($user, $droit, 1));
     }
 }

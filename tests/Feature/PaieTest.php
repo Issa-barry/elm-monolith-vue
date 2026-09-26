@@ -315,6 +315,191 @@ class PaieTest extends TestCase
             ->assertSessionHasErrors('montant');
     }
 
+    public function test_store_paiement_retourne_403_sans_permission(): void
+    {
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
+        [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
+
+        $service = app(PaieCalculService::class);
+        $service->genererLignes($periode);
+        $service->calculerPeriode($periode);
+
+        $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
+
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $user->assignRole('manager');
+
+        $this->actingAs($user)
+            ->post(route('paie-paiements.store', $ligne), [
+                'montant' => 100_000,
+                'date_paiement' => '2025-01-31',
+                'mode_paiement' => 'especes',
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_store_paiement_retourne_403_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $periode = PaiePeriode::create([
+            'organization_id' => $autreOrg->id,
+            'mois' => 1,
+            'annee' => 2025,
+            'statut' => StatutPeriodePaie::VALIDE_RH,
+        ]);
+        $personne = Personne::create([
+            'organization_id' => $autreOrg->id,
+            'nom' => 'AUTRE',
+            'prenom' => 'Org',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+        $employe = Employe::create([
+            'organization_id' => $autreOrg->id,
+            'personne_id' => $personne->id,
+            'matricule' => '999999',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
+        ]);
+        $ligne = PaieLigne::create([
+            'paie_periode_id' => $periode->id,
+            'employe_id' => $employe->id,
+            'salaire_base' => 1_000_000,
+            'brut' => 1_000_000,
+            'net' => 1_000_000,
+            'reste_a_payer' => 1_000_000,
+            'statut' => StatutLignePaie::CALCULE,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('paie-paiements.store', $ligne), [
+                'montant' => 100_000,
+                'date_paiement' => '2025-01-31',
+                'mode_paiement' => 'especes',
+            ])
+            ->assertStatus(403);
+    }
+
+    // ── destroy paiement ──────────────────────────────────────────────────────
+
+    public function test_destroy_paiement_annule_et_recalcule_le_reste(): void
+    {
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
+        [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
+
+        $service = app(PaieCalculService::class);
+        $service->genererLignes($periode);
+        $service->calculerPeriode($periode);
+
+        $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('paie-paiements.store', $ligne), [
+                'montant' => 400_000,
+                'date_paiement' => '2025-01-31',
+                'mode_paiement' => 'especes',
+            ])
+            ->assertRedirect();
+
+        $paiement = $ligne->fresh()->paiements()->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->delete(route('paie-paiements.destroy', $paiement))
+            ->assertRedirect();
+
+        $ligne->refresh();
+        $this->assertEquals(0, (float) $ligne->deja_paye);
+        $this->assertEquals(1_000_000, (float) $ligne->reste_a_payer);
+        $this->assertEquals(StatutLignePaie::CALCULE, $ligne->statut);
+    }
+
+    public function test_destroy_paiement_retourne_403_sans_permission(): void
+    {
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
+        [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
+
+        $service = app(PaieCalculService::class);
+        $service->genererLignes($periode);
+        $service->calculerPeriode($periode);
+
+        $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('paie-paiements.store', $ligne), [
+                'montant' => 400_000,
+                'date_paiement' => '2025-01-31',
+                'mode_paiement' => 'especes',
+            ]);
+
+        $paiement = $ligne->fresh()->paiements()->firstOrFail();
+
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $user->assignRole('manager');
+
+        $this->actingAs($user)
+            ->delete(route('paie-paiements.destroy', $paiement))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_paiement_retourne_403_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $autreSite = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Dépôt', 'type' => 'depot']);
+        $autreUser = User::factory()->create(['organization_id' => $autreOrg->id]);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $autreUser->assignRole('admin_entreprise');
+        $autreUser->givePermissionTo(['rh-paie.read', 'rh-paie.pay']);
+        $autreUser->sites()->attach($autreSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $periode = PaiePeriode::create([
+            'organization_id' => $autreOrg->id,
+            'mois' => 1,
+            'annee' => 2025,
+            'statut' => StatutPeriodePaie::VALIDE_RH,
+        ]);
+        $personne = Personne::create([
+            'organization_id' => $autreOrg->id,
+            'nom' => 'AUTRE',
+            'prenom' => 'Org',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+        $employe = Employe::create([
+            'organization_id' => $autreOrg->id,
+            'personne_id' => $personne->id,
+            'matricule' => '999998',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
+        ]);
+        Contrat::create([
+            'organization_id' => $autreOrg->id,
+            'employe_id' => $employe->id,
+            'type_contrat' => 'cdi',
+            'date_debut' => '2025-01-01',
+            'salaire_base' => 1_000_000,
+            'statut_contrat' => 'actif',
+        ]);
+
+        $service = app(PaieCalculService::class);
+        $service->genererLignes($periode);
+        $service->calculerPeriode($periode);
+        $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
+
+        $this->actingAs($autreUser)
+            ->post(route('paie-paiements.store', $ligne), [
+                'montant' => 400_000,
+                'date_paiement' => '2025-01-31',
+                'mode_paiement' => 'especes',
+            ])
+            ->assertRedirect();
+
+        $paiement = $ligne->fresh()->paiements()->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->delete(route('paie-paiements.destroy', $paiement))
+            ->assertStatus(403);
+    }
+
     // ── modification bloquée sur période verrouillée ──────────────────────────
 
     public function test_variable_bloquee_si_periode_verrouillee(): void

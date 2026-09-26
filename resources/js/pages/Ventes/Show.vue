@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import StatusDot from '@/components/StatusDot.vue';
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,20 +30,25 @@ import {
     HandCoins,
     MoreVertical,
     Package,
+    PackageCheck,
     PackageOpen,
     Pencil,
     Printer,
     Receipt,
+    RotateCcw,
+    ShieldAlert,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import AnnulationExceptionnelleDialog from './partials/AnnulationExceptionnelleDialog.vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
+import ReceptionDialog from './partials/ReceptionDialog.vue';
+import RetourDialog from './partials/RetourDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -67,6 +77,8 @@ interface Encaissement {
     heure: string | null;
     mode_paiement: string;
     mode_paiement_label: string;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -89,10 +101,18 @@ interface LigneCommande {
     quantite_demandee: number;
     quantite_chargee: number | null;
     quantite_livree: number | null;
+    /** Cumul des retours de livraison de cette ligne (cf. CommandeVenteRetourService). */
+    quantite_retournee: number;
+    /** Ce qu'il reste à pouvoir retourner : chargé moins déjà retourné. */
+    quantite_retournable: number;
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
+    type_ecart_reception: string | null;
+    type_ecart_reception_label: string | null;
+    commentaire_ecart_reception: string | null;
     ecart_chargement: number | null;
+    ecart_livraison: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
     // null pour les commandes créées avant la tarification par nature de client (backfillées en
@@ -152,10 +172,13 @@ interface CommandeData {
     reference: string;
     statut: string;
     statut_label: string;
+    statut_affichage: { value: string; label: string };
     statut_color: string;
     total_commande: number;
     mode_tarification_snapshot: string | null;
     mode_tarification_label: string | null;
+    mode_remise_grossiste: string | null;
+    mode_remise_grossiste_label: string | null;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -170,6 +193,7 @@ interface CommandeData {
     chargement_demarre_at: string | null;
     chargement_valide_at: string | null;
     livree_at: string | null;
+    reception_validee_at: string | null;
     closed_at: string | null;
     is_brouillon: boolean;
     is_a_charger: boolean;
@@ -179,12 +203,33 @@ interface CommandeData {
     is_facturation: boolean;
     is_cloturee: boolean;
     is_annulee: boolean;
+    /** Retour TOTAL de la marchandise avant encaissement — statut terminal « Retournée ». */
+    is_retournee: boolean;
+    /** Annulée exceptionnellement (saisie par erreur) — statut terminal distinct d'« Annulée ». */
+    is_annulee_erreur_saisie: boolean;
+    annulation_exceptionnelle: {
+        par: string | null;
+        le: string | null;
+        motif: string;
+        montant_encaisse: number;
+        code_envoye_a: string | null;
+    } | null;
     can_modifier: boolean;
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
     can_valider_chargement: boolean;
+    can_valider_reception: boolean;
+    /** Retour de livraison possible : en livraison, rien d'encaissé, permission dédiée. */
+    can_enregistrer_retour: boolean;
     can_annuler: boolean;
+    /** Permission `ventes.annuler_exceptionnel` et commande éligible (cf. AnnulationExceptionnelleService). */
+    can_annuler_exceptionnel: boolean;
     can_encaisser: boolean;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -197,11 +242,36 @@ interface CommissionStatut {
 
 /** Statut de la DERNIÈRE tentative de génération de commission — distinct de
  * commission_statut (paiement de commissions déjà générées). Non-null
- * uniquement en cas d'échec ("à régulariser"), cf. CommandeVenteController. */
+ * uniquement en cas d'anomalie ("à régulariser" ou "partiellement générée",
+ * chantier 2A du 05/09/2026), cf. CommandeVenteCommissionStatus. */
 interface CommissionGenerationStatut {
-    value: 'erreur';
+    value: 'erreur' | 'partiel';
     label: string;
     motif: string | null;
+}
+
+interface RetourLigneEntry {
+    produit_nom: string | null;
+    quantite: number;
+    montant: number;
+}
+
+interface RetourEntry {
+    id: string;
+    created_at: string;
+    created_by: string;
+    motif: string;
+    motif_label: string;
+    commentaire: string | null;
+    quantite_totale: number;
+    montant_retourne: number;
+    retour_total: boolean;
+    lignes: RetourLigneEntry[];
+}
+
+interface MotifRetour {
+    value: string;
+    label: string;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -212,6 +282,8 @@ const props = defineProps<{
     commission_generation_statut: CommissionGenerationStatut | null;
     historiques: AuditEntry[];
     activites: ActiviteEntry[];
+    retours: RetourEntry[];
+    motifs_retour: MotifRetour[];
 }>();
 
 const toast = useToast();
@@ -389,6 +461,8 @@ const TYPES_ECART = [
 
 // ── Actions de transition ─────────────────────────────────────────────────────
 const actionProcessing = ref(false);
+const receptionDialogVisible = ref(false);
+const retourDialogVisible = ref(false);
 
 function confirmer() {
     if (actionProcessing.value) return;
@@ -502,6 +576,8 @@ function submitAnnuler() {
     });
 }
 
+const annulationExceptionnelleVisible = ref(false);
+
 const annulerDisabled = computed(
     () =>
         annulerForm.processing ||
@@ -516,41 +592,41 @@ const activeTab = ref<
 >('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
-const modesPaiement = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-];
-
+// Un seul choix "mode de paiement" côté UI, porté par PaymentCard : espèces + les moyens que les
+// supports de trésorerie actifs de l'agence de la facture peuvent recevoir (`moyens_encaissement`,
+// fourni par le backend — jamais une liste fixe, cf. docs/encaissements.md).
 const encaisserDialogVisible = ref(false);
-const encaisserForm = useForm({
-    montant: null as number | null,
-    mode_paiement: 'especes' as string | null,
-    note: '',
-    date_encaissement: new Date().toISOString().slice(0, 10),
-});
+const encaisserProcessing = ref(false);
+const encaisserErrors = ref<Record<string, string>>({});
 
 function openEncaisserDialog() {
-    encaisserForm.reset();
-    encaisserForm.montant = props.facture?.montant_restant ?? null;
-    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserErrors.value = {};
     encaisserDialogVisible.value = true;
 }
 
-function submitEncaisser() {
+function submitEncaisser(payload: EncaissementPayload) {
     if (!props.facture) return;
-    encaisserForm.post(
+    encaisserProcessing.value = true;
+    encaisserErrors.value = {};
+    router.post(
         `/backoffice/factures/${props.facture.id}/encaissements`,
+        payload,
         {
+            preserveScroll: true,
             onSuccess: () => {
                 encaisserDialogVisible.value = false;
                 toast.add({
                     severity: 'success',
                     summary: 'Encaissement enregistré',
-                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    detail: `${formatGNF(payload.montant)} enregistré avec succès.`,
                     life: 3000,
                 });
+            },
+            onError: (e) => {
+                encaisserErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaisserProcessing.value = false;
             },
         },
     );
@@ -559,6 +635,24 @@ function submitEncaisser() {
 // ── Colonnes lignes conditionnelles ───────────────────────────────────────────
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
+);
+// Colonnes "Reçue"/Écart/Motif — Grossiste + Livraison uniquement (cf. requiertReception ci-
+// dessus), même triplet que Distributions/Show.vue, affiché dès que le chargement est connu
+// (mêmes conditions que showChargeeCol : jamais avant, la réception suit toujours le chargement).
+const showRecueCol = computed(
+    () => showChargeeCol.value && requiertReception.value,
+);
+// Colonnes "Retournée"/"Livrée" — dès qu'au moins un retour de livraison a été enregistré (vente
+// standard, cf. CommandeVenteRetourService) : livrée = chargée − retournée. Jamais pour une commande
+// à réception explicite, qui n'a pas de retour (elle a la colonne "Reçue" ci-dessus).
+const showRetourCols = computed(() => props.retours.length > 0);
+const chargeeEtEcartColspan = computed(
+    () =>
+        2 +
+        (showChargeeCol.value ? 3 : 0) +
+        (showRecueCol.value ? 3 : 0) +
+        (showRetourCols.value ? 2 : 0) +
+        1,
 );
 
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
@@ -586,6 +680,20 @@ function ligneOrigineLabel(ligne: LigneCommande): string {
     return PRIX_ORIGINE_LABELS[ligneOrigine(ligne)] ?? '';
 }
 
+// Lignes transmises au dialogue de retour, avec le prix unitaire réellement facturé (même règle que
+// ligneUnitPrice) pour prévisualiser le montant retourné — le montant définitif est toujours
+// recalculé côté serveur.
+const lignesPourRetour = computed(() =>
+    props.commande.lignes.map((l) => ({
+        id: l.id,
+        produit_nom: l.produit_nom,
+        quantite_chargee: l.quantite_chargee,
+        quantite_retournee: l.quantite_retournee,
+        quantite_retournable: l.quantite_retournable,
+        prix_unitaire: ligneUnitPrice(l),
+    })),
+);
+
 // ── Ticket impression ─────────────────────────────────────────────────────────
 const page = usePage();
 const orgNom = computed(
@@ -612,35 +720,76 @@ function printTicketCommande(): void {
 }
 
 // ── Timeline de progression ────────────────────────────────────────────────────
-const STEPS = [
-    { key: 'creee', shortLabel: 'Créée', icon: FileText },
-    { key: 'a_charger', shortLabel: 'À charger', icon: Package },
-    { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
-    { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
-    { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
-    { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
-    { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
-];
+// Grossiste + Livraison (depuis le 06/09/2026, cf. docs/grossiste.md, chantier « Réception
+// Grossiste ») exige désormais une réception explicite avant LIVREE, comme distribution_client
+// (cf. Distributions/Show.vue) — une étape "Réception" s'intercale donc entre "Livraison en
+// cours" et "Facturation" pour ce cas précis, jamais pour une vente classique ni un Enlèvement
+// (mode_remise_grossiste n'est jamais 'livraison' pour ces deux derniers).
+const requiertReception = computed(
+    () => props.commande.mode_remise_grossiste === 'livraison',
+);
+
+const STEPS = computed(() => {
+    const steps = [
+        { key: 'creee', shortLabel: 'Créée', icon: FileText },
+        { key: 'a_charger', shortLabel: 'À charger', icon: Package },
+        {
+            key: 'chargement',
+            shortLabel: 'Chargement en cours',
+            icon: PackageOpen,
+        },
+        { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    ];
+    if (requiertReception.value) {
+        steps.push({
+            key: 'reception',
+            shortLabel: 'Réception à valider',
+            icon: PackageCheck,
+        });
+    }
+    steps.push(
+        { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
+        { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
+        { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
+    );
+
+    return steps;
+});
+
+// Position de "Facturation" dans STEPS — décalée d'un cran quand l'étape Réception est insérée.
+const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
+const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
 
 const currentStepIdx = computed(() => {
-    if (props.commande.is_annulee) return -1;
+    if (
+        props.commande.is_annulee ||
+        props.commande.is_retournee ||
+        props.commande.is_annulee_erreur_saisie
+    )
+        return -1;
     if (isCommandeDirecte.value) {
-        if (props.commande.is_cloturee) return 6;
-        if (props.facture?.statut === 'payee') return 5;
-        return 4;
+        if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
+        if (props.facture?.statut === 'payee')
+            return FACTURATION_STEP_IDX.value + 1;
+        return FACTURATION_STEP_IDX.value;
     }
     if (props.commande.is_livree) {
-        return props.facture?.statut === 'payee' ? 5 : 4;
+        return props.facture?.statut === 'payee'
+            ? FACTURATION_STEP_IDX.value + 1
+            : FACTURATION_STEP_IDX.value;
     }
     const map: Record<string, number> = {
         brouillon: 0,
         a_charger: 1,
         chargement_en_cours: 2,
-        livraison_en_cours: 3,
-        facturation: 4,
-        cloturee: 6,
+        // Pour Grossiste + Livraison, le chargement est déjà validé dès ce statut : l'étape
+        // actionnable courante est la Réception (4), pas "Livraison en cours" (3, déjà franchie) —
+        // même convention que Distributions/Show.vue.
+        livraison_en_cours: requiertReception.value ? 4 : 3,
+        facturation: FACTURATION_STEP_IDX.value,
+        cloturee: CLOTUREE_STEP_IDX.value,
     };
     return map[props.commande.statut] ?? 0;
 });
@@ -660,17 +809,25 @@ function connectorIsActive(idx: number): boolean {
     return idx < currentStepIdx.value;
 }
 
-// L'étape "Commissions" (idx 5) doit rester visuellement en anomalie tant que
-// la dernière tentative de génération a échoué — jamais confondue avec "en
-// cours" (bleu) ou "faite" (vert), cf. incident CMD-230826-004 où cet état
-// n'était visible nulle part.
-const COMMISSIONS_STEP_IDX = 5;
+// L'étape "Commissions" doit rester visuellement en anomalie tant que la dernière tentative de
+// génération a échoué — jamais confondue avec "en cours" (bleu) ou "faite" (vert), cf. incident
+// CMD-230826-004 où cet état n'était visible nulle part.
+// PARTIEL (chantier 2A du 05/09/2026, indépendance des cibles) : une partie des commissions de
+// l'opération a bien été générée, seule une autre cible reste à régulariser — distingué de ERREUR
+// (rien n'a été généré) par une couleur WARNING (orange) plutôt que DANGER (rouge), cf. CLAUDE.md.
+const COMMISSIONS_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 1);
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
 );
+const commissionsPartielles = computed(
+    () => props.commission_generation_statut?.value === 'partiel',
+);
+const commissionsAvecAnomalie = computed(
+    () => commissionsEnErreur.value || commissionsPartielles.value,
+);
 
 function stepLabel(idx: number, defaultLabel: string): string {
-    return idx === COMMISSIONS_STEP_IDX && commissionsEnErreur.value
+    return idx === COMMISSIONS_STEP_IDX.value && commissionsAvecAnomalie.value
         ? 'À régulariser'
         : defaultLabel;
 }
@@ -706,7 +863,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_confirmer ||
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
-                        commande.can_annuler
+                        commande.can_valider_reception ||
+                        commande.can_enregistrer_retour ||
+                        commande.can_annuler ||
+                        commande.can_annuler_exceptionnel
                     "
                     class="absolute right-4"
                 >
@@ -763,13 +923,31 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider le chargement
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider_reception"
+                                class="cursor-pointer text-teal-600 focus:text-teal-600"
+                                @click="receptionDialogVisible = true"
+                            >
+                                <PackageCheck class="h-4 w-4" />
+                                Valider la réception
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_enregistrer_retour"
+                                class="cursor-pointer text-orange-600 focus:text-orange-600"
+                                @click="retourDialogVisible = true"
+                            >
+                                <RotateCcw class="h-4 w-4" />
+                                Enregistrer un retour
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
                                     (commande.can_modifier ||
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
-                                        commande.can_valider_chargement)
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception ||
+                                        commande.can_enregistrer_retour)
                                 "
                             />
                             <DropdownMenuItem
@@ -779,6 +957,26 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             >
                                 <XCircle class="h-4 w-4" />
                                 Annuler la commande
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    commande.can_annuler_exceptionnel &&
+                                    (commande.can_modifier ||
+                                        commande.can_confirmer ||
+                                        commande.can_demarrer_chargement ||
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception ||
+                                        commande.can_enregistrer_retour ||
+                                        commande.can_annuler)
+                                "
+                            />
+                            <DropdownMenuItem
+                                v-if="commande.can_annuler_exceptionnel"
+                                class="cursor-pointer text-red-600 focus:text-red-600"
+                                @click="annulationExceptionnelleVisible = true"
+                            >
+                                <ShieldAlert class="h-4 w-4" />
+                                Annulation exceptionnelle
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -810,8 +1008,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </h1>
                         <div class="mt-1 flex items-center gap-2">
                             <StatusDot
-                                :status="commande.statut"
-                                :label="commande.statut_label"
+                                :status="commande.statut_affichage.value"
+                                :label="commande.statut_affichage.label"
                             />
                             <span class="text-sm text-muted-foreground">{{
                                 commande.created_at
@@ -876,6 +1074,29 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         Valider le chargement
                     </Button>
 
+                    <!-- Valider la réception (livraison_en_cours, Grossiste + Livraison) -->
+                    <Button
+                        v-if="commande.can_valider_reception"
+                        size="sm"
+                        class="bg-teal-600 text-white hover:bg-teal-700"
+                        @click="receptionDialogVisible = true"
+                    >
+                        <PackageCheck class="mr-2 h-4 w-4" />
+                        Valider la réception
+                    </Button>
+
+                    <!-- Retour de livraison (livraison_en_cours, avant tout encaissement) -->
+                    <Button
+                        v-if="commande.can_enregistrer_retour"
+                        variant="outline"
+                        size="sm"
+                        class="border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                        @click="retourDialogVisible = true"
+                    >
+                        <RotateCcw class="mr-2 h-4 w-4" />
+                        Retour
+                    </Button>
+
                     <!-- Annuler -->
                     <template v-if="commande.can_annuler">
                         <Button
@@ -888,6 +1109,18 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             Annuler
                         </Button>
                     </template>
+
+                    <!-- Annulation exceptionnelle (commande saisie par erreur, même encaissée) -->
+                    <Button
+                        v-if="commande.can_annuler_exceptionnel"
+                        variant="outline"
+                        size="sm"
+                        class="border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                        @click="annulationExceptionnelleVisible = true"
+                    >
+                        <ShieldAlert class="mr-2 h-4 w-4" />
+                        Annulation exceptionnelle
+                    </Button>
                 </div>
             </div>
 
@@ -904,6 +1137,31 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                 </div>
 
+                <!-- Annulée exceptionnellement : saisie par erreur, régularisations effectuées -->
+                <div
+                    v-else-if="commande.is_annulee_erreur_saisie"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
+                    <ShieldAlert class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Commande annulée exceptionnellement (erreur de saisie)
+                        : encaissements contrepassés, facture annulée, stock
+                        réintégré.</span
+                    >
+                </div>
+
+                <!-- Retournée : retour TOTAL de la marchandise avant encaissement -->
+                <div
+                    v-else-if="commande.is_retournee"
+                    class="flex items-center gap-2 text-orange-600 dark:text-orange-400"
+                >
+                    <RotateCcw class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >La marchandise de cette commande est intégralement
+                        revenue : commande retournée, facture annulée.</span
+                    >
+                </div>
+
                 <!-- Progression normale -->
                 <div v-else class="flex items-center">
                     <template v-for="(step, idx) in STEPS" :key="step.key">
@@ -915,13 +1173,20 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    idx === 5 && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'bg-red-500 text-white shadow-sm'
-                                        : stepState(idx) === 'done'
-                                          ? 'bg-emerald-500 text-white shadow-sm'
-                                          : '',
+                                        : idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsPartielles
+                                          ? 'bg-orange-500 text-white shadow-sm'
+                                          : stepState(idx) === 'done'
+                                            ? 'bg-emerald-500 text-white shadow-sm'
+                                            : '',
                                     stepState(idx) === 'current' &&
-                                    !(idx === 5 && commissionsEnErreur)
+                                    !(
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsAvecAnomalie
+                                    )
                                         ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
                                         : '',
                                     stepState(idx) === 'future'
@@ -934,13 +1199,20 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <span
                                 :class="[
                                     'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    idx === 5 && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'text-red-600 dark:text-red-400'
-                                        : stepState(idx) === 'current'
-                                          ? 'text-blue-600 dark:text-blue-400'
-                                          : '',
+                                        : idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsPartielles
+                                          ? 'text-orange-600 dark:text-orange-400'
+                                          : stepState(idx) === 'current'
+                                            ? 'text-blue-600 dark:text-blue-400'
+                                            : '',
                                     stepState(idx) === 'done' &&
-                                    !(idx === 5 && commissionsEnErreur)
+                                    !(
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsAvecAnomalie
+                                    )
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : '',
                                     stepState(idx) === 'future'
@@ -965,18 +1237,35 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 </div>
             </div>
 
-            <!-- Alerte persistante : commission "à régulariser" ──────────────── -->
-            <Alert v-if="commission_generation_statut" variant="destructive">
-                <AlertTriangle class="size-4" />
-                <AlertTitle>Commission à régulariser</AlertTitle>
+            <!-- Alerte persistante : commission "à régulariser" (rouge) ou "partielle" (orange, chantier 2A) -->
+            <Alert
+                v-if="commission_generation_statut"
+                :variant="commissionsEnErreur ? 'destructive' : 'default'"
+            >
+                <AlertTriangle
+                    :class="
+                        commissionsPartielles
+                            ? 'size-4 text-orange-500'
+                            : 'size-4'
+                    "
+                />
+                <AlertTitle>
+                    {{
+                        commissionsEnErreur
+                            ? 'Commission à régulariser'
+                            : 'Commission partiellement générée'
+                    }}
+                </AlertTitle>
                 <AlertDescription>
                     <p v-if="commission_generation_statut.motif">
                         {{ commission_generation_statut.motif }}
                     </p>
                     <p class="mt-1">
-                        Corrigez la configuration concernée puis relancez la
-                        génération — la commande reste payée mais ne peut pas se
-                        clôturer tant que ce n'est pas fait.
+                        {{
+                            commissionsEnErreur
+                                ? "Corrigez la configuration concernée puis relancez la génération — la commande reste payée mais ne peut pas se clôturer tant que ce n'est pas fait."
+                                : "Les cibles correctement configurées ont bien reçu leur commission. Corrigez la configuration de la cible restante puis relancez la génération pour compléter — la commande ne peut pas se clôturer tant que ce n'est pas fait."
+                        }}
                     </p>
                     <Button
                         type="button"
@@ -1065,8 +1354,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </h3>
                         <div class="flex items-center gap-2">
                             <StatusDot
-                                :status="commande.statut"
-                                :label="commande.statut_label"
+                                :status="commande.statut_affichage.value"
+                                :label="commande.statut_affichage.label"
                             />
                             <button
                                 v-if="facture"
@@ -1200,6 +1489,32 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </p>
                         <p class="text-sm">{{ commande.motif_annulation }}</p>
                     </div>
+
+                    <!-- Trace de l'annulation exceptionnelle -->
+                    <div
+                        v-if="commande.annulation_exceptionnelle"
+                        class="mt-4 rounded-lg border border-red-200 p-4 dark:border-red-900"
+                    >
+                        <p
+                            class="mb-1 text-xs font-medium tracking-wider text-red-600 uppercase dark:text-red-400"
+                        >
+                            Annulation exceptionnelle
+                        </p>
+                        <p class="text-sm">
+                            {{ commande.annulation_exceptionnelle.motif }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Par
+                            {{ commande.annulation_exceptionnelle.par ?? '—' }}
+                            le
+                            {{ commande.annulation_exceptionnelle.le ?? '—' }}
+                            · confirmée par code envoyé à
+                            {{
+                                commande.annulation_exceptionnelle
+                                    .code_envoye_a ?? '—'
+                            }}
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -1244,6 +1559,40 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     </th>
                                     <th
                                         v-if="showChargeeCol"
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Motif d'écart
+                                    </th>
+                                    <th
+                                        v-if="showRetourCols"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 90px"
+                                    >
+                                        Retournée
+                                    </th>
+                                    <th
+                                        v-if="showRetourCols"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Livrée
+                                    </th>
+                                    <th
+                                        v-if="showRecueCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Reçue
+                                    </th>
+                                    <th
+                                        v-if="showRecueCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 70px"
+                                    >
+                                        Écart
+                                    </th>
+                                    <th
+                                        v-if="showRecueCol"
                                         class="px-4 py-2.5 text-left font-medium text-muted-foreground"
                                     >
                                         Motif d'écart
@@ -1313,6 +1662,71 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        v-if="showRetourCols"
+                                        class="px-4 py-3 text-center tabular-nums"
+                                        :class="
+                                            ligne.quantite_retournee > 0
+                                                ? 'font-semibold text-orange-600'
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{ ligne.quantite_retournee }}
+                                    </td>
+                                    <td
+                                        v-if="showRetourCols"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            ligne.quantite_livree ??
+                                            ligne.quantite_chargee ??
+                                            '—'
+                                        }}
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
+                                        {{ ligne.quantite_livree ?? '—' }}
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                        :class="
+                                            ecartClass(ligne.ecart_livraison)
+                                        "
+                                    >
+                                        {{ ecartLabel(ligne.ecart_livraison) }}
+                                    </td>
+                                    <td
+                                        v-if="showRecueCol"
+                                        class="px-4 py-3 text-sm"
+                                    >
+                                        <span
+                                            v-if="
+                                                ligne.type_ecart_reception_label
+                                            "
+                                            class="text-foreground"
+                                            >{{
+                                                ligne.type_ecart_reception_label
+                                            }}</span
+                                        >
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                        <p
+                                            v-if="
+                                                ligne.commentaire_ecart_reception
+                                            "
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                ligne.commentaire_ecart_reception
+                                            }}
+                                        </p>
+                                    </td>
+                                    <td
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
                                         {{ formatGNF(ligneUnitPrice(ligne)) }}
@@ -1330,7 +1744,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <tfoot>
                                 <tr class="border-t bg-muted/20">
                                     <td
-                                        :colspan="showChargeeCol ? 6 : 3"
+                                        :colspan="chargeeEtEcartColspan"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
                                         {{ totalColumnLabel }}
@@ -1344,6 +1758,69 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             </tfoot>
                         </table>
                     </div>
+                </div>
+
+                <!-- Retours de livraison enregistrés sur cette commande -->
+                <div
+                    v-if="retours.length > 0"
+                    class="mt-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+                >
+                    <h3
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Retours de livraison
+                    </h3>
+                    <ol class="space-y-4">
+                        <li
+                            v-for="retour in retours"
+                            :key="retour.id"
+                            class="rounded-lg border px-4 py-3"
+                        >
+                            <div
+                                class="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                            >
+                                <div>
+                                    <strong>{{ retour.motif_label }}</strong>
+                                    <span
+                                        v-if="retour.retour_total"
+                                        class="ml-2 text-xs font-medium text-orange-600"
+                                        >Retour total</span
+                                    >
+                                    <p
+                                        v-if="retour.commentaire"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{ retour.commentaire }}
+                                    </p>
+                                </div>
+                                <span class="text-xs text-muted-foreground"
+                                    >{{ retour.created_by }} —
+                                    {{ retour.created_at }}</span
+                                >
+                            </div>
+                            <ul class="mt-2 space-y-1 text-sm">
+                                <li
+                                    v-for="(rl, i) in retour.lignes"
+                                    :key="i"
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <span
+                                        >{{ rl.produit_nom ?? '—' }} ×
+                                        {{ rl.quantite }}</span
+                                    >
+                                    <span class="tabular-nums">{{
+                                        formatGNF(rl.montant)
+                                    }}</span>
+                                </li>
+                            </ul>
+                            <p
+                                class="mt-2 border-t pt-2 text-right text-sm font-semibold tabular-nums"
+                            >
+                                {{ retour.quantite_totale }} retournée(s) —
+                                {{ formatGNF(retour.montant_retourne) }}
+                            </p>
+                        </li>
+                    </ol>
                 </div>
             </div>
 
@@ -1440,6 +1917,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             Mode
                                         </th>
                                         <th
+                                            class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell"
+                                        >
+                                            Référence
+                                        </th>
+                                        <th
                                             class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         >
                                             Montant
@@ -1468,7 +1950,15 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         <td
                                             class="px-4 py-3 text-muted-foreground"
                                         >
-                                            {{ enc.mode_paiement_label }}
+                                            {{
+                                                enc.operateur_mobile_money_label ??
+                                                enc.mode_paiement_label
+                                            }}
+                                        </td>
+                                        <td
+                                            class="hidden px-4 py-3 text-muted-foreground md:table-cell"
+                                        >
+                                            {{ enc.reference_paiement ?? '—' }}
                                         </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -1659,92 +2149,16 @@ function stepLabel(idx: number, defaultLabel: string): string {
         </div>
 
         <!-- Dialog Encaissement -->
-        <Dialog
+        <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            modal
-            header="Encaisser un paiement"
-            :style="{ width: '440px' }"
-        >
-            <div class="space-y-4">
-                <div v-if="facture" class="rounded-lg bg-primary/10 px-4 py-3">
-                    <p class="text-xs text-primary">Restant dû</p>
-                    <p class="text-xl font-bold text-primary tabular-nums">
-                        {{ formatGNF(facture.montant_restant) }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-montant" class="mb-1.5 block text-sm">
-                        Montant <span class="text-destructive">*</span>
-                    </Label>
-                    <InputNumber
-                        id="enc-montant"
-                        v-model="encaisserForm.montant"
-                        :max="facture?.montant_restant"
-                        :min="1"
-                        :use-grouping="true"
-                        locale="fr-FR"
-                        suffix=" GNF"
-                        class="w-full"
-                        fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.montant"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.montant }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="enc-mode" class="mb-1.5 block text-sm">
-                        Mode de paiement <span class="text-destructive">*</span>
-                    </Label>
-                    <Select
-                        id="enc-mode"
-                        v-model="encaisserForm.mode_paiement"
-                        :options="modesPaiement"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner"
-                        class="w-full"
-                        fluid
-                        :class="{
-                            'p-invalid': encaisserForm.errors.mode_paiement,
-                        }"
-                    />
-                    <p
-                        v-if="encaisserForm.errors.mode_paiement"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ encaisserForm.errors.mode_paiement }}
-                    </p>
-                </div>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        @click="encaisserDialogVisible = false"
-                        >Annuler</Button
-                    >
-                    <Button
-                        :disabled="
-                            encaisserForm.processing ||
-                            !encaisserForm.montant ||
-                            !encaisserForm.mode_paiement
-                        "
-                        @click="submitEncaisser"
-                    >
-                        <HandCoins class="mr-2 h-4 w-4" />
-                        {{
-                            encaisserForm.processing
-                                ? 'Enregistrement…'
-                                : 'Confirmer'
-                        }}
-                    </Button>
-                </div>
-            </template>
-        </Dialog>
+            title="Encaisser un paiement"
+            :solde="facture?.montant_restant ?? 0"
+            :moyens="commande.moyens_encaissement"
+            :especes-disponibles="commande.peut_encaisser_especes"
+            :processing="encaisserProcessing"
+            :errors="encaisserErrors"
+            @submit="submitEncaisser"
+        />
 
         <!-- Dialog Annulation -->
         <Dialog
@@ -2136,6 +2550,30 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :commande-id="commande.id"
             :lignes="commande.lignes"
             :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Réception (Grossiste + Livraison uniquement, cf. requiertReception) -->
+        <ReceptionDialog
+            v-model:visible="receptionDialogVisible"
+            :commande-id="commande.id"
+            :lignes="commande.lignes"
+            :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Retour de livraison (vente standard en livraison, avant tout encaissement) -->
+        <RetourDialog
+            v-model:visible="retourDialogVisible"
+            :commande-id="commande.id"
+            :lignes="lignesPourRetour"
+            :motifs="motifs_retour"
+            :montant-facture="facture ? facture.montant_net : null"
+        />
+
+        <!-- Dialog Annulation exceptionnelle (commande saisie par erreur) -->
+        <AnnulationExceptionnelleDialog
+            v-if="commande.can_annuler_exceptionnel"
+            v-model:visible="annulationExceptionnelleVisible"
+            :commande-id="commande.id"
         />
     </AppLayout>
 </template>

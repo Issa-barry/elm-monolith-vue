@@ -17,6 +17,7 @@ class Client extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        'personne_id',
         'nom',
         'prenom',
         'nom_complet',
@@ -69,6 +70,11 @@ class Client extends Model
         return $this->type === ClientType::REVENDEUR;
     }
 
+    public function isGrossiste(): bool
+    {
+        return $this->type === ClientType::GROSSISTE;
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
@@ -79,8 +85,29 @@ class Client extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Résolution/dédoublonnage d'identité uniquement (cf. docs/identite-client-personne.md) —
+     * Client garde ses propres colonnes (nom_complet, telephone...) comme source des
+     * affichages existants, jamais remplacées silencieusement par celles de Personne.
+     */
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
+    }
+
     public function vehicules(): HasMany
     {
         return $this->hasMany(ClientVehicle::class);
+    }
+
+    public function cashbackTransactions(): HasMany
+    {
+        return $this->hasMany(CashbackTransaction::class);
+    }
+
+    /** Tarifs Grossiste (Enlèvement/Livraison par catégorie) propres à ce client — cf. docs/grossiste.md. */
+    public function tarifsGrossiste(): HasMany
+    {
+        return $this->hasMany(CategorieTarifGrossiste::class);
     }
 }

@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Http\Controllers\UserController;
 use App\Models\User;
 use App\Services\MatriculeService;
+use App\Support\User\UserFormOptions;
 use Illuminate\Console\Command;
 
 class BackfillMatricules extends Command
@@ -17,7 +17,7 @@ class BackfillMatricules extends Command
     {
         $users = User::whereNull('matricule')
             ->whereNotNull('organization_id')
-            ->whereHas('roles', fn ($q) => $q->whereIn('name', UserController::STAFF_ROLES))
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', UserFormOptions::STAFF_ROLES))
             ->orderBy('created_at')
             ->get();
 

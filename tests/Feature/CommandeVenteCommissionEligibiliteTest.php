@@ -24,6 +24,7 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -50,7 +51,10 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->initOrgAndUser([
+            'ventes.read', 'ventes.create', 'ventes.update',
+            'ventes.demarrer_chargement', 'ventes.valider_chargement',
+        ]);
 
         // Ce fichier teste l'ÉLIGIBILITÉ (livraison_vente) à la commission générée au moment du
         // chargement, indépendamment du déclencheur par défaut de l'organisation (devenu
@@ -146,6 +150,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $chauffeur->id,
             'part_pourcentage' => 0,
             'montant_unitaire' => $montantChauffeur,
@@ -154,6 +159,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $convoyeur->id,
             'part_pourcentage' => 0,
             'montant_unitaire' => $montantConvoyeur,

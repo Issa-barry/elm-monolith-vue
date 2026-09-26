@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
@@ -37,9 +38,13 @@ use Tests\TestCase;
  * Cible directe "consultant" (CommissionCibleType::CODE_CONSULTANT) — bénéficiaire =
  * App\Models\Prestataire désigné par l'organisation via CommissionConsultantAffectation, JAMAIS
  * un prestataire codé en dur. Contrairement à Propriétaire/Site, cette cible ne dépend d'aucune
- * donnée de la commande : elle est toujours candidate (cf. CommissionEnveloppeGenerator), et un
- * barème configuré sans désignation active bloque toute la génération (décision AMOA #4 —
- * explicite et traçable, jamais silencieux).
+ * donnée de la commande : elle est toujours candidate (cf. CommissionEnveloppeGenerator).
+ *
+ * Un barème configuré sans désignation active est une anomalie explicite et traçable, jamais
+ * silencieuse — mais depuis le chantier 2A (05/09/2026, indépendance des cibles, révise l'ancienne
+ * décision AMOA #4 "tout-ou-rien") elle ne bloque plus les autres cibles correctement résolues de
+ * la même opération : le Consultant reste seul "à régulariser" (statut PARTIEL), le Propriétaire
+ * ou l'Équipe de livraison par ailleurs bien configurés reçoivent quand même leur commission.
  */
 class CommissionEnveloppeGeneratorConsultantTest extends TestCase
 {
@@ -286,7 +291,7 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
     }
 
     /** @test */
-    public function un_bareme_configure_sans_consultant_designe_bloque_toute_la_generation(): void
+    public function un_bareme_configure_sans_consultant_designe_najamais_les_autres_cibles_correctement_resolues(): void
     {
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         $this->creerRegle(CommissionCibleType::CODE_CONSULTANT, 200, CommissionScopeType::CATEGORIE, $categorie->id);
@@ -299,12 +304,20 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
 
         CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
 
-        // Tout-ou-rien (décision AMOA #4, comme "véhicule sans propriétaire") : même le
-        // propriétaire, pourtant correctement configuré, ne doit recevoir aucune enveloppe.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026 — révise l'ancienne décision AMOA #4
+        // "tout-ou-rien") : le propriétaire, correctement configuré, reçoit malgré tout son
+        // enveloppe ; seul le consultant orphelin est absent et marqué à régulariser.
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+        ]);
         $this->assertDatabaseHas('commission_generation_attempts', [
             'source_id' => $commande->id,
-            'statut' => 'erreur',
+            'statut' => CommissionGenerationStatut::PARTIEL->value,
         ]);
     }
 

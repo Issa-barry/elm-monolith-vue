@@ -38,6 +38,7 @@ const props = defineProps<{
     periodes_disponibles: PeriodeOption[];
     filters: CommissionGlobalFiltersValue;
     can_payer: boolean;
+    filtre_processus: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -56,7 +57,10 @@ function reload(next: string) {
     filters.value = { ...filters.value, periode: next };
     router.get(
         `/backoffice/comptabilite/commissions/consultants/${props.consultant.id}`,
-        { periode: next || undefined },
+        {
+            periode: next || undefined,
+            processus: props.filtre_processus || undefined,
+        },
         { preserveScroll: true, preserveState: true, replace: true },
     );
 }
@@ -66,6 +70,13 @@ const activePeriodeLabel = () =>
         ?.label ?? '';
 
 const activeTab = ref<CommissionDetailTab>('informations');
+
+const PROCESSUS_LABELS: Record<string, string> = {
+    vente: 'Consultant',
+    distribution_client: 'Consultant — distribution client',
+    logistique_transfert: 'Consultant — transfert logistique',
+};
+const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Consultant';
 </script>
 
 <template>
@@ -73,8 +84,8 @@ const activeTab = ref<CommissionDetailTab>('informations');
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="'/backoffice/comptabilite/commissions/consultants'"
-                eyebrow="Consultant"
+                :back-href="`/backoffice/comptabilite/commissions/consultants?processus=${filtre_processus}`"
+                :eyebrow="eyebrowLabel"
                 :title="consultant.nom"
                 :telephone="consultant.telephone"
                 :active-filters-label="activePeriodeLabel()"

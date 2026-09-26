@@ -28,6 +28,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
@@ -47,7 +48,7 @@ use Tests\TestCase;
  *
  * Les exports reprennent les mêmes bénéficiaires et les mêmes statuts que
  * l'écran Commission vente. Une part CREEE doit donc être exportée comme
- * « Partage à valider », au même titre que les parts validées ou payées.
+ * « À valider », au même titre que les parts validées ou payées.
  */
 class CommissionExportVenteTest extends TestCase
 {
@@ -107,6 +108,7 @@ class CommissionExportVenteTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
             'part_pourcentage' => 0,
@@ -264,7 +266,7 @@ class CommissionExportVenteTest extends TestCase
 
         $this->assertStringContainsString($livreur->nom_complet, $content);
         $this->assertStringContainsString('10 000', $content);
-        $this->assertStringContainsString('Partage à valider', $content);
+        $this->assertStringContainsString('À valider', $content);
     }
 
     /** @test */
@@ -332,9 +334,9 @@ class CommissionExportVenteTest extends TestCase
                 $row = $rows->firstWhere('beneficiaire_id', $livreur->id);
 
                 $this->assertNotNull($row);
-                $this->assertSame('Partage à valider', $row['statut']);
+                $this->assertSame('À valider', $row['statut']);
                 $this->assertSame(10000.0, $row['total_genere']);
-                $this->assertSame(0.0, $row['total_cumule']);
+                $this->assertSame(10000.0, $row['total_cumule']);
                 $this->assertTrue($data['show_validation_columns']);
 
                 $html = view('pdf.commissions.index', $data)->render();
@@ -385,7 +387,7 @@ class CommissionExportVenteTest extends TestCase
             $this->assertStringContainsString($colonne, $content);
         }
         $this->assertStringContainsString('5 000', $content);
-        $this->assertStringContainsString('Partage à valider', $content);
+        $this->assertStringContainsString('À valider', $content);
     }
 
     /** @test */
@@ -439,7 +441,7 @@ class CommissionExportVenteTest extends TestCase
             ->streamedContent();
 
         $this->assertStringContainsString($proprietaire->nom_complet, $creees);
-        $this->assertStringContainsString('Partage à valider', $creees);
+        $this->assertStringContainsString('À valider', $creees);
 
         $autreAgence = $this->actingAs($this->user)
             ->get(route('comptabilite.commissions.proprietaires.excel', [

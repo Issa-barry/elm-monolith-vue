@@ -8,6 +8,7 @@ use App\Models\Produit;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
@@ -76,6 +77,21 @@ class TransfertLogistiqueStoreTest extends TestCase
         return $this->makeProduitAvecVariante($org);
     }
 
+    /**
+     * Depuis le correctif du 04/09/2026 (contrôle de disponibilité déplacé à la création, cf.
+     * TransfertLogistiqueController::assertStockDisponiblePourLignes()), tout POST /backoffice/
+     * logistique avec un produit gere_stock=true (cas par défaut de makeProduit()) doit disposer
+     * d'un stock suffisant sur le site SOURCE, sinon la création est désormais refusée au lieu
+     * d'être seulement bloquée plus tard au chargement.
+     */
+    private function seedStock(Produit $produit, Site $site, int $qte = 100): VarianteStock
+    {
+        return VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $produit->variantePrincipale()->first()->id, 'site_id' => $site->id],
+            ['organization_id' => $produit->organization_id, 'qte_stock' => $qte],
+        );
+    }
+
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     public function test_store_cree_transfert_et_redirige_vers_edit(): void
@@ -86,6 +102,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $vehicule = $this->makeVehicule($org);
         $produit = $this->makeProduit($org);
         $user = $this->makeUser($org, $siteA);
+        $this->seedStock($produit, $siteA, 10);
 
         $response = $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteA->id,
@@ -126,6 +143,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $produit = $this->makeProduit($org);
         // Admin affecté à siteA mais crée le transfert depuis siteC
         $user = $this->makeUser($org, $siteA);
+        $this->seedStock($produit, $siteC, 5);
 
         $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteC->id,
@@ -160,6 +178,8 @@ class TransfertLogistiqueStoreTest extends TestCase
         $user->assignRole('manager');
         $user->givePermissionTo(['logistique.create', 'logistique.read']);
         $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
+        // Site source forcé à siteA (site par défaut) quel que soit le site soumis dans la requête.
+        $this->seedStock($produit, $siteA, 5);
 
         $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteC->id, // tentative de forcer un autre site

@@ -12,6 +12,20 @@ enum StatutCommandeVente: string
     case FACTURATION = 'facturation';
     case CLOTUREE = 'cloturee';
     case ANNULEE = 'annulee';
+    /**
+     * Retour TOTAL de la marchandise par le livreur, avant tout encaissement (cf.
+     * CommandeVenteRetourService) : tout ce qui avait été chargé est revenu, la facture est annulée
+     * et le stock réintégré. Distinct d'ANNULEE, qui ne survient jamais après le départ du véhicule.
+     */
+    case RETOURNEE = 'retournee';
+    /**
+     * Annulation exceptionnelle d'une commande saisie par erreur (ex : formation faite en
+     * production), possible après le chargement, la facturation et l'encaissement — cf.
+     * AnnulationExceptionnelleService et docs/adr/0004. Distinct d'ANNULEE (annulation normale,
+     * jamais après le départ du véhicule ni après un encaissement) : les régularisations
+     * (encaissements contrepassés, stock réintégré, cashback retiré) n'existent que sur ce chemin.
+     */
+    case ANNULEE_ERREUR_SAISIE = 'annulee_erreur_saisie';
 
     public function label(): string
     {
@@ -24,6 +38,8 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'À encaisser',
             self::CLOTUREE => 'Clôturée',
             self::ANNULEE => 'Annulée',
+            self::RETOURNEE => 'Retournée',
+            self::ANNULEE_ERREUR_SAISIE => 'Annulée (erreur de saisie)',
         };
     }
 
@@ -38,6 +54,8 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'primary',
             self::CLOTUREE => 'success',
             self::ANNULEE => 'danger',
+            self::RETOURNEE => 'warn',
+            self::ANNULEE_ERREUR_SAISIE => 'danger',
         };
     }
 
@@ -52,6 +70,8 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'bg-violet-500',
             self::CLOTUREE => 'bg-emerald-500',
             self::ANNULEE => 'bg-red-400',
+            self::RETOURNEE => 'bg-orange-500',
+            self::ANNULEE_ERREUR_SAISIE => 'bg-red-500',
         };
     }
 
@@ -64,7 +84,7 @@ enum StatutCommandeVente: string
     /** Statuts terminaux — aucune transition possible */
     public function isTerminal(): bool
     {
-        return in_array($this, [self::CLOTUREE, self::ANNULEE]);
+        return in_array($this, [self::CLOTUREE, self::ANNULEE, self::RETOURNEE, self::ANNULEE_ERREUR_SAISIE]);
     }
 
     /** Annulable depuis BROUILLON, A_CHARGER ou FACTURATION (commande directe non encaissée) */

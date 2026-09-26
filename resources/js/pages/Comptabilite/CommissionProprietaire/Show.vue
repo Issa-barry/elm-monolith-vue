@@ -45,6 +45,7 @@ const props = defineProps<{
     filters: CommissionGlobalFiltersValue;
     can_payer: boolean;
     payable: boolean;
+    filtre_processus: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -74,6 +75,7 @@ function reload(next: CommissionGlobalFiltersValue) {
             periode: next.periode || undefined,
             vehicule_id: next.vehicule_ids,
             site_ids: next.site_ids,
+            processus: props.filtre_processus || undefined,
         },
         { preserveScroll: true, preserveState: true, replace: true },
     );
@@ -81,6 +83,13 @@ function reload(next: CommissionGlobalFiltersValue) {
 
 const activeTab = ref<CommissionDetailTab>('informations');
 const showPaiementDialog = ref(false);
+
+const PROCESSUS_LABELS: Record<string, string> = {
+    vente: 'Propriétaire',
+    distribution_client: 'Propriétaire — distribution client',
+    logistique_transfert: 'Propriétaire — transfert logistique',
+};
+const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Propriétaire';
 </script>
 
 <template>
@@ -88,8 +97,8 @@ const showPaiementDialog = ref(false);
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="'/backoffice/comptabilite/commissions/proprietaires'"
-                eyebrow="Propriétaire"
+                :back-href="`/backoffice/comptabilite/commissions/proprietaires?processus=${filtre_processus}`"
+                :eyebrow="eyebrowLabel"
                 :title="proprietaire.nom"
                 :telephone="proprietaire.telephone"
                 :active-filters-label="activeFiltersLabel"

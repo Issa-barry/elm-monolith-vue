@@ -23,6 +23,7 @@ import {
     Contact,
     Layers,
     LayoutGrid,
+    MessageSquare,
     Package,
     PackageCheck,
     Receipt,
@@ -47,6 +48,9 @@ const moduleFlags = computed(
 const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
 const transfertsAReceptionner = computed(
     () => ((page.props as any).transferts_a_receptionner as number) ?? 0,
+);
+const mouvementsFondsAConfirmer = computed(
+    () => ((page.props as any).mouvements_fonds_a_confirmer as number) ?? 0,
 );
 
 /** Guard combiné permission + module actif */
@@ -83,13 +87,13 @@ const propositionsATraiter = computed(
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
-    if (can('proprietaires.read'))
-        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('vehicules.read'))
         sub.push({
             title: 'Liste de véhicules',
             href: '/backoffice/vehicules',
         });
+    if (can('proprietaires.read'))
+        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('equipes-livraison.read'))
         sub.push({
             title: 'Équipes de livraison',
@@ -120,20 +124,18 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
+            {
+                title: 'Distribution',
+                href: '/backoffice/distributions',
+            },
         ];
-        if (moduleActive('pdv')) {
+        if (canSee('pdv.read', 'pdv')) {
             ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
         }
         ventesSubItems.push({
             title: 'Factures',
             href: '/backoffice/factures',
         });
-        if (moduleActive('cashback')) {
-            ventesSubItems.push({
-                title: 'Cashback',
-                href: '/backoffice/cashback',
-            });
-        }
         items.push({
             title: 'Ventes',
             href: '/backoffice/ventes',
@@ -269,6 +271,32 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('comptabilite.read', 'comptabilite')) {
+        const commissionsSousItems: NavItem[] = [
+            {
+                title: 'Livreurs',
+                href: '/backoffice/comptabilite/commissions/vente',
+            },
+            {
+                title: 'Propriétaires',
+                href: '/backoffice/comptabilite/commissions/proprietaires',
+            },
+            {
+                title: 'Sites',
+                href: '/backoffice/comptabilite/commissions/sites',
+            },
+            {
+                title: 'Consultants',
+                href: '/backoffice/comptabilite/commissions/consultants',
+            },
+        ];
+
+        if (moduleActive('cashback')) {
+            commissionsSousItems.push({
+                title: 'Cashback clients',
+                href: '/backoffice/comptabilite/commissions/cashback',
+            });
+        }
+
         items.push({
             title: 'Comptabilité',
             href: '/backoffice/comptabilite/tresorerie/financement',
@@ -278,17 +306,28 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Trésorerie',
                     href: '/backoffice/comptabilite/tresorerie/financement',
+                    // Libellés courts : le parent porte déjà « Trésorerie » et les
+                    // libellés longs sont tronqués au 3e niveau de la sidebar. Les
+                    // titres de page gardent leur libellé complet.
                     items: [
                         {
-                            title: 'Financement des agences',
+                            title: 'Situation',
+                            href: '/backoffice/comptabilite/tresorerie/situation',
+                        },
+                        {
+                            title: 'Financement',
                             href: '/backoffice/comptabilite/tresorerie/financement',
                         },
                         {
-                            title: 'Mouvements de fonds',
+                            title: 'Mouvements',
                             href: '/backoffice/comptabilite/tresorerie/mouvements',
+                            badge:
+                                mouvementsFondsAConfirmer.value > 0
+                                    ? mouvementsFondsAConfirmer.value
+                                    : undefined,
                         },
                         {
-                            title: 'Supports de trésorerie',
+                            title: 'Supports',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
                     ],
@@ -296,28 +335,7 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Commissions',
                     href: '/backoffice/comptabilite/commissions/vente',
-                    items: [
-                        {
-                            title: 'Ventes',
-                            href: '/backoffice/comptabilite/commissions/vente',
-                        },
-                        {
-                            title: 'Logistique',
-                            href: '/backoffice/comptabilite/commissions/logistique',
-                        },
-                        {
-                            title: 'Propriétaires',
-                            href: '/backoffice/comptabilite/commissions/proprietaires',
-                        },
-                        {
-                            title: 'Sites',
-                            href: '/backoffice/comptabilite/commissions/sites',
-                        },
-                        {
-                            title: 'Consultants',
-                            href: '/backoffice/comptabilite/commissions/consultants',
-                        },
-                    ],
+                    items: commissionsSousItems,
                 },
                 {
                     title: 'Périodes',
@@ -358,6 +376,14 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Comptes',
             href: '/backoffice/comptes',
             icon: UsersRound,
+            group: 'Organisation',
+        });
+
+    if (can('communications.read'))
+        items.push({
+            title: 'Communications',
+            href: '/backoffice/communications',
+            icon: MessageSquare,
             group: 'Organisation',
         });
 

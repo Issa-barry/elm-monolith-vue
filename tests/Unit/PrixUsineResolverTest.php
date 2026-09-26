@@ -11,7 +11,7 @@ use Tests\TestCase;
 /**
  * Couvre la résolution centralisée du prix usine applicable (tricycle vs autres véhicules) —
  * cf. analyse du modèle de tarification tricycle/autres véhicules. Doit rester le SEUL point de
- * vérité consommé par CommandeVenteController et PdvCheckoutService. Purement unitaire (pas de
+ * vérité consommé par CommandeVenteFormBuilder et PdvCheckoutService. Purement unitaire (pas de
  * DB) : PrixUsineResolver ne dépend que des attributs de la variante passée en mémoire.
  */
 class PrixUsineResolverTest extends TestCase

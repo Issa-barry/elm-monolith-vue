@@ -73,4 +73,56 @@ class OtpChannelResolverTest extends TestCase
         $this->assertSame('+224620000505', $this->resolver()->destinationFor(OtpChannel::SMS, '+224620000505', null));
         $this->assertSame('+224620000505', $this->resolver()->destinationFor(OtpChannel::WHATSAPP, '+224620000505', null));
     }
+
+    // ── fallbackFor() — audit du 31/08/2026, intégration Nimba SMS point 2 ──
+
+    private function configureNimba(): void
+    {
+        config([
+            'services.nimba_sms.service_id' => 'test-service-id',
+            'services.nimba_sms.secret_token' => 'test-secret-token',
+            'services.nimba_sms.sender_name' => 'EAULAMAMAN',
+        ]);
+    }
+
+    public function test_fallback_for_sms_is_email_when_the_account_has_one(): void
+    {
+        $this->configureNimba();
+
+        $fallback = $this->resolver()->fallbackFor(OtpChannel::SMS, OtpPurpose::LOGIN, '+224620000510', 'client@example.com');
+
+        $this->assertNotNull($fallback);
+        $this->assertSame(OtpChannel::EMAIL, $fallback->channel);
+        $this->assertSame('client@example.com', $fallback->destination);
+    }
+
+    public function test_fallback_for_sms_is_null_when_the_account_has_no_email(): void
+    {
+        $this->configureNimba();
+
+        $fallback = $this->resolver()->fallbackFor(OtpChannel::SMS, OtpPurpose::LOGIN, '+224620000511', null);
+
+        $this->assertNull($fallback);
+    }
+
+    /**
+     * whatsapp précède sms dans purpose_channels(LOGIN) mais n'est jamais
+     * configuré : fallbackFor() ne doit regarder QU'APRÈS le canal choisi,
+     * jamais reconsidérer un canal qui précédait sms dans la liste.
+     */
+    public function test_fallback_for_sms_never_reconsiders_a_channel_before_it_in_the_list(): void
+    {
+        $this->configureNimba();
+
+        $fallback = $this->resolver()->fallbackFor(OtpChannel::SMS, OtpPurpose::LOGIN, '+224620000512', 'client@example.com');
+
+        $this->assertSame(OtpChannel::EMAIL, $fallback->channel);
+    }
+
+    public function test_fallback_for_email_is_null_when_email_is_last_in_the_list(): void
+    {
+        $fallback = $this->resolver()->fallbackFor(OtpChannel::EMAIL, OtpPurpose::LOGIN, '+224620000513', 'client@example.com');
+
+        $this->assertNull($fallback);
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Enums\OperateurMobileMoney;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -23,6 +24,9 @@ class EncaissementVente extends Model
         'montant',
         'date_encaissement',
         'mode_paiement',
+        'operateur_mobile_money',
+        'compte_tresorerie_id',
+        'reference_paiement',
         'note',
         'created_by',
     ];
@@ -33,6 +37,7 @@ class EncaissementVente extends Model
             'montant' => 'decimal:2',
             'date_encaissement' => 'date:Y-m-d',
             'mode_paiement' => ModePaiement::class,
+            'operateur_mobile_money' => OperateurMobileMoney::class,
         ];
     }
 
@@ -53,8 +58,8 @@ class EncaissementVente extends Model
 
             // Comptabilité générale : un encaissement fait entrer de la trésorerie
             // réelle — bloquant depuis la revue Codex du 2026-08-22 (même raison que
-            // PaiementFichePaiement/PaiePaiement/Depense). EncaissementVenteController::
-            // store() englobe déjà cette création dans une transaction couvrant aussi
+            // PaiementFichePaiement/PaiePaiement/Depense). Ventes\StoreEncaissementVenteController
+            // englobe déjà cette création dans une transaction couvrant aussi
             // la transition de statut de la facture et le déclenchement cashback — un
             // échec ici annule l'ensemble, cohérent avec le commentaire déjà présent
             // sur cette transaction ("doivent réussir ou échouer ensemble").
@@ -70,7 +75,7 @@ class EncaissementVente extends Model
 
             // Jamais de suppression destructive d'écriture validée (règle #29) : on
             // contrepasse la pièce d'encaissement si elle existe, on ne la supprime
-            // jamais. EncaissementVenteController::destroy() englobe déjà cette
+            // jamais. Ventes\DestroyEncaissementVenteController englobe déjà cette
             // suppression dans une transaction.
             if ($facture) {
                 $ecritures = app(EcritureComptableService::class);
@@ -92,5 +97,11 @@ class EncaissementVente extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Support choisi à l'encaissement (Mobile Money, virement, chèque) — null pour les espèces et l'historique. */
+    public function compteTresorerie(): BelongsTo
+    {
+        return $this->belongsTo(CompteTresorerie::class, 'compte_tresorerie_id');
     }
 }

@@ -13,7 +13,7 @@ use Tests\TestCase;
 /**
  * routes/web.php enveloppait la quasi-totalité de /backoffice/* avec
  * `role:super_admin|admin_entreprise|manager|commerciale|comptable` — un rôle personnalisé
- * d'organisation (créé via RoleController) n'accédait donc à AUCUNE page du back-office, quelles
+ * d'organisation (créé via les contrôleurs Role\*) n'accédait donc à AUCUNE page du back-office, quelles
  * que soient ses permissions. Remplacé par le middleware EnsureIsStaffAccount, aujourd'hui basé
  * sur User::hasBackofficeAccess() (règle positive : au moins un rôle non-externe, cf. décision du
  * 26/08/2026 sur le cumul de rôles staff + client/proprietaire/livreur).
@@ -22,7 +22,7 @@ class EnsureIsStaffAccountTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. RoleController. */
+    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. les contrôleurs Role\*. */
     protected function setUp(): void
     {
         parent::setUp();

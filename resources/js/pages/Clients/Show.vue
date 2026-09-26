@@ -2,6 +2,8 @@
 import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
@@ -13,9 +15,13 @@ import {
     Gift,
     Lock,
     Pencil,
+    Plus,
+    Tag,
+    Trash2,
     TrendingUp,
     UserRound,
 } from 'lucide-vue-next';
+import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -45,16 +51,37 @@ interface CashbackSolde {
     total_cashback_verse: number;
 }
 
+interface CategorieOption {
+    id: string;
+    nom: string;
+    produits_count: number;
+}
+
+interface TarifGrossiste {
+    categorie_id: string;
+    mode: string;
+    prix: number;
+}
+
 const props = defineProps<{
     client: ClientData;
     cashback_solde: CashbackSolde | null;
     seuil_global_impayes: number;
+    tarifs_grossiste: {
+        categories: CategorieOption[];
+        tarifs: TarifGrossiste[];
+    };
+    mode_remise_grossiste_options: { value: string; label: string }[];
 }>();
 
 const { can } = usePermissions();
 const toast = useToast();
-const activeTab = ref<'informations' | 'cashback'>('informations');
+useFlashToast();
+const activeTab = ref<'informations' | 'cashback' | 'tarification'>(
+    'informations',
+);
 const isRevendeur = computed(() => props.client.type === 'revendeur');
+const isGrossiste = computed(() => props.client.type === 'grossiste');
 const isEditingCashback = ref(false);
 
 const cashbackForm = useForm({
@@ -119,6 +146,155 @@ function saveCashback(): void {
             });
         },
     });
+}
+
+// ── Tarification Grossiste — propre à CE client, jamais une grille organisation (cf.
+// docs/grossiste.md). Une ligne par (catégorie × mode), pré-remplie avec le tarif existant ou 0.
+// Une ligne par catégorie CONFIGURÉE (jamais toutes les catégories du catalogue — cf. demande du
+// 05/09/2026, même pattern que CapacitesEditor.vue : "Ajouter une ligne" + choix explicite de la
+// catégorie, plutôt qu'une grille pré-remplissant chaque catégorie existante, y compris celles
+// sans rapport avec ce Grossiste).
+interface TarifLigne {
+    categorie_id: string | null;
+    enlevement: number | null;
+    livraison: number | null;
+}
+
+function buildLignesDepuisTarifs(): TarifLigne[] {
+    const lignes = new Map<string, TarifLigne>();
+    for (const t of props.tarifs_grossiste.tarifs) {
+        if (!lignes.has(t.categorie_id)) {
+            lignes.set(t.categorie_id, {
+                categorie_id: t.categorie_id,
+                enlevement: null,
+                livraison: null,
+            });
+        }
+        const ligne = lignes.get(t.categorie_id)!;
+        if (t.mode === 'enlevement') ligne.enlevement = t.prix;
+        else if (t.mode === 'livraison') ligne.livraison = t.prix;
+    }
+
+    return Array.from(lignes.values());
+}
+
+const isEditingTarifs = ref(false);
+const tarifsForm = useForm({ lignes: buildLignesDepuisTarifs() });
+
+// Cast déporté ici (plutôt qu'inline dans le template) : `Record<string, string>` dans un
+// mustache `{{ }}` fait planter le parseur Vue de Prettier (générique confondu avec une balise),
+// cf. https://github.com/prettier/prettier/issues (parse error sur `as Record<...>` en template).
+const tarifsErreur = computed(
+    () => (tarifsForm.errors as Record<string, string>).tarifs,
+);
+
+// Lignes affichées en lecture seule — celles déjà éditées si l'utilisateur est en cours
+// d'édition, sinon reconstruites depuis les tarifs enregistrés.
+const lignesAffichees = computed(() =>
+    isEditingTarifs.value ? tarifsForm.lignes : buildLignesDepuisTarifs(),
+);
+
+function categorieNom(categorieId: string | null): string {
+    return (
+        props.tarifs_grossiste.categories.find((c) => c.id === categorieId)
+            ?.nom ?? '—'
+    );
+}
+
+// Libellé spécifique à CE tableau de prix — volontairement distinct du libellé générique de
+// App\Enums\ModeRemiseGrossiste (« Enlèvement »/« Livraison », qui décrit le MODE d'une commande,
+// pas un prix). Le mot « usine » est banni ici (cf. docs/grossiste.md : le retrait peut avoir
+// lieu à l'usine, au dépôt ou ailleurs — jamais uniquement en sortie d'usine).
+const PRIX_MODE_LABELS: Record<string, string> = {
+    enlevement: 'Prix enlèvement',
+    livraison: 'Prix livraison',
+};
+
+function prixModeLabel(mode: string): string {
+    return PRIX_MODE_LABELS[mode] ?? mode;
+}
+
+// Catégories déjà utilisées par une AUTRE ligne — jamais reproposées (même garde-fou que
+// CapacitesEditor.vue), la contrainte unique client+catégorie+mode côté backend reste le filet
+// de sécurité final.
+function categoriesDisponibles(excludeIndex: number): CategorieOption[] {
+    const utilisees = tarifsForm.lignes
+        .filter((_, i) => i !== excludeIndex)
+        .map((l) => l.categorie_id)
+        .filter((id): id is string => id !== null);
+
+    return props.tarifs_grossiste.categories.filter(
+        (c) => !utilisees.includes(c.id),
+    );
+}
+
+const categoriesRestantes = computed(() => categoriesDisponibles(-1));
+
+function addLigne(): void {
+    tarifsForm.lignes.push({
+        categorie_id: null,
+        enlevement: null,
+        livraison: null,
+    });
+}
+
+function removeLigne(index: number): void {
+    tarifsForm.lignes.splice(index, 1);
+}
+
+function startTarifsEdit(): void {
+    tarifsForm.clearErrors();
+    tarifsForm.lignes = buildLignesDepuisTarifs();
+    isEditingTarifs.value = true;
+}
+
+function cancelTarifsEdit(): void {
+    tarifsForm.clearErrors();
+    isEditingTarifs.value = false;
+}
+
+function saveTarifs(): void {
+    tarifsForm
+        .transform((data) => ({
+            tarifs: data.lignes.flatMap((l) => {
+                if (!l.categorie_id) return [];
+
+                const t: {
+                    categorie_id: string;
+                    mode: string;
+                    prix: number;
+                }[] = [];
+                if (l.enlevement !== null && l.enlevement > 0) {
+                    t.push({
+                        categorie_id: l.categorie_id,
+                        mode: 'enlevement',
+                        prix: l.enlevement,
+                    });
+                }
+                if (l.livraison !== null && l.livraison > 0) {
+                    t.push({
+                        categorie_id: l.categorie_id,
+                        mode: 'livraison',
+                        prix: l.livraison,
+                    });
+                }
+
+                return t;
+            }),
+        }))
+        .put('/backoffice/clients/' + props.client.id + '/tarifs-grossiste', {
+            preserveScroll: true,
+            onSuccess: () => {
+                isEditingTarifs.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Tarification Grossiste',
+                    detail: 'Les tarifs de ce client ont été enregistrés.',
+                    life: 4000,
+                    group: 'top',
+                });
+            },
+        });
 }
 </script>
 
@@ -205,6 +381,24 @@ function saveCashback(): void {
                         <span class="inline-flex items-center gap-2">
                             <Gift class="h-4 w-4" />
                             Cashback
+                        </span>
+                    </button>
+
+                    <button
+                        v-if="isGrossiste"
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:mt-2"
+                        :class="
+                            activeTab === 'tarification'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        data-testid="client-tarification-tab"
+                        @click="activeTab = 'tarification'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Tag class="h-4 w-4" />
+                            Tarification
                         </span>
                     </button>
                 </aside>
@@ -314,7 +508,7 @@ function saveCashback(): void {
                 </div>
 
                 <div
-                    v-else
+                    v-else-if="activeTab === 'cashback'"
                     class="space-y-6"
                     data-testid="client-cashback-panel"
                 >
@@ -417,7 +611,7 @@ function saveCashback(): void {
                                 </span>
                             </p>
                             <Link
-                                href="/backoffice/cashback"
+                                href="/backoffice/comptabilite/commissions/cashback"
                                 class="shrink-0 font-medium underline underline-offset-4 hover:no-underline"
                             >
                                 Gérer le cashback
@@ -674,6 +868,317 @@ function saveCashback(): void {
                             gains.
                         </p>
                     </form>
+                </div>
+
+                <div
+                    v-else-if="activeTab === 'tarification' && isGrossiste"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                    data-testid="client-tarification-panel"
+                >
+                    <div
+                        class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                        <div>
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Tarification Grossiste
+                            </h2>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                Prix appliqué à CE client, par catégorie de
+                                produit et par mode de remise — propre à ce
+                                Grossiste, jamais partagé avec un autre.
+                            </p>
+                        </div>
+
+                        <div
+                            v-if="can('clients.update')"
+                            class="flex shrink-0 items-center gap-2"
+                        >
+                            <Button
+                                v-if="!isEditingTarifs"
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                data-testid="tarifs-edit-button"
+                                @click="startTarifsEdit"
+                            >
+                                <Pencil class="mr-1.5 h-4 w-4" />
+                                Modifier
+                            </Button>
+                            <template v-else>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    :disabled="tarifsForm.processing"
+                                    data-testid="tarifs-cancel-button"
+                                    @click="cancelTarifsEdit"
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    :disabled="tarifsForm.processing"
+                                    data-testid="tarifs-save-button"
+                                    @click="saveTarifs"
+                                >
+                                    {{
+                                        tarifsForm.processing
+                                            ? 'Enregistrement…'
+                                            : 'Enregistrer'
+                                    }}
+                                </Button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <p
+                        v-if="tarifsErreur"
+                        class="mt-3 text-xs text-destructive"
+                    >
+                        {{ tarifsErreur }}
+                    </p>
+
+                    <div
+                        v-if="tarifs_grossiste.categories.length === 0"
+                        class="mt-5 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+                    >
+                        Aucune catégorie de produit n'existe encore. Créez-en
+                        une dans Produits &gt; Catégories avant de configurer un
+                        tarif Grossiste.
+                    </div>
+
+                    <!-- Lecture seule : une ligne par catégorie déjà configurée, jamais toutes
+                    les catégories du catalogue. -->
+                    <template v-else-if="!isEditingTarifs">
+                        <div
+                            v-if="lignesAffichees.length === 0"
+                            class="mt-5 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+                        >
+                            Aucun tarif configuré pour ce client.
+                        </div>
+                        <template v-else>
+                            <!-- Desktop / tablette : tableau -->
+                            <div
+                                class="mt-5 hidden overflow-x-auto rounded-lg border sm:block"
+                            >
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="border-b bg-muted/40">
+                                            <th
+                                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Catégorie
+                                            </th>
+                                            <th
+                                                v-for="m in mode_remise_grossiste_options"
+                                                :key="m.value"
+                                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                {{ prixModeLabel(m.value) }}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr
+                                            v-for="(
+                                                ligne, index
+                                            ) in lignesAffichees"
+                                            :key="ligne.categorie_id ?? index"
+                                        >
+                                            <td class="px-4 py-3 font-medium">
+                                                {{
+                                                    categorieNom(
+                                                        ligne.categorie_id,
+                                                    )
+                                                }}
+                                            </td>
+                                            <td class="px-4 py-3 tabular-nums">
+                                                {{
+                                                    ligne.enlevement
+                                                        ? formatGNF(
+                                                              ligne.enlevement,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </td>
+                                            <td class="px-4 py-3 tabular-nums">
+                                                {{
+                                                    ligne.livraison
+                                                        ? formatGNF(
+                                                              ligne.livraison,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile : cartes empilées, pas de scroll horizontal -->
+                            <div class="mt-5 space-y-2 sm:hidden">
+                                <div
+                                    v-for="(ligne, index) in lignesAffichees"
+                                    :key="ligne.categorie_id ?? index"
+                                    class="rounded-lg border p-3"
+                                >
+                                    <p class="text-sm font-medium">
+                                        {{ categorieNom(ligne.categorie_id) }}
+                                    </p>
+                                    <div class="mt-2 grid grid-cols-2 gap-3">
+                                        <div>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{
+                                                    prixModeLabel('enlevement')
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-0.5 text-sm font-medium tabular-nums"
+                                            >
+                                                {{
+                                                    ligne.enlevement
+                                                        ? formatGNF(
+                                                              ligne.enlevement,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{ prixModeLabel('livraison') }}
+                                            </p>
+                                            <p
+                                                class="mt-0.5 text-sm font-medium tabular-nums"
+                                            >
+                                                {{
+                                                    ligne.livraison
+                                                        ? formatGNF(
+                                                              ligne.livraison,
+                                                          )
+                                                        : 'Non configuré'
+                                                }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </template>
+
+                    <!-- Édition : lignes ajoutables, une catégorie sélectionnée à la fois (même
+                    pattern que CapacitesEditor.vue). -->
+                    <template v-else>
+                        <div
+                            v-if="tarifsForm.lignes.length > 0"
+                            class="mt-5 space-y-3"
+                        >
+                            <div
+                                v-for="(ligne, index) in tarifsForm.lignes"
+                                :key="index"
+                                class="@container rounded-lg border p-3"
+                            >
+                                <div
+                                    class="grid grid-cols-1 items-start gap-4 @sm:grid-cols-2 @2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+                                >
+                                    <div
+                                        class="min-w-0 @sm:col-span-2 @2xl:col-span-1"
+                                    >
+                                        <Label class="mb-1.5 block text-xs"
+                                            >Catégorie</Label
+                                        >
+                                        <Dropdown
+                                            v-model="ligne.categorie_id"
+                                            :options="
+                                                categoriesDisponibles(index)
+                                            "
+                                            option-label="nom"
+                                            option-value="id"
+                                            placeholder="Choisir…"
+                                            class="w-full min-w-0"
+                                        />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <Label class="mb-1.5 block text-xs">{{
+                                            prixModeLabel('enlevement')
+                                        }}</Label>
+                                        <div
+                                            class="flex min-w-0 items-center gap-2"
+                                        >
+                                            <InputNumber
+                                                v-model="ligne.enlevement"
+                                                :min="0"
+                                                :step="100"
+                                                class="min-w-0 flex-1"
+                                                input-class="w-full min-w-0"
+                                            />
+                                            <span
+                                                class="shrink-0 text-xs text-muted-foreground"
+                                                >GNF</span
+                                            >
+                                        </div>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <Label class="mb-1.5 block text-xs">{{
+                                            prixModeLabel('livraison')
+                                        }}</Label>
+                                        <div
+                                            class="flex min-w-0 items-center gap-2"
+                                        >
+                                            <InputNumber
+                                                v-model="ligne.livraison"
+                                                :min="0"
+                                                :step="100"
+                                                class="min-w-0 flex-1"
+                                                input-class="w-full min-w-0"
+                                            />
+                                            <span
+                                                class="shrink-0 text-xs text-muted-foreground"
+                                                >GNF</span
+                                            >
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-9 w-9 shrink-0 justify-self-end text-destructive @sm:col-span-2 @2xl:col-span-1 @2xl:mt-6"
+                                        data-testid="tarifs-remove-ligne"
+                                        @click="removeLigne(index)"
+                                    >
+                                        <Trash2 class="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            class="mt-4"
+                            :disabled="categoriesRestantes.length === 0"
+                            data-testid="tarifs-add-ligne"
+                            @click="addLigne"
+                        >
+                            <Plus class="mr-1.5 h-3.5 w-3.5" />
+                            Ajouter une ligne
+                        </Button>
+                        <p
+                            v-if="categoriesRestantes.length === 0"
+                            class="mt-2 text-xs text-muted-foreground"
+                        >
+                            Toutes les catégories ont déjà une ligne de tarif
+                            définie.
+                        </p>
+                    </template>
                 </div>
             </div>
         </div>

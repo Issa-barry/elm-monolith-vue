@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     CircleAlert,
     CircleCheck,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
+import SelectButton from 'primevue/selectbutton';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -57,12 +58,28 @@ interface Ligne {
 }
 
 const props = defineProps<{
+    processus_actif: string;
+    processus_options: Option[];
     lignes: Ligne[];
     categories: Option[];
     cibles: Cible[];
     typesVehicules: Option[];
     consultantsEligibles: Option[];
 }>();
+
+// Changer d'onglet recharge intégralement la page (nouveau processus = nouvelles lignes/
+// catégories configurées côté serveur) — cohérent avec le fait que la sauvegarde recharge déjà
+// toute la page après un POST. Un brouillon non enregistré est perdu au changement d'onglet.
+function onProcessusChange(code: string | null): void {
+    if (!code || code === props.processus_actif) {
+        return;
+    }
+    router.get(
+        '/settings/commissions',
+        { processus: code },
+        { preserveScroll: true },
+    );
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
@@ -479,6 +496,7 @@ const confirmationVisible = ref(false);
 const globalError = ref('');
 
 const configurationForm = useForm({
+    processus_code: props.processus_actif,
     lignes: [] as PayloadLigne[],
 });
 
@@ -531,6 +549,14 @@ function submitConfiguration(): void {
         <SettingsLayout :wide="true">
             <div class="max-w-full min-w-0 space-y-6 pb-24">
                 <HeadingSmall title="Commissions" />
+
+                <SelectButton
+                    :model-value="processus_actif"
+                    :options="processus_options"
+                    option-label="label"
+                    option-value="value"
+                    @update:model-value="onProcessusChange"
+                />
 
                 <section class="overflow-hidden rounded-xl border bg-card">
                     <div

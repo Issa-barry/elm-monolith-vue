@@ -215,7 +215,37 @@ export async function loginAsElmV2Demo(page: Page): Promise<void> {
                 .getByRole('button', { name: /se connecter/i })
                 .first();
             await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-            await submitButton.click();
+
+            // Contrairement à `login()`, ce compte n'a pas de numéro de repli : le
+            // seul moyen d'éviter le throttle `login` (5/min par téléphone+IP, cf.
+            // FortifyServiceProvider::configureRateLimiting) est d'attendre la fin de
+            // la fenêtre avant de retenter avec le MÊME numéro. Sans cette détection,
+            // un simple 429 (page HTML brute "Too Many Requests", jamais transformée
+            // en erreur Inertia — cf. LockoutResponse, jamais atteint par le pipeline
+            // Fortify actuel) laisse `not.toHaveURL(/login/)` échouer en silence après
+            // 15s, et les 3 tentatives ci-dessous n'attendent que 0.5-1.5s : elles
+            // retombent toutes dans la même fenêtre de 60s et épuisent le budget de
+            // retries pour rien (cause confirmée des échecs CI en cascade sur les
+            // specs commission-* qui appellent toutes ce helper).
+            const [response] = await Promise.all([
+                page.waitForResponse(
+                    (r) =>
+                        r.url().includes('/login') &&
+                        r.request().method() === 'POST',
+                    { timeout: 15_000 },
+                ),
+                submitButton.click(),
+            ]);
+
+            if (response.status() === 429) {
+                const retryAfterSeconds =
+                    Number(response.headers()['retry-after']) || 60;
+                await page.waitForTimeout((retryAfterSeconds + 1) * 1000);
+                throw new Error(
+                    `Rate limited (429) on /login POST, waited ${retryAfterSeconds}s before retrying.`,
+                );
+            }
+
             await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
                 timeout: 15_000,
             });
@@ -255,7 +285,33 @@ export async function login(page: Page): Promise<void> {
                 .getByRole('button', { name: /se connecter/i })
                 .first();
             await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-            await submitButton.click();
+
+            // Même piège que loginAsElmV2Demo() ci-dessus (cf. son commentaire) : un 429
+            // (throttle `login` de Fortify, 5/min par identifiant+IP) reste une page HTML
+            // brute jamais transformée en erreur Inertia, donc pas forcément détectable au
+            // seul texte de la page. On l'intercepte directement pour attendre
+            // `retry-after` avant de retenter — sans quoi les tentatives suivantes (sur ce
+            // numéro comme sur les autres, si le throttle est partagé par IP) ré-échouent
+            // immédiatement en boucle jusqu'à épuisement des 3 x N tentatives disponibles.
+            const [response] = await Promise.all([
+                page.waitForResponse(
+                    (r) =>
+                        r.url().includes('/login') &&
+                        r.request().method() === 'POST',
+                    { timeout: 15_000 },
+                ),
+                submitButton.click(),
+            ]);
+
+            if (response.status() === 429) {
+                const retryAfterSeconds =
+                    Number(response.headers()['retry-after']) || 60;
+                lastError = new Error(
+                    `Rate limited (429) on /login POST for ${phone}, waited ${retryAfterSeconds}s before retrying.`,
+                );
+                await page.waitForTimeout((retryAfterSeconds + 1) * 1000);
+                continue;
+            }
 
             try {
                 await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
@@ -468,19 +524,51 @@ export async function selectOptionFromCombobox(
     let option = visibleOptions.first();
 
     if (optionName) {
-        const optionCount = await visibleOptions.count();
-        let selected: Locator | null = null;
+        // Re-scanné à chaque itération (jamais un seul scan suivi d'un Locator positionnel
+        // nth(i) ou d'un filter({hasText}) figé) : le panneau peut se re-rendre entre deux
+        // lectures (revalidation, re-tri, liste chargée en plusieurs vagues) — deux régressions
+        // CI vécues le 05/09/2026 avec des approches "capture une fois, relocalise plus tard" :
+        // un nth(i) devenu obsolète (nth(11) introuvable après un scan sur 12 options), puis un
+        // filter({hasText: texteBrutMultiLigne}) construit sur le texte capturé pendant LE scan
+        // précédent, qui ne retrouvait plus une option multi-lignes reformulée entretemps
+        // (global-setup.ts, sélecteur véhicule). Ici, `find()` relit le DOM en direct à chaque
+        // appel : la seule donnée qui traverse les itérations est `optionName` lui-même.
+        const wantedOption: string | RegExp = optionName;
+        const find = async (): Promise<Locator | null> => {
+            const count = await visibleOptions.count();
+            for (let i = 0; i < count; i++) {
+                const candidate = visibleOptions.nth(i);
+                // Timeout explicite : sans actionTimeout global, innerText() sur un nth(i) qui a
+                // disparu (liste remplacée entre count() et la lecture, ex. celle des pays par
+                // celle de la nature du client) attend jusqu'au timeout du test au lieu d'échouer,
+                // et le catch() ne sert alors à rien — retry CI du 20/09/2026 bloquée 185 s.
+                const text = (
+                    await candidate
+                        .innerText({ timeout: 1_000 })
+                        .catch(() => '')
+                ).trim();
+                if (text && matchesOptionText(text, wantedOption)) {
+                    return candidate;
+                }
+            }
+            return null;
+        };
 
-        for (let i = 0; i < optionCount; i++) {
-            const candidate = visibleOptions.nth(i);
-            const text = (await candidate.innerText().catch(() => '')).trim();
-            if (text && matchesOptionText(text, optionName)) {
-                selected = candidate;
+        const deadline = Date.now() + 15_000;
+        let found: Locator | null = null;
+        do {
+            const candidate = await find();
+            // Revérifié immédiatement après le scan (pas seulement "trouvé pendant le scan") :
+            // confirmer la visibilité juste avant de sortir de la boucle réduit la fenêtre de
+            // péremption à la durée d'un seul aller-retour, au lieu de la durée du scan complet.
+            if (candidate && (await candidate.isVisible().catch(() => false))) {
+                found = candidate;
                 break;
             }
-        }
+            await page.waitForTimeout(200);
+        } while (Date.now() < deadline);
 
-        if (!selected) {
+        if (!found) {
             const preview = await visibleOptions
                 .allInnerTexts()
                 .then((items) => items.slice(0, 8).join(' | '))
@@ -490,10 +578,11 @@ export async function selectOptionFromCombobox(
             );
         }
 
-        option = selected;
+        option = found;
+    } else {
+        await expect(option).toBeVisible({ timeout: 15_000 });
     }
 
-    await expect(option).toBeVisible({ timeout: 15_000 });
     await option.click({ timeout: 3_000 });
     // Wait for the listbox to close before returning, so the next combobox
     // interaction does not see stale options from this dropdown.
@@ -709,14 +798,22 @@ export async function cleanupRowsByPrefix(
     await login(page);
     await page.goto(route);
 
-    const searchInput = await getVisibleSearchInput(page);
-    await searchInput.fill(prefix);
-    await searchInput.press('Enter');
-    await page.waitForLoadState('networkidle');
-
     const guard = new RegExp(escapeRegExp(prefix), 'i');
 
     for (let i = 0; i < 6; i++) {
+        // Récupéré à CHAQUE itération (jamais réutilisé d'un tour à l'autre) : sur les
+        // pages migrées vers DataFilters trigger-only, `getVisibleSearchInput` doit
+        // rouvrir le drawer Filtres — un `Locator` scopé au drawer capturé une seule
+        // fois avant la boucle redevient invisible dès que la suppression précédente
+        // recharge la page (le drawer se referme), et un `.fill()` sans timeout dessus
+        // attend alors indéfiniment, bloqué jusqu'au timeout du hook `afterEach` (cause
+        // confirmée des shards E2E CI qui expiraient silencieusement, cf. historique de
+        // réactivation de la suite complète).
+        const searchInput = await getVisibleSearchInput(page);
+        await searchInput.fill(prefix);
+        await searchInput.press('Enter');
+        await page.waitForLoadState('networkidle');
+
         const row = page
             .locator('tbody tr:has(button)', { hasText: guard })
             .first();
@@ -747,9 +844,6 @@ export async function cleanupRowsByPrefix(
             break;
         }
 
-        await page.waitForLoadState('networkidle');
-        await searchInput.fill(prefix);
-        await searchInput.press('Enter');
         await page.waitForLoadState('networkidle');
     }
 }

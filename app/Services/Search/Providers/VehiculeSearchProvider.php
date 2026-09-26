@@ -7,7 +7,6 @@ use App\Models\Vehicule;
 use App\Services\Search\Concerns\EscapesSearchTerm;
 use App\Services\Search\SearchProvider;
 use App\Services\Search\SearchResultItem;
-use App\Services\SiteScopeService;
 use Illuminate\Support\Collection;
 
 class VehiculeSearchProvider implements SearchProvider
@@ -36,12 +35,14 @@ class VehiculeSearchProvider implements SearchProvider
         $vehiculeQuery = Vehicule::query()
             ->where('organization_id', $user->organization_id);
 
+        // Même périmètre que la liste et la fiche véhicule (VehiculeController::index/show,
+        // VehiculePolicy) : toute l'organisation, sans filtre site — un véhicule consultable
+        // dans l'écran Véhicules doit aussi être trouvable par la recherche globale.
         if ($user->can('vehicules.read')) {
             $vehiculeQuery->where(function ($q) use ($like) {
                 $q->where('nom_vehicule', 'like', $like)
                     ->orWhere('immatriculation', 'like', $like);
             });
-            $vehiculeQuery = app(SiteScopeService::class)->applyToQuery($vehiculeQuery, $user);
         } elseif ($user->hasRole('proprietaire')) {
             $proprietaireId = $user->proprietaire?->id;
             if ($proprietaireId === null) {

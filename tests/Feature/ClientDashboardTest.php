@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
-use App\Http\Controllers\Client\ClientDashboardController;
+use App\Http\Controllers\Client\QrCodeClientDashboardController;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -447,7 +447,7 @@ class ClientDashboardTest extends TestCase
             'is_active' => true,
         ]);
 
-        $controller = app(ClientDashboardController::class);
+        $controller = app(QrCodeClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 
@@ -480,7 +480,7 @@ class ClientDashboardTest extends TestCase
             'is_active' => true,
         ]);
 
-        $controller = app(ClientDashboardController::class);
+        $controller = app(QrCodeClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 
@@ -502,7 +502,7 @@ class ClientDashboardTest extends TestCase
             'telephone' => $user->telephone,
         ]);
 
-        $controller = app(ClientDashboardController::class);
+        $controller = app(QrCodeClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 

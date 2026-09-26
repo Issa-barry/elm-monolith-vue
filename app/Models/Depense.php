@@ -100,6 +100,11 @@ class Depense extends Model
         return $this->belongsTo(Prestataire::class, 'beneficiaire_id');
     }
 
+    public function clientBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Client::class, 'beneficiaire_id');
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeForOrg($query, string $orgId)

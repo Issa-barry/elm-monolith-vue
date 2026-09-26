@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\MotifAjustementStock;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommandeVenteRetourLigne;
 use App\Models\MouvementStock;
 use App\Models\TransfertLigne;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,19 +16,22 @@ use Illuminate\Support\Collection;
  * peut être une vente, un transfert ou un ajustement manuel).
  *
  * Deux familles de motifs :
- *  - Ajustement manuel (ProduitController::ajusterStock()) : `notes` contient déjà le
+ *  - Ajustement manuel (AjusterStockProduitController) : `notes` contient déjà le
  *    libellé humain (MotifAjustementStock::toNotesString()) — on le fait juste
  *    correspondre à sa valeur d'enum pour obtenir une clé de filtre stable.
  *  - Mouvement automatique (vente, transfert...) : `notes` est vide, on classe via
- *    `source_type`. Seuls CommandeVenteLigne (Vente) et TransfertLigne (Transfert) sont
- *    résolus explicitement pour l'instant — cf. rapport d'implémentation (réception
- *    achat/CommandeAchatLigne reste non étiquetée, comportement inchangé).
+ *    `source_type`. Seuls CommandeVenteLigne (Vente), CommandeVenteRetourLigne (Retour
+ *    livraison) et TransfertLigne (Transfert) sont résolus explicitement pour l'instant — cf.
+ *    rapport d'implémentation (réception achat/CommandeAchatLigne reste non étiquetée,
+ *    comportement inchangé).
  */
 class MouvementStockMotifService
 {
     public const KEY_VENTE = 'vente';
 
     public const KEY_TRANSFERT = 'transfert';
+
+    public const KEY_RETOUR_LIVRAISON = 'retour_livraison';
 
     public const KEY_INCONNU = 'inconnu';
 
@@ -64,12 +68,26 @@ class MouvementStockMotifService
                 ->get()
                 ->mapWithKeys(fn (TransfertLigne $l) => [$l->id => $l->transfert?->reference]);
 
-        return $mouvements->each(function (MouvementStock $m) use ($referencesVente, $referencesTransfert) {
+        $ligneRetourIds = $mouvements
+            ->where('source_type', CommandeVenteRetourLigne::class)
+            ->pluck('source_id')
+            ->filter()
+            ->unique();
+
+        $referencesRetour = $ligneRetourIds->isEmpty()
+            ? collect()
+            : CommandeVenteRetourLigne::whereIn('id', $ligneRetourIds)
+                ->with('retour.commande:id,reference')
+                ->get()
+                ->mapWithKeys(fn (CommandeVenteRetourLigne $l) => [$l->id => $l->retour?->commande?->reference]);
+
+        return $mouvements->each(function (MouvementStock $m) use ($referencesVente, $referencesTransfert, $referencesRetour) {
             [$key, $baseLabel] = self::classify($m->source_type, $m->notes);
 
             $label = match ($key) {
                 self::KEY_VENTE => self::avecReference($baseLabel, $referencesVente->get($m->source_id)),
                 self::KEY_TRANSFERT => self::avecReference($baseLabel, $referencesTransfert->get($m->source_id)),
+                self::KEY_RETOUR_LIVRAISON => self::avecReference($baseLabel, $referencesRetour->get($m->source_id)),
                 // Motifs manuels : le texte brut des notes (ex: "Autre : détail saisi")
                 // est plus précis que le libellé générique du cas — jamais tronqué ici.
                 default => (string) $m->notes !== '' ? (string) $m->notes : $baseLabel,
@@ -117,6 +135,7 @@ class MouvementStockMotifService
         return match (true) {
             $motif === self::KEY_VENTE => $query->where('source_type', CommandeVenteLigne::class),
             $motif === self::KEY_TRANSFERT => $query->where('source_type', TransfertLigne::class),
+            $motif === self::KEY_RETOUR_LIVRAISON => $query->where('source_type', CommandeVenteRetourLigne::class),
             MotifAjustementStock::tryFrom($motif) !== null => self::whereNotesMotif($query, MotifAjustementStock::from($motif)),
             // Clé inconnue (jamais proposée par optionsDisponibles()) : filtre ignoré
             // plutôt qu'un "aucun résultat" silencieux si le menu et les données divergent.
@@ -161,6 +180,10 @@ class MouvementStockMotifService
 
         if ($sourceType === TransfertLigne::class) {
             return [self::KEY_TRANSFERT, 'Transfert'];
+        }
+
+        if ($sourceType === CommandeVenteRetourLigne::class) {
+            return [self::KEY_RETOUR_LIVRAISON, 'Retour livraison'];
         }
 
         return [self::KEY_INCONNU, '—'];

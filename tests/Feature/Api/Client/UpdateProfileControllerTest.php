@@ -4,6 +4,7 @@ namespace Tests\Feature\Api\Client;
 
 use App\Models\Client;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -70,6 +71,33 @@ class UpdateProfileControllerTest extends TestCase
             ->assertJsonPath('profile.localisation.ville', 'Mamou');
 
         $this->assertSame('Mamou', $client->fresh()->ville);
+    }
+
+    /**
+     * Client reste un rôle porté par Personne (cf. docs/identite-client-personne.md) : la
+     * localisation modifiée en self-service doit rester visible depuis un autre rôle
+     * (Parrain, Propriétaire...) de la même personne physique, pas figée côté Client seul.
+     */
+    public function test_client_profile_update_mirrors_onto_linked_personne(): void
+    {
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $this->ensureClientRoles();
+        $user->assignRole('client');
+        $personne = Personne::resoudreOuCreer($org->id, ['telephone' => '+224622000099', 'ville' => 'Conakry']);
+        $client = Client::factory()->create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
+        ]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->patchJson(route('client.profile.update'), ['ville' => 'Labé'])
+            ->assertOk();
+
+        $this->assertSame('Labé', $client->fresh()->ville);
+        $this->assertSame('Labé', $personne->fresh()->ville);
     }
 
     public function test_returns_404_when_no_profile_is_linked(): void

@@ -16,6 +16,7 @@ enum PrixOrigine: string
     case EXTERNE = 'externe';
     case REVENDEUR = 'revendeur';
     case DISTRIBUTEUR = 'distributeur';
+    case GROSSISTE = 'grossiste';
 
     public function label(): string
     {
@@ -25,6 +26,7 @@ enum PrixOrigine: string
             self::EXTERNE => 'Prix externe',
             self::REVENDEUR => 'Prix revendeur',
             self::DISTRIBUTEUR => 'Prix distributeur',
+            self::GROSSISTE => 'Prix grossiste',
         };
     }
 }

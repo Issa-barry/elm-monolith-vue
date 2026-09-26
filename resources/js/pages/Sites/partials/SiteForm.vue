@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Save } from 'lucide-vue-next';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
@@ -17,6 +18,7 @@ interface FormData {
     ville: string | null;
     quartier: string | null;
     telephone: string | null;
+    commissions_active: boolean;
 }
 
 defineProps<{
@@ -152,6 +154,34 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         {{ errors.telephone }}
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Commissions -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <div class="flex items-center justify-between gap-4 sm:gap-6">
+                <div>
+                    <Label class="mb-1 block"
+                        >Activer les commissions pour ce site</Label
+                    >
+                    <p class="text-xs text-muted-foreground">
+                        Si désactivé, ce site ne reçoit plus sa propre part de
+                        commission sur les ventes. Les livreurs, propriétaires
+                        de véhicule et consultants continuent d'être
+                        commissionnés normalement — ce réglage n'affecte qu'eux,
+                        jamais les autres bénéficiaires.
+                    </p>
+                </div>
+                <Switch
+                    aria-label="Activer les commissions pour ce site"
+                    :model-value="form.commissions_active"
+                    @update:model-value="
+                        emit('update:form', {
+                            ...form,
+                            commissions_active: $event as boolean,
+                        })
+                    "
+                />
             </div>
         </div>
 

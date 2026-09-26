@@ -2,8 +2,13 @@
 
 namespace Tests\Unit;
 
+use App\Enums\ClientType;
+use App\Enums\ModePaiement;
+use App\Enums\ModeRemiseGrossiste;
+use App\Enums\OperateurMobileMoney;
 use App\Enums\PackingStatut;
 use App\Enums\PrestataireType;
+use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\SiteRole;
 use App\Enums\SiteStatut;
@@ -158,15 +163,33 @@ class EnumsTest extends TestCase
         $this->assertSame('Livrée', StatutCommandeVente::LIVREE->label());
         $this->assertSame('Clôturée', StatutCommandeVente::CLOTUREE->label());
         $this->assertSame('Annulée', StatutCommandeVente::ANNULEE->label());
+        $this->assertSame('Retournée', StatutCommandeVente::RETOURNEE->label());
+        $this->assertSame('Annulée (erreur de saisie)', StatutCommandeVente::ANNULEE_ERREUR_SAISIE->label());
     }
 
+    /**
+     * 8 statuts jusqu'au 23/09/2026, puis `retournee` (retour total de livraison, cf. CommandeVenteRetourService) = 9,
+     * puis `annulee_erreur_saisie` (24/09/2026, cf. AnnulationExceptionnelleService) = 10.
+     */
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        $this->assertCount(8, $options);
+        $this->assertCount(10, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
+        }
+    }
+
+    public function test_statut_commande_vente_is_editable_uniquement_en_brouillon(): void
+    {
+        $this->assertTrue(StatutCommandeVente::BROUILLON->isEditable());
+
+        foreach (StatutCommandeVente::cases() as $statut) {
+            if ($statut === StatutCommandeVente::BROUILLON) {
+                continue;
+            }
+            $this->assertFalse($statut->isEditable(), "{$statut->value} ne devrait pas être modifiable");
         }
     }
 
@@ -286,5 +309,108 @@ class EnumsTest extends TestCase
         $type = new ProduitType(['vendable' => true, 'achetable' => false]);
         $this->assertTrue($type->isVendable());
         $this->assertFalse($type->isAchetable());
+    }
+
+    // ── ClientType ────────────────────────────────────────────────────────────
+
+    public function test_client_type_labels(): void
+    {
+        $this->assertSame('Externe', ClientType::EXTERNE->label());
+        $this->assertSame('Revendeur', ClientType::REVENDEUR->label());
+        $this->assertSame('Distributeur', ClientType::DISTRIBUTEUR->label());
+        $this->assertSame('Grossiste', ClientType::GROSSISTE->label());
+    }
+
+    public function test_client_type_values(): void
+    {
+        $values = ClientType::values();
+        $this->assertCount(4, $values);
+        $this->assertContains('externe', $values);
+        $this->assertContains('revendeur', $values);
+        $this->assertContains('distributeur', $values);
+        $this->assertContains('grossiste', $values);
+    }
+
+    public function test_client_type_options_returns_all_cases(): void
+    {
+        $options = ClientType::options();
+        $this->assertCount(4, $options);
+        $grossiste = collect($options)->firstWhere('value', 'grossiste');
+        $this->assertSame('Grossiste', $grossiste['label']);
+    }
+
+    // ── ModeRemiseGrossiste ───────────────────────────────────────────────────
+
+    public function test_mode_remise_grossiste_labels(): void
+    {
+        $this->assertSame('Enlèvement usine', ModeRemiseGrossiste::ENLEVEMENT->label());
+        $this->assertSame('Livraison', ModeRemiseGrossiste::LIVRAISON->label());
+    }
+
+    public function test_mode_remise_grossiste_values(): void
+    {
+        $this->assertSame(['enlevement', 'livraison'], ModeRemiseGrossiste::values());
+    }
+
+    public function test_mode_remise_grossiste_options_returns_all_cases(): void
+    {
+        $options = ModeRemiseGrossiste::options();
+        $this->assertCount(2, $options);
+        $this->assertSame('enlevement', $options[0]['value']);
+        $this->assertSame('livraison', $options[1]['value']);
+    }
+
+    // ── ModePaiement ──────────────────────────────────────────────────────────
+    // Reste à 4 valeurs stables (especes/mobile_money/virement/cheque) : consommé par la
+    // comptabilisation (PlanComptableBootstrapService, CompteMappingResolver — comptes 561xxx
+    // déjà configurés) ET par des paiements sans rapport (commissions, cashback, paiement de
+    // fiches, salaires). Ne jamais y ajouter une valeur par opérateur Mobile Money — cf.
+    // App\Enums\OperateurMobileMoney, champ séparé sur encaissements_ventes uniquement.
+
+    public function test_mode_paiement_labels(): void
+    {
+        $this->assertSame('Espèces', ModePaiement::ESPECES->label());
+        $this->assertSame('Mobile Money', ModePaiement::MOBILE_MONEY->label());
+        $this->assertSame('Virement', ModePaiement::VIREMENT->label());
+        $this->assertSame('Chèque', ModePaiement::CHEQUE->label());
+    }
+
+    public function test_mode_paiement_options_returns_all_cases(): void
+    {
+        $options = ModePaiement::options();
+        $this->assertCount(4, $options);
+    }
+
+    // ── OperateurMobileMoney ──────────────────────────────────────────────────
+    // Champ séparé sur encaissements_ventes (operateur_mobile_money), requis uniquement quand
+    // mode_paiement = mobile_money — présenté comme une seule liste déroulante côté UI
+    // (cf. resources/js/components/payment/PaymentCard.vue) mais jamais fusionné dans
+    // mode_paiement (voir ModePaiement ci-dessus pour la raison comptable).
+
+    public function test_operateur_mobile_money_labels(): void
+    {
+        $this->assertSame('Orange Money', OperateurMobileMoney::ORANGE_MONEY->label());
+        $this->assertSame('Kulu', OperateurMobileMoney::KULU->label());
+        $this->assertSame('Soutra Money', OperateurMobileMoney::SOUTRA_MONEY->label());
+        $this->assertSame('MOMO (MTN Mobile Money)', OperateurMobileMoney::MOMO->label());
+        $this->assertSame('PayCard', OperateurMobileMoney::PAYCARD->label());
+        $this->assertSame('Autre', OperateurMobileMoney::AUTRE->label());
+    }
+
+    public function test_operateur_mobile_money_options_returns_all_cases(): void
+    {
+        $options = OperateurMobileMoney::options();
+        $this->assertCount(6, $options);
+        foreach ($options as $option) {
+            $this->assertArrayHasKey('value', $option);
+            $this->assertArrayHasKey('label', $option);
+        }
+    }
+
+    // ── PrixOrigine::GROSSISTE ────────────────────────────────────────────────
+
+    public function test_prix_origine_grossiste_label(): void
+    {
+        $this->assertSame('Prix grossiste', PrixOrigine::GROSSISTE->label());
     }
 }

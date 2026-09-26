@@ -182,9 +182,11 @@ test('stepper — étape commission affiche "Impayé" ou "Partiel" sur elm-2 (co
 }) => {
     await goToTransfertDetail(page, seedRefs.ref001);
 
-    // Le stepper affiche le statut de commission.
-    // elm-2 commence "Impayé" mais peut devenir "Partiel" si
-    // logistique-commission-flow a déjà effectué des versements partiels.
+    // Le stepper affiche le statut de commission agrégé (calculé côté serveur depuis
+    // CommissionEnveloppePart, cf. TransfertLogistiqueController::commissionStatutGenerique()).
+    // elm-2 (Aissatou 70% + Thierno 30%) commence "Impayée" ; si un autre parcours de ce fichier
+    // a déjà réglé la part d'Aissatou, le solde combiné retombe à "Partiellement payée" — les
+    // deux libellés restent donc acceptés.
     const stepper = stepperCard(page);
     await expect(stepper).toBeVisible({ timeout: 10_000 });
     await expect(stepper).toContainText(/impay|partiel/i);
@@ -220,11 +222,14 @@ test('stepper — "Réceptionné" passe au vert quand commission générée (elm
     await expect(stepper).toBeVisible({ timeout: 10_000 });
 
     // "Réceptionné" doit avoir la classe emerald (vert = done), pas blue (current)
-    // car la commission est générée → le marqueur avance sur l'étape commission
-    const receptionneStep = stepper
-        .locator('div.rounded-full')
-        .filter({ has: page.locator('[class*="PackageCheck"], svg') })
-        .first();
+    // car la commission est générée → le marqueur avance sur l'étape commission.
+    // data-testid dédié (plutôt que "contient un <svg>", qui matchait n'importe quelle étape —
+    // toutes en contiennent un — et retombait silencieusement sur « Brouillon », toujours vert
+    // dès qu'on a dépassé cette étape : le vrai bug de régression ci-dessus, où le marqueur
+    // restait bloqué sur « Réceptionné » en bleu, passait inaperçu avec l'ancien sélecteur).
+    const receptionneStep = stepper.locator(
+        '[data-testid="stepper-step-reception"]',
+    );
 
     // La pastille "Réceptionné" doit être verte (bg-emerald-500), pas bleue
     await expect(receptionneStep).toHaveClass(/bg-emerald-500/, {

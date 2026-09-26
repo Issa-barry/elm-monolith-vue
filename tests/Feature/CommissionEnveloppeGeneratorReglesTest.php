@@ -29,6 +29,7 @@ use App\Models\Vehicule;
 use App\Notifications\CommissionManquanteNotification;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\HasProduitVariante;
@@ -134,6 +135,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id,
                 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $livreurId,
                 'part_pourcentage' => 0,
                 'montant_unitaire' => $montant,
@@ -432,7 +434,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
     // ── Groupe invalide bloque toute la génération (tout ou rien) ───────────
 
     /** @test */
-    public function un_groupe_livraison_introuvable_bloque_toute_la_generation_y_compris_le_proprietaire(): void
+    public function un_groupe_livraison_introuvable_najamais_le_proprietaire_correctement_configure(): void
     {
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600);
         $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
@@ -450,18 +452,27 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
 
-        // Ni le propriétaire ni la livraison n'ont d'enveloppe : tout-ou-rien.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026 — révise l'ancienne décision AMOA #4
+        // "tout-ou-rien") : le propriétaire, correctement configuré, reçoit son enveloppe malgré
+        // l'absence d'équipe pour la cible livraison.
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
-        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertEquals(CommissionGenerationStatut::PARTIEL, $tentative->statut);
     }
 
     // ── Catégorie sans partage configuré = à régulariser, jamais de répartition
     // implicite (décision AMOA post-Phase 2) ─────────────────────────────────
 
     /** @test */
-    public function une_categorie_sans_partage_configure_bloque_toute_la_generation_sans_repartition_implicite(): void
+    public function une_categorie_sans_partage_configure_najamais_le_proprietaire_sans_repartition_implicite(): void
     {
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600);
@@ -475,12 +486,21 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
 
-        // Tout-ou-rien : ni propriétaire ni livraison, jamais un partage égal déduit.
-        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        // Indépendance des cibles (chantier 2A, 05/09/2026) : le propriétaire reçoit son
+        // enveloppe malgré la cible livraison en anomalie ; jamais de partage égal déduit pour
+        // autant (aucune répartition implicite créée).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
         $this->assertDatabaseMissing('equipe_livraison_partages_categorie', ['equipe_id' => $vehicule->equipe->id]);
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
-        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertEquals(CommissionGenerationStatut::PARTIEL, $tentative->statut);
         $this->assertStringContainsString('partage non configuré', $tentative->motif_erreur);
     }
 
@@ -553,8 +573,11 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
             declencheurUserId: $this->user->id,
         );
 
+        // PARTIEL, pas ERREUR (chantier 2A, 05/09/2026) : le propriétaire, correctement
+        // configuré, reçoit malgré tout son enveloppe — seule la cible livraison échoue.
+        // L'alerte régularisation doit néanmoins être envoyée dans les deux cas.
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
-        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertEquals(CommissionGenerationStatut::PARTIEL, $tentative->statut);
         $this->assertSame($this->user->id, $tentative->created_by);
 
         Notification::assertSentTo(

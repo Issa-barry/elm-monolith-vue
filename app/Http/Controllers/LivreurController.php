@@ -139,8 +139,13 @@ class LivreurController extends Controller
                     'role' => $e->pivot->role,
                 ])->values(),
             ],
+            // route('commissions.vente.livreur', ...) sans filtre processus = « Tous les
+            // processus » (Vente/Distribution client/Transfert logistique confondus, cf.
+            // CommissionVenteController::showLivreur()) — remplace l'ancien
+            // logistique.commissions.livreur (écran retiré le 04/09/2026, moteur legacy gelé
+            // depuis le 03/09/2026, cf. docs/commissions.md), qui ne couvrait que la logistique.
             'commissions_url' => $isStaff
-                ? route('logistique.commissions.livreur', $livreur->id)
+                ? route('commissions.vente.livreur', $livreur->id)
                 : route('client.gains'),
             'factures_url' => $isStaff
                 ? route('factures.index', ['livreur_id' => $livreur->id])

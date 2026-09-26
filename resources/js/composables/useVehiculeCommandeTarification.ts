@@ -4,7 +4,7 @@
  * et éligibilité aux commissions — deux notions indépendantes.
  *
  * Règle : un véhicule de flotte gérée (toujours livraison_vente=true dans ce picker,
- * cf. CommandeVenteController::vehiculesActifs()) facture toujours au prix de vente
+ * cf. CommandeVenteFormBuilder::vehiculesActifs()) facture toujours au prix de vente
  * plein et est toujours éligible aux commissions. Sans véhicule, seul un client
  * Externe facture à prix usine (jamais de commission — aucun véhicule de flotte
  * impliqué). Partagé entre Ventes/Create.vue et Ventes/Edit.vue pour ne pas dupliquer
@@ -14,7 +14,7 @@ import { computed, type ComputedRef } from 'vue';
 
 export interface ClientTarificationOption {
     id: number;
-    type?: 'externe' | 'revendeur' | 'distributeur';
+    type?: 'externe' | 'revendeur' | 'distributeur' | 'grossiste';
 }
 
 export function useVehiculeCommandeTarification<T extends { id: number }>(
@@ -25,6 +25,9 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
 ): {
     modeTarification: ComputedRef<'prix_vente' | 'prix_usine'>;
     commissionEligible: ComputedRef<boolean>;
+    natureOperationParDefaut: ComputedRef<
+        'vente_standard' | 'distribution_client'
+    >;
 } {
     const selectedVehicule = computed<T | null>(() => {
         const id = getVehiculeId();
@@ -57,5 +60,16 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
         () => !!selectedVehicule.value,
     );
 
-    return { modeTarification, commissionEligible };
+    // Miroir de NatureOperation::deriverParDefaut() (backend, seul juge à l'enregistrement) :
+    // distribution_client seulement si le client est distributeur ET qu'un véhicule de flotte
+    // assure la livraison — sans véhicule, aucune équipe à commissionner, vente standard.
+    const natureOperationParDefaut = computed<
+        'vente_standard' | 'distribution_client'
+    >(() =>
+        selectedClient.value?.type === 'distributeur' && selectedVehicule.value
+            ? 'distribution_client'
+            : 'vente_standard',
+    );
+
+    return { modeTarification, commissionEligible, natureOperationParDefaut };
 }
