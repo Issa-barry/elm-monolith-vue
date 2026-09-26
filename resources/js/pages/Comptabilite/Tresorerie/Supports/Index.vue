@@ -2,6 +2,8 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
+import KpiCard from '@/components/KpiCard.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Badge } from '@/components/ui/badge';
@@ -614,54 +616,32 @@ const selectClass =
                 <div class="flex flex-col gap-1">
                     <h1 class="flex items-center gap-2 text-xl font-semibold">
                         Supports de trésorerie
-                        <TooltipProvider :delay-duration="150">
-                            <Tooltip>
-                                <TooltipTrigger as-child>
-                                    <button
-                                        type="button"
-                                        aria-label="Informations sur les supports de trésorerie"
-                                        class="shrink-0 rounded-sm text-primary transition-colors outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
-                                    >
-                                        <Info
-                                            class="h-4 w-4"
-                                            aria-hidden="true"
-                                        />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                    side="bottom"
-                                    class="w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-left text-sm leading-relaxed font-normal text-pretty"
-                                >
-                                    <p class="mb-2 font-semibold">
-                                        Cette page regroupe :
-                                    </p>
-                                    <ul class="list-disc space-y-2 pl-4">
-                                        <li>
-                                            Les
-                                            <strong>caisses de l'agence</strong
-                                            >.
-                                        </li>
-                                        <li>
-                                            Les
-                                            <strong
-                                                >caisses dédiées aux
-                                                agents</strong
-                                            >.
-                                        </li>
-                                        <li>Les <strong>banques</strong>.</li>
-                                        <li>
-                                            Les comptes
-                                            <strong>Mobile Money</strong>.
-                                        </li>
-                                    </ul>
-                                    <p class="mt-3">
-                                        Le <strong>solde actuel</strong> de
-                                        chaque support est calculé à partir du
-                                        grand livre.
-                                    </p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <InfoTooltip
+                            label="Informations sur les supports de trésorerie"
+                        >
+                            <p class="mb-2 font-semibold">
+                                Cette page regroupe :
+                            </p>
+                            <ul class="list-disc space-y-2 pl-4">
+                                <li>
+                                    Les
+                                    <strong>caisses de l'agence</strong>.
+                                </li>
+                                <li>
+                                    Les
+                                    <strong>caisses dédiées aux agents</strong>.
+                                </li>
+                                <li>Les <strong>banques</strong>.</li>
+                                <li>
+                                    Les comptes
+                                    <strong>Mobile Money</strong>.
+                                </li>
+                            </ul>
+                            <p class="mt-3">
+                                Le <strong>solde actuel</strong> de chaque
+                                support est calculé à partir du grand livre.
+                            </p>
+                        </InfoTooltip>
                     </h1>
                 </div>
                 <ListPageActions>
@@ -689,21 +669,7 @@ const selectClass =
                 </ListPageActions>
             </div>
 
-            <!-- Cartes KPI : reprise du bloc KPI du dashboard Apollo E-Commerce (StatsEcommerceWidget) —
-                 même structure (.card h-full, titre, flex justify-between items-start), mêmes proportions.
-                 Apollo tourne sur une racine à 14 px : ses `p-8`, `gap-8`, `text-lg`, `text-4xl` valent 28 / 28 /
-                 15,75 / 31,5 px de rendu. Cette application est à 16 px : on reprend ces VALEURS RENDUES
-                 (p-7, gap-7, 16 px, 31,5 px), pas les mêmes classes, qui donneraient des cartes plus grandes.
-                 Typographie = celle d'Apollo, mesurée dans le navigateur, CONSTANTE à toutes les largeurs :
-                 Poppins (`font-apollo`, limitée à ces 4 cartes), titre 15,75 px / 600 / interligne 24,5 px,
-                 chiffre 31,5 px / 700 / 35 px, information secondaire 14 px / 500 / 16,8 px, aucun
-                 interlettrage. On ne sacrifie JAMAIS la taille de police : le responsive agit sur la
-                 DISPOSITION. Un montant à 10 chiffres à 31,5 px fait ~203 px ; à 4 colonnes la carte offre
-                 `zone / 4 − 77` px, donc 4 colonnes dès que la zone dispose de 70 rem (1120 px), comme Apollo
-                 sur un écran de bureau ; en dessous, 2 colonnes ; sur mobile, 1. La largeur mesurée est celle
-                 de la zone de contenu (container query), pas celle de l'écran : barre latérale repliée,
-                 4 colonnes reviennent plus tôt. Le titre peut passer sur deux lignes ; le nombre ne se coupe
-                 jamais, « GNF » passe dessous s'il ne tient pas à côté. -->
+            <!-- Grille de la carte KPI commune : 1 / 2 / 4 colonnes selon la zone disponible. -->
             <div class="@container">
                 <div
                     class="grid grid-cols-12 gap-7 font-apollo antialiased"
@@ -716,41 +682,12 @@ const selectClass =
                         :title="carte.astuce"
                         :data-testid="`support-kpi-${carte.id}`"
                     >
-                        <div
-                            class="card h-full p-7 shadow-[0_4px_30px_0_rgba(221,224,255,0.54)] dark:shadow-none"
-                        >
-                            <span
-                                class="block text-[15.75px] leading-[24.5px] font-semibold text-slate-700 dark:text-slate-200"
-                                >{{ carte.titre }}</span
-                            >
-                            <div
-                                class="mt-3.5 flex items-start justify-between"
-                            >
-                                <div>
-                                    <p
-                                        class="text-[31.5px] leading-[35px] font-bold text-slate-900 dark:text-slate-50"
-                                    >
-                                        <span
-                                            class="mr-1.5 whitespace-nowrap"
-                                            data-testid="support-kpi-valeur"
-                                            >{{ carte.valeur }}</span
-                                        >
-                                        <span
-                                            v-if="carte.unite"
-                                            class="inline-block text-[14px] leading-[16.8px] font-medium whitespace-nowrap text-muted-foreground"
-                                            >{{ carte.unite }}</span
-                                        >
-                                    </p>
-                                    <p
-                                        v-if="carte.detail"
-                                        class="text-[14px] leading-[16.8px] font-medium text-blue-600 dark:text-blue-400"
-                                        data-testid="support-kpi-detail"
-                                    >
-                                        {{ carte.detail }}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        <KpiCard
+                            :title="carte.titre"
+                            :value="carte.valeur"
+                            :unit="carte.unite ?? undefined"
+                            :detail="carte.detail ?? undefined"
+                        />
                     </div>
                 </div>
             </div>

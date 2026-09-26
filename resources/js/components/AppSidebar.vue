@@ -20,6 +20,7 @@ import {
     Building2,
     Calculator,
     Car,
+    ChartColumn,
     Contact,
     Layers,
     LayoutGrid,
@@ -385,6 +386,28 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/communications',
             icon: MessageSquare,
             group: 'Organisation',
+        });
+
+    // Rapports (docs/rapports.md) : « Ma situation » (agent imposé) et le rapport d'activité ;
+    // Stock, Achats et Dépenses viendront s'ajouter ici (lot 2).
+    const rapportsSousItems: NavItem[] = [];
+    if (can('rapports.read_own'))
+        rapportsSousItems.push({
+            title: 'Ma situation',
+            href: '/backoffice/ma-situation',
+        });
+    if (can('rapports.read'))
+        rapportsSousItems.push({
+            title: "Rapport d'activité",
+            href: '/backoffice/rapports/activite',
+        });
+    if (rapportsSousItems.length > 0)
+        items.push({
+            title: 'Rapports',
+            href: rapportsSousItems[0].href,
+            icon: ChartColumn,
+            group: 'Pilotage',
+            items: rapportsSousItems,
         });
 
     return items;

@@ -8,6 +8,7 @@ use App\Jobs\NotifierChargementValideCommandeVenteJob;
 use App\Models\CommandeVente;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -22,7 +23,7 @@ class AvancerStatutVenteController extends Controller
      * une étape supplémentaire est possible depuis LIVRAISON_EN_COURS : la validation de
      * réception (→ LIVREE), cf. CommandeVenteService::validerReception().
      */
-    public function __invoke(Request $request, CommandeVente $commande_vente): RedirectResponse
+    public function __invoke(Request $request, CommandeVente $commande_vente, CommandeVenteFormBuilder $formBuilder): RedirectResponse
     {
         $this->authorize('avancerStatut', $commande_vente);
 
@@ -42,6 +43,10 @@ class AvancerStatutVenteController extends Controller
         $ancienStatut = $commande_vente->statut;
 
         try {
+            if ($ancienStatut === StatutCommandeVente::CHARGEMENT_EN_COURS) {
+                $formBuilder->ensurePartageLivraisonConformeAuChargement($commande_vente, $request->input('lignes', []));
+            }
+
             CommandeVenteService::avancerStatut($commande_vente, $request->input('lignes', []));
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());

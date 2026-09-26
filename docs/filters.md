@@ -67,11 +67,12 @@ interface FilterField {
   type: FilterFieldType
   options?: Array<{ value: string | number; label: string }>
   placeholder?: string
-  startKey?: string     // date-range uniquement : nom du param début
-  endKey?: string       // date-range uniquement : nom du param fin
+  startKey?: string     // date-range / period : nom du param début
+  endKey?: string       // date-range / period : nom du param fin
   inline?: boolean      // dans la barre plutôt que dans le drawer
   searchable?: boolean  // select uniquement : liste avec recherche par nom + croix d'effacement
   wide?: boolean        // champ inline plus large (280 px au lieu de 180) pour un libellé long
+  defaultValue?: string // period uniquement : raccourci par défaut (non envoyé, pas un filtre actif)
 }
 
 type FilterFieldType =
@@ -80,6 +81,7 @@ type FilterFieldType =
   | 'multi-select'
   | 'date'
   | 'date-range'
+  | 'period'
   | 'number'
   | 'boolean'
 ```
@@ -125,6 +127,18 @@ Deux champs date (début / fin) affichés côte à côte.
 Par défaut, génère les params `${key}_debut` et `${key}_fin`. Surchargeables via `startKey`/`endKey`.
 ```typescript
 { key: 'date', label: 'Période', type: 'date-range', startKey: 'date_debut', endKey: 'date_fin' }
+```
+
+### `period`
+Raccourcis de période (Aujourd'hui, Hier, Cette semaine, Ce mois…) **résolus côté serveur**, plus
+« Période personnalisée » qui affiche deux dates. Les `options` viennent du backend
+(`SituationPeriode::pourFront()`), jamais calculées dans le navigateur (fuseau et début de semaine
+restent ceux de l'application). Un raccourci envoie `key=<valeur>` ; `personnalisee` envoie
+`startKey`/`endKey` (défaut `date_from`/`date_to`) ; `defaultValue` n'est pas envoyé et ne compte pas
+comme filtre actif. Utilisé par le rapport d'activité (cf. [rapports.md](rapports.md)).
+```typescript
+{ key: 'periode', label: 'Période', type: 'period', inline: true, defaultValue: 'aujourd_hui',
+  startKey: 'date_from', endKey: 'date_to', options: periode.options }
 ```
 
 ### `date`

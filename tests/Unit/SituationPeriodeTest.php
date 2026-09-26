@@ -146,4 +146,36 @@ class SituationPeriodeTest extends TestCase
         $this->assertSame(['value' => 'tout', 'label' => 'Toute la période'], $donnees['options'][0]);
         $this->assertSame(['value' => 'personnalisee', 'label' => 'Période personnalisée'], $donnees['options'][9]);
     }
+
+    public function test_un_autre_parametre_et_une_autre_periode_par_defaut_peuvent_etre_imposes(): void
+    {
+        $defaut = SituationPeriode::depuisRequete($this->requete([]), $this->maintenant(), 'periode', 'aujourd_hui');
+        $this->assertSame(['aujourd_hui', '2026-09-16'], [$defaut->cle, $defaut->debut?->toDateString()]);
+
+        $lu = SituationPeriode::depuisRequete($this->requete(['periode' => 'hier', 'situation_periode' => 'ce_mois']), $this->maintenant(), 'periode', 'aujourd_hui');
+        $this->assertSame('hier', $lu->cle);
+
+        $invalide = SituationPeriode::depuisRequete($this->requete(['date_from' => '2026-09-20', 'date_to' => '2026-09-10']), $this->maintenant(), 'periode', 'aujourd_hui');
+        $this->assertSame('aujourd_hui', $invalide->cle);
+
+        $inconnue = SituationPeriode::depuisRequete($this->requete(['periode' => 'tout']), $this->maintenant(), 'periode', 'aujourd_hui');
+        $this->assertSame('aujourd_hui', $inconnue->cle);
+    }
+
+    public function test_libelle_et_options_restreintes(): void
+    {
+        $semaine = SituationPeriode::depuisRequete($this->requete(['situation_periode' => 'cette_semaine']), $this->maintenant());
+        $this->assertSame('Cette semaine (du 14/09/2026 au 20/09/2026)', $semaine->libelle());
+
+        $jour = SituationPeriode::depuisRequete($this->requete(['situation_periode' => 'aujourd_hui']), $this->maintenant());
+        $this->assertSame("Aujourd'hui (16/09/2026)", $jour->libelle());
+
+        $perso = SituationPeriode::depuisRequete($this->requete(['date_from' => '2026-09-01', 'date_to' => '2026-09-05']), $this->maintenant());
+        $this->assertSame('Du 01/09/2026 au 05/09/2026', $perso->libelle());
+
+        $this->assertSame(
+            ['aujourd_hui', 'personnalisee'],
+            array_column($jour->pourFront(['aujourd_hui', 'personnalisee'])['options'], 'value'),
+        );
+    }
 }

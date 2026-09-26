@@ -46,6 +46,8 @@ export interface CommissionDetailRow {
     montant: number;
     paye: number;
     reste: number;
+    /** Commission annulée : ligne conservée pour la traçabilité, exclue des totaux. */
+    annulee?: boolean;
     statut: string | null;
     statut_dot_class?: string | null;
     /** Origine (Vente/Distribution client/Transfert logistique) — absent sur les écrans qui ne

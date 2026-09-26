@@ -143,6 +143,7 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
                 },
                 Button: false,
                 Primitive: false,
+                KpiCard: false,
             },
         },
     });
@@ -326,7 +327,7 @@ describe('Supports de trésorerie — cartes KPI', () => {
         wrapper.find(`[data-testid="support-kpi-${id}"]`);
 
     const valeur = (wrapper: ReturnType<typeof monter>, id: string) =>
-        carte(wrapper, id).find('[data-testid="support-kpi-valeur"]').text();
+        carte(wrapper, id).find('[data-slot="kpi-value"]').text();
 
     it('présente quatre cartes courtes dans la grille Apollo (1 / 2 / 4 colonnes selon la largeur de la zone)', () => {
         const cartes = monter().findAll('[data-testid="support-kpis"] > div');
@@ -379,12 +380,10 @@ describe('Supports de trésorerie — cartes KPI', () => {
             ]),
         );
         expect(
-            enCours.find('[data-testid="support-kpi-valeur"]').element
-                .parentElement?.className,
+            enCours.find('[data-slot="kpi-value"]').element.parentElement
+                ?.className,
         ).toContain('text-[31.5px] leading-[35px] font-bold');
-        expect(
-            enCours.find('[data-testid="support-kpi-detail"]').classes(),
-        ).toEqual(
+        expect(enCours.find('[data-slot="kpi-detail"]').classes()).toEqual(
             expect.arrayContaining([
                 'text-[14px]',
                 'leading-[16.8px]',
@@ -400,9 +399,9 @@ describe('Supports de trésorerie — cartes KPI', () => {
     it('ne coupe jamais un nombre au milieu : le chiffre reste insécable, seule « GNF » peut passer dessous', () => {
         const solde = carte(monter(), 'solde-total');
 
-        expect(
-            solde.find('[data-testid="support-kpi-valeur"]').classes(),
-        ).toContain('whitespace-nowrap');
+        expect(solde.find('[data-slot="kpi-value"]').classes()).toContain(
+            'whitespace-nowrap',
+        );
         const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
         expect(unite?.classes()).toEqual(
             expect.arrayContaining(['inline-block', 'whitespace-nowrap']),
@@ -413,9 +412,9 @@ describe('Supports de trésorerie — cartes KPI', () => {
         const solde = carte(monter(), 'solde-total');
         const unite = solde.findAll('span').find((s) => s.text() === 'GNF');
 
-        expect(
-            solde.find('[data-testid="support-kpi-valeur"]').classes(),
-        ).toContain('mr-1.5');
+        expect(solde.find('[data-slot="kpi-value"]').classes()).toContain(
+            'mr-1.5',
+        );
         expect(unite?.classes()).not.toContain('ml-1.5');
     });
 
@@ -610,14 +609,10 @@ describe('Supports de trésorerie — versements en cours', () => {
         const enCours = carte(wrapper, 'en-cours-versement');
 
         // Solde ≠ en cours de versement : les 800 000 ne sont dans aucun solde.
-        expect(solde.find('[data-testid="support-kpi-valeur"]').text()).toBe(
-            '50 000',
-        );
+        expect(solde.find('[data-slot="kpi-value"]').text()).toBe('50 000');
         expect(enCours.text()).toContain('En cours de versement');
-        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
-            '800 000',
-        );
-        expect(enCours.find('[data-testid="support-kpi-detail"]').text()).toBe(
+        expect(enCours.find('[data-slot="kpi-value"]').text()).toBe('800 000');
+        expect(enCours.find('[data-slot="kpi-detail"]').text()).toBe(
             '1 à confirmer',
         );
     });
@@ -625,13 +620,9 @@ describe('Supports de trésorerie — versements en cours', () => {
     it('affiche 0 GNF sans information secondaire quand aucun versement n’est en cours', () => {
         const enCours = carte(monter([compte({})]), 'en-cours-versement');
 
-        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
-            '0',
-        );
+        expect(enCours.find('[data-slot="kpi-value"]').text()).toBe('0');
         expect(enCours.text()).toContain('GNF');
-        expect(
-            enCours.find('[data-testid="support-kpi-detail"]').exists(),
-        ).toBe(false);
+        expect(enCours.find('[data-slot="kpi-detail"]').exists()).toBe(false);
     });
 
     it('compte les versements en cours de plusieurs caisses', () => {
@@ -648,10 +639,10 @@ describe('Supports de trésorerie — versements en cours', () => {
         ]);
         const enCours = carte(wrapper, 'en-cours-versement');
 
-        expect(enCours.find('[data-testid="support-kpi-valeur"]').text()).toBe(
+        expect(enCours.find('[data-slot="kpi-value"]').text()).toBe(
             '1 000 000',
         );
-        expect(enCours.find('[data-testid="support-kpi-detail"]').text()).toBe(
+        expect(enCours.find('[data-slot="kpi-detail"]').text()).toBe(
             '3 à confirmer',
         );
     });

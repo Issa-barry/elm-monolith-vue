@@ -382,6 +382,11 @@ class CommissionVenteController extends Controller
         $filteredParts = $filtreProcessus === ''
             ? $filteredPartsTousProcessus
             : $filteredPartsTousProcessus->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->processus?->code === $filtreProcessus)->values();
+        // Une part ANNULEE reste listée (traçabilité) mais ne représente plus de créance : elle
+        // n'entre dans aucun montant (même règle qu'index() et CommissionKpiBuckets).
+        $partsActives = $filteredParts
+            ->reject(fn (CommissionEnveloppePart $p) => $p->statut === StatutCommission::ANNULEE)
+            ->values();
 
         $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur(
             $orgId,
@@ -395,11 +400,11 @@ class CommissionVenteController extends Controller
         // valeur retenue courante, indépendamment de la validation de la période (décision
         // produit du 29/08/2026). $statutResume, lui, reste conditionné par la payabilité.
         $resume = CommissionVenteCalculatorService::calculerResume(
-            (float) $filteredParts->sum('montant_brut'),
+            (float) $partsActives->sum('montant_brut'),
             0.0,
-            (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+            (float) $partsActives->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
             $fraisDepenses,
-            (float) $filteredParts->sum('montant_verse'),
+            (float) $partsActives->sum('montant_verse'),
         );
 
         $buckets = CommissionKpiBuckets::calculer($filteredParts);
@@ -442,9 +447,9 @@ class CommissionVenteController extends Controller
         $payable = false;
 
         $periodeStats = null;
-        if ($periodeFilter !== '' && $filteredParts->isNotEmpty()) {
-            $netPeriode = (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
-            $versePeriode = (float) $filteredParts->sum('montant_verse');
+        if ($periodeFilter !== '' && $partsActives->isNotEmpty()) {
+            $netPeriode = (float) $partsActives->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+            $versePeriode = (float) $partsActives->sum('montant_verse');
             $restePeriode = max(0.0, $netPeriode - $versePeriode);
             $periodeStats = [
                 'code' => $periodeFilter,
@@ -467,6 +472,7 @@ class CommissionVenteController extends Controller
 
                 $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
+                $annulee = $first->statut === StatutCommission::ANNULEE;
 
                 return [
                     'commission_id' => $enveloppe?->id,
@@ -482,7 +488,8 @@ class CommissionVenteController extends Controller
                     'frais' => 0.0,
                     'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantAPayer - $montantVerse),
+                    'reste' => $annulee ? 0.0 : max(0.0, $montantAPayer - $montantVerse),
+                    'annulee' => $annulee,
                     'statut' => $first->statut?->label(),
                     'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
                     'periode' => $periodeCode,

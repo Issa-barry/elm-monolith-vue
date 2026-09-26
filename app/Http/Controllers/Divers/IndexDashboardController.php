@@ -6,7 +6,9 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Http\Controllers\Controller;
 use App\Models\FactureVente;
+use App\Models\Site;
 use App\Services\Client\QrPayloadResolver;
+use App\Services\SiteScopeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +17,10 @@ use Inertia\Response;
 
 class IndexDashboardController extends Controller
 {
-    public function __construct(private readonly QrPayloadResolver $qrPayloadResolver) {}
+    public function __construct(
+        private readonly QrPayloadResolver $qrPayloadResolver,
+        private readonly SiteScopeService $siteScope,
+    ) {}
 
     private function dateRangeForPeriode(string $periode): array
     {
@@ -41,12 +46,21 @@ class IndexDashboardController extends Controller
 
     public function __invoke(Request $request): Response
     {
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $periode = $request->get('periode', 'ce_mois');
         [$start, $end] = $this->dateRangeForPeriode($periode);
 
+        // Périmètre d'agence : même mécanisme que la trésorerie et les rapports (SiteScopeService) —
+        // toute l'organisation pour un administrateur, ses agences (user_sites) sinon. Une facture sans
+        // agence n'est comptée que dans la vue organisation (cf. docs/rapports.md, tableau de bord).
+        $siteIds = $user->isAdmin()
+            ? null
+            : $this->siteScope->accessibleSiteIds($user)->map(fn ($id) => (string) $id)->all();
+        $perimetre = fn ($query, string $colonne) => $siteIds === null ? $query : $query->whereIn($colonne, $siteIds);
+
         // ── Agrégats des factures de vente ─────────────────────────────────────
-        $statsQuery = FactureVente::where('organization_id', $orgId);
+        $statsQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
         if ($start && $end) {
             $statsQuery->whereBetween('created_at', [$start, $end]);
         }
@@ -67,6 +81,7 @@ class IndexDashboardController extends Controller
             ->join('factures_ventes as fv', 'fv.id', '=', 'ev.facture_vente_id')
             ->where('fv.organization_id', $orgId)
             ->whereNull('fv.deleted_at')
+            ->when($siteIds !== null, fn ($q) => $q->whereIn('fv.site_id', $siteIds))
             ->whereIn('fv.statut_facture', [
                 StatutFactureVente::IMPAYEE->value,
                 StatutFactureVente::PARTIEL->value,
@@ -85,7 +100,7 @@ class IndexDashboardController extends Controller
             ? "CAST(strftime('%m', created_at) AS INTEGER)"
             : 'MONTH(created_at)';
 
-        $monthlyQuery = FactureVente::where('organization_id', $orgId);
+        $monthlyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
         if ($start && $end) {
             $monthlyQuery->whereBetween('created_at', [$start, $end]);
         } else {
@@ -111,7 +126,7 @@ class IndexDashboardController extends Controller
 
         // ── Évolution journalière (60 derniers jours) ─────────────────────────
         // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
-        $dailyQuery = FactureVente::where('organization_id', $orgId);
+        $dailyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
         if ($start && $end) {
             $dailyQuery->whereBetween('created_at', [$start, $end]);
         } else {
@@ -143,7 +158,7 @@ class IndexDashboardController extends Controller
         })->values()->toArray();
 
         // ── CA par site (factures non annulées, site renseigné) ───────────────
-        $caParSite = FactureVente::where('factures_ventes.organization_id', $orgId)
+        $caParSite = $perimetre(FactureVente::where('factures_ventes.organization_id', $orgId), 'factures_ventes.site_id')
             ->where('factures_ventes.statut_facture', '!=', StatutFactureVente::ANNULEE->value)
             ->whereNotNull('factures_ventes.site_id')
             ->join('sites', function ($join) {
@@ -163,7 +178,7 @@ class IndexDashboardController extends Controller
             ->toArray();
 
         // ── CA par type de véhicule (factures non annulées, véhicule renseigné) ─
-        $caParTypeVehicule = FactureVente::where('factures_ventes.organization_id', $orgId)
+        $caParTypeVehicule = $perimetre(FactureVente::where('factures_ventes.organization_id', $orgId), 'factures_ventes.site_id')
             ->where('factures_ventes.statut_facture', '!=', StatutFactureVente::ANNULEE->value)
             ->whereNotNull('factures_ventes.vehicule_id')
             ->join('vehicules', function ($join) {
@@ -195,6 +210,7 @@ class IndexDashboardController extends Controller
             ->join('produit_variantes as pv', 'pv.id', '=', 'cvl.variante_id')
             ->join('produits as p', 'p.id', '=', 'pv.produit_id')
             ->where('cv.organization_id', $orgId)
+            ->when($siteIds !== null, fn ($q) => $q->whereIn('cv.site_id', $siteIds))
             ->whereNull('cv.deleted_at')
             ->whereNull('pv.deleted_at')
             ->whereNull('p.deleted_at')
@@ -213,6 +229,10 @@ class IndexDashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'periode' => $periode,
+            // null = toute l'organisation ; sinon les agences auxquelles les chiffres sont limités.
+            'agences' => $siteIds === null
+                ? null
+                : Site::whereIn('id', $siteIds)->orderBy('nom')->pluck('nom')->values()->all(),
             // QR remplaçant les initiales sur mobile (cf. HeaderWidget.vue) — même
             // résolveur que l'espace client/l'API mobile (App\Services\Client\
             // QrPayloadResolver), `null` si l'utilisateur n'a aucun profil
