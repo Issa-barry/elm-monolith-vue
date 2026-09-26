@@ -2,6 +2,7 @@
 import StatusDot from '@/components/StatusDot.vue';
 import { formatGNF } from '@/lib/utils';
 import type { LigneFacture } from '@/types/rapports';
+import { ReceiptText } from 'lucide-vue-next';
 import { dateFr } from './format';
 
 // Lignes de factures (Ventes, Dettes clients) : tableau à partir de 640 px, liste empilée
@@ -15,13 +16,24 @@ defineProps<{
 </script>
 
 <template>
-    <div class="rounded-xl border bg-card">
-        <p
+    <div class="overflow-hidden rounded-xl border bg-card">
+        <div
             v-if="lignes.length === 0"
-            class="px-3 py-8 text-center text-sm text-muted-foreground"
+            class="flex flex-col items-center gap-2 px-4 py-8 text-center"
         >
-            {{ vide }}
-        </p>
+            <ReceiptText
+                class="mb-1 h-7 w-7 text-muted-foreground"
+                aria-hidden="true"
+            />
+            <p class="text-sm font-medium">{{ vide }}</p>
+            <p class="max-w-sm text-xs leading-relaxed text-muted-foreground">
+                {{
+                    afficherAnciennete
+                        ? 'Aucun reste à payer dans le périmètre sélectionné.'
+                        : 'Essayez une autre période ou ajustez les filtres.'
+                }}
+            </p>
+        </div>
 
         <template v-else>
             <!-- Téléphone : liste empilée -->
@@ -103,9 +115,11 @@ defineProps<{
                         <tr
                             v-for="l in lignes"
                             :key="l.id"
-                            class="hover:bg-muted/30"
+                            class="transition-colors hover:bg-muted/30"
                         >
-                            <td class="px-3 py-2 font-mono text-xs">
+                            <td
+                                class="px-3 py-3 font-mono text-xs font-medium whitespace-nowrap"
+                            >
                                 {{ l.reference }}
                             </td>
                             <td class="px-3 py-2 whitespace-nowrap">
@@ -122,18 +136,22 @@ defineProps<{
                                 {{ l.agent ?? '—' }}
                             </td>
                             <td class="px-3 py-2">{{ l.site_nom ?? '—' }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">
+                            <td
+                                class="px-3 py-3 text-right whitespace-nowrap tabular-nums"
+                            >
                                 {{ formatGNF(l.montant) }}
                             </td>
-                            <td class="px-3 py-2 text-right tabular-nums">
+                            <td
+                                class="px-3 py-3 text-right whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
                                 {{ formatGNF(l.encaisse) }}
                             </td>
                             <td
-                                class="px-3 py-2 text-right font-medium tabular-nums"
+                                class="px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums"
                             >
                                 {{ formatGNF(l.reste) }}
                             </td>
-                            <td class="px-3 py-2">
+                            <td class="px-3 py-2 whitespace-nowrap">
                                 <StatusDot
                                     :status="l.statut"
                                     :label="l.statut_label"

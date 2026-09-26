@@ -5,7 +5,7 @@ import type {
     LigneEncaissement,
     LigneMobileMoney,
 } from '@/types/rapports';
-import { AlertTriangle } from 'lucide-vue-next';
+import { AlertTriangle, ArrowDownToLine } from 'lucide-vue-next';
 import { dateFr, heureFr } from './format';
 
 // Lignes d'encaissements (onglets Encaissements et Mobile Money) : tableau à partir de 640 px,
@@ -41,13 +41,20 @@ function autres(l: Partial<LigneMobileMoney>): string | null {
 </script>
 
 <template>
-    <div class="rounded-xl border bg-card">
-        <p
+    <div class="overflow-hidden rounded-xl border bg-card">
+        <div
             v-if="lignes.length === 0"
-            class="px-3 py-8 text-center text-sm text-muted-foreground"
+            class="flex flex-col items-center gap-2 px-4 py-8 text-center"
         >
-            {{ vide }}
-        </p>
+            <ArrowDownToLine
+                class="mb-1 h-7 w-7 text-muted-foreground"
+                aria-hidden="true"
+            />
+            <p class="text-sm font-medium">{{ vide }}</p>
+            <p class="text-xs text-muted-foreground">
+                Essayez une autre période ou ajustez les filtres.
+            </p>
+        </div>
 
         <template v-else>
             <!-- Téléphone : liste empilée -->

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import { ChevronDown } from 'lucide-vue-next';
+import { ArrowRight, ChevronDown } from 'lucide-vue-next';
+import type { Component } from 'vue';
 
 // Carte-onglet du rapport : résumé d'une section ET bouton qui en affiche le détail. La carte
 // active se reconnaît sans la couleur : bordure épaisse, chevron « détail affiché » et
@@ -10,7 +11,9 @@ defineProps<{
     valeur: string;
     detail: string;
     active: boolean;
+    focusable?: boolean;
     testid: string;
+    icone: Component;
     avertissement?: string | null;
     large?: boolean;
 }>();
@@ -22,34 +25,46 @@ defineEmits<{ choisir: [] }>();
     <button
         type="button"
         role="tab"
+        :id="testid"
+        :aria-controls="testid.replace('rapport-tab-', 'rapport-panel-')"
         :aria-selected="active"
+        :tabindex="active || focusable ? 0 : -1"
         :data-testid="testid"
         :class="
             cn(
-                'relative flex min-w-0 flex-col items-start rounded-xl bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                'group relative flex min-w-0 flex-col items-stretch gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none sm:p-4',
                 active
-                    ? 'border-2 border-primary shadow-sm'
-                    : 'border border-border',
-                large && 'sm:flex-row sm:items-center sm:justify-between',
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border bg-card hover:border-primary/40 hover:bg-muted/30',
+                large && 'sm:flex-row sm:items-center sm:gap-6',
             )
         "
         @click="$emit('choisir')"
     >
-        <div class="min-w-0">
-            <p
-                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+        <div class="min-w-0" :class="large && 'sm:flex-1'">
+            <div
+                class="flex items-center gap-2 text-sm font-medium"
+                :class="active ? 'text-primary' : 'text-muted-foreground'"
             >
-                {{ libelle }}
-            </p>
+                <component
+                    :is="icone"
+                    class="h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                />
+                <span>{{ libelle }}</span>
+            </div>
             <p
-                class="mt-0.5 truncate font-bold tabular-nums"
-                :class="large ? 'text-2xl' : 'text-base sm:text-lg'"
+                class="mt-2 font-semibold tracking-tight break-words text-foreground tabular-nums"
+                :class="large ? 'text-2xl sm:text-3xl' : 'text-base sm:text-xl'"
                 data-testid="carte-valeur"
             >
                 {{ valeur }}
             </p>
         </div>
-        <div class="mt-0.5 min-w-0 text-xs text-muted-foreground">
+        <div
+            class="min-w-0 text-xs leading-relaxed text-muted-foreground"
+            :class="!large && 'mt-auto'"
+        >
             <span
                 v-if="avertissement"
                 class="font-medium text-amber-700 dark:text-amber-400"
@@ -57,11 +72,20 @@ defineEmits<{ choisir: [] }>();
             >
             <span v-else>{{ detail }}</span>
         </div>
-        <ChevronDown
-            v-if="active"
+        <div
+            class="flex items-center justify-between gap-2 border-t pt-2 text-xs font-medium"
+            :class="[
+                active
+                    ? 'border-primary/15 text-primary'
+                    : 'text-muted-foreground',
+                large && 'sm:border-t-0 sm:pt-0',
+            ]"
             aria-hidden="true"
-            class="absolute top-2 right-2 h-3.5 w-3.5 text-primary"
-        />
+        >
+            <span>{{ active ? 'Détail affiché' : 'Voir le détail' }}</span>
+            <ChevronDown v-if="active" class="h-3.5 w-3.5 shrink-0" />
+            <ArrowRight v-else class="h-3.5 w-3.5 shrink-0" />
+        </div>
         <span v-if="active" class="sr-only">(détail affiché)</span>
     </button>
 </template>
