@@ -340,34 +340,21 @@ export async function lireDiagnosticCommission(
 }
 
 /**
- * Supprime un encaissement via le VRAI endpoint applicatif (DELETE /encaissements/{id},
+ * Supprime un encaissement via le VRAI endpoint applicatif (DELETE /backoffice/encaissements/{id},
  * Ventes\DestroyEncaissementVenteController) — pas de bouton UI pour cette action aujourd'hui
  * (aucune trace dans Ventes/Show.vue au-delà de l'historique en lecture seule), donc un
  * appel HTTP direct authentifié par la session du navigateur est la façon la plus proche
- * du "vrai parcours" disponible, sans jamais appeler un service PHP directement. CSRF géré
- * comme le ferait Inertia/axios : lecture du cookie XSRF-TOKEN, envoyé en X-XSRF-TOKEN.
+ * du "vrai parcours" disponible, sans jamais appeler un service PHP directement. Exige
+ * `ventes.annuler_exceptionnel` (cf. autoriserSuppressionEncaissement()).
  */
 export async function supprimerEncaissement(
     page: Page,
     encaissementId: string,
 ): Promise<void> {
-    const cookies = await page.context().cookies();
-    const xsrfCookie = cookies.find((c) => c.name === 'XSRF-TOKEN');
-    if (!xsrfCookie) {
-        throw new Error(
-            'supprimerEncaissement: cookie XSRF-TOKEN introuvable — session non authentifiée ?',
-        );
-    }
-
     const response = await page.request.delete(
-        `/encaissements/${encaissementId}`,
-        {
-            headers: {
-                'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value),
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        },
+        `/backoffice/encaissements/${encaissementId}`,
+        // Le contrôleur répond redirect()->back() : ne pas rejouer la redirection (en DELETE).
+        { headers: await enTetesMutation(page), maxRedirects: 0 },
     );
 
     if (![200, 204, 302].includes(response.status())) {
@@ -375,6 +362,45 @@ export async function supprimerEncaissement(
             `supprimerEncaissement: statut HTTP inattendu ${response.status()} — ${await response.text()}`,
         );
     }
+}
+
+/**
+ * Accorde (`true`) ou retire (`false`) à l'utilisateur connecté `ventes.annuler_exceptionnel`,
+ * exigée pour supprimer un encaissement et réservée au super administrateur — via la fixture
+ * e2e-only CommissionE2eFixturesController::permissionAnnulationExceptionnelle().
+ */
+export async function autoriserSuppressionEncaissement(
+    page: Page,
+    autoriser: boolean,
+): Promise<void> {
+    const url = '/e2e/fixtures/permission-annulation-exceptionnelle';
+    const options = { headers: await enTetesMutation(page) };
+    const response = autoriser
+        ? await page.request.post(url, options)
+        : await page.request.delete(url, options);
+
+    if (!response.ok()) {
+        throw new Error(
+            `autoriserSuppressionEncaissement: ${response.status()} ${await response.text()}`,
+        );
+    }
+}
+
+/** CSRF géré comme Inertia/axios : cookie XSRF-TOKEN renvoyé en X-XSRF-TOKEN. */
+async function enTetesMutation(page: Page): Promise<Record<string, string>> {
+    const cookies = await page.context().cookies();
+    const xsrfCookie = cookies.find((c) => c.name === 'XSRF-TOKEN');
+    if (!xsrfCookie) {
+        throw new Error(
+            'cookie XSRF-TOKEN introuvable — session non authentifiée ?',
+        );
+    }
+
+    return {
+        'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value),
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    };
 }
 
 /** Extrait l'ULID de commande depuis l'URL courante (/backoffice/ventes/{id}). */

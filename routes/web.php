@@ -979,6 +979,8 @@ if (app()->environment('e2e')) {
     Route::middleware(['auth'])->group(function () {
         Route::get('e2e/diagnostics/commandes-vente/{commandeId}/commissions', [CommissionE2eDiagnosticController::class, 'commande'])
             ->name('e2e.diagnostics.commande-vente-commissions');
+        Route::match(['post', 'delete'], 'e2e/fixtures/permission-annulation-exceptionnelle', [CommissionE2eFixturesController::class, 'permissionAnnulationExceptionnelle'])
+            ->name('e2e.fixtures.permission-annulation-exceptionnelle');
     });
     // Crée sa propre organisation et y connecte la session : aucun utilisateur préalable requis.
     Route::post('e2e/fixtures/partages-livreur', [CommissionE2eFixturesController::class, 'partagesLivreur'])

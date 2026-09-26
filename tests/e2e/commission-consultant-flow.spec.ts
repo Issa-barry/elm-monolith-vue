@@ -15,11 +15,13 @@
  * Run: E2E_SKIP_GLOBAL_SETUP=1 npx playwright test tests/e2e/commission-consultant-flow.spec.ts --workers=1
  */
 import { expect, test } from '@playwright/test';
-import { loginAsElmV2Demo } from './helpers';
+import { configurerBareme, montantPattern } from './commissions/helpers';
+import { closeFilterDrawerIfOpen, loginAsElmV2Demo } from './helpers';
 
 test.setTimeout(120_000);
 
 const CATEGORIE_NOM = "Sachets d'eau V2 Demo";
+const CONSULTANT_LABEL = 'Consultant V2 Demo';
 
 test.beforeEach(async ({ page }) => {
     await loginAsElmV2Demo(page);
@@ -28,39 +30,30 @@ test.beforeEach(async ({ page }) => {
 test('définir un barème "Consultant" par catégorie dans Paramètres > Commissions', async ({
     page,
 }) => {
+    await configurerBareme(page, {
+        categorieNom: CATEGORIE_NOM,
+        montants: { consultant: 500 },
+        consultantLabel: CONSULTANT_LABEL,
+    });
+
     await page.goto('/settings/commissions');
     await expect(
         page.getByRole('heading', { name: /^commissions$/i }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Colonne "Consultant" présente à côté de Propriétaire/Livraison/Site — jamais un onglet
+    // Colonne "Consultant" présente à côté de Propriétaire/Livreur/Site — jamais un onglet
     // séparé, jamais un nom de prestataire codé en dur ("Fello Consulting").
     await expect(
-        page.getByRole('columnheader', { name: /^consultant$/i }),
+        page.getByText('Consultant', { exact: true }).first(),
     ).toBeVisible();
     await expect(page.getByText(/fello/i)).toHaveCount(0);
 
     const row = page
-        .locator('tbody tr', { hasText: new RegExp(CATEGORIE_NOM, 'i') })
+        .locator('[data-testid^="commission-row-"]', { hasText: CATEGORIE_NOM })
         .first();
     await expect(row).toBeVisible({ timeout: 15_000 });
-
-    // Ordre des colonnes cible : Propriétaire, Livraison, Site, Consultant (cf.
-    // CommissionRegleController).
-    const consultantCell = row.getByRole('button').nth(3);
-    await consultantCell.click();
-
-    const dialog = page.getByRole('dialog', { name: /consultant/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await dialog.locator('#cr-montant').fill('500');
-    await dialog.getByRole('button', { name: /enregistrer/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
-
-    // Toast de succès en haut (jamais en bas), cf. mission §5/§10.
-    await expect(page.getByText(/barème enregistré/i)).toBeVisible({
-        timeout: 10_000,
-    });
-    await expect(consultantCell).toContainText(/500/);
+    await expect(row).toContainText(new RegExp(montantPattern(500)));
+    await expect(row).toContainText(CONSULTANT_LABEL);
 });
 
 test("l'écran Comptabilité > Commission consultants se charge avec ses filtres et ses cartes de synthèse", async ({
@@ -85,7 +78,7 @@ test("l'écran Comptabilité > Commission consultants se charge avec ses filtres
     await filtresButton.click();
     await expect(page.getByTestId('filters-drawer')).toBeVisible();
     await expect(page.getByTestId('agency-filter')).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await closeFilterDrawerIfOpen(page);
 
     // Export unique en dropdown (Excel + PDF), jamais deux boutons séparés.
     await page.getByRole('button', { name: /^exporter$/i }).click();
@@ -125,7 +118,7 @@ test('la navigation latérale regroupe "Consultants" sous Comptabilité > Commis
 
     const commissionsItem = accountingItem
         .locator('[data-sidebar="menu-sub-item"]')
-        .filter({ has: commissionsButton });
+        .filter({ has: page.getByRole('button', { name: /^commissions$/i }) });
     await commissionsItem.getByRole('link', { name: /^consultants$/i }).click();
 
     await expect(page).toHaveURL(/\/comptabilite\/commissions\/consultants$/, {

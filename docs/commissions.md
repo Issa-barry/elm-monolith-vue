@@ -948,6 +948,21 @@ Cf. [retour-commande.md](retour-commande.md) et [ADR 0003](adr/0003-retour-de-li
   date de gain conservée ; retour total → `annulee` ; retour refusé si commission validée/ajustée ;
   déclencheur `FACTURE_ENCAISSEE`).
 
+## Suppression de l'encaissement déclencheur — commissions annulées (incident du 26/08/2026)
+
+- **Règle** : sous le déclencheur `FACTURE_ENCAISSEE`, supprimer un encaissement qui fait repasser la
+  facture sous `payee` retire le fait générateur de la commission.
+  `FactureVente::recalculStatut()` appelle alors `CommissionTriggerService::onFactureVenteEncaissementRetire()`
+  (symétrique de `onFactureVenteEncaissee()`), qui passe en `annulee` toutes les enveloppes et parts de
+  la commande **non encore payées**. Elles restent listées pour la traçabilité, mais ne sont plus
+  payables. Une part déjà `paye` n'est jamais reprise.
+- **Sans effet** sous `CHARGEMENT_VALIDE` (commission indépendante de l'encaissement) et pour les
+  commandes à réception explicite.
+- **Suppression** d'un encaissement : permission `ventes.annuler_exceptionnel` exigée depuis le
+  24/09/2026 (`Ventes\DestroyEncaissementVenteController`).
+- Tests : `CommissionTriggerVenteTest::test_facture_encaissee_suppression_de_lencaissement_declencheur_devrait_invalider_la_commission`
+  (Feature), `tests/e2e/commissions/commission-regression-encaissement-supprime.spec.ts` (E2E).
+
 ## Changement de barème Livreur et partage d'équipe — lot 1 (24/09/2026)
 
 Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md). Contexte : un changement de

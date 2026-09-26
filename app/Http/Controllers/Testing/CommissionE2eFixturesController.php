@@ -39,6 +39,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -213,5 +214,23 @@ class CommissionE2eFixturesController extends Controller
             'produit_id' => $resultat['variante']->produit_id,
             'commande_partielle_id' => $commande->id,
         ]);
+    }
+
+    /**
+     * Accorde (POST) ou retire (DELETE) à l'utilisateur connecté la permission directe
+     * `ventes.annuler_exceptionnel`, exigée pour supprimer un encaissement depuis le 24/09/2026 et
+     * réservée au super administrateur. Le compte « Admin V2 Demo » (admin_entreprise) doit pouvoir
+     * exercer le vrai endpoint de suppression le temps d'une spec, sans modifier les rôles seedés.
+     */
+    public function permissionAnnulationExceptionnelle(Request $request): JsonResponse
+    {
+        $permission = Permission::findOrCreate('ventes.annuler_exceptionnel', 'web');
+        $user = $request->user();
+
+        $request->isMethod('delete')
+            ? $user->revokePermissionTo($permission)
+            : $user->givePermissionTo($permission);
+
+        return response()->json(['granted' => $user->fresh()->hasDirectPermission($permission)]);
     }
 }
