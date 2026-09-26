@@ -151,6 +151,9 @@ use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
 use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
+use App\Http\Controllers\Rapports\ExportRapportActiviteController;
+use App\Http\Controllers\Rapports\IndexMaSituationController;
+use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
@@ -323,6 +326,12 @@ Route::prefix('backoffice')->group(function () {
         ->name('dashboard');
 
     Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
+
+        // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
+        Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');
+        Route::get('ma-situation/export', ExportRapportActiviteController::class)->name('ma-situation.export');
+        Route::get('rapports/activite', IndexRapportActiviteController::class)->name('rapports.activite');
+        Route::get('rapports/activite/export', ExportRapportActiviteController::class)->name('rapports.activite.export');
 
         // Messages de contact
         Route::get('contact-messages/unread-count', UnreadCountContactController::class)->name('contact-messages.unread-count');

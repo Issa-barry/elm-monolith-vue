@@ -20,6 +20,7 @@ import {
     Building2,
     Calculator,
     Car,
+    ChartColumn,
     Contact,
     Layers,
     LayoutGrid,
@@ -29,6 +30,7 @@ import {
     Receipt,
     ShoppingCart,
     Truck,
+    UserRound,
     UsersRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -120,6 +122,14 @@ const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
         { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
     ];
+
+    if (can('rapports.read_own')) {
+        items.push({
+            title: 'Ma situation',
+            href: '/backoffice/ma-situation',
+            icon: UserRound,
+        });
+    }
 
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
@@ -385,6 +395,22 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/communications',
             icon: MessageSquare,
             group: 'Organisation',
+        });
+
+    // Rapports (docs/rapports.md) : le lot 1 ne contient que le rapport d'activité ; Stock, Achats
+    // et Dépenses viendront s'ajouter ici.
+    if (can('rapports.read'))
+        items.push({
+            title: 'Rapports',
+            href: '/backoffice/rapports/activite',
+            icon: ChartColumn,
+            group: 'Pilotage',
+            items: [
+                {
+                    title: "Rapport d'activité",
+                    href: '/backoffice/rapports/activite',
+                },
+            ],
         });
 
     return items;
