@@ -449,8 +449,9 @@ class CommissionProprietaireController extends Controller
 
         // total_brut/total_net/solde restent calculés exclusivement sur les parts déjà actives
         // (jamais CREEE) — jamais mélangées à une commission pas encore éligible au paiement
-        // (cf. $buckets ci-dessous, décision produit du 20/08/2026).
-        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        // (cf. $buckets ci-dessous, décision produit du 20/08/2026). Une part ANNULEE reste listée
+        // (traçabilité) mais ne représente plus de créance : exclue de tous les montants.
+        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => ! in_array($p->statut, [StatutCommission::CREEE, StatutCommission::ANNULEE], true));
         $totalBrut = (float) $activeParts->sum('montant_brut');
         $totalAPayer = (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
         $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
@@ -503,6 +504,7 @@ class CommissionProprietaireController extends Controller
 
                 $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
+                $annulee = $first->statut === StatutCommission::ANNULEE;
 
                 return [
                     'commission_id' => $enveloppe?->id,
@@ -517,7 +519,8 @@ class CommissionProprietaireController extends Controller
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantAPayer - $montantVerse),
+                    'reste' => $annulee ? 0.0 : max(0.0, $montantAPayer - $montantVerse),
+                    'annulee' => $annulee,
                     'statut' => $first->statut?->label(),
                     'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
                     'periode' => $periodeCode,

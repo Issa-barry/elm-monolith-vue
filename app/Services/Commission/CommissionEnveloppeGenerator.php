@@ -9,6 +9,8 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\CommissionCibleType;
@@ -20,6 +22,7 @@ use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraisonPartageCategorie;
+use App\Models\PaiementPeriode;
 use App\Models\Prestataire;
 use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
@@ -29,8 +32,10 @@ use App\Notifications\CommissionManquanteNotification;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
+use App\Services\PeriodeCalculatorService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -97,8 +102,8 @@ class CommissionEnveloppeGenerator
 
         self::executerAvecTentative(
             $ctx, $processusCode, $declenchePar, $declencheurUserId,
-            fn (CommissionProcessus $identite) => self::genererDepuisContexte(
-                $ctx, $identite, CommissionProcessusDefaults::processusResolutionBareme($identite),
+            fn (CommissionProcessus $identite, Collection $existantes) => self::genererDepuisContexte(
+                $ctx, $identite, CommissionProcessusDefaults::processusResolutionBareme($identite), $existantes,
             ),
         );
     }
@@ -121,7 +126,7 @@ class CommissionEnveloppeGenerator
         self::executerAvecTentative(
             $ctx, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $declenchePar, $declencheurUserId,
             // Jamais de repli pour un transfert : logistique_transfert est déjà son propre barème.
-            fn (CommissionProcessus $identite) => self::genererDepuisContexte($ctx, $identite, $identite),
+            fn (CommissionProcessus $identite, Collection $existantes) => self::genererDepuisContexte($ctx, $identite, $identite, $existantes),
         );
     }
 
@@ -228,16 +233,23 @@ class CommissionEnveloppeGenerator
         DB::transaction(function () use ($ctx, $processus, $declenchePar, $declencheurUserId, $generation) {
             $ctx->sourceType::whereKey($ctx->sourceId)->lockForUpdate()->value('id');
 
-            $dejaGenere = CommissionEnveloppe::query()
+            // Idempotence PAR CIBLE (R3, 24/09/2026) — révise l'ancien « une enveloppe existe = no-op
+            // total », qui rendait toute génération PARTIELLE définitivement irrégularisable : une
+            // relance ne retrouvait jamais la cible en échec. Désormais, quand la DERNIÈRE tentative
+            // est PARTIEL, seules les cibles manquantes sont générées (jamais une enveloppe existante
+            // recréée, cf. genererDepuisContexte()), à la date de gain d'origine. Dans tous les
+            // autres cas où des enveloppes existent (génération complète, ou enveloppe annulée par
+            // un retour total/une annulation) : no-op, comme avant.
+            $existantes = CommissionEnveloppe::query()
                 ->where('source_type', $ctx->sourceType)
                 ->where('source_id', $ctx->sourceId)
-                ->exists();
-            if ($dejaGenere) {
+                ->get();
+            if ($existantes->isNotEmpty() && ! self::completionAutorisee($ctx, $existantes)) {
                 return;
             }
 
             try {
-                $erreursCibles = DB::transaction(fn () => $generation($processus));
+                ['erreurs' => $erreursCibles, 'creees' => $enveloppesCreees] = DB::transaction(fn () => $generation($processus, $existantes));
 
                 // "Succès" ne veut pas dire "une commission a réellement été créée" :
                 // l'absence de barème actif pour une catégorie résout silencieusement à
@@ -275,10 +287,21 @@ class CommissionEnveloppeGenerator
                 ]);
 
                 // Les bénéficiaires connectés (propriétaire/livreur) sont notifiés de leur part
-                // dès qu'au moins une enveloppe existe — y compris en PARTIEL : une cible cassée
-                // ne doit jamais retarder la notification des cibles correctement résolues.
-                if ($auMoinsUneEnveloppe) {
-                    self::notifierCommissionGeneree($ctx);
+                // dès qu'au moins une enveloppe est créée — y compris en PARTIEL : une cible cassée
+                // ne doit jamais retarder la notification des cibles correctement résolues. Une
+                // complétion ne notifie que les enveloppes qu'elle vient de créer, jamais une
+                // seconde fois les parts déjà annoncées.
+                if (! empty($enveloppesCreees)) {
+                    self::notifierCommissionGeneree($ctx, $enveloppesCreees);
+                }
+
+                // Une complétion ajoute une enveloppe à une date de gain passée : la période
+                // (encore calculable) qui la couvre doit la refléter sans attendre sa réouverture.
+                if ($existantes->isNotEmpty() && ! empty($enveloppesCreees)) {
+                    app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees(
+                        $ctx->organizationId,
+                        Carbon::parse($existantes->min('earned_at')),
+                    );
                 }
 
                 // Alerte régularisation : succès total mais 0 enveloppe (aucun barème nulle
@@ -319,6 +342,57 @@ class CommissionEnveloppeGenerator
                 // reste "à régulariser", jamais rollbackée.
             }
         });
+    }
+
+    /**
+     * Une complétion (génération des seules cibles manquantes) n'a de sens que si la dernière
+     * tentative a laissé l'opération PARTIELLE, et jamais sur une opération dont une commission a
+     * été annulée (retour total, annulation de commande) : ces enveloppes annulées doivent rester
+     * la vérité de l'opération, jamais complétées par-dessus.
+     *
+     * @param  Collection<int, CommissionEnveloppe>  $existantes
+     */
+    private static function completionAutorisee(CommissionOperationContext $ctx, Collection $existantes): bool
+    {
+        if ($existantes->contains(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::ANNULEE)) {
+            return false;
+        }
+
+        $derniere = CommissionGenerationAttempt::query()
+            ->where('source_type', $ctx->sourceType)
+            ->where('source_id', $ctx->sourceId)
+            ->latest('created_at')
+            ->latest('id')
+            ->first();
+
+        return $derniere?->statut === CommissionGenerationStatut::PARTIEL;
+    }
+
+    /**
+     * Type de période de paiement qui paie une cible — sert à refuser d'ajouter une cible
+     * manquante dans une période déjà validée/clôturée (montants figés, cf.
+     * PeriodeCalculatorService::needsRecalcul()) : la part n'y serait jamais payée.
+     */
+    private static function periodeFigeePour(string $organizationId, string $cibleType, Carbon $date): ?PaiementPeriode
+    {
+        $type = match ($cibleType) {
+            CommissionCibleType::CODE_PROPRIETAIRE => TypePeriodePaiement::PROPRIETAIRE,
+            CommissionCibleType::CODE_EQUIPE_LIVRAISON => TypePeriodePaiement::LIVREUR,
+            CommissionCibleType::CODE_SITE => TypePeriodePaiement::SITE,
+            CommissionCibleType::CODE_CONSULTANT => TypePeriodePaiement::CONSULTANT,
+            default => null,
+        };
+
+        if ($type === null) {
+            return null;
+        }
+
+        return PaiementPeriode::where('organization_id', $organizationId)
+            ->where('type', $type->value)
+            ->whereIn('statut', [StatutPeriodePaiement::VALIDEE->value, StatutPeriodePaiement::CLOTUREE->value])
+            ->whereDate('date_debut', '<=', $date)
+            ->whereDate('date_fin', '>=', $date)
+            ->first();
     }
 
     /**
@@ -381,13 +455,13 @@ class CommissionEnveloppeGenerator
      * BeneficiaireUserResolver). Même garantie d'isolation que
      * alerterCommissionManquante() : jamais de rethrow vers l'appelant.
      */
-    private static function notifierCommissionGeneree(CommissionOperationContext $ctx): void
+    /**
+     * @param  list<string>  $enveloppeIds  enveloppes créées par CETTE génération
+     */
+    private static function notifierCommissionGeneree(CommissionOperationContext $ctx, array $enveloppeIds): void
     {
         try {
-            $parts = CommissionEnveloppePart::whereHas(
-                'enveloppe',
-                fn ($q) => $q->where('source_type', $ctx->sourceType)->where('source_id', $ctx->sourceId)
-            )->whereIn('beneficiaire_type', [
+            $parts = CommissionEnveloppePart::whereIn('enveloppe_id', $enveloppeIds)->whereIn('beneficiaire_type', [
                 CommissionEnveloppePart::TYPE_PROPRIETAIRE,
                 CommissionEnveloppePart::TYPE_LIVREUR,
             ])->get();
@@ -440,13 +514,27 @@ class CommissionEnveloppeGenerator
      * (tout-ou-rien), désormais réservée au seul cas où AUCUNE cible n'a pu être générée, cf.
      * docs/commissions.md.
      *
-     * @return list<string>
+     * Complétion (R3, 24/09/2026) — $existantes non vide : seules les cibles SANS enveloppe sont
+     * persistées (clé cible_type, et cible_type + consultant pour la cible Consultant qui peut en
+     * compter plusieurs), à la date de gain d'origine des enveloppes existantes — barème et
+     * partage résolus à cette date (option A), jamais la configuration du jour. Une cible manquante
+     * dont la période de paiement est déjà validée/clôturée reste à régulariser, avec un motif
+     * explicite, plutôt que d'être créée dans une période où elle ne serait jamais payée.
+     *
+     * @param  Collection<int, CommissionEnveloppe>  $existantes
+     * @return array{erreurs: list<string>, creees: list<string>}
      */
-    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme): array
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes): array
     {
         $vehicule = $ctx->vehicule;
 
-        $earnedAt = $ctx->earnedAt;
+        $completion = $existantes->isNotEmpty();
+        $earnedAt = $completion ? Carbon::parse($existantes->min('earned_at')) : $ctx->earnedAt;
+        $clesExistantes = $existantes
+            ->map(fn (CommissionEnveloppe $e) => $e->cible_type === CommissionCibleType::CODE_CONSULTANT
+                ? "{$e->cible_type}:{$e->cible_id}"
+                : $e->cible_type)
+            ->all();
         $lignes = $ctx->lignes;
 
         $cibles = [];
@@ -784,9 +872,43 @@ class CommissionEnveloppeGenerator
             }
         }
 
+        if ($completion) {
+            // Une cible déjà générée n'est jamais recréée — ses erreurs éventuelles de résolution
+            // sont sans objet (elle est complète), seules celles des cibles manquantes comptent.
+            $ciblesCompletes = array_filter($clesExistantes, fn (string $cle) => ! str_contains($cle, ':'));
+            $erreurs = array_values(array_filter(
+                $erreurs,
+                fn (string $erreur) => ! collect($ciblesCompletes)->contains(
+                    fn (string $cible) => str_starts_with($erreur, "Cible {$cible} :")
+                ),
+            ));
+
+            $enveloppesACreer = array_filter(
+                $enveloppesACreer,
+                fn (string $cle) => ! in_array($cle, $clesExistantes, true),
+                ARRAY_FILTER_USE_KEY,
+            );
+
+            foreach (array_keys($enveloppesACreer) as $cle) {
+                $cibleType = explode(':', (string) $cle)[0];
+                $periode = self::periodeFigeePour($ctx->organizationId, $cibleType, $earnedAt);
+                if ($periode) {
+                    $erreurs[] = sprintf(
+                        'Cible %s : la période de paiement %s couvrant le %s est %s — la part manquante ne peut plus y être ajoutée.',
+                        $cibleType,
+                        $periode->reference,
+                        $earnedAt->format('d/m/Y'),
+                        $periode->statut === StatutPeriodePaiement::CLOTUREE ? 'clôturée' : 'validée',
+                    );
+                    unset($enveloppesACreer[$cle]);
+                }
+            }
+        }
+
         // Persistance de toutes les cibles correctement résolues, qu'il y ait ou non des
         // $erreurs par ailleurs (chantier 2A) — executerAvecTentative() décide du statut
         // SUCCES/PARTIEL/ERREUR à partir du $erreurs retourné plus bas, jamais d'un rollback ici.
+        $creees = [];
         foreach ($enveloppesACreer as $cibleCode => $e) {
             $enveloppe = CommissionEnveloppe::create([
                 'organization_id' => $ctx->organizationId,
@@ -799,6 +921,7 @@ class CommissionEnveloppeGenerator
                 'earned_at' => $earnedAt,
                 'statut' => StatutCommission::CREEE->value,
             ]);
+            $creees[] = $enveloppe->id;
 
             foreach ($e['contributions'] as $c) {
                 CommissionEnveloppeLigne::create([
@@ -829,6 +952,6 @@ class CommissionEnveloppeGenerator
             }
         }
 
-        return $erreurs;
+        return ['erreurs' => $erreurs, 'creees' => $creees];
     }
 }

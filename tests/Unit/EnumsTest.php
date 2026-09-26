@@ -15,6 +15,7 @@ use App\Enums\SiteStatut;
 use App\Enums\SiteType;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
 use App\Models\ProduitType;
 use PHPUnit\Framework\TestCase;
@@ -211,6 +212,14 @@ class EnumsTest extends TestCase
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
         }
+    }
+
+    // ── StatutCommission ──────────────────────────────────────────────────────
+
+    public function test_statut_commission_annulee_affiche_un_point_rouge(): void
+    {
+        // Aligné sur STATUS_COLOR_MAP (StatusDot.vue) : annulee → rouge.
+        $this->assertSame('bg-red-500', StatutCommission::ANNULEE->dotClass());
     }
 
     // ── SiteRole ──────────────────────────────────────────────────────────────

@@ -102,6 +102,11 @@ Champ `reference_paiement` (nullable, string 190) sur `encaissements_ventes`, re
 (`StoreEncaissementVenteController`) pour **Mobile Money** et **Virement**. Facultatif pour
 **Chèque** et **Espèces**. Le champ `note` reste un commentaire libre, distinct de la référence.
 
+Contrôle dans le rapport d'activité ([rapports.md](rapports.md), RAP-007) : un Mobile Money saisi
+depuis le **14/09/2026** sans référence est signalé ; plus ancien, il est « antérieur à
+l'obligation » ; une même référence réutilisée pour le même opérateur dans l'organisation est
+signalée comme déjà utilisée.
+
 ## Une seule liste déroulante côté UI — `resources/js/components/payment/PaymentCard.vue`
 
 L'utilisateur ne voit jamais de sélection en deux temps ("Mobile Money" puis "Opérateur") ni de

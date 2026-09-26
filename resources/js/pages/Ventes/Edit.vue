@@ -11,7 +11,10 @@ import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
+import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
+
+const toast = useToast();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ProduitOption {
@@ -603,7 +606,19 @@ const canSubmit = computed(
 
 // ── Soumission ────────────────────────────────────────────────────────────────
 function submit() {
-    form.put(`/backoffice/ventes/${props.commande.id}`);
+    form.put(`/backoffice/ventes/${props.commande.id}`, {
+        onError: (errors) => {
+            toast.add({
+                group: 'top',
+                severity: 'error',
+                summary: 'Commande non modifiée',
+                detail:
+                    Object.values(errors)[0] ??
+                    'La commande n’a pas pu être modifiée.',
+                life: 8000,
+            });
+        },
+    });
 }
 </script>
 

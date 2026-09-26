@@ -41,8 +41,9 @@ test('ligne cliquable Commission vente : clic, clavier, et menu "..." isolé', a
     await page.keyboard.press('Escape');
 
     // 2. Clic sur la ligne (hors zone interactive) -> navigation vers le détail.
-    const firstCell = firstRow.locator('td').first();
-    await firstCell.click();
+    // La 1re cellule porte la case de sélection (@click.stop) : on clique le nom.
+    const nameCell = firstRow.locator('td').nth(1);
+    await nameCell.click();
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[^/]+$/,
         { timeout: 10_000 },

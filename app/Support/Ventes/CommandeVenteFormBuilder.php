@@ -10,6 +10,7 @@ use App\Enums\ModeTarification;
 use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
+use App\Exceptions\PartageCommissionNonConformeException;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionProcessus;
@@ -482,29 +483,120 @@ final class CommandeVenteFormBuilder
             return;
         }
 
-        $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($lignes);
-
-        $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
+        $this->assertPartageConforme(
             $organizationId,
-            $vehicule->equipe->id,
+            $vehicule,
+            $processusIdentite,
+            $processusBareme,
+            CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($lignes),
+            'créer ou modifier cette commande',
+            'vehicule_id',
+        );
+    }
+
+    /**
+     * Filet de sécurité au chargement (décision du 24/09/2026) — le blocage principal reste à la
+     * création/modification (ensurePartageLivraisonCategorieConfigure()), mais le partage ou ce qui
+     * détermine le barème (type du véhicule, catégorie d'un produit, publication d'un barème) peut
+     * encore changer entre la création et le chargement, jalon où la commission naît sous le
+     * déclencheur par défaut. Même juge (CommissionPartageLivraisonCategorieChecker), même message.
+     *
+     * Ne porte QUE sur les catégories réellement chargées (une ligne chargée à 0 ne génère aucune
+     * commission) et reprend les instantanés figés à la création (nature_operation,
+     * commission_eligible_snapshot, mode_remise_grossiste) — jamais un recalcul. N'est jamais
+     * appelé à l'encaissement : un défaut de configuration de commission ne bloque jamais l'argent
+     * du client.
+     *
+     * @param  array<int, array{id?: string, quantite_chargee?: int|null}>  $lignesData
+     */
+    public function ensurePartageLivraisonConformeAuChargement(CommandeVente $commande, array $lignesData): void
+    {
+        if (! $commande->vehicule_id || ! $commande->commission_eligible_snapshot) {
+            return;
+        }
+
+        $commande->loadMissing(['vehicule.equipe', 'client', 'lignes.variante.produit']);
+        $vehicule = $commande->vehicule;
+        if (! $vehicule?->equipe) {
+            return;
+        }
+
+        $quantitesSaisies = collect($lignesData)->keyBy('id');
+        $categorieIds = $commande->lignes
+            ->filter(function ($ligne) use ($quantitesSaisies) {
+                $saisie = $quantitesSaisies->get($ligne->id);
+                $quantite = $saisie !== null && array_key_exists('quantite_chargee', $saisie) && $saisie['quantite_chargee'] !== null
+                    ? (int) $saisie['quantite_chargee']
+                    : (int) ($ligne->quantite_chargee ?? $ligne->quantite_demandee);
+
+                return $quantite > 0;
+            })
+            ->map(fn ($ligne) => $ligne->variante?->produit?->categorie_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $identiteCode = CommissionProcessusDefaults::identiteCodePourVente(
+            $commande->nature_operation,
+            $commande->client?->type,
+            $commande->mode_remise_grossiste,
+        );
+        $processusIdentite = CommissionProcessusDefaults::resoudreOuCreer($commande->organization_id, $identiteCode);
+
+        $this->assertPartageConforme(
+            $commande->organization_id,
+            $vehicule,
+            $processusIdentite,
+            CommissionProcessusDefaults::processusResolutionBareme($processusIdentite),
+            $categorieIds,
+            'valider ce chargement',
+            'partage_commission',
+        );
+    }
+
+    /**
+     * @param  array<int, string>  $categorieIds
+     */
+    private function assertPartageConforme(
+        string $organizationId,
+        Vehicule $vehicule,
+        CommissionProcessus $processusIdentite,
+        CommissionProcessus $processusBareme,
+        array $categorieIds,
+        string $action,
+        string $champErreur,
+    ): void {
+        $nonConformites = CommissionPartageLivraisonCategorieChecker::nonConformites(
+            $organizationId,
+            $vehicule->equipe,
             $processusBareme->code,
             $vehicule->type_vehicule_id,
             $categorieIds,
             Carbon::today(),
         );
 
-        if ($manquantes->isEmpty()) {
+        if ($nonConformites->isEmpty()) {
             return;
         }
 
-        throw ValidationException::withMessages([
-            'vehicule_id' => sprintf(
-                'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « %s » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
+        $exception = PartageCommissionNonConformeException::withMessages([
+            $champErreur => sprintf(
+                'Impossible de %s : le partage de commission du véhicule %s n\'est pas conforme pour le processus « %s ». %s Corrigez la répartition de l\'équipe avant de continuer.',
+                $action,
                 $vehicule->nom_vehicule,
                 $processusIdentite->libelle,
-                $manquantes->pluck('nom')->implode(', '),
+                $nonConformites->map(fn (array $nc) => CommissionPartageLivraisonCategorieChecker::libelleNonConformite($nc))->implode(' '),
             ),
         ]);
+        $exception->details = [
+            'vehicule_nom' => $vehicule->nom_vehicule,
+            'processus_libelle' => $processusIdentite->libelle,
+            'processus_code' => $processusBareme->code,
+            'categories' => $nonConformites->all(),
+        ];
+
+        throw $exception;
     }
 
     /**

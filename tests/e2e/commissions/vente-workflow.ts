@@ -136,9 +136,10 @@ export async function demarrerEtValiderChargement(page: Page): Promise<void> {
     });
     await expect(chargementDialog).toBeVisible({ timeout: 10_000 });
     await chargementDialog.getByRole('button', { name: /valider le chargement/i }).click();
-    await expect(page.locator('body')).toContainText(/chargement validé|livraison/i, {
-        timeout: 30_000,
-    });
+    // « livraison » figure déjà sur la page avant validation (« Vente avec livraison ») : on
+    // attend que l'action ait disparu, sinon l'encaissement reste refusé (chargement non validé).
+    await expect(chargementDialog).toBeHidden({ timeout: 30_000 });
+    await expect(validerChargementBtn).toBeHidden({ timeout: 30_000 });
 }
 
 /**

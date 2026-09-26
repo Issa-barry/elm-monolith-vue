@@ -20,8 +20,12 @@ export type FilterFieldType =
     | 'multi-select'
     | 'date'
     | 'date-range'
+    | 'period'
     | 'number'
     | 'boolean';
+
+/** Valeur du champ `period` qui affiche les deux dates (bornes libres). */
+const PERIODE_PERSONNALISEE = 'personnalisee';
 
 export interface FilterOption {
     value: string | number;
@@ -47,6 +51,12 @@ export interface FilterField {
     suggestionsUrl?: string;
     /** Pour type: 'autocomplete' — nom du champ passé à l'endpoint (?field=xxx) */
     suggestionsField?: string;
+    /**
+     * Pour type: 'period' — raccourci appliqué quand rien n'est choisi (le serveur retombe dessus) :
+     * ne compte pas comme un filtre actif. Les raccourcis (`options`) sont résolus côté serveur ;
+     * `personnalisee` envoie `startKey`/`endKey` (défaut `date_from`/`date_to`).
+     */
+    defaultValue?: string;
 }
 
 interface SiteOption {
@@ -144,6 +154,10 @@ const localValues = ref<Record<string, unknown>>({});
 const appliedSiteIds = ref<string[]>([]);
 const appliedValues = ref<Record<string, unknown>>({});
 
+function periodKeys(field: FilterField): [string, string] {
+    return [field.startKey ?? 'date_from', field.endKey ?? 'date_to'];
+}
+
 function toArray(val: unknown): string[] {
     if (Array.isArray(val)) return val.map(String);
     if (typeof val === 'string' && val) return [val];
@@ -161,7 +175,13 @@ function initLocal() {
 
     const fresh: Record<string, unknown> = {};
     for (const field of props.fields) {
-        if (field.type === 'date-range') {
+        if (field.type === 'period') {
+            const [sk, ek] = periodKeys(field);
+            fresh[field.key] =
+                (v[field.key] as string) || (field.defaultValue ?? '');
+            fresh[sk] = (v[sk] as string) ?? '';
+            fresh[ek] = (v[ek] as string) ?? '';
+        } else if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             fresh[sk] = (v[sk] as string) ?? '';
@@ -222,7 +242,18 @@ function buildParams(): Record<string, string | string[]> {
 
     for (const field of props.fields) {
         if (field.disabled) continue;
-        if (field.type === 'date-range') {
+        if (field.type === 'period') {
+            const [sk, ek] = periodKeys(field);
+            const choix = localValues.value[field.key] as string;
+            if (choix === PERIODE_PERSONNALISEE) {
+                if (localValues.value[sk])
+                    params[sk] = localValues.value[sk] as string;
+                if (localValues.value[ek])
+                    params[ek] = localValues.value[ek] as string;
+            } else if (choix && choix !== field.defaultValue) {
+                params[field.key] = choix;
+            }
+        } else if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             if (localValues.value[sk])
@@ -274,7 +305,12 @@ function resetFilters() {
 
     for (const field of props.fields) {
         if (field.disabled) continue;
-        if (field.type === 'date-range') {
+        if (field.type === 'period') {
+            const [sk, ek] = periodKeys(field);
+            localValues.value[field.key] = field.defaultValue ?? '';
+            localValues.value[sk] = '';
+            localValues.value[ek] = '';
+        } else if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             localValues.value[sk] = '';
@@ -312,7 +348,10 @@ function countActiveFields(fields: FilterField[]): number {
     let n = 0;
     for (const field of fields) {
         if (field.disabled) continue;
-        if (field.type === 'date-range') {
+        if (field.type === 'period') {
+            const choix = localValues.value[field.key];
+            if (choix && choix !== field.defaultValue) n++;
+        } else if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             if (localValues.value[sk] || localValues.value[ek]) n++;
@@ -411,6 +450,57 @@ const hasActiveFilters = computed(
                         class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
                     />
                 </div>
+            </div>
+
+            <!-- period : raccourcis résolus côté serveur + dates si personnalisée -->
+            <div
+                v-else-if="field.type === 'period'"
+                :data-testid="`filter-inline-${field.key}`"
+                class="flex max-w-full basis-full flex-wrap items-end gap-2 sm:shrink-0 sm:basis-auto"
+            >
+                <div class="flex flex-col gap-1">
+                    <span class="text-xs font-medium text-muted-foreground">{{
+                        field.label
+                    }}</span>
+                    <Select
+                        v-model="localValues[field.key]"
+                        :options="field.options ?? []"
+                        option-label="label"
+                        option-value="value"
+                        :aria-label="field.label"
+                        :disabled="field.disabled ?? false"
+                        size="small"
+                        class="h-9 w-[200px] text-sm"
+                    />
+                </div>
+                <template
+                    v-if="localValues[field.key] === PERIODE_PERSONNALISEE"
+                >
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-muted-foreground"
+                            >Du</span
+                        >
+                        <input
+                            v-model="localValues[periodKeys(field)[0]]"
+                            type="date"
+                            aria-label="Date de début"
+                            :data-testid="`filter-inline-${field.key}-debut`"
+                            class="h-9 w-[150px] rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-muted-foreground"
+                            >Au</span
+                        >
+                        <input
+                            v-model="localValues[periodKeys(field)[1]]"
+                            type="date"
+                            aria-label="Date de fin"
+                            :data-testid="`filter-inline-${field.key}-fin`"
+                            class="h-9 w-[150px] rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        />
+                    </div>
+                </template>
             </div>
 
             <!-- text -->
@@ -590,6 +680,52 @@ const hasActiveFilters = computed(
                                             ] as string | number | undefined
                                         "
                                         type="date"
+                                        class="h-9"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- period -->
+                            <div
+                                v-else-if="field.type === 'period'"
+                                :data-testid="`filter-field-${field.key}`"
+                                class="space-y-1.5"
+                            >
+                                <Label>{{ field.label }}</Label>
+                                <Select
+                                    v-model="localValues[field.key]"
+                                    :options="field.options ?? []"
+                                    option-label="label"
+                                    option-value="value"
+                                    :aria-label="field.label"
+                                    class="w-full"
+                                    fluid
+                                />
+                                <div
+                                    v-if="
+                                        localValues[field.key] ===
+                                        PERIODE_PERSONNALISEE
+                                    "
+                                    class="grid grid-cols-2 gap-2"
+                                >
+                                    <Input
+                                        v-model="
+                                            localValues[
+                                                periodKeys(field)[0]
+                                            ] as string | number | undefined
+                                        "
+                                        type="date"
+                                        aria-label="Date de début"
+                                        class="h-9"
+                                    />
+                                    <Input
+                                        v-model="
+                                            localValues[
+                                                periodKeys(field)[1]
+                                            ] as string | number | undefined
+                                        "
+                                        type="date"
+                                        aria-label="Date de fin"
                                         class="h-9"
                                     />
                                 </div>

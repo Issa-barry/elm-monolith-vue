@@ -11,6 +11,7 @@ use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Depense;
+use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
@@ -20,8 +21,10 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
@@ -171,11 +174,17 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
-            ->where('organization_id', auth()->user()->organization_id)
+        $orgId = auth()->user()->organization_id;
+        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
+            ->where('organization_id', $orgId)
             ->orderBy('nom_vehicule')
-            ->get()
-            ->map(fn (Vehicule $v) => $this->vehiculeData($v));
+            ->get();
+        $partages = PartageConformiteVehiculesService::statuts($orgId, $modeles);
+
+        $vehicules = $modeles->map(fn (Vehicule $v) => [
+            ...$this->vehiculeData($v),
+            'partages_commission' => $partages[$v->id] ?? [],
+        ]);
 
         return Inertia::render('Vehicules/Index', [
             'vehicules' => $vehicules,
@@ -844,6 +853,10 @@ class VehiculeController extends Controller
             );
 
         $statuts = [];
+        // « fait » = même règle que la commande et l'enregistrement de l'équipe (décision du
+        // 24/09/2026) : somme exacte ET chaque membre actif présent (0 GNF accepté).
+        $equipe = EquipeLivraison::find($equipeId);
+        $membresRequis = $equipe ? CommissionPartageLivraisonCategorieChecker::membresRequis($equipe)->keys() : collect();
 
         foreach ($codes as $code) {
             $processusCourant = $processus->get($code);
@@ -864,7 +877,7 @@ class VehiculeController extends Controller
                     : collect();
 
                 try {
-                    CommissionPartageLivraisonValidator::valider($lignes, $enveloppe);
+                    CommissionPartageLivraisonValidator::valider($lignes, $enveloppe, $membresRequis);
                     $statuts[$categorieId][$code] = 'fait';
                 } catch (\InvalidArgumentException) {
                     $statuts[$categorieId][$code] = 'a_faire';

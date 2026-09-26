@@ -13,7 +13,12 @@ use Illuminate\Http\Request;
  * Les périodes rapides sont résolues côté serveur (jamais dans le navigateur) : « aujourd'hui »
  * et le début de semaine restent ceux de l'application. Semaine = du lundi au dimanche.
  * Période personnalisée = `date_from` + `date_to` (Y-m-d, bornes incluses), toutes deux
- * obligatoires et ordonnées ; sinon on retombe sur « Toute la période ».
+ * obligatoires et ordonnées ; sinon on retombe sur la période par défaut (« Toute la période »
+ * pour la fiche véhicule).
+ *
+ * Partagée aussi par le rapport d'activité et « Ma situation » (RapportPerimetreResolver), qui
+ * lisent un autre paramètre d'URL et partent d'« Aujourd'hui » : une seule résolution des périodes
+ * rapides dans l'application.
  */
 final class SituationPeriode
 {
@@ -40,41 +45,65 @@ final class SituationPeriode
         public readonly ?CarbonImmutable $fin,
     ) {}
 
-    public static function depuisRequete(Request $request, ?CarbonImmutable $maintenant = null): self
-    {
+    public static function depuisRequete(
+        Request $request,
+        ?CarbonImmutable $maintenant = null,
+        string $parametre = 'situation_periode',
+        string $defaut = self::TOUT,
+    ): self {
         $maintenant ??= CarbonImmutable::now();
         $du = $request->query('date_from');
         $au = $request->query('date_to');
 
-        if (self::rempli($du) || self::rempli($au)) {
-            return self::personnalisee($du, $au);
-        }
+        $periode = self::rempli($du) || self::rempli($au)
+            ? self::personnalisee($du, $au)
+            : self::rapide((string) $request->query($parametre, $defaut), $maintenant);
 
-        return self::rapide((string) $request->query('situation_periode', self::TOUT), $maintenant);
+        return $periode ?? self::rapide($defaut, $maintenant) ?? self::tout();
     }
 
     /**
+     * @param  list<string>|null  $cles  sous-ensemble des périodes proposées (null = toutes)
      * @return array{cle: string, date_debut: ?string, date_fin: ?string, options: list<array{value: string, label: string}>}
      */
-    public function pourFront(): array
+    public function pourFront(?array $cles = null): array
     {
         return [
             'cle' => $this->cle,
             'date_debut' => $this->debut?->toDateString(),
             'date_fin' => $this->fin?->toDateString(),
-            'options' => self::options(),
+            'options' => self::options($cles),
         ];
     }
 
+    /** Libellé lisible (exports) : « Aujourd'hui (26/09/2026) », « Du 01/09/2026 au 26/09/2026 ». */
+    public function libelle(): string
+    {
+        if ($this->debut === null || $this->fin === null) {
+            return self::LIBELLES[self::TOUT];
+        }
+
+        $du = $this->debut->format('d/m/Y');
+        $au = $this->fin->format('d/m/Y');
+        $bornes = $du === $au ? $du : "du {$du} au {$au}";
+
+        return $this->cle === self::PERSONNALISEE
+            ? ucfirst($bornes)
+            : self::LIBELLES[$this->cle]." ({$bornes})";
+    }
+
     /**
+     * @param  list<string>|null  $cles  sous-ensemble des périodes proposées (null = toutes)
      * @return list<array{value: string, label: string}>
      */
-    public static function options(): array
+    public static function options(?array $cles = null): array
     {
+        $libelles = $cles === null ? self::LIBELLES : array_intersect_key(self::LIBELLES, array_flip($cles));
+
         return array_map(
             fn (string $cle, string $label) => ['value' => $cle, 'label' => $label],
-            array_keys(self::LIBELLES),
-            self::LIBELLES,
+            array_keys($libelles),
+            $libelles,
         );
     }
 
@@ -83,7 +112,7 @@ final class SituationPeriode
         return new self(self::TOUT, null, null);
     }
 
-    private static function rapide(string $cle, CarbonImmutable $maintenant): self
+    private static function rapide(string $cle, CarbonImmutable $maintenant): ?self
     {
         $lundi = CarbonInterface::MONDAY;
         $dimanche = CarbonInterface::SUNDAY;
@@ -100,16 +129,16 @@ final class SituationPeriode
             default => null,
         };
 
-        return $bornes === null ? self::tout() : new self($cle, $bornes[0], $bornes[1]);
+        return $bornes === null ? null : new self($cle, $bornes[0], $bornes[1]);
     }
 
-    private static function personnalisee(mixed $du, mixed $au): self
+    private static function personnalisee(mixed $du, mixed $au): ?self
     {
         $debut = self::date($du);
         $fin = self::date($au);
 
         if ($debut === null || $fin === null || $debut->greaterThan($fin)) {
-            return self::tout();
+            return null;
         }
 
         return new self(self::PERSONNALISEE, $debut->startOfDay(), $fin->endOfDay());

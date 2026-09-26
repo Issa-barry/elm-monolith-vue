@@ -151,6 +151,9 @@ use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
 use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
+use App\Http\Controllers\Rapports\ExportRapportActiviteController;
+use App\Http\Controllers\Rapports\IndexMaSituationController;
+use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
@@ -175,6 +178,7 @@ use App\Http\Controllers\Sites\ShowSiteController;
 use App\Http\Controllers\Sites\StoreSiteController;
 use App\Http\Controllers\Sites\UpdateSiteController;
 use App\Http\Controllers\Testing\CommissionE2eDiagnosticController;
+use App\Http\Controllers\Testing\CommissionE2eFixturesController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
@@ -199,6 +203,7 @@ use App\Http\Controllers\Ventes\AnnulerCommandeVenteController;
 use App\Http\Controllers\Ventes\AnnulerStatutVenteController;
 use App\Http\Controllers\Ventes\AvancerStatutVenteController;
 use App\Http\Controllers\Ventes\CheckoutPdvController;
+use App\Http\Controllers\Ventes\CheckPartageCommissionCommandeVenteController;
 use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
 use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\CreateCommandeVenteController;
@@ -322,6 +327,12 @@ Route::prefix('backoffice')->group(function () {
 
     Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
 
+        // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
+        Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');
+        Route::get('ma-situation/export', ExportRapportActiviteController::class)->name('ma-situation.export');
+        Route::get('rapports/activite', IndexRapportActiviteController::class)->name('rapports.activite');
+        Route::get('rapports/activite/export', ExportRapportActiviteController::class)->name('rapports.activite.export');
+
         // Messages de contact
         Route::get('contact-messages/unread-count', UnreadCountContactController::class)->name('contact-messages.unread-count');
         Route::patch('contact-messages/{contactMessage}/read', MarkReadContactController::class)->name('contact-messages.read');
@@ -368,6 +379,7 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Ventes ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
             Route::get('ventes/check-solvabilite', CheckSolvabiliteCommandeVenteController::class)->name('ventes.check-solvabilite');
+            Route::get('ventes/check-partage-commission', CheckPartageCommissionCommandeVenteController::class)->name('ventes.check-partage-commission');
             Route::get('ventes', IndexCommandeVenteController::class)->name('ventes.index');
             Route::get('ventes/create', CreateCommandeVenteController::class)->name('ventes.create');
             // Avant ventes/{vente} : un segment statique doit toujours être déclaré avant la route
@@ -967,7 +979,12 @@ if (app()->environment('e2e')) {
     Route::middleware(['auth'])->group(function () {
         Route::get('e2e/diagnostics/commandes-vente/{commandeId}/commissions', [CommissionE2eDiagnosticController::class, 'commande'])
             ->name('e2e.diagnostics.commande-vente-commissions');
+        Route::match(['post', 'delete'], 'e2e/fixtures/permission-annulation-exceptionnelle', [CommissionE2eFixturesController::class, 'permissionAnnulationExceptionnelle'])
+            ->name('e2e.fixtures.permission-annulation-exceptionnelle');
     });
+    // Crée sa propre organisation et y connecte la session : aucun utilisateur préalable requis.
+    Route::post('e2e/fixtures/partages-livreur', [CommissionE2eFixturesController::class, 'partagesLivreur'])
+        ->name('e2e.fixtures.partages-livreur');
 }
 
 require __DIR__.'/settings.php';

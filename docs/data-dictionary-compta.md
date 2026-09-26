@@ -405,6 +405,10 @@ mouvements entre agences).
   contrôle de solde pour les mouvements entre agences (il n'en existe toujours pas).
 
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
+Le calcul existe depuis le 26/09/2026 : `FicheCaisseService` (tableau de caisse tiré du grand livre,
+versements, écritures) et le composant `components/tresorerie/CaisseFiche.vue`, utilisés par l'onglet
+Caisse du rapport d'activité ([rapports.md](rapports.md), RAP-008) — la fiche caisse doit les
+réutiliser, pas recalculer.
 
 ## Notification — mouvements de fonds à confirmer
 

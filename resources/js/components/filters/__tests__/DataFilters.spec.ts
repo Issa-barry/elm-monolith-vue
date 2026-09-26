@@ -4,6 +4,7 @@ import DataFilters, {
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import FilterSearchSelect from '@/components/filters/FilterSearchSelect.vue';
 import { shallowMount } from '@vue/test-utils';
+import Select from 'primevue/select';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
@@ -354,5 +355,82 @@ describe('DataFilters — liste avec recherche par nom (searchable)', () => {
         expect(largeur(monterCaisse({}, { wide: true }))).toContain(
             'w-[280px]',
         );
+    });
+});
+
+describe('DataFilters — champ période (raccourcis résolus côté serveur)', () => {
+    const periode: FilterField[] = [
+        {
+            key: 'periode',
+            label: 'Période',
+            type: 'period',
+            inline: true,
+            defaultValue: 'aujourd_hui',
+            startKey: 'date_from',
+            endKey: 'date_to',
+            options: [
+                { value: 'aujourd_hui', label: "Aujourd'hui" },
+                { value: 'hier', label: 'Hier' },
+                { value: 'personnalisee', label: 'Période personnalisée' },
+            ],
+        },
+    ];
+
+    const monterPeriode = (values: Record<string, unknown> = {}) =>
+        shallowMount(DataFilters, {
+            props: { url: '/rapport', values, fields: periode, resultCount: 0 },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+    beforeEach(() => routerGet.mockClear());
+
+    it('envoie le raccourci choisi, sans dates', async () => {
+        const wrapper = monterPeriode({ periode: 'aujourd_hui' });
+
+        wrapper.findComponent(Select).vm.$emit('update:modelValue', 'hier');
+        await nextTick();
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/rapport',
+            { periode: 'hier' },
+            expect.anything(),
+        );
+    });
+
+    it('affiche les deux dates pour une période personnalisée et les envoie', async () => {
+        const wrapper = monterPeriode({ periode: 'aujourd_hui' });
+
+        expect(
+            wrapper
+                .find('[data-testid="filter-inline-periode-debut"]')
+                .exists(),
+        ).toBe(false);
+
+        wrapper
+            .findComponent(Select)
+            .vm.$emit('update:modelValue', 'personnalisee');
+        await nextTick();
+        await wrapper
+            .get('[data-testid="filter-inline-periode-debut"]')
+            .setValue('2026-09-01');
+        await wrapper
+            .get('[data-testid="filter-inline-periode-fin"]')
+            .setValue('2026-09-15');
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/rapport',
+            { date_from: '2026-09-01', date_to: '2026-09-15' },
+            expect.anything(),
+        );
+    });
+
+    it('ne compte pas la période par défaut comme un filtre actif', () => {
+        const parDefaut = monterPeriode({ periode: 'aujourd_hui' });
+        expect(parDefaut.find(reinitialiser).exists()).toBe(false);
+
+        const hier = monterPeriode({ periode: 'hier' });
+        expect(hier.find(reinitialiser).exists()).toBe(true);
     });
 });

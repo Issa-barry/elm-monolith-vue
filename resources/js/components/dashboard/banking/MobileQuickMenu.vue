@@ -16,6 +16,7 @@ import {
     PackageCheck,
     ShoppingCart,
     Truck,
+    UserRound,
     UserRoundCheck,
     UsersRound,
 } from 'lucide-vue-next';
@@ -61,6 +62,12 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             href: dashboard().url,
             icon: House,
             visible: true,
+        },
+        {
+            title: 'Ma situation',
+            href: '/backoffice/ma-situation',
+            icon: UserRound,
+            visible: can('rapports.read_own'),
         },
         {
             title: 'Ventes',

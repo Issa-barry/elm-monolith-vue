@@ -95,6 +95,8 @@ final class PermissionCatalog
         'logistique.valider_chargement' => 'Logistique — valider le chargement',
         'logistique.valider_reception' => 'Logistique — valider la réception',
         'logistique.cloturer' => 'Logistique — clôturer',
+        'rapports.read_own' => 'Rapports — consulter « Ma situation » (ses propres ventes, encaissements et caisse)',
+        'rapports.read' => "Rapports — consulter le rapport d'activité de ses agences (tous les agents)",
     ];
 
     /**
@@ -197,6 +199,13 @@ final class PermissionCatalog
             'resources' => ['parametres-depenses', 'depenses'],
             'standalone' => [
                 'Dépenses' => ['depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler'],
+            ],
+        ],
+        'rapports' => [
+            'label' => 'Rapports',
+            'resources' => [],
+            'standalone' => [
+                'Rapports' => ['rapports.read_own', 'rapports.read'],
             ],
         ],
         'rh' => [

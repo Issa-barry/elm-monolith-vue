@@ -19,6 +19,7 @@ use App\Http\Controllers\Settings\Password\UpdatePasswordController;
 use App\Http\Controllers\Settings\Profile\DestroyProfileController;
 use App\Http\Controllers\Settings\Profile\EditProfileController;
 use App\Http\Controllers\Settings\Profile\UpdateProfileController;
+use App\Http\Controllers\Settings\ReconfigurationPartagesController;
 use App\Http\Controllers\Settings\ShowTwoFactorAuthenticationController;
 use App\Http\Controllers\Settings\StockAjustementController;
 use App\Http\Controllers\Settings\ThemeController;
@@ -76,6 +77,11 @@ Route::middleware('auth')->group(function () {
     Route::post('settings/commissions/configuration', [CommissionRegleController::class, 'storeConfiguration'])->name('settings.commissions.configuration.store');
     Route::post('settings/commissions', [CommissionRegleController::class, 'store'])->name('settings.commissions.store');
     Route::post('settings/commissions/consultant', [CommissionRegleController::class, 'updateConsultant'])->name('settings.commissions.consultant.update');
+    Route::post('settings/commissions/impact', [CommissionRegleController::class, 'apercuImpact'])->name('settings.commissions.impact');
+    Route::get('settings/commissions/brouillons/{brouillon}', [ReconfigurationPartagesController::class, 'show'])->name('settings.commissions.brouillons.show');
+    Route::put('settings/commissions/brouillons/{brouillon}/partages', [ReconfigurationPartagesController::class, 'enregistrerPartages'])->name('settings.commissions.brouillons.partages');
+    Route::post('settings/commissions/brouillons/{brouillon}/publier', [ReconfigurationPartagesController::class, 'publier'])->name('settings.commissions.brouillons.publier');
+    Route::delete('settings/commissions/brouillons/{brouillon}', [ReconfigurationPartagesController::class, 'abandonner'])->name('settings.commissions.brouillons.abandonner');
 
     Route::get('settings/produits', [StockAjustementController::class, 'edit'])->name('settings.produits');
     Route::put('settings/produits', [StockAjustementController::class, 'update'])->name('settings.produits.update');

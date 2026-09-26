@@ -310,9 +310,12 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   facturée et payée le jour même de l'ajout de `processus_id` ci-dessus, bloquée « à régulariser »
   faute de partage migré pour `distribution_client`) — `Ventes\StoreCommandeVenteController` et
   `TransfertLogistiqueController::store()` refusent désormais la création (`ValidationException`
-  sur `vehicule_id`, jamais un simple avertissement) si l'équipe du véhicule sélectionné n'a aucun
-  partage actif pour une catégorie vendue/transférée dont l'enveloppe équipe_livraison est positive
-  sur le processus résolu, via `CommissionPartageLivraisonCategorieChecker`. Ce contrôle :
+  sur `vehicule_id`, jamais un simple avertissement) si le partage de l'équipe du véhicule
+  sélectionné n'est pas **conforme** pour une catégorie vendue/transférée dont l'enveloppe
+  équipe_livraison est positive sur le processus résolu, via
+  `CommissionPartageLivraisonCategorieChecker::nonConformites()` — **révisé le 24/09/2026**
+  (COMM-015) : « conforme » = somme exactement égale au barème ET chaque membre actif présent,
+  plus seulement « un partage existe ». Ce contrôle :
   - rejoue exactement la même résolution que la génération (même enveloppe, même notion de
     partage actif) — jamais une règle divergente ;
   - ne s'applique jamais à une vente sans véhicule, ni à un véhicule non éligible aux commissions
@@ -320,7 +323,8 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
     depuis le 03/09/2026 (retrait de la bascule par organisation, cf. COMM-007) ;
   - reste un contrôle **préventif**, pas une garantie : le filet de sécurité de la génération
     (ci-dessus) reste seul responsable au moment réel de la génération, la configuration pouvant
-    encore changer entre la création et le déclencheur (chargement/encaissement/réception).
+    encore changer entre la création et le déclencheur (chargement/encaissement/réception) —
+    d'où le second contrôle au chargement ajouté le 24/09/2026 (COMM-016).
 
 ## Membres d'équipe — téléphone chauffeur/convoyeur (révisé le 01/09/2026)
 
@@ -513,6 +517,12 @@ Détail du comportement `showLivreur()` (inchangé depuis le 31/08/2026) :
   exactement comme avant sur l'ensemble des parts effectivement affichées (toutes si « tous », un
   seul processus si filtré) — aucun changement de la logique financière, seulement de ce qui est
   montré par défaut et de la transparence sur l'origine.
+- **Commission annulée (25/09/2026)** — fiches Livreur (`showLivreur()`) et Propriétaire (`show()`) :
+  une part `annulee` reste listée dans le détail par commande (traçabilité, point rouge, montant
+  d'origine barré), mais avec `reste = 0` et `annulee = true`. Elle est exclue de tous les montants :
+  KPI (net validé, reste à payer, déjà payé), stats de période et ligne TOTAL du tableau
+  (`CommissionDetailTable.vue`). Même règle que la liste, les exports et `CommissionKpiBuckets` :
+  une part annulée ne représente plus de créance réelle.
 
 ## Vente directe sans véhicule — mouvement de stock (correctif du 30/08/2026)
 
@@ -919,7 +929,9 @@ Cf. [retour-commande.md](retour-commande.md) et [ADR 0003](adr/0003-retour-de-li
     modification ultérieure du barème restent **non rétroactifs** (COMM-013, principe inchangé).
   - **Retour partiel** : les enveloppes `creee` de la commande sont supprimées puis régénérées sur les
     quantités nettes (mêmes barèmes, partage Livreur, cibles Site/Consultant), **avec leur date de gain
-    d'origine** — donc le barème en vigueur à cette date et la même période de paiement. Une nouvelle
+    d'origine** — donc le barème en vigueur à cette date (garanti depuis COMM-017 : avant le
+    24/09/2026, un barème remplacé depuis n'était plus retrouvé et la cible tombait à 0) et la même
+    période de paiement. Une nouvelle
     tentative de génération est tracée (`commission_generation_attempts`, `declenchee_par = systeme`).
   - **Retour total** : parts et enveloppes `annulee`, sans régénération (une part déjà payée n'est
     jamais reprise — elle ne peut pas exister ici, voir le garde-fou).
@@ -935,3 +947,172 @@ Cf. [retour-commande.md](retour-commande.md) et [ADR 0003](adr/0003-retour-de-li
 - Tests : `tests/Feature/CommandeVenteRetourTest.php` (recalcul sur 7 packs après retour de 3 sur 10 ;
   date de gain conservée ; retour total → `annulee` ; retour refusé si commission validée/ajustée ;
   déclencheur `FACTURE_ENCAISSEE`).
+
+## Suppression de l'encaissement déclencheur — commissions annulées (incident du 26/08/2026)
+
+- **Règle** : sous le déclencheur `FACTURE_ENCAISSEE`, supprimer un encaissement qui fait repasser la
+  facture sous `payee` retire le fait générateur de la commission.
+  `FactureVente::recalculStatut()` appelle alors `CommissionTriggerService::onFactureVenteEncaissementRetire()`
+  (symétrique de `onFactureVenteEncaissee()`), qui passe en `annulee` toutes les enveloppes et parts de
+  la commande **non encore payées**. Elles restent listées pour la traçabilité, mais ne sont plus
+  payables. Une part déjà `paye` n'est jamais reprise.
+- **Sans effet** sous `CHARGEMENT_VALIDE` (commission indépendante de l'encaissement) et pour les
+  commandes à réception explicite.
+- **Suppression** d'un encaissement : permission `ventes.annuler_exceptionnel` exigée depuis le
+  24/09/2026 (`Ventes\DestroyEncaissementVenteController`).
+- Tests : `CommissionTriggerVenteTest::test_facture_encaissee_suppression_de_lencaissement_declencheur_devrait_invalider_la_commission`
+  (Feature), `tests/e2e/commissions/commission-regression-encaissement-supprime.spec.ts` (E2E).
+
+## Changement de barème Livreur et partage d'équipe — lot 1 (24/09/2026)
+
+Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md). Contexte : un changement de
+barème Livreur (ex. 800 → 1 000 GNF/pack) laissait les partages d'équipe à 800 ; la commande était
+acceptée, la cible Livreur échouait à la génération (PARTIEL) et « Relancer » ne pouvait jamais la
+rattraper.
+
+- **COMM-015 — Partage conforme obligatoire, bloquant avant l'opération.** Pour chaque catégorie
+  **présente dans l'opération** dont le barème Livreur est positif, le partage de l'équipe du
+  véhicule doit être conforme : somme **exactement** égale au barème en vigueur, et **chaque membre
+  actif** de l'équipe (livreur `is_active`) a une ligne — **0 GNF est une ligne valide**, seule
+  l'absence de ligne est refusée. Barème à 0 ou absent : rien n'est exigé.
+  - Juge unique : `CommissionPartageLivraisonValidator::valider($membres, $bareme, $membresRequis)`,
+    appelé via `CommissionPartageLivraisonCategorieChecker::nonConformites()` — message unique
+    `libelleNonConformite()` (catégorie, barème, total configuré, écart, membres sans part).
+  - Appliqué à : création/modification de commande (`vehicule_id`), création de transfert
+    logistique, **enregistrement de l'équipe** (`EquipeLivraisonController::store()/update()/transferer()`,
+    y compris un membre tout juste ajouté — HTTP 422). Le véhicule reste sélectionnable : seule la
+    commande qui contient une catégorie non conforme est refusée. Aperçu dans le formulaire de
+    création (`GET ventes/check-partage-commission`, même contrôle, purement informatif).
+  - La génération elle-même ne vérifie que ce qui détermine les montants (somme exacte) : un
+    membre sans ligne n'y change rien, la génération ne doit jamais échouer pour une raison sans
+    effet financier.
+  - Fiche véhicule : « fait » / « à faire » suit exactement la même règle.
+  - Liste des véhicules (25/09/2026) : colonne « Partages » — un état par processus exercé par le
+    véhicule (Vente, Logistique, Grossiste) : Fait, À faire, Sans équipe (barème Livreur positif
+    mais aucune équipe), Non requis (aucun barème Livreur positif) ; un processus que l'usage du
+    véhicule n'exerce pas n'est pas affiché. Filtre « Partages commission » (au moins un à faire /
+    tous faits). Calcul groupé : `PartageConformiteVehiculesService`, même juge que la commande.
+- **COMM-016 — Contrôle de sécurité au chargement.** `AvancerStatutVenteController` rejoue le même
+  contrôle avant CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS (erreur `partage_commission`), sur les
+  seules catégories réellement chargées (> 0) et les instantanés figés de la commande
+  (`nature_operation`, `commission_eligible_snapshot`, `mode_remise_grossiste`). **Jamais à
+  l'encaissement** : un défaut de configuration de commission ne bloque jamais l'argent du client
+  (sous le déclencheur `FACTURE_ENCAISSEE`, un PARTIEL reste donc possible si le partage change
+  entre chargement et encaissement — régularisable par COMM-018).
+- **COMM-017 — Barème résolu par date, même remplacé (R1).** `CommissionRegleResolver` applique une
+  règle `remplacee` sur sa propre fenêtre `[effective_from, effective_to]` (comparaison par jour,
+  `whereDate`) ; seul un `brouillon` n'est jamais applicable. Corrige la régénération à une date
+  passée (retour partiel COMM-014, relance, réception logistique validée après coup), qui résolvait
+  auparavant **0** dès que le barème avait changé depuis.
+- **COMM-018 — Régularisation d'une génération PARTIELLE (R3 + option A).**
+  - « Relancer la génération » sur une opération dont la **dernière tentative est PARTIEL** génère
+    **uniquement les cibles sans enveloppe** (clé `cible_type`, et `consultant:{id}` pour le
+    Consultant), à la **date de gain d'origine** (celle des enveloppes existantes) : barème et
+    partage résolus à cette date, jamais la configuration du jour. Aucune enveloppe existante n'est
+    recréée ni modifiée ; seules les parts créées sont notifiées ; la période couvrant la date est
+    recalculée si elle est encore calculable. Tentative finale `succes` si plus rien ne manque.
+  - Pas de complétion (no-op, comme avant) si la dernière tentative est `succes`, ou si une
+    enveloppe de l'opération est `annulee` (retour total, annulation).
+  - Cible manquante dont la **période de paiement de son type** (livreur, propriétaire, site,
+    consultant) couvrant la date d'origine est **validée ou clôturée** : non créée, reste à
+    régulariser avec un motif explicite (référence de la période).
+  - **Option A — date d'effet d'une correction de partage.** Quand une nouvelle version de partage
+    remplace une version **non conforme au barème en vigueur** (somme ≠ barème), elle prend effet à
+    la **date d'effet de ce barème** (jamais avant le début de la version remplacée, qui est bornée
+    à cette date) — `CommissionPartageLivraisonCategorieChecker::dateEffetNouvelleVersion()`. Une
+    vente PARTIELLE née entre ces deux dates retrouve ainsi une configuration valide à sa date
+    d'origine. Dans tous les autres cas (version conforme remplacée par choix, première
+    configuration, barème à 0, simple ajout d'un membre) : effet immédiat, comme avant — un
+    historique conforme n'est jamais réécrit.
+  - Une relance après échec total (`erreur`, aucune enveloppe) garde son comportement antérieur :
+    génération complète à la date du jour.
+- **Diagnostic pré-déploiement** : `php artisan commissions:diagnostiquer-partages
+  [--organization=…] [--csv=fichier.csv]` liste, en lecture seule, chaque équipe/processus/catégorie
+  non conforme (même juge que la commande) — à exécuter avant la mise en production de COMM-015
+  pour corriger les équipes à l'avance.
+- Tests : `tests/Feature/CommissionPartageLivreurConformiteTest.php`,
+  `tests/Unit/CommissionPartageLivraisonValidatorTest.php`, `tests/Unit/CommissionRegleResolverTest.php`.
+
+## Changement de barème Livreur — brouillon, reconfiguration groupée, publication (lot 2, 25/09/2026)
+
+Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
+
+- **COMM-019 — Un barème qui rend des partages non conformes n'est jamais appliqué directement.**
+  À l'enregistrement de Paramètres → Commissions (`CommissionRegleController::storeConfiguration()`
+  → `ReconfigurationPartagesService::enregistrerConfiguration()`) :
+  - aucune (équipe, catégorie) concernée → configuration appliquée tout de suite (comportement
+    historique, `CommissionBaremeConfigurationService::appliquer()`) ;
+  - sinon → versée dans le **brouillon** du processus (`commission_bareme_brouillons`, un seul en
+    cours par organisation et processus) ; barème et partages en vigueur restent ceux des commandes
+    et de la génération. Pendant un brouillon, l'écran Paramètres affiche SA configuration (bandeau
+    « Nouveau barème en préparation ») et toute nouvelle saisie s'y ajoute.
+  - Aperçu avant confirmation : `POST settings/commissions/impact` (nombre de partages et d'équipes
+    concernés, par catégorie), sans écriture.
+- **Équipe concernée** : barème Livreur que le brouillon appliquerait au type de son véhicule > 0,
+  **différent** du barème en vigueur, et partage réel non conforme à ce nouveau barème (même juge
+  que COMM-015 : somme exacte + chaque membre actif). Une catégorie inchangée n'est jamais
+  concernée (ses éventuels partages déjà non conformes relèvent de COMM-015 et du diagnostic).
+  Seules les équipes actives dont le véhicule exerce le processus sont examinées.
+- **Équipe à un seul livreur actif (25/09/2026)** : aucune répartition à décider — sa part est
+  alignée **automatiquement** sur le nouveau barème (nouvelle version de partage, même date d'effet
+  que le barème), au moment où le barème est appliqué (directement, ou à la publication du
+  brouillon). Elle n'apparaît jamais dans la grille et ne déclenche jamais, seule, un brouillon ;
+  l'aperçu l'annonce (« N équipe(s) n'ont qu'un seul livreur… »). Un membre désactivé n'est pas
+  compté. Les équipes à **plusieurs** livreurs actifs gardent un partage explicite obligatoire
+  (grille, proposition jamais appliquée seule).
+  - **Équipes examinées** : toute équipe rattachée à un véhicule, **quel que soit
+    `equipes_livraison.is_active`** (drapeau lu seulement par le contrôle des distributions, jamais
+    par la vente, COMM-015 ni la génération). Correctif du 25/09/2026 : filtrer sur ce drapeau
+    excluait des équipes en service (76 sur 78 en base de dev) — le compteur annonçait 2 équipes et
+    seules ces 2 étaient ajustées.
+  - **Signalées, jamais ajustées ni bloquantes** : équipe **sans** livreur actif (non conforme,
+    refusée à la commande) ; véhicule **inactif** à plusieurs livreurs (partage à revoir avant sa
+    remise en service, refusé à la commande tant qu'il n'est pas corrigé). L'aperçu les compte.
+  - Tous les compteurs de l'aperçu (en équipes) et toutes les écritures viennent du même calcul
+    (`ReconfigurationPartagesService::analyser()`).
+  - **Rattrapage** d'un barème appliqué avant cette règle :
+    `php artisan commissions:diagnostiquer-partages --aligner-livreur-unique` (seule option qui
+    écrit) aligne les équipes à un seul livreur actif restées non conformes, en version datée selon
+    l'option A ; les équipes à plusieurs livreurs ne sont jamais modifiées. **Idempotente** : une
+    équipe alignée devient conforme, une seconde exécution ne crée aucune version. Chaque
+    (équipe, processus, catégorie) est écrite dans sa propre transaction.
+  - **Procédure recommandée** : 1) diagnostic sans option (lecture seule, résumé : équipes
+    analysées, conformes, non conformes dont sans membre actif / plusieurs membres / un seul membre
+    alignable) ; 2) `--aligner-livreur-unique` ; 3) nouveau diagnostic pour vérifier qu'il ne reste
+    plus d'équipe à un seul membre non conforme ; 4) corriger les équipes à plusieurs membres (fiche
+    véhicule ou grille lors du prochain changement de barème).
+- **Membres exigés** (précision du 25/09/2026) : tout membre de l'équipe — chauffeur **et**
+  convoyeur (`equipe_livreurs.role`) — dont le livreur est actif doit avoir une ligne (0 GNF
+  accepté). Une équipe **sans aucun membre actif** est non conforme dès qu'un barème Livreur positif
+  s'applique, même si d'anciennes lignes (livreurs désactivés) totalisent le barème.
+- **Reconfiguration groupée** (`settings/commissions/brouillons/{id}`, page
+  `settings/CommissionRegles/Reconfiguration.vue`) : une ligne par membre, groupée par
+  (véhicule, catégorie), avec rôle, montant actuel, nouveau montant éditable, proposition, total /
+  barème et écart en temps réel ; clavier type tableur (Entrée/↓/↑), collage d'une colonne copiée
+  depuis un tableur, sélection multiple, « Proposer (proportionnel) », « Appliquer par rôle »
+  (chauffeur/convoyeur), « Recopier la première », annulation ; filtres `DataFilters`
+  (statut, recherche, catégorie, agence, type de véhicule). Les saisies non enregistrées survivent
+  aux filtres et aux pages (filtrage et pagination côté navigateur, seules les équipes concernées
+  sont chargées).
+  - **Proposition** : proportionnelle au partage réel, arrondie au GNF inférieur, reliquat au
+    premier chauffeur (à défaut au premier membre) ; aucune proposition sans partage réel (total 0).
+    Jamais appliquée sans action explicite, jamais enregistrée sans « Enregistrer ».
+  - **Enregistrement** (`PUT …/partages`) **atomique** : une seule saisie non conforme (somme,
+    membre actif sans part, livreur hors équipe, équipe plus concernée) → rien n'est enregistré,
+    erreur rendue par (véhicule, catégorie). Les parts préparées (`commission_bareme_brouillon_partages`)
+    portent une empreinte de l'équipe (membres actifs + partage réel).
+- **Publication** (`POST …/publier`) — **une transaction** : barème appliqué et partages versionnés
+  (`PartageLivraisonVersionService`) **à la même date d'effet (aujourd'hui)**, ou rien. Refusée si :
+  une (équipe, catégorie) concernée n'est pas « conforme » (non préparée, somme fausse, membre sans
+  part) ; l'équipe a changé depuis la préparation (statut « à revalider » : composition ou partage
+  réel modifiés par le formulaire normal, qui reste utilisable pendant un brouillon et se valide
+  contre le barème en vigueur) ; ou les règles actives ont changé par un autre chemin depuis la
+  préparation (empreinte `regles_signature`). Les commissions déjà générées ne changent jamais.
+- **Abandon** (`DELETE …`) : barème en vigueur inchangé, brouillon conservé en statut `abandonne`.
+- **Autorisations** : consulter `parametres.read` ; préparer des partages `equipes-livraison.update` ;
+  publier `parametres.update` ET `equipes-livraison.update` ; abandonner `parametres.update`. Les
+  boutons de Paramètres → Commissions (ajouter, modifier, retirer, enregistrer) ne sont affichés
+  qu'avec `parametres.update`.
+- Tests : `tests/Feature/ReconfigurationPartagesTest.php`, E2E
+  `tests/e2e/commissions/reconfiguration-partages.spec.ts` (fixture e2e-only
+  `POST e2e/fixtures/partages-livreur`).

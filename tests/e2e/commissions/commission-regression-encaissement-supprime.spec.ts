@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { loginAsElmV2Demo } from '../helpers';
 import {
+    autoriserSuppressionEncaissement,
     configurerBareme,
     configurerDeclencheurVente,
     lireDiagnosticCommission,
@@ -14,23 +15,15 @@ import {
 } from './vente-workflow';
 
 /**
- * C09 — RÉGRESSION CONFIRMÉE (audit du 2026-08-26, module commissions V2) :
+ * C09 — Non-régression (incident du 2026-08-26, module commissions V2) : en mode
+ * FACTURE_ENCAISSEE, une commission générée à l'entrée en PAYEE restait vivante et payable
+ * après suppression de l'encaissement qui l'avait fait naître.
  *
- * En mode FACTURE_ENCAISSEE, une commission générée à l'entrée en PAYEE reste
- * vivante et payable même après suppression de l'encaissement qui l'avait fait
- * naître. Preuve : app/Http/Controllers/Ventes/DestroyEncaissementVenteController.php
- * autorise la suppression tant que la facture n'est pas ANNULEE, sans vérifier
- * l'existence d'une commission déjà générée ; App\Models\FactureVente::recalculStatut()
- * ne déclenche CommissionTriggerService::onFactureVenteEncaissee() que sur la
- * transition ENTRANTE (!etaitPayee && statut===PAYEE), jamais sur la sortie ; et
- * App\Models\EncaissementVente::deleted() contre-passe l'écriture comptable de
- * l'encaissement mais ne touche jamais CommissionEnveloppe/CommissionEnveloppePart.
- *
- * Ce test exprime le comportement métier CORRECT attendu (la commission ne doit
- * plus rester payable comme si son fait générateur existait encore) — il échoue
- * intentionnellement contre le code actuel. Ne pas "corriger" l'assertion pour le
- * faire passer : corriger le moteur, ou documenter la dette si le produit décide
- * d'assumer ce risque.
+ * Comportement actuel (règle de référence, couverte côté Feature par
+ * CommissionTriggerVenteTest::test_facture_encaissee_suppression_de_lencaissement_declencheur_devrait_invalider_la_commission) :
+ * la suppression reste autorisée (permission `ventes.annuler_exceptionnel`), la facture repasse
+ * sous PAYEE et CommissionTriggerService::onFactureVenteEncaissementRetire() passe en ANNULEE
+ * toutes les enveloppes/parts non encore payées — conservées pour la traçabilité, plus payables.
  */
 
 test.setTimeout(180_000);
@@ -45,7 +38,7 @@ test.beforeEach(async ({ page }) => {
     await loginAsElmV2Demo(page);
 });
 
-test('suppression de l\'encaissement déclencheur → la commission ne doit plus rester payable (régression confirmée)', async ({
+test('suppression de l\'encaissement déclencheur → les commissions non payées passent en annulée', async ({
     page,
 }) => {
     await configurerDeclencheurVente(page, 'facture_encaissee');
@@ -66,20 +59,27 @@ test('suppression de l\'encaissement déclencheur → la commission ne doit plus
     expect(apresEncaissement.facture?.encaissements.length).toBe(1);
 
     const encaissementId = apresEncaissement.facture!.encaissements[0].id;
-    await supprimerEncaissement(page, encaissementId);
+    await autoriserSuppressionEncaissement(page, true);
+    try {
+        await supprimerEncaissement(page, encaissementId);
+    } finally {
+        await autoriserSuppressionEncaissement(page, false);
+    }
 
     const apresSuppression = await lireDiagnosticCommission(page, commandeId);
+    expect(apresSuppression.facture?.encaissements.length).toBe(0);
     expect(
         apresSuppression.facture?.statut,
         'la facture doit redescendre sous PAYEE une fois son seul encaissement supprimé',
     ).not.toBe('payee');
 
-    // Comportement CORRECT attendu : plus de fait générateur (facture non payée) =
-    // plus de commission payable. Échoue aujourd'hui (régression confirmée par l'audit) :
-    // les 4 enveloppes/parts restent intactes et payables malgré la suppression.
-    expect(
-        apresSuppression.enveloppes_count,
-        'RÉGRESSION ATTENDUE : la commission devrait être invalidée/annulée quand son fait ' +
-            'générateur (facture payée) disparaît — elle reste actuellement générée et payable.',
-    ).toBe(0);
+    // Plus de fait générateur = plus de commission payable : les 4 enveloppes restent listées
+    // (traçabilité) mais toutes ANNULEE, parts comprises — aucune ne reste active.
+    expect(apresSuppression.enveloppes_count).toBe(4);
+    for (const enveloppe of apresSuppression.enveloppes) {
+        expect(enveloppe.statut, `enveloppe ${enveloppe.cible_type}`).toBe('annulee');
+        for (const part of enveloppe.parts) {
+            expect(part.statut, `part ${part.beneficiaire_type}`).toBe('annulee');
+        }
+    }
 });

@@ -15,10 +15,13 @@ const props = withDefaults(
     },
 );
 
-const totals = computed(() => ({
-    montant: props.rows.reduce((sum, r) => sum + r.montant, 0),
-    reste: props.rows.reduce((sum, r) => sum + r.reste, 0),
-}));
+const totals = computed(() => {
+    const actives = props.rows.filter((r) => !r.annulee);
+    return {
+        montant: actives.reduce((sum, r) => sum + r.montant, 0),
+        reste: actives.reduce((sum, r) => sum + r.reste, 0),
+    };
+});
 
 // N'affiche la colonne Origine que si au moins une ligne la fournit — n'affecte donc jamais les
 // écrans Logistique/Propriétaire/Consultant/Site/Cashback/Salaire qui réutilisent ce même tableau
@@ -100,7 +103,12 @@ const hasProcessus = computed(() =>
                         {{ row.processus_label ?? '—' }}
                     </td>
                     <td
-                        class="px-4 py-3 text-right font-semibold whitespace-nowrap tabular-nums"
+                        class="px-4 py-3 text-right whitespace-nowrap tabular-nums"
+                        :class="
+                            row.annulee
+                                ? 'text-muted-foreground line-through'
+                                : 'font-semibold'
+                        "
                     >
                         {{ formatGNF(row.montant) }}
                     </td>

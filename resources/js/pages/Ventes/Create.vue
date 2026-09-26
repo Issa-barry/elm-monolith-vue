@@ -10,6 +10,11 @@ import { usePermissions } from '@/composables/usePermissions';
 import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
+import {
+    estErreurPartage,
+    type PartageCommissionDetails,
+} from '@/pages/Ventes/partials/partage-commission';
+import PartageCommissionAlert from '@/pages/Ventes/partials/PartageCommissionAlert.vue';
 import SolvabiliteAlert from '@/pages/Ventes/partials/SolvabiliteAlert.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -36,7 +41,10 @@ import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import Popover from 'primevue/popover';
 import Tooltip from 'primevue/tooltip';
+import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
+
+const toast = useToast();
 
 const vTooltip = Tooltip;
 
@@ -357,6 +365,104 @@ const { modeTarification, commissionEligible, natureOperationParDefaut } =
 watch(natureOperationParDefaut, (valeur) => (form.nature_operation = valeur), {
     immediate: true,
 });
+
+// Aperçu du refus « partage de commission non conforme » (décision du 24/09/2026) — rejoue
+// côté serveur exactement le contrôle de création, sur les seules catégories des produits
+// saisis : le véhicule reste sélectionnable, seule la commande concernée est refusée. Jamais
+// une sécurité : StoreCommandeVenteController refuse de toute façon.
+const partageCommissionBloquant = ref<string | null>(null);
+const partageCommissionDetails = ref<PartageCommissionDetails | null>(null);
+const partageCommissionChecking = ref(false);
+const partageCommissionCheckFailed = ref(false);
+const partageCommissionRefresh = ref(0);
+const partageCommissionMessage = computed(() =>
+    estErreurPartage(form.errors.vehicule_id)
+        ? form.errors.vehicule_id
+        : estErreurPartage(partageCommissionBloquant.value)
+          ? partageCommissionBloquant.value
+          : null,
+);
+const partageCommissionEquipeUrl = computed(() => {
+    if (!form.vehicule_id || !can('vehicules.read')) return null;
+    const params = new URLSearchParams({ tab: 'equipe' });
+    if (partageCommissionDetails.value)
+        params.set('processus', partageCommissionDetails.value.processus_code);
+    return `/backoffice/vehicules/${form.vehicule_id}?${params.toString()}`;
+});
+let partageCommissionRequete = 0;
+
+watch(
+    () =>
+        [
+            form.vehicule_id,
+            form.client_id,
+            form.nature_operation,
+            form.lignes
+                .map((l) => l.produit_id)
+                .filter((id) => id !== null)
+                .join(','),
+            partageCommissionRefresh.value,
+        ] as const,
+    async ([vehiculeId, clientId, natureOperation, produitIds], previous) => {
+        const requete = ++partageCommissionRequete;
+        const contexteChange =
+            !previous ||
+            [vehiculeId, clientId, natureOperation, produitIds].some(
+                (value, index) => value !== previous[index],
+            );
+        if (contexteChange) {
+            partageCommissionBloquant.value = null;
+            partageCommissionDetails.value = null;
+            if (estErreurPartage(form.errors.vehicule_id))
+                form.clearErrors('vehicule_id');
+        }
+        partageCommissionCheckFailed.value = false;
+        partageCommissionChecking.value = false;
+        if (vehiculeId === null || produitIds === '') {
+            partageCommissionBloquant.value = null;
+
+            return;
+        }
+
+        const params = new URLSearchParams({ vehicule_id: String(vehiculeId) });
+        if (clientId !== null) params.set('client_id', String(clientId));
+        if (natureOperation) params.set('nature_operation', natureOperation);
+        produitIds
+            .split(',')
+            .forEach((id) => params.append('produit_ids[]', id));
+
+        try {
+            partageCommissionChecking.value = true;
+            const res = await fetch(
+                `/backoffice/ventes/check-partage-commission?${params.toString()}`,
+                { headers: { Accept: 'application/json' } },
+            );
+            if (requete !== partageCommissionRequete) return;
+            if (!res.ok) throw new Error('Vérification indisponible');
+            const data = (await res.json()) as {
+                bloquant: boolean;
+                message: string | null;
+                details?: PartageCommissionDetails | null;
+            };
+            if (requete !== partageCommissionRequete) return;
+            partageCommissionBloquant.value = data.bloquant
+                ? data.message
+                : null;
+            partageCommissionDetails.value = data.bloquant
+                ? (data.details ?? null)
+                : null;
+            if (estErreurPartage(form.errors.vehicule_id))
+                form.clearErrors('vehicule_id');
+        } catch {
+            // Aperçu indisponible (réseau) : le contrôle serveur à la création reste l'autorité.
+            if (requete === partageCommissionRequete)
+                partageCommissionCheckFailed.value = true;
+        } finally {
+            if (requete === partageCommissionRequete)
+                partageCommissionChecking.value = false;
+        }
+    },
+);
 
 const natureOperationLabel = computed(() =>
     form.nature_operation === 'distribution_client' ? 'Distribution' : 'Vente',
@@ -899,8 +1005,24 @@ function confirmerEtCreer() {
     // ouverte indéfiniment, masquant le message d'erreur déjà affiché sur le formulaire
     // sous-jacent (form.errors.lignes ci-dessous) — 24/08/2026.
     form.post('/backoffice/ventes', {
-        onError: () => {
+        onError: (errors) => {
             showConfirmDialog.value = false;
+            if (estErreurPartage(errors.vehicule_id)) {
+                partageCommissionDetails.value = null;
+                partageCommissionRefresh.value++;
+            }
+            // Le message reste aussi sous le champ concerné ; le toast rend le refus visible
+            // même quand ce champ est hors de l'écran (ex. partage de commission non conforme).
+            toast.add({
+                group: 'top',
+                severity: 'error',
+                summary: 'Commande non créée',
+                detail: estErreurPartage(errors.vehicule_id)
+                    ? 'Corrigez le partage de commission de l’équipe. Les détails sont affichés sous le véhicule.'
+                    : (Object.values(errors)[0] ??
+                      'La commande n’a pas pu être créée.'),
+                life: 8000,
+            });
         },
     });
 }
@@ -1034,11 +1156,32 @@ function confirmerEtCreer() {
                                     >
                                 </template>
                             </AutoComplete>
+                            <!-- Commande réellement refusée à la création (DANGER, rule 10). -->
+                            <PartageCommissionAlert
+                                v-if="partageCommissionMessage"
+                                :details="partageCommissionDetails"
+                                :equipe-url="partageCommissionEquipeUrl"
+                                :checking="partageCommissionChecking"
+                                :check-failed="partageCommissionCheckFailed"
+                                @retry="partageCommissionRefresh++"
+                            />
                             <p
-                                v-if="form.errors.vehicule_id"
+                                v-if="
+                                    form.errors.vehicule_id &&
+                                    !estErreurPartage(form.errors.vehicule_id)
+                                "
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.vehicule_id }}
+                            </p>
+                            <p
+                                v-else-if="
+                                    partageCommissionBloquant &&
+                                    !partageCommissionMessage
+                                "
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ partageCommissionBloquant }}
                             </p>
                             <!-- Blocages réels (rule 10 CLAUDE.md : DANGER/rouge réservé à une
                             opération effectivement empêchée) — jamais affichés ensemble, la liste
