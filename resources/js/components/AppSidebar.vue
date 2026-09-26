@@ -430,7 +430,7 @@ const footerNavItems: NavItem[] = [];
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent class="mb-4">
             <NavMain :items="mainNavItems" />
         </SidebarContent>
 
