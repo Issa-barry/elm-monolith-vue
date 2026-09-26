@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useUrlTab } from '@/composables/useUrlTab';
@@ -12,19 +13,15 @@ import type { RapportActivite } from '@/types/rapports';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
-    ArrowDownToLine,
     CalendarDays,
     ChartColumn,
     FileSpreadsheet,
     FileText,
     Info,
-    ReceiptText,
-    Smartphone,
     UserRound,
-    Wallet,
 } from 'lucide-vue-next';
 import Select from 'primevue/select';
-import { computed, ref, watch, type Component } from 'vue';
+import { computed, ref, watch } from 'vue';
 import CarteSection from './partials/CarteSection.vue';
 import EnTeteSection from './partials/EnTeteSection.vue';
 import { dateFr, pluriel } from './partials/format';
@@ -155,7 +152,6 @@ interface Carte {
     valeur: string;
     detail: string;
     avertissement: string | null;
-    icone: Component;
 }
 
 const cartes = computed((): Carte[] => {
@@ -163,7 +159,6 @@ const cartes = computed((): Carte[] => {
     const liste: Carte[] = [
         {
             cle: 'ventes',
-            icone: ReceiptText,
             libelle: maSituation.value ? 'Mes ventes' : 'Ventes',
             valeur: formatGNF(r.ventes.resume.facture),
             detail: pluriel(r.ventes.resume.nombre, 'vente'),
@@ -171,7 +166,6 @@ const cartes = computed((): Carte[] => {
         },
         {
             cle: 'encaissements',
-            icone: ArrowDownToLine,
             libelle: maSituation.value ? 'Mes encaissements' : 'Encaissé',
             valeur: formatGNF(r.encaissements.resume.montant),
             detail: pluriel(r.encaissements.resume.nombre, 'paiement'),
@@ -179,7 +173,6 @@ const cartes = computed((): Carte[] => {
         },
         {
             cle: 'creances',
-            icone: ReceiptText,
             libelle: 'Dettes clients',
             valeur: formatGNF(r.creances.resume.reste),
             detail: `${pluriel(r.creances.resume.nombre, 'facture')} · toutes dates`,
@@ -187,7 +180,6 @@ const cartes = computed((): Carte[] => {
         },
         {
             cle: 'mobile_money',
-            icone: Smartphone,
             libelle: 'Mobile Money',
             valeur: formatGNF(r.mobile_money.resume.montant),
             detail: pluriel(r.mobile_money.resume.nombre, 'paiement'),
@@ -200,7 +192,6 @@ const cartes = computed((): Carte[] => {
     if (!maSituation.value) {
         liste.push({
             cle: 'caisse',
-            icone: Wallet,
             libelle: 'Caisses dédiées',
             valeur: r.caisse.aucune_caisse
                 ? '—'
@@ -390,6 +381,16 @@ const chiffresMobileMoney = computed(() =>
                             class="h-5 w-5 text-muted-foreground"
                         />
                         {{ titre }}
+                        <InfoTooltip
+                            :label="`Informations sur ${titre.toLowerCase()}`"
+                        >
+                            Consultez les ventes, les encaissements, les dettes
+                            clients et les caisses du périmètre sélectionné.
+                            Cliquez sur une carte pour afficher son détail. Les
+                            dettes clients et les soldes actuels des caisses
+                            portent sur toutes les dates ; les ventes et les
+                            encaissements suivent la période choisie.
+                        </InfoTooltip>
                     </h1>
                     <p
                         class="text-sm font-medium"
@@ -499,14 +500,13 @@ const chiffresMobileMoney = computed(() =>
             <div
                 role="tablist"
                 aria-label="Sections du rapport"
-                class="space-y-3"
+                class="@container space-y-7"
                 @keydown="naviguerCartes"
             >
                 <template v-if="maSituation">
                     <CarteSection
                         v-if="!rapport.caisse.aucune_caisse"
                         testid="rapport-tab-caisse"
-                        :icone="Wallet"
                         libelle="Ma caisse · À remettre — solde théorique"
                         :valeur="formatGNF(rapport.caisse.resume.solde_actuel)"
                         :detail="dernierVersement"
@@ -527,11 +527,11 @@ const chiffresMobileMoney = computed(() =>
                 </template>
 
                 <div
-                    class="grid grid-cols-2 gap-2 sm:gap-3"
+                    class="grid grid-cols-1 gap-7 @[40rem]:grid-cols-2"
                     :class="
                         maSituation
-                            ? 'lg:grid-cols-4'
-                            : 'lg:grid-cols-3 xl:grid-cols-5'
+                            ? '@[70rem]:grid-cols-4'
+                            : '@[70rem]:grid-cols-3 @[90rem]:grid-cols-5'
                     "
                 >
                     <CarteSection
@@ -539,7 +539,6 @@ const chiffresMobileMoney = computed(() =>
                         :key="c.cle"
                         :testid="`rapport-tab-${c.cle}`"
                         :libelle="c.libelle"
-                        :icone="c.icone"
                         :valeur="c.valeur"
                         :detail="c.detail"
                         :avertissement="c.avertissement"

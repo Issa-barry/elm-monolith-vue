@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Info } from 'lucide-vue-next';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 
-// L'aide reste accessible au clic et au clavier, y compris sur téléphone.
+// Aide au survol et au focus, partagée avec Supports de trésorerie.
 defineProps<{
     titre: string;
     aide: string;
@@ -15,19 +15,9 @@ defineProps<{
         <div class="relative flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2">
                 <h2 class="text-base font-semibold">{{ titre }}</h2>
-                <details class="group">
-                    <summary
-                        :aria-label="`Comprendre : ${titre}`"
-                        class="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
-                    >
-                        <Info class="h-4 w-4" aria-hidden="true" />
-                    </summary>
-                    <p
-                        class="absolute top-full left-0 z-20 mt-1 w-full max-w-sm rounded-lg border bg-popover p-3 text-sm leading-relaxed text-popover-foreground shadow-md"
-                    >
-                        {{ aide }}
-                    </p>
-                </details>
+                <InfoTooltip :label="`Comprendre : ${titre}`">{{
+                    aide
+                }}</InfoTooltip>
             </div>
             <p
                 v-if="contexte"

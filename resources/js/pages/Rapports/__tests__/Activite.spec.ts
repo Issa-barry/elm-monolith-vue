@@ -1,4 +1,5 @@
 import DataFilters from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import Activite from '@/pages/Rapports/Activite.vue';
 import ListeFactures from '@/pages/Rapports/partials/ListeFactures.vue';
 import type { RapportActivite } from '@/types/rapports';
@@ -100,6 +101,7 @@ const rapportVide = (): RapportActivite => ({
 // Composants propres à la page rendus pour de vrai (cartes, sections, listes) ; seuls
 // DataFilters et AppLayout restent des bouchons.
 const composantsReels = {
+    KpiCard: false,
     ListPageActions: false,
     CarteSection: false,
     EnTeteSection: false,
@@ -317,12 +319,13 @@ describe('Rapports/Activite', () => {
         expect(wrapper.get('[role="tabpanel"]').text()).toContain(
             'Situation actuelle · Toutes dates',
         );
-        expect(wrapper.get('details').text()).toContain(
+        const aide = wrapper
+            .get('[role="tabpanel"]')
+            .findComponent(InfoTooltip);
+        expect(aide.text()).toContain(
             "la période choisie ne s'applique pas ici",
         );
-        expect(wrapper.get('summary').attributes('aria-label')).toBe(
-            'Comprendre : Dettes clients',
-        );
+        expect(aide.props('label')).toBe('Comprendre : Dettes clients');
     });
 
     it('sans caisse dédiée : un message, jamais un solde à zéro', () => {
