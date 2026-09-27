@@ -534,21 +534,100 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
+        if (! $periode->isCalculee()) {
+            return back()->with('error', 'Seule une période calculée peut voir ses véhicules validés.');
+        }
+
+        $resultat = $this->validerUnVehicule($periode, $vehicule === 'sans-vehicule' ? null : $vehicule);
+
+        abort_if($resultat === null, 404);
+
+        if ($resultat['erreur'] !== null) {
+            return back()->with('error', $resultat['erreur']);
+        }
+
+        return back()->with('success', "Véhicule validé : {$resultat['count']} commission(s) validée(s).");
+    }
+
+    /**
+     * Validation en masse depuis le détail de la période : même règle que validerVehicule()
+     * appliquée à chaque véhicule sélectionné, sans passer par l'écran d'ajustement. Chaque
+     * véhicule est traité indépendamment : un véhicule non équilibré est refusé et signalé,
+     * sans empêcher la validation des autres. Ne touche jamais au statut de la période
+     * elle-même (c'est PaiementPeriodeController::valider()).
+     */
+    public function validerVehicules(Request $request, PaiementPeriode $periode): RedirectResponse
+    {
+        $this->authorize('ajuster', $periode);
+
+        if (! $periode->isCalculee()) {
+            return back()->with('error', 'Seule une période calculée peut voir ses véhicules validés.');
+        }
+
+        $data = $request->validate([
+            'vehicules' => ['required', 'array', 'min:1'],
+            'vehicules.*' => ['required', 'string'],
+        ]);
+
+        $valides = [];
+        $refus = [];
+        foreach (array_unique($data['vehicules']) as $segment) {
+            $resultat = $this->validerUnVehicule($periode, $segment === 'sans-vehicule' ? null : $segment);
+            if ($resultat === null) {
+                continue;
+            }
+
+            if ($resultat['erreur'] !== null) {
+                $refus[] = "{$resultat['nom']} ({$resultat['erreur']})";
+            } else {
+                $valides[] = $resultat['nom'];
+            }
+        }
+
+        $nbValides = count($valides);
+        $message = $nbValides.' véhicule'.($nbValides > 1 ? 's' : '').' validé'.($nbValides > 1 ? 's' : '').'.';
+
+        if (! empty($refus)) {
+            return back()->with('error', $message.' Non validé(s) : '.implode(' ; ', $refus).'.');
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Valide toutes les commissions (vente + logistique) d'un véhicule sur la période, si
+     * l'enveloppe est équilibrée. Renvoie null si le véhicule n'a aucune commission sur la
+     * période, sinon le nom du véhicule, le nombre de parts validées et l'erreur éventuelle.
+     *
+     * @return array{nom: string, count: int, erreur: ?string}|null
+     */
+    private function validerUnVehicule(PaiementPeriode $periode, ?string $vehiculeId): ?array
+    {
         // Combine toujours vente + logistique — cf. vehicule() ci-dessus.
-        $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
         $groupesRaw = collect([
             ...CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId),
             ...CommissionAdjustmentService::groupesLogistiqueParVehicule($periode, $vehiculeId),
         ]);
 
-        abort_if($groupesRaw->isEmpty(), 404);
-
-        $ecart = round((float) $groupesRaw->sum('ecart'), 2);
-        if (abs($ecart) > 0.01) {
-            return back()->with('error', "Impossible de valider : il reste {$ecart} GNF à répartir sur ce véhicule.");
+        if ($groupesRaw->isEmpty()) {
+            return null;
         }
 
         $nomVehicule = $groupesRaw->first()['vehicule_nom'] ?? 'Sans véhicule';
+
+        $ecart = round((float) $groupesRaw->sum('ecart'), 2);
+        if (abs($ecart) > 0.01) {
+            $abs = number_format(abs($ecart), 0, ',', ' ');
+
+            return [
+                'nom' => $nomVehicule,
+                'count' => 0,
+                'erreur' => $ecart < 0
+                    ? "Impossible de valider : il reste {$abs} GNF à répartir sur ce véhicule."
+                    : "Impossible de valider : le montant ajusté dépasse de {$abs} GNF le montant théorique.",
+            ];
+        }
+
         $parts = $groupesRaw->flatMap(fn (array $g) => $g['parts']);
         $partsVente = $parts->filter(fn ($p) => $p instanceof CommissionEnveloppePart);
         $partsLogistique = $parts->reject(fn ($p) => $p instanceof CommissionEnveloppePart);
@@ -561,7 +640,7 @@ class CommissionAjustementController extends Controller
             'description' => "Véhicule {$nomVehicule} validé en bloc ({$count} commission(s)) pour la période {$periode->reference}",
         ]);
 
-        return back()->with('success', "Véhicule validé : {$count} commission(s) validée(s).");
+        return ['nom' => $nomVehicule, 'count' => $count, 'erreur' => null];
     }
 
     private function resolvePart(string $type, string $partId): CommissionLogistiquePart|CommissionEnveloppePart

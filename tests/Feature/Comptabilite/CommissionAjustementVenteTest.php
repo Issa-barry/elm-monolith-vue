@@ -33,6 +33,7 @@ use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -398,6 +399,143 @@ class CommissionAjustementVenteTest extends TestCase
             ->where('vehicules.0.equilibre', false)
             ->where('vehicules.0.ecart', -20000)
         );
+    }
+
+    /** @test */
+    public function valider_vehicules_en_masse_valide_les_vehicules_selectionnes_sans_valider_la_periode(): void
+    {
+        ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
+        $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
+        ['vehicule' => $vehiculeB, 'categorie' => $categorieB] = $this->makeVehiculeTroisLivreurs(' B');
+        $this->creerCommandeEtGenererCommission($vehiculeB, $categorieB);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.valider-vehicules', $periode), [
+                'vehicules' => [$vehiculeA->id, $vehiculeB->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', '2 véhicules validés.');
+
+        $parts = CommissionAdjustmentService::partsPourPeriode($periode);
+        $this->assertCount(6, $parts);
+        foreach ($parts as $part) {
+            $this->assertNotNull($part->fresh()->validated_at);
+        }
+
+        $this->assertSame(
+            StatutPeriodePaiement::CALCULEE->value,
+            $periode->fresh()->statut->value,
+            'valider des véhicules ne doit jamais valider la période de paiement elle-même',
+        );
+    }
+
+    /** @test */
+    public function valider_vehicules_en_masse_refuse_un_vehicule_desequilibre_sans_bloquer_les_autres(): void
+    {
+        ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
+        $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
+        ['vehicule' => $vehiculeB, 'livreurs' => $livreursB, 'categorie' => $categorieB] = $this->makeVehiculeTroisLivreurs(' B');
+        $this->creerCommandeEtGenererCommission($vehiculeB, $categorieB);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $partAbdoulayeB = CommissionAdjustmentService::partsPourPeriode($periode)
+            ->first(fn ($p) => $p->beneficiaire_id === $livreursB['Abdoulaye']->id);
+        $this->actingAs($this->user)->post(
+            route('comptabilite.ajustements.absence', ['type' => 'vente', 'partId' => $partAbdoulayeB->id]),
+        );
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.valider-vehicules', $periode), [
+                'vehicules' => [$vehiculeA->id, $vehiculeB->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $part = $part->fresh();
+            $surB = in_array($part->beneficiaire_id, collect($livreursB)->pluck('id')->all(), true);
+            if ($surB) {
+                $this->assertNull($part->validated_at, 'le véhicule déséquilibré ne doit pas être validé');
+            } else {
+                $this->assertNotNull($part->validated_at, 'le véhicule équilibré doit être validé malgré le refus de l\'autre');
+            }
+        }
+    }
+
+    /** @test */
+    public function valider_vehicules_en_masse_refuse_une_periode_deja_validee(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.valider-vehicules', $periode), [
+                'vehicules' => [$vehicule->id],
+            ])
+            ->assertForbidden();
+
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $this->assertNull($part->fresh()->validated_at);
+        }
+    }
+
+    /**
+     * Le super administrateur court-circuite les policies (Gate::before) : la garde d'état
+     * « période calculée » est donc aussi vérifiée dans le contrôleur.
+     *
+     * @test
+     */
+    public function valider_vehicules_en_masse_refuse_une_periode_validee_meme_pour_le_super_admin(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $this->user->assignRole('super_admin');
+
+        $this->actingAs($this->user->fresh())
+            ->post(route('comptabilite.periodes.ajustements.valider-vehicules', $periode), [
+                'vehicules' => [$vehicule->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $this->assertNull($part->fresh()->validated_at);
+        }
+    }
+
+    /** @test */
+    public function valider_vehicules_en_masse_interdit_a_une_autre_organisation(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $this->actingAs($this->makeAdminUser())
+            ->post(route('comptabilite.periodes.ajustements.valider-vehicules', $periode), [
+                'vehicules' => [$vehicule->id],
+            ])
+            ->assertForbidden();
+
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $this->assertNull($part->fresh()->validated_at);
+        }
     }
 
     /** @test */

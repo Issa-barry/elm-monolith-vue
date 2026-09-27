@@ -190,6 +190,36 @@ class CommissionValidationDirecteTest extends TestCase
     }
 
     /** @test */
+    public function le_badge_ne_reste_pas_a_valider_apres_validation_directe(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur, 'categorie' => $categorie] = $this->makeVehiculeUnLivreur();
+        $this->genererCommission($vehicule, $categorie);
+        $part = $this->seulePart($livreur);
+
+        $rowAvant = collect($this->actingAs($this->user)->get(route('comptabilite.commissions.vente.index'))
+            ->viewData('page')['props']['beneficiaires'])->firstWhere('beneficiaire_id', $livreur->id);
+        $this->assertSame('en_attente', $rowAvant['display_status']);
+        $this->assertSame('À valider', $rowAvant['display_label']);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.commissions.ajustements.valider'), [
+                'parts' => [['type' => 'vente', 'id' => $part->id]],
+            ])
+            ->assertSessionHas('success');
+
+        $row = collect($this->actingAs($this->user)->get(route('comptabilite.commissions.vente.index'))
+            ->viewData('page')['props']['beneficiaires'])->firstWhere('beneficiaire_id', $livreur->id);
+        $this->assertSame('repartition_validee', $row['display_status']);
+        $this->assertSame('Validée — période en attente', $row['display_label']);
+        $this->assertFalse($row['can_pay'], 'validée ne veut pas dire payable : la période reste à valider');
+
+        $detail = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.livreur', $livreur->id))
+            ->viewData('page')['props'];
+        $this->assertSame('repartition_validee', data_get($detail, 'statut_commission.display_status'));
+    }
+
+    /** @test */
     public function valider_directement_valide_toutes_les_parts_dun_meme_beneficiaire(): void
     {
         ['vehicule' => $vehicule, 'livreur' => $livreur, 'categorie' => $categorie] = $this->makeVehiculeUnLivreur();

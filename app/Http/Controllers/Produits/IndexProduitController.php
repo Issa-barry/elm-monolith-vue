@@ -11,6 +11,7 @@ use App\Models\Produit;
 use App\Models\Site;
 use App\Models\VarianteStock;
 use App\Services\DroitAjustementStockService;
+use App\Services\SavedFilterService;
 use App\Services\StockStatutService;
 use App\Support\Produits\ProduitFormOptions;
 use Illuminate\Http\Request;
@@ -29,16 +30,24 @@ class IndexProduitController extends Controller
     {
         $this->authorize('viewAny', Produit::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid'], 'stock' => ['nullable', 'in:rupture,stock_faible']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'produits');
+
         $user = auth()->user();
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
 
-        $filters = $request->only(['search', 'produit_type_id', 'statut', 'categorie_id']);
+        $filters = $request->only(['search', 'produit_type_id', 'statut', 'categorie_id', 'stock']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         if (empty($siteIds) && ! $isAdmin) {
             $siteIds = $user->sites()->pluck('sites.id')->map(fn ($id) => (string) $id)->toArray();
         }
+
+        $allowedSiteIds = $isAdmin
+            ? Site::where('organization_id', $orgId)->pluck('id')->all()
+            : $user->sites()->where('sites.organization_id', $orgId)->pluck('sites.id')->all();
+        abort_if((! $isAdmin && empty($allowedSiteIds)) || count(array_diff($siteIds, $allowedSiteIds)) > 0, 403);
 
         $query = Produit::where('organization_id', $orgId)
             ->with([
@@ -185,7 +194,7 @@ class IndexProduitController extends Controller
                 'has_variantes' => $p->variantes->count() > 1,
                 'last_mouvement_type' => $lastMouvement?->type,
                 'last_mouvement_quantite' => $lastMouvement?->quantite,
-                'stocks_par_site' => $siteStocksAll->map(fn ($s) => [
+                'stocks_par_site' => $siteStocksScope->map(fn ($s) => [
                     'site_id' => $s->site_id,
                     'site_code' => $s->site?->code,
                     'site_nom' => $s->site?->nom,
@@ -201,6 +210,12 @@ class IndexProduitController extends Controller
             ];
         });
 
+        if (($filters['stock'] ?? '') === 'rupture') {
+            $mapped = $mapped->filter(fn ($p) => $p['has_stock'] && $p['is_out_of_stock'])->values();
+        } elseif (($filters['stock'] ?? '') === 'stock_faible') {
+            $mapped = $mapped->filter(fn ($p) => $p['has_stock'] && $p['is_low_stock'])->values();
+        }
+
         $allSites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
         $categories = Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']);
 
@@ -211,7 +226,8 @@ class IndexProduitController extends Controller
 
         return Inertia::render('Produits/Index', [
             'produits' => $mapped,
-            'sites' => $allSites,
+            'sites' => $allSites->whereIn('id', $allowedSiteIds)->values(),
+            'saved_view' => $savedView,
             'categories' => $categories,
             'can_ajuster_stock' => $canAjuster,
             'can_augmenter_stock' => $this->droitService->canAugmenter($user, $orgId),
