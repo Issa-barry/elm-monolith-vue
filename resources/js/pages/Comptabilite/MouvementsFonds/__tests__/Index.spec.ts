@@ -62,6 +62,7 @@ const mouvement = (surcharge: Record<string, unknown> = {}) => ({
     peut_annuler: false,
     peut_contester: false,
     peut_confirmer_retour: false,
+    confirme_par_expediteur: false,
     ...surcharge,
 });
 
@@ -234,6 +235,29 @@ describe('Mouvements de fonds — colonnes indépendantes du tableau', () => {
 
         expect(recu.text()).toContain('Ibrahima Caissier');
         expect(pasRecu.text()).toBe('—');
+    });
+
+    it('signale « Confirmé par l’expéditeur » quand l’envoyeur a confirmé lui-même (information seulement)', () => {
+        const [autoConfirme, parUnTiers] = monter([
+            mouvement({
+                id: 'a',
+                statut: 'recu',
+                statut_label: 'Reçu',
+                receptionnaire: 'Issa BARRY',
+                date_reception: '2026-09-21',
+                confirme_par_expediteur: true,
+            }),
+            mouvement({
+                id: 'b',
+                statut: 'recu',
+                statut_label: 'Reçu',
+                receptionnaire: 'Ibrahima Caissier',
+                date_reception: '2026-09-21',
+            }),
+        ]).findAll('[data-testid="mouvement-recu-par"]');
+
+        expect(autoConfirme.text()).toContain("Confirmé par l'expéditeur");
+        expect(parUnTiers.text()).not.toContain('Confirmé par');
     });
 
     it("l'état vide couvre les neuf colonnes", () => {

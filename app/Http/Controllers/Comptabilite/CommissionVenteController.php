@@ -6,6 +6,7 @@ use App\Enums\ModePaiement;
 use App\Enums\MotifAjustementCommission;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\StatutValidationEquipe;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
@@ -215,7 +216,9 @@ class CommissionVenteController extends Controller
             $periode = $premiereEcheance
                 ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($premiereEcheance)))
                 : null;
-            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["livreur:{$livreurId}"] ?? null) : null;
+            $teamStatus = $periode
+                ? ($teamStatusParPeriode[$periode->id]["livreur:{$livreurId}"] ?? null)
+                : self::statutValidationPartsCreees($parts);
 
             $resolved = CommissionStatusResolver::resolve(
                 $periode,
@@ -433,7 +436,7 @@ class CommissionVenteController extends Controller
 
         $teamStatus = $periodeResolue
             ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
-            : null;
+            : self::statutValidationPartsCreees($filteredParts);
 
         $labelsParStatut = ['creee' => 'Créée', 'impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
         $statutCommission = CommissionStatusResolver::resolve(
@@ -608,6 +611,18 @@ class CommissionVenteController extends Controller
     }
 
     /**
+     * Sans période résolue (toutes les parts encore CREEE), la pré-validation (validated_at)
+     * est lue directement sur les parts du livreur — sinon le badge resterait « À valider »
+     * après un clic sur Valider, alors que plus aucune action n'est possible sur la ligne.
+     */
+    private static function statutValidationPartsCreees(Collection $parts): ?StatutValidationEquipe
+    {
+        $creees = $parts->filter(fn (CommissionEnveloppePart $p) => $p->statut === StatutCommission::CREEE)->values();
+
+        return $creees->isEmpty() ? null : CommissionAdjustmentService::statutValidationPourParts($creees);
+    }
+
+    /**
      * Prédicat période/véhicule/agence partagé entre $filteredParts (éventuellement restreint à
      * un processus) et $filteredPartsTousProcessus — écrit une seule fois pour éviter toute
      * divergence entre les deux.
@@ -627,7 +642,7 @@ class CommissionVenteController extends Controller
             return false;
         }
 
-        if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
+        if (! empty($siteIds) && ! in_array($part->enveloppe?->siteResponsableId(), $siteIds, true)) {
             return false;
         }
 

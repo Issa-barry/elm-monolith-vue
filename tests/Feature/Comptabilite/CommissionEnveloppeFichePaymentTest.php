@@ -12,6 +12,7 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
+use App\Enums\StatutTransfert;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -29,6 +30,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
@@ -37,6 +39,7 @@ use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -246,6 +249,58 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         $this->assertSame(10000.0, (float) $fiche->montant_net);
         $this->assertSame('CommissionEnveloppePart', class_basename($fiche->lignes()->first()->source_type));
+    }
+
+    /** @test */
+    public function la_fiche_dune_commission_de_transfert_est_rattachee_a_lagence_source_du_transfert(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $siteDestination = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site Destination',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $transfert = TransfertLogistique::create([
+            'organization_id' => $this->org->id,
+            'reference' => 'TRF-TEST-001',
+            'site_source_id' => $this->defaultSite->id,
+            'site_destination_id' => $siteDestination->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutTransfert::CLOTURE->value,
+            'created_by' => $this->user->id,
+        ]);
+
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => TransfertLogistique::class,
+            'source_id' => $transfert->id,
+            'processus_id' => $this->processus->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 5000,
+            'earned_at' => now(),
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $enveloppe->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $fiche = PaiementFiche::where('periode_id', $periode->id)
+            ->where('beneficiaire_id', $livreur->id)
+            ->firstOrFail();
+
+        $this->assertSame($this->defaultSite->id, $fiche->site_id);
     }
 
     // ── Paiement via Fiches de paiement → répercuté sur commission_enveloppe_parts ──

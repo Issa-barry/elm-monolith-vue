@@ -1116,3 +1116,66 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Tests : `tests/Feature/ReconfigurationPartagesTest.php`, E2E
   `tests/e2e/commissions/reconfiguration-partages.spec.ts` (fixture e2e-only
   `POST e2e/fixtures/partages-livreur`).
+
+## Badge « Statut » de l'écran Commissions des livreurs après « Valider » (corrigé le 27/09/2026)
+
+- Le bouton **Valider** d'une ligne pré-valide les parts encore `CREEE` (`validated_at`) sans
+  toucher leur statut : elles ne deviennent payables (`IMPAYE`) qu'à la validation de la période de
+  paiement.
+- Bug corrigé : un livreur dont toutes les parts sont encore `CREEE` n'a pas de période résolue, et
+  `CommissionStatusResolver` renvoyait toujours « À valider » dans ce cas, même après le clic sur
+  Valider (bouton disparu, badge inchangé).
+- Règle actuelle : sans période résolue, le statut de validation est lu sur les parts `CREEE` du
+  livreur (`CommissionAdjustmentService::statutValidationPourParts`). Si toutes sont pré-validées,
+  le badge affiche **« Validée — période en attente »** (point bleu, `repartition_validee`), sinon
+  « À valider ». Toujours non payable (`can_pay = false`). S'applique à la liste et à la fiche du livreur.
+- Le filtre Statut « À valider » (`statut=creee`) reste basé sur le statut brut `CREEE` : il liste aussi
+  les lignes déjà pré-validées en attente de période.
+- Tests : `tests/Unit/CommissionStatusResolverTest.php`,
+  `tests/Feature/Comptabilite/CommissionValidationDirecteTest.php`.
+
+## Détail d'une période livreur/propriétaire — validation directe et en masse des véhicules (27/09/2026)
+
+- Deux niveaux de validation distincts, désormais nommés sans ambiguïté sur l'écran
+  Comptabilité > Périodes > détail :
+  - **Valider** (ligne) / **Valider les véhicules (N)** (sélection multiple, case à cocher en
+    première colonne) : valide toutes les parts (vente + logistique) du ou des véhicules
+    (`validated_at`), exactement comme « Valider le véhicule » de l'écran d'ajustement. Ne change
+    jamais le statut de la période, ne rend rien payable.
+  - **Valider la période de paiement** (en-tête, anciennement « Valider ») : fait passer la
+    période `CALCULEE → VALIDEE`, fige les montants et rend les commissions payables. Toujours
+    refusée tant qu'une part n'est pas validée ou qu'un véhicule n'est pas équilibré.
+- « Ajuster » reste l'action séparée des cas de correction (absence, remplaçant, redistribution).
+  Un véhicule non équilibré (reste à répartir) ne peut pas être validé directement : bouton et
+  case désactivés, refus garanti côté backend.
+- Validation en masse : `POST comptabilite/periodes/{periode}/ajustements/valider-vehicules`
+  (`CommissionAjustementController::validerVehicules`). Chaque véhicule est traité
+  indépendamment : un véhicule déséquilibré est refusé et listé dans le message, sans bloquer les
+  autres. Une entrée d'audit par véhicule validé.
+- Seule une période `CALCULEE` accepte la validation de véhicules — vérifié aussi dans le
+  contrôleur (et plus seulement par la policy `ajuster`), car le super administrateur court-circuite
+  les policies (`Gate::before`). Même garde ajoutée sur `validerVehicule`.
+- Visibilité : cases et boutons affichés uniquement si `can.ajuster` et période calculée ; seules
+  les lignes « À vérifier » / « À revérifier » équilibrées sont sélectionnables.
+- Tests : `tests/Feature/Comptabilite/CommissionAjustementVenteTest.php`
+  (`valider_vehicules_en_masse_*`).
+
+### Bouton « Valider la période de paiement » après validation (27/09/2026)
+
+- Visible pour qui a le droit de valider (policy `gererValidation` : administrateur de
+  l'organisation), mais **désactivé** hors période `CALCULEE`, avec une infobulle :
+  « Période déjà validée — aucune nouvelle commission à valider. » (ou « La période doit d'abord
+  être calculée. » pour un brouillon). `PaiementPeriodeController::valider()` refuse aussi toute
+  période non calculée, super administrateur compris (qui court-circuite la policy) : revalider
+  réactiverait/recomptabiliserait sans rien intégrer de nouveau.
+- **Commissions arrivées après la validation** : une commande encaissée tard mais datée dans une
+  période déjà validée génère une commission qui ne figure sur aucune fiche (les fiches d'une
+  période validée ne sont jamais recalculées, cf. `needsRecalcul`). Elle n'est donc jamais payée
+  en l'état. `PeriodeCalculatorService::commissionsHorsFiches()` les détecte (même périmètre que
+  le calcul livreur/propriétaire) et la page affiche une alerte orange avec leur nombre et leur
+  montant.
+- **Règle non tranchée** : le traitement de ces commissions tardives (réouverture de la période,
+  report sur la période suivante, fiche complémentaire…) n'est pas encore décidé. Le bouton reste
+  désactivé dans ce cas, car une simple revalidation ne les intégrerait pas.
+- Tests : `tests/Feature/Comptabilite/PaiementPeriodeTest.php` (`test_bouton_valider_*`,
+  `test_commission_arrivee_apres_validation_*`, `test_revalider_*`).

@@ -218,9 +218,9 @@ class MouvementFondsBadgeNotificationTest extends TestCase
         ]);
         $this->assertSame(0, $this->badgeVia($this->user));
 
-        // sent_by = l'utilisateur lui-même ici : la séparation envoi/réception ne s'applique
-        // qu'aux versements de caisse interne (cf. MouvementFonds::separationEnvoiReceptionRespectee()),
-        // pas aux mouvements entre agences, dont la séparation se fait par site.
+        // sent_by = l'utilisateur lui-même ici : aucune séparation par personne (ni pour les
+        // mouvements entre agences, ni pour les versements de caisse depuis le 27/09/2026 — ADR 0001) ;
+        // seules la permission et l'agence de destination décident.
         $this->actingAs($this->user)
             ->post(route('comptabilite.tresorerie.mouvements.envoyer', $mouvement))
             ->assertRedirect();

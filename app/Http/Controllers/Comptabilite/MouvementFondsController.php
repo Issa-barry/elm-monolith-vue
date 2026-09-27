@@ -119,19 +119,14 @@ class MouvementFondsController extends Controller
             'expediteur' => $m->expediteur?->name,
             'receptionnaire' => $m->receptionnaire?->name,
             'created_at' => $m->created_at->toDateString(),
+            'confirme_par_expediteur' => $m->confirmeParExpediteur(),
             // L'état du mouvement est vérifié EXPLICITEMENT en plus de la policy : le Gate::before du
             // super admin passe avant elle et afficherait sinon toutes les actions sur chaque ligne,
-            // y compris terminée. Même raison pour la séparation envoi/réception d'un versement de
-            // caisse (MouvementFonds::separationEnvoiReceptionRespectee()). Le service reste la
-            // garantie réelle de chacune de ces règles.
+            // y compris terminée. Le service reste la garantie réelle de chacune de ces règles.
             'peut_envoyer' => $m->isBrouillon() && $user->can('envoyer', $m),
-            'peut_recevoir' => ($m->isEnvoye() || $m->isConteste())
-                && $m->separationEnvoiReceptionRespectee($user)
-                && $user->can('recevoir', $m),
+            'peut_recevoir' => ($m->isEnvoye() || $m->isConteste()) && $user->can('recevoir', $m),
             'peut_annuler' => $m->isBrouillon() && $user->can('annuler', $m),
-            'peut_contester' => $m->isEnvoye()
-                && $m->separationEnvoiReceptionRespectee($user)
-                && $user->can('contester', $m),
+            'peut_contester' => $m->isEnvoye() && $user->can('contester', $m),
             'peut_confirmer_retour' => $m->isConteste() && $user->can('confirmerRetour', $m),
         ]);
 

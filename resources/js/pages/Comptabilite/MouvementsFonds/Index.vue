@@ -47,6 +47,8 @@ interface Mouvement {
     date_reception: string | null;
     expediteur: string | null;
     receptionnaire: string | null;
+    /** Versement confirmé par la personne qui l'a envoyé (traçabilité, jamais un blocage). */
+    confirme_par_expediteur: boolean;
     created_at: string;
     peut_envoyer: boolean;
     peut_recevoir: boolean;
@@ -498,6 +500,13 @@ function confirmerMotif() {
                                         class="text-xs text-muted-foreground"
                                     >
                                         {{ dateFr(m.date_reception) }}
+                                    </div>
+                                    <div
+                                        v-if="m.confirme_par_expediteur"
+                                        class="text-xs text-muted-foreground italic"
+                                        data-testid="mouvement-confirme-par-expediteur"
+                                    >
+                                        Confirmé par l'expéditeur
                                     </div>
                                 </template>
                                 <template v-else>—</template>

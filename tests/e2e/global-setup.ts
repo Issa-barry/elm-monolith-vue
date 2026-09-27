@@ -257,8 +257,7 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 
     await page.goto(periodeUrl);
     const validerPeriodeBtn = page.getByRole('button', {
-        name: 'Valider',
-        exact: true,
+        name: 'Valider la période de paiement',
     });
     await validerPeriodeBtn.waitFor({ state: 'visible', timeout: 15_000 });
     await validerPeriodeBtn.click();

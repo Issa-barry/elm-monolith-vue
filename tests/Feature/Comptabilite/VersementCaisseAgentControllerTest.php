@@ -22,8 +22,9 @@ use Tests\TestCase;
 
 /**
  * Versement d'une caisse dédiée (phase 3) côté HTTP : permission `tresorerie.verser`, portée par
- * agence, agent limité à SA caisse, erreurs de validation, confirmation de réception par un
- * autre utilisateur, indicateurs `peut_*` de l'écran Mouvements (états explicites malgré le
+ * agence, agent limité à SA caisse, erreurs de validation, confirmation/contestation décidées par la
+ * seule permission (l'envoyeur habilité confirme lui-même, tracé — ADR 0001, 27/09/2026),
+ * indicateurs `peut_*` de l'écran Mouvements (états explicites malgré le
  * bypass super admin) et accès en lecture à l'écran Supports limité à ses agences.
  */
 class VersementCaisseAgentControllerTest extends TestCase
@@ -238,14 +239,30 @@ class VersementCaisseAgentControllerTest extends TestCase
     }
 
     /**
-     * Pour un utilisateur ordinaire, la policy refuse l'envoyeur EN AMONT (403) : le service, qui
-     * porte la même règle (cf. VersementCaisseAgentServiceTest), reste le filet pour tout appel
-     * qui ne passe pas par la policy.
+     * Règle du 27/09/2026 (ADR 0001) : plus de séparation par personne — confirmer ou contester
+     * dépend uniquement de la permission du rôle, y compris pour celui qui a envoyé les fonds.
      */
-    public function test_l_envoyeur_ne_peut_pas_confirmer_la_reception_via_l_ecran(): void
+    public function test_l_envoyeur_qui_a_la_permission_confirme_sa_propre_reception(): void
     {
-        // Le responsable reçoit aussi le droit de recevoir : seule la séparation l'en empêche.
         $this->responsable->givePermissionTo(Permission::firstOrCreate(['name' => 'tresorerie.recevoir', 'guard_name' => 'web']));
+        $mouvement = $this->versementEnvoye();
+
+        $this->actingAs($this->responsable)
+            ->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement))
+            ->assertSessionHasNoErrors();
+
+        $mouvement->refresh();
+        $this->assertSame(StatutMouvementFonds::RECU, $mouvement->statut);
+        $this->assertSame($this->responsable->id, $mouvement->sent_by);
+        $this->assertSame($this->responsable->id, $mouvement->received_by);
+        $this->assertTrue($mouvement->confirmeParExpediteur());
+
+        $ligne = collect($this->props($this->responsable, 'comptabilite.tresorerie.mouvements.index')['mouvements']['data'])->firstWhere('id', $mouvement->id);
+        $this->assertTrue($ligne['confirme_par_expediteur']);
+    }
+
+    public function test_sans_la_permission_recevoir_l_envoyeur_ne_peut_pas_confirmer(): void
+    {
         $mouvement = $this->versementEnvoye();
 
         $this->actingAs($this->responsable)
@@ -257,9 +274,20 @@ class VersementCaisseAgentControllerTest extends TestCase
         $this->assertNull($mouvement->received_by);
     }
 
-    public function test_l_envoyeur_ne_peut_pas_contester_via_l_ecran(): void
+    public function test_l_envoyeur_qui_a_la_permission_conteste_son_versement(): void
     {
         $this->responsable->givePermissionTo(Permission::firstOrCreate(['name' => 'tresorerie.rejeter', 'guard_name' => 'web']));
+        $mouvement = $this->versementEnvoye();
+
+        $this->actingAs($this->responsable)
+            ->post(route('comptabilite.tresorerie.mouvements.contester', $mouvement), ['motif' => 'Montant erroné'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(StatutMouvementFonds::CONTESTE, $mouvement->fresh()->statut);
+    }
+
+    public function test_sans_la_permission_rejeter_personne_ne_peut_contester(): void
+    {
         $mouvement = $this->versementEnvoye();
 
         $this->actingAs($this->responsable)
@@ -269,7 +297,7 @@ class VersementCaisseAgentControllerTest extends TestCase
         $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->fresh()->statut);
     }
 
-    public function test_le_super_admin_envoyeur_peut_confirmer_sa_propre_reception_via_l_ecran(): void
+    public function test_le_super_admin_envoyeur_confirme_sa_propre_reception_comme_tout_utilisateur_habilite(): void
     {
         $superAdmin = $this->superAdmin();
         $mouvement = $this->versementEnvoye($superAdmin);
@@ -280,8 +308,17 @@ class VersementCaisseAgentControllerTest extends TestCase
 
         $mouvement->refresh();
         $this->assertSame(StatutMouvementFonds::RECU, $mouvement->statut);
-        $this->assertSame($superAdmin->id, $mouvement->sent_by);
         $this->assertSame($superAdmin->id, $mouvement->received_by);
+    }
+
+    public function test_une_reception_par_un_tiers_n_est_pas_marquee_confirmee_par_l_expediteur(): void
+    {
+        $mouvement = $this->versementEnvoye();
+        app(MouvementFondsService::class)->recevoir($mouvement, $this->receveur->id, $this->caisseAgence->id);
+
+        $ligne = collect($this->props($this->receveur, 'comptabilite.tresorerie.mouvements.index')['mouvements']['data'])->firstWhere('id', $mouvement->id);
+
+        $this->assertFalse($ligne['confirme_par_expediteur']);
     }
 
     // ── Écran Mouvements ─────────────────────────────────────────────────────
@@ -304,23 +341,26 @@ class VersementCaisseAgentControllerTest extends TestCase
         $this->assertSame('envoye', $ligne['statut']);
     }
 
-    public function test_les_indicateurs_de_l_ecran_respectent_la_separation_envoi_reception(): void
+    public function test_les_boutons_de_l_ecran_suivent_uniquement_les_permissions(): void
     {
-        // Le responsable peut tout faire côté trésorerie, y compris recevoir et contester.
+        $mouvement = $this->versementEnvoye($this->responsable);
+        $ligne = fn (User $u) => collect($this->props($u, 'comptabilite.tresorerie.mouvements.index')['mouvements']['data'])->firstWhere('id', $mouvement->id);
+
+        $sansDroit = $ligne($this->responsable);
+        $this->assertFalse($sansDroit['peut_recevoir'], 'sans tresorerie.recevoir : pas de « Confirmer réception »');
+        $this->assertFalse($sansDroit['peut_contester'], 'sans tresorerie.rejeter : pas de « Contester »');
+
         foreach (['tresorerie.recevoir', 'tresorerie.rejeter'] as $permission) {
             $this->responsable->givePermissionTo(Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']));
         }
-        $mouvement = $this->versementEnvoye($this->responsable);
 
-        $ligne = fn (User $u) => collect($this->props($u, 'comptabilite.tresorerie.mouvements.index')['mouvements']['data'])->firstWhere('id', $mouvement->id);
+        $chezEnvoyeur = $ligne($this->responsable->fresh());
+        $this->assertTrue($chezEnvoyeur['peut_recevoir'], "l'envoyeur habilité voit « Confirmer réception »");
+        $this->assertTrue($chezEnvoyeur['peut_contester']);
 
         $chezReceveur = $ligne($this->receveur);
         $this->assertTrue($chezReceveur['peut_recevoir']);
         $this->assertTrue($chezReceveur['peut_contester']);
-
-        $chezEnvoyeur = $ligne($this->responsable);
-        $this->assertFalse($chezEnvoyeur['peut_recevoir'], 'l\'envoyeur ne voit pas « Confirmer réception »');
-        $this->assertFalse($chezEnvoyeur['peut_contester']);
 
         $chezSuperAdmin = $ligne($this->superAdmin());
         $this->assertTrue($chezSuperAdmin['peut_recevoir']);
