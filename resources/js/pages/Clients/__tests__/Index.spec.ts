@@ -100,7 +100,7 @@ describe('Clients — filtres serveur', () => {
         expect(wrapper.findComponent(DataTable).props('value')).toEqual([]);
         for (const composant of wrapper.findAllComponents(DataFilters)) {
             expect(composant.props('resultCount')).toBe(0);
-            expect(composant.props('values').cashback).toBe('eligible');
+            expect(composant.props('values')?.cashback).toBe('eligible');
         }
     });
 });
