@@ -1159,3 +1159,23 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   les lignes « À vérifier » / « À revérifier » équilibrées sont sélectionnables.
 - Tests : `tests/Feature/Comptabilite/CommissionAjustementVenteTest.php`
   (`valider_vehicules_en_masse_*`).
+
+### Bouton « Valider la période de paiement » après validation (27/09/2026)
+
+- Visible pour qui a le droit de valider (policy `gererValidation` : administrateur de
+  l'organisation), mais **désactivé** hors période `CALCULEE`, avec une infobulle :
+  « Période déjà validée — aucune nouvelle commission à valider. » (ou « La période doit d'abord
+  être calculée. » pour un brouillon). `PaiementPeriodeController::valider()` refuse aussi toute
+  période non calculée, super administrateur compris (qui court-circuite la policy) : revalider
+  réactiverait/recomptabiliserait sans rien intégrer de nouveau.
+- **Commissions arrivées après la validation** : une commande encaissée tard mais datée dans une
+  période déjà validée génère une commission qui ne figure sur aucune fiche (les fiches d'une
+  période validée ne sont jamais recalculées, cf. `needsRecalcul`). Elle n'est donc jamais payée
+  en l'état. `PeriodeCalculatorService::commissionsHorsFiches()` les détecte (même périmètre que
+  le calcul livreur/propriétaire) et la page affiche une alerte orange avec leur nombre et leur
+  montant.
+- **Règle non tranchée** : le traitement de ces commissions tardives (réouverture de la période,
+  report sur la période suivante, fiche complémentaire…) n'est pas encore décidé. Le bouton reste
+  désactivé dans ce cas, car une simple revalidation ne les intégrerait pas.
+- Tests : `tests/Feature/Comptabilite/PaiementPeriodeTest.php` (`test_bouton_valider_*`,
+  `test_commission_arrivee_apres_validation_*`, `test_revalider_*`).

@@ -1,3 +1,25 @@
+<script lang="ts">
+export interface SavedView {
+    id: string;
+    name: string;
+    visibility: 'personal' | 'shared';
+    filters: Record<string, string | string[]>;
+    owner_name: string;
+    can_manage: boolean;
+}
+
+interface SavedViewsState {
+    views: SavedView[];
+    default_id: string | null;
+    can_share: boolean;
+}
+
+// Partagé entre toutes les instances et les navigations Inertia : le menu s'ouvre sur la
+// dernière liste connue pendant que le serveur est réinterrogé en arrière-plan.
+const cache = new Map<string, SavedViewsState>();
+const inflight = new Map<string, Promise<SavedViewsState>>();
+</script>
+
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import {
@@ -24,16 +46,8 @@ import {
     Trash2,
     X,
 } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
-export interface SavedView {
-    id: string;
-    name: string;
-    visibility: 'personal' | 'shared';
-    filters: Record<string, string | string[]>;
-    owner_name: string;
-    can_manage: boolean;
-}
 const props = defineProps<{
     scope: string;
     active?: SavedView | null;
@@ -97,27 +111,45 @@ async function request(path = '', method = 'GET', body?: unknown) {
     return data;
 }
 
+const loaded = ref(false);
+
+function applyState(state: SavedViewsState) {
+    views.value = state.views;
+    defaultId.value = state.default_id;
+    canShare.value = state.can_share;
+    loaded.value = true;
+}
+
 async function load() {
-    loading.value = true;
+    const cached = cache.get(props.scope);
+    if (cached) applyState(cached);
+    // « Chargement » seulement quand aucune liste n'est encore connue.
+    loading.value = !loaded.value;
     error.value = '';
     try {
-        const data = await request();
-        views.value = data.views;
-        defaultId.value = data.default_id;
-        canShare.value = data.can_share;
+        let pending = inflight.get(props.scope);
+        if (!pending) {
+            pending = request() as Promise<SavedViewsState>;
+            inflight.set(props.scope, pending);
+        }
+        const state = await pending;
+        cache.set(props.scope, state);
+        applyState(state);
     } catch (e) {
         error.value =
             e instanceof Error ? e.message : 'Impossible de charger les vues.';
     } finally {
+        inflight.delete(props.scope);
         loading.value = false;
     }
 }
+onMounted(() => void load());
 watch(opened, (value) => {
     if (value) void load();
 });
 
 async function startCreate() {
-    await load();
+    if (!loaded.value) await load();
     if (error.value) {
         opened.value = true;
         return;
@@ -150,6 +182,9 @@ async function setDefault(view: SavedView) {
             id: defaultId.value === view.id ? null : view.id,
         });
         defaultId.value = data.default_id;
+        const cached = cache.get(props.scope);
+        if (cached)
+            cache.set(props.scope, { ...cached, default_id: data.default_id });
     } catch (e) {
         error.value =
             e instanceof Error
@@ -188,6 +223,7 @@ async function submit() {
             emit('apply', view);
         }
         dialogOpen.value = false;
+        void load();
     } catch (e) {
         error.value =
             e instanceof Error ? e.message : 'Impossible d’enregistrer la vue.';

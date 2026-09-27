@@ -515,6 +515,106 @@ class PaiementPeriodeTest extends TestCase
         ]);
     }
 
+    private function makeLivreur(string $nom = 'Mamadou Diallo'): Livreur
+    {
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => $nom,
+            'prenom' => 'Test',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'nom_complet' => $nom,
+            'is_active' => true,
+        ]);
+    }
+
+    /** Période calculée via l'ouverture de la page, puis forcée à VALIDEE (fiches figées). */
+    private function makePeriodeValideeAvecUneFiche(): PaiementPeriode
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $this->makeEnveloppeAvecPart(300000, null, $this->makeLivreur());
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $periode->refresh()->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        return $periode;
+    }
+
+    public function test_bouton_valider_actif_sur_une_periode_calculee(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $this->makeEnveloppeAvecPart(300000, null, $this->makeLivreur());
+        $periode = $this->makePeriode();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CALCULEE->value)
+                ->where('can.valider', true)
+                ->where('validation.possible', true)
+                ->where('validation.raison', null)
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+    }
+
+    public function test_bouton_valider_desactive_sur_une_periode_validee_sans_nouvelle_commission(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('can.valider', true)
+                ->where('validation.possible', false)
+                ->where('validation.raison', 'Période déjà validée — aucune nouvelle commission à valider.')
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+    }
+
+    /**
+     * Une commission générée après la validation (datée dans la période) n'est sur aucune
+     * fiche : elle est signalée, mais le bouton reste désactivé — revalider n'intégrerait
+     * pas la commission (fiches figées), le traitement relève d'une décision métier.
+     */
+    public function test_commission_arrivee_apres_validation_est_signalee_sans_reactiver_le_bouton(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+
+        $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('validation.possible', false)
+                ->where('validation.commissions_hors_fiches.nombre', 1)
+                ->where('validation.commissions_hors_fiches.montant', 45000)
+                ->where('validation.raison', fn (string $raison) => str_contains($raison, 'arrivées après la validation'))
+            );
+
+        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count(), 'les fiches d\'une période validée restent figées');
+    }
+
+    public function test_revalider_une_periode_validee_est_refuse_meme_pour_le_super_admin(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $periode->update(['validated_at' => '2026-06-10 12:00:00']);
+
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $this->user->assignRole('super_admin');
+
+        $this->actingAs($this->user->fresh())
+            ->post(route('comptabilite.periodes.valider', $periode))
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Seule une période calculée peut être validée.');
+
+        $this->assertSame('2026-06-10 12:00:00', $periode->fresh()->validated_at->toDateTimeString());
+    }
+
     public function test_sans_droit_comptabilite_ne_peut_pas_resoudre_une_periode(): void
     {
         Role::firstOrCreate(['name' => 'employe', 'guard_name' => 'web']);

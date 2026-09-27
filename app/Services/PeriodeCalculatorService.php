@@ -15,6 +15,7 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiementFiche;
+use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
 use App\Models\Prestataire;
@@ -90,6 +91,58 @@ class PeriodeCalculatorService
      * ne relance `calculer()` que si le hash source a réellement changé, et jamais sur une
      * période validée/clôturée (cf. needsRecalcul).
      */
+    /**
+     * Commissions (vente + logistique) qui entreraient dans cette période au calcul mais ne
+     * figurent sur aucune de ses fiches — typiquement générées après la validation (une
+     * commande encaissée tard mais datée dans la période) : les fiches d'une période validée
+     * sont figées (cf. needsRecalcul), ces commissions n'y sont donc jamais payées. Même
+     * périmètre que calculerLivreurs()/calculerProprietaires() ; sans objet pour les autres types.
+     *
+     * @return array{nombre: int, montant: float}
+     */
+    public function commissionsHorsFiches(PaiementPeriode $periode): array
+    {
+        [$typeLogistique, $typeVente, $colonneLogistique] = match ($periode->type) {
+            TypePeriodePaiement::LIVREUR => ['livreur', CommissionEnveloppePart::TYPE_LIVREUR, 'livreur_id'],
+            TypePeriodePaiement::PROPRIETAIRE => ['proprietaire', CommissionEnveloppePart::TYPE_PROPRIETAIRE, 'proprietaire_id'],
+            default => [null, null, null],
+        };
+
+        if ($typeVente === null) {
+            return ['nombre' => 0, 'montant' => 0.0];
+        }
+
+        $orgId = $periode->organization_id;
+        $exclus = [StatutCommission::ANNULEE->value, StatutCommission::PAYE->value];
+
+        $surFiches = PaiementFicheLigne::whereIn('fiche_id', $periode->fiches()->select('id'))
+            ->get(['source_type', 'source_id'])
+            ->map(fn (PaiementFicheLigne $l) => "{$l->source_type}:{$l->source_id}")
+            ->flip();
+
+        $vente = CommissionEnveloppePart::where('beneficiaire_type', $typeVente)
+            ->whereNotIn('statut', $exclus)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+            ->get()
+            ->reject(fn (CommissionEnveloppePart $p) => $surFiches->has(CommissionEnveloppePart::class.":{$p->id}"));
+
+        $logistique = CommissionLogistiquePart::where('type_beneficiaire', $typeLogistique)
+            ->whereNotNull($colonneLogistique)
+            ->whereNotIn('statut', $exclus)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
+            ->get()
+            ->reject(fn (CommissionLogistiquePart $p) => $surFiches->has(CommissionLogistiquePart::class.":{$p->id}"));
+
+        $parts = $vente->concat($logistique);
+
+        return [
+            'nombre' => $parts->count(),
+            'montant' => round((float) $parts->sum(fn ($p) => $p->montant_a_payer), 2),
+        ];
+    }
+
     public function recalculerPeriodesConcernees(string $organizationId, Carbon $date): void
     {
         PaiementPeriode::where('organization_id', $organizationId)

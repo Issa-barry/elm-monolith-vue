@@ -32,9 +32,18 @@ class PaiementPeriodePolicy
 
     public function valider(User $user, PaiementPeriode $periode): bool
     {
+        return $this->gererValidation($user, $periode) && $periode->peutEtreValidee();
+    }
+
+    /**
+     * Droit de valider une période, indépendamment de son état : sert à afficher le bouton
+     * « Valider la période de paiement » (désactivé hors période calculée) à ceux qui
+     * pourraient l'utiliser, sans jamais l'afficher aux autres.
+     */
+    public function gererValidation(User $user, PaiementPeriode $periode): bool
+    {
         return $user->isAdmin()
-            && $user->organization_id === $periode->organization_id
-            && $periode->peutEtreValidee();
+            && $user->organization_id === $periode->organization_id;
     }
 
     public function ajuster(User $user, PaiementPeriode $periode): bool

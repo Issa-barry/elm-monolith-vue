@@ -261,9 +261,10 @@ class PaiementPeriodeController extends Controller
                 'total_paye' => (float) $allFiches->sum('montant_paye'),
                 'reste' => max(0.0, (float) $allFiches->sum('montant_net') - (float) $allFiches->sum('montant_paye')),
             ],
+            'validation' => $this->etatValidation($periode),
             'can' => [
                 'calculer' => auth()->user()->can('calculer', $periode),
-                'valider' => auth()->user()->can('valider', $periode),
+                'valider' => auth()->user()->can('gererValidation', $periode),
                 'cloturer' => auth()->user()->can('cloturer', $periode),
                 'delete' => auth()->user()->can('delete', $periode),
                 'ajuster' => auth()->user()->can('ajuster', $periode),
@@ -352,6 +353,13 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('valider', $periode);
 
+        // Répété ici car le super administrateur court-circuite la policy (Gate::before) :
+        // revalider une période déjà validée réactiverait/recomptabiliserait sans jamais
+        // intégrer de nouvelles commissions (fiches figées, cf. etatValidation()).
+        if (! $periode->peutEtreValidee()) {
+            return back()->with('error', 'Seule une période calculée peut être validée.');
+        }
+
         // Combine toujours vente + logistique (jamais un choix) : une période
         // LIVREUR/PROPRIETAIRE peut porter les deux natures de commission, et aucune des
         // deux ne doit jamais être ignorée. Sans effet sur une période SALARIE
@@ -411,6 +419,35 @@ class PaiementPeriodeController extends Controller
         }
 
         return back()->with('success', 'Période validée.');
+    }
+
+    /**
+     * État du bouton « Valider la période de paiement ». Seule une période calculée est
+     * validable ; une fois validée, ses fiches sont figées. Les commissions arrivées ensuite
+     * dans ses dates (commissions_hors_fiches) ne sont pas intégrables par une simple
+     * revalidation : elles sont seulement signalées, leur traitement relève d'une décision
+     * métier distincte.
+     *
+     * @return array{possible: bool, raison: ?string, commissions_hors_fiches: array{nombre: int, montant: float}}
+     */
+    private function etatValidation(PaiementPeriode $periode): array
+    {
+        $horsFiches = $periode->isValidee() || $periode->isCloturee()
+            ? $this->calculator->commissionsHorsFiches($periode)
+            : ['nombre' => 0, 'montant' => 0.0];
+
+        $raison = match (true) {
+            $periode->peutEtreValidee() => null,
+            $periode->isBrouillon() => "La période doit d'abord être calculée.",
+            $horsFiches['nombre'] > 0 => 'Période déjà validée — des commissions arrivées après la validation ne sont sur aucune fiche (voir l\'alerte).',
+            default => 'Période déjà validée — aucune nouvelle commission à valider.',
+        };
+
+        return [
+            'possible' => $periode->peutEtreValidee(),
+            'raison' => $raison,
+            'commissions_hors_fiches' => $horsFiches,
+        ];
     }
 
     public function cloturer(PaiementPeriode $periode): RedirectResponse

@@ -11,7 +11,7 @@ class IndexSavedFilterController extends Controller
 {
     public function __invoke(Request $request, SavedFilterService $service, string $scope): JsonResponse
     {
-        $views = $service->visible($request->user(), $scope)->with('user')->orderBy('name')->get();
+        $views = $service->visible($request->user(), $scope)->with('user.personne')->orderBy('name')->get();
 
         return response()->json([
             'views' => $views->map(fn ($view) => $service->payload($view, $request->user())),

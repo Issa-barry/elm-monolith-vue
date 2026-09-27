@@ -7,6 +7,7 @@ use App\Models\Site;
 use App\Models\User;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -116,6 +117,29 @@ class SavedViewsEngineTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('saved_view.id', $id)->where('sites', fn ($sites) => collect($sites)->pluck('id')->all() === [$this->matoto->id]));
         $this->actingAs($this->collegue)->get(route('produits.index', ['saved_view' => $id]))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('saved_view.id', $id)->where('sites', fn ($sites) => collect($sites)->pluck('id')->all() === [$this->dixinn->id]));
+    }
+
+    public function test_la_liste_des_vues_ne_fait_pas_une_requete_par_auteur(): void
+    {
+        $compter = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->actingAs($this->collegue)->getJson(route('saved-filters.index', 'produits'))->assertOk();
+            DB::disableQueryLog();
+
+            // Seules les requêtes des vues comptent : les middlewares ont leurs propres caches.
+            return collect(DB::getQueryLog())->pluck('query')
+                ->filter(fn (string $sql) => preg_match('/from "(saved_filters|saved_filter_preferences|users|personnes)"/', $sql))
+                ->count();
+        };
+        $this->creer($this->utilisateur($this->matoto, ['produits.read', 'produits.update']), 'Vue A', ['statut' => 'actif'], 'shared');
+        $avant = $compter();
+
+        foreach (['Vue B', 'Vue C', 'Vue D'] as $nom) {
+            $this->creer($this->utilisateur($this->matoto, ['produits.read', 'produits.update']), $nom, ['statut' => 'actif'], 'shared');
+        }
+
+        $this->assertSame($avant, $compter());
     }
 
     public function test_une_vue_sans_critere_est_refusee(): void

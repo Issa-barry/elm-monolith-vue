@@ -79,6 +79,11 @@ const props = defineProps<{
         effectue: boolean;
         nb_fiches: number;
     };
+    validation: {
+        possible: boolean;
+        raison: string | null;
+        commissions_hors_fiches: { nombre: number; montant: number };
+    };
     stats: {
         total_brut: number;
         total_net: number;
@@ -545,10 +550,20 @@ function exportPdf() {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button v-if="can.valider" size="sm" @click="doValider">
-                        <CheckCircle class="mr-1.5 h-4 w-4" />
-                        Valider la période de paiement
-                    </Button>
+                    <!-- span porteur du title : un bouton désactivé ne reçoit pas le survol -->
+                    <span
+                        v-if="can.valider"
+                        :title="validation.raison ?? undefined"
+                    >
+                        <Button
+                            size="sm"
+                            :disabled="!validation.possible"
+                            @click="doValider"
+                        >
+                            <CheckCircle class="mr-1.5 h-4 w-4" />
+                            Valider la période de paiement
+                        </Button>
+                    </span>
                     <Button
                         v-if="can.cloturer"
                         variant="outline"
@@ -605,6 +620,36 @@ function exportPdf() {
                     <ExternalLink class="h-3.5 w-3.5" />
                     Voir les commissions de cette période
                 </Link>
+            </div>
+
+            <div
+                v-if="validation.commissions_hors_fiches.nombre > 0"
+                class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300"
+            >
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                    <p class="font-medium">
+                        {{ validation.commissions_hors_fiches.nombre }}
+                        commission{{
+                            validation.commissions_hors_fiches.nombre > 1
+                                ? 's'
+                                : ''
+                        }}
+                        ({{ fmt(validation.commissions_hors_fiches.montant) }})
+                        arrivée{{
+                            validation.commissions_hors_fiches.nombre > 1
+                                ? 's'
+                                : ''
+                        }}
+                        après la validation
+                    </p>
+                    <p class="mt-0.5">
+                        Elles sont datées dans cette période mais ne figurent
+                        sur aucune fiche : la période étant validée, ses fiches
+                        ne sont plus recalculées et ces commissions ne seront
+                        pas payées en l'état.
+                    </p>
+                </div>
             </div>
 
             <!-- KPI stats -->
