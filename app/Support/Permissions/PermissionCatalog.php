@@ -65,12 +65,12 @@ final class PermissionCatalog
         'pieces-identite.valider' => "Pièces d'identité — valider",
         'pieces-identite.rejeter' => "Pièces d'identité — rejeter",
         'comptabilite.payer' => 'Comptabilité — payer',
-        'tresorerie.envoyer' => 'Trésorerie — envoyer un mouvement',
-        'tresorerie.recevoir' => 'Trésorerie — recevoir un mouvement',
+        'tresorerie.envoyer' => "Trésorerie — envoyer un mouvement de fonds (entre agences, ou versement de la caisse d'un autre agent)",
+        'tresorerie.recevoir' => 'Trésorerie — confirmer la réception (versements de caisse et mouvements entre agences)',
         'tresorerie.annuler' => 'Trésorerie — annuler un mouvement',
-        'tresorerie.rejeter' => 'Trésorerie — rejeter un mouvement',
+        'tresorerie.rejeter' => 'Trésorerie — contester un mouvement reçu',
         'tresorerie.confirmer_retour' => 'Trésorerie — confirmer un retour',
-        'tresorerie.verser' => "Trésorerie — verser une caisse dédiée à la caisse de l'agence",
+        'tresorerie.verser' => "Trésorerie — déclencher un versement de caisse vers l'agence",
         'tresorerie.gerer_soldes_ouverture' => "Trésorerie — gérer les soldes d'ouverture",
         'tresorerie.valider_supports' => 'Trésorerie — valider un support (caisse, banque, Mobile Money)',
         'tresorerie.exporter' => 'Trésorerie — exporter',
@@ -185,10 +185,14 @@ final class PermissionCatalog
             'label' => 'Finance & Comptabilité',
             'resources' => ['comptabilite', 'journal-financier', 'tresorerie', 'commissions'],
             'standalone' => [
+                // Libellés métier des clés historiques (décision du 27/09/2026) : envoyer / recevoir /
+                // rejeter servent aussi aux mouvements entre agences — jamais renommées.
+                'Versements et mouvements de fonds' => [
+                    'tresorerie.verser', 'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.rejeter',
+                    'tresorerie.annuler', 'tresorerie.confirmer_retour',
+                ],
                 'Trésorerie' => [
-                    'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter',
-                    'tresorerie.confirmer_retour', 'tresorerie.verser', 'tresorerie.gerer_soldes_ouverture',
-                    'tresorerie.valider_supports', 'tresorerie.exporter',
+                    'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
                 ],
                 'Comptabilité' => ['comptabilite.payer'],
                 'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter'],

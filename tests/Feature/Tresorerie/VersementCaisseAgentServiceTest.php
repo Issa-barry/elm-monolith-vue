@@ -18,7 +18,6 @@ use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
-use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -27,9 +26,9 @@ use Tests\TestCase;
 /**
  * Phase 3 du chantier caisses dédiées (ADR 0001) : versement d'une caisse dédiée à un agent vers
  * une caisse de l'agence, en deux étapes — ENVOYÉ (la caisse de l'agent baisse, l'argent passe par
- * le compte de transit) puis REÇU (la caisse de l'agence augmente), confirmé par un AUTRE
- * utilisateur. Verrouille : écritures, contrôle de solde, destination, séparation
- * envoi/réception (dérogation super admin), contestation/retour, désactivation, et l'absence
+ * le compte de transit) puis REÇU (la caisse de l'agence augmente). Depuis le 27/09/2026, l'envoyeur
+ * peut confirmer lui-même si son rôle le permet (tracé). Verrouille : écritures, contrôle de solde,
+ * destination, auto-confirmation tracée, contestation/retour, désactivation, et l'absence
  * d'effet sur le Financement (un versement interne n'est pas un financement du siège).
  */
 class VersementCaisseAgentServiceTest extends TestCase
@@ -109,16 +108,6 @@ class VersementCaisseAgentServiceTest extends TestCase
     private function solde(CompteTresorerie $support): float
     {
         return $this->disponibilite->soldePourSupport($support);
-    }
-
-    private function superAdmin(): User
-    {
-        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
-        $superAdmin->assignRole('super_admin');
-        $superAdmin->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => false]);
-
-        return $superAdmin;
     }
 
     // ── Envoi ────────────────────────────────────────────────────────────────
@@ -207,40 +196,32 @@ class VersementCaisseAgentServiceTest extends TestCase
         $this->assertSame(0.0, $this->disponibilite->disponiblePourSite($this->org->id, $this->site->id, Carbon::now()));
     }
 
-    public function test_l_envoyeur_ne_peut_pas_confirmer_la_reception(): void
+    /**
+     * Règle du 27/09/2026 (ADR 0001) : le service ne sépare plus envoi et réception par personne —
+     * c'est la permission du rôle, vérifiée par la policy, qui décide. Écritures inchangées.
+     */
+    public function test_l_envoyeur_peut_confirmer_son_propre_versement_et_c_est_trace(): void
     {
+        $this->assertFalse($this->envoyeur->isSuperAdmin());
         $mouvement = $this->verser(800_000);
 
-        $this->assertErreurValidationSur('compte_tresorerie_destination_id', fn () => $this->service->recevoir($mouvement, $this->envoyeur->id, $this->caisseAgence->id));
-
-        $mouvement->refresh();
-        $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->statut);
-        $this->assertNull($mouvement->piece_comptable_reception_id);
-        $this->assertSame(0.0, $this->solde($this->caisseAgence));
-    }
-
-    public function test_le_super_admin_peut_confirmer_son_propre_versement_et_l_exception_reste_tracee(): void
-    {
-        $superAdmin = $this->superAdmin();
-        $mouvement = $this->verser(800_000, $superAdmin);
-
-        $recu = $this->service->recevoir($mouvement, $superAdmin->id, $this->caisseAgence->id);
+        $recu = $this->service->recevoir($mouvement, $this->envoyeur->id, $this->caisseAgence->id);
 
         $this->assertSame(StatutMouvementFonds::RECU, $recu->statut);
-        $this->assertSame($superAdmin->id, $recu->sent_by);
-        $this->assertSame($superAdmin->id, $recu->received_by, 'envoyeur et receveur sont tous deux enregistrés');
+        $this->assertSame($this->envoyeur->id, $recu->sent_by);
+        $this->assertSame($this->envoyeur->id, $recu->received_by, 'envoyeur et receveur sont tous deux enregistrés');
+        $this->assertTrue($recu->confirmeParExpediteur());
+        $this->assertNotNull($recu->piece_comptable_reception_id);
         $this->assertSame(800_000.0, $this->solde($this->caisseAgence));
     }
 
-    public function test_seul_le_super_admin_deroge_pas_un_admin_entreprise(): void
+    public function test_l_envoyeur_peut_contester_son_propre_versement(): void
     {
-        // $this->envoyeur est admin_entreprise (isAdmin) mais pas super admin.
-        $this->assertTrue($this->envoyeur->isAdmin());
-        $this->assertFalse($this->envoyeur->isSuperAdmin());
-
         $mouvement = $this->verser(100_000);
 
-        $this->assertErreurValidationSur('compte_tresorerie_destination_id', fn () => $this->service->recevoir($mouvement, $this->envoyeur->id, $this->caisseAgence->id));
+        $conteste = $this->service->contester($mouvement, $this->envoyeur->id, 'Montant erroné');
+
+        $this->assertSame(StatutMouvementFonds::CONTESTE, $conteste->statut);
     }
 
     // ── Contrôles ────────────────────────────────────────────────────────────
@@ -388,20 +369,6 @@ class VersementCaisseAgentServiceTest extends TestCase
 
         $this->assertSame(StatutMouvementFonds::RECU, $recu->statut);
         $this->assertSame(800_000.0, $this->solde($this->caisseAgence));
-    }
-
-    public function test_l_envoyeur_ne_peut_pas_contester_son_propre_versement(): void
-    {
-        $mouvement = $this->verser(800_000);
-
-        $this->assertErreurValidationSur('motif', fn () => $this->service->contester($mouvement, $this->envoyeur->id, 'Erreur'));
-        $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->fresh()->statut);
-
-        $this->assertSame(
-            StatutMouvementFonds::CONTESTE,
-            $this->service->contester($mouvement, $this->superAdmin()->id, 'Contrôle')->statut,
-            'un autre utilisateur, ici un super admin, peut contester',
-        );
     }
 
     // ── Désactivation d'une caisse ───────────────────────────────────────────

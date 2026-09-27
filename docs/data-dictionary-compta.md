@@ -215,6 +215,22 @@ porte pas de `compte_tresorerie_id` (seulement `compte_comptable_id` + `site_id`
 supports d'un même site partagent le même compte comptable (cas rare, non empêché à la création),
 leur solde renvoyé est identique (reflet exact du grand livre, pas un bug de ce calcul).
 
+### Agence d'une fiche de paiement (besoin du Financement)
+
+Le besoin « livreurs » / « propriétaires » d'une agence dans le Financement se lit sur
+`paiement_fiches.site_id`, fixé au calcul de la période (`PeriodeCalculatorService`) : l'agence qui
+pèse le plus dans les commissions de la fiche. L'agence d'une commission est donnée par
+`CommissionEnveloppe::siteResponsableId()` :
+
+- source commande de vente → `commandes_ventes.site_id` ;
+- source transfert logistique → **agence source** du transfert (`site_source_id`, même règle que
+  `CommissionLogistiqueService::resolveSiteResponsable()`).
+
+Une fiche sans aucune commission rattachable reste `site_id = null` et remonte dans la ligne
+« Sans agence » (statut « Données incomplètes »). Avant le 2026-09-27, les commissions de transfert
+n'étaient pas rattachées (lecture d'un `site_id` inexistant sur le transfert) : leurs fiches
+tombaient à tort dans « Sans agence ».
+
 ## Situation de trésorerie — vue de lecture
 
 L'écran "Situation de trésorerie" (`/backoffice/comptabilite/tresorerie/situation`,
@@ -363,11 +379,12 @@ mouvements entre agences).
   **au plus égal au solde de la caisse au grand livre** (deux versements successifs relisent le
   solde déjà diminué). La caisse de destination est fixée à l'envoi : la réception la confirme, elle
   ne la remplace pas, et exige qu'elle soit toujours active.
-- **Séparation envoi/réception** : celui qui a envoyé ne confirme ni ne conteste
-  (`MouvementFonds::separationEnvoiReceptionRespectee()`, appliquée par le service, la policy et les
-  indicateurs de l'écran). **Seul le super admin peut y déroger** (décision du 2026-09-19) ;
-  `sent_by` et `received_by` restent enregistrés, l'exception est donc traçable. Un
-  `admin_entreprise` n'a pas cette dérogation.
+- **Confirmer / contester = permission du rôle** (révision du 27/09/2026, ADR 0001, qui remplace la
+  séparation envoi/réception du 2026-09-19) : `tresorerie.recevoir` confirme la réception,
+  `tresorerie.rejeter` conteste — **y compris le versement qu'on a soi-même envoyé**. Plus aucune
+  dérogation propre au super admin. Traçabilité : `sent_by` et `received_by` sont enregistrés, et
+  l'écran Mouvements affiche « Confirmé par l'expéditeur » quand ce sont la même personne
+  (`MouvementFonds::confirmeParExpediteur()`), à titre d'information uniquement.
 - **Contestation / retour** : réutilisés tels quels (Contesté → Reçu, ou → Retourné qui recrédite la
   caisse de l'agent). Pas d'annulation après l'envoi. Une caisse ne peut pas être désactivée tant
   qu'un de ses versements est Envoyé ou Contesté.
@@ -375,7 +392,7 @@ mouvements entre agences).
   existants ; présente dans les préréglages admin, manager et comptable du seeder). Portée : agence
   de l'utilisateur ; sans `tresorerie.envoyer` (hors responsable) on ne verse que **sa propre**
   caisse. La réception reste sous `tresorerie.recevoir`. Le `Gate::before` du super admin neutralise
-  les policies : l'état de la caisse et la séparation sont donc revérifiés par le service, et les
+  les policies : l'état de la caisse est donc revérifié par le service, et les
   indicateurs `peut_*` de l'écran Mouvements vérifient désormais l'état du mouvement explicitement
   (un super admin ne voit plus toutes les actions sur une ligne terminée).
 - **Financement** : les versements internes sont exclus de « fonds en transit » et de « déjà

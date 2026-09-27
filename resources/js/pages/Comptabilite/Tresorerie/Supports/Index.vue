@@ -1076,11 +1076,11 @@ const selectClass =
                             side="top"
                             class="z-[1200] w-80 max-w-[calc(100vw-2rem)] px-4 py-3 text-sm leading-relaxed"
                         >
-                            Un autre utilisateur habilité de l'agence
-                            {{ versementCible.site }} doit confirmer la
-                            réception dans « Mouvements de fonds ». La caisse de
-                            l'agence est créditée uniquement après cette
-                            confirmation.
+                            Un utilisateur habilité à confirmer la réception à
+                            {{ versementCible.site }} — vous-même si votre rôle
+                            le permet — doit la confirmer dans « Mouvements de
+                            fonds ». La caisse de l'agence est créditée
+                            uniquement après cette confirmation.
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>

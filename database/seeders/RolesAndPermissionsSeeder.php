@@ -192,6 +192,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.read',
             'tresorerie.create',        'tresorerie.read',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.verser',
+            'tresorerie.rejeter',
             // Rapports
             'rapports.read_own',        'rapports.read',
             // RH
