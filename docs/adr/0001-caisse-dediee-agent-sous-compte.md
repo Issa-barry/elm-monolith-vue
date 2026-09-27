@@ -77,12 +77,14 @@ Le modèle existant ne le permet pas :
   table, statuts et écritures via le compte de transit 588000), créé et envoyé en une seule
   opération par `MouvementFondsService::verserCaisseAgent()`. La caisse de destination (caisse
   d'agence de type Caisse, même site) est fixée à l'envoi ; le solde de la caisse source est
-  contrôlé au grand livre sous verrou ; l'envoyeur ne confirme ni ne conteste (sauf super admin).
+  contrôlé au grand livre sous verrou ; confirmer ou contester dépend de la seule permission du
+  rôle (révision du 27/09/2026 ci-dessous — l'ancienne séparation par personne est abandonnée).
   Décisions du 2026-09-19 : permission dédiée `tresorerie.verser` (un agent qui verse sa caisse ne
   doit pas pouvoir envoyer de l'argent entre agences) ; versements internes exclus de « fonds en
   transit » et de « déjà financé » ; écran Supports ouvert en lecture à `tresorerie.read`, limité à
   ses agences.
-- **Exception super admin à la séparation envoi/réception** (choisie contre la recommandation
+- **~~Exception super admin à la séparation envoi/réception~~ — remplacée le 27/09/2026** (voir
+  « Révision du 27/09/2026 »). Historique : (choisie contre la recommandation
   initiale « aucun contournement ») : elle évite le blocage d'une organisation à un seul
   utilisateur habilité, mais un même compte peut alors envoyer et confirmer. Elle est bornée au
   rôle `super_admin` (pas `admin_entreprise`), portée par une règle unique
@@ -90,6 +92,22 @@ Le modèle existant ne le permet pas :
   `received_by` sont tous deux conservés. Le `Gate::before` du super admin neutralisant les
   policies, la règle est imposée par le service ; sans dérogation, il faut au moins deux
   utilisateurs habilités par agence.
+- **Révision du 27/09/2026 — la permission du rôle décide seule** (demande explicite de
+  l'utilisateur, qui remplace la séparation envoi/réception) : un utilisateur qui a
+  `tresorerie.recevoir` peut confirmer la réception de son **propre** versement, et avec
+  `tresorerie.rejeter` le contester. `MouvementFonds::separationEnvoiReceptionRespectee()` et la
+  garde du service sont supprimées ; la dérogation super admin devient sans objet. Le contrôle à
+  quatre yeux n'est plus imposé par le code : il se configure par rôle (ex. une Commerciale peut
+  verser sans pouvoir confirmer). Traçabilité conservée : `sent_by` / `received_by`, et mention
+  « Confirmé par l'expéditeur » dans Mouvements (`MouvementFonds::confirmeParExpediteur()`),
+  jamais bloquante. Le rôle type Manager reçoit `tresorerie.rejeter` (seeder + migration
+  `2026_09_27_100000_backfill_tresorerie_rejeter_manager`, ajout seul). Clés de permission
+  inchangées (`verser`, `envoyer`, `recevoir`, `rejeter` servent aussi aux mouvements entre
+  agences) ; seuls leurs libellés deviennent métier : « Déclencher un versement de caisse vers
+  l'agence », « Envoyer un mouvement de fonds (entre agences, ou versement de la caisse d'un autre
+  agent) », « Confirmer la réception (versements de caisse et mouvements entre agences) »,
+  « Contester un mouvement reçu ». Le bouton garde le libellé « Contester » ; workflows Envoyé →
+  Reçu / Contesté et écritures comptables inchangés.
 - **Cycle de vie (ADR [0002](0002-cycle-de-vie-support-tresorerie.md))** : une caisse dédiée est
   désormais créée en **brouillon** et validée avant usage ; le routage des encaissements date sa
   mise en service à la validation (`valide_le`), plus à la création.

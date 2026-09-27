@@ -172,23 +172,17 @@ class MouvementFonds extends Model
     }
 
     /**
-     * Séparation envoi/réception d'un versement de caisse : celui qui a envoyé les fonds ne
-     * confirme pas lui-même leur réception, ni ne la conteste — un autre utilisateur habilité doit
-     * le faire. Seul le super admin peut y déroger (décision du 2026-09-19) ; l'envoyeur et le
-     * receveur restent tous deux enregistrés (`sent_by`, `received_by`), donc l'exception est
-     * traçable. Sans objet pour un mouvement entre agences, dont la séparation se fait par site.
-     *
-     * Règle unique, partagée par le service (source de vérité), la policy et les indicateurs
-     * `peut_*` de l'écran : le Gate::before du super admin neutralise les policies, elle ne
-     * peut donc pas reposer sur la policy seule.
+     * Versement de caisse dont la réception a été confirmée par la personne qui l'a envoyé —
+     * autorisé depuis le 27/09/2026 si son rôle a `tresorerie.recevoir` (ADR 0001) : simple
+     * information de traçabilité affichée dans Mouvements (« Confirmé par l'expéditeur »), jamais
+     * un blocage.
      */
-    public function separationEnvoiReceptionRespectee(?User $acteur): bool
+    public function confirmeParExpediteur(): bool
     {
-        if (! $this->isInterne() || $acteur === null || $this->sent_by === null) {
-            return true;
-        }
-
-        return $this->sent_by !== $acteur->id || $acteur->isSuperAdmin();
+        return $this->isInterne()
+            && $this->sent_by !== null
+            && $this->received_by !== null
+            && $this->sent_by === $this->received_by;
     }
 
     /** Remise agence -> siège : le site d'origine n'est pas de type siège, la destination l'est. */

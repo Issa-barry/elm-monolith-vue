@@ -627,7 +627,7 @@ class CommissionVenteController extends Controller
             return false;
         }
 
-        if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
+        if (! empty($siteIds) && ! in_array($part->enveloppe?->siteResponsableId(), $siteIds, true)) {
             return false;
         }
 

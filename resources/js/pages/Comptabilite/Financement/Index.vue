@@ -184,7 +184,7 @@ function nouveauFinancementHref(row: Row): string {
     <Head title="Financement des agences" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-4 sm:p-6">
+        <div class="w-full min-w-0 space-y-6 p-4 sm:p-6">
             <div class="flex flex-col gap-1">
                 <h1 class="flex items-center gap-2 text-xl font-semibold">
                     <Wallet class="h-5 w-5 text-muted-foreground" />
@@ -266,12 +266,17 @@ function nouveauFinancementHref(row: Row): string {
                 </template>
             </DataFilters>
 
-            <div class="overflow-x-auto rounded-xl border bg-card">
-                <table class="w-full min-w-[960px] text-sm">
+            <div
+                role="region"
+                aria-label="Financement par agence — tableau à défilement horizontal"
+                tabindex="0"
+                class="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+                <table class="w-max min-w-full text-sm whitespace-nowrap">
                     <thead>
                         <tr class="border-b bg-muted/40 text-left">
                             <th
-                                class="sticky left-0 z-10 bg-muted/40 px-4 py-3 font-medium"
+                                class="sticky left-0 z-10 min-w-40 bg-muted px-4 py-3 font-medium"
                             >
                                 Agence
                             </th>
@@ -302,7 +307,9 @@ function nouveauFinancementHref(row: Row): string {
                             <th class="px-4 py-3 text-left font-medium">
                                 Statut
                             </th>
-                            <th class="px-4 py-3"></th>
+                            <th class="px-4 py-3">
+                                <span class="sr-only">Actions</span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -312,7 +319,7 @@ function nouveauFinancementHref(row: Row): string {
                             class="hover:bg-muted/30"
                         >
                             <td
-                                class="sticky left-0 z-10 bg-card px-4 py-3 font-medium"
+                                class="sticky left-0 z-10 max-w-56 min-w-40 bg-card px-4 py-3 font-medium whitespace-normal"
                             >
                                 <Link
                                     :href="detailHref(row)"
@@ -382,7 +389,7 @@ function nouveauFinancementHref(row: Row): string {
                         </tr>
                         <tr v-if="rows.length === 0">
                             <td
-                                :colspan="6 + colonnesVisibles.length"
+                                :colspan="8 + colonnesVisibles.length"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
                                 Aucune agence pour cette période.

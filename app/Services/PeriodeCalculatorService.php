@@ -257,7 +257,7 @@ class PeriodeCalculatorService
                     'montant' => $montant,
                     'ordre' => $ordre++,
                 ]);
-                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
+                $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
             }
 
             foreach ($logParts->get($livreurId, collect()) as $part) {
@@ -367,7 +367,7 @@ class PeriodeCalculatorService
                     'montant' => $montant,
                     'ordre' => $ordre++,
                 ]);
-                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
+                $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
             }
 
             foreach ($logParts->get($proprietaireId, collect()) as $part) {

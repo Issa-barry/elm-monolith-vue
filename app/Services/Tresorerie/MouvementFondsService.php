@@ -8,7 +8,6 @@ use App\Enums\TypeSupportTresorerie;
 use App\Exceptions\Tresorerie\TransitionMouvementFondsInvalideException;
 use App\Models\CompteTresorerie;
 use App\Models\MouvementFonds;
-use App\Models\User;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\MouvementFondsComptabilisationService;
 use Illuminate\Support\Carbon;
@@ -36,8 +35,9 @@ use Illuminate\Validation\ValidationException;
  * Deux natures (NatureMouvementFonds). Le versement d'une caisse dédiée à un agent vers la caisse
  * de l'agence (`interne_caisses`, même site, cf. verserCaisseAgent()) suit le même workflow et les
  * mêmes écritures via le compte de transit, avec des règles propres : destination fixée à
- * l'envoi, et l'envoyeur ne confirme pas lui-même la réception
- * (MouvementFonds::separationEnvoiReceptionRespectee()).
+ * l'envoi. Confirmer ou contester dépend uniquement des permissions du rôle
+ * (`tresorerie.recevoir`, `tresorerie.rejeter`) : l'envoyeur peut confirmer son propre versement
+ * s'il en a le droit (décision du 27/09/2026, cf. ADR 0001) — `sent_by` / `received_by` le tracent.
  *
  * Solde suffisant contrôlé sous verrou À L'ENVOI, pour les DEUX natures (garantirSoldeSuffisant(),
  * revue produit du 22/09/2026) : une caisse dont le solde disponible est nul ou insuffisant ne
@@ -221,23 +221,6 @@ class MouvementFondsService
     }
 
     /**
-     * Séparation envoi/réception d'un versement de caisse : celui qui confirme ou conteste n'est
-     * pas celui qui a envoyé les fonds (sauf super admin, cf.
-     * MouvementFonds::separationEnvoiReceptionRespectee()). $champ désigne le champ d'erreur
-     * affiché par l'écran.
-     */
-    private function garantirSeparationEnvoiReception(MouvementFonds $mouvement, ?string $userId, string $champ): void
-    {
-        $acteur = $userId !== null ? User::find($userId) : null;
-
-        if (! $mouvement->separationEnvoiReceptionRespectee($acteur)) {
-            throw ValidationException::withMessages([
-                $champ => 'Vous avez envoyé ces fonds : un autre utilisateur habilité doit confirmer la réception du versement.',
-            ]);
-        }
-    }
-
-    /**
      * Un mouvement entre agences ne part jamais d'une caisse dédiée à un agent
      * et n'y arrive jamais : cet argent transite d'abord par un versement vers la
      * caisse de l'agence. Garde serveur, indépendante des listes proposées par
@@ -342,7 +325,6 @@ class MouvementFondsService
                         ),
                     ]);
                 }
-                $this->garantirSeparationEnvoiReception($verrouille, $userId, 'compte_tresorerie_destination_id');
             }
 
             $verrouille->date_reception = $dateReception ?? now();
@@ -388,15 +370,11 @@ class MouvementFondsService
      */
     public function contester(MouvementFonds $mouvement, ?string $userId, string $motif): MouvementFonds
     {
-        return DB::transaction(function () use ($mouvement, $userId, $motif) {
+        return DB::transaction(function () use ($mouvement, $motif) {
             $verrouille = MouvementFonds::whereKey($mouvement->id)->lockForUpdate()->firstOrFail();
 
             if ($verrouille->statut !== StatutMouvementFonds::ENVOYE) {
                 throw TransitionMouvementFondsInvalideException::pour($verrouille, 'contester', [StatutMouvementFonds::ENVOYE]);
-            }
-
-            if ($verrouille->isInterne()) {
-                $this->garantirSeparationEnvoiReception($verrouille, $userId, 'motif');
             }
 
             $verrouille->update([
