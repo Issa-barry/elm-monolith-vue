@@ -257,7 +257,9 @@ export async function loginAsElmV2Demo(page: Page): Promise<void> {
     }
 
     throw lastError instanceof Error
-        ? new Error(`loginAsElmV2Demo failed after retries.\nCause: ${lastError.message}`)
+        ? new Error(
+              `loginAsElmV2Demo failed after retries.\nCause: ${lastError.message}`,
+          )
         : new Error('loginAsElmV2Demo failed after retries.');
 }
 
@@ -744,6 +746,28 @@ export async function createUser(
     await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 }
 
+/**
+ * Valide la recherche et, si elle déclenche une visite Inertia (filtre serveur via
+ * DataFilters), attend sa réponse : sinon la ligne trouvée appartient encore à la liste
+ * non filtrée et le re-rendu qui suit détache le menu d'actions ouvert entre-temps.
+ * Un filtre purement client ne lance aucune requête : on n'attend alors que brièvement.
+ */
+async function submitSearch(search: Locator): Promise<void> {
+    const page = search.page();
+    const inertiaVisit = page
+        .waitForRequest(
+            (r) => r.method() === 'GET' && !!r.headers()['x-inertia'],
+            { timeout: 1_500 },
+        )
+        .catch(() => null);
+    await search.press('Enter');
+    const request = await inertiaVisit;
+    if (request) {
+        await request.response().catch(() => null);
+        await page.waitForLoadState('networkidle');
+    }
+}
+
 export async function findUserInList(
     page: Page,
     query: string,
@@ -751,7 +775,7 @@ export async function findUserInList(
     await page.goto('/backoffice/users');
     const search = await getVisibleSearchInput(page);
     await search.fill(query);
-    await search.press('Enter');
+    await submitSearch(search);
     const row = page
         .locator('tbody tr', {
             hasText: new RegExp(escapeRegExp(query), 'i'),
@@ -767,7 +791,7 @@ export async function findRowByName(
 ): Promise<Locator> {
     const search = await getVisibleSearchInput(page);
     await search.fill(name);
-    await search.press('Enter');
+    await submitSearch(search);
     await page.waitForLoadState('networkidle');
     return page
         .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
