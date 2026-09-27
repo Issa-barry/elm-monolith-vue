@@ -68,12 +68,15 @@ test('Commissions > Ventes — valider directement une ligne "À valider" sans p
 
     await confirmAlertDialog(page, 'Valider');
 
-    // La ligne reste "À valider" (rien n'est encore payable — seule la validation de la période
-    // active le paiement), mais l'action Valider a été consommée : le bouton disparaît, preuve
-    // que la part a bien été pré-validée côté serveur (validated_at) sans jamais transiter par
-    // l'écran Périodes/Ajustement véhicule.
+    // L'action Valider a été consommée : le bouton disparaît et le badge passe à « Validée —
+    // période en attente » (cf. docs/commissions.md, correctif du 27/09/2026) — la part est
+    // pré-validée côté serveur (validated_at) sans transiter par l'écran Périodes, mais rien
+    // n'est encore payable tant que la période n'est pas validée.
     await expect(validerBtn).toBeHidden({ timeout: 15_000 });
-    await expect(row.getByText(/^à valider$/i)).toBeVisible();
+    await expect(
+        row.getByText(/^validée — période en attente$/i),
+    ).toBeVisible();
+    await expect(row.getByText(/^à valider$/i)).toHaveCount(0);
 });
 
 test('Commissions > Ventes — ajuster une commission (motif obligatoire, montant théorique conservé)', async ({
@@ -104,7 +107,9 @@ test('Commissions > Ventes — ajuster une commission (motif obligatoire, montan
 
     // Montant calculé = parts encore ajustables (hors déjà validées/payées).
     const montantCalcule = await montantDe(
-        dialog.getByText('Montant calculé', { exact: true }).locator('xpath=following-sibling::*[1]'),
+        dialog
+            .getByText('Montant calculé', { exact: true })
+            .locator('xpath=following-sibling::*[1]'),
     );
     expect(montantCalcule).toBeGreaterThan(100);
 
