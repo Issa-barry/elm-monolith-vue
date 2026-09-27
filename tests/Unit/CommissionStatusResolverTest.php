@@ -68,6 +68,24 @@ class CommissionStatusResolverTest extends TestCase
         $this->assertNull($result['team_validation_status']);
     }
 
+    public function test_aucune_periode_mais_parts_prevalidees_nest_plus_a_valider(): void
+    {
+        $result = CommissionStatusResolver::resolve(null, StatutValidationEquipe::VALIDEE, 'creee', 'Créée');
+
+        $this->assertSame('creee', $result['commission_status']);
+        $this->assertSame('repartition_validee', $result['display_status']);
+        $this->assertSame('Validée — période en attente', $result['display_label']);
+        $this->assertFalse($result['can_pay']);
+    }
+
+    public function test_aucune_periode_parts_partiellement_validees_reste_a_valider(): void
+    {
+        $result = CommissionStatusResolver::resolve(null, StatutValidationEquipe::A_REVERIFIER, 'creee', 'Créée');
+
+        $this->assertSame('en_attente', $result['display_status']);
+        $this->assertSame('À valider', $result['display_label']);
+    }
+
     public function test_periode_calculee_equipe_non_validee(): void
     {
         $periode = $this->makePeriode(StatutPeriodePaiement::CALCULEE);

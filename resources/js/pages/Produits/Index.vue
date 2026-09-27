@@ -116,12 +116,15 @@ interface Filters {
     produit_type_id?: string;
     statut?: string;
     site_ids?: string[];
+    categorie_id?: string;
+    stock?: string;
 }
 
 const props = defineProps<{
     produits: Produit[];
     sites: Site[];
     types: FilterOption[];
+    categories: { id: string; nom: string }[];
     statuts: FilterOption[];
     filters: Filters;
     can_ajuster_stock: boolean;
@@ -145,11 +148,9 @@ const hasActiveFilters = computed(
 
 function clearFilters() {
     searchInput.value = '';
-    showOnlyRuptures.value = false;
-    showOnlyFaibles.value = false;
     router.get(
         '/backoffice/produits',
-        {},
+        { all: '1' },
         { preserveState: true, replace: true },
     );
 }
@@ -190,6 +191,25 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Rechercher...',
     },
     {
+        key: 'categorie_id',
+        type: 'select',
+        label: 'Catégorie',
+        searchable: true,
+        options: (props.categories ?? []).map((c) => ({
+            value: c.id,
+            label: c.nom,
+        })),
+    },
+    {
+        key: 'stock',
+        type: 'select',
+        label: 'Alerte de stock',
+        options: [
+            { value: 'stock_faible', label: 'Stock faible' },
+            { value: 'rupture', label: 'En rupture' },
+        ],
+    },
+    {
         key: 'produit_type_id',
         type: 'select',
         label: 'Type',
@@ -202,16 +222,30 @@ const filterFields = computed<FilterField[]>(() => [
 
 // ── Filtres client (rupture / stock faible) ───────────────────────────────────
 
-const showOnlyRuptures = ref(false);
-const showOnlyFaibles = ref(false);
+const showOnlyRuptures = computed(() => props.filters.stock === 'rupture');
+const showOnlyFaibles = computed(() => props.filters.stock === 'stock_faible');
 
 function toggleRuptures() {
-    showOnlyRuptures.value = !showOnlyRuptures.value;
-    if (showOnlyRuptures.value) showOnlyFaibles.value = false;
+    router.get(
+        '/backoffice/produits',
+        {
+            ...props.filters,
+            stock: showOnlyRuptures.value ? '' : 'rupture',
+            all: '1',
+        },
+        { preserveScroll: true, replace: true },
+    );
 }
 function toggleFaibles() {
-    showOnlyFaibles.value = !showOnlyFaibles.value;
-    if (showOnlyFaibles.value) showOnlyRuptures.value = false;
+    router.get(
+        '/backoffice/produits',
+        {
+            ...props.filters,
+            stock: showOnlyFaibles.value ? '' : 'stock_faible',
+            all: '1',
+        },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 const ruptures = computed(() =>
@@ -222,10 +256,6 @@ const faibles = computed(() =>
 );
 
 const filteredProduits = computed(() => {
-    if (showOnlyRuptures.value)
-        return props.produits.filter((p) => p.has_stock && p.is_out_of_stock);
-    if (showOnlyFaibles.value)
-        return props.produits.filter((p) => p.has_stock && p.is_low_stock);
     return props.produits;
 });
 
@@ -779,12 +809,15 @@ function confirmArchive(produit: Produit) {
                     <template #filters>
                         <DataFilters
                             trigger-only
+                            saved-filter-scope="produits"
                             url="/backoffice/produits"
                             :values="{
                                 search: filters.search ?? '',
                                 produit_type_id: filters.produit_type_id ?? '',
                                 statut: filters.statut ?? '',
                                 site_ids: filters.site_ids ?? [],
+                                categorie_id: filters.categorie_id ?? '',
+                                stock: filters.stock ?? '',
                             }"
                             :fields="filterFields"
                             :result-count="filteredProduits.length"
@@ -1251,6 +1284,8 @@ function confirmArchive(produit: Produit) {
                     produit_type_id: filters.produit_type_id ?? '',
                     statut: filters.statut ?? '',
                     site_ids: filters.site_ids ?? [],
+                    categorie_id: filters.categorie_id ?? '',
+                    stock: filters.stock ?? '',
                 }"
                 :filter-fields="filterFields"
                 :result-count="filteredProduits.length"

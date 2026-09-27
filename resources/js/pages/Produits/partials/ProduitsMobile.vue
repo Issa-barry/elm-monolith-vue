@@ -129,7 +129,7 @@ const filteredProduits = computed(() => {
                 </Link>
             </div>
 
-            <div class="flex items-center gap-2 px-4 pb-3">
+            <div class="flex flex-wrap items-center gap-2 px-4 pb-3">
                 <div class="relative flex flex-1 items-center">
                     <Search
                         class="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground"
@@ -143,6 +143,7 @@ const filteredProduits = computed(() => {
                 </div>
                 <DataFilters
                     trigger-only
+                    saved-filter-scope="produits"
                     :url="filterUrl"
                     :values="filterValues"
                     :fields="filterFields"

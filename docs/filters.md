@@ -398,6 +398,55 @@ Clic sur **Réinitialiser** (dans la barre ou dans le drawer) :
 
 ---
 
+## Vues enregistrées (« Mes vues »)
+
+Prop `savedFilterScope` : affiche le bouton **Mes vues** (`SavedViews.vue`) à côté de **Filtres**.
+L'utilisateur enregistre les critères courants sous un nom, les réapplique en un clic, et peut
+marquer une vue comme **vue par défaut** (appliquée à l'ouverture de la liste sans paramètre).
+
+Listes activées :
+
+| Scope | Page | Critères enregistrables | Partage |
+|---|---|---|---|
+| `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
+| `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
+
+Règles (garanties par `SavedFilterService`) :
+- lecture/écriture exigent la permission de la liste déclarée dans `authorize` (`viewAny` Produit pour les deux scopes) ;
+  un scope inconnu répond 404 ; les vues sont isolées par organisation **et** par scope ;
+- seuls les critères du scope sont acceptés (`array:` strict) — un critère d'une autre liste est refusé ;
+- une vue **personnelle** n'est visible que de son auteur ; une vue **partagée** exige la permission
+  de partage du scope et reste en lecture seule pour les autres utilisateurs ;
+- un non-admin ne peut enregistrer que ses agences ; `site_scope = mine` (« Adapter la vue aux agences
+  de chaque utilisateur ») se résout au moment de l'application ;
+- les critères de la vue remplacent ceux de l'URL, la liste reste seule autorité métier (aucun calcul
+  n'est porté par la vue). Sur Stock, un non-admin reste limité à ses agences quoi que contienne la vue ;
+- `DataFilters` envoie `all=1` lors d'un filtrage/réinitialisation manuel : la vue par défaut ne se
+  réapplique alors pas. Toute réinitialisation propre à une page doit aussi envoyer `all=1`.
+
+### Architecture — un seul moteur, une configuration par liste
+
+| Élément | Rôle | Modifier quand… |
+|---|---|---|
+| `app/Support/SavedFilters/SavedFilterScopes.php` | **Configuration** : une entrée par liste (`authorize`, `share`, `sites`, `criteria` + règles) | on active les vues sur une nouvelle liste ou on ajoute un critère |
+| `app/Services/SavedFilterService.php` | **Moteur** : stockage, visibilité, partage, vue par défaut, « mes agences », validation | on change le comportement pour toutes les listes |
+| `app/Http/Controllers/SavedFilters/*` + routes `saved-filters/{scope}` | API JSON commune (liste, créer, renommer, supprimer, défaut) | jamais pour une liste précise |
+| `resources/js/components/filters/SavedViews.vue` | **UX unique** : menu Mes vues, dialogues, étoile « par défaut » | on change le design ou le parcours partout |
+| `DataFilters.vue` (prop `savedFilterScope`) | Intègre `SavedViews`, fournit les critères courants et leur libellé | — |
+
+Tables : `saved_filters` (vues, par organisation/auteur/scope) et `saved_filter_preferences` (vue par
+défaut **par utilisateur** et par scope — choisir une vue partagée comme défaut n'affecte personne d'autre).
+
+### Ajouter les vues sur une nouvelle liste (sans recopier de code)
+
+1. `SavedFilterScopes::all()` : ajouter l'entrée du scope (mêmes clés que les paramètres de requête de la liste).
+2. Contrôleur Index : `$savedView = app(SavedFilterService::class)->applyToRequest($request, '<scope>');`
+   **avant** de lire les filtres, puis exposer `'saved_view' => $savedView` aux props Inertia.
+3. Page : `<DataFilters saved-filter-scope="<scope>" … />` ; toute réinitialisation propre à la page envoie `all=1`.
+4. Tests : une vue du scope est appliquée par la liste (modèle : `tests/Feature/StockSavedViewsTest.php`).
+
+---
+
 ## Ajouter un nouveau type de champ
 
 1. Ajouter la valeur dans `FilterFieldType` dans `DataFilters.vue`

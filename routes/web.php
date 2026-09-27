@@ -161,6 +161,11 @@ use App\Http\Controllers\Role\EditRoleController;
 use App\Http\Controllers\Role\IndexRoleController;
 use App\Http\Controllers\Role\StoreRoleController;
 use App\Http\Controllers\Role\UpdateRoleController;
+use App\Http\Controllers\SavedFilters\DestroySavedFilterController;
+use App\Http\Controllers\SavedFilters\IndexSavedFilterController;
+use App\Http\Controllers\SavedFilters\SetDefaultSavedFilterController;
+use App\Http\Controllers\SavedFilters\StoreSavedFilterController;
+use App\Http\Controllers\SavedFilters\UpdateSavedFilterController;
 use App\Http\Controllers\ScanLivraisonController;
 use App\Http\Controllers\ScanProduitController;
 use App\Http\Controllers\ScanUserController;
@@ -326,6 +331,12 @@ Route::prefix('backoffice')->group(function () {
         ->name('dashboard');
 
     Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
+
+        Route::get('saved-filters/{scope}', IndexSavedFilterController::class)->name('saved-filters.index');
+        Route::post('saved-filters/{scope}', StoreSavedFilterController::class)->name('saved-filters.store');
+        Route::put('saved-filters/{scope}/default', SetDefaultSavedFilterController::class)->name('saved-filters.default');
+        Route::patch('saved-filters/{scope}/{id}', UpdateSavedFilterController::class)->name('saved-filters.update');
+        Route::delete('saved-filters/{scope}/{id}', DestroySavedFilterController::class)->name('saved-filters.destroy');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');
@@ -866,6 +877,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('periodes/{periode}/ajustements/vehicules/{vehicule}', [CommissionAjustementController::class, 'vehicule'])->name('periodes.ajustements.vehicule');
             Route::post('periodes/{periode}/ajustements/vehicules/{vehicule}/valider', [CommissionAjustementController::class, 'validerVehicule'])->name('periodes.ajustements.vehicule.valider');
             Route::post('periodes/{periode}/ajustements/remplacant', [CommissionAjustementController::class, 'remplacant'])->name('periodes.ajustements.remplacant');
+            Route::post('periodes/{periode}/ajustements/valider-vehicules', [CommissionAjustementController::class, 'validerVehicules'])->name('periodes.ajustements.valider-vehicules');
             Route::post('periodes/{periode}/ajustements/valider-lot', [CommissionAjustementController::class, 'validerLot'])->name('periodes.ajustements.valider-lot');
             Route::post('periodes/{periode}/ajustements/ajuster-groupe', [CommissionAjustementController::class, 'ajusterGroupe'])->name('periodes.ajustements.ajuster-groupe');
             Route::post('periodes/{periode}/ajustements/ajuster-multiple', [CommissionAjustementController::class, 'ajusterMultiple'])->name('periodes.ajustements.ajuster-multiple');

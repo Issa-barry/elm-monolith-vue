@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Services\DroitAjustementStockService;
 use App\Services\MouvementStockMotifService;
+use App\Services\SavedFilterService;
 use App\Services\StockStatutService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -28,11 +29,15 @@ class IndexStockController extends Controller
     public function __construct(
         private readonly DroitAjustementStockService $droitService,
         private readonly StockStatutService $stockStatutService,
+        private readonly SavedFilterService $savedFilterService,
     ) {}
 
     public function __invoke(Request $request): Response
     {
         $this->authorize('viewAny', Produit::class);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = $this->savedFilterService->applyToRequest($request, 'stock');
 
         $user = $request->user();
         $orgId = (string) $user->organization_id;
@@ -69,6 +74,7 @@ class IndexStockController extends Controller
                 'label' => $statut->label(),
             ]),
             'filters' => $filters,
+            'saved_view' => $savedView,
             'can_augmenter_stock' => $this->droitService->canAugmenter($user, $orgId),
             'can_diminuer_stock' => $this->droitService->canDiminuer($user, $orgId),
         ]);

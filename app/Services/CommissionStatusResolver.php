@@ -78,6 +78,20 @@ final class CommissionStatusResolver
         }
 
         // Pas encore rattachée à une période calculée : rien à afficher côté paiement.
+        // Si l'appelant fournit un statut de validation (parts déjà pré-validées via
+        // validated_at), le travail de validation est fait : on l'affiche plutôt que de
+        // laisser « À valider » alors qu'aucune action ne reste possible sur la ligne.
+        if ($periode === null && $teamStatus !== null && $teamStatus->estValidee()) {
+            return [
+                ...$base,
+                'commission_status' => StatutCommissionMetier::CREEE->value,
+                'commission_status_label' => StatutCommissionMetier::CREEE->label(),
+                'display_status' => 'repartition_validee',
+                'display_label' => 'Validée — période en attente',
+                'can_pay' => false,
+            ];
+        }
+
         // display_status/display_label utilisent volontairement le même badge « À valider »
         // que la branche en_attente ci-dessous (période résolue, équipe pas encore validée) :
         // du point de vue de l'utilisateur, les deux signifient exactement la même action à

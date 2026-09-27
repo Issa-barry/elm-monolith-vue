@@ -4,6 +4,10 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import FilterAutocomplete from '@/components/filters/FilterAutocomplete.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import FilterSearchSelect from '@/components/filters/FilterSearchSelect.vue';
+import SavedViews, {
+    type SavedView,
+} from '@/components/filters/SavedViews.vue';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { router, usePage } from '@inertiajs/vue3';
@@ -82,6 +86,7 @@ const props = withDefaults(
         triggerOnly?: boolean;
         /** Élément où déplacer le bouton « Filtres » (ex. en-tête, à côté de « Nouveau ») ; les champs `inline` restent dans la barre */
         triggerTarget?: HTMLElement | null;
+        savedFilterScope?: string;
     }>(),
     {
         baseParams: () => ({}),
@@ -103,6 +108,45 @@ const emit = defineEmits<{
 // ── Détection admin ───────────────────────────────────────────────────────────
 
 const page = usePage();
+const savedViews = ref<InstanceType<typeof SavedViews> | null>(null);
+const activeSavedView = computed(
+    () => (page.props.saved_view as SavedView | null) ?? null,
+);
+
+function applySavedView(view: SavedView) {
+    filterDrawerOpen.value = false;
+    if (props.url)
+        router.get(
+            props.url,
+            { ...props.baseParams, saved_view: view.id },
+            { preserveScroll: true, replace: true },
+        );
+}
+
+function describeSavedFilters(
+    values: Record<string, string | string[]>,
+): string {
+    const labels: string[] = [];
+    if (values.site_scope === 'mine') labels.push('Mes agences');
+    else if (Array.isArray(values.site_ids)) {
+        labels.push(
+            ...values.site_ids.map(
+                (id) =>
+                    siteOptions.value.find((s) => s.value === id)?.label ??
+                    'Agence indisponible',
+            ),
+        );
+    }
+    for (const field of props.fields) {
+        const value = values[field.key];
+        if (value === undefined || value === '') continue;
+        const selected = Array.isArray(value) ? value : [value];
+        labels.push(
+            `${field.label} : ${selected.map((v) => field.options?.find((o) => String(o.value) === String(v))?.label ?? (field.options ? 'Choix indisponible' : v)).join(', ')}`,
+        );
+    }
+    return labels.join(' · ');
+}
 
 const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
 
@@ -291,7 +335,11 @@ function buildParams(): Record<string, string | string[]> {
 function applyFilters() {
     const values = buildParams();
     if (props.url) {
-        router.get(props.url, values, { preserveScroll: true, replace: true });
+        router.get(
+            props.url,
+            { ...values, ...(props.savedFilterScope ? { all: '1' } : {}) },
+            { preserveScroll: true, replace: true },
+        );
     }
     emit('apply', values);
     appliedSiteIds.value = [...localSiteIds.value];
@@ -326,10 +374,17 @@ function resetFilters() {
     appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
 
     if (props.url) {
-        router.get(props.url, props.baseParams, {
-            preserveScroll: true,
-            replace: true,
-        });
+        router.get(
+            props.url,
+            {
+                ...props.baseParams,
+                ...(props.savedFilterScope ? { all: '1' } : {}),
+            },
+            {
+                preserveScroll: true,
+                replace: true,
+            },
+        );
     }
     emit('reset');
 }
@@ -562,6 +617,16 @@ const hasActiveFilters = computed(
 
         <!-- ── 3. Bouton Filtres (drawer) ── toujours en dernier ────────────── -->
         <Teleport :to="triggerTarget" :disabled="!triggerTarget">
+            <SavedViews
+                v-if="savedFilterScope && url"
+                ref="savedViews"
+                :scope="savedFilterScope"
+                :active="activeSavedView"
+                :get-filters="buildParams"
+                :describe="describeSavedFilters"
+                @apply="applySavedView"
+                @clear="resetFilters"
+            />
             <div
                 v-if="drawerFields.length > 0"
                 :class="triggerTarget ? 'shrink-0' : 'shrink-0 self-end'"
@@ -577,6 +642,16 @@ const hasActiveFilters = computed(
                     @reset="resetFilters"
                 >
                     <div class="space-y-5">
+                        <Button
+                            v-if="savedFilterScope && url"
+                            variant="outline"
+                            class="w-full"
+                            @click="
+                                filterDrawerOpen = false;
+                                savedViews?.startCreate();
+                            "
+                            >Enregistrer cette vue</Button
+                        >
                         <div
                             v-if="
                                 triggerOnly &&
