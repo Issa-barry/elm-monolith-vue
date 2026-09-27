@@ -843,7 +843,7 @@ function confirmDelete(c: Commande) {
         </div>
 
         <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
-        <div class="hidden flex-col gap-6 p-6 sm:flex">
+        <div class="hidden min-w-0 flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
             <div class="flex items-center justify-between">
                 <div>
@@ -951,7 +951,9 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-x-auto rounded-xl border bg-card">
+            <div
+                class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="commandesFiltrees"
                     :paginator="commandesFiltrees.length > 20"
@@ -960,8 +962,17 @@ function confirmDelete(c: Commande) {
                     striped-rows
                     removable-sort
                     class="text-sm"
+                    table-style="width: max-content; min-width: 100%"
                     :pt="{
-                        root: { class: 'w-full min-w-[1100px]' },
+                        root: { class: 'w-full min-w-0' },
+                        table: { class: 'whitespace-nowrap' },
+                        tableContainer: {
+                            class: 'overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                            tabindex: 0,
+                            role: 'region',
+                            'aria-label':
+                                'Liste des ventes — tableau à défilement horizontal',
+                        },
                         tbody: { class: 'divide-y' },
                         bodyRow: bodyRowPt,
                     }"
@@ -972,7 +983,7 @@ function confirmDelete(c: Commande) {
                         field="reference"
                         header="Référence"
                         sortable
-                        style="min-width: 180px"
+                        style="min-width: 190px"
                     >
                         <template #body="{ data }">
                             <Link
@@ -989,7 +1000,7 @@ function confirmDelete(c: Commande) {
                     </Column>
 
                     <!-- Véhicule -->
-                    <Column header="Véhicule" style="min-width: 140px">
+                    <Column header="Véhicule" style="min-width: 180px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.vehicule_nom"
@@ -1001,7 +1012,7 @@ function confirmDelete(c: Commande) {
                     </Column>
 
                     <!-- Livreur -->
-                    <Column header="Livreur" style="min-width: 130px">
+                    <Column header="Livreur" style="min-width: 200px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.chauffeur_nom"
@@ -1013,7 +1024,7 @@ function confirmDelete(c: Commande) {
                     </Column>
 
                     <!-- Client -->
-                    <Column header="Client" style="min-width: 140px">
+                    <Column header="Client" style="min-width: 200px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.client_nom"
@@ -1029,7 +1040,7 @@ function confirmDelete(c: Commande) {
                         field="site_nom"
                         header="Site"
                         sortable
-                        style="min-width: 120px"
+                        style="min-width: 150px"
                     >
                         <template #body="{ data }">
                             <span
@@ -1045,7 +1056,9 @@ function confirmDelete(c: Commande) {
                         field="quantite_totale"
                         header="Qté"
                         sortable
-                        style="width: 90px"
+                        style="min-width: 110px"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="tabular-nums">{{
@@ -1059,7 +1072,9 @@ function confirmDelete(c: Commande) {
                         field="total_commande"
                         header="Montant"
                         sortable
-                        style="width: 140px"
+                        style="min-width: 190px"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="tabular-nums">{{
@@ -1073,7 +1088,9 @@ function confirmDelete(c: Commande) {
                         field="facture_montant_restant"
                         header="Restant"
                         sortable
-                        style="width: 140px"
+                        style="min-width: 190px"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground tabular-nums">
@@ -1095,7 +1112,7 @@ function confirmDelete(c: Commande) {
                         field="created_at"
                         header="Date"
                         sortable
-                        style="width: 110px"
+                        style="min-width: 140px"
                     >
                         <template #body="{ data }">
                             <span
@@ -1110,7 +1127,7 @@ function confirmDelete(c: Commande) {
                         field="processus_label"
                         header="Processus"
                         sortable
-                        style="width: 150px"
+                        style="min-width: 160px"
                     >
                         <template #body="{ data }">
                             <ProcessusBadge
@@ -1125,7 +1142,7 @@ function confirmDelete(c: Commande) {
                         field="statut"
                         header="Statut"
                         sortable
-                        style="width: 130px"
+                        style="min-width: 200px"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -1136,7 +1153,7 @@ function confirmDelete(c: Commande) {
                     </Column>
 
                     <!-- Actions -->
-                    <Column header="" style="width: 56px">
+                    <Column header="" style="min-width: 64px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <DropdownMenu>
@@ -1244,7 +1261,7 @@ function confirmDelete(c: Commande) {
 
                     <template #empty>
                         <div
-                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                            class="flex flex-col items-center gap-3 py-16 whitespace-normal text-muted-foreground"
                         >
                             <ShoppingCart class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune commande trouvée.</p>

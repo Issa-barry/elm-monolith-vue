@@ -58,7 +58,7 @@ const mouvementsFondsAConfirmer = computed(
 const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
-/** Sous-items Contacts : Clients, Fournisseurs, Prestataires — regroupés sous un seul menu. */
+/** Tiers regroupés sous Contacts : Clients, Fournisseurs, Prestataires et Propriétaires. */
 const contactsItems = computed((): NavItem[] => {
     const sub: NavItem[] = [];
     if (can('clients.read'))
@@ -67,6 +67,8 @@ const contactsItems = computed((): NavItem[] => {
         sub.push({ title: 'Fournisseurs', href: '/backoffice/fournisseurs' });
     if (canSee('prestataires.read', 'prestataires'))
         sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
+    if (canSee('proprietaires.read', 'vehicules'))
+        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     return sub;
 });
 
@@ -93,8 +95,6 @@ const vehiculesItems = computed((): NavItem[] => {
             title: 'Liste de véhicules',
             href: '/backoffice/vehicules',
         });
-    if (can('proprietaires.read'))
-        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('equipes-livraison.read'))
         sub.push({
             title: 'Équipes de livraison',
