@@ -47,5 +47,10 @@ class DatabaseSeeder extends Seeder
             // ── Trésorerie ────────────────────────────────────────────────────
             CaissesEncaissementDemoSeeder::class, // Caisse dédiée des comptes de démo qui encaissent (espèces impossibles sans)
         ]);
+
+        // Base E2E seulement (`--env=e2e`) : support approvisionné pour payer les fiches du préchargement.
+        if (app()->environment('e2e')) {
+            $this->call(SupportBanqueE2eSeeder::class);
+        }
     }
 }

@@ -298,30 +298,34 @@ async function payFullCommission(
         timeout: 20_000,
     });
 
-    // waitForURL ne garantit que le changement d'URL, pas le remplacement du DOM
-    // (transition Inertia) : sans cette attente, un combobox non scopé peut encore
-    // matcher le filtre Agence de la page liste précédente (Fiches/Index.vue,
-    // DataFilters) au lieu du "Mode de paiement" de cette page.
-    await page
-        .getByRole('heading', { name: /enregistrer un paiement/i })
-        .waitFor({ state: 'visible', timeout: 15_000 });
-
-    // Montant pré-rempli au solde restant de la fiche — seul le mode de paiement
-    // (obligatoire, sans valeur par défaut) doit être renseigné avant de soumettre.
-    // Scopé au <form> (comme les autres combobox de ce fichier de tests) : DataFilters,
-    // utilisé sur la page liste précédente, ne rend jamais de <form>, donc ce scope
-    // exclut aussi son filtre Agence par construction, indépendamment du timing.
-    const modeCombobox = page.locator('form').getByRole('combobox').first();
-    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
-    await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
-
-    const submitBtn = page.getByRole('button', {
-        name: /enregistrer le paiement/i,
+    // Le bloc « Enregistrer un paiement » n'ouvre plus un formulaire inline mais le
+    // dialogue PaymentCard (décaissement, ADR 0009), via son bouton « Payer ».
+    const paiementHeading = page.getByRole('heading', {
+        name: /enregistrer un paiement/i,
     });
-    await submitBtn.waitFor({ state: 'visible', timeout: 10_000 });
-    await submitBtn.click();
+    await paiementHeading.waitFor({ state: 'visible', timeout: 15_000 });
+    await page.getByRole('button', { name: /^payer$/i }).click();
 
-    // La fiche est intégralement soldée : le formulaire de paiement disparaît
-    // (can_pay redevient false côté backend une fois montant_restant à 0).
-    await submitBtn.waitFor({ state: 'hidden', timeout: 20_000 });
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+
+    // Montant pré-rempli au reste à payer. La fiche est rattachée à CBA (site source du
+    // transfert), où l'admin E2E n'a pas de caisse dédiée : le paiement sort du support
+    // « Banque E2E » approvisionné par SupportBanqueE2eSeeder — chèque, sans référence requise.
+    const modeCombobox = dialog.getByRole('combobox').first();
+    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
+    await selectOptionFromCombobox(
+        page,
+        modeCombobox,
+        /ch[eè]que.*banque e2e/i,
+    );
+
+    const confirmerBtn = dialog.getByRole('button', { name: /^confirmer$/i });
+    await confirmerBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await confirmerBtn.click();
+
+    // La fiche est intégralement soldée : le dialogue se ferme puis le bloc de paiement
+    // disparaît (can_pay redevient false côté backend une fois montant_restant à 0).
+    await dialog.waitFor({ state: 'hidden', timeout: 20_000 });
+    await paiementHeading.waitFor({ state: 'hidden', timeout: 20_000 });
 }
