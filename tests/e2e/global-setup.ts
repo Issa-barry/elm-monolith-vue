@@ -260,8 +260,16 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
         name: 'Valider la période de paiement',
     });
     await validerPeriodeBtn.waitFor({ state: 'visible', timeout: 15_000 });
-    await validerPeriodeBtn.click();
-    await confirmDialog(page, 'Valider');
+    // La période passe à « Validée » automatiquement dès la dernière commission validée :
+    // le bouton n'est plus actif que s'il reste une validation manuelle à faire.
+    if (await validerPeriodeBtn.isEnabled()) {
+        await validerPeriodeBtn.click();
+        await confirmDialog(page, 'Valider');
+    }
+    await page
+        .getByText('Validée', { exact: true })
+        .first()
+        .waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 /**

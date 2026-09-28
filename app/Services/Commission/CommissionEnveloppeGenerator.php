@@ -61,6 +61,17 @@ use Throwable;
 class CommissionEnveloppeGenerator
 {
     /**
+     * Bénéficiaires toujours uniques sur leur enveloppe (aucune répartition possible) : leur
+     * part est validée d'office à la génération. Les livreurs (partage d'équipe) restent en
+     * validation manuelle — c'est là que se constatent absences et remplacements.
+     */
+    public const TYPES_VALIDATION_AUTOMATIQUE = [
+        CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+        CommissionEnveloppePart::TYPE_SITE,
+        CommissionEnveloppePart::TYPE_PRESTATAIRE,
+    ];
+
+    /**
      * Résout un CommissionRegle PAR_UNITE_VENDUE par ligne de commande
      * (variante > produit > catégorie exacte > globale, décision AMOA #3),
      * agrège en une seule enveloppe par cible (décision AMOA #6). Le processus
@@ -295,13 +306,23 @@ class CommissionEnveloppeGenerator
                     self::notifierCommissionGeneree($ctx, $enveloppesCreees);
                 }
 
-                // Une complétion ajoute une enveloppe à une date de gain passée : la période
-                // (encore calculable) qui la couvre doit la refléter sans attendre sa réouverture.
-                if ($existantes->isNotEmpty() && ! empty($enveloppesCreees)) {
-                    app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees(
-                        $ctx->organizationId,
-                        Carbon::parse($existantes->min('earned_at')),
-                    );
+                // Toute nouvelle enveloppe est répercutée tout de suite sur la période qui la
+                // couvre : recalcul (période calculée), réouverture (période déjà validée, cf.
+                // PeriodeValidationService::rouvrirSiDesynchronisee) et validation
+                // automatique si ses parts sont toutes validées (propriétaire/site/consultant).
+                // Un incident côté période ne doit jamais faire échouer la génération elle-même.
+                if (! empty($enveloppesCreees)) {
+                    try {
+                        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees(
+                            $ctx->organizationId,
+                            Carbon::parse($existantes->isNotEmpty() ? $existantes->min('earned_at') : $ctx->earnedAt),
+                        );
+                    } catch (Throwable $e) {
+                        Log::error('Mise à jour des périodes après génération de commission échouée', [
+                            'source_id' => $ctx->sourceId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
 
                 // Alerte régularisation : succès total mais 0 enveloppe (aucun barème nulle
@@ -948,6 +969,10 @@ class CommissionEnveloppeGenerator
                     'montant_net' => $p['montant'],
                     'statut' => StatutCommission::CREEE->value,
                     'origine' => OrigineCommissionPart::THEORIQUE->value,
+                    // Bénéficiaire unique sans répartition possible : validée d'office par le
+                    // système (validated_by null). Le statut reste CREEE — elle ne devient
+                    // payable qu'à la validation de sa période, comme toute commission.
+                    'validated_at' => in_array($p['beneficiaire_type'], self::TYPES_VALIDATION_AUTOMATIQUE, true) ? now() : null,
                 ]);
             }
         }

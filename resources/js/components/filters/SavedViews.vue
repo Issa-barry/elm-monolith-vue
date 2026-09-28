@@ -50,6 +50,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
     scope: string;
+    hideAgenceSelector?: boolean;
     active?: SavedView | null;
     getFilters: () => Record<string, string | string[]>;
     describe: (filters: Record<string, string | string[]>) => string;
@@ -432,7 +433,9 @@ defineExpose({ startCreate });
                                 describe(draft) || 'Aucun critère sélectionné.'
                             }}
                         </p>
-                        <label class="flex items-start gap-2 text-sm"
+                        <label
+                            v-if="!hideAgenceSelector"
+                            class="flex items-start gap-2 text-sm"
                             ><input
                                 v-model="dynamicAgency"
                                 class="mt-1"

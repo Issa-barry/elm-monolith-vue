@@ -8,6 +8,7 @@ use App\Models\CashbackTransaction;
 use App\Models\Client;
 use App\Models\Depense;
 use App\Services\CashbackService;
+use App\Services\SavedFilterService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -24,6 +25,9 @@ class CashbackController extends Controller
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', CashbackTransaction::class);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'cashback');
 
         $orgId = auth()->user()->organization_id;
         $statut = $this->scalarInput($request, 'statut');
@@ -74,6 +78,7 @@ class CashbackController extends Controller
             ->values();
 
         return Inertia::render('Comptabilite/Cashback/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $clients,
             'kpis' => [
                 'nb_clients' => $clients->count(),

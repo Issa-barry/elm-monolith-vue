@@ -3,7 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import CommissionIndexLayout from '@/components/commission/CommissionIndexLayout.vue';
 import type { FilterField } from '@/components/filters/DataFilters.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,14 +13,15 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import type { CommissionIndexSummary } from '@/types/commission';
+import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import type {
     PeriodeAffichee,
     StatutCommissionResolu,
 } from '@/types/commission-status';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import {
     Building2,
     ExternalLink,
@@ -60,6 +61,8 @@ interface BeneficiaireRow extends StatutCommissionResolu {
     payable?: number;
     /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
     processus_labels: string[];
+    /** Fiche due sur laquelle le bouton Payer enregistre le paiement (null = rien à payer). */
+    fiche_a_payer: FicheAPayer | null;
 }
 
 interface PeriodeOption {
@@ -156,11 +159,7 @@ const currentFilters = computed(() => ({
     processus: props.filtre_processus ?? [],
 }));
 
-// Dialog paiement
-const showPaiementDialog = ref(false);
-const selectedBenef = ref<BeneficiaireRow | null>(null);
-const paiementProcessing = ref(false);
-const paiementErrors = ref<Record<string, string>>({});
+const paiement = usePaiementFiche();
 
 const showAudit = ref(false);
 const auditBenefId = ref('');
@@ -188,34 +187,12 @@ function openAudit(b: BeneficiaireRow) {
     showAudit.value = true;
 }
 
-function openPaiement(b: BeneficiaireRow) {
-    selectedBenef.value = b;
-    showPaiementDialog.value = true;
+function peutPayer(b: BeneficiaireRow): boolean {
+    return props.can_payer && b.can_pay && b.fiche_a_payer !== null;
 }
 
-function handlePaiementSubmit(payload: {
-    montant: number;
-    mode_paiement: string;
-}) {
-    if (!selectedBenef.value) return;
-    paiementProcessing.value = true;
-    paiementErrors.value = {};
-    router.post(
-        `/backoffice/comptabilite/commissions/proprietaires/${selectedBenef.value.beneficiaire_id}/paiements`,
-        payload,
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                showPaiementDialog.value = false;
-            },
-            onError: (e) => {
-                paiementErrors.value = e as Record<string, string>;
-            },
-            onFinish: () => {
-                paiementProcessing.value = false;
-            },
-        },
-    );
+function openPaiement(b: BeneficiaireRow) {
+    if (b.fiche_a_payer) paiement.open(b.fiche_a_payer);
 }
 
 function buildParams(): URLSearchParams {
@@ -291,6 +268,7 @@ function fmtTel(tel: string | null | undefined): string {
     <Head title="Commission propriétaire — Comptabilité" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <CommissionIndexLayout
+            saved-filter-scope="commissions-proprietaires"
             title="Commission propriétaire"
             :entity-count="kpis.nb_proprietaires"
             entity-label="propriétaire"
@@ -510,11 +488,23 @@ function fmtTel(tel: string | null | undefined): string {
                         >
                             {{ fmt(b.solde_restant) }}
                         </td>
-                        <td class="px-4 py-3">
-                            <StatusDot
-                                :status="b.display_status"
-                                :label="b.display_label"
-                            />
+                        <td class="px-4 py-3" @click.stop>
+                            <div class="flex items-center gap-2">
+                                <StatusDot
+                                    :status="b.display_status"
+                                    :label="b.display_label"
+                                />
+                                <Button
+                                    v-if="peutPayer(b)"
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-6 px-2 text-xs"
+                                    @click="openPaiement(b)"
+                                >
+                                    <HandCoins class="mr-1 h-3.5 w-3.5" />
+                                    Payer
+                                </Button>
+                            </div>
                         </td>
                         <td
                             class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
@@ -546,7 +536,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         <History class="mr-2 h-4 w-4" />
                                         Historique
                                     </DropdownMenuItem>
-                                    <template v-if="can_payer && b.can_pay">
+                                    <template v-if="peutPayer(b)">
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
                                             class="cursor-pointer"
@@ -565,17 +555,22 @@ function fmtTel(tel: string | null | undefined): string {
         </CommissionIndexLayout>
     </AppLayout>
 
-    <PaymentDialogCompact
-        v-model:visible="showPaiementDialog"
-        :title="
-            selectedBenef
-                ? `Payer — ${selectedBenef.beneficiaire_nom}`
-                : 'Payer'
+    <PaymentCard
+        v-if="paiement.fiche.value"
+        v-model:visible="paiement.visible.value"
+        :title="paiement.title.value"
+        :info-rows="paiement.infoRows.value"
+        sens="decaissement"
+        solde-label="Reste à payer"
+        :solde="paiement.fiche.value.montant_restant"
+        :moyens="paiement.fiche.value.tresorerie.moyens"
+        :especes-disponibles="
+            paiement.fiche.value.tresorerie.especes_disponibles
         "
-        :solde="selectedBenef?.solde_restant ?? 0"
-        :processing="paiementProcessing"
-        :errors="paiementErrors"
-        @submit="handlePaiementSubmit"
+        :solde-especes="paiement.fiche.value.tresorerie.solde_especes"
+        :processing="paiement.processing.value"
+        :errors="paiement.errors.value"
+        @submit="paiement.submit"
     />
 
     <AuditDrawer

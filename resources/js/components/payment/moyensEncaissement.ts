@@ -20,6 +20,8 @@ export interface MoyenEncaissement {
     operateur_mobile_money: string | null;
     compte_tresorerie_id: string;
     reference_requise: boolean;
+    /** Décaissement uniquement (paiement de fiche) : solde disponible du support, grand livre. */
+    solde_disponible?: number | null;
 }
 
 export interface ModeOption {
@@ -31,6 +33,8 @@ export interface ModeOption {
     requiresReference: boolean;
     /** Espèces : possibles seulement avec une caisse dédiée active de l'utilisateur. */
     requiresCaisse?: boolean;
+    /** Décaissement uniquement : solde disponible du support (null = inconnu). */
+    soldeDisponible?: number | null;
     icon: LucideIcon;
     /** Repère visuel (pas un logo de marque). */
     badgeClass: string;
@@ -93,6 +97,7 @@ function versOption(moyen: MoyenEncaissement): ModeOption {
         mode_paiement: moyen.mode_paiement,
         compte_tresorerie_id: moyen.compte_tresorerie_id,
         requiresReference: moyen.reference_requise,
+        soldeDisponible: moyen.solde_disponible ?? null,
     };
 
     if (moyen.mode_paiement === 'mobile_money') {

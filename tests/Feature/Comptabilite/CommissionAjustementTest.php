@@ -297,9 +297,8 @@ class CommissionAjustementTest extends TestCase
         $part->refresh();
         $this->assertNotNull($part->validated_at);
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
@@ -334,9 +333,8 @@ class CommissionAjustementTest extends TestCase
             $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]));
         }
 
-        $response = $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode));
-        $response->assertRedirect();
-        $response->assertSessionHasNoErrors();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
@@ -378,9 +376,8 @@ class CommissionAjustementTest extends TestCase
             $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]));
         }
 
-        $response = $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode));
-        $response->assertRedirect();
-        $response->assertSessionHasNoErrors();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
@@ -735,9 +732,8 @@ class CommissionAjustementTest extends TestCase
             ->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]))
             ->assertRedirect();
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
@@ -791,9 +787,8 @@ class CommissionAjustementTest extends TestCase
             ->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $partDansPeriode->id]))
             ->assertRedirect();
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
@@ -852,9 +847,8 @@ class CommissionAjustementTest extends TestCase
             ->post(route('comptabilite.ajustements.valider', ['type' => 'logistique', 'partId' => $part->id]))
             ->assertRedirect();
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
 
         $periode->refresh();
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);

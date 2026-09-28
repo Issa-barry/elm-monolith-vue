@@ -16,11 +16,13 @@ use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Site;
 use App\Models\VehiculeCapacite;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
@@ -60,12 +62,15 @@ class CommissionVenteController extends Controller
      * organisation, la performance n'est pas un enjeu à cette échelle, et une
      * collection reste plus simple à garder correcte.
      *
-     * Paiement : jamais depuis cet écran — `can_pay` est toujours false, la seule
-     * chaîne de paiement valide passe par Comptabilité > Fiches de paiement.
+     * Paiement : le bouton Payer d'une ligne enregistre le paiement sur la fiche de la
+     * période (FichePayableResolver) — jamais une chaîne de paiement parallèle.
      */
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-livreurs');
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -167,9 +172,17 @@ class CommissionVenteController extends Controller
             fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
         );
 
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(
+            $user,
+            CommissionEnveloppePart::TYPE_LIVREUR,
+            $allLivreurIds,
+            $filtrePeriode,
+        );
+
         $beneficiaires = $partsParLivreur->map(function (Collection $parts, string $livreurId) use (
             $agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur,
             $premiereEcheanceParLivreur, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
+            $fichesPayables,
         ) {
             $premier = $parts->first();
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
@@ -226,9 +239,11 @@ class CommissionVenteController extends Controller
                 $statutGlobal,
                 $labelsParStatut[$statutGlobal] ?? $statutGlobal,
             );
-            // Jamais payable depuis cet écran : le paiement passe uniquement
-            // par Comptabilité > Fiches de paiement (chaîne de paiement unique).
-            $resolved['can_pay'] = false;
+            // Le paiement depuis cet écran s'enregistre sur la fiche de la période (chaîne de
+            // paiement unique, cf. FichePayableResolver) : payable seulement si une fiche
+            // due existe, sur une période validée, et que l'utilisateur peut la payer.
+            $fiche = $fichesPayables->get($livreurId);
+            $resolved['can_pay'] = $fiche !== null;
 
             $beneficiaire = $premier->resoudreBeneficiaire();
 
@@ -254,6 +269,7 @@ class CommissionVenteController extends Controller
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
                 'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 ...$resolved,
+                'fiche_a_payer' => $fiche,
             ];
         })->values();
 
@@ -299,6 +315,7 @@ class CommissionVenteController extends Controller
         $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
 
         return Inertia::render('Comptabilite/CommissionVente/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $search,
@@ -317,9 +334,7 @@ class CommissionVenteController extends Controller
             ] : null,
             'sites' => $sites,
             'motifs' => MotifAjustementCommission::options(),
-            // Jamais de paiement direct depuis cet écran, quel que soit le
-            // droit "comptabilite.payer" — cf. can_pay forcé à false ci-dessus.
-            'can_payer' => false,
+            'can_payer' => $user->can('comptabilite.payer'),
         ]);
     }
 

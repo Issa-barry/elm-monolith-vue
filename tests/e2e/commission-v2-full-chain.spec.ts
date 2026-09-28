@@ -146,8 +146,15 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
         name: 'Valider la période de paiement',
     });
     await expect(validerPeriodeBtn).toBeVisible({ timeout: 15_000 });
-    await validerPeriodeBtn.click();
-    await confirmAlertDialog(page, 'Valider');
+    // La période passe à « Validée » automatiquement dès la dernière commission validée :
+    // le bouton n'est plus actif que s'il reste une validation manuelle à faire.
+    if (await validerPeriodeBtn.isEnabled()) {
+        await validerPeriodeBtn.click();
+        await confirmAlertDialog(page, 'Valider');
+    }
+    await expect(
+        page.getByText('Validée', { exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 }
 
 /** Paie intégralement la fiche du chauffeur de démo, puis vérifie reste à payer = 0. */

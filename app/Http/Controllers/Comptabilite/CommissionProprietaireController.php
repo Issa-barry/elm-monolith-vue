@@ -15,10 +15,12 @@ use App\Models\PaiementFichePaiement;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
@@ -53,12 +55,15 @@ class CommissionProprietaireController extends Controller
 
     /**
      * Écran "Commission propriétaire" — cf. CommissionVenteController::index()
-     * pour le raisonnement (collection plutôt que SQL brut, can_pay/can_payer
-     * toujours false : paiement exclusivement via Fiches de paiement).
+     * pour le raisonnement (collection plutôt que SQL brut ; le bouton Payer d'une ligne
+     * enregistre le paiement sur la fiche de la période, cf. FichePayableResolver).
      */
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-proprietaires');
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -184,9 +189,16 @@ class CommissionProprietaireController extends Controller
             fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
         );
 
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(
+            $user,
+            CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            $partsParProprio->keys()->map(fn ($id) => (string) $id)->all(),
+            $filtrePeriode,
+        );
+
         $beneficiaires = $partsParProprio->map(function (Collection $parts, string $proprioId) use (
             $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
-            $proprietaires,
+            $proprietaires, $fichesPayables,
         ) {
             // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
             // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
@@ -221,7 +233,8 @@ class CommissionProprietaireController extends Controller
                 $statutGlobal,
                 $labelsParStatut[$statutGlobal] ?? $statutGlobal,
             );
-            $resolved['can_pay'] = false;
+            $fiche = $fichesPayables->get($proprioId);
+            $resolved['can_pay'] = $fiche !== null;
 
             $beneficiaire = $proprietaires->get($proprioId);
             // Liste derivee uniquement des ventes portant les parts affichees : un vehicule
@@ -273,6 +286,7 @@ class CommissionProprietaireController extends Controller
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
                 'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 ...$resolved,
+                'fiche_a_payer' => $fiche,
             ];
         })->values();
 
@@ -321,6 +335,7 @@ class CommissionProprietaireController extends Controller
         $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, $dateAffichee);
 
         return Inertia::render('Comptabilite/CommissionProprietaire/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'filtre_nom' => $filtreNom,
@@ -339,7 +354,7 @@ class CommissionProprietaireController extends Controller
                 'statut_label' => $periodeAffichee->statut_label,
             ] : null,
             'sites' => $sites,
-            'can_payer' => false,
+            'can_payer' => $user->can('comptabilite.payer'),
         ]);
     }
 

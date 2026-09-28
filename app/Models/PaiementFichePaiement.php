@@ -21,6 +21,8 @@ class PaiementFichePaiement extends Model
         'montant',
         'mode_paiement',
         'moyen_paiement_detail',
+        'reference_paiement',
+        'compte_tresorerie_id',
         'date_paiement',
         'note',
         'created_by',
@@ -88,6 +90,12 @@ class PaiementFichePaiement extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** Support d'où l'argent est sorti — null pour un paiement antérieur à l'ADR 0009. */
+    public function compteTresorerie(): BelongsTo
+    {
+        return $this->belongsTo(CompteTresorerie::class, 'compte_tresorerie_id');
     }
 
     public function createur(): BelongsTo

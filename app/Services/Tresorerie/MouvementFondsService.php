@@ -189,9 +189,8 @@ class MouvementFondsService
      * qu'il s'agisse d'un versement de caisse dédiée (`interne_caisses`) ou d'un mouvement entre
      * agences (`inter_sites`, cf. revue produit du 22/09/2026 : rien n'empêchait jusque-là un
      * envoi entre agences depuis une caisse à sec, seul le versement de caisse dédiée l'avait).
-     * Appelé sous verrou de la caisse (`lockForUpdate()`) : le solde est relu ici, jamais transmis
-     * par l'appelant ni mis en cache — deux envois qui se succèdent (concurremment ou non) relisent
-     * chacun le solde déjà diminué par le précédent, jamais le solde d'avant.
+     * Contrôle de solde sous verrou partagé avec les paiements de fiche
+     * (TresorerieDisponibiliteService::garantirSoldeSuffisant()).
      */
     private function garantirSoldeSuffisant(MouvementFonds $mouvement, ?\DateTimeInterface $dateEnvoi): void
     {
@@ -209,15 +208,11 @@ class MouvementFondsService
             ]);
         }
 
-        $solde = $this->disponibilite->soldePourSupport($source, Carbon::instance($dateEnvoi ?? now()));
-
-        if ((float) $mouvement->montant > $solde + 0.004) {
-            $disponible = number_format(max($solde, 0), 0, ',', ' ');
-            $demande = number_format((float) $mouvement->montant, 0, ',', ' ');
-            throw ValidationException::withMessages([
-                'montant' => "Solde insuffisant : {$disponible} GNF disponible dans « {$source->libelle} » pour un envoi de {$demande} GNF.",
-            ]);
-        }
+        $this->disponibilite->garantirSoldeSuffisant(
+            $source->id,
+            (float) $mouvement->montant,
+            Carbon::instance($dateEnvoi ?? now()),
+        );
     }
 
     /**

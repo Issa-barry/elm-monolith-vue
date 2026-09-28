@@ -129,15 +129,20 @@ class FicheComptabilisationService
 
         $evenement = self::evenementPaiementPour($fiche->beneficiaire_type);
 
-        $lignes = [
-            [
-                'role' => 'dette_tiers',
-                'sens' => 'debit',
+        // Depuis l'ADR 0009, la sortie vise le compte du support réellement débité (caisse dédiée
+        // du payeur, wallet, banque) : son solde baisse. Un paiement antérieur, sans support,
+        // garde la résolution par compta_mappings — jamais reclassé.
+        $support = $paiement->compteTresorerie;
+        $ligneTresorerie = $support
+            ? [
+                'compte_comptable_id' => $support->compte_comptable_id,
+                'journal_role' => 'tresorerie',
+                'moyen_paiement' => $paiement->mode_paiement,
+                'sens' => 'credit',
                 'montant' => (float) $paiement->montant,
-                'tiers_type' => $fiche->beneficiaire_type,
-                'tiers_model' => $beneficiaire,
-            ],
-            [
+                'libelle' => "Paiement fiche {$fiche->reference} — {$support->libelle}",
+            ]
+            : [
                 'role' => 'tresorerie',
                 'sens' => 'credit',
                 'montant' => (float) $paiement->montant,
@@ -147,7 +152,17 @@ class FicheComptabilisationService
                 'moyen_paiement' => $paiement->moyen_paiement_detail
                     ? $paiement->mode_paiement.':'.$paiement->moyen_paiement_detail
                     : $paiement->mode_paiement,
+            ];
+
+        $lignes = [
+            [
+                'role' => 'dette_tiers',
+                'sens' => 'debit',
+                'montant' => (float) $paiement->montant,
+                'tiers_type' => $fiche->beneficiaire_type,
+                'tiers_model' => $beneficiaire,
             ],
+            $ligneTresorerie,
         ];
 
         return $this->ecritures->comptabiliser(

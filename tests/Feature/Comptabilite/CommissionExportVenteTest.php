@@ -194,8 +194,9 @@ class CommissionExportVenteTest extends TestCase
             $this->user->id,
         );
         app(PeriodeCalculatorService::class)->calculer($periode);
+        // La dernière validation fait passer la période à « Validée » automatiquement.
         CommissionAdjustmentService::validerLot(CommissionAdjustmentService::partsPourPeriode($periode), $this->user);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode))->assertSessionHas('success');
+        $this->assertSame('validee', $periode->fresh()->statut->value);
     }
 
     /** @test */

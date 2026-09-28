@@ -53,6 +53,7 @@ withDefaults(
         periodLabel: string;
         periodStatus?: PeriodStatus | null;
         filterUrl: string;
+        savedFilterScope?: string;
         filterValues: Record<string, unknown>;
         filterFields: FilterField[];
         sites?: SiteOption[];
@@ -152,6 +153,7 @@ defineEmits<{
                     <DataFilters
                         trigger-only
                         :url="filterUrl"
+                        :saved-filter-scope="savedFilterScope"
                         :values="filterValues"
                         :fields="filterFields"
                         :sites="sites"

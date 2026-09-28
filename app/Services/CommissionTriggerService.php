@@ -9,6 +9,7 @@ use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\FactureVente;
+use App\Models\PaiementPeriode;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
 use App\Services\Commission\CommissionEnveloppeGenerator;
@@ -170,9 +171,14 @@ class CommissionTriggerService
 
     /**
      * Une commission non annulée de cette commande a-t-elle déjà fait l'objet d'une décision
-     * humaine (sortie de CREEE, montant ajusté, validation, versement) ? Règle partagée par le
-     * retour de livraison et l'annulation exceptionnelle : ni l'un ni l'autre n'efface jamais un
-     * engagement déjà pris envers un bénéficiaire.
+     * humaine (validation par un utilisateur, montant ajusté, versement) ou est-elle engagée dans
+     * une période qui ne peut plus être rouverte (déjà payée en partie, ou clôturée) ? Règle
+     * partagée par le retour de livraison et l'annulation exceptionnelle : ni l'un ni l'autre
+     * n'efface jamais un engagement déjà pris envers un bénéficiaire.
+     *
+     * Une validation système (part propriétaire/site/consultant validée à la génération,
+     * validated_by vide) et l'activation qui suit la validation automatique de la période ne sont
+     * pas des décisions humaines : la période concernée est rouverte puis recalculée (ADR 0008).
      */
     public static function aDesCommissionsFigees(CommandeVente $commande): bool
     {
@@ -183,13 +189,15 @@ class CommissionTriggerService
                 continue;
             }
 
-            $figee = $enveloppe->statut !== StatutCommission::CREEE
-                || $enveloppe->parts->contains(
-                    fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
-                        || (float) $part->montant_verse > 0
-                        || $part->montant_actuel !== null
-                        || $part->validated_at !== null
-                );
+            $figee = $enveloppe->parts->contains(
+                fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::ANNULEE && (
+                    $part->statut === StatutCommission::PAYE
+                    || (float) $part->montant_verse > 0
+                    || $part->montant_actuel !== null
+                    || $part->validated_by !== null
+                    || self::estDansUnePeriodeNonRouvrable($part)
+                )
+            );
 
             if ($figee) {
                 return true;
@@ -197,6 +205,20 @@ class CommissionTriggerService
         }
 
         return false;
+    }
+
+    /** La part figure-t-elle sur une fiche d'une période clôturée ou ayant déjà reçu un paiement ? */
+    private static function estDansUnePeriodeNonRouvrable(CommissionEnveloppePart $part): bool
+    {
+        $periodes = PaiementPeriode::whereHas('fiches.lignes', fn ($q) => $q
+            ->where('source_type', CommissionEnveloppePart::class)
+            ->where('source_id', $part->id))
+            ->get();
+
+        $validation = app(PeriodeValidationService::class);
+
+        return $periodes->contains(fn (PaiementPeriode $p) => $p->isCloturee()
+            || ($p->isValidee() && $validation->aDesPaiements($p)));
     }
 
     /**

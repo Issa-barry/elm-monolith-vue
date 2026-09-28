@@ -65,19 +65,27 @@ class RolesAndPermissionsSeeder extends Seeder
             'proprietaire' => 'Propriétaire',
             'livreur' => 'Livreur',
         ];
+        $roles = [];
         foreach ($labels as $name => $label) {
-            Role::updateOrCreate(['name' => $name, 'organization_id' => null], ['label' => $label]);
+            $roles[$name] = Role::updateOrCreate(['name' => $name, 'organization_id' => null], ['label' => $label]);
         }
 
-        $superAdmin = Role::whereNull('organization_id')->where('name', 'super_admin')->firstOrFail();
-        $adminEntreprise = Role::whereNull('organization_id')->where('name', 'admin_entreprise')->firstOrFail();
-        $manager = Role::whereNull('organization_id')->where('name', 'manager')->firstOrFail();
-        $commerciale = Role::whereNull('organization_id')->where('name', 'commerciale')->firstOrFail();
-        $comptable = Role::whereNull('organization_id')->where('name', 'comptable')->firstOrFail();
+        // super_admin (verrouillé) reçoit toujours TOUTES les permissions, y compris celles
+        // ajoutées au catalogue depuis le dernier déploiement.
+        $roles['super_admin']->syncPermissions(Permission::all());
 
-        $superAdmin->syncPermissions(Permission::all());
+        // Les autres rôles sont configurables dans /backoffice/roles : leur matrice par défaut
+        // n'est posée qu'à la CRÉATION du rôle. Ce seeder tourne à chaque déploiement — la
+        // resynchroniser écrasait silencieusement les permissions cochées par l'utilisateur
+        // (incident 2026-09-28, rôle commerciale). Accorder une nouvelle permission aux rôles
+        // existants passe par une migration de backfill additive (cf. 2026_09_13_140136_*).
+        $parDefaut = static function (Role $role, array $permissions): void {
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($permissions);
+            }
+        };
 
-        $adminEntreprise->syncPermissions([
+        $parDefaut($roles['admin_entreprise'], [
             // Personnes
             'clients.create',           'clients.read',           'clients.update',           'clients.delete',
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
@@ -147,7 +155,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'modules-metier.read',      'modules-metier.update',
         ]);
 
-        $manager->syncPermissions([
+        $parDefaut($roles['manager'], [
             // Personnes
             'clients.create',           'clients.read',           'clients.update',
             'prestataires.create',      'prestataires.read',      'prestataires.update',
@@ -209,7 +217,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'parametres-ventes.read',
         ]);
 
-        $commerciale->syncPermissions([
+        $parDefaut($roles['commerciale'], [
             'clients.create',      'clients.read',      'clients.update',
             'prestataires.create', 'prestataires.read', 'prestataires.update',
             'livreurs.create',     'livreurs.read',     'livreurs.update',
@@ -230,7 +238,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rapports.read_own',
         ]);
 
-        $comptable->syncPermissions([
+        $parDefaut($roles['comptable'], [
             'clients.read',           'prestataires.read',  'livreurs.read',
             'proprietaires.read',     'vehicules.read',     'equipes-livraison.read',
             'sites.read',             'produits.read',      'categories.read',    'options.read',    'type-produits.read',    'packings.read',

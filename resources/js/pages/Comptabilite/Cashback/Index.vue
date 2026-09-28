@@ -96,6 +96,7 @@ const summary = computed<CommissionIndexSummary>(() => ({
     <Head title="Cashback clients — Comptabilité" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <CommissionIndexLayout
+            saved-filter-scope="cashback"
             title="Cashback clients"
             :entity-count="kpis.nb_clients"
             entity-label="client"

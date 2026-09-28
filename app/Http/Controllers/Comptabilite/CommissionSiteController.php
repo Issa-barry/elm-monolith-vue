@@ -15,8 +15,10 @@ use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Site;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
@@ -39,7 +41,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * bénéficiaire EST le site métier de l'opération — jamais un gérant, un employé, ou une équipe :
  * aucune notion d'éligibilité, de fonction, de rôle ou d'affectation n'intervient ici. Mêmes
  * conventions que les autres écrans Commission v2 : cartes de synthèse, DataFilters, StatusDot,
- * exports, jamais de paiement direct (chaîne unique via Comptabilité > Fiches de paiement).
+ * exports. Le bouton Payer d'une ligne enregistre le paiement sur la fiche de la période
+ * (FichePayableResolver) — jamais une chaîne de paiement parallèle.
  */
 class CommissionSiteController extends Controller
 {
@@ -57,6 +60,9 @@ class CommissionSiteController extends Controller
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-sites');
 
         [$list, $meta] = $this->resolveBeneficiaires($request);
         $orgId = auth()->user()->organization_id;
@@ -78,6 +84,7 @@ class CommissionSiteController extends Controller
             : [];
 
         return Inertia::render('Comptabilite/CommissionSite/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $meta['search'],
@@ -92,7 +99,7 @@ class CommissionSiteController extends Controller
             'sites' => Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
             'site_types' => $meta['site_types'],
-            'can_payer' => false,
+            'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
 
@@ -347,9 +354,10 @@ class CommissionSiteController extends Controller
         $allSiteIds = $partsParSite->keys()->map(fn ($id) => (string) $id)->all();
         $fraisDepensesParSite = $this->fraisDepensesParSite($orgId, $allSiteIds, $filtrePeriode);
         $sitesById = Site::whereIn('id', $allSiteIds)->get()->keyBy('id');
+        $fichesPayables = FichePayableResolver::pourBeneficiaires($user, CommissionEnveloppePart::TYPE_SITE, $allSiteIds, $filtrePeriode);
 
         $beneficiaires = $partsParSite->map(function (Collection $parts, string $siteId) use (
-            $categoriesParSite, $fraisDepensesParSite, $sitesById,
+            $categoriesParSite, $fraisDepensesParSite, $sitesById, $fichesPayables,
         ) {
             $site = $sitesById->get($siteId);
             $fraisDepenses = $fraisDepensesParSite[$siteId] ?? 0.0;
@@ -393,8 +401,9 @@ class CommissionSiteController extends Controller
                 // Toujours exposé, même filtré sur un seul processus (décision produit du
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
                 'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
-                // Jamais payable depuis cet écran, cf. docblock de classe.
-                'can_pay' => false,
+                // Payable uniquement via la fiche due de la période, cf. docblock de classe.
+                'can_pay' => $fichesPayables->has($siteId),
+                'fiche_a_payer' => $fichesPayables->get($siteId),
             ];
         })->values();
 

@@ -20,12 +20,17 @@ class PaiementFiche extends Model
         'beneficiaire_type',
         'beneficiaire_id',
         'beneficiaire_nom',
+        'rang',
+        'fiche_origine_id',
         'site_id',
         'montant_brut',
         'total_deductions',
         'montant_net',
         'montant_paye',
+        'report_a_deduire',
         'statut',
+        'validated_at',
+        'validated_by',
         'mode_paiement',
         'date_paiement',
         'paid_by',
@@ -44,7 +49,44 @@ class PaiementFiche extends Model
             'total_deductions' => 'decimal:2',
             'montant_net' => 'decimal:2',
             'montant_paye' => 'decimal:2',
+            'report_a_deduire' => 'decimal:2',
+            'rang' => 'integer',
+            'validated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Colonnes qui définissent ce qu'une fiche doit : figées dès le premier paiement. Le
+     * montant payé et le statut de paiement restent mis à jour par les paiements eux-mêmes.
+     */
+    private const COLONNES_FIGEES = [
+        'periode_id', 'beneficiaire_type', 'beneficiaire_id', 'rang',
+        'montant_brut', 'total_deductions', 'montant_net', 'report_a_deduire',
+    ];
+
+    /**
+     * Protection modèle (ADR 0010) : une fiche ayant reçu un paiement n'est jamais supprimée
+     * (ni douce ni définitive) ni modifiée dans ce qu'elle doit. Doublée en base par la clé
+     * étrangère restrictive de paiement_fiche_paiements et, dans le recalcul, par l'exclusion
+     * des fiches figées.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (self $fiche) {
+            if ($fiche->estFigee()) {
+                throw new \LogicException("La fiche {$fiche->reference} a déjà reçu un paiement : elle ne peut pas être supprimée.");
+            }
+        });
+
+        static::updating(function (self $fiche) {
+            $etaitFigee = (float) $fiche->getOriginal('montant_paye') > 0.009
+                || (float) $fiche->getOriginal('report_a_deduire') > 0.009
+                || $fiche->historiquePaiements()->exists();
+
+            if ($etaitFigee && $fiche->isDirty(self::COLONNES_FIGEES)) {
+                throw new \LogicException("La fiche {$fiche->reference} a déjà reçu un paiement : ses montants ne peuvent plus être modifiés.");
+            }
+        });
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -62,6 +104,11 @@ class PaiementFiche extends Model
     public function historiquePaiements(): HasMany
     {
         return $this->hasMany(PaiementFichePaiement::class, 'fiche_id')->latest('date_paiement');
+    }
+
+    public function ficheOrigine(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'fiche_origine_id');
     }
 
     public function payeur(): BelongsTo
@@ -98,8 +145,24 @@ class PaiementFiche extends Model
 
     // ── Métier ────────────────────────────────────────────────────────────────
 
+    /**
+     * Fiche définitivement figée (ADR 0010) : elle a reçu au moins un paiement, ou elle porte
+     * une déduction reportée sur la fiche suivante. Jamais supprimée ni recalculée : toute
+     * nouvelle ligne du bénéficiaire va sur une fiche complémentaire.
+     */
+    public function estFigee(): bool
+    {
+        return (float) $this->montant_paye > 0.009
+            || (float) $this->report_a_deduire > 0.009
+            || $this->historiquePaiements()->exists();
+    }
+
     public function recalculTotaux(): void
     {
+        if ($this->estFigee()) {
+            throw new \LogicException("La fiche {$this->reference} a déjà reçu un paiement : ses totaux ne peuvent plus être recalculés.");
+        }
+
         $lignes = $this->lignes()->get();
         $brut = (float) $lignes->where('montant', '>', 0)->sum('montant');
         $deductions = abs((float) $lignes->where('montant', '<', 0)->sum('montant'));

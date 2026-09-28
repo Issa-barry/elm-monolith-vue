@@ -127,6 +127,19 @@ trait HasCaissesDediees
         );
     }
 
+    /**
+     * Payer une fiche est un décaissement réel (ADR 0009) : en espèces, l'argent sort de la caisse
+     * dédiée active DU PAYEUR sur l'agence de trésorerie de la fiche — elle doit exister et être
+     * approvisionnée. À appeler avant tout POST sur comptabilite.fiches.paiements.store en espèces.
+     */
+    private function equiperPayeurEspeces(User $payeur, string $siteId, float $solde = 100_000_000): CompteTresorerie
+    {
+        $caisse = $this->creerCaisseActivePour($payeur, $siteId);
+        $this->alimenterCaisse($caisse, $solde);
+
+        return $caisse;
+    }
+
     /** Vide la caisse en contrepassant sa pièce d'alimentation. */
     private function viderCaisse(PieceComptable $pieceAlimentation): void
     {
