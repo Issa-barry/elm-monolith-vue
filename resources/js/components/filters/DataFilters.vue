@@ -621,6 +621,7 @@ const hasActiveFilters = computed(
                 v-if="savedFilterScope && url"
                 ref="savedViews"
                 :scope="savedFilterScope"
+                :hide-agence-selector="hideAgenceSelector"
                 :active="activeSavedView"
                 :get-filters="buildParams"
                 :describe="describeSavedFilters"

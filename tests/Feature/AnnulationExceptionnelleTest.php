@@ -518,7 +518,7 @@ class AnnulationExceptionnelleTest extends TestCase
         $this->encaisser($commande, 3000);
         $this->confirmer($commande, $empreinte)->assertSessionHasErrors('empreinte');
 
-        CommissionEnveloppePart::whereIn('enveloppe_id', $commande->commissions()->pluck('id'))->update(['validated_at' => now()]);
+        CommissionEnveloppePart::whereIn('enveloppe_id', $commande->commissions()->pluck('id'))->update(['validated_at' => now(), 'validated_by' => $this->user->id]);
         $this->confirmer($commande, $this->recapitulatif($commande)['empreinte'])->assertSessionHasErrors('annulation');
 
         $this->assertNotEquals(StatutCommandeVente::ANNULEE_ERREUR_SAISIE, $commande->fresh()->statut);
@@ -575,7 +575,7 @@ class AnnulationExceptionnelleTest extends TestCase
     {
         ['commande' => $commande] = $this->commandeEncaissee();
         CommissionEnveloppePart::whereIn('enveloppe_id', $commande->commissions()->pluck('id'))
-            ->update(['validated_at' => now()]);
+            ->update(['validated_at' => now(), 'validated_by' => $this->user->id]);
 
         $recap = $this->recapitulatif($commande);
         $this->assertNotEmpty($recap['blocages']);

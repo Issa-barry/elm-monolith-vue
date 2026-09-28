@@ -187,6 +187,26 @@ class CommissionAjustementVenteTest extends TestCase
         );
     }
 
+    /**
+     * Les livreurs gardent la validation manuelle (contrôle des absences/remplacements) :
+     * seules les parts propriétaire/site/consultant sont validées à la génération.
+     *
+     * @test
+     */
+    public function les_parts_livreur_ne_sont_pas_validees_automatiquement_a_la_generation(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $this->assertNull($part->validated_at);
+        }
+        $this->assertSame(StatutPeriodePaiement::CALCULEE->value, $periode->fresh()->statut->value);
+    }
+
     /** @test */
     public function periode_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees(): void
     {
@@ -402,7 +422,7 @@ class CommissionAjustementVenteTest extends TestCase
     }
 
     /** @test */
-    public function valider_vehicules_en_masse_valide_les_vehicules_selectionnes_sans_valider_la_periode(): void
+    public function valider_vehicules_en_masse_valide_les_vehicules_et_la_periode_devient_validee_automatiquement(): void
     {
         ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
         $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
@@ -425,11 +445,16 @@ class CommissionAjustementVenteTest extends TestCase
             $this->assertNotNull($part->fresh()->validated_at);
         }
 
-        $this->assertSame(
-            StatutPeriodePaiement::CALCULEE->value,
-            $periode->fresh()->statut->value,
-            'valider des véhicules ne doit jamais valider la période de paiement elle-même',
-        );
+        // Toutes les commissions de la période sont validées : elle passe à « Validée » sans
+        // clic sur « Valider la période de paiement », et ses commissions deviennent payables.
+        $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->fresh()->statut->value);
+        foreach ($parts as $part) {
+            $this->assertSame('impaye', $part->fresh()->statut->value);
+        }
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page->where('validation.possible', false));
     }
 
     /** @test */
@@ -465,6 +490,12 @@ class CommissionAjustementVenteTest extends TestCase
                 $this->assertNotNull($part->validated_at, 'le véhicule équilibré doit être validé malgré le refus de l\'autre');
             }
         }
+
+        $this->assertSame(
+            StatutPeriodePaiement::CALCULEE->value,
+            $periode->fresh()->statut->value,
+            'une commission restant à valider maintient la période « Calculée »',
+        );
     }
 
     /** @test */
@@ -536,6 +567,33 @@ class CommissionAjustementVenteTest extends TestCase
         foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
             $this->assertNull($part->fresh()->validated_at);
         }
+    }
+
+    /**
+     * `taille_equipe` compte l'équipe actuelle du véhicule, `nb_membres` seulement les
+     * bénéficiaires commissionnés sur la période : un membre ajouté après coup ne compte que
+     * dans le premier.
+     *
+     * @test
+     */
+    public function periode_show_distingue_la_taille_de_l_equipe_des_membres_commissionnes(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $nouveau = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Nouveau membre']);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $nouveau->id, 'role' => 'convoyeur', 'ordre' => 1]);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.vehicule_id', $vehicule->id)
+                ->where('vehicules.0.nb_membres', 3)
+                ->where('vehicules.0.taille_equipe', 4)
+            );
     }
 
     /** @test */

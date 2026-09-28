@@ -439,6 +439,14 @@ défaut **par utilisateur** et par scope — choisir une vue partagée comme dé
 
 ### Ajouter les vues sur une nouvelle liste (sans recopier de code)
 
+Les listes comptables utilisent également ce moteur via la prop `savedFilterScope` de
+`CommissionIndexLayout.vue` : `commissions-livreurs`, `commissions-proprietaires`,
+`commissions-sites`, `commissions-consultants` et `cashback`. Chaque liste conserve ses propres
+vues et sa préférence par défaut. La lecture reprend `canReadCommissions()` pour les commissions
+et la policy cashback ; le partage exige respectivement `commissions.update` et `cashback.update`.
+Les consultants et le cashback n'exposent pas l'option « mes agences », leurs listes n'ayant pas
+ce filtre. Les critères sont validés côté serveur et les identifiants sont limités à l'organisation.
+
 1. `SavedFilterScopes::all()` : ajouter l'entrée du scope (mêmes clés que les paramètres de requête de la liste).
 2. Contrôleur Index : `$savedView = app(SavedFilterService::class)->applyToRequest($request, '<scope>');`
    **avant** de lire les filtres, puis exposer `'saved_view' => $savedView` aux props Inertia.

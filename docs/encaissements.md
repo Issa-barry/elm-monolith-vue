@@ -218,6 +218,19 @@ active de l'auteur sur le site de la facture.**
   réaffectation) est une décision métier explicite, jamais automatique : elle doit être tracée
   (auteur, date, ancienne et nouvelle destination, motif).
 
+## Réutilisation pour les sorties : paiement des fiches (ADR 0009)
+
+`PaymentCard` sert aussi à **payer** une fiche de commission (jamais une fiche salarié : les salaires
+se paient depuis Comptabilité > Paiement salaire), en
+mode `sens="decaissement"` : mêmes moyens (`MoyensEncaissementResolver` sur l'agence de la fiche, ou le
+siège principal pour une fiche sans agence), même caisse dédiée pour les espèces (celle du payeur),
+même règle de référence. En plus : solde disponible du moyen choisi (`solde_disponible`,
+`soldeEspeces`) et « Confirmer » désactivé s'il est insuffisant ; le refus réel est serveur, sous
+verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`, partagé avec les mouvements de
+fonds). Détail : [commissions.md](commissions.md) et
+[ADR 0009](adr/0009-paiement-de-fiche-decaissement-tresorerie.md). Le mode `encaissement` (défaut)
+est inchangé.
+
 ## Backend comme source de vérité
 
 La validation (référence/opérateur obligatoires selon le mode) est portée exclusivement par

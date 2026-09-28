@@ -66,6 +66,14 @@ function mountLayout(resultCount = 2) {
 }
 
 describe('CommissionIndexLayout', () => {
+    it('active les vues du scope choisi dans le filtre partage', async () => {
+        const wrapper = mountLayout();
+        await wrapper.setProps({ savedFilterScope: 'commissions-sites' });
+        expect(
+            wrapper.getComponent(DataFilters).props('savedFilterScope'),
+        ).toBe('commissions-sites');
+    });
+
     it('affiche le contexte commun et transmet les filtres propres à la page', () => {
         const wrapper = mountLayout();
 

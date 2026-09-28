@@ -470,26 +470,64 @@ class CommissionAdjustmentService
             return;
         }
 
-        $part->validated_by = $user->id;
-        $part->validated_at = now();
-        $part->save();
+        self::poserValidation($part, $user);
+        self::validerPeriodesConcernees([$part]);
     }
 
     /** @param  iterable<CommissionEnveloppePart>  $parts */
     public static function validerLot(iterable $parts, User $user): int
     {
         $count = 0;
+        $validees = [];
 
-        DB::transaction(function () use ($parts, $user, &$count) {
+        DB::transaction(function () use ($parts, $user, &$count, &$validees) {
             foreach ($parts as $part) {
                 if (! $part->estValidee()) {
-                    self::validerPart($part, $user);
+                    self::poserValidation($part, $user);
+                    $validees[] = $part;
                     $count++;
                 }
             }
         });
 
+        self::validerPeriodesConcernees($validees);
+
         return $count;
+    }
+
+    private static function poserValidation(CommissionEnveloppePart|CommissionLogistiquePart $part, User $user): void
+    {
+        $part->validated_by = $user->id;
+        $part->validated_at = now();
+        $part->save();
+    }
+
+    /**
+     * Après une validation de commissions, chaque période qui les couvre et dont toutes les
+     * commissions sont désormais validées passe automatiquement à « Validée »
+     * (PeriodeValidationService::validerSiComplete — mêmes contrôles que le bouton).
+     *
+     * @param  iterable<CommissionEnveloppePart|CommissionLogistiquePart>  $parts
+     */
+    private static function validerPeriodesConcernees(iterable $parts): void
+    {
+        $parts = collect($parts);
+        if ($parts->isEmpty()) {
+            return;
+        }
+
+        $orgId = $parts->map(fn ($p) => $p instanceof CommissionEnveloppePart
+            ? $p->enveloppe?->organization_id
+            : $p->commission?->organization_id)->filter()->first();
+        $dates = $parts->map(fn ($p) => $p instanceof CommissionEnveloppePart
+            ? $p->enveloppe?->earned_at
+            : $p->earned_at)->filter();
+
+        if ($orgId === null || $dates->isEmpty()) {
+            return;
+        }
+
+        app(PeriodeCalculatorService::class)->traiterPeriodesPourDates($orgId, $dates);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -991,24 +1029,27 @@ class CommissionAdjustmentService
             return;
         }
 
-        $part->validated_by = $user->id;
-        $part->validated_at = now();
-        $part->save();
+        self::poserValidation($part, $user);
+        self::validerPeriodesConcernees([$part]);
     }
 
     /** @param  iterable<CommissionLogistiquePart>  $parts */
     public static function validerLotLogistique(iterable $parts, User $user): int
     {
         $count = 0;
+        $validees = [];
 
-        DB::transaction(function () use ($parts, $user, &$count) {
+        DB::transaction(function () use ($parts, $user, &$count, &$validees) {
             foreach ($parts as $part) {
                 if (! $part->estValidee()) {
-                    self::validerPartLogistique($part, $user);
+                    self::poserValidation($part, $user);
+                    $validees[] = $part;
                     $count++;
                 }
             }
         });
+
+        self::validerPeriodesConcernees($validees);
 
         return $count;
     }

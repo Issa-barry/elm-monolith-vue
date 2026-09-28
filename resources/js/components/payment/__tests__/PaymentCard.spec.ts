@@ -267,4 +267,73 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
             ],
         ]);
     });
+
+    describe('décaissement (paiement de fiche, ADR 0009)', () => {
+        const MOYENS_AVEC_SOLDE = MOYENS_AGENCE.map((m) => ({
+            ...m,
+            solde_disponible:
+                m.compte_tresorerie_id === 's-orange' ? 50_000 : 1_000_000,
+        }));
+
+        it('affiche le solde disponible de la caisse pour les espèces', () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 250_000,
+            });
+
+            expect(
+                wrapper.get('[data-testid="solde-disponible"]').text(),
+            ).toContain('Disponible');
+            expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
+        });
+
+        it('bloque Confirmer quand le montant dépasse le solde du support choisi', async () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 250_000,
+            });
+
+            select(wrapper).vm.$emit(
+                'update:modelValue',
+                'mobile_money:s-orange',
+            );
+            await nextTick();
+            wrapper
+                .findComponent(InputTexteFactice)
+                .vm.$emit('update:modelValue', 'OM-1');
+            await nextTick();
+
+            const solde = wrapper.get('[data-testid="solde-disponible"]');
+            expect(solde.text()).toContain('Solde insuffisant');
+            expect(solde.classes()).toContain('text-destructive');
+            expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+            await confirmer(wrapper).trigger('click');
+            expect(wrapper.emitted('submit')).toBeUndefined();
+        });
+
+        it('parle de payer, pas d’encaisser, quand le payeur n’a pas de caisse', () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                especesDisponibles: false,
+            });
+
+            expect(
+                wrapper.get('[data-testid="especes-indisponible"]').text(),
+            ).toContain('impossible de payer en espèces');
+        });
+
+        it('n’affiche aucun solde en encaissement', () => {
+            const wrapper = monter({
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 10,
+            });
+
+            expect(
+                wrapper.find('[data-testid="solde-disponible"]').exists(),
+            ).toBe(false);
+        });
+    });
 });

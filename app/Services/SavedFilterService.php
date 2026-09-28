@@ -40,8 +40,13 @@ final class SavedFilterService
 
     public function owned(User $user, string $scope): Builder
     {
-        [$ability, $model] = $this->config($user, $scope)['authorize'];
-        Gate::forUser($user)->authorize($ability, $model);
+        $authorize = $this->config($user, $scope)['authorize'];
+        if (is_callable($authorize)) {
+            abort_unless($authorize($user), 403);
+        } else {
+            [$ability, $model] = $authorize;
+            Gate::forUser($user)->authorize($ability, $model);
+        }
         abort_unless($user->organization_id, 403);
 
         return SavedFilter::query()

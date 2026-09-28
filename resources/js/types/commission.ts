@@ -1,3 +1,5 @@
+import type { MoyenEncaissement } from '@/components/payment/moyensEncaissement';
+
 export interface CommissionSummary {
     brut_cumule: number;
     frais: number;
@@ -91,6 +93,32 @@ export interface PeriodeOption {
 export interface ModePaiementOption {
     value: string;
     label: string;
+}
+
+/** Contexte de trésorerie du paiement d'une fiche (cf. DecaissementFicheResolver). */
+export interface TresorerieFiche {
+    site_id: string | null;
+    moyens: MoyenEncaissement[];
+    especes_disponibles: boolean;
+    solde_especes: number | null;
+    /** Paiement impossible (ex : fiche sans agence et aucun siège principal). */
+    message: string | null;
+}
+
+/** Fiche de paiement due, telle que la présente FichePayableResolver::presenter(). */
+export interface FicheAPayer {
+    id: string;
+    reference: string;
+    beneficiaire_type: string;
+    beneficiaire_nom: string;
+    periode_reference: string | null;
+    /** Dates ISO (AAAA-MM-JJ) de la période de la fiche. */
+    periode_debut: string | null;
+    periode_fin: string | null;
+    montant_net: number;
+    montant_paye: number;
+    montant_restant: number;
+    tresorerie: TresorerieFiche;
 }
 
 export type CommissionDetailTab =

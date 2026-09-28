@@ -9,6 +9,7 @@ use App\Models\EcritureComptable;
 use App\Models\MouvementFonds;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Position de trésorerie réelle d'un site, calculée depuis le grand livre
@@ -218,6 +219,32 @@ class TresorerieDisponibiliteService
      * propre à cette caisse ; pour un support d'agence, même limite que
      * situationParSupport() si deux supports d'un site partagent leur compte.
      */
+    /**
+     * Toute sortie d'argent d'un support (mouvement de fonds, paiement de fiche) passe ici : le
+     * support est verrouillé (`lockForUpdate()`) et son solde relu depuis le grand livre, jamais
+     * transmis par l'appelant — deux sorties successives ou concurrentes relisent chacune le solde
+     * déjà diminué par la précédente. À appeler dans la transaction qui enregistre la sortie.
+     *
+     * @param  string  $operation  complément du message, ex. « un envoi », « un paiement »
+     *
+     * @throws ValidationException solde insuffisant (clé `montant`)
+     */
+    public function garantirSoldeSuffisant(string $supportId, float $montant, ?Carbon $date = null, string $operation = 'un envoi'): CompteTresorerie
+    {
+        $support = CompteTresorerie::whereKey($supportId)->lockForUpdate()->firstOrFail();
+        $solde = $this->soldePourSupport($support, $date ?? now());
+
+        if ($montant > $solde + 0.004) {
+            $disponible = number_format(max($solde, 0), 0, ',', ' ');
+            $demande = number_format($montant, 0, ',', ' ');
+            throw ValidationException::withMessages([
+                'montant' => "Solde insuffisant : {$disponible} GNF disponible dans « {$support->libelle} » pour {$operation} de {$demande} GNF.",
+            ]);
+        }
+
+        return $support;
+    }
+
     public function soldePourSupport(CompteTresorerie $support, ?Carbon $date = null): float
     {
         $solde = EcritureComptable::query()

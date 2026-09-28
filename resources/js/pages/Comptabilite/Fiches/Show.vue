@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { Button } from '@/components/ui/button';
+import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { FicheAPayer } from '@/types/commission';
 import type { StatutCommissionResolu } from '@/types/commission-status';
-import { Head, router } from '@inertiajs/vue3';
-import { FileDown, Minus, Plus } from 'lucide-vue-next';
-import Dropdown from 'primevue/dropdown';
-import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { Head } from '@inertiajs/vue3';
+import { FileDown, HandCoins, Minus, Plus } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 interface LigneVehicule {
     id: string;
@@ -31,6 +33,9 @@ interface HistoriquePaiement {
     id: string;
     montant: number;
     mode_paiement: string;
+    reference_paiement: string | null;
+    /** Support d'où l'argent est sorti — null pour un paiement antérieur à l'ADR 0009. */
+    support: string | null;
     date_paiement: string | null;
     note: string | null;
     createur: string | null;
@@ -64,15 +69,11 @@ interface Fiche extends StatutCommissionResolu {
     historique: HistoriquePaiement[];
 }
 
-interface Option {
-    value: string;
-    label: string;
-}
-
 const props = defineProps<{
     fiche: Fiche;
-    modes_paiement: Option[];
     can_payer: boolean;
+    /** Dialogue de paiement (null sans droit de payer), cf. FichePayableResolver::presenter(). */
+    paiement: FicheAPayer | null;
 }>();
 
 const typeLabel = {
@@ -106,16 +107,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-const toast = useToast();
+const dialoguePaiement = usePaiementFiche();
 
-const paiementForm = ref({
-    montant: props.fiche.montant_restant,
-    mode_paiement: '',
-    date_paiement: new Date().toISOString().split('T')[0],
-    note: '',
-});
-const submittingPaiement = ref(false);
-const paiementErrors = ref<Record<string, string>>({});
+function ouvrirPaiement() {
+    if (props.paiement) dialoguePaiement.open(props.paiement);
+}
 
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
@@ -133,33 +129,6 @@ const gains = computed(() => props.fiche.lignes.filter((l) => l.is_gain));
 const deductions = computed(() =>
     props.fiche.lignes.filter((l) => l.is_deduction),
 );
-
-function submitPaiement() {
-    submittingPaiement.value = true;
-    paiementErrors.value = {};
-    router.post(
-        `/backoffice/comptabilite/fiches/${props.fiche.id}/paiements`,
-        paiementForm.value,
-        {
-            onError: (e) => {
-                paiementErrors.value = e;
-                submittingPaiement.value = false;
-            },
-            onSuccess: () => {
-                toast.add({
-                    severity: 'success',
-                    summary: 'Paiement enregistré',
-                    life: 3000,
-                });
-                submittingPaiement.value = false;
-                paiementForm.value.note = '';
-            },
-            onFinish: () => {
-                submittingPaiement.value = false;
-            },
-        },
-    );
-}
 
 function exportPdf() {
     window.open(
@@ -377,98 +346,23 @@ function exportPdf() {
                 </div>
             </div>
 
-            <!-- Formulaire paiement -->
+            <!-- Paiement : même dialogue que les écrans Commissions (PaymentCard, décaissement) -->
             <div
-                v-if="can_payer && fiche.can_pay"
-                class="rounded-xl border bg-card p-5"
+                v-if="can_payer && fiche.can_pay && paiement"
+                class="flex items-center justify-between rounded-xl border bg-card p-5"
             >
-                <h2 class="mb-4 text-sm font-semibold">
-                    Enregistrer un paiement
-                </h2>
-                <form
-                    class="flex flex-col gap-4"
-                    @submit.prevent="submitPaiement"
-                >
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1.5">
-                            <label
-                                class="text-xs font-medium text-muted-foreground"
-                                >Montant (GNF)</label
-                            >
-                            <input
-                                v-model.number="paiementForm.montant"
-                                type="number"
-                                :max="fiche.montant_restant"
-                                min="1"
-                                class="h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold focus:ring-2 focus:ring-ring focus:outline-none"
-                            />
-                            <p
-                                v-if="paiementErrors.montant"
-                                class="text-xs text-destructive"
-                            >
-                                {{ paiementErrors.montant }}
-                            </p>
-                        </div>
-                        <div class="flex flex-col gap-1.5">
-                            <label
-                                class="text-xs font-medium text-muted-foreground"
-                                >Mode de paiement</label
-                            >
-                            <Dropdown
-                                v-model="paiementForm.mode_paiement"
-                                :options="modes_paiement"
-                                option-label="label"
-                                option-value="value"
-                                placeholder="Sélectionner…"
-                                class="w-full"
-                            />
-                            <p
-                                v-if="paiementErrors.mode_paiement"
-                                class="text-xs text-destructive"
-                            >
-                                {{ paiementErrors.mode_paiement }}
-                            </p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1.5">
-                            <label
-                                class="text-xs font-medium text-muted-foreground"
-                                >Date du paiement</label
-                            >
-                            <input
-                                v-model="paiementForm.date_paiement"
-                                type="date"
-                                class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            />
-                        </div>
-                        <div class="flex flex-col gap-1.5">
-                            <label
-                                class="text-xs font-medium text-muted-foreground"
-                                >Note (optionnel)</label
-                            >
-                            <input
-                                v-model="paiementForm.note"
-                                type="text"
-                                placeholder="Observation…"
-                                class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            />
-                        </div>
-                    </div>
-                    <div class="flex justify-end">
-                        <button
-                            type="submit"
-                            :disabled="submittingPaiement"
-                            class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-60"
-                        >
-                            {{
-                                submittingPaiement
-                                    ? 'Enregistrement…'
-                                    : 'Enregistrer le paiement'
-                            }}
-                        </button>
-                    </div>
-                </form>
+                <div>
+                    <h2 class="text-sm font-semibold">
+                        Enregistrer un paiement
+                    </h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Reste à payer : {{ fmt(fiche.montant_restant) }}
+                    </p>
+                </div>
+                <Button @click="ouvrirPaiement">
+                    <HandCoins class="mr-1.5 h-4 w-4" />
+                    Payer
+                </Button>
             </div>
 
             <!-- Historique paiements -->
@@ -494,6 +388,12 @@ function exportPdf() {
                                 Mode
                             </th>
                             <th class="px-5 py-2.5 text-left font-medium">
+                                Compte débité
+                            </th>
+                            <th class="px-5 py-2.5 text-left font-medium">
+                                Référence
+                            </th>
+                            <th class="px-5 py-2.5 text-left font-medium">
                                 Par
                             </th>
                             <th class="px-5 py-2.5 text-left font-medium">
@@ -513,6 +413,12 @@ function exportPdf() {
                             </td>
                             <td class="px-5 py-2.5 text-muted-foreground">
                                 {{ p.mode_paiement ?? '—' }}
+                            </td>
+                            <td class="px-5 py-2.5 text-muted-foreground">
+                                {{ p.support ?? '—' }}
+                            </td>
+                            <td class="px-5 py-2.5 font-mono text-xs">
+                                {{ p.reference_paiement ?? '—' }}
                             </td>
                             <td class="px-5 py-2.5 text-muted-foreground">
                                 {{ p.createur ?? '—' }}
@@ -573,5 +479,24 @@ function exportPdf() {
                 </div>
             </div>
         </div>
+        <PaymentCard
+            v-if="dialoguePaiement.fiche.value"
+            v-model:visible="dialoguePaiement.visible.value"
+            :title="dialoguePaiement.title.value"
+            :info-rows="dialoguePaiement.infoRows.value"
+            sens="decaissement"
+            solde-label="Reste à payer"
+            :solde="dialoguePaiement.fiche.value.montant_restant"
+            :moyens="dialoguePaiement.fiche.value.tresorerie.moyens"
+            :especes-disponibles="
+                dialoguePaiement.fiche.value.tresorerie.especes_disponibles
+            "
+            :solde-especes="
+                dialoguePaiement.fiche.value.tresorerie.solde_especes
+            "
+            :processing="dialoguePaiement.processing.value"
+            :errors="dialoguePaiement.errors.value"
+            @submit="dialoguePaiement.submit"
+        />
     </AppLayout>
 </template>

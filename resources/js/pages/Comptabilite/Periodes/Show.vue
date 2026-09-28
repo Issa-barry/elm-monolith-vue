@@ -49,6 +49,7 @@ interface VehiculeCard {
     vehicule_nom: string;
     vehicule_immat: string | null;
     nb_membres: number;
+    taille_equipe: number | null;
     nb_commandes: number;
     theorique: number;
     ajuste: number;
@@ -171,7 +172,8 @@ const filterFields = computed<FilterField[]>(() =>
 // largeur de son contenu (montants toujours sur une ligne), le Véhicule (`w-full max-w-0`)
 // absorbe le reste et tronque son nom. Seuils en requête de conteneur (largeur réelle du
 // tableau, sidebar comprise) : < 1150px l'immatriculation passe sous le nom, < 1000px les
-// en-têtes Commandes/Membres s'abrègent. Le `!` est nécessaire : le padding des cellules
+// en-têtes Commandes/Membres s'abrègent et la taille d'équipe passe sous le nom.
+// Le `!` est nécessaire : le padding des cellules
 // PrimeVue n'est pas dans un layer Tailwind.
 const CELLULE = 'w-px whitespace-nowrap !px-3';
 const COL_COMPACTE = {
@@ -183,12 +185,19 @@ const COL_SELECTION = {
     bodyCell: { class: 'w-px !pr-1 !pl-4' },
 };
 const COL_VEHICULE = {
-    headerCell: { class: 'w-full max-w-0 min-w-[8rem] !px-3' },
-    bodyCell: { class: 'w-full max-w-0 min-w-[8rem] !px-3' },
+    headerCell: { class: 'w-full max-w-0 min-w-[7rem] !px-3' },
+    bodyCell: { class: 'w-full max-w-0 min-w-[7rem] !px-3' },
 };
 const COL_IMMAT = {
     headerCell: { class: `${CELLULE} hidden @min-[1150px]:table-cell` },
     bodyCell: { class: `${CELLULE} hidden @min-[1150px]:table-cell` },
+};
+const COL_EQUIPE = {
+    headerCell: { class: `${CELLULE} hidden @min-[1000px]:table-cell` },
+    columnHeaderContent: { class: 'justify-center' },
+    bodyCell: {
+        class: `${CELLULE} !text-center hidden @min-[1000px]:table-cell`,
+    },
 };
 const COL_NOMBRE = {
     headerCell: { class: CELLULE },
@@ -645,9 +654,9 @@ function exportPdf() {
                     </p>
                     <p class="mt-0.5">
                         Elles sont datées dans cette période mais ne figurent
-                        sur aucune fiche : la période étant validée, ses fiches
-                        ne sont plus recalculées et ces commissions ne seront
-                        pas payées en l'état.
+                        sur aucune fiche. La période a déjà reçu des paiements :
+                        elle ne peut pas être rouverte automatiquement, et ces
+                        commissions ne seront pas payées en l'état.
                     </p>
                 </div>
             </div>
@@ -825,9 +834,17 @@ function exportPdf() {
                                         {{ data.vehicule_nom }}
                                     </div>
                                     <div
-                                        class="truncate text-xs text-muted-foreground @min-[1150px]:hidden"
+                                        class="truncate text-xs text-muted-foreground"
                                     >
-                                        {{ data.vehicule_immat ?? '—' }}
+                                        <span class="@min-[1150px]:hidden">{{
+                                            data.vehicule_immat ?? '—'
+                                        }}</span>
+                                        <span
+                                            v-if="data.taille_equipe !== null"
+                                            class="@min-[1000px]:hidden"
+                                        >
+                                            · Équipe {{ data.taille_equipe }}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -864,7 +881,10 @@ function exportPdf() {
 
                     <Column field="nb_membres" :pt="COL_NOMBRE">
                         <template #header>
-                            <span class="font-semibold" title="Membres">
+                            <span
+                                class="font-semibold"
+                                title="Membres ayant une commission sur la période"
+                            >
                                 <span class="@min-[1000px]:hidden">Memb.</span>
                                 <span class="hidden @min-[1000px]:inline"
                                     >Membres</span
@@ -874,6 +894,21 @@ function exportPdf() {
                         <template #body="{ data }">
                             <span class="text-muted-foreground tabular-nums">{{
                                 data.nb_membres
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column field="taille_equipe" :pt="COL_EQUIPE">
+                        <template #header>
+                            <span
+                                class="font-semibold"
+                                title="Membres actuels de l'équipe du véhicule"
+                                >Équipe</span
+                            >
+                        </template>
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground tabular-nums">{{
+                                data.taille_equipe ?? '—'
                             }}</span>
                         </template>
                     </Column>

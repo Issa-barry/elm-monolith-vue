@@ -701,6 +701,21 @@ class CommandeVenteService
                 $commission->update(['statut' => StatutCommission::ANNULEE->value]);
             }
         }
+
+        // Une période déjà validée dont une fiche portait ces commissions est rouverte puis
+        // recalculée (PeriodeValidationService::rouvrirSiDesynchronisee) ; un incident côté
+        // période ne doit jamais faire échouer l'annulation elle-même.
+        $dates = $commande->commissions->pluck('earned_at')->filter();
+        if ($dates->isNotEmpty()) {
+            try {
+                app(PeriodeCalculatorService::class)->traiterPeriodesPourDates($commande->organization_id, $dates);
+            } catch (\Throwable $e) {
+                Log::error('Mise à jour des périodes après annulation de commissions échouée', [
+                    'commande_id' => $commande->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     // ── Pré-conditions ────────────────────────────────────────────────────────

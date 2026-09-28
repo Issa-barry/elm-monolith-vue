@@ -43,12 +43,22 @@ interface Props {
      * (`peut_encaisser_especes`) : caisse dédiée active sur le site de la facture. Défaut `true` :
      * un écran qui l'oublierait ne masque rien, la garantie réelle reste côté serveur. */
     especesDisponibles?: boolean;
+    /** « encaissement » (défaut) : l'argent entre dans un support. « decaissement » : il en sort
+     * (paiement de fiche, ADR 0009) — libellés adaptés et solde disponible affiché/contrôlé. */
+    sens?: 'encaissement' | 'decaissement';
+    /** Décaissement : solde de la caisse dédiée du payeur (espèces), null = inconnu. */
+    soldeEspeces?: number | null;
+    /** Libellé du bloc principal (défaut « Montant dû »). */
+    soldeLabel?: string;
 }
 
 // Texte identique à CaisseAgentResolver::MESSAGE_SANS_CAISSE (renvoyé aussi par le backend si le
 // bouton était contourné) — visible directement sous la liste, pas seulement au survol.
 const MESSAGE_ESPECES_INDISPONIBLE =
     "Vous ne disposez pas d'une caisse active : impossible d'encaisser en espèces. Contactez votre responsable pour qu'il vous en crée une.";
+// Texte identique à DecaissementFicheResolver::MESSAGE_SANS_CAISSE.
+const MESSAGE_ESPECES_INDISPONIBLE_DECAISSEMENT =
+    "Vous ne disposez pas d'une caisse active sur ce site : impossible de payer en espèces. Contactez votre responsable pour qu'il vous en crée une.";
 
 // Une seule liste déroulante : Espèces, puis chaque support de l'agence (un Mobile Money par
 // opérateur réellement configuré, virement/chèque par banque) — jamais un second select opérateur.
@@ -62,9 +72,26 @@ const props = withDefaults(defineProps<Props>(), {
     errors: () => ({}),
     moyens: () => [],
     especesDisponibles: true,
+    sens: 'encaissement',
+    soldeEspeces: null,
+    soldeLabel: 'Montant dû',
 });
 
-const modeOptions = computed(() => construireOptions(props.moyens));
+const decaissement = computed(() => props.sens === 'decaissement');
+
+const modeOptions = computed(() =>
+    construireOptions(props.moyens).map((option) =>
+        option.requiresCaisse
+            ? { ...option, soldeDisponible: props.soldeEspeces }
+            : option,
+    ),
+);
+
+const messageEspecesIndisponible = computed(() =>
+    decaissement.value
+        ? MESSAGE_ESPECES_INDISPONIBLE_DECAISSEMENT
+        : MESSAGE_ESPECES_INDISPONIBLE,
+);
 
 function modeIndisponible(mode: ModeOption): boolean {
     return !!mode.requiresCaisse && !props.especesDisponibles;
@@ -105,6 +132,17 @@ function modeByKey(key: string): ModeOption | undefined {
 }
 
 const modeActif = computed(() => modeByKey(selectedKey.value));
+
+// Décaissement : solde connu du support choisi. Le contrôle réel reste serveur (sous verrou) —
+// ici on évite seulement une confirmation vouée à l'échec.
+const soldeSupport = computed(() =>
+    decaissement.value ? (modeActif.value?.soldeDisponible ?? null) : null,
+);
+const soldeInsuffisant = computed(
+    () =>
+        soldeSupport.value !== null &&
+        (montant.value ?? 0) > soldeSupport.value + 0.004,
+);
 const referencePaiementRequise = computed(
     () => modeActif.value?.requiresReference ?? false,
 );
@@ -161,6 +199,7 @@ function handleSubmit() {
     const mode = modeActif.value;
     if (!mode || modeIndisponible(mode)) return;
     if (mode.requiresReference && !referencePaiement.value) return;
+    if (soldeInsuffisant.value) return;
     emit('submit', {
         montant: montant.value,
         mode_paiement: mode.mode_paiement,
@@ -203,7 +242,9 @@ function handleSubmit() {
                 class="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-5 py-3"
             >
                 <div>
-                    <p class="text-sm font-semibold text-primary">Montant dû</p>
+                    <p class="text-sm font-semibold text-primary">
+                        {{ soldeLabel }}
+                    </p>
                     <p
                         class="mt-0.5 text-2xl font-extrabold tracking-tight text-primary tabular-nums [word-spacing:0.16em]"
                     >
@@ -224,7 +265,9 @@ function handleSubmit() {
                     <span class="text-destructive">*</span>
                     <Info
                         v-tooltip.top="
-                            'Veuillez saisir le montant à encaisser en GNF.'
+                            decaissement
+                                ? 'Veuillez saisir le montant à payer en GNF.'
+                                : 'Veuillez saisir le montant à encaisser en GNF.'
                         "
                         class="h-3.5 w-3.5 cursor-help text-muted-foreground"
                 /></Label>
@@ -318,7 +361,26 @@ function handleSubmit() {
                     class="mt-1.5 text-xs text-amber-700 dark:text-amber-400"
                     data-testid="especes-indisponible"
                 >
-                    {{ MESSAGE_ESPECES_INDISPONIBLE }}
+                    {{ messageEspecesIndisponible }}
+                </p>
+                <!-- Décaissement : solde du support choisi ; rouge seulement s'il bloque le paiement. -->
+                <p
+                    v-if="soldeSupport !== null"
+                    class="mt-1.5 text-xs"
+                    :class="
+                        soldeInsuffisant
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'
+                    "
+                    data-testid="solde-disponible"
+                >
+                    <template v-if="soldeInsuffisant">
+                        Solde insuffisant : {{ formatGNF(soldeSupport) }}
+                        disponible.
+                    </template>
+                    <template v-else>
+                        Disponible : {{ formatGNF(soldeSupport) }}
+                    </template>
                 </p>
                 <p
                     v-if="errors?.mode_paiement"
@@ -374,6 +436,7 @@ function handleSubmit() {
                     processing ||
                     !montant ||
                     !modeActif ||
+                    soldeInsuffisant ||
                     (referencePaiementRequise && !referencePaiement)
                 "
                 @click="handleSubmit"
