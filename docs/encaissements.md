@@ -1,5 +1,13 @@
 # Encaissements de vente
 
+> **Agence d'encaissement** (ADR 0012, 29/09/2026) : un encaissement porte l'agence qui a réellement
+> reçu l'argent (`site_encaissement_id`) — celle de la facture, sauf quand un client paie dans une
+> autre agence (« Encaisser une commande d'une autre agence », permission
+> `factures.encaisser_autre_agence`). Partout ci-dessous, « l'agence de la facture » s'entend alors
+> de l'agence d'encaissement pour les moyens proposés, la caisse dédiée et la pièce comptable ; la
+> vente et la créance restent à l'agence de la commande. Détail :
+> [tresorerie-inter-agences.md](tresorerie-inter-agences.md).
+
 ## Modes de paiement — `App\Enums\ModePaiement` (4 valeurs stables, ne pas étendre)
 
 `especes`, `mobile_money`, `virement`, `cheque`. **Ne jamais y ajouter une valeur par opérateur**
@@ -158,7 +166,9 @@ Mobile Money → 561xxx). Elle devient le **sous-compte de la caisse dédiée de
   `journal_role` (compte imposé, journal tiré du mapping de ce rôle) ; sans effet pour les autres
   appelants.
 - **Suppression d'un encaissement** : la contrepassation reprend les comptes de la pièce d'origine,
-  donc l'extourne vise le même sous-compte. Depuis le 24/09/2026, la route
+  donc l'extourne vise le même sous-compte. Un encaissement reçu pour une autre agence a deux pièces,
+  toutes deux contrepassées ; s'il est déjà engagé dans un règlement inter-agences, sa suppression
+  est refusée (ADR 0012). Depuis le 24/09/2026, la route
   `DELETE /encaissements/{id}` exige la permission `ventes.annuler_exceptionnel` (auparavant : aucune
   permission, seulement l'organisation). Pour défaire une commande saisie par erreur, utiliser
   l'annulation exceptionnelle (cf. [annulation-exceptionnelle.md](annulation-exceptionnelle.md)),

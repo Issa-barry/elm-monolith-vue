@@ -43,6 +43,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Vente encaissée en totalité, en attente du versement des commissions avant clôture
     // (CommandeVente::statutAffichage()).
     commissions_a_verser: 'bg-blue-500',
+    // Encaissement reçu pour une autre agence, reversement parti mais pas encore reçu (ADR 0012).
+    en_cours_versement: 'bg-blue-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
@@ -56,6 +58,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
     contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
+    reserve: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',
@@ -102,6 +106,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     analyse: 'bg-orange-500',
     stock_faible: 'bg-amber-500',
     a_financer: 'bg-orange-500',
+    // Encaissement reçu pour une autre agence, pas encore reversé : à faire, pas une erreur (ADR 0012).
+    a_verser: 'bg-amber-500',
     donnees_incompletes: 'bg-amber-500',
     stock_negatif: 'bg-orange-500',
 };

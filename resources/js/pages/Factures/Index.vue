@@ -23,6 +23,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Building2,
     CreditCard,
     History,
     MoreVertical,
@@ -35,6 +36,7 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import EncaisserAutreAgenceDialog from './partials/EncaisserAutreAgenceDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface EncaissementItem {
@@ -246,6 +248,14 @@ const factureActive = ref<FactureItem | null>(null);
 const encaissProcessing = ref(false);
 const encaissErrors = ref<Record<string, string>>({});
 
+// ── Commande d'une autre agence (ADR 0012) ────────────────────────────────────
+// Visible seulement avec les deux permissions vérifiées par le serveur
+// (RechercherFactureAutreAgenceController / StoreEncaissementVenteController).
+const autreAgenceVisible = ref(false);
+const peutEncaisserAutreAgence = computed(
+    () => can('factures.encaisser') && can('factures.encaisser_autre_agence'),
+);
+
 // ── Dialog historique ─────────────────────────────────────────────────────────
 const historyVisible = ref(false);
 const factureHistory = ref<FactureItem | null>(null);
@@ -317,7 +327,16 @@ function _progressPercent(f: FactureItem): number {
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Factures</span>
-                <div class="w-8" />
+                <button
+                    v-if="peutEncaisserAutreAgence"
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                    title="Encaisser une commande d'une autre agence"
+                    @click="autreAgenceVisible = true"
+                >
+                    <Building2 class="h-5 w-5" />
+                </button>
+                <div v-else class="w-8" />
             </div>
 
             <!-- Bandeau filtre livreur (mobile) -->
@@ -492,6 +511,15 @@ function _progressPercent(f: FactureItem): number {
                         Suivi et encaissement des factures.
                     </p>
                 </div>
+                <Button
+                    v-if="peutEncaisserAutreAgence"
+                    variant="outline"
+                    data-testid="ouvrir-encaissement-autre-agence"
+                    @click="autreAgenceVisible = true"
+                >
+                    <Building2 class="mr-1.5 h-4 w-4" />
+                    Encaisser une commande d'une autre agence
+                </Button>
             </div>
 
             <!-- Bandeau filtre livreur -->
@@ -945,6 +973,11 @@ function _progressPercent(f: FactureItem): number {
             :processing="encaissProcessing"
             :errors="encaissErrors"
             @submit="handleEncaissSubmit"
+        />
+
+        <EncaisserAutreAgenceDialog
+            v-if="peutEncaisserAutreAgence"
+            v-model:visible="autreAgenceVisible"
         />
     </AppLayout>
 </template>

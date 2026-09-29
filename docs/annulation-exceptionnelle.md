@@ -28,7 +28,11 @@ L'annulation exceptionnelle est **refusée** si :
 - le cashback généré par la commande a déjà été validé ou versé ;
 - les espèces encaissées ont déjà quitté la caisse dédiée de l'agent (versement à l'agence) :
   contrepasser l'encaissement rendrait la caisse négative. Annuler d'abord le versement ;
-- un retour de livraison a déjà été enregistré sur la commande.
+- un retour de livraison a déjà été enregistré sur la commande ;
+- un encaissement reçu par une autre agence est engagé dans un règlement inter-agences (même en
+  brouillon) : l'argent est reversé, ou en passe de l'être, à l'agence de la commande (ADR 0012,
+  cf. [tresorerie-inter-agences.md](tresorerie-inter-agences.md)). Pour un brouillon, annuler
+  d'abord le règlement.
 
 Ces refus sont affichés dans le récapitulatif et **revérifiés côté serveur** à la demande de code et
 à la confirmation.

@@ -331,6 +331,14 @@ const mainNavItems = computed((): NavItem[] => {
                             title: 'Supports',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
+                        ...(can('tresorerie.read')
+                            ? [
+                                  {
+                                      title: 'Inter-agences',
+                                      href: '/backoffice/comptabilite/tresorerie/inter-agences',
+                                  },
+                              ]
+                            : []),
                     ],
                 },
                 {

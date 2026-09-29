@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EncaissementVente;
 use App\Services\AuditLogService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\ValidationException;
 
 class DestroyEncaissementVenteController extends Controller
 {
@@ -28,6 +29,15 @@ class DestroyEncaissementVenteController extends Controller
             'Acces refuse.'
         );
         abort_if($facture->isAnnulee(), 422, 'Impossible de modifier une facture annulee.');
+
+        // Encaissement déjà reversé (ou en passe de l'être) à l'agence de la commande par un
+        // règlement inter-agences : refusé avant toute trace d'audit (ADR 0012). Le modèle porte la
+        // même garde pour tout autre appelant.
+        if ($ligne = $encaissement_vente->ligneReglementActive()) {
+            throw ValidationException::withMessages([
+                'encaissement' => $encaissement_vente->messageReglementActif($ligne),
+            ]);
+        }
 
         // Audit: log on the parent commande before deletion
         $commande = $facture->commande;

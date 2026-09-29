@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\MouvementFonds;
+use App\Models\Site;
 use App\Models\User;
 
 /**
@@ -33,6 +34,21 @@ class MouvementFondsPolicy
     public function create(User $user): bool
     {
         return $user->can('tresorerie.create');
+    }
+
+    /**
+     * Régler une dette inter-agences (ADR 0012) : « Régler » crée ET envoie le règlement en une seule
+     * opération — il faut donc les deux droits (création, envoi) et, comme pour tout envoi, être
+     * affecté à l'agence débitrice (admin : toute l'organisation). Seule garantie d'autorisation :
+     * le `peut_regler` des écrans n'en est que le reflet.
+     */
+    public function regler(User $user, Site $debiteur): bool
+    {
+        if (! $user->can('tresorerie.create') || ! $user->can('tresorerie.envoyer') || $user->organization_id !== $debiteur->organization_id) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($debiteur->id);
     }
 
     public function envoyer(User $user, MouvementFonds $mouvement): bool

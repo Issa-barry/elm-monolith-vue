@@ -46,7 +46,21 @@ export type EncaissementPayload = {
     mode_paiement: string;
     compte_tresorerie_id?: string;
     reference_paiement?: string;
+    /** Agence qui reçoit l'argent — envoyée seulement quand l'écran propose un choix d'agence. */
+    site_encaissement_id?: string;
 };
+
+/**
+ * Agence où l'utilisateur peut encaisser (App\Services\Tresorerie\AgenceEncaissementResolver) :
+ * toujours l'une de SES agences, avec les moyens de paiement et la disponibilité des espèces
+ * propres à cette agence (ADR 0012).
+ */
+export interface AgenceEncaissement {
+    site_id: string;
+    nom: string;
+    moyens: MoyenEncaissement[];
+    peut_encaisser_especes: boolean;
+}
 
 const ESPECES: ModeOption = {
     key: 'especes',

@@ -81,6 +81,14 @@ interface Encaissement {
     reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
+    /** Agence qui a reçu l'argent quand ce n'est pas celle de la commande (ADR 0012), sinon null. */
+    encaisse_a: string | null;
+    /** Reversement à l'agence de la commande — seulement pour un encaissement reçu ailleurs. */
+    reversement: {
+        statut: string;
+        statut_label: string;
+        mouvement_reference: string | null;
+    } | null;
 }
 
 interface FactureData {
@@ -1954,6 +1962,38 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                                 enc.operateur_mobile_money_label ??
                                                 enc.mode_paiement_label
                                             }}
+                                            <div
+                                                v-if="enc.encaisse_a"
+                                                class="mt-0.5 text-xs"
+                                                data-testid="encaissement-autre-agence"
+                                            >
+                                                <span class="text-foreground"
+                                                    >Encaissé à
+                                                    {{ enc.encaisse_a }}</span
+                                                >
+                                                <StatusDot
+                                                    v-if="enc.reversement"
+                                                    :status="
+                                                        enc.reversement.statut
+                                                    "
+                                                    :label="
+                                                        enc.reversement
+                                                            .statut_label
+                                                    "
+                                                    class="mt-0.5"
+                                                />
+                                                <span
+                                                    v-if="
+                                                        enc.reversement
+                                                            ?.mouvement_reference
+                                                    "
+                                                    class="block text-muted-foreground"
+                                                    >{{
+                                                        enc.reversement
+                                                            .mouvement_reference
+                                                    }}</span
+                                                >
+                                            </div>
                                         </td>
                                         <td
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
