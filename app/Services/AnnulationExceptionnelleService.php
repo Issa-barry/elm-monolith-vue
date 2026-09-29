@@ -446,6 +446,15 @@ class AnnulationExceptionnelleService
             }
         }
 
+        // Encaissement reçu par une autre agence et déjà engagé dans un règlement inter-agences :
+        // l'argent est reversé (ou en passe de l'être) à l'agence de la commande — le contrepasser
+        // le ferait sortir d'une trésorerie qui ne le détient plus (ADR 0012).
+        foreach ($commande->facture?->encaissements ?? [] as $encaissement) {
+            if ($ligne = $encaissement->ligneReglementActive()) {
+                $blocages[] = $encaissement->messageReglementActif($ligne);
+            }
+        }
+
         return $blocages;
     }
 
@@ -550,8 +559,12 @@ class AnnulationExceptionnelleService
         $comptes = $piece->lignes()->where('debit', '>', 0)->pluck('compte_comptable_id');
         $supports = CompteTresorerie::forOrg($commande->organization_id)->whereIn('compte_comptable_id', $comptes)->get();
 
+        // L'argent est allé dans un support de l'agence qui a encaissé (celle de la facture, sauf
+        // encaissement dans une autre agence — ADR 0012).
+        $siteEncaissement = $encaissement->site_encaissement_id ?? $commande->facture?->site_id;
+
         return $supports->first(fn (CompteTresorerie $s) => $s->isDediee())
-            ?? $supports->first(fn (CompteTresorerie $s) => $s->site_id === $commande->facture?->site_id)
+            ?? $supports->first(fn (CompteTresorerie $s) => $s->site_id === $siteEncaissement)
             ?? $supports->first();
     }
 

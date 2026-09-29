@@ -7,6 +7,7 @@ use App\Enums\StatutMouvementFonds;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Document métier du transfert d'argent entre deux sites (agence -> siège =
@@ -20,7 +21,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * verrouillage de période comptable centralisés là-bas).
  *
  * `nature` distingue le mouvement entre agences (`inter_sites`, historique) du versement d'une
- * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site) — cf.
+ * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site) et du
+ * règlement inter-agences (`reglement_agences`, lié à des encaissements précis) — cf.
  * NatureMouvementFonds.
  */
 class MouvementFonds extends Model
@@ -129,6 +131,12 @@ class MouvementFonds extends Model
         return $this->belongsTo(PieceComptable::class, 'piece_comptable_reception_id');
     }
 
+    /** Encaissements reversés par un règlement inter-agences (vide pour les autres natures). */
+    public function lignesReglement(): HasMany
+    {
+        return $this->hasMany(MouvementFondsEncaissement::class, 'mouvement_fonds_id');
+    }
+
     public function createur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -169,6 +177,11 @@ class MouvementFonds extends Model
     public function isInterne(): bool
     {
         return $this->nature === NatureMouvementFonds::INTERNE_CAISSES;
+    }
+
+    public function isReglementAgences(): bool
+    {
+        return $this->nature === NatureMouvementFonds::REGLEMENT_AGENCES;
     }
 
     /**

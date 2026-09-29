@@ -93,6 +93,10 @@ class PlanComptableBootstrapService
             // Chantier Financement des agences (2026-08) — cf. docblock de
             // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
             '588000' => 'Virements de fonds internes (en transit)',
+            // Dette/créance entre agences d'une même organisation (ADR 0012) : une agence qui
+            // encaisse une commande d'une autre agence la crédite ici (tiers = agence de la
+            // commande) jusqu'au règlement inter-agences. Soldé à 0 au niveau de l'organisation.
+            '181000' => 'Comptes de liaison des agences',
             '661000' => 'Rémunérations du personnel',
             '109000' => 'Solde d\'ouverture trésorerie (contrepartie technique)',
         ];
@@ -226,6 +230,14 @@ class PlanComptableBootstrapService
             ['encaissement_vente_recu', 'tresorerie', 'virement', '521000', 'BQ'],
             ['encaissement_vente_recu', 'tresorerie', 'cheque', '521000', 'BQ'],
 
+            // Encaissement d'une commande d'une AUTRE agence (ADR 0012) : sur le site qui encaisse,
+            // la trésorerie est débitée contre la liaison (tiers = agence de la commande) au lieu du
+            // client ; sur le site de la commande, la liaison (tiers = agence qui a encaissé) est
+            // débitée contre le client. Le compte client reste ainsi entièrement à l'agence qui a vendu.
+            ['encaissement_vente_recu', 'liaison', null, '181000', null],
+            ['encaissement_vente_pour_compte', 'liaison', null, '181000', 'OD'],
+            ['encaissement_vente_pour_compte', 'client', null, '411000', null],
+
             // Dépense interne (vraie charge ELM)
             ['depense_interne_validee', 'charge_defaut', null, '628800', 'OD'],
             ['depense_interne_validee', 'tresorerie', null, '571000', 'CA'],
@@ -255,6 +267,10 @@ class PlanComptableBootstrapService
             // (58) a besoin d'être configurable ici.
             ['mouvement_fonds_envoye', 'fonds_transit', null, '588000', 'OD'],
             ['mouvement_fonds_recu', 'fonds_transit', null, '588000', 'OD'],
+            // Règlement inter-agences (nature `reglement_agences`) : la contrepartie de la trésorerie
+            // est la liaison, pas le transit — c'est elle qui solde la dette née des encaissements.
+            ['mouvement_fonds_envoye', 'liaison', null, '181000', 'OD'],
+            ['mouvement_fonds_recu', 'liaison', null, '181000', 'OD'],
 
             // Solde d'ouverture d'un support de trésorerie — contrepartie technique, jamais
             // un vrai résultat/charge (cf. SoldeOuvertureTresorerieService).

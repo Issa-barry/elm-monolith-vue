@@ -115,7 +115,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
             'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',      'fournisseurs.delete',
             'factures.create',          'factures.read',          'factures.update',          'factures.delete',
-            'factures.encaisser',       'factures.annuler',
+            'factures.encaisser',       'factures.encaisser_autre_agence', 'factures.annuler',
             'commissions.create',       'commissions.read',       'commissions.update',       'commissions.delete',
             'commissions.payer',        'commissions.cloturer',   'commissions.exporter',
             'cashback.create',          'cashback.read',          'cashback.update',          'cashback.delete',

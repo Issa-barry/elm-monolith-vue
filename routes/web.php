@@ -221,6 +221,7 @@ use App\Http\Controllers\Ventes\ExportCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
+use App\Http\Controllers\Ventes\RechercherFactureAutreAgenceController;
 use App\Http\Controllers\Ventes\RelancerCommissionsCommandeVenteController;
 use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\ShowCommandeVenteController;
@@ -423,6 +424,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/annulation-exceptionnelle', ConfirmerAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.confirmer');
             Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
             Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
+            // Encaisser dans son agence une commande d'une autre agence (ADR 0012) : recherche par
+            // référence exacte, lecture seule — l'encaissement passe par encaissements.store.
+            Route::get('factures/autre-agence', RechercherFactureAutreAgenceController::class)->name('factures.autre-agence');
 
             // Encaissements factures
             Route::post('factures/{facture_vente}/encaissements', StoreEncaissementVenteController::class)->name('encaissements.store');

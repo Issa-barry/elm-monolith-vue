@@ -19,9 +19,9 @@ use Illuminate\Validation\ValidationException;
  *  - le paiement est en **espèces** : Mobile Money, virement et chèque ne sont pas de
  *    l'argent physiquement détenu par l'agent et gardent leurs supports habituels ;
  *  - l'auteur de l'encaissement (`created_by`) a une caisse dédiée **active** sur le site
- *    de la facture — la pièce comptable est déjà rattachée à ce site, la caisse doit
- *    l'être aussi (une seule caisse active par agent et par site, cf. CaisseAgentService,
- *    donc jamais d'ambiguïté) ;
+ *    d'ENCAISSEMENT — celui de la facture, sauf encaissement dans une autre agence (ADR 0012) :
+ *    la pièce comptable est rattachée à ce site, la caisse doit l'être aussi (une seule caisse
+ *    active par agent et par site, cf. CaisseAgentService, donc jamais d'ambiguïté) ;
  *  - la caisse était en service au moment de l'encaissement : jamais de reclassement
  *    rétroactif de l'historique. La mise en service est la VALIDATION de la caisse
  *    (`valide_le`), pas sa création en brouillon : tant qu'elle n'est pas validée, elle est
@@ -75,14 +75,16 @@ class CaisseAgentResolver
             return null;
         }
 
-        if (! $encaissement->created_by || ! $facture->site_id || ! $facture->organization_id) {
+        $siteId = $encaissement->site_encaissement_id ?? $facture->site_id;
+
+        if (! $encaissement->created_by || ! $siteId || ! $facture->organization_id) {
             return null;
         }
 
         return $this->caisseEnServicePour(
             $facture->organization_id,
             $encaissement->created_by,
-            $facture->site_id,
+            $siteId,
             $encaissement->date_encaissement ? Carbon::parse($encaissement->date_encaissement) : null,
             $encaissement->created_at,
         );
@@ -96,15 +98,20 @@ class CaisseAgentResolver
      * et « comptabilisé dans une caisse dédiée » ne peuvent jamais diverger. Sans effet pour tout
      * autre mode de paiement.
      *
+     * `$siteEncaissementId` : agence qui reçoit l'argent (AgenceEncaissementResolver), celle de la
+     * facture par défaut.
+     *
      * @throws ValidationException
      */
-    public function garantirCaissePourEspeces(string $modePaiement, string $agentId, FactureVente $facture, ?string $dateEncaissement): void
+    public function garantirCaissePourEspeces(string $modePaiement, string $agentId, FactureVente $facture, ?string $dateEncaissement, ?string $siteEncaissementId = null): void
     {
         if ($modePaiement !== ModePaiement::ESPECES->value) {
             return;
         }
 
-        if (! $facture->site_id || ! $this->caisseActive($facture->organization_id, $agentId, $facture->site_id)) {
+        $siteId = $siteEncaissementId ?? $facture->site_id;
+
+        if (! $siteId || ! $this->caisseActive($facture->organization_id, $agentId, $siteId)) {
             throw ValidationException::withMessages(['mode_paiement' => self::MESSAGE_SANS_CAISSE]);
         }
 
@@ -113,7 +120,7 @@ class CaisseAgentResolver
         $caisse = $this->caisseEnServicePour(
             $facture->organization_id,
             $agentId,
-            $facture->site_id,
+            $siteId,
             $dateEncaissement ? Carbon::parse($dateEncaissement) : null,
             null,
         );
