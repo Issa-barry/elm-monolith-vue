@@ -47,7 +47,7 @@ l'argent dans sa trésorerie (pièce posée sur le site A, solde des supports ca
    aux encaissements précis qu'il reverse (`mouvement_fonds_encaissements`). Son montant est la somme
    de ces encaissements, calculée par le serveur. Ses écritures ont la liaison pour contrepartie
    (au lieu du transit 588000) : envoi = dette de B soldée, réception = créance de A soldée. Un
-   mouvement « Entre agences » ordinaire (remise au siège, financement) ne solde jamais rien.
+   mouvement « Transfert entre agences » ordinaire (remise au siège, financement) ne solde jamais rien.
 6. **Jamais de double rapprochement** : un encaissement n'appartient qu'à un règlement actif —
    contrôle sous verrou, et index unique `encaissement_actif_id` en base. Un règlement annulé
    (brouillon) ou retourné libère ses encaissements.

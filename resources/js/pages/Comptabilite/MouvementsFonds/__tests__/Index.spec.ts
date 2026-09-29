@@ -203,11 +203,14 @@ describe('Mouvements de fonds — colonnes indépendantes du tableau', () => {
 
     it("n'affiche aucun commentaire sous Type quand il est absent", () => {
         const wrapper = monter([
-            mouvement({ nature_label: 'Entre agences', commentaire: null }),
+            mouvement({
+                nature_label: 'Transfert entre agences',
+                commentaire: null,
+            }),
         ]);
 
         expect(wrapper.get('[data-testid="mouvement-type"]').text()).toBe(
-            'Entre agences',
+            'Transfert entre agences',
         );
     });
 
@@ -616,7 +619,7 @@ describe('Mouvements de fonds — Confirmer désactivé sans support sélectionn
             [
                 mouvement({
                     nature: 'inter_sites',
-                    nature_label: 'Entre agences',
+                    nature_label: 'Transfert entre agences',
                     peut_recevoir: true,
                     compte_destination_id: null,
                 }),
@@ -743,7 +746,10 @@ describe('Mouvements de fonds — règlement inter-agences (ADR 0012)', () => {
 
     it('n’affiche aucun lien d’encaissements pour un mouvement ordinaire', () => {
         const ligne = monter([
-            mouvement({ nature: 'inter_sites', nature_label: 'Entre agences' }),
+            mouvement({
+                nature: 'inter_sites',
+                nature_label: 'Transfert entre agences',
+            }),
         ]).find('tbody tr');
 
         expect(

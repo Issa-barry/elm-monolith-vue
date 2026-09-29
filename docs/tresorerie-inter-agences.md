@@ -64,6 +64,24 @@ Ensuite, `StoreEncaissementVenteController` applique les règles habituelles **�
 d'encaissement** : support actif de cette agence (`MoyensEncaissementResolver`), espèces
 uniquement avec une caisse dédiée active de l'auteur sur cette agence (`CaisseAgentResolver`).
 
+## Deux circuits distincts : l'agent, puis l'agence
+
+```
+Commande créée à Matoto
+  → encaissée par un agent affecté à CBA          (caisse dédiée de l'agent à CBA)
+  → Versement de caisse : caisse agent → caisse de l'agence CBA   (même agence, compte 588)
+  → dette inter-agences : CBA doit à Matoto        (compte 181, calculée depuis l'encaissement)
+  → Règlement inter-agences : CBA → Matoto         (seul mouvement qui solde la dette)
+```
+
+- **L'agent** remet toujours ses espèces à la caisse de **son** agence (versement de caisse), même
+  pour une commande d'une autre agence. « Ma situation » lui montre seulement « Ma caisse · À
+  remettre » et « À remettre à la caisse de {agence} » — jamais « à reverser à Matoto ».
+- **L'agence** porte la dette : Trésorerie → Inter-agences (« À verser » / « À recevoir ») et le
+  rapport d'activité des responsables (« pour {agence} · à reverser »).
+- Un **versement de caisse** et un mouvement **« Transfert entre agences »** ordinaire ne soldent jamais une
+  dette inter-agences : seul le **règlement inter-agences** le fait.
+
 ## Comptabilité
 
 Compte **181000 « Comptes de liaison des agences »**, tiers = agence contrepartie (`compta_tiers`,

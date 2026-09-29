@@ -24,7 +24,7 @@ use Illuminate\Validation\ValidationException;
  *  - aucun n'est déjà engagé dans un règlement actif (index unique `encaissement_actif_id` en
  *    dernier rempart contre une création concurrente).
  *
- * Seule cette nature solde une dette : un mouvement « Entre agences » ordinaire n'a aucune ligne.
+ * Seule cette nature solde une dette : un mouvement « Transfert entre agences » ordinaire n'a aucune ligne.
  */
 class ReglementInterAgencesService
 {
