@@ -4,10 +4,16 @@ namespace App\Support\SavedFilters;
 
 use App\Enums\ProduitStatut;
 use App\Enums\SiteType;
+use App\Enums\StatutCommandeVente;
+use App\Enums\StatutCommission;
+use App\Enums\StatutFactureVente;
 use App\Enums\StockStatut;
 use App\Models\CashbackTransaction;
+use App\Models\CommandeVente;
 use App\Models\Produit;
+use App\Models\Site;
 use App\Models\User;
+use App\Models\Vehicule;
 use App\Support\Commission\CommissionProcessusFilter;
 use Illuminate\Validation\Rule;
 
@@ -41,6 +47,57 @@ final class SavedFilterScopes
         ];
 
         return [
+            'ventes' => [
+                'authorize' => ['viewAny', CommandeVente::class],
+                'share' => 'ventes.update',
+                'sites' => true,
+                'criteria' => [
+                    'periode' => [Rule::in(['all', 'today', 'week', 'month'])],
+                    'statuts' => ['array', Rule::in(array_column(StatutCommandeVente::cases(), 'value'))],
+                    'statut_facture' => [Rule::enum(StatutFactureVente::class)],
+                    'statut_commission' => [Rule::enum(StatutCommission::class)],
+                    'date_debut' => ['date_format:Y-m-d'],
+                    'date_fin' => ['date_format:Y-m-d'],
+                    'vehicule' => $search,
+                    'proprietaire' => $search,
+                    'livreur' => $search,
+                    'client' => $search,
+                    'numero_commande' => $search,
+                ],
+            ],
+            'factures' => [
+                'authorize' => ['viewAny', CommandeVente::class],
+                'share' => 'ventes.update',
+                'sites' => true,
+                'criteria' => [
+                    'periode' => [Rule::in(['today', 'week', 'month', 'tout'])],
+                    'statut' => [Rule::enum(StatutFactureVente::class)],
+                    'livreur_id' => ['ulid', Rule::exists('livreurs', 'id')->where('organization_id', $org)],
+                    'vehicule' => $search,
+                    'chauffeur' => $search,
+                    'convoyeur' => $search,
+                    'proprietaire' => $search,
+                    'client' => $search,
+                    'reference' => $search,
+                ],
+            ],
+            'vehicules' => [
+                'authorize' => ['viewAny', Vehicule::class],
+                'share' => 'vehicules.update',
+                'sites' => true,
+                'criteria' => [
+                    'nom' => $search,
+                    'statut' => [Rule::in(['actif', 'inactif'])],
+                    'type_vehicule_id' => ['ulid', Rule::exists('type_vehicules', 'id')->where('organization_id', $org)],
+                    'usage' => [Rule::in(['vente', 'logistique', 'aucun'])],
+                    'agence_proprietaire_id' => ['string', function (string $attribute, mixed $value, \Closure $fail) use ($org): void {
+                        if ($value !== '__none__' && ! Site::where('organization_id', $org)->whereKey($value)->exists()) {
+                            $fail('Cette agence est indisponible.');
+                        }
+                    }],
+                    'partage' => [Rule::in(['a_faire', 'fait'])],
+                ],
+            ],
             'commissions-livreurs' => $commission,
             'commissions-proprietaires' => [
                 ...$commission,

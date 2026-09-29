@@ -10,6 +10,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -31,10 +32,15 @@ class IndexCommandeVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = $request->routeIs('ventes.index')
+            ? app(SavedFilterService::class)->applyToRequest($request, 'ventes')
+            : null;
+
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $periode = $request->input('periode', 'all');
+        $periode = $request->input('periode') ?? 'all';
         $statuts = array_values(array_filter((array) $request->input('statuts', [])));
         $statutFacture = $request->input('statut_facture');
         $statutCommission = $request->input('statut_commission');
@@ -245,6 +251,7 @@ class IndexCommandeVenteController extends Controller
         }
 
         return Inertia::render('Ventes/Index', [
+            'saved_view' => $savedView,
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
             'nature_filtree' => $natureFiltree->value,

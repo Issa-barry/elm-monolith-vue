@@ -27,7 +27,6 @@ import {
     History,
     MoreVertical,
     Pencil,
-    Search,
     Trash2,
     TriangleAlert,
     Upload,
@@ -77,7 +76,19 @@ interface Vehicule {
     partages_commission: Record<string, string>;
 }
 
-const props = defineProps<{ vehicules: Vehicule[] }>();
+const props = defineProps<{
+    vehicules: Vehicule[];
+    filters: Record<string, unknown>;
+    types_options: { value: string; label: string }[];
+    agences_proprietaires_options: { value: string; label: string }[];
+    vehicule_stats: {
+        total: number;
+        actifs: number;
+        inactifs: number;
+        sansEquipe: number;
+        parType: { label: string; count: number }[];
+    };
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
@@ -86,24 +97,6 @@ const toast = useToast();
 const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
     (vehicule) => `/backoffice/vehicules/${vehicule.id}`,
 );
-
-// Filtres — état unique partagé entre le bouton Filtres desktop et mobile
-// (même DataFilters trigger-only des deux côtés, cf. template).
-const search = ref('');
-const filterType = ref<string | null>(null);
-const filterStatut = ref<string | null>(null);
-const filterUsage = ref<string | null>(null);
-const filterAgence = ref<string | null>(null);
-const filterPartage = ref<string | null>(null);
-
-function resetFilters() {
-    search.value = '';
-    filterType.value = null;
-    filterStatut.value = null;
-    filterUsage.value = null;
-    filterAgence.value = null;
-    filterPartage.value = null;
-}
 
 // Partage Livreur par processus (cf. PartageConformiteVehiculesService) — un partage « à faire »
 // bloque les commandes/transferts du véhicule sur la catégorie concernée (ADR 0006).
@@ -127,26 +120,6 @@ function partagesAffiches(v: Vehicule) {
     })).filter((p) => p.statut !== 'non_applicable');
 }
 
-function partageAFaire(v: Vehicule): boolean {
-    return Object.values(v.partages_commission ?? {}).some(
-        (s) => s === 'a_faire' || s === 'sans_equipe',
-    );
-}
-
-const typeOptions = computed(() =>
-    [...new Set(props.vehicules.map((v) => v.type_label))].sort(),
-);
-
-const agenceOptions = computed(() =>
-    [
-        ...new Set(
-            props.vehicules
-                .map((v) => v.agence_nom)
-                .filter((a): a is string => Boolean(a)),
-        ),
-    ].sort((a, b) => a.localeCompare(b)),
-);
-
 const filterFields = computed<FilterField[]>(() => [
     {
         key: 'statut',
@@ -166,10 +139,10 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Rechercher...',
     },
     {
-        key: 'type',
+        key: 'type_vehicule_id',
         label: 'Type',
         type: 'select',
-        options: typeOptions.value.map((t) => ({ value: t, label: t })),
+        options: props.types_options,
     },
     {
         key: 'usage',
@@ -182,11 +155,11 @@ const filterFields = computed<FilterField[]>(() => [
         ],
     },
     {
-        key: 'agence',
-        label: 'Agence',
+        key: 'agence_proprietaire_id',
+        label: 'Agence du propriétaire',
         type: 'select',
         options: [
-            ...agenceOptions.value.map((a) => ({ value: a, label: a })),
+            ...props.agences_proprietaires_options,
             { value: '__none__', label: 'Non rattachée' },
         ],
     },
@@ -201,79 +174,8 @@ const filterFields = computed<FilterField[]>(() => [
     },
 ]);
 
-function matchesUsageFilter(v: Vehicule, value: string): boolean {
-    if (value === 'aucun') return !v.livraison_vente && !v.livraison_logistique;
-    return value === 'vente' ? v.livraison_vente : v.livraison_logistique;
-}
-
-const filteredVehicules = computed(() =>
-    props.vehicules.filter((v) => {
-        const q = search.value.trim().toLowerCase();
-        const matchSearch =
-            !q ||
-            v.nom_vehicule.toLowerCase().includes(q) ||
-            v.immatriculation.toLowerCase().includes(q) ||
-            v.type_label.toLowerCase().includes(q) ||
-            (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.proprietaire_telephone ?? '')
-                .replace(/\D/g, '')
-                .includes(q.replace(/\D/g, '')) ||
-            (v.agence_nom ?? '').toLowerCase().includes(q) ||
-            (v.equipe_nom ?? '').toLowerCase().includes(q) ||
-            v.capacites.some((c) => String(c.capacite_max).includes(q));
-        const matchType =
-            !filterType.value || v.type_label === filterType.value;
-        const matchStatut = !filterStatut.value
-            ? true
-            : filterStatut.value === 'actif'
-              ? v.is_active
-              : !v.is_active;
-        const matchUsage =
-            !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
-        const matchAgence =
-            !filterAgence.value ||
-            (filterAgence.value === '__none__'
-                ? !v.agence_nom
-                : v.agence_nom === filterAgence.value);
-        const matchPartage =
-            !filterPartage.value ||
-            (filterPartage.value === 'a_faire'
-                ? partageAFaire(v)
-                : !partageAFaire(v));
-        return (
-            matchSearch &&
-            matchType &&
-            matchStatut &&
-            matchUsage &&
-            matchAgence &&
-            matchPartage
-        );
-    }),
-);
-
-// Mini stats — calculées sur l'ensemble des véhicules (indépendantes des filtres actifs),
-// pour donner une vue d'ensemble constante pendant qu'on filtre la liste en dessous.
-const vehiculeStats = computed(() => {
-    const total = props.vehicules.length;
-    const actifs = props.vehicules.filter((v) => v.is_active).length;
-    const sansEquipe = props.vehicules.filter((v) => !v.equipe_nom).length;
-
-    const parTypeMap = new Map<string, number>();
-    for (const v of props.vehicules) {
-        parTypeMap.set(v.type_label, (parTypeMap.get(v.type_label) ?? 0) + 1);
-    }
-    const parType = [...parTypeMap.entries()]
-        .map(([label, count]) => ({ label, count }))
-        .sort((a, b) => b.count - a.count);
-
-    return {
-        total,
-        actifs,
-        inactifs: total - actifs,
-        sansEquipe,
-        parType,
-    };
-});
+const filteredVehicules = computed(() => props.vehicules);
+const vehiculeStats = computed(() => props.vehicule_stats);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -345,42 +247,15 @@ function confirmDelete(v: Vehicule) {
                 <div class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search + Filtres (même état que le desktop, cf. filterFields) -->
-            <div class="flex items-center gap-2 px-3 py-2">
-                <div class="relative flex-1">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="search"
-                        type="search"
-                        placeholder="Rechercher..."
-                        class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                </div>
+            <!-- Vues et filtres : même état serveur que sur desktop. -->
+            <div class="flex flex-wrap items-center gap-2 px-3 py-2">
                 <DataFilters
                     trigger-only
-                    :values="{
-                        nom: search,
-                        type: filterType ?? '',
-                        usage: filterUsage ?? '',
-                        statut: filterStatut ?? '',
-                        agence: filterAgence ?? '',
-                        partage: filterPartage ?? '',
-                    }"
+                    saved-filter-scope="vehicules"
+                    url="/backoffice/vehicules"
+                    :values="filters"
                     :fields="filterFields"
                     :result-count="filteredVehicules.length"
-                    @apply="
-                        (vals) => {
-                            search = (vals.nom as string) || '';
-                            filterType = (vals.type as string) || null;
-                            filterUsage = (vals.usage as string) || null;
-                            filterStatut = (vals.statut as string) || null;
-                            filterAgence = (vals.agence as string) || null;
-                            filterPartage = (vals.partage as string) || null;
-                        }
-                    "
-                    @reset="resetFilters"
                 />
             </div>
 
@@ -633,31 +508,11 @@ function confirmDelete(v: Vehicule) {
                     <template #filters>
                         <DataFilters
                             trigger-only
-                            :values="{
-                                nom: search,
-                                type: filterType ?? '',
-                                usage: filterUsage ?? '',
-                                statut: filterStatut ?? '',
-                                agence: filterAgence ?? '',
-                                partage: filterPartage ?? '',
-                            }"
+                            saved-filter-scope="vehicules"
+                            url="/backoffice/vehicules"
+                            :values="filters"
                             :fields="filterFields"
                             :result-count="filteredVehicules.length"
-                            @apply="
-                                (vals) => {
-                                    search = (vals.nom as string) || '';
-                                    filterType = (vals.type as string) || null;
-                                    filterUsage =
-                                        (vals.usage as string) || null;
-                                    filterStatut =
-                                        (vals.statut as string) || null;
-                                    filterAgence =
-                                        (vals.agence as string) || null;
-                                    filterPartage =
-                                        (vals.partage as string) || null;
-                                }
-                            "
-                            @reset="resetFilters"
                         />
                     </template>
                 </ListPageActions>

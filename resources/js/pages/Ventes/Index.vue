@@ -773,7 +773,9 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Search + Filtres -->
-            <div class="flex items-center gap-2 border-t border-b px-4 py-2">
+            <div
+                class="flex flex-wrap items-center gap-2 border-t border-b px-4 py-2"
+            >
                 <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -787,7 +789,16 @@ function confirmDelete(c: Commande) {
                 </div>
                 <DataFilters
                     trigger-only
-                    url="/backoffice/ventes"
+                    :url="
+                        nature_filtree === 'distribution_client'
+                            ? '/backoffice/distributions'
+                            : '/backoffice/ventes'
+                    "
+                    :saved-filter-scope="
+                        nature_filtree === 'distribution_client'
+                            ? undefined
+                            : 'ventes'
+                    "
                     :base-params="{ periode: 'all' }"
                     :values="filterValues"
                     :sites="sites"
@@ -868,7 +879,16 @@ function confirmDelete(c: Commande) {
                         <template #filters>
                             <DataFilters
                                 trigger-only
-                                url="/backoffice/ventes"
+                                :url="
+                                    nature_filtree === 'distribution_client'
+                                        ? '/backoffice/distributions'
+                                        : '/backoffice/ventes'
+                                "
+                                :saved-filter-scope="
+                                    nature_filtree === 'distribution_client'
+                                        ? undefined
+                                        : 'ventes'
+                                "
                                 :base-params="{ periode: 'all' }"
                                 :values="filterValues"
                                 :sites="sites"

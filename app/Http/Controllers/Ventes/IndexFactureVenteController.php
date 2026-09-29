@@ -9,6 +9,7 @@ use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\Site;
+use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,6 +22,9 @@ class IndexFactureVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'factures');
+
         $user = auth()->user();
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
@@ -28,8 +32,8 @@ class IndexFactureVenteController extends Controller
         // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
         $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
 
-        $periode = $request->input('periode', 'month');
-        $statut = $request->input('statut', 'tous');
+        $periode = $request->input('periode') ?? 'month';
+        $statut = $request->input('statut') ?? 'tous';
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $livreurId = $request->input('livreur_id');
         $vehiculeRecherche = $request->input('vehicule');
@@ -218,6 +222,7 @@ class IndexFactureVenteController extends Controller
         ];
 
         return Inertia::render('Factures/Index', [
+            'saved_view' => $savedView,
             'factures' => $factures->values(),
             'totaux' => $totaux,
             'periode' => $periode,
