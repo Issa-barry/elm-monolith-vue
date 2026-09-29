@@ -52,7 +52,12 @@ const rapportVide = (): RapportActivite => ({
         total_lignes: 0,
     },
     encaissements: {
-        resume: { nombre: 0, montant: 0 },
+        resume: {
+            nombre: 0,
+            montant: 0,
+            pour_autres_agences_nombre: 0,
+            pour_autres_agences_montant: 0,
+        },
         par_moyen: [],
         lignes: [],
         total_lignes: 0,
@@ -414,6 +419,7 @@ describe('Rapports/Activite', () => {
                         client: 'Client A',
                         agent: null,
                         site_nom: 'Matoto',
+                        encaisse_a: null,
                         montant: 800_000,
                         encaisse: 550_000,
                         reste: 250_000,

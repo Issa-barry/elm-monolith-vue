@@ -4,10 +4,7 @@ namespace App\Http\Controllers\Ventes;
 
 use App\Http\Controllers\Controller;
 use App\Models\FactureVente;
-use App\Models\Site;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
-use App\Services\Tresorerie\CaisseAgentResolver;
-use App\Services\Tresorerie\MoyensEncaissementResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,8 +12,8 @@ use Illuminate\Http\Request;
  * « Encaisser une commande d'une autre agence » (ADR 0012) : retrouve UNE facture de l'organisation
  * par sa référence exacte — les listes Ventes/Factures restent limitées aux agences de
  * l'utilisateur — et renvoie ce qu'il faut pour l'encaisser dans l'une de SES agences : montant
- * restant, agences proposées (AgenceEncaissementResolver) avec leurs moyens de paiement et la
- * disponibilité des espèces. Lecture seule : l'encaissement lui-même passe par
+ * restant, agences proposées avec leurs moyens de paiement et la disponibilité des espèces
+ * (AgenceEncaissementResolver::pourEcran(), le même calcul que les autres écrans d'encaissement). Lecture seule : l'encaissement lui-même passe par
  * StoreEncaissementVenteController, qui rejoue tous les contrôles.
  *
  * Référence exacte seulement (jamais une recherche partielle) : on ne donne accès qu'à la facture
@@ -24,12 +21,8 @@ use Illuminate\Http\Request;
  */
 class RechercherFactureAutreAgenceController extends Controller
 {
-    public function __invoke(
-        Request $request,
-        AgenceEncaissementResolver $agences,
-        MoyensEncaissementResolver $moyens,
-        CaisseAgentResolver $caisses,
-    ): JsonResponse {
+    public function __invoke(Request $request, AgenceEncaissementResolver $agences): JsonResponse
+    {
         $user = $request->user();
         abort_unless($user->can('factures.encaisser') && $user->can(AgenceEncaissementResolver::PERMISSION), 403, 'Action non autorisée.');
 
@@ -52,9 +45,7 @@ class RechercherFactureAutreAgenceController extends Controller
             return response()->json(['message' => 'Aucune facture ne correspond à cette référence.'], 404);
         }
 
-        $options = $agences->options($user, $facture);
-        $sitesAvecCaisse = $caisses->sitesAvecCaisseActive($user->organization_id, (string) $user->id);
-        $moyensParSite = $moyens->parSite($user->organization_id, $options->pluck('id'));
+        $encaissement = $agences->pourEcran($user, [$facture])[$facture->id];
 
         return response()->json([
             'facture' => [
@@ -70,14 +61,9 @@ class RechercherFactureAutreAgenceController extends Controller
                 'statut_facture' => $facture->statut_facture?->value,
                 'statut_label' => $facture->statut_label,
             ],
-            'raison_non_encaissable' => $this->raisonNonEncaissable($facture),
-            'agences' => $options->map(fn (Site $site) => [
-                'site_id' => $site->id,
-                'nom' => $site->nom,
-                'moyens' => $moyensParSite[$site->id] ?? [],
-                'peut_encaisser_especes' => in_array($site->id, $sitesAvecCaisse, true),
-            ])->values(),
-            'agence_defaut' => $agences->parDefaut($user, $facture, $options),
+            'raison_non_encaissable' => $this->raisonNonEncaissable($facture) ?? $encaissement['message'],
+            'agences' => $encaissement['agences'],
+            'agence_defaut' => $encaissement['agence_defaut'],
         ]);
     }
 

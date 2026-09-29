@@ -28,6 +28,9 @@ graphique, non filtrée par agence.
    `date_encaissement`), créances (état actuel, toutes dates). Aucun « reste » calculé par différence
    entre blocs — l'agent qui encaisse n'est pas toujours celui qui a vendu, et un encaissement du jour
    solde souvent une vente ancienne.
+   Depuis l'ADR 0012 (29/09/2026), deux axes d'agence : ventes et créances → agence de la
+   commande ; encaissements → agence qui a reçu l'argent (`site_encaissement_id`). Les écrans et
+   exports affichent « Créée à » et « Encaissée à ».
 5. **Créances à l'état actuel** en lot 1 ; la reconstitution à une date passée est une évolution.
 6. **Caisse = grand livre** (solde de début + mouvements = solde de fin), dans un service et un
    composant réutilisés par la future fiche caisse. L'onglet s'appelle « Caisse » : sans comptage

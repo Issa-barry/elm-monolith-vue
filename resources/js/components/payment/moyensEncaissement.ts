@@ -62,6 +62,18 @@ export interface AgenceEncaissement {
     peut_encaisser_especes: boolean;
 }
 
+/**
+ * Tout ce qu'un écran reçoit du backend pour encaisser une facture
+ * (AgenceEncaissementResolver::pourEcran()) : agences de l'utilisateur, agence présélectionnée,
+ * agence de la commande et, s'il ne peut encaisser nulle part, la raison.
+ */
+export interface EncaissementAgences {
+    agences: AgenceEncaissement[];
+    agence_defaut: string | null;
+    agence_commande: { id: string; nom: string } | null;
+    message: string | null;
+}
+
 const ESPECES: ModeOption = {
     key: 'especes',
     label: 'Espèces',

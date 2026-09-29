@@ -3,6 +3,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -73,6 +74,8 @@ interface FactureItem {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     created_at: string;
     encaissements: EncaissementItem[];
 }
@@ -972,6 +975,7 @@ function _progressPercent(f: FactureItem): number {
             :especes-disponibles="factureActive?.peut_encaisser_especes ?? true"
             :processing="encaissProcessing"
             :errors="encaissErrors"
+            :encaissement-agences="factureActive?.encaissement_agences ?? null"
             @submit="handleEncaissSubmit"
         />
 

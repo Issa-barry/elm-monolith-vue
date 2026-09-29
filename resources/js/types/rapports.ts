@@ -6,7 +6,10 @@ export interface LigneFacture {
     date: string;
     client: string | null;
     agent: string | null;
+    /** « Créée à » : agence de la commande. */
     site_nom: string | null;
+    /** « Encaissée à » : agence(s) où ses encaissements ont été reçus (ADR 0012), null sans encaissement. */
+    encaisse_a: string | null;
     montant: number;
     encaisse: number;
     reste: number;
@@ -29,7 +32,12 @@ export interface LigneEncaissement {
     facture_reference: string;
     client: string | null;
     agent: string | null;
+    /** « Créée à » : agence de la commande. */
     site_nom: string | null;
+    /** « Encaissée à » : agence qui a reçu l'argent (ADR 0012). */
+    encaisse_a: string | null;
+    /** Encaissé pour une commande d'une autre agence : à reverser. */
+    pour_autre_agence: boolean;
 }
 
 export type AnomalieMobileMoney =
@@ -115,7 +123,12 @@ export interface RapportActivite {
         total_lignes: number;
     };
     encaissements: {
-        resume: { nombre: number; montant: number };
+        resume: {
+            nombre: number;
+            montant: number;
+            pour_autres_agences_nombre: number;
+            pour_autres_agences_montant: number;
+        };
         par_moyen: {
             cle: string;
             libelle: string;

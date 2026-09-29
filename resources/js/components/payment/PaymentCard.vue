@@ -12,6 +12,7 @@ import { computed, ref, watch } from 'vue';
 import {
     type AgenceEncaissement,
     construireOptions,
+    type EncaissementAgences,
     type EncaissementPayload,
     type ModeOption,
     type MoyenEncaissement,
@@ -59,6 +60,10 @@ interface Props {
     agenceDefaut?: string | null;
     /** Agence de la commande : un bandeau d'information s'affiche si l'argent est reçu ailleurs. */
     agenceCommande?: { id: string; nom: string } | null;
+    /** Regroupe agences / agence présélectionnée / agence de la commande / raison d'un refus, tels que
+     * fournis par le backend (AgenceEncaissementResolver::pourEcran()) — prioritaire sur les trois
+     * props précédentes. L'agence d'encaissement est toujours une agence de l'utilisateur (ADR 0012). */
+    encaissementAgences?: EncaissementAgences | null;
 }
 
 // Texte identique à CaisseAgentResolver::MESSAGE_SANS_CAISSE (renvoyé aussi par le backend si le
@@ -87,6 +92,7 @@ const props = withDefaults(defineProps<Props>(), {
     agences: () => [],
     agenceDefaut: null,
     agenceCommande: null,
+    encaissementAgences: null,
 });
 
 const decaissement = computed(() => props.sens === 'decaissement');
@@ -94,11 +100,27 @@ const decaissement = computed(() => props.sens === 'decaissement');
 // Agence d'encaissement (ADR 0012) : sans liste d'agences, l'écran encaisse dans l'agence de la
 // facture avec les moyens reçus en props — comportement de tous les écrans existants.
 const siteEncaissementId = ref('');
-const avecChoixAgence = computed(() => props.agences.length > 0);
+const agencesProposees = computed<AgenceEncaissement[]>(
+    () => props.encaissementAgences?.agences ?? props.agences,
+);
+const agenceDefautProposee = computed(() =>
+    props.encaissementAgences
+        ? props.encaissementAgences.agence_defaut
+        : props.agenceDefaut,
+);
+const agenceDeLaCommande = computed(() =>
+    props.encaissementAgences
+        ? props.encaissementAgences.agence_commande
+        : props.agenceCommande,
+);
+// Aucune agence où l'utilisateur peut encaisser (non affecté, pas autorisé) : bloquant.
+const refusAgence = computed(() => props.encaissementAgences?.message ?? null);
+const avecChoixAgence = computed(() => agencesProposees.value.length > 0);
 const agenceActive = computed(
     () =>
-        props.agences.find((a) => a.site_id === siteEncaissementId.value) ??
-        null,
+        agencesProposees.value.find(
+            (a) => a.site_id === siteEncaissementId.value,
+        ) ?? null,
 );
 const moyensEffectifs = computed(() =>
     avecChoixAgence.value ? (agenceActive.value?.moyens ?? []) : props.moyens,
@@ -111,9 +133,9 @@ const especesEffectives = computed(() =>
 const pourAutreAgence = computed(
     () =>
         avecChoixAgence.value &&
-        !!props.agenceCommande &&
+        !!agenceDeLaCommande.value &&
         !!agenceActive.value &&
-        agenceActive.value.site_id !== props.agenceCommande.id,
+        agenceActive.value.site_id !== agenceDeLaCommande.value.id,
 );
 
 const modeOptions = computed(() =>
@@ -195,7 +217,9 @@ watch(
         if (open) {
             montant.value = props.solde > 0 ? props.solde : null;
             siteEncaissementId.value =
-                props.agenceDefaut ?? props.agences[0]?.site_id ?? '';
+                agenceDefautProposee.value ??
+                agencesProposees.value[0]?.site_id ??
+                '';
             selectedKey.value = modeInitial();
             referencePaiement.value = '';
         }
@@ -240,6 +264,7 @@ function close() {
 }
 
 function handleSubmit() {
+    if (refusAgence.value) return;
     if (!montant.value || montant.value <= 0) return;
     const mode = modeActif.value;
     if (!mode || modeIndisponible(mode)) return;
@@ -306,6 +331,15 @@ function handleSubmit() {
                 </div>
             </div>
 
+            <!-- Aucune agence où encaisser : l'opération est réellement bloquée (rouge). -->
+            <p
+                v-if="refusAgence"
+                class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                data-testid="refus-agence-encaissement"
+            >
+                {{ refusAgence }}
+            </p>
+
             <!-- Agence d'encaissement (ADR 0012) : toujours l'une des agences de l'utilisateur. -->
             <div v-if="avecChoixAgence" data-testid="agence-encaissement">
                 <Label class="mb-1.5 block text-sm"
@@ -313,9 +347,9 @@ function handleSubmit() {
                     <span class="text-destructive">*</span></Label
                 >
                 <Select
-                    v-if="agences.length > 1"
+                    v-if="agencesProposees.length > 1"
                     v-model="siteEncaissementId"
-                    :options="agences"
+                    :options="agencesProposees"
                     option-label="nom"
                     option-value="site_id"
                     placeholder="Choisir l'agence qui reçoit le paiement"
@@ -342,9 +376,9 @@ function handleSubmit() {
                     class="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
                     data-testid="bandeau-autre-agence"
                 >
-                    Commande de {{ agenceCommande?.nom }} encaissée à
+                    Commande de {{ agenceDeLaCommande?.nom }} encaissée à
                     {{ agenceActive?.nom }} : {{ agenceActive?.nom }} devra
-                    reverser ce montant à {{ agenceCommande?.nom }}.
+                    reverser ce montant à {{ agenceDeLaCommande?.nom }}.
                 </p>
             </div>
 
@@ -524,6 +558,7 @@ function handleSubmit() {
             <Button
                 :disabled="
                     processing ||
+                    !!refusAgence ||
                     !montant ||
                     !modeActif ||
                     soldeInsuffisant ||

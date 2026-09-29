@@ -81,8 +81,9 @@ class StoreEncaissementVenteController extends Controller
             'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
         ]);
 
-        // Agence qui reçoit réellement l'argent (ADR 0012) : celle de la facture par défaut ; une autre
-        // agence seulement avec `factures.encaisser_autre_agence` et si l'utilisateur y est affecté.
+        // Agence qui reçoit réellement l'argent (ADR 0012) : toujours une agence de l'utilisateur qui
+        // encaisse — jamais l'agence de la facture par défaut ; une agence autre que celle de la
+        // commande exige `factures.encaisser_autre_agence` ; sans agence d'affectation, refus.
         // Tout ce qui suit (moyens, caisse dédiée, pièce comptable) se rapporte à CETTE agence.
         $siteEncaissementId = app(AgenceEncaissementResolver::class)->resoudre(
             $request->user(),

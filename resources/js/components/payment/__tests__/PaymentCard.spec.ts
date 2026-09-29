@@ -470,3 +470,51 @@ describe('PaymentCard — agence d’encaissement (ADR 0012)', () => {
         ).toBe(true);
     });
 });
+
+describe('PaymentCard — agences fournies par l’écran (encaissementAgences)', () => {
+    it('présélectionne l’agence de l’utilisateur et annonce le reversement', () => {
+        const wrapper = monter({
+            encaissementAgences: {
+                agences: [
+                    {
+                        site_id: 'cba',
+                        nom: 'CBA',
+                        moyens: [],
+                        peut_encaisser_especes: true,
+                    },
+                ],
+                agence_defaut: 'cba',
+                agence_commande: { id: 'matoto', nom: 'Matoto' },
+                message: null,
+            },
+        });
+
+        expect(
+            wrapper.get('[data-testid="agence-encaissement"]').text(),
+        ).toContain('CBA');
+        expect(
+            wrapper.get('[data-testid="bandeau-autre-agence"]').text(),
+        ).toContain('Commande de Matoto encaissée à CBA');
+        expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('bloque l’encaissement et explique pourquoi quand l’utilisateur n’a aucune agence possible', async () => {
+        const wrapper = monter({
+            encaissementAgences: {
+                agences: [],
+                agence_defaut: null,
+                agence_commande: { id: 'matoto', nom: 'Matoto' },
+                message:
+                    "Vous n'êtes affecté à aucune agence. Vous ne pouvez pas effectuer cet encaissement.",
+            },
+        });
+
+        const refus = wrapper.get('[data-testid="refus-agence-encaissement"]');
+        expect(refus.text()).toContain('Vous n');
+        // Opération réellement bloquée : rouge.
+        expect(refus.classes().join(' ')).toContain('destructive');
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+        await confirmer(wrapper).trigger('click');
+        expect(wrapper.emitted('submit')).toBeUndefined();
+    });
+});

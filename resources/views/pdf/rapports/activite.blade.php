@@ -94,13 +94,13 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
 <p class="note">Encaissé {{ $gnf($v['resume']['encaisse']) }} GNF et reste {{ $gnf($v['resume']['reste']) }} GNF sur ces ventes (état actuel).
     @if ($v['resume']['annulees_nombre'] > 0) {{ $v['resume']['annulees_nombre'] }} vente(s) annulée(s) ou retournée(s) exclue(s) du chiffre d'affaires. @endif</p>
 <table class="data">
-    <thead><tr><th>Facture</th><th>Date</th><th>Client</th><th>Agent</th><th>Agence</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
+    <thead><tr><th>Facture</th><th>Date</th><th>Client</th><th>Agent</th><th>Créée à</th><th>Encaissée à</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
     <tbody>
     @forelse ($v['lignes'] as $l)
-        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td>
+        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td><td>{{ $l['encaisse_a'] ?? '—' }}</td>
             <td class="right">{{ $gnf($l['montant']) }}</td><td class="right">{{ $gnf($l['encaisse']) }}</td><td class="right">{{ $gnf($l['reste']) }}</td><td>{{ $l['statut_label'] }}</td></tr>
     @empty
-        <tr><td colspan="9" class="vide">Aucune vente sur la période.</td></tr>
+        <tr><td colspan="10" class="vide">Aucune vente sur la période.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -115,17 +115,20 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
     @if (count($e['par_moyen']) === 0)<td>Aucun encaissement.</td>@endif
     </tr>
 </table>
+@if ($e['resume']['pour_autres_agences_nombre'] > 0)
+<p class="note">Dont {{ $gnf($e['resume']['pour_autres_agences_montant']) }} GNF encaissés pour des commandes d'autres agences ({{ $e['resume']['pour_autres_agences_nombre'] }}) : à reverser à l'agence de la commande.</p>
+@endif
 <table class="data">
-    <thead><tr><th>Date</th><th>Saisi le</th><th>Facture</th><th>Client</th><th>Agent</th><th>Moyen</th><th>Référence</th><th class="right">Montant</th></tr></thead>
+    <thead><tr><th>Date</th><th>Saisi le</th><th>Facture</th><th>Client</th><th>Agent</th><th>Créée à</th><th>Encaissée à</th><th>Moyen</th><th>Référence</th><th class="right">Montant</th></tr></thead>
     <tbody>
     @forelse ($e['lignes'] as $l)
         <tr><td>{{ \Carbon\Carbon::parse($l['date_encaissement'])->format('d/m/Y') }}</td><td>{{ $l['saisi_le'] ? \Carbon\Carbon::parse($l['saisi_le'])->format('d/m/Y H:i') : '—' }}</td><td>{{ $l['facture_reference'] }}</td>
-            <td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['moyen_libelle'] }}</td><td>{{ $l['reference_paiement'] ?? '—' }}</td><td class="right">{{ $gnf($l['montant']) }}</td></tr>
+            <td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td><td>{{ $l['encaisse_a'] ?? '—' }}</td><td>{{ $l['moyen_libelle'] }}</td><td>{{ $l['reference_paiement'] ?? '—' }}</td><td class="right">{{ $gnf($l['montant']) }}</td></tr>
     @empty
-        <tr><td colspan="8" class="vide">Aucun encaissement sur la période.</td></tr>
+        <tr><td colspan="10" class="vide">Aucun encaissement sur la période.</td></tr>
     @endforelse
     @if (count($e['lignes']) > 0)
-        <tr class="total"><td colspan="7" class="right">TOTAL</td><td class="right">{{ $gnf($e['resume']['montant']) }}</td></tr>
+        <tr class="total"><td colspan="9" class="right">TOTAL</td><td class="right">{{ $gnf($e['resume']['montant']) }}</td></tr>
     @endif
     </tbody>
 </table>

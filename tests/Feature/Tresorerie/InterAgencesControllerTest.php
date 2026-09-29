@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Tresorerie;
 
+use App\Enums\AuditEvent;
 use App\Enums\NatureMouvementFonds;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutMouvementFonds;
@@ -14,6 +15,7 @@ use App\Models\MouvementFondsEncaissement;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\AuditLogService;
 use App\Services\Tresorerie\DetteInterAgencesService;
 use App\Services\Tresorerie\MouvementFondsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -371,20 +373,43 @@ class InterAgencesControllerTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('facture.encaissements.0.encaisse_a', 'Agence Kindia')
+                ->where('facture.encaissements.0.pour_autre_agence', true)
                 ->where('facture.encaissements.0.reversement.statut', DetteInterAgencesService::EN_COURS)
                 ->where('facture.encaissements.0.reversement.statut_label', 'En cours de versement')
                 ->where('facture.encaissements.0.reversement.mouvement_reference', $reference));
     }
 
-    public function test_la_fiche_commande_n_affiche_rien_de_plus_pour_un_encaissement_dans_la_meme_agence(): void
+    public function test_la_fiche_commande_affiche_l_agence_d_un_encaissement_dans_la_meme_agence_sans_reversement(): void
     {
         $orangeA = $this->creerSupportAgence($this->agenceA->id, 'mobile_money', '561100', 'orange_money');
         $x = $this->encaissement(200_000, $this->agenceA, $orangeA);
 
         $this->actingAs($this->user)->get(route('ventes.show', $x->facture->commande))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('facture.encaissements.0.encaisse_a', null)
+                ->where('facture.encaissements.0.encaisse_a', 'Site Principal')
+                ->where('facture.encaissements.0.pour_autre_agence', false)
                 ->where('facture.encaissements.0.reversement', null));
+    }
+
+    public function test_l_historique_de_la_commande_affiche_le_nom_de_l_agence_jamais_son_identifiant(): void
+    {
+        $x = $this->encaissement(200_000);
+        $commande = $x->facture->commande;
+        app(AuditLogService::class)->record($commande, AuditEvent::ENCAISSEMENT_ADDED, $this->user, null, [
+            'montant' => 200_000.0,
+            'site_encaissement_id' => $this->agenceB->id,
+        ]);
+
+        $this->actingAs($this->user)->get(route('ventes.show', $commande))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('historiques', function ($historiques) {
+                    $valeurs = collect($historiques)->firstWhere('event_code', AuditEvent::ENCAISSEMENT_ADDED->value)['new_values'];
+
+                    return ($valeurs['agence_encaissement'] ?? null) === 'Agence Kindia'
+                        && ! array_key_exists('site_encaissement_id', $valeurs)
+                        && ! in_array($this->agenceB->id, $valeurs, true);
+                }));
     }
 
     private function badge(User $acteur): int

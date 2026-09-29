@@ -338,12 +338,24 @@ const chiffresVentes = computed(() => {
     ];
 });
 
-const chiffresEncaissements = computed(() =>
-    props.rapport.encaissements.par_moyen.map((m) => ({
+const chiffresEncaissements = computed(() => {
+    const r = props.rapport.encaissements.resume;
+    const moyens = props.rapport.encaissements.par_moyen.map((m) => ({
         libelle: m.libelle,
         valeur: formatGNF(m.montant),
-    })),
-);
+    }));
+
+    // Encaissés pour des commandes d'autres agences (ADR 0012) : à reverser.
+    return r.pour_autres_agences_nombre > 0
+        ? [
+              ...moyens,
+              {
+                  libelle: "Pour d'autres agences (à reverser)",
+                  valeur: formatGNF(r.pour_autres_agences_montant),
+              },
+          ]
+        : moyens;
+});
 
 const chiffresDettes = computed(() => {
     const c = props.rapport.creances.resume;

@@ -25,7 +25,13 @@ use Illuminate\Support\Facades\DB;
  *   facture est recalculé par CommandeVenteService::recalculerTotaux()). Encaissé / reste = état
  *   ACTUEL de ces factures, tous encaissements confondus.
  * - Encaissements : encaissements dont la `date_encaissement` est dans la période, agent = auteur
- *   de l'encaissement — quelle que soit la date de la vente.
+ *   de l'encaissement — quelle que soit la date de la vente. Axe TRÉSORERIE : une agence y voit ce
+ *   qu'ELLE a encaissé (`site_encaissement_id`, ADR 0012), y compris pour des commandes d'autres
+ *   agences (« Créée à » ≠ « Encaissée à », à reverser), jamais ce qu'une autre agence a encaissé
+ *   pour elle.
+ *
+ * Ventes et créances restent sur l'axe COMMERCIAL : agence de la commande (`factures_ventes.site_id`),
+ * avec en information l'agence (ou les agences) où leurs encaissements ont été reçus.
  * - Créances : factures impayées ou partielles à l'état actuel, TOUTES dates confondues (les vieilles
  *   dettes restent visibles), agent = créateur de la vente.
  * - Mobile Money : sous-ensemble Mobile Money des encaissements, avec contrôle des références.
@@ -100,8 +106,8 @@ class RapportActiviteService
             ->selectRaw($this->encaisseSql().' as encaisse')
             ->orderByDesc('fv.created_at')
             ->when($limite !== null, fn (Builder $q) => $q->limit($limite))
-            ->get()
-            ->map(fn ($l) => $this->ligneFacture($l));
+            ->get();
+        $lignes = $this->avecAgencesEncaissement($lignes)->map(fn ($l) => $this->ligneFacture($l));
 
         return [
             'resume' => [
@@ -128,6 +134,12 @@ class RapportActiviteService
             ->selectRaw('COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
             ->first();
 
+        // Encaissés par l'agence pour des commandes d'autres agences : à reverser (ADR 0012).
+        $pourAutres = $this->encaissementsBase($p)
+            ->whereColumn('ev.site_encaissement_id', '<>', 'fv.site_id')
+            ->selectRaw('COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
+            ->first();
+
         $parMoyen = $this->encaissementsBase($p)
             ->groupBy('ev.mode_paiement', 'ev.operateur_mobile_money')
             ->selectRaw('ev.mode_paiement, ev.operateur_mobile_money, COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
@@ -148,6 +160,8 @@ class RapportActiviteService
             'resume' => [
                 'nombre' => (int) $resume->nombre,
                 'montant' => round((float) $resume->montant, 2),
+                'pour_autres_agences_nombre' => (int) $pourAutres->nombre,
+                'pour_autres_agences_montant' => round((float) $pourAutres->montant, 2),
             ],
             'par_moyen' => $parMoyen->all(),
             'lignes' => $lignes->all(),
@@ -183,7 +197,8 @@ class RapportActiviteService
             ->selectRaw($this->encaisseSql().' as encaisse')
             ->orderBy('fv.created_at')
             ->when($limite !== null, fn (Builder $q) => $q->limit($limite))
-            ->get()
+            ->get();
+        $lignes = $this->avecAgencesEncaissement($lignes)
             ->map(fn ($l) => [
                 ...$this->ligneFacture($l),
                 'anciennete_jours' => (int) CarbonImmutable::parse($l->created_at)->startOfDay()
@@ -357,7 +372,11 @@ class RapportActiviteService
             ->leftJoin('commandes_ventes as cv', 'cv.id', '=', 'fv.commande_vente_id')
             ->where('fv.organization_id', $p->organizationId)
             ->whereNull('fv.deleted_at')
-            ->when($p->siteIds !== null, fn (Builder $q) => $q->whereIn('fv.site_id', $p->siteIds))
+            // Axe trésorerie : l'agence qui a reçu l'argent (ADR 0012) — un encaissement antérieur sans
+            // agence d'encaissement renseignée reste à l'agence de sa facture.
+            ->when($p->siteIds !== null, fn (Builder $q) => $q->where(fn (Builder $w) => $w
+                ->whereIn('ev.site_encaissement_id', $p->siteIds)
+                ->orWhere(fn (Builder $legacy) => $legacy->whereNull('ev.site_encaissement_id')->whereIn('fv.site_id', $p->siteIds))))
             ->when($p->agentId !== null, fn (Builder $q) => $q->where('ev.created_by', $p->agentId))
             ->whereBetween('ev.date_encaissement', [$p->debut()->toDateString(), $p->fin()->toDateString()]);
     }
@@ -393,10 +412,12 @@ class RapportActiviteService
     private function lignesEncaissements(Builder $base, ?int $limite): Collection
     {
         return $this->avecNoms($base, 'ev.created_by')
+            ->leftJoin('sites as se', 'se.id', '=', 'ev.site_encaissement_id')
             ->select([
                 'ev.id', 'ev.date_encaissement', 'ev.created_at', 'ev.montant', 'ev.mode_paiement',
                 'ev.operateur_mobile_money', 'ev.reference_paiement',
                 'fv.id as facture_id', 'fv.reference as facture_reference',
+                'se.nom as encaisse_a',
                 ...$this->colonnesNoms(),
             ])
             ->orderByDesc('ev.date_encaissement')
@@ -421,9 +442,39 @@ class RapportActiviteService
                     'facture_reference' => $l->facture_reference,
                     'client' => $this->nomClient($l),
                     'agent' => $this->nomAgent($l),
+                    // « Créée à » (agence de la commande) et « Encaissée à » (agence qui a reçu l'argent).
                     'site_nom' => $l->site_nom,
+                    'encaisse_a' => $l->encaisse_a ?? $l->site_nom,
+                    'pour_autre_agence' => $l->encaisse_a !== null && $l->site_nom !== null && $l->encaisse_a !== $l->site_nom,
                 ];
             });
+    }
+
+    /**
+     * Agences où chaque facture a été encaissée (« Encaissée à »), en une requête : noms distincts,
+     * dans l'ordre alphabétique — une facture payée en plusieurs fois peut l'être dans deux agences.
+     *
+     * @param  Collection<int, object>  $lignes
+     * @return Collection<int, object>
+     */
+    private function avecAgencesEncaissement(Collection $lignes): Collection
+    {
+        if ($lignes->isEmpty()) {
+            return $lignes;
+        }
+
+        $parFacture = DB::table('encaissements_ventes as ev')
+            ->join('factures_ventes as fv', 'fv.id', '=', 'ev.facture_vente_id')
+            ->leftJoin('sites as se', 'se.id', '=', DB::raw('COALESCE(ev.site_encaissement_id, fv.site_id)'))
+            ->whereIn('ev.facture_vente_id', $lignes->pluck('id')->all())
+            ->distinct()
+            ->get(['ev.facture_vente_id', 'se.nom'])
+            ->groupBy('facture_vente_id')
+            ->map(fn (Collection $sites) => $sites->pluck('nom')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->implode(', '));
+
+        return $lignes->each(function (object $l) use ($parFacture) {
+            $l->encaisse_a = $parFacture->get($l->id) ?: null;
+        });
     }
 
     /**
@@ -440,7 +491,9 @@ class RapportActiviteService
             'date' => CarbonImmutable::parse($l->created_at)->toDateString(),
             'client' => $this->nomClient($l),
             'agent' => $this->nomAgent($l),
+            // « Créée à » : agence de la commande ; « Encaissée à » : agence(s) de ses encaissements.
             'site_nom' => $l->site_nom,
+            'encaisse_a' => $l->encaisse_a ?? null,
             'montant' => round((float) $l->montant_net, 2),
             'encaisse' => $encaisse,
             'reste' => round(max(0, (float) $l->montant_net - $encaisse), 2),
@@ -523,7 +576,7 @@ class RapportActiviteService
                     ->whereNull('f.deleted_at')
                     ->where('e.mode_paiement', ModePaiement::MOBILE_MONEY->value)
                     ->whereIn(DB::raw('UPPER(TRIM(e.reference_paiement))'), $lot->all())
-                    ->get(['e.id', 'e.operateur_mobile_money', 'e.reference_paiement', 'e.date_encaissement', 'e.created_by', 'f.reference as facture_reference', 'f.site_id'])
+                    ->get(['e.id', 'e.operateur_mobile_money', 'e.reference_paiement', 'e.date_encaissement', 'e.created_by', 'f.reference as facture_reference', DB::raw('COALESCE(e.site_encaissement_id, f.site_id) as site_id')])
             );
         }
 

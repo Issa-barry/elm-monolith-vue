@@ -8,6 +8,7 @@ import DataFilters, {
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -69,6 +70,8 @@ interface Commande extends VenteMobile {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     encaissements: {
         id: number;
         montant: number;
@@ -1437,6 +1440,9 @@ function confirmDelete(c: Commande) {
             :info-rows="encaisserInfoRows"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
+            :encaissement-agences="
+                encaisserCommande?.encaissement_agences ?? null
+            "
             @submit="submitEncaisser"
         />
 
