@@ -114,18 +114,32 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
     });
 
     it('désactive les espèces et explique pourquoi quand il n’y a pas de caisse active', () => {
-        const wrapper = monter({ especesDisponibles: false });
+        const wrapper = monter({
+            especesDisponibles: false,
+            moyens: MOYENS_AGENCE,
+        });
 
         expect(optionDesactivee(wrapper, 'especes')).toBe(true);
 
         const message = wrapper.find('[data-testid="especes-indisponible"]');
         expect(message.exists()).toBe(true);
-        expect(message.text()).toContain(
-            "Vous ne disposez pas d'une caisse active",
+        expect(message.text()).toBe(
+            'Espèces indisponibles : aucune caisse active.',
         );
-        expect(message.text()).toContain('Contactez votre responsable');
         // Attention (autre mode possible), jamais une erreur rouge.
         expect(message.classes().join(' ')).toContain('amber');
+    });
+
+    it('affiche une seule alerte quand aucun moyen de paiement ne fonctionne', () => {
+        const wrapper = monter({ especesDisponibles: false });
+
+        expect(wrapper.get('[data-testid="especes-indisponible"]').text()).toBe(
+            'Aucun moyen de paiement disponible. Contactez votre responsable.',
+        );
+        expect(wrapper.find('[data-testid="aucun-autre-moyen"]').exists()).toBe(
+            false,
+        );
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
     });
 
     it('laisse les autres moyens de l’agence disponibles sans caisse', () => {
@@ -245,8 +259,7 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
 
         const info = wrapper.find('[data-testid="aucun-autre-moyen"]');
         expect(info.exists()).toBe(true);
-        // Information (bleu), jamais une erreur : c'est une configuration de l'agence.
-        expect(info.classes().join(' ')).toContain('blue');
+        expect(info.text()).toBe('Espèces uniquement.');
     });
 
     it('soumet le chèque sur la banque choisie, sans référence exigée', async () => {
@@ -322,7 +335,7 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
 
             expect(
                 wrapper.get('[data-testid="especes-indisponible"]').text(),
-            ).toContain('impossible de payer en espèces');
+            ).toContain('Paiement en espèces indisponible');
         });
 
         it('n’affiche aucun solde en encaissement', () => {
@@ -414,14 +427,7 @@ describe('PaymentCard — agence d’encaissement (ADR 0012)', () => {
         expect(selectMode(wrapper).props('modelValue')).toBe('');
 
         const bandeau = wrapper.get('[data-testid="bandeau-autre-agence"]');
-        expect(bandeau.text()).toContain(
-            'Commande de Matoto encaissée à Kindia',
-        );
-        expect(bandeau.text()).toContain(
-            'Kindia devra reverser ce montant à Matoto',
-        );
-        // Information, jamais une erreur.
-        expect(bandeau.classes().join(' ')).toContain('blue');
+        expect(bandeau.text()).toBe('Kindia devra reverser à Matoto.');
     });
 
     it('soumet l’agence d’encaissement avec le support de cette agence', async () => {
@@ -494,7 +500,7 @@ describe('PaymentCard — agences fournies par l’écran (encaissementAgences)'
         ).toContain('CBA');
         expect(
             wrapper.get('[data-testid="bandeau-autre-agence"]').text(),
-        ).toContain('Commande de Matoto encaissée à CBA');
+        ).toContain('CBA devra reverser à Matoto.');
         expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
     });
 
