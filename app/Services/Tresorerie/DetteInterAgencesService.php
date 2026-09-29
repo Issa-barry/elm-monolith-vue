@@ -57,10 +57,7 @@ class DetteInterAgencesService
             ->orderBy('encaissements_ventes.date_encaissement')
             ->get();
 
-        $actives = MouvementFondsEncaissement::whereIn('encaissement_actif_id', $encaissements->pluck('id'))
-            ->with('mouvement')
-            ->get()
-            ->keyBy('encaissement_actif_id');
+        $actives = $this->reglementsActifs($encaissements->pluck('id')->all());
 
         return $encaissements->map(function (EncaissementVente $e) use ($actives) {
             $mouvement = $actives->get($e->id)?->mouvement;
@@ -71,6 +68,8 @@ class DetteInterAgencesService
                 'montant' => round((float) $e->montant, 2),
                 'date_encaissement' => $e->date_encaissement?->toDateString(),
                 'mode_paiement' => $e->mode_paiement?->value,
+                'mode_paiement_label' => $e->operateur_mobile_money?->label() ?? $e->mode_paiement?->label(),
+                'reference_paiement' => $e->reference_paiement,
                 'site_debiteur_id' => $e->site_encaissement_id,
                 'site_debiteur_nom' => $e->siteEncaissement?->nom,
                 'site_creancier_id' => $e->facture?->site_id,
@@ -85,6 +84,34 @@ class DetteInterAgencesService
                 'mouvement_reference' => $mouvement?->reference,
             ];
         })->values();
+    }
+
+    /**
+     * Statut de reversement d'encaissements déjà chargés (fiche commande) — lecture groupée, une seule
+     * requête. Seuls les encaissements reçus par une autre agence que celle de la commande en ont un.
+     *
+     * @param  iterable<EncaissementVente>  $encaissements  avec leur facture chargée
+     * @return array<string, array{statut:string, statut_label:string, mouvement_reference:?string}>
+     */
+    public function reversements(iterable $encaissements): array
+    {
+        $pourAutreAgence = collect($encaissements)->filter(fn (EncaissementVente $e) => $e->estPourAutreAgence());
+        if ($pourAutreAgence->isEmpty()) {
+            return [];
+        }
+
+        $actives = $this->reglementsActifs($pourAutreAgence->pluck('id')->all());
+
+        return $pourAutreAgence->mapWithKeys(function (EncaissementVente $e) use ($actives) {
+            $mouvement = $actives->get($e->id)?->mouvement;
+            $statut = self::statutPour($mouvement);
+
+            return [$e->id => [
+                'statut' => $statut,
+                'statut_label' => self::LIBELLES[$statut],
+                'mouvement_reference' => $mouvement?->reference,
+            ]];
+        })->all();
     }
 
     /**
@@ -136,6 +163,20 @@ class DetteInterAgencesService
             $mouvement->statut === StatutMouvementFonds::RECU => self::VERSE,
             default => self::EN_COURS,
         };
+    }
+
+    /**
+     * Ligne de règlement active de chaque encaissement donné, avec son mouvement.
+     *
+     * @param  list<string>  $encaissementIds
+     * @return Collection<string, MouvementFondsEncaissement>
+     */
+    private function reglementsActifs(array $encaissementIds): Collection
+    {
+        return MouvementFondsEncaissement::whereIn('encaissement_actif_id', $encaissementIds)
+            ->with('mouvement')
+            ->get()
+            ->keyBy('encaissement_actif_id');
     }
 
     /** Encaissements dont l'agence d'encaissement diffère de l'agence de la commande. */

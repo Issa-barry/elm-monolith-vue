@@ -57,6 +57,8 @@ const mouvement = (surcharge: Record<string, unknown> = {}) => ({
     expediteur: 'Issa BARRY',
     receptionnaire: null,
     created_at: '2026-09-20T10:00:00Z',
+    encaissements_regles: [],
+    detail_reglement_url: null,
     peut_envoyer: false,
     peut_recevoir: false,
     peut_annuler: false,
@@ -681,5 +683,73 @@ describe('Mouvements de fonds — Confirmer désactivé sans support sélectionn
         expect(post.mock.calls[0][1]).toEqual({
             compte_tresorerie_destination_id: 'c1',
         });
+    });
+});
+
+describe('Mouvements de fonds — règlement inter-agences (ADR 0012)', () => {
+    const reglement = () =>
+        mouvement({
+            id: 'r1',
+            nature: 'reglement_agences',
+            nature_label: 'Règlement inter-agences',
+            site_origine: 'Kindia',
+            site_destination: 'Matoto',
+            encaissements_regles: [
+                {
+                    id: 'l1',
+                    facture_reference: 'CMD-001',
+                    commande_id: 'c1',
+                    client_nom: 'Mamadou Diallo',
+                    date_encaissement: '2026-09-29',
+                    montant: 200_000,
+                },
+                {
+                    id: 'l2',
+                    facture_reference: 'CMD-002',
+                    commande_id: 'c2',
+                    client_nom: 'Aïssatou Bah',
+                    date_encaissement: '2026-09-29',
+                    montant: 150_000,
+                },
+            ],
+            detail_reglement_url:
+                '/backoffice/comptabilite/tresorerie/inter-agences/b/a',
+        });
+
+    it('affiche le type « Règlement inter-agences » et le nombre d’encaissements réglés', () => {
+        const ligne = monter([reglement()]).find('tbody tr');
+
+        expect(ligne.find('[data-testid="mouvement-type"]').text()).toContain(
+            'Règlement inter-agences',
+        );
+        expect(
+            ligne.find('[data-testid="mouvement-encaissements-regles"]').text(),
+        ).toBe('2 encaissements');
+    });
+
+    it('liste les encaissements réglés dans la fenêtre dédiée', async () => {
+        const wrapper = monter([reglement()]);
+
+        await wrapper
+            .find('[data-testid="mouvement-encaissements-regles"]')
+            .trigger('click');
+
+        const lignes = wrapper.findAll('[data-testid="encaissement-regle"]');
+        expect(lignes).toHaveLength(2);
+        expect(lignes[0].text()).toContain('CMD-001');
+        expect(lignes[0].text()).toContain('Mamadou Diallo');
+        expect(lignes[1].text()).toContain('150 000 GNF');
+    });
+
+    it('n’affiche aucun lien d’encaissements pour un mouvement ordinaire', () => {
+        const ligne = monter([
+            mouvement({ nature: 'inter_sites', nature_label: 'Entre agences' }),
+        ]).find('tbody tr');
+
+        expect(
+            ligne
+                .find('[data-testid="mouvement-encaissements-regles"]')
+                .exists(),
+        ).toBe(false);
     });
 });

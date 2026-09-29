@@ -48,6 +48,7 @@ use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteC
 use App\Http\Controllers\Comptabilite\CompteTresorerieController;
 use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
+use App\Http\Controllers\Comptabilite\InterAgencesController;
 use App\Http\Controllers\Comptabilite\JournalFinancierController;
 use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
@@ -787,6 +788,12 @@ Route::prefix('backoffice')->group(function () {
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
+
+                // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
+                // et leur règlement (création + envoi en une opération).
+                Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
+                Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
+                Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
 
                 Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
                 Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');

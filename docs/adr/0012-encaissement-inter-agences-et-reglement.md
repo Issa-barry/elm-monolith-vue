@@ -2,8 +2,8 @@
 
 - **Date** : 2026-09-29
 - **Statut** : accepté — lot 1 (modèle, encaissement, comptabilité, dette, règlement côté service)
-  livré le 2026-09-29 ; lot 2 (écran Inter-agences, règlement dans l'interface) et lot 3 (rapports,
-  Situation, financement, E2E) à venir
+  livré le 2026-09-29 ; lot 2 (écran Inter-agences, règlement dans l'interface) développé le
+  2026-09-29 ; lot 3 (rapports, Situation, financement, E2E) à venir
 - **Périmètre** : encaissements de vente, trésorerie, mouvements de fonds, comptabilité générale —
   cf. [tresorerie-inter-agences.md](../tresorerie-inter-agences.md)
 
@@ -43,7 +43,11 @@ l'argent dans sa trésorerie (pièce posée sur le site A, solde des supports ca
    contrôle sous verrou, et index unique `encaissement_actif_id` en base. Un règlement annulé
    (brouillon) ou retourné libère ses encaissements.
 7. **Pas de compensation automatique** : les dettes A → B et B → A restent séparées.
-8. **Annulation** : un encaissement engagé dans un règlement actif (même en brouillon) ne peut plus
+8. **« Régler » crée ET envoie le règlement** en une seule opération et une seule transaction
+   (décision du 29/09/2026) : si l'envoi échoue (solde insuffisant…), aucun règlement ni brouillon
+   ne reste. Autorisation entièrement serveur (`MouvementFondsPolicy::regler` : `tresorerie.create`
+   + `tresorerie.envoyer` + affectation à l'agence qui verse, admin : toute l'organisation).
+9. **Annulation** : un encaissement engagé dans un règlement actif (même en brouillon) ne peut plus
    être supprimé, ni par la suppression unitaire, ni par l'annulation exceptionnelle. Avant tout
    règlement, sa suppression contrepasse ses deux pièces et la dette disparaît. Le retour d'argent
    après règlement relèvera d'un futur mécanisme de remboursement/régularisation.

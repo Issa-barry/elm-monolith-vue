@@ -55,6 +55,18 @@ interface Mouvement {
     peut_annuler: boolean;
     peut_contester: boolean;
     peut_confirmer_retour: boolean;
+    /** Règlement inter-agences (ADR 0012) : encaissements précis reversés — vide sinon. */
+    encaissements_regles: EncaissementRegle[];
+    detail_reglement_url: string | null;
+}
+
+interface EncaissementRegle {
+    id: string;
+    facture_reference: string | null;
+    commande_id: string | null;
+    client_nom: string | null;
+    date_encaissement: string | null;
+    montant: number;
 }
 
 interface CompteTresorerie {
@@ -279,6 +291,15 @@ function confirmerReception() {
     );
 }
 
+// ── Encaissements d'un règlement inter-agences (lecture seule) ──
+const reglementCible = ref<Mouvement | null>(null);
+const reglementDialogOpen = ref(false);
+
+function ouvrirEncaissementsRegles(m: Mouvement) {
+    reglementCible.value = m;
+    reglementDialogOpen.value = true;
+}
+
 // ── Dialog motif (annuler / contester / confirmer-retour) — un seul dialog réutilisé ──
 
 type ActionMotif = 'annuler' | 'contester' | 'confirmer-retour';
@@ -438,6 +459,20 @@ function confirmerMotif() {
                             </td>
                             <td class="px-4 py-3" data-testid="mouvement-type">
                                 {{ m.nature_label }}
+                                <button
+                                    v-if="m.encaissements_regles.length"
+                                    type="button"
+                                    class="block text-xs font-medium text-primary hover:underline"
+                                    data-testid="mouvement-encaissements-regles"
+                                    @click="ouvrirEncaissementsRegles(m)"
+                                >
+                                    {{ m.encaissements_regles.length }}
+                                    encaissement{{
+                                        m.encaissements_regles.length > 1
+                                            ? 's'
+                                            : ''
+                                    }}
+                                </button>
                                 <div
                                     v-if="m.commentaire"
                                     class="text-xs text-muted-foreground"
@@ -745,6 +780,81 @@ function confirmerMotif() {
                         <Spinner v-if="enCours" />
                         {{ enCours ? 'Confirmation…' : 'Confirmer' }}
                     </button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog v-model:open="reglementDialogOpen">
+            <DialogContent class="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>
+                        Encaissements réglés — {{ reglementCible?.reference }}
+                    </DialogTitle>
+                </DialogHeader>
+                <p class="text-sm text-muted-foreground">
+                    Encaissements reçus par {{ reglementCible?.site_origine }}
+                    pour des commandes de
+                    {{ reglementCible?.site_destination }}, reversés par ce
+                    règlement.
+                </p>
+                <div
+                    v-if="reglementCible"
+                    class="max-h-80 overflow-y-auto rounded-lg border"
+                >
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b bg-muted/40 text-left">
+                                <th class="px-3 py-2 font-medium">Commande</th>
+                                <th class="px-3 py-2 font-medium">Client</th>
+                                <th class="px-3 py-2 font-medium">Date</th>
+                                <th class="px-3 py-2 text-right font-medium">
+                                    Montant
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="e in reglementCible?.encaissements_regles ??
+                                []"
+                                :key="e.id"
+                                data-testid="encaissement-regle"
+                            >
+                                <td class="px-3 py-2">
+                                    <Link
+                                        v-if="e.commande_id"
+                                        :href="`/backoffice/ventes/${e.commande_id}`"
+                                        class="font-mono text-xs text-primary hover:underline"
+                                        >{{ e.facture_reference }}</Link
+                                    >
+                                    <span v-else class="font-mono text-xs">{{
+                                        e.facture_reference ?? '—'
+                                    }}</span>
+                                </td>
+                                <td class="px-3 py-2">
+                                    {{ e.client_nom ?? '—' }}
+                                </td>
+                                <td class="px-3 py-2 tabular-nums">
+                                    {{
+                                        e.date_encaissement
+                                            ? dateFr(e.date_encaissement)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td class="px-3 py-2 text-right tabular-nums">
+                                    {{ formatGNF(e.montant) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <DialogFooter>
+                    <Link
+                        v-if="reglementCible?.detail_reglement_url"
+                        :href="reglementCible.detail_reglement_url"
+                        class="text-sm font-medium text-primary hover:underline"
+                    >
+                        Voir la dette inter-agences
+                    </Link>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

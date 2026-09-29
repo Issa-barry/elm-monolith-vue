@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\CommandeVente;
 use App\Services\AnnulationExceptionnelleService;
 use App\Services\Tresorerie\CaisseAgentResolver;
+use App\Services\Tresorerie\DetteInterAgencesService;
 use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
@@ -27,13 +28,14 @@ class ShowCommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'facture.encaissements.siteEncaissement', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
 
         $user = auth()->user();
         $facture = $commande->facture;
+        $reversements = $facture ? app(DetteInterAgencesService::class)->reversements($facture->encaissements) : [];
 
         $vehicule = $commande->vehicule;
         $equipe = $vehicule?->equipe;
@@ -254,6 +256,10 @@ class ShowCommandeVenteController extends Controller
                 'statut' => $facture->statut_facture?->value,
                 'statut_label' => $facture->statut_label,
                 'encaissements' => $facture->encaissements->map(fn ($e) => [
+                    // Encaissé par une autre agence (ADR 0012) : où l'argent a été reçu et où en est
+                    // son reversement à l'agence de la commande. Null sinon.
+                    'encaisse_a' => $e->estPourAutreAgence() ? $e->siteEncaissement?->nom : null,
+                    'reversement' => $reversements[$e->id] ?? null,
                     'id' => $e->id,
                     'montant' => (float) $e->montant,
                     'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),

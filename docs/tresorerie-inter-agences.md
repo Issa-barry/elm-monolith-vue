@@ -1,8 +1,9 @@
 # Trésorerie inter-agences — encaisser la commande d'une autre agence
 
 Décision : [ADR 0012](adr/0012-encaissement-inter-agences-et-reglement.md). État : **lot 1 livré**
-(29/09/2026) — encaissement, comptabilité, dette, règlement côté service. Lot 2 : écran
-Trésorerie → Inter-agences et règlement dans l'interface. Lot 3 : rapports, Situation, financement.
+(29/09/2026) — encaissement, comptabilité, dette, règlement côté service ; **lot 2 développé**
+(29/09/2026) — écran Trésorerie → Inter-agences, règlement dans l'interface, Mouvements, fiche
+commande, compteur. Lot 3 : rapports, Situation, financement, E2E.
 
 ## Exemple
 
@@ -93,6 +94,39 @@ réception par A avec choix du support, contestation, retour). Annulation du bro
 confirmé : les encaissements redeviennent « à verser ». Table `mouvement_fonds_encaissements` :
 `encaissement_actif_id` unique = un encaissement dans un seul règlement actif, garanti en base.
 
+## Écran Trésorerie → Inter-agences (lot 2)
+
+`InterAgencesController` — interface seulement : dette par `DetteInterAgencesService`, règlement par
+`ReglementInterAgencesService` puis `MouvementFondsService::envoyer()`.
+
+| Écran | Contenu | Accès |
+|---|---|---|
+| Inter-agences (`/backoffice/comptabilite/tresorerie/inter-agences`) | Une carte par agence : « À verser à d'autres agences » et « À recevoir d'autres agences », montant par contrepartie, totaux. Filtre Agence (`site_ids[]`) | `tresorerie.read` ; admin : toute l'organisation, sinon ses agences (le filtre ne l'élargit jamais) |
+| Détail `…/inter-agences/{B}/{A}` | Encaissements reçus par B pour des commandes de A : commande, client, date, moyen, auteur, montant, statut (`StatusDot` : À verser, Réservé, En cours de versement, Versé) et référence du règlement. Filtre Statut | `tresorerie.read` + accès à B ou à A ; 404 pour une agence d'une autre organisation |
+
+**Régler** (bouton du détail, `POST …/inter-agences/{B}/{A}/reglements`) :
+
+- lignes « À verser » cochées par défaut (quel que soit le filtre de statut) ; les lignes réservées,
+  en cours ou versées ne sont jamais proposées ;
+- montant du règlement affiché en lecture seule, **jamais envoyé** : le serveur le recalcule ;
+- support d'origine : supports d'agence de B, actifs et validés, avec leur solde — **jamais une caisse
+  d'agent** (les espèces des agents sont d'abord versées à la caisse de l'agence) ; bouton désactivé
+  si le solde est insuffisant, refus réel côté serveur à l'envoi ;
+- création et envoi dans **une transaction** : un échec (solde, double règlement, support refusé)
+  ne laisse aucun règlement ni brouillon ;
+- autorisation serveur `MouvementFondsPolicy::regler` (`tresorerie.create` + `tresorerie.envoyer` +
+  affectation à B, admin : toute l'organisation) ; `peut_regler` ne sert qu'à l'affichage.
+
+**Réception** : écran Mouvements existant (A choisit le support qui a reçu les fonds). Un règlement y
+apparaît « Règlement inter-agences » avec « N encaissements » : la liste des encaissements réglés et
+un lien vers le détail de la dette. Le badge « mouvements à confirmer » compte les règlements envoyés
+vers les agences de l'utilisateur (`HandleInertiaRequests::mouvementsFondsAConfirmer()`).
+
+**Fiche commande** (Ventes et Distributions) : pour un encaissement reçu ailleurs, l'historique
+indique « Encaissé à B », le statut du reversement et la référence du règlement
+(`DetteInterAgencesService::reversements()`, une requête). Rien ne change pour un encaissement dans
+l'agence de la commande.
+
 ## Annulation
 
 - Encaissement **non engagé** dans un règlement : suppression (permission
@@ -103,9 +137,8 @@ confirmé : les encaissements redeviennent « à verser ». Table `mouvement_fon
   `AnnulationExceptionnelleService`). Pour un brouillon : annuler d'abord le règlement. Après
   versement : relèvera d'un futur mécanisme de remboursement/régularisation.
 
-## Hors lot 1
+## Hors lots 1 et 2
 
-- Écran Inter-agences (À verser / À recevoir, détail, règlement) — lot 2.
 - Rapports par agence d'encaissement, Situation, financement (disponible de B diminué de ce qu'il
   doit : `DetteInterAgencesService::aVerserParSite()`) — lot 3.
 - Les sorties d'argent de B ne sont pas bloquées par la dette (décision du 29/09/2026).
