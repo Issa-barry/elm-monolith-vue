@@ -105,7 +105,8 @@ class TresorerieDisponibiliteService
             ->where('nature', NatureMouvementFonds::INTER_SITES->value)
             ->where('site_destination_id', $siteId)
             ->where('statut', StatutMouvementFonds::RECU->value)
-            ->whereBetween('date_reception', [$debut->toDateString(), $fin->toDateString()])
+            ->whereDate('date_reception', '>=', $debut->toDateString())
+            ->whereDate('date_reception', '<=', $fin->toDateString())
             ->sum('montant'), 2);
     }
 

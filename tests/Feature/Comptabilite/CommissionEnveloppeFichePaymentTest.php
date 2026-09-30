@@ -287,7 +287,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
             'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
             'cible_id' => (string) Str::ulid(),
             'montant_total' => 5000,
-            'earned_at' => now(),
+            'earned_at' => today(),
             'statut' => StatutCommission::IMPAYE->value,
         ]);
         CommissionEnveloppePart::create([
