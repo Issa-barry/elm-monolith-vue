@@ -35,6 +35,7 @@ use App\Services\Vehicules\VehiculeSituationVentesService;
 use App\Support\SavedFilters\SavedFilterScopes;
 use App\Support\Vehicules\SituationPeriode;
 use App\Support\Vehicules\VehiculeIndexFilters;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -113,6 +114,10 @@ class VehiculeController extends Controller
                 'livreur_nom' => $m['label'],
                 'telephone' => $m['membre']->livreur?->telephone ?? null,
                 'role' => $m['membre']->role,
+                // Un livreur inactif (désactivé ou auto-inscrit non approuvé) peut rester membre :
+                // sans ce statut, l'équipe paraît complète alors que la distribution est refusée.
+                'livreur_actif' => (bool) ($m['membre']->livreur?->is_active ?? false),
+                'livreur_a_un_compte' => $m['membre']->livreur?->user_id !== null,
                 'taux_commission' => (float) $m['membre']->taux_commission,
                 'montant_par_pack' => (int) $m['membre']->montant_par_pack,
             ])->values()->all(),
@@ -360,7 +365,7 @@ class VehiculeController extends Controller
             ->with('success', 'Véhicule créé avec succès.');
     }
 
-    public function show(Request $request, Vehicule $vehicule): Response
+    public function show(Request $request, Vehicule $vehicule, CommandeVenteFormBuilder $commandeFormBuilder): Response
     {
         $this->authorize('view', $vehicule);
 
@@ -443,6 +448,13 @@ class VehiculeController extends Controller
 
         return Inertia::render('Vehicules/Show', [
             'vehicule' => $this->vehiculeData($vehicule),
+            // Même règle que le refus serveur d'une distribution (CommandeVenteFormBuilder) :
+            // la fiche annonce le blocage avant qu'une commande ne soit tentée.
+            'distribution_chauffeur_motif' => $vehicule->livraison_logistique
+                ? $commandeFormBuilder->motifChauffeurIndisponible(
+                    $commandeFormBuilder->resolveVehiculeAvecEquipe($vehicule->id, $vehicule->organization_id),
+                )
+                : null,
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'situation_ventes' => $situationVentes,

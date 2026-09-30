@@ -47,6 +47,8 @@ interface EquipeMembre {
     taux_commission: number;
     montant_par_pack: number;
     role: string;
+    livreur_actif: boolean;
+    livreur_a_un_compte: boolean;
 }
 
 interface DepenseRow {
@@ -151,6 +153,7 @@ type StatutPartageCommission = 'fait' | 'a_faire' | 'non_requis';
 
 const props = defineProps<{
     vehicule: VehiculeData;
+    distribution_chauffeur_motif: string | null;
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     situation_ventes: SituationVentesData;
@@ -736,6 +739,17 @@ function formatGNF(val: number): string {
 
                     <div class="space-y-5">
                         <div
+                            v-if="distribution_chauffeur_motif"
+                            class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                        >
+                            <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+                            <p>
+                                Distributions impossibles avec ce véhicule :
+                                {{ distribution_chauffeur_motif }}
+                            </p>
+                        </div>
+
+                        <div
                             class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
                         >
                             <div>
@@ -836,6 +850,23 @@ function formatGNF(val: number): string {
                                     >
                                         <td class="px-4 py-3 font-medium">
                                             {{ m.livreur_nom ?? '—' }}
+                                            <StatusDot
+                                                v-if="
+                                                    m.livreur_id &&
+                                                    !m.livreur_actif
+                                                "
+                                                :status="
+                                                    m.livreur_a_un_compte
+                                                        ? 'en_attente'
+                                                        : 'inactif'
+                                                "
+                                                :label="
+                                                    m.livreur_a_un_compte
+                                                        ? 'En attente d’approbation'
+                                                        : 'Inactif'
+                                                "
+                                                class="mt-0.5 flex font-normal text-muted-foreground"
+                                            />
                                         </td>
                                         <td
                                             class="px-4 py-3 font-mono text-xs text-muted-foreground"

@@ -27,6 +27,7 @@ export type Resource =
     | 'parametres'
     | 'logistique'
     | 'comptabilite'
+    | 'commissions'
     | 'tresorerie'
     | 'rh-employes'
     | 'rh-contrats'

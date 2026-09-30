@@ -29,6 +29,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
+    // Monitoring des commissions (CommissionAnomalieStatut) : commission finalement générée.
+    regularisee: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -58,6 +60,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
     contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
+    sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
     reserve: 'bg-zinc-400 dark:bg-zinc-500',
 
@@ -76,6 +80,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
     erreur: 'bg-red-500',
+    // Monitoring des commissions : commission attendue mais absente (erreur réelle à corriger).
+    non_generee: 'bg-red-500',
+    echec_recurrent: 'bg-red-500',
     // MessageLog.status — cf. commentaire "sent" plus haut.
     failed: 'bg-red-500',
     rupture: 'bg-red-500',
@@ -88,6 +95,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
+    partiellement_verse: 'bg-orange-500',
     en_attente: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',

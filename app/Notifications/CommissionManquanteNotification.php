@@ -13,6 +13,10 @@ use Illuminate\Notifications\Notification;
  * renseigné). Dans les deux cas, l'opération déclenchante ne doit jamais laisser une commission
  * manquante passer inaperçue — jamais bloquée pour autant (cf. CommissionEnveloppeGenerator).
  *
+ * Une génération en échec (motif renseigné) est aussi suivie dans Commissions > Monitoring
+ * (CommissionMonitoringService) : l'email n'en est plus la seule trace et y renvoie. Le cas
+ * « aucun barème » n'y figure pas — aucune commission n'est due, ce n'est pas une anomalie.
+ *
  * Les paramètres de libellé (libelleOperation/verbeEvenement/urlPath/actionLabel) ont des
  * défauts reproduisant le texte historique "vente" — seuls les appels transfert logistique les
  * surchargent.
@@ -65,6 +69,11 @@ class CommissionManquanteNotification extends Notification
             ->line("{$this->libelleOperation} {$this->reference}{$montantSuffix} a été {$this->verbeEvenement}, mais aucune commission n'a été générée.")
             ->line("Raison : {$this->raison()}")
             ->action($this->actionLabel, url("{$this->urlPath}{$this->sourceId}"))
-            ->line('Vérifiez le barème de commission de la catégorie concernée dans Paramètres > Commissions, puis relancez la génération si nécessaire.');
+            ->line($this->motifErreur
+                ? 'Corrigez la configuration indiquée, puis relancez la génération depuis Commissions > Monitoring.'
+                : 'Vérifiez le barème de commission de la catégorie concernée dans Paramètres > Commissions, puis relancez la génération si nécessaire.')
+            ->when($this->motifErreur !== null, fn (MailMessage $mail) => $mail->line(
+                "Suivi de l'anomalie : ".url('/backoffice/comptabilite/commissions/monitoring?'.http_build_query(['reference' => $this->reference, 'statut' => 'toutes']))
+            ));
     }
 }

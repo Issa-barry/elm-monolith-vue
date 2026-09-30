@@ -289,6 +289,10 @@ const mainNavItems = computed((): NavItem[] => {
                 title: 'Consultants',
                 href: '/backoffice/comptabilite/commissions/consultants',
             },
+            {
+                title: 'Monitoring',
+                href: '/backoffice/comptabilite/commissions/monitoring',
+            },
         ];
 
         if (moduleActive('cashback')) {

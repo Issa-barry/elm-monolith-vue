@@ -1,3 +1,4 @@
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -53,6 +54,66 @@ const monter = (values: Record<string, unknown> = {}) =>
 
 const valeur = (wrapper: ReturnType<typeof monter>, selecteur: string) =>
     (wrapper.get(selecteur).element as HTMLInputElement).value;
+
+describe('DataFilters — bouton seul', () => {
+    it('garde le tiroir accessible quand Agence est le seul filtre et transmet site_ids', async () => {
+        routerGet.mockClear();
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/liste',
+                fields: [],
+                values: {},
+                triggerOnly: true,
+                sites: [
+                    { id: 'cba', nom: 'Cba' },
+                    { id: 'matoto', nom: 'Matoto' },
+                ],
+                resultCount: 0,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+        expect(wrapper.findComponent(FilterDrawer).exists()).toBe(true);
+        wrapper
+            .getComponent(FilterMultiSelect)
+            .vm.$emit('update:modelValue', ['cba']);
+        await nextTick();
+        wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+        expect(routerGet).toHaveBeenCalledWith(
+            '/liste',
+            { site_ids: ['cba'] },
+            expect.anything(),
+        );
+    });
+
+    it('ne crée pas de tiroir sans aucun filtre disponible', () => {
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/liste',
+                fields: [],
+                values: {},
+                triggerOnly: true,
+                resultCount: 0,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+        expect(wrapper.findComponent(FilterDrawer).exists()).toBe(false);
+    });
+
+    it('déplace aussi un champ inline dans le tiroir en mode bouton seul', () => {
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/liste',
+                fields: champs,
+                values: {},
+                triggerOnly: true,
+                resultCount: 0,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+        expect(wrapper.findComponent(FilterDrawer).exists()).toBe(true);
+        expect(wrapper.find(montantMin).exists()).toBe(false);
+    });
+});
 
 describe('DataFilters — champ numérique inline', () => {
     beforeEach(() => routerGet.mockClear());
