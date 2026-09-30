@@ -72,7 +72,7 @@ describe('DataFilters — bouton seul', () => {
             },
             global: { renderStubDefaultSlot: true },
         });
-        expect(wrapper.getComponent(FilterDrawer).exists()).toBe(true);
+        expect(wrapper.findComponent(FilterDrawer).exists()).toBe(true);
         wrapper
             .getComponent(FilterMultiSelect)
             .vm.$emit('update:modelValue', ['cba']);
@@ -110,7 +110,7 @@ describe('DataFilters — bouton seul', () => {
             },
             global: { renderStubDefaultSlot: true },
         });
-        expect(wrapper.getComponent(FilterDrawer).exists()).toBe(true);
+        expect(wrapper.findComponent(FilterDrawer).exists()).toBe(true);
         expect(wrapper.find(montantMin).exists()).toBe(false);
     });
 });
