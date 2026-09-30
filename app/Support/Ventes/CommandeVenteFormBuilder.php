@@ -212,6 +212,7 @@ final class CommandeVenteFormBuilder
             // exactement ce que le backend va vérifier. Vide = véhicule non limité.
             'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
             'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
+            'chauffeur_indisponible_motif' => $this->motifChauffeurIndisponible($v),
             'livreur_telephone' => $v->equipe?->membres
                 ->firstWhere('role', 'chauffeur')
                 ?->livreur?->telephone,
@@ -382,14 +383,51 @@ final class CommandeVenteFormBuilder
             ]);
         }
 
-        $aUnLivreurActif = $vehicule->equipe?->is_active
-            && $vehicule->equipe->livreurs->contains(fn ($l) => $l->is_active);
+        $motif = $this->motifChauffeurIndisponible($vehicule);
 
-        if (! $aUnLivreurActif) {
-            throw ValidationException::withMessages([
-                'vehicule_id' => "Ce véhicule n'a aucun livreur actif assigné — une distribution nécessite un livreur.",
-            ]);
+        if ($motif !== null) {
+            throw ValidationException::withMessages(['vehicule_id' => $motif]);
         }
+    }
+
+    /**
+     * Raison pour laquelle ce véhicule ne peut pas faire de distribution faute de chauffeur actif,
+     * ou null s'il en a un. Seule source de la règle : le contrôle serveur ci-dessus et le motif
+     * exposé au formulaire (mapVehiculeOption) passent tous deux par ici, pour que l'écran annonce
+     * exactement ce que le serveur refusera. Attend equipe.livreurs déjà filtré sur le rôle
+     * chauffeur (cf. vehiculesEligibles() et resolveVehiculeAvecEquipe()).
+     *
+     * Un livreur inactif (désactivé, ou auto-inscrit pas encore approuvé) peut rester membre d'une
+     * équipe : il faut donc le nommer, sinon l'équipe paraît complète sur la fiche véhicule alors
+     * que la commande est refusée.
+     */
+    public function motifChauffeurIndisponible(Vehicule $vehicule): ?string
+    {
+        $equipe = $vehicule->equipe;
+
+        if (! $equipe) {
+            return "Ce véhicule n'a aucune équipe de livraison — une distribution nécessite un livreur.";
+        }
+
+        if (! $equipe->is_active) {
+            return "L'équipe de livraison de ce véhicule est désactivée — une distribution nécessite une équipe active.";
+        }
+
+        $chauffeurs = $equipe->livreurs;
+
+        if ($chauffeurs->isEmpty()) {
+            return "L'équipe de ce véhicule n'a aucun chauffeur — une distribution nécessite un livreur.";
+        }
+
+        if ($chauffeurs->contains(fn ($l) => $l->is_active)) {
+            return null;
+        }
+
+        $noms = $chauffeurs->map(fn ($l) => $l->libelleAffichage())->implode(', ');
+
+        return $chauffeurs->count() > 1
+            ? "Les chauffeurs de ce véhicule ({$noms}) sont inactifs ou en attente d'approbation — activez-en un depuis la liste des livreurs."
+            : "Le chauffeur de ce véhicule ({$noms}) est inactif ou en attente d'approbation — activez-le depuis la liste des livreurs.";
     }
 
     public function ensureQuantiteMatchesVehiculeCapacity(array $data): void

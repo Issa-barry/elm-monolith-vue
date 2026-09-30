@@ -36,6 +36,9 @@ class DetteInterAgencesService
 
     public const VERSE = 'verse';
 
+    /** Statut de synthèse d'un couple d'agences, jamais d'un encaissement individuel. */
+    public const PARTIELLEMENT_VERSE = 'partiellement_verse';
+
     public const LIBELLES = [
         self::A_VERSER => 'À verser',
         self::RESERVE => 'Réservé (règlement en préparation)',
@@ -119,7 +122,7 @@ class DetteInterAgencesService
      * l'une des deux agences fait partie de la liste (null = toute l'organisation).
      *
      * @param  list<string>|null  $siteIds
-     * @return Collection<int, array{site_debiteur_id:string, site_debiteur_nom:?string, site_creancier_id:string, site_creancier_nom:?string, a_verser:float, en_cours_versement:float, verse:float, a_recevoir:float, nombre_a_verser:int}>
+     * @return Collection<int, array{site_debiteur_id:string, site_debiteur_nom:?string, site_creancier_id:string, site_creancier_nom:?string, a_verser:float, en_cours_versement:float, verse:float, a_recevoir:float, nombre_a_verser:int, statut:string, statut_label:string}>
      */
     public function soldes(string $organizationId, ?array $siteIds = null): Collection
     {
@@ -131,17 +134,29 @@ class DetteInterAgencesService
             ->map(function (Collection $lignes) {
                 $somme = fn (array $statuts) => round((float) $lignes->whereIn('statut', $statuts)->sum('montant'), 2);
                 $premiere = $lignes->first();
+                $aVerser = $somme([self::A_VERSER, self::RESERVE]);
+                $enCours = $somme([self::EN_COURS]);
+                $verse = $somme([self::VERSE]);
+                // Un envoi en attente de réception reste prioritaire, même après un versement partiel.
+                [$statut, $statutLabel] = match (true) {
+                    $enCours > 0 => [self::EN_COURS, 'En cours de versement'],
+                    $aVerser > 0 && $verse > 0 => [self::PARTIELLEMENT_VERSE, 'Partiellement versé'],
+                    $aVerser > 0 => [self::A_VERSER, 'À envoyer'],
+                    default => [self::VERSE, 'Versé'],
+                };
 
                 return [
                     'site_debiteur_id' => $premiere['site_debiteur_id'],
                     'site_debiteur_nom' => $premiere['site_debiteur_nom'],
                     'site_creancier_id' => $premiere['site_creancier_id'],
                     'site_creancier_nom' => $premiere['site_creancier_nom'],
-                    'a_verser' => $somme([self::A_VERSER, self::RESERVE]),
-                    'en_cours_versement' => $somme([self::EN_COURS]),
-                    'verse' => $somme([self::VERSE]),
+                    'a_verser' => $aVerser,
+                    'en_cours_versement' => $enCours,
+                    'verse' => $verse,
                     'a_recevoir' => $somme([self::A_VERSER, self::RESERVE, self::EN_COURS]),
                     'nombre_a_verser' => $lignes->whereIn('statut', [self::A_VERSER, self::RESERVE])->count(),
+                    'statut' => $statut,
+                    'statut_label' => $statutLabel,
                 ];
             })
             ->values();

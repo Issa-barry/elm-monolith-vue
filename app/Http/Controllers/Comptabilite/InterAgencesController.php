@@ -47,44 +47,24 @@ class InterAgencesController extends Controller
         $perimetre = $this->perimetre($user, $filtre);
 
         $soldes = $this->dettes->soldes($orgId, $perimetre->pluck('id')->all())
-            ->filter(fn (array $s) => $s['a_recevoir'] > 0 || $s['a_verser'] > 0);
+            ->filter(fn (array $s) => $s['a_recevoir'] > 0 || $s['verse'] > 0);
 
-        $agences = $perimetre->map(function (Site $site) use ($soldes) {
-            $aVerser = $soldes->where('site_debiteur_id', $site->id)->filter(fn ($s) => $s['a_verser'] > 0 || $s['en_cours_versement'] > 0)
-                ->map(fn (array $s) => [
-                    'contrepartie_id' => $s['site_creancier_id'],
-                    'contrepartie_nom' => $s['site_creancier_nom'],
-                    'montant' => $s['a_verser'],
-                    'en_cours_versement' => $s['en_cours_versement'],
-                    'nombre' => $s['nombre_a_verser'],
-                    'detail_url' => $this->detailUrl($site->id, $s['site_creancier_id']),
-                ])->sortBy('contrepartie_nom')->values();
-
-            $aRecevoir = $soldes->where('site_creancier_id', $site->id)
-                ->map(fn (array $s) => [
-                    'contrepartie_id' => $s['site_debiteur_id'],
-                    'contrepartie_nom' => $s['site_debiteur_nom'],
-                    'montant' => $s['a_recevoir'],
-                    'en_cours_versement' => $s['en_cours_versement'],
-                    'detail_url' => $this->detailUrl($s['site_debiteur_id'], $site->id),
-                ])->sortBy('contrepartie_nom')->values();
-
-            return [
-                'site_id' => $site->id,
-                'site_nom' => $site->nom,
-                'a_verser' => $aVerser,
-                'total_a_verser' => round((float) $aVerser->sum('montant'), 2),
-                'a_recevoir' => $aRecevoir,
-                'total_a_recevoir' => round((float) $aRecevoir->sum('montant'), 2),
-            ];
-        })->filter(fn (array $a) => $a['a_verser']->isNotEmpty() || $a['a_recevoir']->isNotEmpty())->values();
+        // Une seule ligne par sens de reversement, avec les montants du service métier.
+        $reversements = $soldes
+            ->sortBy([['site_debiteur_nom', 'asc'], ['site_creancier_nom', 'asc']])
+            ->map(fn (array $solde) => [
+                'debiteur' => ['id' => $solde['site_debiteur_id'], 'nom' => $solde['site_debiteur_nom']],
+                'creancier' => ['id' => $solde['site_creancier_id'], 'nom' => $solde['site_creancier_nom']],
+                'a_verser' => $solde['a_verser'],
+                'en_cours_versement' => $solde['en_cours_versement'],
+                'verse' => $solde['verse'],
+                'statut' => $solde['statut'],
+                'statut_label' => $solde['statut_label'],
+                'detail_url' => $this->detailUrl($solde['site_debiteur_id'], $solde['site_creancier_id']),
+            ])->values();
 
         return Inertia::render('Comptabilite/Tresorerie/InterAgences/Index', [
-            'agences' => $agences,
-            'totaux' => [
-                'a_verser' => round((float) $agences->sum('total_a_verser'), 2),
-                'a_recevoir' => round((float) $agences->sum('total_a_recevoir'), 2),
-            ],
+            'reversements' => $reversements,
             'filters' => ['site_ids' => $filtre],
             'sites' => $this->sitesProposes($user),
         ]);

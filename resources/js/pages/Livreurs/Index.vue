@@ -367,6 +367,20 @@ function approuver(livreur: Livreur) {
                             <CheckCircle class="h-3.5 w-3.5" />
                             Approuver
                         </Button>
+                        <!-- Livreur désactivé (sans compte) : resté membre de son équipe, il
+                        bloque les distributions de ce véhicule tant qu'il n'est pas réactivé. -->
+                        <Button
+                            v-else-if="
+                                !data.is_active && can('livreurs.update')
+                            "
+                            size="sm"
+                            variant="outline"
+                            class="gap-1.5"
+                            @click="approuver(data)"
+                        >
+                            <CheckCircle class="h-3.5 w-3.5" />
+                            Réactiver
+                        </Button>
                     </template>
                 </Column>
             </DataTable>

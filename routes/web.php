@@ -42,6 +42,8 @@ use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
+use App\Http\Controllers\Comptabilite\CommissionMonitoring\IndexCommissionMonitoringController;
+use App\Http\Controllers\Comptabilite\CommissionMonitoring\RelancerCommissionMonitoringController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
@@ -101,6 +103,7 @@ use App\Http\Controllers\InstallWizard\StoreInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyEmailCodeInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\Livreurs\UpdateLivreurController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
@@ -516,11 +519,13 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
                 ->name('pieces-identite.destroy');
 
-            // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
+            // Livreurs : affectation gérée depuis les Équipes ; identité modifiable depuis la fiche
             Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
             Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
+            Route::put('livreurs/{livreur}', UpdateLivreurController::class)->name('livreurs.update');
             Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
             Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
+            Route::patch('livreurs/{livreur}/desactiver', [LivreurController::class, 'desactiver'])->name('livreurs.desactiver');
             Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
             // Déclarée avant le resource() : sinon "verifier-telephone" est capturé par
@@ -813,6 +818,12 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
 
             Route::get('journal', [JournalFinancierController::class, 'index'])->name('journal');
+
+            // ── Monitoring des commissions non générées ──────────────────────────
+            Route::get('commissions/monitoring', IndexCommissionMonitoringController::class)
+                ->name('commissions.monitoring.index');
+            Route::post('commissions/monitoring/relancer', RelancerCommissionMonitoringController::class)
+                ->name('commissions.monitoring.relancer');
 
             // ── Commission livreurs logistique ────────────────────────────────────
             Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])

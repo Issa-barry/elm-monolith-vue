@@ -137,6 +137,7 @@ interface VehiculeOption {
     type_vehicule_nom: string | null;
     capacites: CapaciteCategorie[];
     livreur_nom: string | null;
+    chauffeur_indisponible_motif: string | null;
     livreur_telephone: string | null;
     equipe_membres: EquipeMembreOption[];
 }
@@ -952,12 +953,13 @@ const commandeBloquee = computed(() =>
 // ── Validation locale ────────────────────────────────────────────────────────
 // Distribution client = livreur obligatoire (règle métier du 31/08/2026). Aucun champ
 // "livreur_id" n'existe sur la commande : le livreur est dérivé de l'équipe du véhicule
-// (cf. CommandeVenteFormBuilder::ensureNatureOperationCoherente, source de vérité backend) — ici
-// on ne fait que refléter cette dérivation via livreur_nom, déjà résolu côté serveur.
-const livreurManquantPourDistribution = computed(
-    () =>
-        form.nature_operation === 'distribution_client' &&
-        !vehiculeSelectionne.value?.livreur_nom,
+// (cf. CommandeVenteFormBuilder::motifChauffeurIndisponible, source de vérité backend) — ici on
+// ne fait que refléter le motif déjà résolu côté serveur, jamais la simple présence d'un nom : un
+// chauffeur inactif reste membre de l'équipe mais bloque la distribution.
+const livreurManquantPourDistribution = computed(() =>
+    form.nature_operation === 'distribution_client' && vehiculeSelectionne.value
+        ? vehiculeSelectionne.value.chauffeur_indisponible_motif
+        : null,
 );
 
 const canSubmit = computed(
@@ -1204,8 +1206,7 @@ function confirmerEtCreer() {
                                 v-else-if="livreurManquantPourDistribution"
                                 class="mt-1 text-xs text-destructive"
                             >
-                                Ce véhicule n'a aucun livreur actif assigné — la
-                                distribution nécessite un livreur.
+                                {{ livreurManquantPourDistribution }}
                             </p>
 
                             <!-- Solvabilité véhicule — n'est le facteur de blocage QUE si aucun

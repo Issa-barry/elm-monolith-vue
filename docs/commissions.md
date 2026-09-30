@@ -35,6 +35,15 @@ même principe de barème dynamique au transfert logistique interne.
   depuis `store()` et `update()` — deux points d'entrée indépendants, aucun ne suppose que l'autre a
   déjà protégé la donnée. `vente_standard` n'est soumise à aucune de ces exigences.
 
+  Un livreur inactif (désactivé, ou auto-inscrit pas encore approuvé) peut rester membre d'une
+  équipe. Le motif du blocage est donc calculé à un seul endroit
+  (`CommandeVenteFormBuilder::motifChauffeurIndisponible()`) et nomme la cause réelle : pas
+  d'équipe, équipe désactivée, aucun chauffeur, ou chauffeur(s) inactif(s) nommés (30/09/2026).
+  Ce même motif est renvoyé par le refus serveur, exposé au formulaire de commande
+  (`chauffeur_indisponible_motif`, qui bloque l'envoi dès la sélection du véhicule) et affiché sur
+  la fiche véhicule (onglet Équipe : statut de chaque membre + bandeau). Un chauffeur inactif se
+  réactive depuis la liste des livreurs (« Approuver » s'il a un compte, sinon « Réactiver »).
+
   Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
   client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
   véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques
@@ -206,8 +215,11 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   `Logistique/Show.vue`) — un simple `git grep` sur `logistique.commissions.` le confirme — alors
   que l'écran Comptabilité reste, lui, atteignable depuis son propre menu. `LivreurController::show()`
   (`commissions_url` de la fiche livreur, ex-`route('logistique.commissions.livreur', ...)`)
-  pointe désormais vers `route('commissions.vente.livreur', ...)` sans filtre processus (« Tous
-  les processus » — Vente/Distribution client/Transfert logistique confondus).
+  pointe désormais vers `route('comptabilite.commissions.vente.livreur', ...)` sans filtre
+  processus (« Tous les processus » — Vente/Distribution client/Transfert logistique confondus).
+  Corrigé le 30/09/2026 : le nom de route était écrit sans le préfixe `comptabilite.` du groupe,
+  d'où une `RouteNotFoundException` (500) à chaque ouverture de la fiche livreur par un
+  utilisateur staff en production (Sentry PHP-LARAVEL-71) ; couvert par `LivreurTest`.
 - **04/09/2026** — corrigé dans la foulée (même cause racine, détecté par les tests E2E
   `logistique-flow.spec.ts`) : le badge "Commission" de `Logistique/Index.vue` et l'étape
   "Commission" du stepper de `Logistique/Show.vue` (libellé Impayée/Partiellement payée/Payée
@@ -1282,3 +1294,61 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 - Les fiches des périodes déjà validées ont reçu `validated_at` = validation de leur période
   (reprise non destructive).
 - Tests : `tests/Feature/Comptabilite/FicheFigeeEtComplementaireTest.php`.
+
+## Monitoring des commissions non générées (30/09/2026, ADR 0013)
+
+Écran **Comptabilité → Commissions → Monitoring** (`/backoffice/comptabilite/commissions/monitoring`).
+Il liste les commissions **attendues mais non générées**. Avant cet écran, l'email « Commission non
+générée » en était la seule trace.
+
+- **COMM-020 — Une anomalie par cible manquante, dérivée, jamais stockée.** Une anomalie correspond
+  à une opération (commande ou transfert), un processus et une cible : `cible_type`, ou
+  `consultant:<id>` pour la cible Consultant. C'est le grain d'une enveloppe du moteur. Elle est
+  calculée à la lecture par `CommissionMonitoringService` à partir de
+  `commission_generation_attempts` et des enveloppes existantes. Il n'y a ni table ni statut
+  stocké, comme pour le statut de génération. Toute génération en échec, historique comprise,
+  y apparaît sans reprise de données.
+- **Statuts** (`CommissionAnomalieStatut`) :
+  - **Non générée** : la dernière tentative échoue encore sur cette cible.
+  - **Échec récurrent** : même cas, à partir de 3 tentatives en échec.
+  - **Régularisée** : l'enveloppe de la cible existe désormais.
+  - **Sans objet** : l'opération est annulée ou retournée, sa commission a été annulée, ou la
+    dernière génération ne trouve plus rien à verser pour cette cible.
+
+  Il n'y a pas de statut « en cours » : la relance est synchrone, sous verrou de l'opération.
+- **Jamais une anomalie** : absence de barème, barème à 0, site aux commissions désactivées
+  (COMM-013), cible non applicable (véhicule non éligible, pas de site). Aucune commission n'est
+  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4). Une opération
+  dont la génération n'a **jamais été déclenchée** n'a pas de tentative : elle relève de
+  `commissions:auditer-ventes`.
+- **Motif structuré.** Depuis ce chantier, chaque erreur de cible est aussi enregistrée dans
+  `detail_erreur.cibles[]` avec :
+  - un `code` (`CommissionMotifNonGeneration` : partage Livreur non conforme ou manquant, équipe,
+    propriétaire, catégorie, consultant non désigné ou inactif, site, période figée, erreur
+    technique) ;
+  - le `montant_attendu` ;
+  - un `contexte` : catégorie, quantité, barème Livreur, total des parts, écart, parts par livreur,
+    consultant, période.
+
+  Le texte de `motif_erreur` est inchangé. Les tentatives antérieures, qui n'ont que le texte, sont
+  classées à la lecture à partir de leur message.
+- **Relance** (unitaire, depuis la ligne ou le détail, ou multiple) : elle passe par le moteur
+  officiel (`CommissionEnveloppeGenerator`), une fois par opération, chacune isolée. Un succès
+  partiel est rapporté tel quel. Le comportement est celui de COMM-018 : seules les cibles
+  manquantes d'un PARTIEL sont générées, à la date de gain d'origine ; une relance après échec
+  total (`erreur`) reste à la date du jour (ADR 0006, inchangé). La relance est idempotente : double
+  clic, anomalie déjà régularisée ou relances concurrentes ne créent jamais de seconde enveloppe.
+  Une vente relancée tente aussi sa clôture (`cloturerSiComplete()`), comme la relance depuis la
+  fiche commande.
+- **Permissions.** La lecture suit la même règle que les autres écrans Commissions
+  (`comptabilite.read` ou `commissions.read`). La relance exige `commissions.update`, et son bouton
+  est masqué sans cette permission. Un utilisateur non administrateur ne voit que les anomalies de
+  ses agences (site de la commande, site source du transfert). Isolation par `organization_id`.
+- **Fiche commande.** L'alerte « Commission à régulariser / partiellement générée » propose aussi
+  « Voir dans le monitoring ».
+- **Email.** L'email « Commission non générée » est conservé. En cas d'échec, il renvoie vers
+  l'anomalie dans le monitoring.
+- **Console.** `php artisan commissions:diagnostiquer-manquantes [--organization=…] [--tous]` :
+  même liste, en lecture seule. Elle ne crée jamais de commission.
+- Tests : `tests/Feature/Comptabilite/CommissionMonitoringTest.php` ;
+  E2E `tests/e2e/commissions/monitoring-commissions.spec.ts`.

@@ -114,7 +114,10 @@ function dateFr(date: string | null): string {
 
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-sm text-muted-foreground">À verser</p>
+                    <p class="text-sm text-muted-foreground">
+                        Montant que {{ debiteur.nom }} doit envoyer à
+                        {{ creancier.nom }}
+                    </p>
                     <p
                         class="mt-1 text-2xl font-bold tabular-nums"
                         data-testid="resume-a-verser"

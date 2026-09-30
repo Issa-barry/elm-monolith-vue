@@ -17,6 +17,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
@@ -415,6 +416,16 @@ function demarrerChargement() {
 
 // ── Relance génération commission ("à régulariser") ──────────────────────────
 const relanceCommissionsProcessing = ref(false);
+
+const { can } = usePermissions();
+// Même règle de lecture que les écrans Commissions (User::canReadCommissions()).
+const peutVoirMonitoring = computed(
+    () => can('comptabilite.read') || can('commissions.read'),
+);
+const monitoringUrl = computed(
+    () =>
+        `/backoffice/comptabilite/commissions/monitoring?statut=toutes&reference=${encodeURIComponent(props.commande.reference)}`,
+);
 
 function relancerCommissions() {
     if (relanceCommissionsProcessing.value) return;
@@ -1016,20 +1027,34 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 : "Les cibles correctement configurées ont bien reçu leur commission. Corrigez la configuration de la cible restante puis relancez la génération pour compléter — la commande ne peut pas se clôturer tant que ce n'est pas fait."
                         }}
                     </p>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="mt-3"
-                        :disabled="relanceCommissionsProcessing"
-                        @click="relancerCommissions"
-                    >
-                        {{
-                            relanceCommissionsProcessing
-                                ? 'Relance en cours…'
-                                : 'Relancer la génération'
-                        }}
-                    </Button>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            :disabled="relanceCommissionsProcessing"
+                            @click="relancerCommissions"
+                        >
+                            {{
+                                relanceCommissionsProcessing
+                                    ? 'Relance en cours…'
+                                    : 'Relancer la génération'
+                            }}
+                        </Button>
+                        <Button
+                            v-if="peutVoirMonitoring"
+                            as-child
+                            size="sm"
+                            variant="ghost"
+                        >
+                            <Link
+                                :href="monitoringUrl"
+                                data-testid="commande-lien-monitoring"
+                            >
+                                Voir dans le monitoring
+                            </Link>
+                        </Button>
+                    </div>
                 </AlertDescription>
             </Alert>
 

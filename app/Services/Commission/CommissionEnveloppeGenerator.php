@@ -5,6 +5,7 @@ namespace App\Services\Commission;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
+use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\PrestataireType;
@@ -260,7 +261,8 @@ class CommissionEnveloppeGenerator
             }
 
             try {
-                ['erreurs' => $erreursCibles, 'creees' => $enveloppesCreees] = DB::transaction(fn () => $generation($processus, $existantes));
+                ['erreurs' => $erreursDetaillees, 'creees' => $enveloppesCreees] = DB::transaction(fn () => $generation($processus, $existantes));
+                $erreursCibles = array_column($erreursDetaillees, 'message');
 
                 // "Succès" ne veut pas dire "une commission a réellement été créée" :
                 // l'absence de barème actif pour une catégorie résout silencieusement à
@@ -292,7 +294,9 @@ class CommissionEnveloppeGenerator
                     'processus_id' => $processus->id,
                     'statut' => $statut->value,
                     'motif_erreur' => empty($erreursCibles) ? null : implode(' | ', $erreursCibles),
-                    'detail_erreur' => empty($erreursCibles) ? null : ['erreurs' => $erreursCibles],
+                    // `cibles` : une entrée structurée par cible en échec (code de motif, montant
+                    // attendu, contexte de diagnostic) — lue par CommissionMonitoringService.
+                    'detail_erreur' => empty($erreursCibles) ? null : ['erreurs' => $erreursCibles, 'cibles' => $erreursDetaillees],
                     'declenchee_par' => $declenchePar->value,
                     'created_by' => $declencheurUserId,
                 ]);
@@ -351,7 +355,14 @@ class CommissionEnveloppeGenerator
                     'processus_id' => $processus->id,
                     'statut' => CommissionGenerationStatut::ERREUR->value,
                     'motif_erreur' => $e->getMessage(),
-                    'detail_erreur' => ['erreurs' => [$e->getMessage()]],
+                    'detail_erreur' => ['erreurs' => [$e->getMessage()], 'cibles' => [[
+                        'cible' => null,
+                        'cle' => null,
+                        'code' => CommissionMotifNonGeneration::ERREUR_TECHNIQUE->value,
+                        'message' => $e->getMessage(),
+                        'montant_attendu' => null,
+                        'contexte' => [],
+                    ]]],
                     'declenchee_par' => $declenchePar->value,
                     'created_by' => $declencheurUserId,
                 ]);
@@ -527,8 +538,8 @@ class CommissionEnveloppeGenerator
      * distribution_client tant qu'il n'a pas sa propre configuration (cf.
      * CommissionProcessusDefaults::processusResolutionBareme()), identiques dans tous les autres cas.
      *
-     * Retourne les messages des cibles dont le bénéficiaire n'a pas pu être résolu (liste vide
-     * si tout s'est bien passé), jamais levés en exception depuis le chantier 2A (05/09/2026,
+     * Retourne les erreurs des cibles dont le bénéficiaire n'a pas pu être résolu (liste vide
+     * si tout s'est bien passé, une entrée structurée par erreur, cf. erreurCible()), jamais levées en exception depuis le chantier 2A (05/09/2026,
      * indépendance des cibles) : une cible cassée n'empêche plus la persistance des cibles
      * correctement résolues de la même opération (cf. executerAvecTentative(), qui décide du
      * statut SUCCES/PARTIEL/ERREUR à partir de ce retour). Révise l'ancienne décision AMOA #4
@@ -543,7 +554,7 @@ class CommissionEnveloppeGenerator
      * explicite, plutôt que d'être créée dans une période où elle ne serait jamais payée.
      *
      * @param  Collection<int, CommissionEnveloppe>  $existantes
-     * @return array{erreurs: list<string>, creees: list<string>}
+     * @return array{erreurs: list<array{cible: string, cle: string, code: string, message: string, montant_attendu: ?float, contexte: array<string, mixed>}>, creees: list<string>}
      */
     private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes): array
     {
@@ -668,7 +679,9 @@ class CommissionEnveloppeGenerator
 
             if ($cibleCode === CommissionCibleType::CODE_PROPRIETAIRE) {
                 if (! $vehicule->proprietaire_id) {
-                    $erreurs[] = "Cible {$cibleCode} : véhicule sans propriétaire.";
+                    $erreurs[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::PROPRIETAIRE_MANQUANT, 'véhicule sans propriétaire.', $montantTotal, [
+                        'vehicule_id' => $vehicule->id,
+                    ]);
 
                     continue;
                 }
@@ -689,7 +702,9 @@ class CommissionEnveloppeGenerator
 
             if ($cibleCode === CommissionCibleType::CODE_EQUIPE_LIVRAISON) {
                 if (! $vehicule->equipe) {
-                    $erreurs[] = "Cible {$cibleCode} : aucune équipe de livraison configurée pour le véhicule.";
+                    $erreurs[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::EQUIPE_LIVRAISON_MANQUANTE, 'aucune équipe de livraison configurée pour le véhicule.', $montantTotal, [
+                        'vehicule_id' => $vehicule->id,
+                    ]);
 
                     continue;
                 }
@@ -710,10 +725,17 @@ class CommissionEnveloppeGenerator
                 $typeParBeneficiaire = [];
                 $montantTotalEquipe = 0;
                 $repartitionEchouee = false;
+                // Erreurs de la cible collectées à part : leur montant attendu (enveloppe complète
+                // de l'équipe, toutes catégories) n'est connu qu'après la boucle.
+                $erreursEquipe = [];
+                $montantAttenduEquipe = 0.0;
 
                 foreach ($parCategorie as $categorieId => $contribsCategorie) {
                     if ($categorieId === 'sans_categorie') {
-                        $erreurs[] = "Cible {$cibleCode} : une ligne sans catégorie ne peut pas résoudre de partage Livreur.";
+                        $montantAttenduEquipe += (float) $contribsCategorie->sum('montant');
+                        $erreursEquipe[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::CATEGORIE_MANQUANTE, 'une ligne sans catégorie ne peut pas résoudre de partage Livreur.', null, [
+                            'equipe_id' => $vehicule->equipe->id,
+                        ]);
                         $repartitionEchouee = true;
 
                         continue;
@@ -745,6 +767,13 @@ class CommissionEnveloppeGenerator
                     }
 
                     $quantiteCategorie = (int) $contribsCategorie->sum('quantite');
+                    $montantAttenduEquipe += $quantiteCategorie * $enveloppeUnitaire;
+                    $contexteCategorie = [
+                        'equipe_id' => $vehicule->equipe->id,
+                        'categorie_id' => $categorieId,
+                        'quantite' => $quantiteCategorie,
+                        'enveloppe_unitaire' => $enveloppeUnitaire,
+                    ];
 
                     $partages = CommissionPartageLivraisonCategorieChecker::partagesActifs(
                         $processusBareme->id,
@@ -754,7 +783,7 @@ class CommissionEnveloppeGenerator
                     );
 
                     if ($partages->isEmpty()) {
-                        $erreurs[] = "Cible {$cibleCode} : partage non configuré pour cette équipe sur la catégorie {$categorieId} — à régulariser.";
+                        $erreursEquipe[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::PARTAGE_LIVREUR_MANQUANT, "partage non configuré pour cette équipe sur la catégorie {$categorieId} — à régulariser.", null, $contexteCategorie);
                         $repartitionEchouee = true;
 
                         continue;
@@ -768,7 +797,16 @@ class CommissionEnveloppeGenerator
                     try {
                         CommissionPartageLivraisonValidator::valider($membresValidation, $enveloppeUnitaire);
                     } catch (InvalidArgumentException $e) {
-                        $erreurs[] = "Cible {$cibleCode} : {$e->getMessage()}";
+                        $attribue = (int) $partages->sum(fn (EquipeLivraisonPartageCategorie $p) => (int) $p->montant_unitaire);
+                        $erreursEquipe[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::PARTAGE_LIVREUR_NON_CONFORME, $e->getMessage(), null, [
+                            ...$contexteCategorie,
+                            'attribue' => $attribue,
+                            'ecart' => $enveloppeUnitaire - $attribue,
+                            'parts' => $partages->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                                'livreur_id' => $p->livreur_id,
+                                'montant_unitaire' => $p->montant_unitaire === null ? null : (int) $p->montant_unitaire,
+                            ])->values()->all(),
+                        ]);
                         $repartitionEchouee = true;
 
                         continue;
@@ -787,6 +825,10 @@ class CommissionEnveloppeGenerator
                 }
 
                 if ($repartitionEchouee) {
+                    foreach ($erreursEquipe as $erreurEquipe) {
+                        $erreurs[] = [...$erreurEquipe, 'montant_attendu' => $montantAttenduEquipe];
+                    }
+
                     continue;
                 }
 
@@ -821,7 +863,7 @@ class CommissionEnveloppeGenerator
                 // utilisateur (décision produit 2026-08-21) : mode DIRECT au même titre que
                 // CODE_PROPRIETAIRE ci-dessus, pas de répartition à calculer.
                 if (! $site) {
-                    $erreurs[] = "Cible {$cibleCode} : opération sans site.";
+                    $erreurs[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::SITE_MANQUANT, 'opération sans site.', $montantTotal);
 
                     continue;
                 }
@@ -856,7 +898,14 @@ class CommissionEnveloppeGenerator
 
                 foreach ($parConsultant as $consultantId => $contributionsConsultant) {
                     if ($consultantId === 'sans_consultant') {
-                        $erreurs[] = "Cible {$cibleCode} : une catégorie n'a aucun consultant désigné.";
+                        $erreurs[] = self::erreurCible(
+                            $cibleCode,
+                            CommissionMotifNonGeneration::CONSULTANT_NON_DESIGNE,
+                            "une catégorie n'a aucun consultant désigné.",
+                            round((float) $contributionsConsultant->sum('montant'), 2),
+                            ['categorie_ids' => $contributionsConsultant->map(fn (array $c) => $c['categorie']?->id)->filter()->unique()->values()->all()],
+                            "{$cibleCode}:sans_consultant",
+                        );
 
                         continue;
                     }
@@ -868,7 +917,14 @@ class CommissionEnveloppeGenerator
                         ->exists();
 
                     if (! $consultantActif) {
-                        $erreurs[] = "Cible {$cibleCode} : le consultant {$consultantId} n'est plus actif.";
+                        $erreurs[] = self::erreurCible(
+                            $cibleCode,
+                            CommissionMotifNonGeneration::CONSULTANT_INACTIF,
+                            "le consultant {$consultantId} n'est plus actif.",
+                            round((float) $contributionsConsultant->sum('montant'), 2),
+                            ['consultant_id' => $consultantId],
+                            "{$cibleCode}:{$consultantId}",
+                        );
 
                         continue;
                     }
@@ -899,9 +955,7 @@ class CommissionEnveloppeGenerator
             $ciblesCompletes = array_filter($clesExistantes, fn (string $cle) => ! str_contains($cle, ':'));
             $erreurs = array_values(array_filter(
                 $erreurs,
-                fn (string $erreur) => ! collect($ciblesCompletes)->contains(
-                    fn (string $cible) => str_starts_with($erreur, "Cible {$cible} :")
-                ),
+                fn (array $erreur) => ! in_array($erreur['cible'], $ciblesCompletes, true),
             ));
 
             $enveloppesACreer = array_filter(
@@ -914,12 +968,18 @@ class CommissionEnveloppeGenerator
                 $cibleType = explode(':', (string) $cle)[0];
                 $periode = self::periodeFigeePour($ctx->organizationId, $cibleType, $earnedAt);
                 if ($periode) {
-                    $erreurs[] = sprintf(
-                        'Cible %s : la période de paiement %s couvrant le %s est %s — la part manquante ne peut plus y être ajoutée.',
+                    $erreurs[] = self::erreurCible(
                         $cibleType,
-                        $periode->reference,
-                        $earnedAt->format('d/m/Y'),
-                        $periode->statut === StatutPeriodePaiement::CLOTUREE ? 'clôturée' : 'validée',
+                        CommissionMotifNonGeneration::PERIODE_FIGEE,
+                        sprintf(
+                            'la période de paiement %s couvrant le %s est %s — la part manquante ne peut plus y être ajoutée.',
+                            $periode->reference,
+                            $earnedAt->format('d/m/Y'),
+                            $periode->statut === StatutPeriodePaiement::CLOTUREE ? 'clôturée' : 'validée',
+                        ),
+                        (float) $enveloppesACreer[$cle]['montant'],
+                        ['periode_id' => $periode->id, 'periode_reference' => $periode->reference],
+                        (string) $cle,
                     );
                     unset($enveloppesACreer[$cle]);
                 }
@@ -978,5 +1038,32 @@ class CommissionEnveloppeGenerator
         }
 
         return ['erreurs' => $erreurs, 'creees' => $creees];
+    }
+
+    /**
+     * Erreur d'une cible, sous forme structurée : `message` garde exactement le texte historique
+     * (« Cible <code> : ... », motif_erreur de la tentative et alerte), `code`/`montant_attendu`/
+     * `contexte` servent au monitoring des commissions. `cle` = clé d'enveloppe de la cible
+     * (cible_type, ou cible_type:consultant pour la cible Consultant).
+     *
+     * @param  array<string, mixed>  $contexte
+     * @return array{cible: string, cle: string, code: string, message: string, montant_attendu: ?float, contexte: array<string, mixed>}
+     */
+    private static function erreurCible(
+        string $cible,
+        CommissionMotifNonGeneration $code,
+        string $detail,
+        ?float $montantAttendu = null,
+        array $contexte = [],
+        ?string $cle = null,
+    ): array {
+        return [
+            'cible' => $cible,
+            'cle' => $cle ?? $cible,
+            'code' => $code->value,
+            'message' => "Cible {$cible} : {$detail}",
+            'montant_attendu' => $montantAttendu,
+            'contexte' => $contexte,
+        ];
     }
 }

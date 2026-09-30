@@ -125,7 +125,7 @@ class InterAgencesControllerTest extends TestCase
 
     // ── Écran « À verser / À recevoir » ──────────────────────────────────────
 
-    public function test_l_admin_voit_ce_que_chaque_agence_doit_verser_et_recevoir(): void
+    public function test_l_admin_voit_une_seule_ligne_par_sens_de_reversement(): void
     {
         $this->encaissement(200_000);
         $this->encaissement(300_000);
@@ -134,27 +134,38 @@ class InterAgencesControllerTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/Tresorerie/InterAgences/Index')
-                ->where('totaux.a_verser', 500_000)
-                ->where('totaux.a_recevoir', 500_000)
-                ->has('agences', 2)
-                ->where('agences.0.site_nom', 'Agence Kindia')
-                ->where('agences.0.a_verser.0.contrepartie_nom', 'Site Principal')
-                ->where('agences.0.a_verser.0.montant', 500_000)
-                ->where('agences.0.a_verser.0.nombre', 2)
-                ->where('agences.1.site_nom', 'Site Principal')
-                ->where('agences.1.a_recevoir.0.contrepartie_nom', 'Agence Kindia')
-                ->where('agences.1.a_recevoir.0.montant', 500_000));
+                ->has('reversements', 1)
+                ->where('reversements.0.debiteur.id', $this->agenceB->id)
+                ->where('reversements.0.debiteur.nom', 'Agence Kindia')
+                ->where('reversements.0.creancier.id', $this->agenceA->id)
+                ->where('reversements.0.creancier.nom', 'Site Principal')
+                ->where('reversements.0.a_verser', 500_000)
+                ->where('reversements.0.en_cours_versement', 0)
+                ->where('reversements.0.verse', 0)
+                ->where('reversements.0.statut', 'a_verser')
+                ->where('reversements.0.statut_label', 'À envoyer')
+                ->where('reversements.0.detail_url', route('comptabilite.tresorerie.inter-agences.show', [$this->agenceB, $this->agenceA], false)));
     }
 
     public function test_le_filtre_agence_restreint_l_affichage(): void
     {
         $this->encaissement(200_000);
 
-        $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index', ['site_ids' => [$this->agenceB->id]]))
-            ->assertInertia(fn (Assert $page) => $page
-                ->has('agences', 1)
-                ->where('agences.0.site_id', $this->agenceB->id)
-                ->where('totaux.a_recevoir', 0));
+        $agenceC = $this->creerSite('Agence Labé');
+        $agenceD = $this->creerSite('Agence Boké');
+        $supportC = $this->creerSupportAgence($agenceC->id, 'mobile_money', '561100', 'orange_money', 'Orange Labé');
+        $this->encaissement(50_000, $agenceD, $supportC);
+
+        // La même ligne est visible depuis l'agence qui verse comme depuis celle qui reçoit.
+        foreach ([$this->agenceB, $this->agenceA] as $agence) {
+            $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index', ['site_ids' => [$agence->id]]))
+                ->assertInertia(fn (Assert $page) => $page
+                    ->has('reversements', 1)
+                    ->where('reversements.0.debiteur.id', $this->agenceB->id)
+                    ->where('reversements.0.creancier.id', $this->agenceA->id)
+                    ->where('reversements.0.a_verser', 200_000)
+                    ->where('filters.site_ids', [$agence->id]));
+        }
     }
 
     public function test_un_utilisateur_ne_voit_que_ses_agences_et_le_filtre_ne_l_elargit_pas(): void
@@ -163,12 +174,79 @@ class InterAgencesControllerTest extends TestCase
 
         $this->actingAs($this->agentB)->get(route('comptabilite.tresorerie.inter-agences.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('agences', 1)
-                ->where('agences.0.site_id', $this->agenceB->id)
+                ->has('reversements', 1)
+                ->where('reversements.0.debiteur.id', $this->agenceB->id)
                 ->has('sites', 1));
 
         $this->actingAs($this->agentB)->get(route('comptabilite.tresorerie.inter-agences.index', ['site_ids' => [$this->agenceA->id]]))
-            ->assertInertia(fn (Assert $page) => $page->has('agences', 0));
+            ->assertInertia(fn (Assert $page) => $page->has('reversements', 0));
+    }
+
+    public function test_les_dettes_dans_les_deux_sens_ne_sont_pas_compensees(): void
+    {
+        $this->encaissement(200_000);
+        $this->encaissement(50_000, $this->agenceB, $this->caisseA);
+
+        $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reversements', 2)
+                ->where('reversements.0.debiteur.id', $this->agenceB->id)
+                ->where('reversements.0.creancier.id', $this->agenceA->id)
+                ->where('reversements.0.a_verser', 200_000)
+                ->where('reversements.1.debiteur.id', $this->agenceA->id)
+                ->where('reversements.1.creancier.id', $this->agenceB->id)
+                ->where('reversements.1.a_verser', 50_000));
+    }
+
+    public function test_un_reversement_envoye_reste_visible_jusqu_a_reception(): void
+    {
+        $encaissement = $this->encaissement(200_000);
+        $this->regler($this->agentB, [$encaissement])->assertSessionHasNoErrors();
+
+        $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reversements', 1)
+                ->where('reversements.0.a_verser', 0)
+                ->where('reversements.0.en_cours_versement', 200_000)
+                ->where('reversements.0.verse', 0)
+                ->where('reversements.0.statut', 'en_cours_versement'));
+    }
+
+    public function test_deja_verse_et_statut_suivent_les_receptions_et_conservent_la_ligne_soldee(): void
+    {
+        $premier = $this->encaissement(200_000);
+        $second = $this->encaissement(300_000);
+        $this->regler($this->agentB, [$premier])->assertSessionHasNoErrors();
+        $mouvements = app(MouvementFondsService::class);
+        $mouvements->recevoir(MouvementFonds::where('nature', NatureMouvementFonds::REGLEMENT_AGENCES)->sole(), $this->user->id, $this->caisseA->id);
+
+        $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reversements', 1)
+                ->where('reversements.0.a_verser', 300_000)
+                ->where('reversements.0.verse', 200_000)
+                ->where('reversements.0.statut', 'partiellement_verse')
+                ->where('reversements.0.statut_label', 'Partiellement versé'));
+
+        $this->regler($this->agentB, [$second])->assertSessionHasNoErrors();
+        $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('reversements.0.a_verser', 0)
+                ->where('reversements.0.en_cours_versement', 300_000)
+                ->where('reversements.0.verse', 200_000)
+                ->where('reversements.0.statut', 'en_cours_versement'));
+
+        $mouvements->recevoir(MouvementFonds::where('nature', NatureMouvementFonds::REGLEMENT_AGENCES)->where('statut', StatutMouvementFonds::ENVOYE)->sole(), $this->user->id, $this->caisseA->id);
+        foreach ([$this->agenceA, $this->agenceB] as $agence) {
+            $this->actingAs($this->user)->get(route('comptabilite.tresorerie.inter-agences.index', ['site_ids' => [$agence->id]]))
+                ->assertInertia(fn (Assert $page) => $page
+                    ->has('reversements', 1)
+                    ->where('reversements.0.a_verser', 0)
+                    ->where('reversements.0.en_cours_versement', 0)
+                    ->where('reversements.0.verse', 500_000)
+                    ->where('reversements.0.statut', 'verse')
+                    ->where('reversements.0.statut_label', 'Versé'));
+        }
     }
 
     public function test_l_ecran_exige_la_lecture_de_la_tresorerie(): void

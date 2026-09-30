@@ -1483,6 +1483,51 @@ class VehiculeTest extends TestCase
             );
     }
 
+    /**
+     * Cas de prod du 30/09/2026 : chauffeur inactif affiché comme membre normal de l'équipe, alors
+     * que toute distribution avec ce véhicule était refusée — la fiche doit montrer son statut et
+     * le blocage, avec le même motif que le refus serveur.
+     */
+    public function test_show_signale_un_chauffeur_inactif_qui_bloque_la_distribution(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, livraisonLogistique: true);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vehicule->proprietaire_id,
+            'is_active' => true,
+        ]);
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Kaba Test',
+            'is_active' => false,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicule.equipe_membres.0.livreur_actif', false)
+                ->where('vehicule.equipe_membres.0.livreur_a_un_compte', false)
+                ->where('distribution_chauffeur_motif', "Le chauffeur de ce véhicule (Kaba Test) est inactif ou en attente d'approbation — activez-le depuis la liste des livreurs.")
+            );
+
+        $livreur->update(['is_active' => true]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicule.equipe_membres.0.livreur_actif', true)
+                ->where('distribution_chauffeur_motif', null)
+            );
+    }
+
     public function test_show_retourne_403_pour_autre_organisation(): void
     {
         $otherOrg = Organization::factory()->create();
