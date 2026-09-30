@@ -31,8 +31,10 @@ n'étaient validables depuis aucun écran : leurs périodes restaient bloquées 
 3. **Réouverture automatique** : une commission générée dans une période déjà validée (commande
    encaissée après la validation) fait repasser la période à « Calculée » — contrepassation des
    pièces « fiche validée », recalcul des fiches, puis revalidation automatique si tout est validé.
-   **Refusée dès qu'un paiement existe sur la période** : le recalcul supprime les fiches non
-   soldées et, en cascade, leurs paiements. La commission reste alors signalée (alerte orange).
+   ~~Refusée dès qu'un paiement existe sur la période~~ — **révisé le 30/09/2026** : depuis
+   l'ADR 0010 (lot 1), une fiche ayant reçu un paiement n'est plus jamais supprimée ni recalculée ;
+   la réouverture est donc aussi faite sur une période déjà payée, la commission tardive allant sur
+   une fiche complémentaire (ADR 0010, point 4). Seule une période clôturée n'est jamais rouverte.
    La réouverture couvre aussi le cas inverse : une fiche portant une commission **annulée ou
    supprimée** depuis la validation (retour de livraison, annulation de commande) ; l'annulation des
    commissions d'une commande relance donc le traitement des périodes concernées.
@@ -51,11 +53,11 @@ n'étaient validables depuis aucun écran : leurs périodes restaient bloquées 
   validation manuelle à faire.
 - Une période en cours peut être validée puis rouverte plusieurs fois au fil des nouvelles
   commissions ; l'historique d'audit trace chaque passage (validation automatique, réouverture).
-- **Limite connue** : une période validée **et déjà partiellement payée** ne peut pas intégrer une
-  commission tardive — la commission reste hors fiche et signalée. Un traitement (report sur la
-  période suivante ou fiche complémentaire) reste à décider.
-- La relance de génération (complétion, ADR 0006 point 3) refuse toujours d'ajouter une cible
-  manquante dans une période validée : elle n'a pas été alignée sur la réouverture.
+- ~~Limite connue : une période validée et déjà partiellement payée ne peut pas intégrer une
+  commission tardive.~~ Levée le 30/09/2026 : fiche complémentaire de la même période (décision
+  utilisateur, ADR 0010 point 4 appliqué à ce cas).
+- ~~La relance de génération refuse d'ajouter une cible manquante dans une période validée.~~
+  Alignée le 30/09/2026 : seule une période clôturée bloque encore la complétion (COMM-018).
 - Correctif associé : `PeriodeCalculatorService::recalculerPeriodesConcernees()` refusait le type de
   date transmis par le générateur (`Carbon\Carbon`) : le recalcul après complétion échouait sur
   une erreur de type. L'appel est désormais aussi isolé (journalisé) pour ne jamais faire échouer

@@ -151,12 +151,14 @@ class PeriodeValidationService
     /**
      * Réouverture automatique d'une période validée dont les fiches ne reflètent plus les
      * commissions : une commission datée dans ses bornes n'est sur aucune fiche (arrivée après
-     * la validation), ou une fiche porte une commission annulée/supprimée depuis (retour de
-     * livraison, annulation de commande). Refusée dès
-     * qu'un paiement existe sur la période : le recalcul supprime les fiches non soldées et,
-     * avec elles, leurs paiements (cascade) — on ne détruit jamais un paiement.
-     * Les pièces comptables des fiches recalculées sont contrepassées avant le recalcul,
-     * sinon la revalidation engagerait la dette une seconde fois.
+     * la validation), ou une fiche non figée porte une commission annulée/supprimée depuis
+     * (retour de livraison, annulation de commande).
+     * Possible même si la période a déjà reçu des paiements (ADR 0010, point 4) : le recalcul
+     * ne touche jamais une fiche figée, et une commission arrivée ensuite va sur une fiche
+     * complémentaire. Une ligne annulée sur une fiche figée ne justifie donc pas de réouverture,
+     * puisque le recalcul ne pourrait pas la retirer.
+     * Les pièces comptables des fiches recalculées (non figées) sont contrepassées avant le
+     * recalcul, sinon la revalidation engagerait la dette une seconde fois.
      */
     public function rouvrirSiDesynchronisee(PaiementPeriode $periode): bool
     {
@@ -166,7 +168,7 @@ class PeriodeValidationService
 
         $horsFiches = app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode);
         $obsoletes = $this->lignesObsoletes($periode);
-        if (($horsFiches['nombre'] === 0 && $obsoletes === 0) || $this->aDesPaiements($periode)) {
+        if ($horsFiches['nombre'] === 0 && $obsoletes === 0) {
             return false;
         }
 
@@ -211,12 +213,16 @@ class PeriodeValidationService
     }
 
     /**
-     * Lignes de fiche dont la commission source a été annulée ou supprimée depuis le calcul
-     * (retour de livraison, annulation de commande) : la fiche figée porterait un montant périmé.
+     * Lignes de fiche non figée dont la commission source a été annulée ou supprimée depuis le
+     * calcul (retour de livraison, annulation de commande) : la fiche porterait un montant périmé.
      */
     private function lignesObsoletes(PaiementPeriode $periode): int
     {
-        $lignes = PaiementFicheLigne::whereIn('fiche_id', $periode->fiches()->select('id'))
+        $ficheIds = $periode->fiches()->get()
+            ->reject(fn (PaiementFiche $f) => $f->estFigee())
+            ->pluck('id');
+
+        $lignes = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
             ->whereIn('source_type', [CommissionEnveloppePart::class, CommissionLogistiquePart::class])
             ->get(['source_type', 'source_id']);
 

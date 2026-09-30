@@ -579,12 +579,14 @@ class PaiementPeriodeTest extends TestCase
     }
 
     /**
-     * Période validée ET déjà payée en partie : une commission arrivée ensuite ne peut pas la
-     * rouvrir (le recalcul supprimerait les paiements) — elle est seulement signalée.
+     * Période validée ET déjà payée en partie : une commission arrivée ensuite la rouvre quand
+     * même (ADR 0010, point 4) — la fiche payée n'est jamais recalculée, la nouvelle commission
+     * a sa propre fiche.
      */
-    public function test_commission_arrivee_apres_validation_sur_periode_payee_est_seulement_signalee(): void
+    public function test_commission_arrivee_apres_validation_rouvre_la_periode_payee_sans_toucher_la_fiche_payee(): void
     {
         $periode = $this->makePeriodeValideeAvecUneFiche();
+        $payee = $periode->fiches()->firstOrFail();
         $periode->fiches()->update(['montant_paye' => 1000]);
 
         $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
@@ -592,15 +594,35 @@ class PaiementPeriodeTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('comptabilite.periodes.show', $periode))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('periode.statut', StatutPeriodePaiement::VALIDEE->value)
+                ->where('periode.statut', StatutPeriodePaiement::CALCULEE->value)
+                ->where('validation.possible', true)
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+
+        $this->assertSame(2, PaiementFiche::where('periode_id', $periode->id)->count(), 'la nouvelle commission a sa fiche');
+        $this->assertSame(1000.0, (float) $payee->fresh()->montant_paye, 'la fiche payée est conservée telle quelle');
+        $this->assertSame(1000.0, (float) PaiementFiche::where('periode_id', $periode->id)->sum('montant_paye'));
+    }
+
+    /** Une période clôturée n'est jamais rouverte : la commission tardive y reste signalée. */
+    public function test_commission_arrivee_apres_cloture_est_seulement_signalee(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
+
+        $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CLOTUREE->value)
                 ->where('validation.possible', false)
                 ->where('validation.commissions_hors_fiches.nombre', 1)
                 ->where('validation.commissions_hors_fiches.montant', 45000)
                 ->where('validation.raison', fn (string $raison) => str_contains($raison, 'arrivées après la validation'))
             );
 
-        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count(), 'aucune fiche payée n\'est recalculée');
-        $this->assertSame(1000.0, (float) PaiementFiche::where('periode_id', $periode->id)->sum('montant_paye'));
+        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count());
     }
 
     /** Sans paiement, la commission tardive rouvre la période à l'ouverture de la page (ADR 0008). */

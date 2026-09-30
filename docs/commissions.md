@@ -1026,8 +1026,15 @@ rattraper.
   - Pas de complétion (no-op, comme avant) si la dernière tentative est `succes`, ou si une
     enveloppe de l'opération est `annulee` (retour total, annulation).
   - Cible manquante dont la **période de paiement de son type** (livreur, propriétaire, site,
-    consultant) couvrant la date d'origine est **validée ou clôturée** : non créée, reste à
-    régulariser avec un motif explicite (référence de la période).
+    consultant) couvrant la date d'origine est **clôturée** : non créée, reste à régulariser avec
+    un motif explicite (référence de la période).
+  - **Révisé le 30/09/2026** (auparavant : refusée aussi sur une période seulement validée, ce qui
+    rendait irrégularisable toute part manquante d'une période déjà payée). Période **validée**,
+    même déjà payée : la part est créée à sa date d'origine, la période est rouverte
+    automatiquement et la part va sur une **fiche complémentaire** (ADR 0010, point 4) — la fiche
+    déjà payée reste intacte. Une part Livreur doit ensuite être validée ; la période repasse
+    « Validée » dès que toutes ses commissions le sont, et la fiche complémentaire devient
+    payable.
   - **Option A — date d'effet d'une correction de partage.** Quand une nouvelle version de partage
     remplace une version **non conforme au barème en vigueur** (somme ≠ barème), elle prend effet à
     la **date d'effet de ce barème** (jamais avant le début de la version remplacée, qui est bornée
@@ -1187,9 +1194,16 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   période validée ne sont jamais recalculées, cf. `needsRecalcul`). Elle n'est donc jamais payée
   en l'état. `PeriodeCalculatorService::commissionsHorsFiches()` les détecte (même périmètre que
   le calcul livreur/propriétaire/site/consultant).
-- **Traitement (ADR 0008)** : la période est **rouverte automatiquement** (repasse « Calculée »,
-  fiches recalculées) — sauf si un paiement existe déjà sur la période. Dans ce dernier cas seule
-  subsiste l'alerte orange (nombre, montant), et aucun traitement n'est encore décidé.
+- **Traitement (ADR 0008, révisé le 30/09/2026 par ADR 0010 point 4)** : la période est
+  **rouverte automatiquement** (repasse « Calculée », fiches non figées recalculées), **même si un
+  paiement existe déjà** : une fiche figée (paiement reçu) n'est jamais recalculée, la commission
+  tardive va sur une fiche complémentaire du bénéficiaire (ou sur sa propre fiche s'il n'en avait
+  pas). Seules les pièces « fiche validée » des fiches non figées sont contrepassées. L'alerte
+  orange (nombre, montant) ne subsiste que sur une période **clôturée** ou dont la réouverture a
+  échoué (contrepassation impossible, journalisée).
+- Une commission **annulée** portée par une fiche figée ne déclenche pas de réouverture (le
+  recalcul ne pourrait pas la retirer) ; retour et annulation restent de toute façon refusés sur
+  une période payée.
 - Tests : `tests/Feature/Comptabilite/PaiementPeriodeTest.php` (`test_bouton_valider_*`,
   `test_commission_arrivee_apres_validation_*`, `test_revalider_*`).
 
@@ -1267,10 +1281,12 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   (`PeriodeValidationService::validerSiComplete`, mêmes contrôles et mêmes effets que le bouton :
   activation `creee → impaye`, comptabilisation des fiches). Déclenchée après toute validation de
   commission, tout calcul de période et toute génération. Jamais pour une période sans commission.
-- **Réouverture automatique** d'une période validée non payée quand ses fiches ne reflètent plus
-  les commissions (nouvelle commission datée dans la période, ou commission annulée/supprimée) :
-  contrepassation des pièces « fiche validée », recalcul, puis revalidation si tout est validé. Une
-  période déjà payée en partie n'est jamais rouverte (alerte orange sur la page Période).
+- **Réouverture automatique** d'une période validée quand ses fiches ne reflètent plus les
+  commissions (nouvelle commission datée dans la période, ou commission annulée/supprimée sur une
+  fiche non figée) : contrepassation des pièces « fiche validée » des fiches non figées, recalcul,
+  puis revalidation si tout est validé. Depuis le 30/09/2026, une période déjà payée en partie est
+  aussi rouverte : ses fiches payées restent intactes et la nouvelle commission va sur une fiche
+  complémentaire (ADR 0010, point 4). Une période clôturée n'est jamais rouverte.
 - **Retour de livraison / annulation exceptionnelle** : seule une décision humaine ou une période
   payée/clôturée bloque (cf. [retour-commande.md](retour-commande.md)).
 - **Rattrapage** de l'existant : `php artisan commissions:valider-beneficiaire-unique --dry-run`, puis
@@ -1340,6 +1356,9 @@ générée » en était la seule trace.
   clic, anomalie déjà régularisée ou relances concurrentes ne créent jamais de seconde enveloppe.
   Une vente relancée tente aussi sa clôture (`cloturerSiComplete()`), comme la relance depuis la
   fiche commande.
+- **Motif « période figée »** : depuis le 30/09/2026, seule une période **clôturée** bloque encore
+  la relance. Une anomalie historique dont le message cite une période « validée » se régularise
+  en relançant : la période est rouverte et la part va sur une fiche complémentaire.
 - **Permissions.** La lecture suit la même règle que les autres écrans Commissions
   (`comptabilite.read` ou `commissions.read`). La relance exige `commissions.update`, et son bouton
   est masqué sans cette permission. Un utilisateur non administrateur ne voit que les anomalies de

@@ -654,9 +654,9 @@ function exportPdf() {
                     </p>
                     <p class="mt-0.5">
                         Elles sont datées dans cette période mais ne figurent
-                        sur aucune fiche. La période a déjà reçu des paiements :
-                        elle ne peut pas être rouverte automatiquement, et ces
-                        commissions ne seront pas payées en l'état.
+                        sur aucune fiche. La période est clôturée ou n'a pas pu
+                        être rouverte automatiquement : ces commissions ne
+                        seront pas payées en l'état.
                     </p>
                 </div>
             </div>

@@ -288,22 +288,45 @@ class VehiculePremiereRegularisationTest extends TestCase
         $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
     }
 
-    /** Symétrique : une dérogation dont le plafond ne couvre pas l'exposition laisse le verrou actif. */
+    /**
+     * Symétrique : une dérogation dont le plafond ne couvre pas l'exposition bloque toujours, avec
+     * le message du plafond dérogatoire et le montant à encaisser — jamais « aucun paiement »,
+     * qui laissait croire qu'un encaissement quelconque suffirait (rapport du 30/09/2026).
+     */
     public function test_store_bloque_malgre_la_derogation_quand_lexposition_depasse_le_plafond(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $vehicule = $this->makeVehicule();
         $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
-        $facture = $this->makeFactureNonEncaissee(10_000, $vehicule); // 10 000 > plafond 5 000
+        $this->makeFactureNonEncaissee(10_000, $vehicule); // 10 000 > plafond 5 000
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), $this->payloadVente($vehicule))
             ->assertSessionHasErrors('impayes');
 
         $errors = session('errors')->getBag('default')->get('impayes');
-        $this->assertStringContainsString('aucun paiement', $errors[0]);
-        $this->assertStringContainsString($facture->reference, $errors[0]);
+        $this->assertStringContainsString('plafond de derogation', $errors[0]);
+        $this->assertStringContainsString('Encaissez au moins 5 000 GNF', $errors[0]);
+        $this->assertStringNotContainsString('aucun paiement', $errors[0]);
         $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    public function test_check_solvabilite_annonce_le_plafond_derogatoire_depasse(): void
+    {
+        $vehicule = $this->makeVehicule();
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
+        $this->makeFactureNonEncaissee(10_000, $vehicule);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?vehicule_id='.$vehicule->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertTrue($apercu['blocked']);
+        $this->assertFalse($apercu['blocage_premiere_facture']);
+        $this->assertTrue($apercu['blocage_plafond_derogation']);
+        $this->assertSame(10_000, $apercu['exposition']);
+        $this->assertSame(5_000, $apercu['depassement']);
     }
 
     /** Sans dérogation active, le verrou reste absolu — comportement inchangé (cf. Cas 2 plus haut). */

@@ -160,8 +160,8 @@ class PaiementPeriodeController extends Controller
         // PeriodeCalculatorService::calculer()). Ne s'applique jamais à une période
         // validée/clôturée : needsRecalcul() renvoie alors toujours false, ses montants
         // restent figés tant qu'elle n'a pas été repassée en brouillon.
-        // Période validée ayant reçu des commissions depuis : réouverte avant recalcul (sauf
-        // paiement déjà enregistré), cf. PeriodeValidationService.
+        // Période validée ayant reçu des commissions depuis : réouverte avant recalcul, même
+        // déjà payée (fiche complémentaire, ADR 0010), cf. PeriodeValidationService.
         app(PeriodeValidationService::class)->rouvrirSiDesynchronisee($periode);
         $recalcul = $this->calculator->calculerSiNecessaire($periode->refresh());
         if ($recalcul['recalcule']) {
@@ -391,10 +391,9 @@ class PaiementPeriodeController extends Controller
 
     /**
      * État du bouton « Valider la période de paiement ». Seule une période calculée est
-     * validable ; une fois validée, ses fiches sont figées. Les commissions arrivées ensuite
-     * dans ses dates (commissions_hors_fiches) ne sont pas intégrables par une simple
-     * revalidation : elles sont seulement signalées, leur traitement relève d'une décision
-     * métier distincte.
+     * validable. Une commission arrivée après la validation rouvre la période (même déjà
+     * payée) ; commissions_hors_fiches ne reste donc non nul que sur une période clôturée ou
+     * dont la réouverture automatique a échoué : elles y sont seulement signalées.
      *
      * @return array{possible: bool, raison: ?string, commissions_hors_fiches: array{nombre: int, montant: float}}
      */
@@ -407,7 +406,7 @@ class PaiementPeriodeController extends Controller
         $raison = match (true) {
             $periode->peutEtreValidee() => null,
             $periode->isBrouillon() => "La période doit d'abord être calculée.",
-            $horsFiches['nombre'] > 0 => 'Période déjà validée et payée en partie — des commissions arrivées après la validation ne sont sur aucune fiche (voir l\'alerte).',
+            $horsFiches['nombre'] > 0 => 'Des commissions arrivées après la validation ne sont sur aucune fiche (voir l\'alerte).',
             default => 'Période déjà validée — aucune nouvelle commission à valider.',
         };
 
