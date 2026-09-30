@@ -116,7 +116,10 @@ class RapportPerimetreResolver
             ->join('factures_ventes as fv', 'fv.id', '=', 'ev.facture_vente_id')
             ->where('fv.organization_id', $organizationId)
             ->whereNotNull('ev.created_by')
-            ->when($siteIds !== null, fn ($q) => $q->whereIn('fv.site_id', $siteIds))
+            // Agents qui ont encaissé DANS ces agences (ADR 0012 : agence d'encaissement).
+            ->when($siteIds !== null, fn ($q) => $q->where(fn ($w) => $w
+                ->whereIn('ev.site_encaissement_id', $siteIds)
+                ->orWhere(fn ($legacy) => $legacy->whereNull('ev.site_encaissement_id')->whereIn('fv.site_id', $siteIds))))
             ->distinct()
             ->pluck('ev.created_by');
 

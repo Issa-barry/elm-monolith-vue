@@ -439,6 +439,14 @@ défaut **par utilisateur** et par scope — choisir une vue partagée comme dé
 
 ### Ajouter les vues sur une nouvelle liste (sans recopier de code)
 
+Ventes, Factures et Véhicules utilisent les scopes `ventes`, `factures` et `vehicules`.
+Le partage exige `ventes.update` (ventes/factures) ou `vehicules.update`. La vue des ventes
+ne s'applique pas à Distribution, même si ces pages partagent un contrôleur.
+Les filtres des véhicules sont appliqués côté serveur par `VehiculeIndexFilters` ; les compteurs
+restent globaux. Le type et l'agence du propriétaire sont enregistrés par identifiant, tandis
+que `site_ids[]` désigne l'agence du véhicule. Sur Factures, une vue sans période conserve le
+mois courant et `periode=tout` permet de voir toutes les dates.
+
 Les listes comptables utilisent également ce moteur via la prop `savedFilterScope` de
 `CommissionIndexLayout.vue` : `commissions-livreurs`, `commissions-proprietaires`,
 `commissions-sites`, `commissions-consultants` et `cashback`. Chaque liste conserve ses propres

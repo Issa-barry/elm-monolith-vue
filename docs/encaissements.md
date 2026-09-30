@@ -1,9 +1,9 @@
 # Encaissements de vente
 
 > **Agence d'encaissement** (ADR 0012, 29/09/2026) : un encaissement porte l'agence qui a réellement
-> reçu l'argent (`site_encaissement_id`) — celle de la facture, sauf quand un client paie dans une
-> autre agence (« Encaisser une commande d'une autre agence », permission
-> `factures.encaisser_autre_agence`). Partout ci-dessous, « l'agence de la facture » s'entend alors
+> reçu l'argent (`site_encaissement_id`) = **l'agence de l'utilisateur qui encaisse**, jamais celle
+> de la facture par défaut. Encaisser une commande d'une autre agence exige la permission
+> `factures.encaisser_autre_agence` ; un utilisateur affecté à aucune agence ne peut pas encaisser. Partout ci-dessous, « l'agence de la facture » s'entend alors
 > de l'agence d'encaissement pour les moyens proposés, la caisse dédiée et la pièce comptable ; la
 > vente et la créance restent à l'agence de la commande. Détail :
 > [tresorerie-inter-agences.md](tresorerie-inter-agences.md).

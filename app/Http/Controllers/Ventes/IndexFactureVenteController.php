@@ -9,8 +9,8 @@ use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\Site;
-use App\Services\Tresorerie\CaisseAgentResolver;
-use App\Services\Tresorerie\MoyensEncaissementResolver;
+use App\Services\SavedFilterService;
+use App\Services\Tresorerie\AgenceEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -22,6 +22,9 @@ class IndexFactureVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'factures');
+
         $user = auth()->user();
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
@@ -29,8 +32,8 @@ class IndexFactureVenteController extends Controller
         // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
         $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
 
-        $periode = $request->input('periode', 'month');
-        $statut = $request->input('statut', 'tous');
+        $periode = $request->input('periode') ?? 'month';
+        $statut = $request->input('statut') ?? 'tous';
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $livreurId = $request->input('livreur_id');
         $vehiculeRecherche = $request->input('vehicule');
@@ -148,12 +151,9 @@ class IndexFactureVenteController extends Controller
                 ->orWhere('telephone', 'like', "%{$clientRecherche}%"));
         }
 
-        // Une seule requête pour toute la liste (indicateur peut_encaisser_especes de chaque ligne).
-        $sitesAvecCaisse = app(CaisseAgentResolver::class)->sitesAvecCaisseActive($orgId, (string) $user->id);
-
         $facturesTrouvees = $query->orderByDesc('created_at')->get();
-        // Moyens hors espèces par agence (supports actifs), une seule résolution pour la liste.
-        $moyensParSite = app(MoyensEncaissementResolver::class)->parSite($orgId, $facturesTrouvees->pluck('site_id'));
+        // Agences d'encaissement de l'utilisateur, moyens et caisses : une seule résolution pour la liste.
+        $encaissementParFacture = app(AgenceEncaissementResolver::class)->pourEcran($user, $facturesTrouvees);
 
         $factures = $facturesTrouvees
             ->map(fn (FactureVente $f) => [
@@ -172,10 +172,12 @@ class IndexFactureVenteController extends Controller
                 'is_annulee' => $f->isAnnulee(),
                 'is_payee' => $f->isPayee(),
                 'is_encaissable' => $f->commande?->isEncaissable() ?? false,
-                // Espèces : possibles seulement avec une caisse dédiée active sur le site de la
-                // facture (cf. CaisseAgentResolver::garantirCaissePourEspeces(), garantie serveur).
-                'peut_encaisser_especes' => (bool) ($f->site_id && in_array($f->site_id, $sitesAvecCaisse, true)),
-                'moyens_encaissement' => $moyensParSite[$f->site_id ?? ''] ?? [],
+                // Agence d'encaissement = agence de l'utilisateur (ADR 0012, AgenceEncaissementResolver) :
+                // agences proposées, leurs moyens et leurs espèces. Les deux clés historiques reprennent
+                // l'agence présélectionnée.
+                'encaissement_agences' => $encaissementParFacture[$f->id] ?? null,
+                'peut_encaisser_especes' => (bool) (self::agenceDefaut($encaissementParFacture[$f->id] ?? null)['peut_encaisser_especes'] ?? false),
+                'moyens_encaissement' => self::agenceDefaut($encaissementParFacture[$f->id] ?? null)['moyens'] ?? [],
                 'created_at' => $f->created_at?->format('d/m/Y'),
                 'encaissements' => $f->encaissements
                     ->sortByDesc(fn ($e) => $e->created_at?->timestamp ?? 0)
@@ -220,6 +222,7 @@ class IndexFactureVenteController extends Controller
         ];
 
         return Inertia::render('Factures/Index', [
+            'saved_view' => $savedView,
             'factures' => $factures->values(),
             'totaux' => $totaux,
             'periode' => $periode,
@@ -235,5 +238,16 @@ class IndexFactureVenteController extends Controller
             'client' => $clientRecherche,
             'reference' => $referenceRecherche,
         ]);
+    }
+
+    /**
+     * Agence présélectionnée d'une entrée de AgenceEncaissementResolver::pourEcran() (null : aucune).
+     *
+     * @param  array<string, mixed>|null  $encaissement
+     * @return array<string, mixed>|null
+     */
+    private static function agenceDefaut(?array $encaissement): ?array
+    {
+        return collect($encaissement['agences'] ?? [])->firstWhere('site_id', $encaissement['agence_defaut'] ?? null);
     }
 }

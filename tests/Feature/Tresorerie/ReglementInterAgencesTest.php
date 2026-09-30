@@ -32,7 +32,7 @@ use Tests\TestCase;
  * Règlement inter-agences (ADR 0012, lot 1) : la dette née d'un encaissement reçu pour le compte
  * d'une autre agence ne se solde que par un mouvement de fonds de nature « règlement », lié à ces
  * encaissements précis, dont le montant est calculé — jamais saisi. Un encaissement n'est jamais
- * engagé dans deux règlements actifs ; un mouvement « Entre agences » ordinaire ne solde rien.
+ * engagé dans deux règlements actifs ; un mouvement « Transfert entre agences » ordinaire ne solde rien.
  * Le compte de liaison (181) du grand livre suit exactement la dette calculée.
  */
 class ReglementInterAgencesTest extends TestCase
@@ -286,6 +286,51 @@ class ReglementInterAgencesTest extends TestCase
 
         $this->assertSame(500_000.0, $this->soldeBversA()['a_verser']);
         $this->assertSame(-500_000.0, $this->soldeLiaison($this->agenceB, $this->agenceA));
+    }
+
+    /**
+     * Circuit de l'agent (ADR 0012) : il verse ses espèces à la caisse de SA propre agence, même
+     * encaissées pour une commande d'une autre agence. Ce versement de caisse ne solde jamais la
+     * dette inter-agences : seul un règlement de l'agence le fait.
+     */
+    public function test_un_versement_de_caisse_de_l_agent_ne_solde_jamais_la_dette_inter_agences(): void
+    {
+        $agentB = $this->creerAgent($this->agenceB, 'Mariama', 'Kindia');
+        $caisseAgent = $this->creerCaisseActivePour($agentB, $this->agenceB->id);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->agenceA->id,
+            'statut' => StatutCommandeVente::LIVREE,
+            'total_commande' => 300_000,
+        ]);
+        $facture = FactureVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $commande->id,
+            'site_id' => $this->agenceA->id,
+            'montant_net' => 300_000,
+        ]);
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'site_encaissement_id' => $this->agenceB->id,
+            'montant' => 300_000,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+            'created_by' => $agentB->id,
+        ]);
+        $disponibilite = app(TresorerieDisponibiliteService::class);
+        $this->assertSame(300_000.0, $disponibilite->soldePourSupport($caisseAgent));
+
+        $versement = $this->mouvements->verserCaisseAgent($this->org->id, $caisseAgent, $this->caisseB->id, 300_000, 'Remise du soir', $agentB->id);
+        $this->mouvements->recevoir($versement, $this->user->id, $this->caisseB->id);
+
+        // L'argent est à la caisse de l'agence B (Kindia)…
+        $this->assertSame(300_000.0, $disponibilite->soldePourSupport($this->caisseB));
+        $this->assertSame(0.0, $disponibilite->soldePourSupport($caisseAgent));
+        // … mais B doit toujours tout à A : la dette reste ouverte jusqu'au règlement inter-agences.
+        $this->assertSame(300_000.0, $this->soldeBversA()['a_verser']);
+        $this->assertSame(-300_000.0, $this->soldeLiaison($this->agenceB, $this->agenceA));
+        $this->assertSame(0, MouvementFondsEncaissement::count());
     }
 
     public function test_annuler_un_reglement_en_brouillon_libere_ses_encaissements(): void

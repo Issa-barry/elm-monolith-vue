@@ -21,11 +21,20 @@ l'argent dans sa trésorerie (pièce posée sur le site A, solde des supports ca
    client, les commissions, le cashback et le stock restent à l'agence de la **commande**
    (`factures_ventes.site_id`, inchangé). L'argent est reçu par l'agence **d'encaissement**
    (`encaissements_ventes.site_encaissement_id`) : ses moyens, sa caisse dédiée, sa trésorerie.
-2. **L'agence d'encaissement est toujours l'une des agences de l'utilisateur** (`user_sites`),
-   jamais un choix libre, sans passe-droit de rôle. Encaisser ailleurs que dans l'agence de la
-   commande exige la permission `factures.encaisser_autre_agence` (accordée par défaut à
-   `admin_entreprise` ; `super_admin` l'a d'office). L'agence de la commande est présélectionnée
-   quand l'utilisateur y est affecté. Sans agence demandée, rien ne change : agence de la facture.
+2. **L'agence d'encaissement est l'agence de l'utilisateur qui encaisse** (`user_sites`), jamais
+   un choix libre ni l'agence de la facture par défaut, sans passe-droit de rôle (règle précisée le
+   29/09/2026, après un encaissement enregistré à Matoto par un agent affecté à CBA) :
+   - affecté à l'agence de la commande → elle est proposée et présélectionnée ;
+   - encaisser dans une autre de ses agences exige `factures.encaisser_autre_agence` (accordée par
+     défaut à `admin_entreprise` ; `super_admin` l'a d'office) — sans elle, un utilisateur non
+     affecté à l'agence de la commande ne peut pas l'encaisser ;
+   - affecté à aucune agence (administrateur, super admin compris) → refus, aucun repli ;
+   - plusieurs agences possibles → agence de la commande si elle en fait partie, sinon l'agence par
+     défaut de l'utilisateur, modifiable dans la fenêtre de paiement.
+   Tous les écrans d'encaissement (listes Factures et Ventes, fiches Ventes et Distributions,
+   recherche « autre agence ») reçoivent ces agences (`AgenceEncaissementResolver::pourEcran()`) ;
+   le serveur applique la même règle quand l'écran n'envoie rien. Les espèces vont dans la caisse
+   dédiée de l'agent DANS cette agence : une caisse d'une autre agence n'est jamais utilisée.
 3. **Deux pièces mono-site reliées par un compte de liaison (181000)**, comme les mouvements de
    fonds : sur le site B, débit trésorerie / crédit liaison [tiers A] ; sur le site A, débit
    liaison [tiers B] / crédit client. La liaison se solde à 0 au niveau de l'organisation ; par
@@ -38,7 +47,7 @@ l'argent dans sa trésorerie (pièce posée sur le site A, solde des supports ca
    aux encaissements précis qu'il reverse (`mouvement_fonds_encaissements`). Son montant est la somme
    de ces encaissements, calculée par le serveur. Ses écritures ont la liaison pour contrepartie
    (au lieu du transit 588000) : envoi = dette de B soldée, réception = créance de A soldée. Un
-   mouvement « Entre agences » ordinaire (remise au siège, financement) ne solde jamais rien.
+   mouvement « Transfert entre agences » ordinaire (remise au siège, financement) ne solde jamais rien.
 6. **Jamais de double rapprochement** : un encaissement n'appartient qu'à un règlement actif —
    contrôle sous verrou, et index unique `encaissement_actif_id` en base. Un règlement annulé
    (brouillon) ou retourné libère ses encaissements.
@@ -62,4 +71,6 @@ l'argent dans sa trésorerie (pièce posée sur le site A, solde des supports ca
 - Les rapports distingueront deux axes (lot 3) : vente/créance → agence de la commande ;
   encaissement/trésorerie → agence d'encaissement.
 - Historique : chaque encaissement existant reçoit l'agence de sa facture (valeur exacte). Aucune
-  pièce comptable existante n'est modifiée.
+  pièce comptable existante n'est modifiée. Un encaissement enregistré avant la règle précisée du
+  29/09/2026 (ex. VTE-290926-001 à Matoto) reste tel quel : le corriger passe par une annulation
+  exceptionnelle puis un nouvel encaissement, jamais une modification en base.

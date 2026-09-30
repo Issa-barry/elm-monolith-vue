@@ -52,7 +52,12 @@ const rapportVide = (): RapportActivite => ({
         total_lignes: 0,
     },
     encaissements: {
-        resume: { nombre: 0, montant: 0 },
+        resume: {
+            nombre: 0,
+            montant: 0,
+            pour_autres_agences_nombre: 0,
+            pour_autres_agences_montant: 0,
+        },
         par_moyen: [],
         lignes: [],
         total_lignes: 0,
@@ -110,7 +115,10 @@ const composantsReels = {
     SectionCaisse: false,
 };
 
-const monter = (mode: 'ma_situation' | 'rapport') =>
+const monter = (
+    mode: 'ma_situation' | 'rapport',
+    rapport: RapportActivite = rapportVide(),
+) =>
     shallowMount(Activite, {
         props: {
             mode,
@@ -144,7 +152,7 @@ const monter = (mode: 'ma_situation' | 'rapport') =>
                     ? { id: 'u1', nom: 'Moussa Sidibé' }
                     : null,
             limite_lignes: 300,
-            rapport: rapportVide(),
+            rapport,
         },
         global: { renderStubDefaultSlot: true, stubs: composantsReels },
     });
@@ -414,6 +422,7 @@ describe('Rapports/Activite', () => {
                         client: 'Client A',
                         agent: null,
                         site_nom: 'Matoto',
+                        encaisse_a: null,
                         montant: 800_000,
                         encaisse: 550_000,
                         reste: 250_000,
@@ -431,5 +440,74 @@ describe('Rapports/Activite', () => {
         expect(wrapper.get('table').element.parentElement?.className).toContain(
             'hidden',
         );
+    });
+
+    // ADR 0012 : l'agent remet tout à la caisse de SON agence ; le reversement à l'agence de la
+    // commande est une obligation de l'agence (Trésorerie → Inter-agences), jamais de l'agent.
+    const rapportPourAutreAgence = (): RapportActivite => {
+        const rapport = rapportVide();
+        rapport.encaissements.resume = {
+            nombre: 1,
+            montant: 10_800_000,
+            pour_autres_agences_nombre: 1,
+            pour_autres_agences_montant: 10_800_000,
+        };
+        rapport.encaissements.par_moyen = [
+            {
+                cle: 'especes',
+                libelle: 'Espèces',
+                mode_paiement: 'especes',
+                nombre: 1,
+                montant: 10_800_000,
+            },
+        ];
+        rapport.encaissements.lignes = [
+            {
+                id: 'e1',
+                date_encaissement: '2026-09-29',
+                saisi_le: '2026-09-29 10:00',
+                saisie_differee: false,
+                montant: 10_800_000,
+                mode_paiement: 'especes',
+                operateur_mobile_money: null,
+                moyen_libelle: 'Espèces',
+                reference_paiement: null,
+                facture_id: 'f1',
+                facture_reference: 'VTE-290926-001',
+                client: null,
+                agent: 'Moussa Sidibé',
+                site_nom: 'Matoto',
+                encaisse_a: 'CBA',
+                pour_autre_agence: true,
+            },
+        ];
+        rapport.encaissements.total_lignes = 1;
+
+        return rapport;
+    };
+
+    it('Ma situation ne montre jamais à l’agent ce que son agence doit reverser à une autre', () => {
+        url.valeur = '/backoffice/ma-situation?tab=encaissements';
+        const wrapper = monter('ma_situation', rapportPourAutreAgence());
+
+        expect(wrapper.text()).toContain('CBA');
+        expect(wrapper.text()).not.toContain('à reverser');
+        expect(
+            wrapper
+                .find('[data-testid="encaissement-pour-autre-agence"]')
+                .exists(),
+        ).toBe(false);
+    });
+
+    it('le rapport d’activité des responsables garde le reversement dû par l’agence', () => {
+        url.valeur = '/backoffice/rapports/activite?tab=encaissements';
+        const wrapper = monter('rapport', rapportPourAutreAgence());
+
+        expect(wrapper.text()).toContain("Pour d'autres agences (à reverser)");
+        expect(
+            wrapper
+                .get('[data-testid="encaissement-pour-autre-agence"]')
+                .text(),
+        ).toBe('pour Matoto · à reverser');
     });
 });

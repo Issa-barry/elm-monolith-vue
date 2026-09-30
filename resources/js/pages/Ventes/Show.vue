@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -81,8 +82,10 @@ interface Encaissement {
     reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
-    /** Agence qui a reçu l'argent quand ce n'est pas celle de la commande (ADR 0012), sinon null. */
+    /** Agence qui a reçu l'argent (ADR 0012). */
     encaisse_a: string | null;
+    /** Reçu par une autre agence que celle de la commande : un reversement est dû. */
+    pour_autre_agence: boolean;
     /** Reversement à l'agence de la commande — seulement pour un encaissement reçu ailleurs. */
     reversement: {
         statut: string;
@@ -238,6 +241,8 @@ interface CommandeData {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -406,6 +411,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
     montant: 'Montant',
     mode_paiement: 'Mode paiement',
     date_encaissement: 'Date encaissement',
+    agence_encaissement: 'Encaissé à',
     lignes: 'Produits',
 };
 
@@ -2197,6 +2203,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :especes-disponibles="commande.peut_encaisser_especes"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
+            :encaissement-agences="commande.encaissement_agences"
             @submit="submitEncaisser"
         />
 

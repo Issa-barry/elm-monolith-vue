@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Tresorerie;
 
+use App\Enums\AuditEvent;
 use App\Enums\EvenementComptable;
 use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
@@ -21,6 +22,7 @@ use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -165,15 +167,140 @@ class EncaissementInterAgencesTest extends TestCase
         $this->assertNull($this->piece($encaissement, EvenementComptable::ENCAISSEMENT_VENTE_POUR_COMPTE));
     }
 
-    public function test_sans_agence_demandee_l_encaissement_reste_a_l_agence_de_la_facture(): void
+    /**
+     * Règle du 29/09/2026 (remplace le repli sur l'agence de la facture du lot 1) : sans agence
+     * envoyée — boutons « Encaisser » des listes et fiches —, l'argent entre dans l'agence de
+     * l'utilisateur qui encaisse, jamais dans celle de la commande.
+     */
+    public function test_sans_agence_demandee_l_encaissement_est_recu_par_l_agence_de_l_utilisateur(): void
     {
-        // Comportement de tous les écrans existants : aucune agence envoyée.
+        $this->encaisser($this->facture(), $this->agentB, ['site_encaissement_id' => null])->assertSessionHasNoErrors();
+
+        $this->assertSame($this->agenceB->id, EncaissementVente::firstOrFail()->site_encaissement_id);
+    }
+
+    public function test_un_support_de_l_agence_de_la_commande_est_refuse_sans_agence_demandee(): void
+    {
         $this->encaisser($this->facture(), $this->agentB, [
             'compte_tresorerie_id' => $this->orangeA->id,
             'site_encaissement_id' => null,
+        ])->assertSessionHasErrors('compte_tresorerie_id');
+
+        $this->assertSame(0, EncaissementVente::count());
+    }
+
+    public function test_sans_la_permission_un_utilisateur_d_une_autre_agence_ne_peut_pas_encaisser_la_commande(): void
+    {
+        $agent = $this->creerUtilisateurNonAdmin($this->agenceB, ['factures.encaisser'], 'Sans', 'Permission');
+
+        $this->encaisser($this->facture(), $agent, ['site_encaissement_id' => null])
+            ->assertSessionHasErrors(['site_encaissement_id' => AgenceEncaissementResolver::MESSAGE_SANS_PERMISSION]);
+
+        $this->assertSame(0, EncaissementVente::count());
+    }
+
+    public function test_un_utilisateur_affecte_a_aucune_agence_ne_peut_pas_encaisser_meme_super_admin(): void
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+
+        $this->encaisser($this->facture(), $superAdmin, [
+            'compte_tresorerie_id' => $this->orangeA->id,
+            'site_encaissement_id' => null,
+        ])->assertSessionHasErrors(['site_encaissement_id' => AgenceEncaissementResolver::MESSAGE_AUCUNE_AGENCE]);
+
+        $this->assertSame(0, EncaissementVente::count());
+    }
+
+    /**
+     * Scénario de validation du 29/09/2026 : commande créée à Matoto, agent affecté à CBA (ancienne
+     * caisse encore active à Matoto), encaissement depuis le bouton « Encaisser » ordinaire.
+     */
+    public function test_commande_de_matoto_encaissee_par_un_agent_affecte_a_cba(): void
+    {
+        $matoto = $this->agenceA;
+        $cba = $this->agenceB;
+        $this->agentB->sites()->attach($matoto->id, ['role' => 'employe', 'is_default' => false]);
+        $caisseMatoto = $this->creerCaisseActivePour($this->agentB, $matoto->id);
+        $this->agentB->sites()->detach($matoto->id);
+        $caisseCba = $this->creerCaisseActivePour($this->agentB, $cba->id);
+        $facture = $this->facture($matoto);
+
+        $this->encaisser($facture, $this->agentB, [
+            'mode_paiement' => 'especes',
+            'compte_tresorerie_id' => null,
+            'reference_paiement' => null,
+            'site_encaissement_id' => null,
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame($this->agenceA->id, EncaissementVente::firstOrFail()->site_encaissement_id);
+        $encaissement = EncaissementVente::firstOrFail();
+        $this->assertSame($cba->id, $encaissement->site_encaissement_id, 'Encaissée à CBA');
+        $this->assertSame($matoto->id, $facture->fresh()->site_id, 'Créée à Matoto');
+
+        $disponibilite = app(TresorerieDisponibiliteService::class);
+        $this->assertSame(100_000.0, $disponibilite->soldePourSupport($caisseCba), 'caisse de l\'agent à CBA');
+        $this->assertSame(0.0, $disponibilite->soldePourSupport($caisseMatoto), 'jamais la caisse de Matoto');
+
+        $recu = $this->lignes($this->piece($encaissement, EvenementComptable::ENCAISSEMENT_VENTE_RECU));
+        $this->assertSame($cba->id, $recu[$caisseCba->compte->numero]['site_id'], 'comptabilité de l\'encaissement à CBA');
+
+        $soldes = app(DetteInterAgencesService::class)->soldes($this->org->id);
+        $this->assertSame($cba->id, $soldes[0]['site_debiteur_id'], 'CBA doit reverser');
+        $this->assertSame($matoto->id, $soldes[0]['site_creancier_id'], 'à Matoto');
+        $this->assertSame(100_000.0, $soldes[0]['a_verser']);
+
+        $this->actingAs($this->user)->get(route('ventes.show', $facture->commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('facture.encaissements.0.encaisse_a', $cba->nom)
+                ->where('historiques', fn ($historiques) => collect($historiques)
+                    ->firstWhere('event_code', AuditEvent::ENCAISSEMENT_ADDED->value)['new_values']['agence_encaissement'] === $cba->nom));
+    }
+
+    public function test_une_caisse_d_une_autre_agence_n_est_jamais_utilisee_pour_les_especes(): void
+    {
+        $this->agentB->sites()->attach($this->agenceA->id, ['role' => 'employe', 'is_default' => false]);
+        $this->creerCaisseActivePour($this->agentB, $this->agenceA->id);
+        $this->agentB->sites()->detach($this->agenceA->id);
+
+        $this->encaisser($this->facture(), $this->agentB, [
+            'mode_paiement' => 'especes',
+            'compte_tresorerie_id' => null,
+            'reference_paiement' => null,
+            'site_encaissement_id' => null,
+        ])->assertSessionHasErrors('mode_paiement');
+
+        $this->assertSame(0, EncaissementVente::count());
+    }
+
+    public function test_les_ecrans_proposent_l_agence_de_l_utilisateur_et_ses_moyens(): void
+    {
+        $facture = $this->facture();
+        Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
+        $this->agentB->givePermissionTo('ventes.read');
+
+        $this->actingAs($this->agentB)->get(route('ventes.show', $facture->commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('commande.encaissement_agences.agence_defaut', $this->agenceB->id)
+                ->where('commande.encaissement_agences.agence_commande.id', $this->agenceA->id)
+                ->where('commande.encaissement_agences.message', null)
+                ->where('commande.moyens_encaissement.0.compte_tresorerie_id', $this->orangeB->id));
+    }
+
+    public function test_les_ecrans_expliquent_pourquoi_un_utilisateur_sans_agence_ne_peut_pas_encaisser(): void
+    {
+        $facture = $this->facture();
+        $this->user->sites()->detach();
+        $this->user->sites()->attach($this->creerSite('Agence Boké')->id, ['role' => 'employe', 'is_default' => true]);
+        $this->user->revokePermissionTo(AgenceEncaissementResolver::PERMISSION);
+
+        $this->actingAs($this->user)->get(route('ventes.show', $facture->commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('commande.encaissement_agences.agences', [])
+                ->where('commande.encaissement_agences.message', AgenceEncaissementResolver::MESSAGE_SANS_PERMISSION));
     }
 
     public function test_l_agence_de_la_facture_n_est_jamais_remplacee_par_un_encaissement_cree_sans_agence(): void

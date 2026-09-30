@@ -98,7 +98,8 @@ defineProps<{
                             >
                                 Agent
                             </th>
-                            <th class="px-3 py-2 font-medium">Agence</th>
+                            <th class="px-3 py-2 font-medium">Créée à</th>
+                            <th class="px-3 py-2 font-medium">Encaissée à</th>
                             <th class="px-3 py-2 text-right font-medium">
                                 Montant
                             </th>
@@ -136,6 +137,12 @@ defineProps<{
                                 {{ l.agent ?? '—' }}
                             </td>
                             <td class="px-3 py-2">{{ l.site_nom ?? '—' }}</td>
+                            <td
+                                class="px-3 py-2"
+                                data-testid="facture-encaissee-a"
+                            >
+                                {{ l.encaisse_a ?? '—' }}
+                            </td>
                             <td
                                 class="px-3 py-3 text-right whitespace-nowrap tabular-nums"
                             >

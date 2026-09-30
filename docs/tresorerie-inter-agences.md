@@ -36,21 +36,51 @@ Pas de compensation : si B doit 500 000 à A et A doit 300 000 à B, les deux de
   plusieurs agences possibles. Les moyens (supports actifs) et les espèces (caisse dédiée active)
   sont ceux de l'agence choisie. Bandeau bleu (information) quand l'argent est reçu ailleurs :
   « Commande de A encaissée à B : B devra reverser ce montant à A ».
-- Les écrans existants (fiche vente, listes Ventes et Factures) n'envoient pas d'agence : l'argent
-  reste reçu par l'agence de la facture, comme avant.
+- Les écrans existants (fiche vente et distribution, listes Ventes et Factures) proposent eux aussi
+  les agences de l'utilisateur (`encaissement_agences`, `AgenceEncaissementResolver::pourEcran()`) :
+  le bouton « Encaisser » ordinaire encaisse dans l'agence de l'utilisateur, avec ses moyens et sa
+  caisse. S'il ne peut encaisser nulle part, la fenêtre l'explique (rouge) et Confirmer est bloqué.
 
 ### Règles serveur — `AgenceEncaissementResolver` (source unique écran + contrôle)
 
-| Demande | Résultat |
+**Agence d'encaissement = agence de l'utilisateur qui encaisse** — jamais l'agence de la facture
+par défaut (règle précisée le 29/09/2026).
+
+| Situation | Résultat |
 |---|---|
-| Aucune agence, ou l'agence de la facture | Agence de la facture (comportement historique, quelle que soit l'affectation) |
-| Une autre agence, sans `factures.encaisser_autre_agence` | Refus sur `site_encaissement_id` |
-| Une autre agence à laquelle l'utilisateur n'est pas affecté (y compris admin, autre organisation) | Refus sur `site_encaissement_id` |
-| Une autre agence de l'utilisateur, avec la permission | Acceptée |
+| Utilisateur affecté à aucune agence (administrateur, super admin compris) | Refus : « Vous n'êtes affecté à aucune agence. Vous ne pouvez pas effectuer cet encaissement. » |
+| Affecté à l'agence de la commande, aucune agence demandée | Agence de la commande |
+| Non affecté à l'agence de la commande, sans `factures.encaisser_autre_agence` | Refus |
+| Non affecté à l'agence de la commande, avec la permission, aucune agence demandée | Son agence par défaut (ou sa seule agence) |
+| Agence demandée à laquelle l'utilisateur n'est pas affecté (autre organisation comprise) | Refus |
+| Autre agence de l'utilisateur demandée, avec la permission | Acceptée |
+
+Scénario de référence : commande créée à **Matoto**, agent affecté à **CBA** → encaissée à CBA,
+espèces dans la caisse de l'agent à CBA (jamais sa caisse de Matoto ; sans caisse active à CBA,
+refus), pièce comptable à CBA, CBA doit reverser à Matoto, historique « Encaissé à CBA », rapport
+« Créée à Matoto / Encaissée à CBA ».
 
 Ensuite, `StoreEncaissementVenteController` applique les règles habituelles **à l'agence
 d'encaissement** : support actif de cette agence (`MoyensEncaissementResolver`), espèces
 uniquement avec une caisse dédiée active de l'auteur sur cette agence (`CaisseAgentResolver`).
+
+## Deux circuits distincts : l'agent, puis l'agence
+
+```
+Commande créée à Matoto
+  → encaissée par un agent affecté à CBA          (caisse dédiée de l'agent à CBA)
+  → Versement de caisse : caisse agent → caisse de l'agence CBA   (même agence, compte 588)
+  → dette inter-agences : CBA doit à Matoto        (compte 181, calculée depuis l'encaissement)
+  → Règlement inter-agences : CBA → Matoto         (seul mouvement qui solde la dette)
+```
+
+- **L'agent** remet toujours ses espèces à la caisse de **son** agence (versement de caisse), même
+  pour une commande d'une autre agence. « Ma situation » lui montre seulement « Ma caisse · À
+  remettre » et « À remettre à la caisse de {agence} » — jamais « à reverser à Matoto ».
+- **L'agence** porte la dette : Trésorerie → Inter-agences (« À verser » / « À recevoir ») et le
+  rapport d'activité des responsables (« pour {agence} · à reverser »).
+- Un **versement de caisse** et un mouvement **« Transfert entre agences »** ordinaire ne soldent jamais une
+  dette inter-agences : seul le **règlement inter-agences** le fait.
 
 ## Comptabilité
 
@@ -137,8 +167,20 @@ l'agence de la commande.
   `AnnulationExceptionnelleService`). Pour un brouillon : annuler d'abord le règlement. Après
   versement : relèvera d'un futur mécanisme de remboursement/régularisation.
 
+## Traçabilité des agences — rapports et historique (lot 2)
+
+- **Rapport d'activité / Ma situation** (`RapportActiviteService`, exports Excel et PDF) : colonnes
+  « Créée à » (agence de la commande) et « Encaissée à » (agence qui a reçu l'argent) dans les ventes,
+  encaissements, dettes clients et Mobile Money. Le bloc Encaissements suit l'agence d'encaissement et
+  distingue les encaissements « pour d'autres agences (à reverser) » ; ventes et créances restent à
+  l'agence de la commande. Cf. [rapports.md](rapports.md).
+- **Historique de la commande** : l'entrée « Encaissement ajouté » affiche « Encaissé à : {agence} »
+  (nom), jamais l'identifiant technique — y compris pour les entrées déjà enregistrées (traduction à
+  l'affichage, l'audit garde l'identifiant). L'historique des encaissements de la facture affiche
+  toujours l'agence d'encaissement, et le reversement quand elle diffère de l'agence de la commande.
+
 ## Hors lots 1 et 2
 
-- Rapports par agence d'encaissement, Situation, financement (disponible de B diminué de ce qu'il
-  doit : `DetteInterAgencesService::aVerserParSite()`) — lot 3.
+- Situation de trésorerie (colonnes À verser / À recevoir) et financement (disponible de B diminué
+  de ce qu'il doit : `DetteInterAgencesService::aVerserParSite()`), E2E — lot 3.
 - Les sorties d'argent de B ne sont pas bloquées par la dette (décision du 29/09/2026).

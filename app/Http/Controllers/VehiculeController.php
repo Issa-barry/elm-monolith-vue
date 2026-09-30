@@ -28,10 +28,13 @@ use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
+use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\SavedFilters\SavedFilterScopes;
 use App\Support\Vehicules\SituationPeriode;
+use App\Support\Vehicules\VehiculeIndexFilters;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -84,6 +87,7 @@ class VehiculeController extends Controller
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
+            'agence_id' => $agence?->id,
             // Parrainage (phase 1, sans commission ni historique — cf.
             // docs/parrainage-vehicule.md). code_pays exposé (contrairement à proprietaire_*)
             // car édité en place depuis cette fiche, pas via une page dédiée avec splitPhone().
@@ -170,9 +174,20 @@ class VehiculeController extends Controller
         return $this->membresAvecLabel(collect([$m]))->first()['label'];
     }
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', Vehicule::class);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedViews = app(SavedFilterService::class);
+        $savedView = $savedViews->applyToRequest($request, 'vehicules');
+        $filters = $request->only($savedViews->filterKeys($request->user(), 'vehicules'));
+        $filters = array_filter($filters, fn ($value) => $value !== null);
+        $filters = validator($filters, [
+            ...SavedFilterScopes::all($request->user())['vehicules']['criteria'],
+            'site_ids' => ['array'],
+            'site_ids.*' => ['ulid'],
+        ])->validate();
 
         $orgId = auth()->user()->organization_id;
         $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
@@ -187,7 +202,14 @@ class VehiculeController extends Controller
         ]);
 
         return Inertia::render('Vehicules/Index', [
-            'vehicules' => $vehicules,
+            'saved_view' => $savedView,
+            'filters' => $filters,
+            'vehicules' => VehiculeIndexFilters::apply($vehicules, $filters),
+            'vehicule_stats' => VehiculeIndexFilters::stats($vehicules),
+            'types_options' => $vehicules->unique('type_vehicule_id')->sortBy('type_label')
+                ->map(fn ($v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_label']])->values(),
+            'agences_proprietaires_options' => $vehicules->whereNotNull('agence_id')->unique('agence_id')->sortBy('agence_nom')
+                ->map(fn ($v) => ['value' => $v['agence_id'], 'label' => $v['agence_nom']])->values(),
         ]);
     }
 
