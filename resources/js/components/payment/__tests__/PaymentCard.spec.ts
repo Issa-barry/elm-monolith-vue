@@ -114,18 +114,32 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
     });
 
     it('désactive les espèces et explique pourquoi quand il n’y a pas de caisse active', () => {
-        const wrapper = monter({ especesDisponibles: false });
+        const wrapper = monter({
+            especesDisponibles: false,
+            moyens: MOYENS_AGENCE,
+        });
 
         expect(optionDesactivee(wrapper, 'especes')).toBe(true);
 
         const message = wrapper.find('[data-testid="especes-indisponible"]');
         expect(message.exists()).toBe(true);
-        expect(message.text()).toContain(
-            "Vous ne disposez pas d'une caisse active",
+        expect(message.text()).toBe(
+            'Espèces indisponibles : aucune caisse active.',
         );
-        expect(message.text()).toContain('Contactez votre responsable');
         // Attention (autre mode possible), jamais une erreur rouge.
         expect(message.classes().join(' ')).toContain('amber');
+    });
+
+    it('affiche une seule alerte quand aucun moyen de paiement ne fonctionne', () => {
+        const wrapper = monter({ especesDisponibles: false });
+
+        expect(wrapper.get('[data-testid="especes-indisponible"]').text()).toBe(
+            'Aucun moyen de paiement disponible. Contactez votre responsable.',
+        );
+        expect(wrapper.find('[data-testid="aucun-autre-moyen"]').exists()).toBe(
+            false,
+        );
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
     });
 
     it('laisse les autres moyens de l’agence disponibles sans caisse', () => {
@@ -245,8 +259,7 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
 
         const info = wrapper.find('[data-testid="aucun-autre-moyen"]');
         expect(info.exists()).toBe(true);
-        // Information (bleu), jamais une erreur : c'est une configuration de l'agence.
-        expect(info.classes().join(' ')).toContain('blue');
+        expect(info.text()).toBe('Espèces uniquement.');
     });
 
     it('soumet le chèque sur la banque choisie, sans référence exigée', async () => {
@@ -266,5 +279,248 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
                 },
             ],
         ]);
+    });
+
+    describe('décaissement (paiement de fiche, ADR 0009)', () => {
+        const MOYENS_AVEC_SOLDE = MOYENS_AGENCE.map((m) => ({
+            ...m,
+            solde_disponible:
+                m.compte_tresorerie_id === 's-orange' ? 50_000 : 1_000_000,
+        }));
+
+        it('affiche le solde disponible de la caisse pour les espèces', () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 250_000,
+            });
+
+            expect(
+                wrapper.get('[data-testid="solde-disponible"]').text(),
+            ).toContain('Disponible');
+            expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
+        });
+
+        it('bloque Confirmer quand le montant dépasse le solde du support choisi', async () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 250_000,
+            });
+
+            select(wrapper).vm.$emit(
+                'update:modelValue',
+                'mobile_money:s-orange',
+            );
+            await nextTick();
+            wrapper
+                .findComponent(InputTexteFactice)
+                .vm.$emit('update:modelValue', 'OM-1');
+            await nextTick();
+
+            const solde = wrapper.get('[data-testid="solde-disponible"]');
+            expect(solde.text()).toContain('Solde insuffisant');
+            expect(solde.classes()).toContain('text-destructive');
+            expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+            await confirmer(wrapper).trigger('click');
+            expect(wrapper.emitted('submit')).toBeUndefined();
+        });
+
+        it('parle de payer, pas d’encaisser, quand le payeur n’a pas de caisse', () => {
+            const wrapper = monter({
+                sens: 'decaissement',
+                moyens: MOYENS_AVEC_SOLDE,
+                especesDisponibles: false,
+            });
+
+            expect(
+                wrapper.get('[data-testid="especes-indisponible"]').text(),
+            ).toContain('Paiement en espèces indisponible');
+        });
+
+        it('n’affiche aucun solde en encaissement', () => {
+            const wrapper = monter({
+                moyens: MOYENS_AVEC_SOLDE,
+                soldeEspeces: 10,
+            });
+
+            expect(
+                wrapper.find('[data-testid="solde-disponible"]').exists(),
+            ).toBe(false);
+        });
+    });
+});
+
+describe('PaymentCard — agence d’encaissement (ADR 0012)', () => {
+    const MOYEN_KINDIA = {
+        key: 'mobile_money:s-kindia',
+        label: 'Orange Money',
+        mode_paiement: 'mobile_money',
+        operateur_mobile_money: 'orange_money',
+        compte_tresorerie_id: 's-kindia',
+        reference_requise: true,
+    };
+    const AGENCES = [
+        {
+            site_id: 'site-a',
+            nom: 'Matoto',
+            moyens: MOYENS_AGENCE,
+            peut_encaisser_especes: true,
+        },
+        {
+            site_id: 'site-b',
+            nom: 'Kindia',
+            moyens: [MOYEN_KINDIA],
+            peut_encaisser_especes: false,
+        },
+    ];
+    const AGENCE_COMMANDE = { id: 'site-a', nom: 'Matoto' };
+
+    const selects = (wrapper: ReturnType<typeof monter>) =>
+        wrapper.findAllComponents(SelectFactice);
+    const selectAgence = (wrapper: ReturnType<typeof monter>) =>
+        selects(wrapper).find((s) => s.props('optionValue') === 'site_id')!;
+    const selectMode = (wrapper: ReturnType<typeof monter>) =>
+        selects(wrapper).find((s) => s.props('optionValue') === 'key')!;
+    const clesModes = (wrapper: ReturnType<typeof monter>) =>
+        (selectMode(wrapper).props('options') as { key: string }[]).map(
+            (o) => o.key,
+        );
+
+    it('n’affiche aucun choix d’agence sur les écrans existants', () => {
+        const wrapper = monter({ moyens: MOYENS_AGENCE });
+
+        expect(
+            wrapper.find('[data-testid="agence-encaissement"]').exists(),
+        ).toBe(false);
+    });
+
+    it('présélectionne l’agence de la commande et en propose les moyens, sans bandeau', () => {
+        const wrapper = monter({
+            agences: AGENCES,
+            agenceDefaut: 'site-a',
+            agenceCommande: AGENCE_COMMANDE,
+        });
+
+        expect(selectAgence(wrapper).props('modelValue')).toBe('site-a');
+        expect(clesModes(wrapper)).toEqual([
+            'especes',
+            ...MOYENS_AGENCE.map((m) => m.key),
+        ]);
+        expect(
+            wrapper.find('[data-testid="bandeau-autre-agence"]').exists(),
+        ).toBe(false);
+    });
+
+    it('suit les moyens et la caisse de l’agence choisie et annonce le reversement', async () => {
+        const wrapper = monter({
+            agences: AGENCES,
+            agenceDefaut: 'site-a',
+            agenceCommande: AGENCE_COMMANDE,
+        });
+
+        selectAgence(wrapper).vm.$emit('update:modelValue', 'site-b');
+        await nextTick();
+
+        expect(clesModes(wrapper)).toEqual(['especes', MOYEN_KINDIA.key]);
+        // Pas de caisse dédiée à Kindia : espèces désactivées, rien de présélectionné.
+        expect(selectMode(wrapper).props('modelValue')).toBe('');
+
+        const bandeau = wrapper.get('[data-testid="bandeau-autre-agence"]');
+        expect(bandeau.text()).toBe('Kindia devra reverser à Matoto.');
+    });
+
+    it('soumet l’agence d’encaissement avec le support de cette agence', async () => {
+        const wrapper = monter({
+            agences: AGENCES,
+            agenceDefaut: 'site-a',
+            agenceCommande: AGENCE_COMMANDE,
+        });
+
+        selectAgence(wrapper).vm.$emit('update:modelValue', 'site-b');
+        await nextTick();
+        selectMode(wrapper).vm.$emit('update:modelValue', MOYEN_KINDIA.key);
+        await nextTick();
+        wrapper
+            .findComponent(InputTexteFactice)
+            .vm.$emit('update:modelValue', 'OM-9');
+        await nextTick();
+        await confirmer(wrapper).trigger('click');
+
+        expect(wrapper.emitted('submit')).toEqual([
+            [
+                {
+                    montant: 100_000,
+                    mode_paiement: 'mobile_money',
+                    compte_tresorerie_id: 's-kindia',
+                    reference_paiement: 'OM-9',
+                    site_encaissement_id: 'site-b',
+                },
+            ],
+        ]);
+    });
+
+    it('affiche l’unique agence possible sans liste déroulante', () => {
+        const wrapper = monter({
+            agences: [AGENCES[1]],
+            agenceDefaut: 'site-b',
+            agenceCommande: AGENCE_COMMANDE,
+        });
+
+        expect(selectAgence(wrapper)).toBeUndefined();
+        expect(
+            wrapper.get('[data-testid="agence-encaissement"]').text(),
+        ).toContain('Kindia');
+        expect(
+            wrapper.find('[data-testid="bandeau-autre-agence"]').exists(),
+        ).toBe(true);
+    });
+});
+
+describe('PaymentCard — agences fournies par l’écran (encaissementAgences)', () => {
+    it('présélectionne l’agence de l’utilisateur et annonce le reversement', () => {
+        const wrapper = monter({
+            encaissementAgences: {
+                agences: [
+                    {
+                        site_id: 'cba',
+                        nom: 'CBA',
+                        moyens: [],
+                        peut_encaisser_especes: true,
+                    },
+                ],
+                agence_defaut: 'cba',
+                agence_commande: { id: 'matoto', nom: 'Matoto' },
+                message: null,
+            },
+        });
+
+        expect(
+            wrapper.get('[data-testid="agence-encaissement"]').text(),
+        ).toContain('CBA');
+        expect(
+            wrapper.get('[data-testid="bandeau-autre-agence"]').text(),
+        ).toContain('CBA devra reverser à Matoto.');
+        expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('bloque l’encaissement et explique pourquoi quand l’utilisateur n’a aucune agence possible', async () => {
+        const wrapper = monter({
+            encaissementAgences: {
+                agences: [],
+                agence_defaut: null,
+                agence_commande: { id: 'matoto', nom: 'Matoto' },
+                message:
+                    "Vous n'êtes affecté à aucune agence. Vous ne pouvez pas effectuer cet encaissement.",
+            },
+        });
+
+        const refus = wrapper.get('[data-testid="refus-agence-encaissement"]');
+        expect(refus.text()).toContain('Vous n');
+        // Opération réellement bloquée : rouge.
+        expect(refus.classes().join(' ')).toContain('destructive');
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+        await confirmer(wrapper).trigger('click');
+        expect(wrapper.emitted('submit')).toBeUndefined();
     });
 });

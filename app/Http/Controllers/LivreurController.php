@@ -6,7 +6,9 @@ use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
 use App\Models\Personne;
+use App\Support\Livreurs\FicheLivreurStaffData;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -103,21 +105,48 @@ class LivreurController extends Controller
     }
 
     /**
-     * Approuve un livreur auto-inscrit (is_active false → true).
+     * Active un livreur inactif (is_active false → true) : approbation d'un livreur auto-inscrit,
+     * ou réactivation d'un livreur désactivé.
      */
-    public function approuver(Livreur $livreur): JsonResponse
+    public function approuver(Request $request, Livreur $livreur): JsonResponse|RedirectResponse
     {
         $this->authorize('update', $livreur);
 
         $livreur->update(['is_active' => true]);
 
-        return response()->json(['is_active' => true]);
+        // La liste des livreurs appelle cette action via Inertia (router.patch), qui exige une
+        // redirection : une réponse JSON y déclenche l'erreur « réponse non Inertia ».
+        if ($request->wantsJson()) {
+            return response()->json(['is_active' => true]);
+        }
+
+        return back()->with('success', 'Livreur activé.');
+    }
+
+    /**
+     * Désactive un livreur depuis sa fiche (is_active → false), sans rien supprimer : il reste
+     * rattaché à son équipe, ses commissions, factures et historiques sont conservés. Effets :
+     * son compte application (s'il en a un) est bloqué sur la page d'attente
+     * (RequireActiveLivreur) et il n'est plus exigé dans le partage de commission de son équipe
+     * (CommissionPartageLivraisonCategorieChecker::membresRequis()). Réactivation : approuver().
+     */
+    public function desactiver(Request $request, Livreur $livreur): JsonResponse|RedirectResponse
+    {
+        $this->authorize('update', $livreur);
+
+        $livreur->update(['is_active' => false]);
+
+        if ($request->wantsJson()) {
+            return response()->json(['is_active' => false]);
+        }
+
+        return back()->with('success', 'Livreur désactivé.');
     }
 
     /**
      * Affiche la fiche d'un livreur — page d'accueil après scan QR.
      */
-    public function show(Livreur $livreur): Response
+    public function show(Livreur $livreur, FicheLivreurStaffData $fiche): Response
     {
         $this->authorize('view', $livreur);
 
@@ -133,24 +162,28 @@ class LivreurController extends Controller
                 'telephone' => $livreur->telephone,
                 'is_active' => $livreur->is_active,
                 'has_account' => $livreur->user_id !== null,
+                'enregistre_le' => $livreur->created_at?->format('d/m/Y'),
                 'equipes' => $livreur->equipes->map(fn ($e) => [
                     'id' => $e->id,
                     'vehicule_nom' => $e->vehicule?->nom_vehicule ?? '—',
                     'role' => $e->pivot->role,
                 ])->values(),
             ],
-            // route('commissions.vente.livreur', ...) sans filtre processus = « Tous les
+            // route('comptabilite.commissions.vente.livreur', ...) sans filtre processus = « Tous les
             // processus » (Vente/Distribution client/Transfert logistique confondus, cf.
             // CommissionVenteController::showLivreur()) — remplace l'ancien
             // logistique.commissions.livreur (écran retiré le 04/09/2026, moteur legacy gelé
             // depuis le 03/09/2026, cf. docs/commissions.md), qui ne couvrait que la logistique.
             'commissions_url' => $isStaff
-                ? route('commissions.vente.livreur', $livreur->id)
-                : route('client.gains'),
+                ? route('comptabilite.commissions.vente.livreur', $livreur->id)
+                : route('client.earnings'),
             'factures_url' => $isStaff
                 ? route('factures.index', ['livreur_id' => $livreur->id])
                 : null,
             'is_staff' => $isStaff,
+            // Fiche complète (onglets) réservée au backoffice ; l'espace livreur garde sa vue
+            // d'accès rapide.
+            'fiche' => $isStaff ? $fiche->pour($livreur, $user) : null,
         ]);
     }
 

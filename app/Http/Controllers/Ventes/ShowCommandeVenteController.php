@@ -8,11 +8,13 @@ use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CommandeVente;
+use App\Models\Site;
 use App\Services\AnnulationExceptionnelleService;
-use App\Services\Tresorerie\CaisseAgentResolver;
-use App\Services\Tresorerie\MoyensEncaissementResolver;
+use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Services\Tresorerie\DetteInterAgencesService;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,13 +29,16 @@ class ShowCommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'facture.encaissements.siteEncaissement', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
 
         $user = auth()->user();
         $facture = $commande->facture;
+        $reversements = $facture ? app(DetteInterAgencesService::class)->reversements($facture->encaissements) : [];
+        $encaissementAgences = $facture ? (app(AgenceEncaissementResolver::class)->pourEcran($user, [$facture])[$facture->id] ?? null) : null;
+        $agenceDefaut = collect($encaissementAgences['agences'] ?? [])->firstWhere('site_id', $encaissementAgences['agence_defaut'] ?? null);
 
         $vehicule = $commande->vehicule;
         $equipe = $vehicule?->equipe;
@@ -63,20 +68,31 @@ class ShowCommandeVenteController extends Controller
             'total_ligne' => (float) $l->total_ligne,
         ]);
 
-        $historiques = AuditLog::where('organization_id', $commande->organization_id)
+        $logs = AuditLog::where('organization_id', $commande->organization_id)
             ->where('auditable_type', CommandeVente::class)
             ->where('auditable_id', $commande->id)
             ->orderByDesc('created_at')
-            ->get()
-            ->map(fn (AuditLog $log) => [
-                'id' => $log->id,
-                'event_code' => $log->event_code,
-                'event_label' => $log->event_label,
-                'actor_name' => $log->actor_name_snapshot ?? 'Système',
-                'old_values' => $log->old_values,
-                'new_values' => $log->new_values,
-                'created_at' => $log->created_at->format('d/m/Y H:i'),
-            ]);
+            ->get();
+
+        // L'audit garde l'identifiant technique de l'agence d'encaissement (ADR 0012) ; l'historique
+        // affiche son nom — y compris pour les entrées déjà enregistrées.
+        $nomsSites = Site::where('organization_id', $commande->organization_id)
+            ->whereIn('id', $logs->flatMap(fn (AuditLog $l) => [
+                $l->old_values['site_encaissement_id'] ?? null,
+                $l->new_values['site_encaissement_id'] ?? null,
+            ])->filter()->unique()->values())
+            ->pluck('nom', 'id');
+        $lisibles = fn (?array $valeurs) => self::avecAgenceLisible($valeurs, $nomsSites);
+
+        $historiques = $logs->map(fn (AuditLog $log) => [
+            'id' => $log->id,
+            'event_code' => $log->event_code,
+            'event_label' => $log->event_label,
+            'actor_name' => $log->actor_name_snapshot ?? 'Système',
+            'old_values' => $lisibles($log->old_values),
+            'new_values' => $lisibles($log->new_values),
+            'created_at' => $log->created_at->format('d/m/Y H:i'),
+        ]);
 
         $retours = $commande->retours->map(fn ($r) => [
             'id' => $r->id,
@@ -231,16 +247,13 @@ class ShowCommandeVenteController extends Controller
                     && (float) $facture->montant_restant > 0
                     && $commande->isEncaissable()
                     && $user->can('factures.encaisser'),
-                // Espèces : possibles seulement avec une caisse dédiée active de l'utilisateur sur le
-                // site de la facture. Indicateur d'affichage (PaymentCard) — la garantie réelle reste
-                // CaisseAgentResolver::garantirCaissePourEspeces(), côté serveur à l'enregistrement.
-                'peut_encaisser_especes' => (bool) ($facture?->site_id
-                    && app(CaisseAgentResolver::class)->caisseActive($facture->organization_id, (string) $user->id, $facture->site_id)),
-                // Autres moyens : uniquement ceux qu'un support actif de l'agence de la facture peut
-                // recevoir (MoyensEncaissementResolver, rejoué côté serveur à l'enregistrement).
-                'moyens_encaissement' => $facture
-                    ? app(MoyensEncaissementResolver::class)->pourSite($facture->organization_id, $facture->site_id)
-                    : [],
+                // Agence d'encaissement = agence de l'utilisateur (ADR 0012, AgenceEncaissementResolver) :
+                // agences proposées, leurs moyens et leurs espèces (caisse dédiée de l'agent DANS
+                // l'agence) — indicateurs d'affichage, la garantie réelle reste le contrôle serveur à
+                // l'enregistrement. Les deux clés historiques reprennent l'agence présélectionnée.
+                'encaissement_agences' => $encaissementAgences,
+                'peut_encaisser_especes' => (bool) ($agenceDefaut['peut_encaisser_especes'] ?? false),
+                'moyens_encaissement' => $agenceDefaut['moyens'] ?? [],
                 'created_at' => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande->createdBy?->name,
                 'lignes' => $lignes,
@@ -254,6 +267,13 @@ class ShowCommandeVenteController extends Controller
                 'statut' => $facture->statut_facture?->value,
                 'statut_label' => $facture->statut_label,
                 'encaissements' => $facture->encaissements->map(fn ($e) => [
+                    // Encaissé par une autre agence (ADR 0012) : où l'argent a été reçu et où en est
+                    // son reversement à l'agence de la commande. Null sinon.
+                    // Agence qui a reçu l'argent, toujours affichée (ADR 0012) ; le reversement n'existe
+                    // que pour un encaissement reçu par une autre agence que celle de la commande.
+                    'encaisse_a' => $e->siteEncaissement?->nom,
+                    'pour_autre_agence' => $e->estPourAutreAgence(),
+                    'reversement' => $reversements[$e->id] ?? null,
                     'id' => $e->id,
                     'montant' => (float) $e->montant,
                     'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
@@ -289,5 +309,26 @@ class ShowCommandeVenteController extends Controller
         }
 
         return ['value' => 'impaye', 'label' => 'Impayée'];
+    }
+
+    /**
+     * Remplace `site_encaissement_id` par `agence_encaissement` (nom de l'agence) dans des valeurs
+     * d'audit — jamais un identifiant technique à l'écran.
+     *
+     * @param  array<string, mixed>|null  $valeurs
+     * @param  Collection<string, string>  $nomsSites
+     * @return array<string, mixed>|null
+     */
+    private static function avecAgenceLisible(?array $valeurs, $nomsSites): ?array
+    {
+        if (! is_array($valeurs) || ! array_key_exists('site_encaissement_id', $valeurs)) {
+            return $valeurs;
+        }
+
+        $id = $valeurs['site_encaissement_id'];
+        unset($valeurs['site_encaissement_id']);
+        $valeurs['agence_encaissement'] = $id ? ($nomsSites[$id] ?? '—') : null;
+
+        return $valeurs;
     }
 }

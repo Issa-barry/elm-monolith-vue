@@ -42,12 +42,15 @@ use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
+use App\Http\Controllers\Comptabilite\CommissionMonitoring\IndexCommissionMonitoringController;
+use App\Http\Controllers\Comptabilite\CommissionMonitoring\RelancerCommissionMonitoringController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\CompteTresorerieController;
 use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
+use App\Http\Controllers\Comptabilite\InterAgencesController;
 use App\Http\Controllers\Comptabilite\JournalFinancierController;
 use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
@@ -100,6 +103,7 @@ use App\Http\Controllers\InstallWizard\StoreInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyEmailCodeInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\Livreurs\UpdateLivreurController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
@@ -221,6 +225,7 @@ use App\Http\Controllers\Ventes\ExportCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
+use App\Http\Controllers\Ventes\RechercherFactureAutreAgenceController;
 use App\Http\Controllers\Ventes\RelancerCommissionsCommandeVenteController;
 use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\ShowCommandeVenteController;
@@ -423,6 +428,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/annulation-exceptionnelle', ConfirmerAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.confirmer');
             Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
             Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
+            // Encaisser dans son agence une commande d'une autre agence (ADR 0012) : recherche par
+            // référence exacte, lecture seule — l'encaissement passe par encaissements.store.
+            Route::get('factures/autre-agence', RechercherFactureAutreAgenceController::class)->name('factures.autre-agence');
 
             // Encaissements factures
             Route::post('factures/{facture_vente}/encaissements', StoreEncaissementVenteController::class)->name('encaissements.store');
@@ -511,11 +519,13 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
                 ->name('pieces-identite.destroy');
 
-            // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
+            // Livreurs : affectation gérée depuis les Équipes ; identité modifiable depuis la fiche
             Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
             Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
+            Route::put('livreurs/{livreur}', UpdateLivreurController::class)->name('livreurs.update');
             Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
             Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
+            Route::patch('livreurs/{livreur}/desactiver', [LivreurController::class, 'desactiver'])->name('livreurs.desactiver');
             Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
             // Déclarée avant le resource() : sinon "verifier-telephone" est capturé par
@@ -784,6 +794,12 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
 
+                // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
+                // et leur règlement (création + envoi en une opération).
+                Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
+                Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
+                Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
+
                 Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
                 Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');
 
@@ -802,6 +818,12 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
 
             Route::get('journal', [JournalFinancierController::class, 'index'])->name('journal');
+
+            // ── Monitoring des commissions non générées ──────────────────────────
+            Route::get('commissions/monitoring', IndexCommissionMonitoringController::class)
+                ->name('commissions.monitoring.index');
+            Route::post('commissions/monitoring/relancer', RelancerCommissionMonitoringController::class)
+                ->name('commissions.monitoring.relancer');
 
             // ── Commission livreurs logistique ────────────────────────────────────
             Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])

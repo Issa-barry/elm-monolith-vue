@@ -73,7 +73,12 @@ use Illuminate\Validation\ValidationException;
  * ET que l'exposition totale (dette déjà comptée au sens du seuil + la facture bloquante
  * elle-même si son statut ne l'y faisait pas déjà entrer, ex. encore CREEE) reste dans son
  * plafond dérogatoire : dans ce cas précis, ce verrou n'a plus prise et seul le contrôle de
- * seuil habituel s'applique (qui, par construction, est alors déjà respecté). Un véhicule/client
+ * seuil habituel s'applique (qui, par construction, est alors déjà respecté). Au-delà de ce
+ * plafond, la commande reste bloquée — même contrôle des impayés désactivé, comme le verrou
+ * qu'elle remplace — mais au titre du PLAFOND DÉROGATOIRE (`blocage_plafond_derogation`,
+ * `exposition`, `depassement` = montant minimal à encaisser), jamais avec le message « aucun
+ * paiement » : un encaissement quelconque ne suffirait pas à débloquer (rapport du 30/09/2026,
+ * véhicule ABARRY : 5 800 000 restants + 10 800 000 jamais encaissés > plafond 15 000 000). Un véhicule/client
  * SANS dérogation active reste bloqué exactement comme avant — ce verrou ne s'assouplit jamais
  * pour le seuil standard, seulement pour une dérogation explicitement configurée (décision
  * produit du 22/09/2026, EN CORRECTION de la version du 20/08/2026 qui l'excluait totalement :
@@ -99,10 +104,12 @@ class SolvabiliteService
      *     controle_actif: bool,
      *     seuil_impayes: int,
      *     seuil_origine: 'standard'|'derogation',
+     *     exposition: int,
      *     montant_disponible: int,
      *     blocked: bool,
      *     depassement: int,
      *     blocage_premiere_facture: bool,
+     *     blocage_plafond_derogation: bool,
      *     facture_bloquante_reference: ?string,
      *     facture_bloquante_commande_id: ?string,
      *     factures: array<int, array{commande_id: string, reference: ?string, date: ?string, montant: int, encaisse: int, restant: int, statut: string, statut_label: string}>,
@@ -141,24 +148,32 @@ class SolvabiliteService
         // 22/08/2026).
         $blockedSeuil = $controleActif && $totalRemaining > $seuil;
         $blockedPremiereFacture = $factureBloquante !== null;
+        $blockedPlafondDerogation = false;
+        $exposition = $totalRemaining;
 
-        // Assouplissement du 22/09/2026 (cf. docblock de classe) : une dérogation active peut
-        // lever le verrou « première régularisation » si l'exposition totale — la dette déjà
-        // comptée ci-dessus PLUS la facture bloquante elle-même si son statut ne l'y faisait pas
-        // déjà entrer (ex. encore CREEE, jamais compté par facturesImpayeesVehicule()) — reste
-        // dans le plafond dérogatoire. Jamais pour le seuil standard : sans dérogation active, ce
-        // verrou reste absolu, comportement inchangé.
+        // Assouplissement du 22/09/2026 (cf. docblock de classe) : une dérogation active remplace
+        // le verrou « première régularisation » par une comparaison de l'exposition totale — la
+        // dette déjà comptée ci-dessus PLUS la facture bloquante elle-même si son statut ne l'y
+        // faisait pas déjà entrer (ex. encore CREEE, jamais compté par facturesImpayeesVehicule())
+        // — au plafond dérogatoire. Au-delà, c'est le plafond qui bloque (message et montants du
+        // plafond), jamais « enregistrez un encaissement » : un encaissement partiel ne suffirait
+        // pas à débloquer (cf. rapport du 30/09/2026). Jamais pour le seuil standard : sans
+        // dérogation active, ce verrou reste absolu, comportement inchangé.
         if ($blockedPremiereFacture && $seuilOrigine === 'derogation') {
             $dejaCompteeDansLaDette = $factures->contains(fn (FactureVente $f) => $f->is($factureBloquante));
-            $expositionFactureBloquante = $dejaCompteeDansLaDette
+            $exposition += $dejaCompteeDansLaDette
                 ? 0
                 : (int) round((float) $factureBloquante->montant_restant);
-            $expositionTotale = $totalRemaining + $expositionFactureBloquante;
 
-            if ($expositionTotale <= $seuil) {
-                $blockedPremiereFacture = false;
-            }
+            $blockedPremiereFacture = false;
+            $blockedPlafondDerogation = $exposition > $seuil;
         }
+
+        $depassement = match (true) {
+            $blockedPlafondDerogation => $exposition - $seuil,
+            $blockedSeuil => $totalRemaining - $seuil,
+            default => 0,
+        };
 
         return [
             'cible' => $cible,
@@ -172,10 +187,12 @@ class SolvabiliteService
             'controle_actif' => $controleActif,
             'seuil_impayes' => $seuil,
             'seuil_origine' => $seuilOrigine,
-            'montant_disponible' => max(0, $seuil - $totalRemaining),
-            'blocked' => $blockedPremiereFacture || $blockedSeuil,
-            'depassement' => $blockedSeuil ? $totalRemaining - $seuil : 0,
+            'exposition' => $exposition,
+            'montant_disponible' => max(0, $seuil - $exposition),
+            'blocked' => $blockedPremiereFacture || $blockedSeuil || $blockedPlafondDerogation,
+            'depassement' => $depassement,
             'blocage_premiere_facture' => $blockedPremiereFacture,
+            'blocage_plafond_derogation' => $blockedPlafondDerogation,
             'facture_bloquante_reference' => $factureBloquante?->reference,
             'facture_bloquante_commande_id' => $factureBloquante?->commande_vente_id,
             'factures' => $factures->map(fn (FactureVente $f) => [
@@ -214,6 +231,18 @@ class SolvabiliteService
                 'impayes' => 'Ce véhicule possède déjà une commande'
                     .($reference ? " ({$reference})" : '')
                     .' dont la facture n\'a encore reçu aucun paiement. Enregistrez d\'abord un encaissement avant de créer une nouvelle commande.',
+            ]);
+        }
+
+        if ($resultat['blocage_plafond_derogation']) {
+            throw ValidationException::withMessages([
+                'impayes' => 'Creation bloquee : le montant des impayes ('
+                    .number_format($resultat['exposition'], 0, ',', ' ')
+                    .' GNF) depasse le plafond de derogation ('
+                    .number_format($resultat['seuil_impayes'], 0, ',', ' ')
+                    .' GNF). Encaissez au moins '
+                    .number_format($resultat['depassement'], 0, ',', ' ')
+                    .' GNF pour debloquer ce vehicule.',
             ]);
         }
 

@@ -36,6 +36,7 @@ class MouvementFondsController extends Controller
                 'siteOrigine:id,nom', 'siteDestination:id,nom',
                 'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle',
                 'expediteur.personne', 'receptionnaire.personne',
+                'lignesReglement.encaissement.facture.commande.client',
             ]);
 
         if ($statut = $request->input('statut')) {
@@ -120,6 +121,21 @@ class MouvementFondsController extends Controller
             'receptionnaire' => $m->receptionnaire?->name,
             'created_at' => $m->created_at->toDateString(),
             'confirme_par_expediteur' => $m->confirmeParExpediteur(),
+            // Règlement inter-agences (ADR 0012) : les encaissements précis qu'il reverse — vide pour
+            // toute autre nature.
+            'encaissements_regles' => $m->isReglementAgences()
+                ? $m->lignesReglement->map(fn ($ligne) => [
+                    'id' => $ligne->id,
+                    'facture_reference' => $ligne->encaissement?->facture?->reference,
+                    'commande_id' => $ligne->encaissement?->facture?->commande_vente_id,
+                    'client_nom' => $ligne->encaissement?->facture?->commande?->client?->nom_complet,
+                    'date_encaissement' => $ligne->encaissement?->date_encaissement?->toDateString(),
+                    'montant' => (float) $ligne->montant,
+                ])->values()
+                : [],
+            'detail_reglement_url' => $m->isReglementAgences()
+                ? route('comptabilite.tresorerie.inter-agences.show', [$m->site_origine_id, $m->site_destination_id], false)
+                : null,
             // L'état du mouvement est vérifié EXPLICITEMENT en plus de la policy : le Gate::before du
             // super admin passe avant elle et afficherait sinon toutes les actions sur chaque ligne,
             // y compris terminée. Le service reste la garantie réelle de chacune de ces règles.

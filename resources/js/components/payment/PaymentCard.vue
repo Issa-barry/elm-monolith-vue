@@ -2,21 +2,20 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { formatGNF } from '@/lib/utils';
-import { HandCoins, Info, Receipt } from 'lucide-vue-next';
+import { Building2, HandCoins } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import Tooltip from 'primevue/tooltip';
 import { computed, ref, watch } from 'vue';
 import {
+    type AgenceEncaissement,
     construireOptions,
+    type EncaissementAgences,
     type EncaissementPayload,
     type ModeOption,
     type MoyenEncaissement,
 } from './moyensEncaissement';
-
-const vTooltip = Tooltip;
 
 interface InfoRow {
     label: string;
@@ -43,12 +42,32 @@ interface Props {
      * (`peut_encaisser_especes`) : caisse dédiée active sur le site de la facture. Défaut `true` :
      * un écran qui l'oublierait ne masque rien, la garantie réelle reste côté serveur. */
     especesDisponibles?: boolean;
+    /** « encaissement » (défaut) : l'argent entre dans un support. « decaissement » : il en sort
+     * (paiement de fiche, ADR 0009) — libellés adaptés et solde disponible affiché/contrôlé. */
+    sens?: 'encaissement' | 'decaissement';
+    /** Décaissement : solde de la caisse dédiée du payeur (espèces), null = inconnu. */
+    soldeEspeces?: number | null;
+    /** Libellé du bloc principal (défaut « Montant dû »). */
+    soldeLabel?: string;
+    /** Agences où l'utilisateur peut encaisser (ADR 0012), fournies par le backend
+     * (AgenceEncaissementResolver) — seulement par l'écran « commande d'une autre agence ». Quand
+     * elles sont fournies, moyens et espèces sont ceux de l'agence choisie (`moyens` et
+     * `especesDisponibles` sont alors ignorées) et le paiement porte `site_encaissement_id`. */
+    agences?: AgenceEncaissement[];
+    agenceDefaut?: string | null;
+    /** Agence de la commande : un bandeau d'information s'affiche si l'argent est reçu ailleurs. */
+    agenceCommande?: { id: string; nom: string } | null;
+    /** Regroupe agences / agence présélectionnée / agence de la commande / raison d'un refus, tels que
+     * fournis par le backend (AgenceEncaissementResolver::pourEcran()) — prioritaire sur les trois
+     * props précédentes. L'agence d'encaissement est toujours une agence de l'utilisateur (ADR 0012). */
+    encaissementAgences?: EncaissementAgences | null;
 }
 
-// Texte identique à CaisseAgentResolver::MESSAGE_SANS_CAISSE (renvoyé aussi par le backend si le
-// bouton était contourné) — visible directement sous la liste, pas seulement au survol.
+// Messages courts d'interface ; les contrôles et messages backend restent inchangés.
 const MESSAGE_ESPECES_INDISPONIBLE =
-    "Vous ne disposez pas d'une caisse active : impossible d'encaisser en espèces. Contactez votre responsable pour qu'il vous en crée une.";
+    'Espèces indisponibles : aucune caisse active.';
+const MESSAGE_ESPECES_INDISPONIBLE_DECAISSEMENT =
+    'Paiement en espèces indisponible : aucune caisse active.';
 
 // Une seule liste déroulante : Espèces, puis chaque support de l'agence (un Mobile Money par
 // opérateur réellement configuré, virement/chèque par banque) — jamais un second select opérateur.
@@ -62,19 +81,81 @@ const props = withDefaults(defineProps<Props>(), {
     errors: () => ({}),
     moyens: () => [],
     especesDisponibles: true,
+    sens: 'encaissement',
+    soldeEspeces: null,
+    soldeLabel: 'Montant dû',
+    agences: () => [],
+    agenceDefaut: null,
+    agenceCommande: null,
+    encaissementAgences: null,
 });
 
-const modeOptions = computed(() => construireOptions(props.moyens));
+const decaissement = computed(() => props.sens === 'decaissement');
+
+// Agence d'encaissement (ADR 0012) : sans liste d'agences, l'écran encaisse dans l'agence de la
+// facture avec les moyens reçus en props — comportement de tous les écrans existants.
+const siteEncaissementId = ref('');
+const agencesProposees = computed<AgenceEncaissement[]>(
+    () => props.encaissementAgences?.agences ?? props.agences,
+);
+const agenceDefautProposee = computed(() =>
+    props.encaissementAgences
+        ? props.encaissementAgences.agence_defaut
+        : props.agenceDefaut,
+);
+const agenceDeLaCommande = computed(() =>
+    props.encaissementAgences
+        ? props.encaissementAgences.agence_commande
+        : props.agenceCommande,
+);
+// Aucune agence où l'utilisateur peut encaisser (non affecté, pas autorisé) : bloquant.
+const refusAgence = computed(() => props.encaissementAgences?.message ?? null);
+const avecChoixAgence = computed(() => agencesProposees.value.length > 0);
+const agenceActive = computed(
+    () =>
+        agencesProposees.value.find(
+            (a) => a.site_id === siteEncaissementId.value,
+        ) ?? null,
+);
+const moyensEffectifs = computed(() =>
+    avecChoixAgence.value ? (agenceActive.value?.moyens ?? []) : props.moyens,
+);
+const especesEffectives = computed(() =>
+    avecChoixAgence.value
+        ? (agenceActive.value?.peut_encaisser_especes ?? false)
+        : props.especesDisponibles,
+);
+const pourAutreAgence = computed(
+    () =>
+        avecChoixAgence.value &&
+        !!agenceDeLaCommande.value &&
+        !!agenceActive.value &&
+        agenceActive.value.site_id !== agenceDeLaCommande.value.id,
+);
+
+const modeOptions = computed(() =>
+    construireOptions(moyensEffectifs.value).map((option) =>
+        option.requiresCaisse
+            ? { ...option, soldeDisponible: props.soldeEspeces }
+            : option,
+    ),
+);
+
+const messageEspecesIndisponible = computed(() =>
+    decaissement.value
+        ? MESSAGE_ESPECES_INDISPONIBLE_DECAISSEMENT
+        : MESSAGE_ESPECES_INDISPONIBLE,
+);
 
 function modeIndisponible(mode: ModeOption): boolean {
-    return !!mode.requiresCaisse && !props.especesDisponibles;
+    return !!mode.requiresCaisse && !especesEffectives.value;
 }
 
 const especesBloquees = computed(() =>
     modeOptions.value.some((m) => modeIndisponible(m)),
 );
 
-const aucunAutreMoyen = computed(() => props.moyens.length === 0);
+const aucunAutreMoyen = computed(() => moyensEffectifs.value.length === 0);
 
 // Mode présélectionné à l'ouverture : le premier, sauf s'il est indisponible — jamais un autre mode
 // choisi à la place de l'utilisateur (un Mobile Money enregistré par erreur serait un encaissement
@@ -105,6 +186,17 @@ function modeByKey(key: string): ModeOption | undefined {
 }
 
 const modeActif = computed(() => modeByKey(selectedKey.value));
+
+// Décaissement : solde connu du support choisi. Le contrôle réel reste serveur (sous verrou) —
+// ici on évite seulement une confirmation vouée à l'échec.
+const soldeSupport = computed(() =>
+    decaissement.value ? (modeActif.value?.soldeDisponible ?? null) : null,
+);
+const soldeInsuffisant = computed(
+    () =>
+        soldeSupport.value !== null &&
+        (montant.value ?? 0) > soldeSupport.value + 0.004,
+);
 const referencePaiementRequise = computed(
     () => modeActif.value?.requiresReference ?? false,
 );
@@ -119,6 +211,10 @@ watch(
     (open) => {
         if (open) {
             montant.value = props.solde > 0 ? props.solde : null;
+            siteEncaissementId.value =
+                agenceDefautProposee.value ??
+                agencesProposees.value[0]?.site_id ??
+                '';
             selectedKey.value = modeInitial();
             referencePaiement.value = '';
         }
@@ -128,8 +224,14 @@ watch(
 
 // La disponibilité des espèces peut changer pendant que la fenêtre est ouverte (rafraîchissement
 // des données de la page) : une sélection devenue impossible est retirée, jamais soumise.
+// Changer d'agence change la liste des moyens : le mode est choisi à nouveau, jamais conservé
+// d'une agence à l'autre (un support n'appartient qu'à une agence).
+watch(siteEncaissementId, () => {
+    selectedKey.value = modeInitial();
+});
+
 watch(
-    () => props.especesDisponibles,
+    () => especesEffectives.value,
     () => {
         const actif = modeActif.value;
         if (actif && modeIndisponible(actif)) {
@@ -157,15 +259,20 @@ function close() {
 }
 
 function handleSubmit() {
+    if (refusAgence.value) return;
     if (!montant.value || montant.value <= 0) return;
     const mode = modeActif.value;
     if (!mode || modeIndisponible(mode)) return;
     if (mode.requiresReference && !referencePaiement.value) return;
+    if (soldeInsuffisant.value) return;
     emit('submit', {
         montant: montant.value,
         mode_paiement: mode.mode_paiement,
         compte_tresorerie_id: mode.compte_tresorerie_id,
         reference_paiement: referencePaiement.value || undefined,
+        site_encaissement_id: avecChoixAgence.value
+            ? siteEncaissementId.value || undefined
+            : undefined,
     });
 }
 </script>
@@ -175,10 +282,10 @@ function handleSubmit() {
         v-model:visible="localVisible"
         modal
         :header="title"
-        :style="{ width: '460px' }"
+        :style="{ width: '460px', maxWidth: 'calc(100vw - 2rem)' }"
         :draggable="false"
     >
-        <div class="space-y-6 py-2">
+        <div class="space-y-5 py-1">
             <!-- Contexte optionnel (ex: référence commande, montant total) — secondaire, ne doit
                  jamais rivaliser visuellement avec le montant dû ci-dessous. -->
             <div
@@ -200,34 +307,74 @@ function handleSubmit() {
             <!-- Montant dû — information principale du modal, à ne jamais confondre avec le
                  montant saisi ci-dessous (cf. docs/encaissements.md). -->
             <div
-                class="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-5 py-3"
+                class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg bg-muted px-4 py-3"
             >
-                <div>
-                    <p class="text-sm font-semibold text-primary">Montant dû</p>
-                    <p
-                        class="mt-0.5 text-2xl font-extrabold tracking-tight text-primary tabular-nums [word-spacing:0.16em]"
-                    >
-                        {{ formatGNF(solde) }}
-                    </p>
-                </div>
-                <div
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15"
+                <p class="text-sm font-medium text-foreground">
+                    {{ soldeLabel }}
+                </p>
+                <p
+                    class="text-xl font-bold tracking-tight text-foreground tabular-nums [word-spacing:0.16em]"
                 >
-                    <Receipt class="h-4 w-4 text-primary" />
-                </div>
+                    {{ formatGNF(solde) }}
+                </p>
+            </div>
+
+            <!-- Aucune agence où encaisser : l'opération est réellement bloquée (rouge). -->
+            <p
+                v-if="refusAgence"
+                class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                data-testid="refus-agence-encaissement"
+            >
+                {{ refusAgence }}
+            </p>
+
+            <!-- Agence d'encaissement (ADR 0012) : toujours l'une des agences de l'utilisateur. -->
+            <div v-if="avecChoixAgence" data-testid="agence-encaissement">
+                <Label class="mb-1.5 block text-sm"
+                    >Agence <span class="text-destructive">*</span></Label
+                >
+                <Select
+                    v-if="agencesProposees.length > 1"
+                    v-model="siteEncaissementId"
+                    :options="agencesProposees"
+                    option-label="nom"
+                    option-value="site_id"
+                    placeholder="Choisir une agence"
+                    class="w-full"
+                    :class="{ 'p-invalid': errors?.site_encaissement_id }"
+                />
+                <p
+                    v-else
+                    class="flex items-center gap-2 text-sm font-medium text-foreground"
+                >
+                    <Building2 class="h-4 w-4 text-muted-foreground" />
+                    {{ agenceActive?.nom ?? '—' }}
+                </p>
+                <p
+                    v-if="errors?.site_encaissement_id"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ errors.site_encaissement_id }}
+                </p>
+                <!-- Rappel court du reversement à l'agence de la commande. -->
+                <p
+                    v-if="pourAutreAgence"
+                    class="mt-2 text-sm leading-relaxed text-foreground"
+                    data-testid="bandeau-autre-agence"
+                >
+                    {{ agenceActive?.nom }} devra reverser à
+                    {{ agenceDeLaCommande?.nom }}.
+                </p>
             </div>
 
             <!-- Montant à encaisser -->
             <div>
                 <Label class="mb-2 flex items-center gap-1 text-sm font-medium"
-                    >Montant (GNF)
+                    >{{
+                        decaissement ? 'Montant à payer' : 'Montant à encaisser'
+                    }}
                     <span class="text-destructive">*</span>
-                    <Info
-                        v-tooltip.top="
-                            'Veuillez saisir le montant à encaisser en GNF.'
-                        "
-                        class="h-3.5 w-3.5 cursor-help text-muted-foreground"
-                /></Label>
+                </Label>
                 <div class="relative">
                     <!-- fr-CA et non fr-FR : sépare les milliers par une espace insécable de largeur
                          normale (U+00A0) au lieu de l'espace fine U+202F, quasi invisible en gras. -->
@@ -315,10 +462,33 @@ function handleSubmit() {
                      modes restent possibles) — jamais rouge : rien n'est bloqué pour eux. -->
                 <p
                     v-if="especesBloquees"
-                    class="mt-1.5 text-xs text-amber-700 dark:text-amber-400"
+                    class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950 dark:bg-amber-950/40 dark:text-amber-200"
                     data-testid="especes-indisponible"
                 >
-                    {{ MESSAGE_ESPECES_INDISPONIBLE }}
+                    <template v-if="aucunAutreMoyen">
+                        Aucun moyen de paiement disponible. Contactez votre
+                        responsable.
+                    </template>
+                    <template v-else>{{ messageEspecesIndisponible }}</template>
+                </p>
+                <!-- Décaissement : solde du support choisi ; rouge seulement s'il bloque le paiement. -->
+                <p
+                    v-if="soldeSupport !== null"
+                    class="mt-1.5 text-xs"
+                    :class="
+                        soldeInsuffisant
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'
+                    "
+                    data-testid="solde-disponible"
+                >
+                    <template v-if="soldeInsuffisant">
+                        Solde insuffisant : {{ formatGNF(soldeSupport) }}
+                        disponible.
+                    </template>
+                    <template v-else>
+                        Disponible : {{ formatGNF(soldeSupport) }}
+                    </template>
                 </p>
                 <p
                     v-if="errors?.mode_paiement"
@@ -326,15 +496,13 @@ function handleSubmit() {
                 >
                     {{ errors.mode_paiement }}
                 </p>
-                <!-- Aucun support Mobile Money/Banque actif dans l'agence : information (bleu), rien
-                     n'est cassé — c'est une configuration de Trésorerie > Supports. -->
+                <!-- Mention utile seulement si les espèces sont effectivement disponibles. -->
                 <p
-                    v-if="aucunAutreMoyen"
-                    class="mt-1.5 text-xs text-blue-700 dark:text-blue-400"
+                    v-if="aucunAutreMoyen && !especesBloquees"
+                    class="mt-2 text-sm leading-relaxed text-foreground"
                     data-testid="aucun-autre-moyen"
                 >
-                    Aucun compte Mobile Money ni bancaire actif dans cette
-                    agence : seules les espèces sont proposées.
+                    Espèces uniquement.
                 </p>
                 <p
                     v-if="errors?.compte_tresorerie_id"
@@ -372,8 +540,10 @@ function handleSubmit() {
             <Button
                 :disabled="
                     processing ||
+                    !!refusAgence ||
                     !montant ||
                     !modeActif ||
+                    soldeInsuffisant ||
                     (referencePaiementRequise && !referencePaiement)
                 "
                 @click="handleSubmit"

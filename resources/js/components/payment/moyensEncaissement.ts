@@ -20,6 +20,8 @@ export interface MoyenEncaissement {
     operateur_mobile_money: string | null;
     compte_tresorerie_id: string;
     reference_requise: boolean;
+    /** Décaissement uniquement (paiement de fiche) : solde disponible du support, grand livre. */
+    solde_disponible?: number | null;
 }
 
 export interface ModeOption {
@@ -31,6 +33,8 @@ export interface ModeOption {
     requiresReference: boolean;
     /** Espèces : possibles seulement avec une caisse dédiée active de l'utilisateur. */
     requiresCaisse?: boolean;
+    /** Décaissement uniquement : solde disponible du support (null = inconnu). */
+    soldeDisponible?: number | null;
     icon: LucideIcon;
     /** Repère visuel (pas un logo de marque). */
     badgeClass: string;
@@ -42,7 +46,33 @@ export type EncaissementPayload = {
     mode_paiement: string;
     compte_tresorerie_id?: string;
     reference_paiement?: string;
+    /** Agence qui reçoit l'argent — envoyée seulement quand l'écran propose un choix d'agence. */
+    site_encaissement_id?: string;
 };
+
+/**
+ * Agence où l'utilisateur peut encaisser (App\Services\Tresorerie\AgenceEncaissementResolver) :
+ * toujours l'une de SES agences, avec les moyens de paiement et la disponibilité des espèces
+ * propres à cette agence (ADR 0012).
+ */
+export interface AgenceEncaissement {
+    site_id: string;
+    nom: string;
+    moyens: MoyenEncaissement[];
+    peut_encaisser_especes: boolean;
+}
+
+/**
+ * Tout ce qu'un écran reçoit du backend pour encaisser une facture
+ * (AgenceEncaissementResolver::pourEcran()) : agences de l'utilisateur, agence présélectionnée,
+ * agence de la commande et, s'il ne peut encaisser nulle part, la raison.
+ */
+export interface EncaissementAgences {
+    agences: AgenceEncaissement[];
+    agence_defaut: string | null;
+    agence_commande: { id: string; nom: string } | null;
+    message: string | null;
+}
 
 const ESPECES: ModeOption = {
     key: 'especes',
@@ -93,6 +123,7 @@ function versOption(moyen: MoyenEncaissement): ModeOption {
         mode_paiement: moyen.mode_paiement,
         compte_tresorerie_id: moyen.compte_tresorerie_id,
         requiresReference: moyen.reference_requise,
+        soldeDisponible: moyen.solde_disponible ?? null,
     };
 
     if (moyen.mode_paiement === 'mobile_money') {

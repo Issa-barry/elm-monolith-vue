@@ -206,6 +206,29 @@ const cartes = computed((): Carte[] => {
     return liste;
 });
 
+// « Ma situation » : l'agent remet toujours son argent à la caisse de l'agence de sa caisse dédiée
+// (versement de caisse, même agence) — jamais à l'agence d'une commande encaissée pour une autre
+// agence : ce reversement-là est porté par l'agence (Trésorerie → Inter-agences, ADR 0012).
+const remettreA = computed(() => {
+    const agences = [
+        ...new Set(
+            props.rapport.caisse.fiches
+                .filter((f) => Math.abs(f.solde_actuel) >= 0.005)
+                .map((f) => f.caisse.site_nom)
+                .filter((nom): nom is string => !!nom),
+        ),
+    ];
+    if (agences.length === 0) return null;
+
+    return agences.length === 1
+        ? `À remettre à la caisse de ${agences[0]}`
+        : `À remettre aux caisses de ${agences.join(', ')}`;
+});
+
+const detailMaCaisse = computed(() =>
+    [remettreA.value, dernierVersement.value].filter(Boolean).join(' · '),
+);
+
 const dernierVersement = computed(() => {
     const versements = props.rapport.caisse.fiches
         .map((f) => f.dernier_versement)
@@ -338,12 +361,25 @@ const chiffresVentes = computed(() => {
     ];
 });
 
-const chiffresEncaissements = computed(() =>
-    props.rapport.encaissements.par_moyen.map((m) => ({
+const chiffresEncaissements = computed(() => {
+    const r = props.rapport.encaissements.resume;
+    const moyens = props.rapport.encaissements.par_moyen.map((m) => ({
         libelle: m.libelle,
         valeur: formatGNF(m.montant),
-    })),
-);
+    }));
+
+    // Encaissés pour des commandes d'autres agences (ADR 0012) : à reverser par l'AGENCE — jamais
+    // affiché dans « Ma situation », où l'agent remet tout à la caisse de sa propre agence.
+    return r.pour_autres_agences_nombre > 0 && !maSituation.value
+        ? [
+              ...moyens,
+              {
+                  libelle: "Pour d'autres agences (à reverser)",
+                  valeur: formatGNF(r.pour_autres_agences_montant),
+              },
+          ]
+        : moyens;
+});
 
 const chiffresDettes = computed(() => {
     const c = props.rapport.creances.resume;
@@ -509,7 +545,7 @@ const chiffresMobileMoney = computed(() =>
                         testid="rapport-tab-caisse"
                         libelle="Ma caisse · À remettre — solde théorique"
                         :valeur="formatGNF(rapport.caisse.resume.solde_actuel)"
-                        :detail="dernierVersement"
+                        :detail="detailMaCaisse"
                         :active="onglet === 'caisse'"
                         large
                         class="w-full"
@@ -604,6 +640,7 @@ const chiffresMobileMoney = computed(() =>
                 <ListeEncaissements
                     :lignes="rapport.encaissements.lignes"
                     :afficher-agent="!maSituation"
+                    :afficher-reversement="!maSituation"
                     :total="rapport.encaissements.resume.montant"
                     vide="Aucun encaissement sur la période."
                 />
@@ -681,6 +718,7 @@ const chiffresMobileMoney = computed(() =>
                 <ListeEncaissements
                     :lignes="rapport.mobile_money.lignes"
                     :afficher-agent="!maSituation"
+                    :afficher-reversement="!maSituation"
                     controle
                     vide="Aucun encaissement Mobile Money sur la période."
                 />

@@ -88,6 +88,7 @@ class ComptabilisationBloquanteTest extends TestCase
             'montant_net' => 100_000,
             'statut' => 'a_payer',
         ]);
+        $this->equiperPayeurEspeces($this->user, $site->id);
 
         $this->casserMapping('paiement_livreur');
 

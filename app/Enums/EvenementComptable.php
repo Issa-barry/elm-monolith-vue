@@ -42,6 +42,11 @@ enum EvenementComptable: string
     case VENTE_RETOUR = 'vente_retour';
     // Fait générateur = EncaissementVente créé (chaque encaissement, partiel ou total).
     case ENCAISSEMENT_VENTE_RECU = 'encaissement_vente_recu';
+    // Jambe « agence de la commande » d'un encaissement réalisé par une AUTRE agence (ADR 0012) :
+    // débit liaison (tiers = agence qui a encaissé) / crédit client, sur le site de la commande. La
+    // pièce ENCAISSEMENT_VENTE_RECU, elle, est alors posée sur le site d'encaissement : débit
+    // trésorerie / crédit liaison (tiers = agence de la commande).
+    case ENCAISSEMENT_VENTE_POUR_COMPTE = 'encaissement_vente_pour_compte';
     // Paiement de salaire (PaiePaiement) — jambe trésorerie uniquement (pas
     // d'engagement/dette préalable comptabilisé, cf. PaieComptabilisationService) :
     // couvre juste la sortie de caisse/banque nécessaire au calcul du disponible
@@ -83,6 +88,7 @@ enum EvenementComptable: string
             self::VENTE_FACTUREE => 'Vente facturée',
             self::VENTE_RETOUR => 'Retour de livraison (régularisation de facture)',
             self::ENCAISSEMENT_VENTE_RECU => 'Encaissement client reçu',
+            self::ENCAISSEMENT_VENTE_POUR_COMPTE => 'Encaissement reçu par une autre agence',
             self::PAIEMENT_SALAIRE => 'Paiement salaire',
             self::MOUVEMENT_FONDS_ENVOYE => 'Mouvement de fonds — envoi',
             self::MOUVEMENT_FONDS_RECU => 'Mouvement de fonds — réception',

@@ -63,11 +63,24 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   une annulation ou un retour postérieur modifie le chiffre de la période d'origine.
 - Une facture « Créée » (commande confirmée, pas encore livrée) est une vente.
 - Encaissé / reste de ces ventes = **état actuel** (paiements reçus après la période compris).
+- **Agence = agence de la commande** (filtre Agence et colonne **« Créée à »**). La colonne
+  **« Encaissée à »** indique où les paiements de la facture ont été reçus (plusieurs agences
+  possibles, séparées par une virgule) — ADR 0012.
 
 ### Encaissements (RAP-005)
 
 - **Date = `date_encaissement`** ; **agent = auteur de l'encaissement** (`created_by`), quelle que
   soit la date ou le vendeur de la vente.
+- **Agence = agence qui a reçu l'argent** (`encaissements_ventes.site_encaissement_id`, ADR 0012 —
+  axe trésorerie), pas celle de la commande. Colonnes **« Créée à »** (agence de la commande) et
+  **« Encaissée à »** ; quand elles diffèrent, la ligne porte « pour {agence} · à reverser » et le
+  résumé ajoute **« Pour d'autres agences (à reverser) »** — dans le rapport d'activité des
+  responsables seulement : **« Ma situation »** ne montre jamais à l'agent ce que son agence doit
+  reverser (lui remet tout à la caisse de sa propre agence ; la carte « Ma caisse » indique « À
+  remettre à la caisse de {agence} »). Une agence voit donc ce qu'elle a
+  encaissé pour ses commandes et pour celles des autres ; ce qu'une autre agence a encaissé pour elle
+  apparaît dans ses **ventes** (« Encaissée à »), pas dans ses encaissements. Le filtre Agent et la
+  liste des agents suivent la même règle. Le contrôle des références Mobile Money aussi.
 - Totaux par moyen **réellement utilisé** (Espèces, chaque opérateur Mobile Money, Virement, Chèque) ;
   un Mobile Money historique sans opérateur apparaît comme « Mobile Money (opérateur non renseigné) ».
 - `date_encaissement` n'a pas d'heure : la colonne **« Saisi le »** vient de `created_at` (moment de
@@ -82,6 +95,7 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   comptabilité (décision du 26/09/2026, simple changement de libellé, aucune règle modifiée).
 - Factures **impayées** ou **partielles**, **état actuel, toutes dates confondues** : la période ne
   s'y applique pas, pour que les vieilles dettes restent visibles. Agent = créateur de la vente.
+  Agence = agence de la commande (« Créée à »), avec « Encaissée à » pour les paiements partiels.
 - Une facture « Créée » n'est pas encore une créance (elle devient impayée à la livraison).
 - Historique « créances au 15/09 » (reconstitution à une date passée) : hors lot 1.
 

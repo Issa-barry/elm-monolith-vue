@@ -712,10 +712,15 @@ class CommandeVenteRetourTest extends TestCase
     {
         ['commande' => $commande, 'lignes' => [$ligne]] = $this->commandeEnLivraison([10]);
 
-        // Période de paiement validée : la part est sortie de CREEE (cf. CommissionAdjustmentService).
+        // Commission validée par un utilisateur puis période validée : la part est sortie de
+        // CREEE. Une validation système seule (validated_by vide) ne bloquerait pas (ADR 0008).
         $enveloppe = $this->enveloppe($commande, CommissionCibleType::CODE_PROPRIETAIRE);
         $enveloppe->update(['statut' => StatutCommission::IMPAYE->value]);
-        $enveloppe->parts()->update(['statut' => StatutCommission::IMPAYE->value]);
+        $enveloppe->parts()->update([
+            'statut' => StatutCommission::IMPAYE->value,
+            'validated_at' => now(),
+            'validated_by' => $this->user->id,
+        ]);
 
         $this->posterRetour($commande, [['id' => $ligne->id, 'quantite' => 3]])->assertSessionHasErrors('retour');
 

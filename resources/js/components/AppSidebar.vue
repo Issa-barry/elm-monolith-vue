@@ -289,6 +289,10 @@ const mainNavItems = computed((): NavItem[] => {
                 title: 'Consultants',
                 href: '/backoffice/comptabilite/commissions/consultants',
             },
+            {
+                title: 'Monitoring',
+                href: '/backoffice/comptabilite/commissions/monitoring',
+            },
         ];
 
         if (moduleActive('cashback')) {
@@ -331,6 +335,14 @@ const mainNavItems = computed((): NavItem[] => {
                             title: 'Supports',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
+                        ...(can('tresorerie.read')
+                            ? [
+                                  {
+                                      title: 'Inter-agences',
+                                      href: '/backoffice/comptabilite/tresorerie/inter-agences',
+                                  },
+                              ]
+                            : []),
                     ],
                 },
                 {

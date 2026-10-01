@@ -27,6 +27,7 @@ export type Resource =
     | 'parametres'
     | 'logistique'
     | 'comptabilite'
+    | 'commissions'
     | 'tresorerie'
     | 'rh-employes'
     | 'rh-contrats'
@@ -50,7 +51,9 @@ export type StandalonePermission =
     | 'tresorerie.gerer_soldes_ouverture'
     | 'tresorerie.valider_supports'
     | 'rapports.read_own'
-    | 'rapports.read';
+    | 'rapports.read'
+    | 'factures.encaisser'
+    | 'factures.encaisser_autre_agence';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

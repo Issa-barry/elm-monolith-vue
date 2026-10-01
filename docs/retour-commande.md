@@ -85,12 +85,17 @@ La commission d'une vente standard est calculée sur la **quantité facturée** 
   une nouvelle notification « commission générée » au montant réajusté.
 - **Retour total** : parts et enveloppes passent à `annulee`, sans régénération — même traitement que
   l'annulation d'une commande (`CommandeVenteService::annulerCommissionsAssociees()`).
-- **Garde-fou** : le retour est **refusé** (erreur `retour`) si une part de commission de la commande
-  a déjà fait l'objet d'une décision humaine — sortie de `creee` (période de paiement validée), montant
-  ajusté, validée ou versée (`CommissionTriggerService::raisonCommissionsNonRegularisables()`).
-  Recalculer effacerait ou dupliquerait un engagement déjà pris envers un bénéficiaire ; la commission
-  doit d'abord être régularisée. Cas rare : la période de paiement couvrant la commande doit avoir été
-  validée avant le retour de la marchandise.
+- **Garde-fou** (révisé le 27/09/2026, ADR 0008) : le retour est **refusé** (erreur `retour`) si une
+  part de commission de la commande a déjà fait l'objet d'une **décision humaine** — validée par un
+  utilisateur (`validated_by` renseigné), montant ajusté, versée ou payée — ou si elle figure sur une
+  fiche d'une période **déjà payée en partie ou clôturée**
+  (`CommissionTriggerService::raisonCommissionsNonRegularisables()`). Recalculer effacerait ou
+  dupliquerait un engagement déjà pris envers un bénéficiaire ; la commission doit d'abord être
+  régularisée.
+- Une validation **système** (part propriétaire/site/consultant validée à la génération) et la
+  validation automatique de la période qui s'ensuit ne bloquent plus le retour : la période, sans
+  paiement, est rouverte puis recalculée automatiquement (pièces comptables des fiches contrepassées).
+  Avant cette révision, toute part sortie de `creee` ou validée bloquait le retour.
 
 ### Comptabilité
 

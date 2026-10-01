@@ -482,4 +482,85 @@ class RapportActiviteTest extends TestCase
         $this->assertSame(['Ibrahima Bah', 'Moussa Sidibé'], array_column(array_column($caisse['fiches'], 'caisse'), 'agent_nom'));
         $this->assertNull($caisse['fiches'][0]['ecritures']);
     }
+
+    // ── Créée à / Encaissée à (ADR 0012) ─────────────────────────────────────
+
+    /** Encaissement reçu par `$agence`, quelle que soit l'agence de la facture. */
+    private function encaisserA(FactureVente $facture, User $auteur, float $montant, Site $agence): EncaissementVente
+    {
+        Auth::login($auteur);
+        $encaissement = EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'site_encaissement_id' => $agence->id,
+            'montant' => $montant,
+            'date_encaissement' => '2026-09-26',
+            'mode_paiement' => 'especes',
+        ]);
+        Auth::logout();
+
+        return $encaissement;
+    }
+
+    public function test_vente_et_encaissement_dans_la_meme_agence_affichent_la_meme_agence(): void
+    {
+        $facture = $this->vente($this->siteA, $this->agentA, 100_000);
+        $this->encaisser($facture, $this->agentA, 100_000);
+
+        $rapport = $this->props($this->user, 'rapports.activite')['rapport'];
+
+        $vente = collect($rapport['ventes']['lignes'])->firstWhere('id', $facture->id);
+        $this->assertSame($this->siteA->nom, $vente['site_nom']);
+        $this->assertSame($this->siteA->nom, $vente['encaisse_a']);
+
+        $encaissement = $rapport['encaissements']['lignes'][0];
+        $this->assertSame($this->siteA->nom, $encaissement['site_nom']);
+        $this->assertSame($this->siteA->nom, $encaissement['encaisse_a']);
+        $this->assertFalse($encaissement['pour_autre_agence']);
+        $this->assertEquals(0, $rapport['encaissements']['resume']['pour_autres_agences_montant']);
+    }
+
+    public function test_une_commande_creee_a_une_agence_et_encaissee_a_une_autre_est_tracee_des_deux_cotes(): void
+    {
+        $factureA = $this->vente($this->siteA, $this->agentA, 300_000);
+        $this->encaisserA($factureA, $this->agentSiteB, 300_000, $this->siteB);
+        $factureB = $this->vente($this->siteB, $this->agentSiteB, 50_000);
+        $this->encaisser($factureB, $this->agentSiteB, 50_000);
+
+        // Kouria (B) : elle voit ses deux encaissements, dont celui fait pour l'agence A, à reverser.
+        $b = $this->props($this->user, 'rapports.activite', ['site_ids' => [$this->siteB->id]])['rapport'];
+        $this->assertEquals(350_000, $b['encaissements']['resume']['montant']);
+        $this->assertSame(1, $b['encaissements']['resume']['pour_autres_agences_nombre']);
+        $this->assertEquals(300_000, $b['encaissements']['resume']['pour_autres_agences_montant']);
+        $pourA = collect($b['encaissements']['lignes'])->firstWhere('facture_reference', $factureA->reference);
+        $this->assertSame($this->siteA->nom, $pourA['site_nom'], 'Créée à');
+        $this->assertSame('Kouria', $pourA['encaisse_a'], 'Encaissée à');
+        $this->assertTrue($pourA['pour_autre_agence']);
+        $propre = collect($b['encaissements']['lignes'])->firstWhere('facture_reference', $factureB->reference);
+        $this->assertFalse($propre['pour_autre_agence']);
+
+        // La vente et la créance restent à l'agence de la commande : B ne la compte pas dans ses ventes.
+        $this->assertNull(collect($b['ventes']['lignes'])->firstWhere('id', $factureA->id));
+
+        // A : la vente est chez elle, encaissée à Kouria ; l'encaissement n'est pas dans SA trésorerie.
+        $a = $this->props($this->user, 'rapports.activite', ['site_ids' => [$this->siteA->id]])['rapport'];
+        $vente = collect($a['ventes']['lignes'])->firstWhere('id', $factureA->id);
+        $this->assertSame($this->siteA->nom, $vente['site_nom']);
+        $this->assertSame('Kouria', $vente['encaisse_a']);
+        $this->assertEquals(300_000, $vente['encaisse']);
+        $this->assertSame([], $a['encaissements']['lignes']);
+    }
+
+    public function test_ma_situation_de_l_agent_trace_l_encaissement_fait_pour_une_autre_agence(): void
+    {
+        $factureA = $this->vente($this->siteA, $this->agentA, 200_000);
+        $this->encaisserA($factureA, $this->agentSiteB, 200_000, $this->siteB);
+
+        $rapport = $this->props($this->agentSiteB, 'ma-situation')['rapport'];
+
+        $ligne = $rapport['encaissements']['lignes'][0];
+        $this->assertSame($this->siteA->nom, $ligne['site_nom']);
+        $this->assertSame('Kouria', $ligne['encaisse_a']);
+        $this->assertTrue($ligne['pour_autre_agence']);
+        $this->assertEquals(200_000, $rapport['encaissements']['resume']['pour_autres_agences_montant']);
+    }
 }

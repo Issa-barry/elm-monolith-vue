@@ -10,8 +10,8 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
-use App\Services\Tresorerie\CaisseAgentResolver;
-use App\Services\Tresorerie\MoyensEncaissementResolver;
+use App\Services\SavedFilterService;
+use App\Services\Tresorerie\AgenceEncaissementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -32,10 +32,15 @@ class IndexCommandeVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = $request->routeIs('ventes.index')
+            ? app(SavedFilterService::class)->applyToRequest($request, 'ventes')
+            : null;
+
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $periode = $request->input('periode', 'all');
+        $periode = $request->input('periode') ?? 'all';
         $statuts = array_values(array_filter((array) $request->input('statuts', [])));
         $statutFacture = $request->input('statut_facture');
         $statutCommission = $request->input('statut_commission');
@@ -207,10 +212,9 @@ class IndexCommandeVenteController extends Controller
             'montant_cloturees' => (float) $cloturees->sum('total_commande'),
         ];
 
-        // Une seule requête pour toute la page (indicateur peut_encaisser_especes de chaque ligne).
-        $sitesAvecCaisse = app(CaisseAgentResolver::class)->sitesAvecCaisseActive($orgId, (string) $user->id);
-        $moyensParSite = app(MoyensEncaissementResolver::class)->parSite($orgId, $commandes->map(fn (CommandeVente $c) => $c->facture?->site_id));
-        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $sitesAvecCaisse, $moyensParSite));
+        // Agences d'encaissement de l'utilisateur, moyens et caisses : une seule résolution pour la page.
+        $encaissementParFacture = app(AgenceEncaissementResolver::class)->pourEcran($user, $commandes->map(fn (CommandeVente $c) => $c->facture));
+        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $encaissementParFacture));
 
         $sites = $user->isAdmin()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get()
@@ -247,6 +251,7 @@ class IndexCommandeVenteController extends Controller
         }
 
         return Inertia::render('Ventes/Index', [
+            'saved_view' => $savedView,
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
             'nature_filtree' => $natureFiltree->value,
@@ -275,10 +280,9 @@ class IndexCommandeVenteController extends Controller
     }
 
     /**
-     * @param  list<string>  $sitesAvecCaisse  sites où l'utilisateur a une caisse dédiée active
-     * @param  array<string, list<array<string, mixed>>>  $moyensParSite  moyens d'encaissement hors espèces par agence
+     * @param  array<string, array<string, mixed>>  $encaissementParFacture  AgenceEncaissementResolver::pourEcran(), par facture
      */
-    private function mapCommandeForIndex(CommandeVente $c, mixed $user, array $sitesAvecCaisse = [], array $moyensParSite = []): array
+    private function mapCommandeForIndex(CommandeVente $c, mixed $user, array $encaissementParFacture = []): array
     {
         // Identité de processus de commission (Vente / Distribution client / Transfert grossiste),
         // calculée via la même source unique que la génération réelle (cf.
@@ -317,10 +321,12 @@ class IndexCommandeVenteController extends Controller
             'facture_statut_label' => $c->facture?->statut_facture?->label(),
             'facture_montant_encaisse' => $c->facture ? (float) $c->facture->montant_encaisse : null,
             'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
-            // Espèces : possibles seulement avec une caisse dédiée active sur le site de la facture
-            // (cf. CaisseAgentResolver::garantirCaissePourEspeces(), garantie côté serveur).
-            'peut_encaisser_especes' => (bool) ($c->facture?->site_id && in_array($c->facture->site_id, $sitesAvecCaisse, true)),
-            'moyens_encaissement' => $moyensParSite[$c->facture?->site_id ?? ''] ?? [],
+            // Agence d'encaissement = agence de l'utilisateur (ADR 0012, AgenceEncaissementResolver) :
+            // agences proposées, leurs moyens et leurs espèces. Les deux clés historiques reprennent
+            // l'agence présélectionnée.
+            'encaissement_agences' => $encaissementParFacture[$c->facture?->id ?? ''] ?? null,
+            'peut_encaisser_especes' => (bool) (self::agenceDefaut($encaissementParFacture[$c->facture?->id ?? ''] ?? null)['peut_encaisser_especes'] ?? false),
+            'moyens_encaissement' => self::agenceDefaut($encaissementParFacture[$c->facture?->id ?? ''] ?? null)['moyens'] ?? [],
             'encaissements' => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
                 'id' => $e->id,
                 'montant' => (float) $e->montant,
@@ -355,5 +361,16 @@ class IndexCommandeVenteController extends Controller
 
         return $user->sites()->wherePivot('is_default', true)->value('sites.id')
             ?? $user->sites()->value('sites.id');
+    }
+
+    /**
+     * Agence présélectionnée d'une entrée de AgenceEncaissementResolver::pourEcran() (null : aucune).
+     *
+     * @param  array<string, mixed>|null  $encaissement
+     * @return array<string, mixed>|null
+     */
+    private static function agenceDefaut(?array $encaissement): ?array
+    {
+        return collect($encaissement['agences'] ?? [])->firstWhere('site_id', $encaissement['agence_defaut'] ?? null);
     }
 }

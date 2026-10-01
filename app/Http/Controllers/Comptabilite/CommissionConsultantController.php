@@ -13,8 +13,10 @@ use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Prestataire;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
+use App\Services\SavedFilterService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionProcessusFilter;
@@ -42,8 +44,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * compris un ancien consultant remplacé ou désactivé depuis (cf. mission §3) : le groupBy sur
  * beneficiaire_id — jamais un filtre sur "le consultant actuel" — garantit cette persistance.
  * Mêmes conventions que les autres écrans Commission v2 : cartes de synthèse, DataFilters,
- * StatusDot, exports, jamais de paiement direct (chaîne unique via Comptabilité > Fiches de
- * paiement).
+ * StatusDot, exports. Le bouton Payer d'une ligne enregistre le paiement sur la fiche de la
+ * période (FichePayableResolver) — jamais une chaîne de paiement parallèle.
  */
 class CommissionConsultantController extends Controller
 {
@@ -59,6 +61,9 @@ class CommissionConsultantController extends Controller
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-consultants');
 
         [$list, $meta] = $this->resolveBeneficiaires($request);
         $orgId = auth()->user()->organization_id;
@@ -80,6 +85,7 @@ class CommissionConsultantController extends Controller
             : [];
 
         return Inertia::render('Comptabilite/CommissionConsultant/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $meta['search'],
@@ -90,7 +96,7 @@ class CommissionConsultantController extends Controller
             'selected_periode' => $meta['filtre_periode'],
             'periodes_disponibles' => $periodesDisponibles,
             'consultants_options' => $meta['consultants_options'],
-            'can_payer' => false,
+            'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
 
@@ -318,9 +324,10 @@ class CommissionConsultantController extends Controller
             ->whereIn('id', $allConsultantIds)
             ->get()
             ->keyBy('id');
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(auth()->user(), CommissionEnveloppePart::TYPE_PRESTATAIRE, $allConsultantIds, $filtrePeriode);
 
         $beneficiaires = $partsParConsultant->map(function (Collection $parts, string $consultantId) use (
-            $fraisDepensesParConsultant, $prestatairesById,
+            $fraisDepensesParConsultant, $prestatairesById, $fichesPayables,
         ) {
             $prestataire = $prestatairesById->get($consultantId);
             $fraisDepenses = $fraisDepensesParConsultant[$consultantId] ?? 0.0;
@@ -362,8 +369,9 @@ class CommissionConsultantController extends Controller
                 // Toujours exposé, même filtré sur un seul processus (décision produit du
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
                 'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
-                // Jamais payable depuis cet écran, cf. docblock de classe.
-                'can_pay' => false,
+                // Payable uniquement via la fiche due de la période, cf. docblock de classe.
+                'can_pay' => $fichesPayables->has($consultantId),
+                'fiche_a_payer' => $fichesPayables->get($consultantId),
             ];
         })->values();
 

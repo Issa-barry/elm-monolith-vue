@@ -81,9 +81,15 @@ interface SolvabiliteResult {
     // le message explicatif affiché quand has_debt && !blocked — jamais la couleur du bloc
     // (toujours warning dans ce cas, cf. commandeBloquee/le principe SUCCESS/WARNING/DANGER).
     seuil_origine: 'standard' | 'derogation';
+    // Dette comparée au plafond : total_remaining, plus la facture jamais encaissée quand une
+    // dérogation remplace le verrou « première régularisation » (cf. SolvabiliteService).
+    exposition: number;
     montant_disponible: number;
     blocked: boolean;
     depassement: number;
+    // Dérogation active mais exposition au-delà de son plafond : bloqué par le plafond, jamais
+    // par le verrou « première facture » (un simple encaissement ne suffirait pas).
+    blocage_plafond_derogation: boolean;
     // Verrou « première régularisation » (cf. SolvabiliteService) : distinct du contrôle de
     // seuil ci-dessus — se déclenche dès qu'une facture n'a reçu AUCUN encaissement, quel que
     // soit le seuil ou le paramètre de contrôle des impayés. Ne concerne que la cible véhicule.
@@ -137,6 +143,7 @@ interface VehiculeOption {
     type_vehicule_nom: string | null;
     capacites: CapaciteCategorie[];
     livreur_nom: string | null;
+    chauffeur_indisponible_motif: string | null;
     livreur_telephone: string | null;
     equipe_membres: EquipeMembreOption[];
 }
@@ -952,12 +959,13 @@ const commandeBloquee = computed(() =>
 // ── Validation locale ────────────────────────────────────────────────────────
 // Distribution client = livreur obligatoire (règle métier du 31/08/2026). Aucun champ
 // "livreur_id" n'existe sur la commande : le livreur est dérivé de l'équipe du véhicule
-// (cf. CommandeVenteFormBuilder::ensureNatureOperationCoherente, source de vérité backend) — ici
-// on ne fait que refléter cette dérivation via livreur_nom, déjà résolu côté serveur.
-const livreurManquantPourDistribution = computed(
-    () =>
-        form.nature_operation === 'distribution_client' &&
-        !vehiculeSelectionne.value?.livreur_nom,
+// (cf. CommandeVenteFormBuilder::motifChauffeurIndisponible, source de vérité backend) — ici on
+// ne fait que refléter le motif déjà résolu côté serveur, jamais la simple présence d'un nom : un
+// chauffeur inactif reste membre de l'équipe mais bloque la distribution.
+const livreurManquantPourDistribution = computed(() =>
+    form.nature_operation === 'distribution_client' && vehiculeSelectionne.value
+        ? vehiculeSelectionne.value.chauffeur_indisponible_motif
+        : null,
 );
 
 const canSubmit = computed(
@@ -1204,8 +1212,7 @@ function confirmerEtCreer() {
                                 v-else-if="livreurManquantPourDistribution"
                                 class="mt-1 text-xs text-destructive"
                             >
-                                Ce véhicule n'a aucun livreur actif assigné — la
-                                distribution nécessite un livreur.
+                                {{ livreurManquantPourDistribution }}
                             </p>
 
                             <!-- Solvabilité véhicule — n'est le facteur de blocage QUE si aucun
@@ -1318,7 +1325,8 @@ function confirmerEtCreer() {
                                 <p
                                     v-else-if="
                                         vehiculeSolvabilite &&
-                                        !vehiculeSolvabilite.has_debt
+                                        !vehiculeSolvabilite.has_debt &&
+                                        !vehiculeSolvabilite.blocked
                                     "
                                     class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                 >
@@ -1395,10 +1403,12 @@ function confirmerEtCreer() {
                                         >
                                             Commande bloquée —
                                             {{
-                                                vehiculeSolvabilite.total_remaining >
-                                                0
-                                                    ? 'plafond dépassé'
-                                                    : 'cette vente dépasse le plafond'
+                                                vehiculeSolvabilite.blocage_plafond_derogation
+                                                    ? 'plafond de dérogation dépassé'
+                                                    : vehiculeSolvabilite.total_remaining >
+                                                        0
+                                                      ? 'plafond dépassé'
+                                                      : 'cette vente dépasse le plafond'
                                             }}
                                         </p>
                                         <button
@@ -1449,7 +1459,7 @@ function confirmerEtCreer() {
                                             >
                                                 {{
                                                     formatGNF(
-                                                        vehiculeSolvabilite.total_remaining,
+                                                        vehiculeSolvabilite.exposition,
                                                     )
                                                 }}
                                             </p>
@@ -1487,6 +1497,21 @@ function confirmerEtCreer() {
                                             </p>
                                         </div>
                                     </div>
+                                    <p
+                                        v-if="
+                                            vehiculeSolvabilite.blocage_plafond_derogation
+                                        "
+                                        class="mt-3 text-sm text-red-900 dark:text-red-200"
+                                    >
+                                        La dérogation de ce véhicule ne couvre
+                                        plus ses impayés. Encaissez au moins
+                                        {{
+                                            formatGNF(
+                                                vehiculeSolvabilite.depassement,
+                                            )
+                                        }}
+                                        pour débloquer une nouvelle commande.
+                                    </p>
                                 </div>
                             </template>
                         </div>

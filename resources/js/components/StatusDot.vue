@@ -29,6 +29,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
+    // Monitoring des commissions (CommissionAnomalieStatut) : commission finalement générée.
+    regularisee: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -43,6 +45,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Vente encaissée en totalité, en attente du versement des commissions avant clôture
     // (CommandeVente::statutAffichage()).
     commissions_a_verser: 'bg-blue-500',
+    // Encaissement reçu pour une autre agence, reversement parti mais pas encore reçu (ADR 0012).
+    en_cours_versement: 'bg-blue-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
@@ -56,6 +60,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
     contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
+    sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
+    // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
+    reserve: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',
@@ -72,6 +80,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
     erreur: 'bg-red-500',
+    // Monitoring des commissions : commission attendue mais absente (erreur réelle à corriger).
+    non_generee: 'bg-red-500',
+    echec_recurrent: 'bg-red-500',
     // MessageLog.status — cf. commentaire "sent" plus haut.
     failed: 'bg-red-500',
     rupture: 'bg-red-500',
@@ -84,6 +95,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
+    partiellement_verse: 'bg-orange-500',
     en_attente: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
@@ -102,6 +114,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     analyse: 'bg-orange-500',
     stock_faible: 'bg-amber-500',
     a_financer: 'bg-orange-500',
+    // Encaissement reçu pour une autre agence, pas encore reversé : à faire, pas une erreur (ADR 0012).
+    a_verser: 'bg-amber-500',
     donnees_incompletes: 'bg-amber-500',
     stock_negatif: 'bg-orange-500',
 };

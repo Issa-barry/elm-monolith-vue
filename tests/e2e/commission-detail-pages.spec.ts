@@ -27,6 +27,15 @@ test.setTimeout(120_000);
 
 const TAB_LABELS = ['Informations', 'Dépenses', 'Paiements', 'Historique'];
 
+/**
+ * Ouvre la fiche d'un livreur depuis la liste « Commissions des livreurs » en cliquant sur la
+ * cellule du nom : un clic au centre de la ligne peut tomber sur une cellule Véhicule/Processus/
+ * Statut en `@click.stop` (selon la largeur des colonnes), et la navigation n'a alors pas lieu.
+ */
+async function ouvrirDetailLivreur(row: import('@playwright/test').Locator) {
+    await row.locator('td').nth(1).click();
+}
+
 async function assertSummaryCardsAndTabs(
     page: import('@playwright/test').Page,
     fraisLabel: string,
@@ -274,7 +283,7 @@ test('détail Commission livreur (transfert logistique) — 4 cartes, tabs, jama
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await row.click();
+    await ouvrirDetailLivreur(row);
 
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
@@ -306,7 +315,7 @@ test('détail Commission vente — 4 cartes et tabs identiques', async ({
         'Aucun bénéficiaire seedé pour Commission vente dans cet environnement (CommissionsSeeder désactivé).',
     );
 
-    await row.click();
+    await ouvrirDetailLivreur(row);
 
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
@@ -378,7 +387,7 @@ test('filtres globaux Commission vente — URL persiste et Réinitialiser foncti
         'Aucun bénéficiaire seedé pour Commission vente dans cet environnement (CommissionsSeeder désactivé).',
     );
 
-    await row.click();
+    await ouvrirDetailLivreur(row);
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
         { timeout: 20_000 },
@@ -422,7 +431,7 @@ test('filtres globaux présents et identiques sur Commission livreur (logistique
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(logistiqueRow).toBeVisible({ timeout: 20_000 });
-    await logistiqueRow.click();
+    await ouvrirDetailLivreur(logistiqueRow);
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
         { timeout: 20_000 },

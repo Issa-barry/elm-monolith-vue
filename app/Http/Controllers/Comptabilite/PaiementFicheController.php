@@ -14,8 +14,10 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
+use App\Services\Tresorerie\DecaissementFicheResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -115,13 +117,16 @@ class PaiementFicheController extends Controller
 
         $fiche->load([
             'lignes.source' => $this->ligneSourceEagerLoad(),
-            'site', 'periode', 'payeur', 'historiquePaiements.createur',
+            'site', 'periode', 'payeur', 'historiquePaiements.createur', 'historiquePaiements.compteTresorerie',
         ]);
 
         $teamStatusParPeriode = collect();
         if ($fiche->beneficiaire_type !== 'salarie' && $fiche->periode !== null) {
             $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationCombineParBeneficiaire($fiche->periode);
         }
+
+        // Fiche salarié : consultable et imprimable, jamais payable ici (circuit Paie, ADR 0009).
+        $canPayer = $fiche->beneficiaire_type !== 'salarie' && auth()->user()->can('payer', $fiche);
 
         return Inertia::render('Comptabilite/Fiches/Show', [
             'fiche' => [
@@ -148,13 +153,22 @@ class PaiementFicheController extends Controller
                     'id' => $p->id,
                     'montant' => (float) $p->montant,
                     'mode_paiement' => $p->mode_paiement,
+                    'reference_paiement' => $p->reference_paiement,
+                    'support' => $p->compteTresorerie?->libelle,
                     'date_paiement' => $p->date_paiement?->toDateString(),
                     'note' => $p->note,
                     'createur' => $p->createur?->name,
                 ]),
             ],
             'modes_paiement' => ModePaiement::options(),
-            'can_payer' => auth()->user()->can('payer', $fiche),
+            'can_payer' => $canPayer,
+            // Dialogue de paiement (PaymentCard) : mêmes moyens et soldes que les écrans Commissions.
+            'paiement' => $canPayer
+                ? FichePayableResolver::presenter(
+                    $fiche,
+                    app(DecaissementFicheResolver::class)->optionsPourFiches(collect([$fiche]), auth()->user())[$fiche->id],
+                )
+                : null,
         ]);
     }
 

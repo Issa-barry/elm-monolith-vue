@@ -145,8 +145,10 @@ class HandleInertiaRequests extends Middleware
             return 0;
         }
 
+        // Mouvements entre agences ET règlements inter-agences (ADR 0012) : l'agence destinataire doit
+        // confirmer la réception des deux. Les versements de caisse (même agence) restent à part.
         $query = MouvementFonds::where('organization_id', $user->organization_id)
-            ->where('nature', NatureMouvementFonds::INTER_SITES->value)
+            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value])
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
 
         if (! $user->isAdmin()) {

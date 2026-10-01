@@ -3,6 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import CommissionIndexLayout from '@/components/commission/CommissionIndexLayout.vue';
 import type { FilterField } from '@/components/filters/DataFilters.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,12 +12,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import type { CommissionIndexSummary } from '@/types/commission';
+import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import { Head } from '@inertiajs/vue3';
-import { Briefcase, History, MoreHorizontal } from 'lucide-vue-next';
+import { Briefcase, HandCoins, History, MoreHorizontal } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface BeneficiaireRow {
@@ -37,6 +39,9 @@ interface BeneficiaireRow {
     payable: number;
     /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
     processus_labels: string[];
+    can_pay: boolean;
+    /** Fiche due sur laquelle le bouton Payer enregistre le paiement (null = rien à payer). */
+    fiche_a_payer: FicheAPayer | null;
 }
 
 interface PeriodeOption {
@@ -125,6 +130,16 @@ const showAudit = ref(false);
 const auditBenefId = ref('');
 const auditBenefNom = ref('');
 
+const paiement = usePaiementFiche();
+
+function peutPayer(b: BeneficiaireRow): boolean {
+    return props.can_payer && b.can_pay && b.fiche_a_payer !== null;
+}
+
+function openPaiement(b: BeneficiaireRow) {
+    if (b.fiche_a_payer) paiement.open(b.fiche_a_payer);
+}
+
 function openAudit(b: BeneficiaireRow) {
     auditBenefId.value = b.beneficiaire_id;
     auditBenefNom.value = b.beneficiaire_nom;
@@ -190,6 +205,7 @@ function fmt(val: number | null | undefined) {
     <Head title="Commissions des consultants — Comptabilité" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <CommissionIndexLayout
+            saved-filter-scope="commissions-consultants"
             title="Commissions des consultants"
             :entity-count="beneficiaires.length"
             entity-label="consultant"
@@ -362,15 +378,27 @@ function fmt(val: number | null | undefined) {
                         >
                             {{ fmt(b.solde_restant) }}
                         </td>
-                        <td class="px-4 py-3">
-                            <StatusDot
-                                :status="
-                                    b.statut_global === 'creee'
-                                        ? 'en_attente'
-                                        : b.statut_global
-                                "
-                                :label="b.statut_label"
-                            />
+                        <td class="px-4 py-3" @click.stop>
+                            <div class="flex items-center gap-2">
+                                <StatusDot
+                                    :status="
+                                        b.statut_global === 'creee'
+                                            ? 'en_attente'
+                                            : b.statut_global
+                                    "
+                                    :label="b.statut_label"
+                                />
+                                <Button
+                                    v-if="peutPayer(b)"
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-6 px-2 text-xs"
+                                    @click="openPaiement(b)"
+                                >
+                                    <HandCoins class="mr-1 h-3.5 w-3.5" />
+                                    Payer
+                                </Button>
+                            </div>
                         </td>
                         <td
                             class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right"
@@ -394,6 +422,14 @@ function fmt(val: number | null | undefined) {
                                         <History class="mr-2 h-4 w-4" />
                                         Historique
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="peutPayer(b)"
+                                        class="cursor-pointer"
+                                        @click="openPaiement(b)"
+                                    >
+                                        <HandCoins class="mr-2 h-4 w-4" />
+                                        Payer
+                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </td>
@@ -402,6 +438,24 @@ function fmt(val: number | null | undefined) {
             </table>
         </CommissionIndexLayout>
     </AppLayout>
+
+    <PaymentCard
+        v-if="paiement.fiche.value"
+        v-model:visible="paiement.visible.value"
+        :title="paiement.title.value"
+        :info-rows="paiement.infoRows.value"
+        sens="decaissement"
+        solde-label="Reste à payer"
+        :solde="paiement.fiche.value.montant_restant"
+        :moyens="paiement.fiche.value.tresorerie.moyens"
+        :especes-disponibles="
+            paiement.fiche.value.tresorerie.especes_disponibles
+        "
+        :solde-especes="paiement.fiche.value.tresorerie.solde_especes"
+        :processing="paiement.processing.value"
+        :errors="paiement.errors.value"
+        @submit="paiement.submit"
+    />
 
     <AuditDrawer
         v-model:visible="showAudit"

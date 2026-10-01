@@ -767,11 +767,12 @@ class SolvabiliteServiceTest extends TestCase
     }
 
     /**
-     * Symétrique du test précédent : une dérogation active mais dont le plafond ne couvre PAS
-     * l'exposition (facture bloquante comprise) laisse le verrou en place — la dérogation ne
-     * lève le verrou que si elle couvre réellement la situation, jamais inconditionnellement.
+     * Symétrique du test précédent : une dérogation active dont le plafond ne couvre PAS
+     * l'exposition (facture bloquante comprise) bloque toujours — mais au titre du PLAFOND
+     * dérogatoire, jamais du verrou « première facture » (correction du 30/09/2026 : le message
+     * « enregistrez un encaissement » était faux, un encaissement partiel ne suffisant pas).
      */
-    public function test_derogation_avec_plafond_insuffisant_laisse_le_verrou_premiere_regularisation(): void
+    public function test_derogation_avec_plafond_insuffisant_bloque_par_le_plafond_derogatoire(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
@@ -779,9 +780,78 @@ class SolvabiliteServiceTest extends TestCase
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
-        $this->assertTrue($resultat['blocage_premiere_facture'], 'le plafond ne couvre pas l\'exposition → le verrou reste actif');
+        $this->assertFalse($resultat['blocage_premiere_facture']);
+        $this->assertTrue($resultat['blocage_plafond_derogation']);
         $this->assertTrue($resultat['blocked']);
+        $this->assertSame(10_000, $resultat['exposition']);
+        $this->assertSame(5_000, $resultat['depassement']);
         $this->assertSame($facture->reference, $resultat['facture_bloquante_reference']);
+    }
+
+    /** Une facture CREEE n'entre pas dans total_remaining, mais bien dans l'exposition comparée au plafond. */
+    public function test_derogation_facture_creee_au_dela_du_plafond_bloque_par_le_plafond_derogatoire(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+        $this->makeFacture(1_000_000, StatutFactureVente::CREEE, $vehicule->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertSame(0, $resultat['total_remaining']);
+        $this->assertSame(1_000_000, $resultat['exposition']);
+        $this->assertTrue($resultat['blocage_plafond_derogation']);
+        $this->assertSame(500_000, $resultat['depassement']);
+        $this->assertSame(0, $resultat['montant_disponible']);
+    }
+
+    /** Le plafond dérogatoire garde le verrou actif même quand le contrôle de seuil est désactivé. */
+    public function test_derogation_au_dela_du_plafond_bloque_meme_controle_impayes_desactive(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, false, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000]);
+        $this->makeFacture(10_000, StatutFactureVente::IMPAYEE, $vehicule->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertTrue($resultat['blocage_plafond_derogation']);
+        $this->assertTrue($resultat['blocked']);
+    }
+
+    /**
+     * Scénario rapporté le 30/09/2026 (véhicule ABARRY, plafond dérogatoire 15 000 000 GNF) : une
+     * vente précédente partiellement encaissée (reste 5 800 000) + une vente de 10 800 000 jamais
+     * encaissée = 16 600 000 > 15 000 000. Bloqué par le plafond (dépassement 1 600 000), pas par
+     * le verrou « première facture » ; encaisser ce dépassement débloque le véhicule.
+     */
+    public function test_derogation_15_millions_depassee_par_16_6_millions_dimpayes(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 15_000_000]);
+        $precedente = $this->makeFacture(10_800_000, StatutFactureVente::PARTIEL, $vehicule->id);
+        $this->encaisser($precedente, 5_000_000);
+        $jamaisEncaissee = $this->makeFacture(10_800_000, StatutFactureVente::IMPAYEE, $vehicule->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertSame(16_600_000, $resultat['exposition']);
+        $this->assertFalse($resultat['blocage_premiere_facture']);
+        $this->assertTrue($resultat['blocage_plafond_derogation']);
+        $this->assertSame(1_600_000, $resultat['depassement']);
+
+        try {
+            $this->service->enforcerOuEchouer($this->org->id, $vehicule->id, null);
+            $this->fail('ValidationException attendue.');
+        } catch (ValidationException $e) {
+            $message = $e->errors()['impayes'][0];
+            $this->assertStringContainsString('plafond de derogation', $message);
+            $this->assertStringContainsString('1 600 000', $message);
+            $this->assertStringNotContainsString('aucun paiement', $message);
+        }
+
+        $jamaisEncaissee->update(['statut_facture' => StatutFactureVente::PARTIEL->value]);
+        $this->encaisser($jamaisEncaissee, 1_600_000);
+
+        $this->assertFalse($this->service->evaluer($this->org->id, $vehicule->id, null)['blocked']);
     }
 
     /**

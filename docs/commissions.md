@@ -35,6 +35,15 @@ même principe de barème dynamique au transfert logistique interne.
   depuis `store()` et `update()` — deux points d'entrée indépendants, aucun ne suppose que l'autre a
   déjà protégé la donnée. `vente_standard` n'est soumise à aucune de ces exigences.
 
+  Un livreur inactif (désactivé, ou auto-inscrit pas encore approuvé) peut rester membre d'une
+  équipe. Le motif du blocage est donc calculé à un seul endroit
+  (`CommandeVenteFormBuilder::motifChauffeurIndisponible()`) et nomme la cause réelle : pas
+  d'équipe, équipe désactivée, aucun chauffeur, ou chauffeur(s) inactif(s) nommés (30/09/2026).
+  Ce même motif est renvoyé par le refus serveur, exposé au formulaire de commande
+  (`chauffeur_indisponible_motif`, qui bloque l'envoi dès la sélection du véhicule) et affiché sur
+  la fiche véhicule (onglet Équipe : statut de chaque membre + bandeau). Un chauffeur inactif se
+  réactive depuis la liste des livreurs (« Approuver » s'il a un compte, sinon « Réactiver »).
+
   Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
   client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
   véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques
@@ -206,8 +215,11 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   `Logistique/Show.vue`) — un simple `git grep` sur `logistique.commissions.` le confirme — alors
   que l'écran Comptabilité reste, lui, atteignable depuis son propre menu. `LivreurController::show()`
   (`commissions_url` de la fiche livreur, ex-`route('logistique.commissions.livreur', ...)`)
-  pointe désormais vers `route('commissions.vente.livreur', ...)` sans filtre processus (« Tous
-  les processus » — Vente/Distribution client/Transfert logistique confondus).
+  pointe désormais vers `route('comptabilite.commissions.vente.livreur', ...)` sans filtre
+  processus (« Tous les processus » — Vente/Distribution client/Transfert logistique confondus).
+  Corrigé le 30/09/2026 : le nom de route était écrit sans le préfixe `comptabilite.` du groupe,
+  d'où une `RouteNotFoundException` (500) à chaque ouverture de la fiche livreur par un
+  utilisateur staff en production (Sentry PHP-LARAVEL-71) ; couvert par `LivreurTest`.
 - **04/09/2026** — corrigé dans la foulée (même cause racine, détecté par les tests E2E
   `logistique-flow.spec.ts`) : le badge "Commission" de `Logistique/Index.vue` et l'étape
   "Commission" du stepper de `Logistique/Show.vue` (libellé Impayée/Partiellement payée/Payée
@@ -1014,8 +1026,15 @@ rattraper.
   - Pas de complétion (no-op, comme avant) si la dernière tentative est `succes`, ou si une
     enveloppe de l'opération est `annulee` (retour total, annulation).
   - Cible manquante dont la **période de paiement de son type** (livreur, propriétaire, site,
-    consultant) couvrant la date d'origine est **validée ou clôturée** : non créée, reste à
-    régulariser avec un motif explicite (référence de la période).
+    consultant) couvrant la date d'origine est **clôturée** : non créée, reste à régulariser avec
+    un motif explicite (référence de la période).
+  - **Révisé le 30/09/2026** (auparavant : refusée aussi sur une période seulement validée, ce qui
+    rendait irrégularisable toute part manquante d'une période déjà payée). Période **validée**,
+    même déjà payée : la part est créée à sa date d'origine, la période est rouverte
+    automatiquement et la part va sur une **fiche complémentaire** (ADR 0010, point 4) — la fiche
+    déjà payée reste intacte. Une part Livreur doit ensuite être validée ; la période repasse
+    « Validée » dès que toutes ses commissions le sont, et la fiche complémentaire devient
+    payable.
   - **Option A — date d'effet d'une correction de partage.** Quand une nouvelle version de partage
     remplace une version **non conforme au barème en vigueur** (somme ≠ barème), elle prend effet à
     la **date d'effet de ce barème** (jamais avant le début de la version remplacée, qui est bornée
@@ -1140,11 +1159,13 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   Comptabilité > Périodes > détail :
   - **Valider** (ligne) / **Valider les véhicules (N)** (sélection multiple, case à cocher en
     première colonne) : valide toutes les parts (vente + logistique) du ou des véhicules
-    (`validated_at`), exactement comme « Valider le véhicule » de l'écran d'ajustement. Ne change
-    jamais le statut de la période, ne rend rien payable.
+    (`validated_at`), exactement comme « Valider le véhicule » de l'écran d'ajustement. Quand la
+    dernière commission de la période est validée, la période passe elle-même à « Validée »
+    (validation automatique, ADR 0008).
   - **Valider la période de paiement** (en-tête, anciennement « Valider ») : fait passer la
     période `CALCULEE → VALIDEE`, fige les montants et rend les commissions payables. Toujours
-    refusée tant qu'une part n'est pas validée ou qu'un véhicule n'est pas équilibré.
+    refusée tant qu'une part n'est pas validée ou qu'un véhicule n'est pas équilibré. Depuis
+    l'ADR 0008, rarement nécessaire : la période se valide seule dès que tout est validé.
 - « Ajuster » reste l'action séparée des cas de correction (absence, remplaçant, redistribution).
   Un véhicule non équilibré (reste à répartir) ne peut pas être validé directement : bouton et
   case désactivés, refus garanti côté backend.
@@ -1172,10 +1193,181 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   période déjà validée génère une commission qui ne figure sur aucune fiche (les fiches d'une
   période validée ne sont jamais recalculées, cf. `needsRecalcul`). Elle n'est donc jamais payée
   en l'état. `PeriodeCalculatorService::commissionsHorsFiches()` les détecte (même périmètre que
-  le calcul livreur/propriétaire) et la page affiche une alerte orange avec leur nombre et leur
-  montant.
-- **Règle non tranchée** : le traitement de ces commissions tardives (réouverture de la période,
-  report sur la période suivante, fiche complémentaire…) n'est pas encore décidé. Le bouton reste
-  désactivé dans ce cas, car une simple revalidation ne les intégrerait pas.
+  le calcul livreur/propriétaire/site/consultant).
+- **Traitement (ADR 0008, révisé le 30/09/2026 par ADR 0010 point 4)** : la période est
+  **rouverte automatiquement** (repasse « Calculée », fiches non figées recalculées), **même si un
+  paiement existe déjà** : une fiche figée (paiement reçu) n'est jamais recalculée, la commission
+  tardive va sur une fiche complémentaire du bénéficiaire (ou sur sa propre fiche s'il n'en avait
+  pas). Seules les pièces « fiche validée » des fiches non figées sont contrepassées. L'alerte
+  orange (nombre, montant) ne subsiste que sur une période **clôturée** ou dont la réouverture a
+  échoué (contrepassation impossible, journalisée).
+- Une commission **annulée** portée par une fiche figée ne déclenche pas de réouverture (le
+  recalcul ne pourrait pas la retirer) ; retour et annulation restent de toute façon refusés sur
+  une période payée.
 - Tests : `tests/Feature/Comptabilite/PaiementPeriodeTest.php` (`test_bouton_valider_*`,
   `test_commission_arrivee_apres_validation_*`, `test_revalider_*`).
+
+### Colonnes « Membres » et « Équipe » du détail de période (27/09/2026)
+
+- **Membres** (`nb_membres`) : bénéficiaires ayant une commission sur la période pour ce véhicule.
+- **Équipe** (`taille_equipe`) : nombre de membres de l'équipe **active** du véhicule
+  (`EquipeLivraison` + `EquipeLivreur`), composition **actuelle** — l'équipe n'est pas historisée,
+  un changement d'équipe après la période s'y reflète. `—` sans véhicule ou sans équipe active.
+- Un écart (Équipe > Membres) signale un membre de l'équipe sans commission sur la période.
+- Conteneur étroit (< 1000px) : la taille d'équipe passe sous le nom du véhicule.
+- Test : `CommissionAjustementVenteTest::periode_show_distingue_la_taille_de_l_equipe_des_membres_commissionnes`.
+
+## Bouton « Payer » sur les écrans Commissions (27/09/2026)
+
+Révise la règle antérieure « jamais de paiement depuis les écrans Commissions, uniquement via
+Comptabilité > Fiches de paiement » : les liens de menu vers les fiches avaient été retirés
+(16/06/2026), rendant le paiement inaccessible depuis l'interface.
+
+- **Écrans concernés** : listes Livreurs, Propriétaires, Sites, Consultants
+  (`Comptabilite/Commission*/Index`). Bouton **Payer** à côté du statut + entrée du menu ⋮.
+- **Une seule chaîne de paiement** : le bouton ouvre le dialogue de paiement et **poste sur la fiche**
+  de la période (`POST /comptabilite/fiches/{fiche}/paiements`, `PaiementFichePaiementController`),
+  qui alloue le paiement aux `CommissionEnveloppePart` (`CommissionEnveloppePartAllocationService`).
+  Aucun endpoint de paiement propre aux écrans Commissions.
+- **Fiche retenue** (`FichePayableResolver`) : fiche du bénéficiaire (même `beneficiaire_type` :
+  `livreur`, `proprietaire`, `site`, `prestataire`) dont la période est **validée**, avec un
+  **reste à payer > 0**, chevauchant le filtre de période de l'écran, et que l'utilisateur peut
+  payer (`PaiementFichePolicy::payer` : `comptabilite.payer` + agence de la fiche, sauf admin).
+  Sans filtre de période, la **plus ancienne** fiche due est proposée ; les suivantes se paient
+  une par une.
+- **Pas de bouton** si : période non validée (À valider, Validée — période en attente, clôturée),
+  reste à payer nul, aucune fiche générée pour la période, ou utilisateur sans droit.
+- Le montant proposé est le **reste de la fiche** (plafond serveur `max:montant_restant`), la date
+  de paiement est celle du jour.
+- Les pages détail (fiche commission d'un livreur/propriétaire) restent sans paiement direct.
+- Tests : `FichePayableResolverTest`, `CommissionEnveloppeFichePaymentTest::lecran_commission_*_expose_le_paiement_via_la_fiche_de_la_periode`,
+  `sans_permission_payer_lecran_commission_vente_ne_propose_pas_payer`.
+
+### Paiement = décaissement réel depuis un support de trésorerie (28/09/2026, ADR 0009)
+
+Voir [ADR 0009](adr/0009-paiement-de-fiche-decaissement-tresorerie.md). S'applique à tout paiement de
+fiche de commission (écrans Commissions et écran de la fiche, même point d'entrée).
+
+- **Fiche salarié : jamais payable par la fiche** — refus serveur « Les salaires se paient depuis
+  Comptabilité > Paiement salaire. », sans aucun effet, et pas de bouton Payer (fiche consultable et
+  imprimable). La fiche salarié repose sur la même `PaieLigne` que le circuit Paie : la payer ici
+  permettait un double paiement non comptabilisé.
+
+- **D'où sort l'argent** : espèces → caisse dédiée active **du payeur** ; Mobile Money / virement /
+  chèque → support actif choisi. Uniquement les moyens de **l'agence de la fiche** — ou du **siège
+  principal** pour une fiche sans agence (consultant). Aucun siège principal → paiement bloqué.
+- **Mêmes moyens et même fenêtre que l'encaissement** (`PaymentCard`, mode `decaissement`) : titre
+  « Payer une commission livreur/propriétaire/site/consultant », Bénéficiaire, Période (« 16–30
+  septembre 2026 (P2) »), Référence, Montant dû, Déjà payé, bloc « Reste à payer ». Solde disponible
+  du moyen choisi affiché ; « Confirmer » désactivé s'il est insuffisant.
+- **Solde insuffisant = refus serveur** sous verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`),
+  message « Solde insuffisant : X GNF disponible dans « … » pour un paiement de Y GNF. » — aucun
+  effet (ni paiement, ni allocation, ni écriture, ni notification).
+- **Référence de transaction** obligatoire pour Mobile Money et virement (mêmes règles que l'encaissement).
+- **Comptabilité** : crédit du compte du support débité ; paiements antérieurs non reclassés.
+- Code : `DecaissementFicheResolver`, `PaiementFichePaiementController::store()`,
+  `FicheComptabilisationService::comptabiliserPaiementFiche()`, `usePaiementFiche`.
+- Tests : `PaiementFicheDecaissementTest` (espèces, Mobile Money, virement, solde insuffisant sans
+  effet, relecture du solde, autre agence, référence, espèces sans caisse, autre organisation, siège
+  principal, absence de siège), `PaymentCard.spec.ts` (bloc « décaissement »).
+
+## Validation automatique des commissions et des périodes (27/09/2026, ADR 0008)
+
+- **Parts propriétaire, site, consultant** : validées d'office à la génération (`validated_at`,
+  `validated_by` vide = système), statut toujours `creee` — rien n'est payable avant la validation de
+  la période. Les **parts livreur** restent en validation manuelle. Le **cashback** n'est pas concerné.
+- **Période** (livreur, propriétaire, site, consultant) : passe seule à « Validée » dès que toutes ses
+  commissions sont validées, immédiatement, même en cours de quinzaine
+  (`PeriodeValidationService::validerSiComplete`, mêmes contrôles et mêmes effets que le bouton :
+  activation `creee → impaye`, comptabilisation des fiches). Déclenchée après toute validation de
+  commission, tout calcul de période et toute génération. Jamais pour une période sans commission.
+- **Réouverture automatique** d'une période validée quand ses fiches ne reflètent plus les
+  commissions (nouvelle commission datée dans la période, ou commission annulée/supprimée sur une
+  fiche non figée) : contrepassation des pièces « fiche validée » des fiches non figées, recalcul,
+  puis revalidation si tout est validé. Depuis le 30/09/2026, une période déjà payée en partie est
+  aussi rouverte : ses fiches payées restent intactes et la nouvelle commission va sur une fiche
+  complémentaire (ADR 0010, point 4). Une période clôturée n'est jamais rouverte.
+- **Retour de livraison / annulation exceptionnelle** : seule une décision humaine ou une période
+  payée/clôturée bloque (cf. [retour-commande.md](retour-commande.md)).
+- **Rattrapage** de l'existant : `php artisan commissions:valider-beneficiaire-unique --dry-run`, puis
+  sans `--dry-run`.
+- Tests : `tests/Feature/Comptabilite/CommissionSiteTest.php` (validation automatique, réouverture,
+  rattrapage), `CommissionAjustementVenteTest`, `CommissionAjustementTest`, `PaiementPeriodeTest`.
+
+## Fiche figée, fiche complémentaire et report de déduction (28/09/2026, ADR 0010 lot 1)
+
+- **Fiche figée** (`PaiementFiche::estFigee()`) : fiche ayant reçu au moins un paiement, même
+  partiel, ou portant une déduction reportée. Jamais supprimée ni recréée — garanti en base (clé
+  étrangère des paiements en suppression interdite), dans le modèle (suppression et modification
+  des montants refusées, lignes intouchables) et dans le recalcul.
+- **Recalcul** : seules les fiches non figées sont reconstruites. Une ligne déjà portée par une
+  fiche figée n'est jamais reprise ; le reste des lignes d'un bénéficiaire forme une **fiche
+  complémentaire** de la même période (`rang` 2, 3…, `fiche_origine_id` = fiche initiale).
+- **Report de déduction** : une fiche complémentaire (ou imputant un report) dont les déductions
+  dépassent les gains n'est pas due (montant net 0) et reporte le solde (`report_a_deduire`) sur la
+  prochaine fiche du bénéficiaire, dans la même période si possible, sinon la suivante (ligne
+  « Report de déduction »). Jamais imputé deux fois.
+- Les fiches des périodes déjà validées ont reçu `validated_at` = validation de leur période
+  (reprise non destructive).
+- Tests : `tests/Feature/Comptabilite/FicheFigeeEtComplementaireTest.php`.
+
+## Monitoring des commissions non générées (30/09/2026, ADR 0013)
+
+Écran **Comptabilité → Commissions → Monitoring** (`/backoffice/comptabilite/commissions/monitoring`).
+Il liste les commissions **attendues mais non générées**. Avant cet écran, l'email « Commission non
+générée » en était la seule trace.
+
+- **COMM-020 — Une anomalie par cible manquante, dérivée, jamais stockée.** Une anomalie correspond
+  à une opération (commande ou transfert), un processus et une cible : `cible_type`, ou
+  `consultant:<id>` pour la cible Consultant. C'est le grain d'une enveloppe du moteur. Elle est
+  calculée à la lecture par `CommissionMonitoringService` à partir de
+  `commission_generation_attempts` et des enveloppes existantes. Il n'y a ni table ni statut
+  stocké, comme pour le statut de génération. Toute génération en échec, historique comprise,
+  y apparaît sans reprise de données.
+- **Statuts** (`CommissionAnomalieStatut`) :
+  - **Non générée** : la dernière tentative échoue encore sur cette cible.
+  - **Échec récurrent** : même cas, à partir de 3 tentatives en échec.
+  - **Régularisée** : l'enveloppe de la cible existe désormais.
+  - **Sans objet** : l'opération est annulée ou retournée, sa commission a été annulée, ou la
+    dernière génération ne trouve plus rien à verser pour cette cible.
+
+  Il n'y a pas de statut « en cours » : la relance est synchrone, sous verrou de l'opération.
+- **Jamais une anomalie** : absence de barème, barème à 0, site aux commissions désactivées
+  (COMM-013), cible non applicable (véhicule non éligible, pas de site). Aucune commission n'est
+  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4). Une opération
+  dont la génération n'a **jamais été déclenchée** n'a pas de tentative : elle relève de
+  `commissions:auditer-ventes`.
+- **Motif structuré.** Depuis ce chantier, chaque erreur de cible est aussi enregistrée dans
+  `detail_erreur.cibles[]` avec :
+  - un `code` (`CommissionMotifNonGeneration` : partage Livreur non conforme ou manquant, équipe,
+    propriétaire, catégorie, consultant non désigné ou inactif, site, période figée, erreur
+    technique) ;
+  - le `montant_attendu` ;
+  - un `contexte` : catégorie, quantité, barème Livreur, total des parts, écart, parts par livreur,
+    consultant, période.
+
+  Le texte de `motif_erreur` est inchangé. Les tentatives antérieures, qui n'ont que le texte, sont
+  classées à la lecture à partir de leur message.
+- **Relance** (unitaire, depuis la ligne ou le détail, ou multiple) : elle passe par le moteur
+  officiel (`CommissionEnveloppeGenerator`), une fois par opération, chacune isolée. Un succès
+  partiel est rapporté tel quel. Le comportement est celui de COMM-018 : seules les cibles
+  manquantes d'un PARTIEL sont générées, à la date de gain d'origine ; une relance après échec
+  total (`erreur`) reste à la date du jour (ADR 0006, inchangé). La relance est idempotente : double
+  clic, anomalie déjà régularisée ou relances concurrentes ne créent jamais de seconde enveloppe.
+  Une vente relancée tente aussi sa clôture (`cloturerSiComplete()`), comme la relance depuis la
+  fiche commande.
+- **Motif « période figée »** : depuis le 30/09/2026, seule une période **clôturée** bloque encore
+  la relance. Une anomalie historique dont le message cite une période « validée » se régularise
+  en relançant : la période est rouverte et la part va sur une fiche complémentaire.
+- **Permissions.** La lecture suit la même règle que les autres écrans Commissions
+  (`comptabilite.read` ou `commissions.read`). La relance exige `commissions.update`, et son bouton
+  est masqué sans cette permission. Un utilisateur non administrateur ne voit que les anomalies de
+  ses agences (site de la commande, site source du transfert). Isolation par `organization_id`.
+- **Fiche commande.** L'alerte « Commission à régulariser / partiellement générée » propose aussi
+  « Voir dans le monitoring ».
+- **Email.** L'email « Commission non générée » est conservé. En cas d'échec, il renvoie vers
+  l'anomalie dans le monitoring.
+- **Console.** `php artisan commissions:diagnostiquer-manquantes [--organization=…] [--tous]` :
+  même liste, en lecture seule. Elle ne crée jamais de commission.
+- Tests : `tests/Feature/Comptabilite/CommissionMonitoringTest.php` ;
+  E2E `tests/e2e/commissions/monitoring-commissions.spec.ts`.

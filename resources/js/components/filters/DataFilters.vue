@@ -621,6 +621,7 @@ const hasActiveFilters = computed(
                 v-if="savedFilterScope && url"
                 ref="savedViews"
                 :scope="savedFilterScope"
+                :hide-agence-selector="hideAgenceSelector"
                 :active="activeSavedView"
                 :get-filters="buildParams"
                 :describe="describeSavedFilters"
@@ -628,7 +629,12 @@ const hasActiveFilters = computed(
                 @clear="resetFilters"
             />
             <div
-                v-if="drawerFields.length > 0"
+                v-if="
+                    displayedDrawerFields.length > 0 ||
+                    (triggerOnly &&
+                        !hideAgenceSelector &&
+                        siteOptions.length > 0)
+                "
                 :class="triggerTarget ? 'shrink-0' : 'shrink-0 self-end'"
             >
                 <FilterDrawer

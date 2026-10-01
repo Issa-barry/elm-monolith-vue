@@ -12,10 +12,13 @@ enum TypeLignePaiement: string
     case DEPENSE = 'depense';
     case RETENUE = 'retenue';
     case AJUSTEMENT = 'ajustement';
+    // Déduction reportée d'une fiche figée (payée) dont le solde était négatif (ADR 0010).
+    case REPORT = 'report';
 
     public function label(): string
     {
         return match ($this) {
+            self::REPORT => 'Report de déduction',
             self::COMMISSION_VENTE => 'Commission vente',
             self::COMMISSION_LOGISTIQUE => 'Commission logistique',
             self::SALAIRE => 'Salaire de base',
@@ -29,7 +32,7 @@ enum TypeLignePaiement: string
 
     public function isDeduction(): bool
     {
-        return in_array($this, [self::AVANCE, self::DEPENSE, self::RETENUE], true);
+        return in_array($this, [self::AVANCE, self::DEPENSE, self::RETENUE, self::REPORT], true);
     }
 
     public function isGain(): bool

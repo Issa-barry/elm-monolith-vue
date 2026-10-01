@@ -28,10 +28,14 @@ use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
+use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\SavedFilters\SavedFilterScopes;
 use App\Support\Vehicules\SituationPeriode;
+use App\Support\Vehicules\VehiculeIndexFilters;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -84,6 +88,7 @@ class VehiculeController extends Controller
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
+            'agence_id' => $agence?->id,
             // Parrainage (phase 1, sans commission ni historique — cf.
             // docs/parrainage-vehicule.md). code_pays exposé (contrairement à proprietaire_*)
             // car édité en place depuis cette fiche, pas via une page dédiée avec splitPhone().
@@ -109,6 +114,10 @@ class VehiculeController extends Controller
                 'livreur_nom' => $m['label'],
                 'telephone' => $m['membre']->livreur?->telephone ?? null,
                 'role' => $m['membre']->role,
+                // Un livreur inactif (désactivé ou auto-inscrit non approuvé) peut rester membre :
+                // sans ce statut, l'équipe paraît complète alors que la distribution est refusée.
+                'livreur_actif' => (bool) ($m['membre']->livreur?->is_active ?? false),
+                'livreur_a_un_compte' => $m['membre']->livreur?->user_id !== null,
                 'taux_commission' => (float) $m['membre']->taux_commission,
                 'montant_par_pack' => (int) $m['membre']->montant_par_pack,
             ])->values()->all(),
@@ -170,9 +179,20 @@ class VehiculeController extends Controller
         return $this->membresAvecLabel(collect([$m]))->first()['label'];
     }
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', Vehicule::class);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedViews = app(SavedFilterService::class);
+        $savedView = $savedViews->applyToRequest($request, 'vehicules');
+        $filters = $request->only($savedViews->filterKeys($request->user(), 'vehicules'));
+        $filters = array_filter($filters, fn ($value) => $value !== null);
+        $filters = validator($filters, [
+            ...SavedFilterScopes::all($request->user())['vehicules']['criteria'],
+            'site_ids' => ['array'],
+            'site_ids.*' => ['ulid'],
+        ])->validate();
 
         $orgId = auth()->user()->organization_id;
         $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
@@ -187,7 +207,14 @@ class VehiculeController extends Controller
         ]);
 
         return Inertia::render('Vehicules/Index', [
-            'vehicules' => $vehicules,
+            'saved_view' => $savedView,
+            'filters' => $filters,
+            'vehicules' => VehiculeIndexFilters::apply($vehicules, $filters),
+            'vehicule_stats' => VehiculeIndexFilters::stats($vehicules),
+            'types_options' => $vehicules->unique('type_vehicule_id')->sortBy('type_label')
+                ->map(fn ($v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_label']])->values(),
+            'agences_proprietaires_options' => $vehicules->whereNotNull('agence_id')->unique('agence_id')->sortBy('agence_nom')
+                ->map(fn ($v) => ['value' => $v['agence_id'], 'label' => $v['agence_nom']])->values(),
         ]);
     }
 
@@ -338,7 +365,7 @@ class VehiculeController extends Controller
             ->with('success', 'Véhicule créé avec succès.');
     }
 
-    public function show(Request $request, Vehicule $vehicule): Response
+    public function show(Request $request, Vehicule $vehicule, CommandeVenteFormBuilder $commandeFormBuilder): Response
     {
         $this->authorize('view', $vehicule);
 
@@ -421,6 +448,13 @@ class VehiculeController extends Controller
 
         return Inertia::render('Vehicules/Show', [
             'vehicule' => $this->vehiculeData($vehicule),
+            // Même règle que le refus serveur d'une distribution (CommandeVenteFormBuilder) :
+            // la fiche annonce le blocage avant qu'une commande ne soit tentée.
+            'distribution_chauffeur_motif' => $vehicule->livraison_logistique
+                ? $commandeFormBuilder->motifChauffeurIndisponible(
+                    $commandeFormBuilder->resolveVehiculeAvecEquipe($vehicule->id, $vehicule->organization_id),
+                )
+                : null,
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'situation_ventes' => $situationVentes,

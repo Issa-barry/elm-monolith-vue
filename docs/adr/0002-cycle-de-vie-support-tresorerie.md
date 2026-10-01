@@ -70,7 +70,9 @@ Actif** : un support (caisse, banque, wallet) ne doit servir qu'après avoir ét
 - **Migration** `2026_09_19_300000_add_validation_to_compta_supports_tresorerie_table` : ajoute
   `valide_le` et `valide_par_id`, puis reprend l'existant (non destructive, réversible).
 - **Nouvelle permission sans backfill** : les rôles personnalisés existants ne l'ont pas tant
-  qu'un administrateur ne la coche ; les rôles système la reçoivent au prochain passage du seeder.
+  qu'un administrateur ne la coche. Les rôles système existants la reçoivent via la migration
+  `2026_09_28_100000_backfill_matrices_roles_systeme` (depuis le 28/09/2026, le seeder ne
+  resynchronise plus les rôles existants — il ne pose leur matrice qu'à leur création).
   Tant qu'aucun profil ne la porte, seuls les super admins peuvent valider un nouveau support.
 - Un support créé directement **actif** par du code (hors écran) est réputé validé — les deux seuls
   points de création applicatifs (`CompteTresorerieController::store`,

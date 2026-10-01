@@ -82,7 +82,7 @@ class DistributionClientVehiculeLogistiqueTest extends TestCase
         ], $overrides));
     }
 
-    private function assignChauffeurActif(Vehicule $vehicule, bool $livreurActif = true, bool $equipeActive = true): void
+    private function assignChauffeurActif(Vehicule $vehicule, bool $livreurActif = true, bool $equipeActive = true, string $role = 'chauffeur'): Livreur
     {
         $equipe = EquipeLivraison::create([
             'organization_id' => $vehicule->organization_id,
@@ -94,7 +94,9 @@ class DistributionClientVehiculeLogistiqueTest extends TestCase
             'organization_id' => $vehicule->organization_id,
             'is_active' => $livreurActif,
         ]);
-        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => $role, 'ordre' => 0]);
+
+        return $chauffeur;
     }
 
     private function payload(array $overrides = []): array
@@ -150,18 +152,41 @@ class DistributionClientVehiculeLogistiqueTest extends TestCase
         $this->assertSame(0, CommandeVente::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Cas de prod du 30/09/2026 : le chauffeur inactif (auto-inscrit non approuvé, ou désactivé)
+     * reste affiché dans l'équipe du véhicule — le refus doit le nommer, jamais prétendre
+     * qu'aucun livreur n'est assigné.
+     */
     public function test_distribution_avec_chauffeur_inactif_est_refusee(): void
     {
         $distributeur = $this->makeDistributeur();
         $vehicule = $this->makeVehicule();
-        $this->assignChauffeurActif($vehicule, livreurActif: false);
+        $chauffeur = $this->assignChauffeurActif($vehicule, livreurActif: false);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), $this->payload([
                 'client_id' => $distributeur->id,
                 'vehicule_id' => $vehicule->id,
             ]))
-            ->assertSessionHasErrors('vehicule_id');
+            ->assertSessionHasErrors([
+                'vehicule_id' => "Le chauffeur de ce véhicule ({$chauffeur->libelleAffichage()}) est inactif ou en attente d'approbation — activez-le depuis la liste des livreurs.",
+            ]);
+    }
+
+    public function test_distribution_avec_equipe_sans_chauffeur_est_refusee(): void
+    {
+        $distributeur = $this->makeDistributeur();
+        $vehicule = $this->makeVehicule();
+        $this->assignChauffeurActif($vehicule, role: 'convoyeur');
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), $this->payload([
+                'client_id' => $distributeur->id,
+                'vehicule_id' => $vehicule->id,
+            ]))
+            ->assertSessionHasErrors([
+                'vehicule_id' => "L'équipe de ce véhicule n'a aucun chauffeur — une distribution nécessite un livreur.",
+            ]);
     }
 
     public function test_distribution_avec_equipe_inactive_est_refusee(): void
@@ -175,7 +200,33 @@ class DistributionClientVehiculeLogistiqueTest extends TestCase
                 'client_id' => $distributeur->id,
                 'vehicule_id' => $vehicule->id,
             ]))
-            ->assertSessionHasErrors('vehicule_id');
+            ->assertSessionHasErrors([
+                'vehicule_id' => "L'équipe de livraison de ce véhicule est désactivée — une distribution nécessite une équipe active.",
+            ]);
+    }
+
+    /**
+     * Le formulaire de commande doit annoncer exactement le refus serveur : avant le 30/09/2026 il
+     * ne vérifiait que la présence d'un nom de chauffeur, et laissait soumettre une distribution
+     * avec un chauffeur inactif que le serveur refusait ensuite.
+     */
+    public function test_formulaire_expose_le_motif_du_serveur_pour_chaque_vehicule_de_distribution(): void
+    {
+        $vehiculeBloque = $this->makeVehicule(overrides: ['nom_vehicule' => 'Bloqué']);
+        $chauffeurInactif = $this->assignChauffeurActif($vehiculeBloque, livreurActif: false);
+        $vehiculeOk = $this->makeVehicule(overrides: ['nom_vehicule' => 'Disponible']);
+        $this->assignChauffeurActif($vehiculeOk);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertOk()
+            ->assertInertia(function ($page) use ($vehiculeBloque, $vehiculeOk, $chauffeurInactif) {
+                $options = collect($page->toArray()['props']['vehicules_distribution'])->keyBy('id');
+
+                $this->assertSame($chauffeurInactif->libelleAffichage(), $options[$vehiculeBloque->id]['livreur_nom']);
+                $this->assertStringContainsString('est inactif ou en attente', $options[$vehiculeBloque->id]['chauffeur_indisponible_motif']);
+                $this->assertNull($options[$vehiculeOk->id]['chauffeur_indisponible_motif']);
+            });
     }
 
     public function test_distribution_avec_vehicule_inactif_est_refusee(): void

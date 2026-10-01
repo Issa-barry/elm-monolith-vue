@@ -12,6 +12,7 @@ use App\Services\AuditLogService;
 use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\Tresorerie\MoyensEncaissementResolver;
 use Illuminate\Http\RedirectResponse;
@@ -69,6 +70,7 @@ class StoreEncaissementVenteController extends Controller
                 'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
             ],
             'note' => 'nullable|string|max:2000',
+            'site_encaissement_id' => 'nullable|string',
         ], [
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit etre superieur a 0.',
@@ -79,7 +81,17 @@ class StoreEncaissementVenteController extends Controller
             'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
         ]);
 
-        // Un moyen n'est accepté que s'il figure dans la liste proposée pour l'agence de la facture
+        // Agence qui reçoit réellement l'argent (ADR 0012) : toujours une agence de l'utilisateur qui
+        // encaisse — jamais l'agence de la facture par défaut ; une agence autre que celle de la
+        // commande exige `factures.encaisser_autre_agence` ; sans agence d'affectation, refus.
+        // Tout ce qui suit (moyens, caisse dédiée, pièce comptable) se rapporte à CETTE agence.
+        $siteEncaissementId = app(AgenceEncaissementResolver::class)->resoudre(
+            $request->user(),
+            $facture_vente,
+            $data['site_encaissement_id'] ?? null,
+        );
+
+        // Un moyen n'est accepté que s'il figure dans la liste proposée pour l'agence d'encaissement
         // (support actif de cette agence, du bon type/opérateur) — même source que PaymentCard.
         $data['operateur_mobile_money'] = null;
         if ($data['mode_paiement'] === ModePaiement::ESPECES->value) {
@@ -87,14 +99,14 @@ class StoreEncaissementVenteController extends Controller
         } else {
             $support = app(MoyensEncaissementResolver::class)->supportPour(
                 $facture_vente->organization_id,
-                $facture_vente->site_id,
+                $siteEncaissementId,
                 $data['compte_tresorerie_id'],
                 $data['mode_paiement'],
             );
 
             if (! $support) {
                 throw ValidationException::withMessages([
-                    'compte_tresorerie_id' => "Ce moyen de paiement n'est pas disponible dans l'agence de cette facture : aucun support de trésorerie actif ne peut le recevoir.",
+                    'compte_tresorerie_id' => "Ce moyen de paiement n'est pas disponible dans l'agence d'encaissement : aucun support de trésorerie actif ne peut le recevoir.",
                 ]);
             }
 
@@ -113,6 +125,7 @@ class StoreEncaissementVenteController extends Controller
             (string) auth()->id(),
             $facture_vente,
             $data['date_encaissement'],
+            $siteEncaissementId,
         );
 
         // Transaction : l'encaissement, la transition de statut de la facture (donc la
@@ -122,7 +135,7 @@ class StoreEncaissementVenteController extends Controller
         // échec en cours de route ne doit jamais laisser une commission générée pour un
         // encaissement finalement non persisté.
         try {
-            DB::transaction(function () use ($facture_vente, $commande, $data) {
+            DB::transaction(function () use ($facture_vente, $commande, $data, $siteEncaissementId) {
                 $etaitPayee = $facture_vente->isPayee();
 
                 // Auto-transition LIVRAISON_EN_COURS → LIVREE AVANT l'encaissement :
@@ -141,6 +154,7 @@ class StoreEncaissementVenteController extends Controller
                 }
 
                 $facture_vente->encaissements()->create([
+                    'site_encaissement_id' => $siteEncaissementId,
                     'montant' => $data['montant'],
                     'date_encaissement' => $data['date_encaissement'],
                     'mode_paiement' => $data['mode_paiement'],
@@ -165,6 +179,7 @@ class StoreEncaissementVenteController extends Controller
                             'compte_tresorerie_id' => $data['compte_tresorerie_id'],
                             'reference_paiement' => $data['reference_paiement'] ?? null,
                             'date_encaissement' => $data['date_encaissement'],
+                            'site_encaissement_id' => $siteEncaissementId,
                         ],
                     );
                 }

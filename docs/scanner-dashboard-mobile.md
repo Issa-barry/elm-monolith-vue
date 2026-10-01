@@ -77,6 +77,59 @@ pour Node 22 — ne pas les mettre à jour sans revalidation explicite).
   - Résolution réussie → navigation Inertia (`router.visit`), jamais un rechargement
     complet ni une ouverture d'URL externe automatique.
 
+## 3. Page cible du QR livreur (`livreurs.show`) — deux vues (30/09/2026)
+
+`/livreurs/{livreur}` (`LivreurController::show()`) sert deux publics sur la même URL :
+
+- **Backoffice (staff)** : fiche complète sur le modèle de la fiche client — en-tête, navigation
+  latérale (`?tab=`, `useUrlTab`) et onglets :
+  - *Informations* : désignation, téléphone, statut, compte application, agence (celle du
+    véhicule actuel — un livreur n'a pas d'agence propre), date d'enregistrement, véhicule actuel ;
+  - *Véhicule & équipe* : véhicule (immatriculation, type, agence, capacités), rôle, date d'entrée
+    dans l'équipe, coéquipiers ; action « Changer de véhicule » (`equipes-livraison.update`) ;
+  - *Commissions* (si `comptabilite.read`/`commissions.read` et module Comptabilité actif) : KPI
+    `CommissionKpiBuckets` tous processus confondus + 10 dernières commissions, lien vers
+    `comptabilite.commissions.vente.livreur` ;
+  - *Factures* (si `ventes.read` et module Ventes actif) : factures des ventes du véhicule du
+    livreur — même périmètre que `factures.index?livreur_id=` (restriction d'agence incluse pour un
+    non-admin) — totaux + 10 dernières, lien vers la liste complète.
+  Données construites par `App\Support\Livreurs\FicheLivreurStaffData` ; un onglet non autorisé
+  n'est pas envoyé (`null`) donc pas affiché.
+- **Livreur sur sa propre fiche** (scan de son QR) : vue d'accès rapide inchangée
+  (`partials/EspaceLivreurView.vue`), lien « Mes commissions » vers `client.earnings`.
+
+Pas d'historique des équipes : le changement de véhicule déplace la ligne `equipe_livreurs`, aucun
+historique n'est conservé en base.
+
+**Modifier un livreur** (onglet Informations, bouton visible avec `livreurs.update`) :
+`PUT /backoffice/livreurs/{livreur}` (`Livreurs\UpdateLivreurController`, route `livreurs.update`).
+Champs : désignation (`nom_complet`, obligatoire) et téléphone. Mêmes règles que la saisie d'un
+membre d'équipe : format `+224` + 9 chiffres, obligatoire si le livreur est chauffeur dans une
+équipe, facultatif sinon (convoyeur). Le téléphone est celui de la `Personne` rattachée, modifiée en
+place, et son unicité dans l'organisation est vérifiée par `Personne::assertTelephoneDisponible()`
+(toutes personnes confondues, pas seulement les livreurs). L'identifiant de connexion d'un livreur
+qui a un compte (`UserAuthIdentity`) n'est **pas** modifié par cet écran, et la fenêtre le signale.
+L'affectation (équipe, rôle) ne se modifie pas ici : elle passe par les Équipes de livraison.
+
+**Activer / désactiver un livreur** : le lien « Désactiver » ou « Activer » à côté du statut, dans
+l'onglet Informations (visible avec `livreurs.update`), ouvre une confirmation, séparée du bouton
+Modifier. La désactivation passe par `PATCH livreurs/{livreur}/desactiver`
+(`LivreurController::desactiver()`, idempotent) ; la réactivation réutilise
+`PATCH livreurs/{livreur}/approuver`, la même action que « Réactiver » / « Approuver » dans la liste.
+Une désactivation ne supprime rien : le livreur reste rattaché à son équipe et ses commissions,
+factures et historiques sont conservés. Ses seuls effets :
+- s'il a un compte application, celui-ci est bloqué sur la page d'attente (`RequireActiveLivreur`) ;
+- il n'est plus exigé dans le partage de commission de son équipe
+  (`CommissionPartageLivraisonCategorieChecker::membresRequis()`).
+
+La fenêtre de confirmation n'affiche que ces effets.
+
+**Corrigé le 30/09/2026** : les deux liens « commissions » de cette page pointaient vers des noms
+de route inexistants (`commissions.vente.livreur` sans le préfixe `comptabilite.`, et
+`client.gains` au lieu de `client.earnings`) → erreur 500 pour tout staff (Sentry
+PHP-LARAVEL-71) comme pour le livreur scannant sa propre fiche. Couvert par `LivreurTest` et
+`LivreurFicheTest`.
+
 ## Hors périmètre (signalé, non corrigé par ce chantier)
 
 - `ScanLivraisonController`/`ScanUserController` ne filtrent toujours pas par

@@ -10,13 +10,20 @@ import { dateFr, heureFr } from './format';
 
 // Lignes d'encaissements (onglets Encaissements et Mobile Money) : tableau à partir de 640 px,
 // liste empilée en dessous. En mode Mobile Money, chaque ligne affiche le contrôle de référence.
-defineProps<{
-    lignes: (LigneEncaissement | Partial<LigneMobileMoney>)[];
-    afficherAgent: boolean;
-    controle?: boolean;
-    vide: string;
-    total?: number;
-}>();
+// `afficherReversement` : mention « pour {agence} · à reverser » sur un encaissement fait pour une
+// autre agence — une obligation de l'AGENCE (Trésorerie → Inter-agences), jamais montrée à l'agent
+// dans « Ma situation » : lui remet toujours son argent à la caisse de sa propre agence (ADR 0012).
+withDefaults(
+    defineProps<{
+        lignes: (LigneEncaissement | Partial<LigneMobileMoney>)[];
+        afficherAgent: boolean;
+        controle?: boolean;
+        vide: string;
+        total?: number;
+        afficherReversement?: boolean;
+    }>(),
+    { controle: false, total: undefined, afficherReversement: true },
+);
 
 const LIBELLES_ANOMALIE: Record<AnomalieMobileMoney, string> = {
     reference_absente: 'Référence absente',
@@ -75,6 +82,11 @@ function autres(l: Partial<LigneMobileMoney>): string | null {
                     <div class="text-xs text-muted-foreground">
                         <span class="font-mono">{{ l.facture_reference }}</span>
                         · {{ l.client ?? 'Client non renseigné' }}
+                        <template
+                            v-if="afficherReversement && l.pour_autre_agence"
+                        >
+                            · pour {{ l.site_nom }}</template
+                        >
                         <template v-if="afficherAgent && l.agent">
                             · {{ l.agent }}</template
                         >
@@ -131,6 +143,8 @@ function autres(l: Partial<LigneMobileMoney>): string | null {
                             >
                                 Agent
                             </th>
+                            <th class="px-3 py-2 font-medium">Créée à</th>
+                            <th class="px-3 py-2 font-medium">Encaissée à</th>
                             <th class="px-3 py-2 font-medium">Moyen</th>
                             <th class="px-3 py-2 font-medium">Référence</th>
                             <th class="px-3 py-2 text-right font-medium">
@@ -177,6 +191,23 @@ function autres(l: Partial<LigneMobileMoney>): string | null {
                             <td v-if="afficherAgent" class="px-3 py-2">
                                 {{ l.agent ?? '—' }}
                             </td>
+                            <td class="px-3 py-2">{{ l.site_nom ?? '—' }}</td>
+                            <td
+                                class="px-3 py-2"
+                                data-testid="encaissement-encaisse-a"
+                            >
+                                {{ l.encaisse_a ?? '—' }}
+                                <!-- Encaissé pour une commande d'une autre agence : à reverser (information). -->
+                                <span
+                                    v-if="
+                                        afficherReversement &&
+                                        l.pour_autre_agence
+                                    "
+                                    class="block text-xs text-amber-700 dark:text-amber-400"
+                                    data-testid="encaissement-pour-autre-agence"
+                                    >pour {{ l.site_nom }} · à reverser</span
+                                >
+                            </td>
                             <td class="px-3 py-2">{{ l.moyen_libelle }}</td>
                             <td class="px-3 py-2 font-mono text-xs">
                                 {{ l.reference_paiement ?? '—' }}
@@ -216,7 +247,7 @@ function autres(l: Partial<LigneMobileMoney>): string | null {
                     <tfoot v-if="total !== undefined">
                         <tr class="border-t bg-muted/20 font-semibold">
                             <td
-                                :colspan="afficherAgent ? 7 : 6"
+                                :colspan="afficherAgent ? 9 : 8"
                                 class="px-3 py-2"
                             >
                                 Total de la période

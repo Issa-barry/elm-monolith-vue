@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -16,6 +17,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -81,6 +83,16 @@ interface Encaissement {
     reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
+    /** Agence qui a reçu l'argent (ADR 0012). */
+    encaisse_a: string | null;
+    /** Reçu par une autre agence que celle de la commande : un reversement est dû. */
+    pour_autre_agence: boolean;
+    /** Reversement à l'agence de la commande — seulement pour un encaissement reçu ailleurs. */
+    reversement: {
+        statut: string;
+        statut_label: string;
+        mouvement_reference: string | null;
+    } | null;
 }
 
 interface FactureData {
@@ -230,6 +242,8 @@ interface CommandeData {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -398,6 +412,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
     montant: 'Montant',
     mode_paiement: 'Mode paiement',
     date_encaissement: 'Date encaissement',
+    agence_encaissement: 'Encaissé à',
     lignes: 'Produits',
 };
 
@@ -504,6 +519,16 @@ function demarrerChargement() {
 
 // ── Relance génération commission ("à régulariser") ──────────────────────────
 const relanceCommissionsProcessing = ref(false);
+
+const { can } = usePermissions();
+// Même règle de lecture que les écrans Commissions (User::canReadCommissions()).
+const peutVoirMonitoring = computed(
+    () => can('comptabilite.read') || can('commissions.read'),
+);
+const monitoringUrl = computed(
+    () =>
+        `/backoffice/comptabilite/commissions/monitoring?statut=toutes&reference=${encodeURIComponent(props.commande.reference)}`,
+);
 
 function relancerCommissions() {
     if (relanceCommissionsProcessing.value) return;
@@ -1267,20 +1292,34 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 : "Les cibles correctement configurées ont bien reçu leur commission. Corrigez la configuration de la cible restante puis relancez la génération pour compléter — la commande ne peut pas se clôturer tant que ce n'est pas fait."
                         }}
                     </p>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="mt-3"
-                        :disabled="relanceCommissionsProcessing"
-                        @click="relancerCommissions"
-                    >
-                        {{
-                            relanceCommissionsProcessing
-                                ? 'Relance en cours…'
-                                : 'Relancer la génération'
-                        }}
-                    </Button>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            :disabled="relanceCommissionsProcessing"
+                            @click="relancerCommissions"
+                        >
+                            {{
+                                relanceCommissionsProcessing
+                                    ? 'Relance en cours…'
+                                    : 'Relancer la génération'
+                            }}
+                        </Button>
+                        <Button
+                            v-if="peutVoirMonitoring"
+                            as-child
+                            size="sm"
+                            variant="ghost"
+                        >
+                            <Link
+                                :href="monitoringUrl"
+                                data-testid="commande-lien-monitoring"
+                            >
+                                Voir dans le monitoring
+                            </Link>
+                        </Button>
+                    </div>
                 </AlertDescription>
             </Alert>
 
@@ -1954,6 +1993,38 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                                 enc.operateur_mobile_money_label ??
                                                 enc.mode_paiement_label
                                             }}
+                                            <div
+                                                v-if="enc.encaisse_a"
+                                                class="mt-0.5 text-xs"
+                                                data-testid="encaissement-autre-agence"
+                                            >
+                                                <span class="text-foreground"
+                                                    >Encaissé à
+                                                    {{ enc.encaisse_a }}</span
+                                                >
+                                                <StatusDot
+                                                    v-if="enc.reversement"
+                                                    :status="
+                                                        enc.reversement.statut
+                                                    "
+                                                    :label="
+                                                        enc.reversement
+                                                            .statut_label
+                                                    "
+                                                    class="mt-0.5"
+                                                />
+                                                <span
+                                                    v-if="
+                                                        enc.reversement
+                                                            ?.mouvement_reference
+                                                    "
+                                                    class="block text-muted-foreground"
+                                                    >{{
+                                                        enc.reversement
+                                                            .mouvement_reference
+                                                    }}</span
+                                                >
+                                            </div>
                                         </td>
                                         <td
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
@@ -2157,6 +2228,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :especes-disponibles="commande.peut_encaisser_especes"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
+            :encaissement-agences="commande.encaissement_agences"
             @submit="submitEncaisser"
         />
 

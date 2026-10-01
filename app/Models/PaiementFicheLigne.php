@@ -30,6 +30,21 @@ class PaiementFicheLigne extends Model
         ];
     }
 
+    /** Les lignes d'une fiche figée (payée ou portant un report) sont intouchables (ADR 0010). */
+    protected static function booted(): void
+    {
+        $garde = function (self $ligne): void {
+            $fiche = PaiementFiche::withTrashed()->find($ligne->fiche_id);
+            if ($fiche && $fiche->estFigee()) {
+                throw new \LogicException("La fiche {$fiche->reference} a déjà reçu un paiement : ses lignes ne peuvent plus être modifiées.");
+            }
+        };
+
+        static::creating($garde);
+        static::updating($garde);
+        static::deleting($garde);
+    }
+
     public function fiche(): BelongsTo
     {
         return $this->belongsTo(PaiementFiche::class, 'fiche_id');

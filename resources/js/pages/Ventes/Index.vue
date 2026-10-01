@@ -8,6 +8,7 @@ import DataFilters, {
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -69,6 +70,8 @@ interface Commande extends VenteMobile {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     encaissements: {
         id: number;
         montant: number;
@@ -770,7 +773,9 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Search + Filtres -->
-            <div class="flex items-center gap-2 border-t border-b px-4 py-2">
+            <div
+                class="flex flex-wrap items-center gap-2 border-t border-b px-4 py-2"
+            >
                 <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -784,7 +789,16 @@ function confirmDelete(c: Commande) {
                 </div>
                 <DataFilters
                     trigger-only
-                    url="/backoffice/ventes"
+                    :url="
+                        nature_filtree === 'distribution_client'
+                            ? '/backoffice/distributions'
+                            : '/backoffice/ventes'
+                    "
+                    :saved-filter-scope="
+                        nature_filtree === 'distribution_client'
+                            ? undefined
+                            : 'ventes'
+                    "
                     :base-params="{ periode: 'all' }"
                     :values="filterValues"
                     :sites="sites"
@@ -865,7 +879,16 @@ function confirmDelete(c: Commande) {
                         <template #filters>
                             <DataFilters
                                 trigger-only
-                                url="/backoffice/ventes"
+                                :url="
+                                    nature_filtree === 'distribution_client'
+                                        ? '/backoffice/distributions'
+                                        : '/backoffice/ventes'
+                                "
+                                :saved-filter-scope="
+                                    nature_filtree === 'distribution_client'
+                                        ? undefined
+                                        : 'ventes'
+                                "
                                 :base-params="{ periode: 'all' }"
                                 :values="filterValues"
                                 :sites="sites"
@@ -1437,6 +1460,9 @@ function confirmDelete(c: Commande) {
             :info-rows="encaisserInfoRows"
             :processing="encaisserProcessing"
             :errors="encaisserErrors"
+            :encaissement-agences="
+                encaisserCommande?.encaissement_agences ?? null
+            "
             @submit="submitEncaisser"
         />
 

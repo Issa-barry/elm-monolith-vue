@@ -146,8 +146,15 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
         name: 'Valider la période de paiement',
     });
     await expect(validerPeriodeBtn).toBeVisible({ timeout: 15_000 });
-    await validerPeriodeBtn.click();
-    await confirmAlertDialog(page, 'Valider');
+    // La période passe à « Validée » automatiquement dès la dernière commission validée :
+    // le bouton n'est plus actif que s'il reste une validation manuelle à faire.
+    if (await validerPeriodeBtn.isEnabled()) {
+        await validerPeriodeBtn.click();
+        await confirmAlertDialog(page, 'Valider');
+    }
+    await expect(
+        page.getByText('Validée', { exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 }
 
 /** Paie intégralement la fiche du chauffeur de démo, puis vérifie reste à payer = 0. */
@@ -168,18 +175,23 @@ async function payerFicheEtVerifierSolde(page: Page): Promise<void> {
     });
     await expect(paiementHeading).toBeVisible({ timeout: 15_000 });
 
-    const modeCombobox = page.locator('form').getByRole('combobox').first();
+    // Le paiement passe par le dialogue PaymentCard (décaissement, ADR 0009) : en espèces,
+    // il sort de la caisse dédiée du payeur, approvisionnée par l'encaissement de la vente.
+    await page.getByRole('button', { name: /^payer$/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    const modeCombobox = dialog.getByRole('combobox').first();
     await expect(modeCombobox).toBeVisible({ timeout: 10_000 });
     await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
 
-    const submitBtn = page.getByRole('button', {
-        name: /enregistrer le paiement/i,
-    });
-    await expect(submitBtn).toBeVisible({ timeout: 10_000 });
-    await submitBtn.click();
+    const confirmerBtn = dialog.getByRole('button', { name: /^confirmer$/i });
+    await expect(confirmerBtn).toBeEnabled({ timeout: 10_000 });
+    await confirmerBtn.click();
 
-    // Le montant pré-rempli au solde restant règle la fiche intégralement : le
-    // formulaire de paiement disparaît une fois can_pay redevenu false.
+    // Le montant pré-rempli au reste à payer règle la fiche intégralement : le dialogue
+    // se ferme et le bloc de paiement disparaît une fois can_pay redevenu false.
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
     await expect(paiementHeading).toBeHidden({ timeout: 20_000 });
 
     // Reste à payer = 0 — le résumé de la fiche l'affiche explicitement, dans un

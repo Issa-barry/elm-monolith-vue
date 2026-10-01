@@ -5,6 +5,7 @@ namespace App\Services\Comptabilite;
 use App\Enums\EvenementComptable;
 use App\Models\MouvementFonds;
 use App\Models\PieceComptable;
+use App\Models\Site;
 use Illuminate\Support\Carbon;
 
 /**
@@ -21,6 +22,13 @@ use Illuminate\Support\Carbon;
  * reste cohérente avec toutes les autres pièces du système (un seul site par
  * pièce), et le solde du compte 58 au niveau organisation reflète correctement
  * les fonds en transit (il se solde à 0 dès que la réception est postée).
+ *
+ * Règlement inter-agences (nature `reglement_agences`, ADR 0012) : mêmes deux pièces, mais la
+ * contrepartie de la trésorerie est le compte de LIAISON (181), tiers = l'agence d'en face — c'est
+ * lui qui porte la dette née des encaissements reçus pour le compte d'une autre agence :
+ *   - envoi (site débiteur)     : débit liaison [agence créancière] / crédit trésorerie → dette soldée ;
+ *   - réception (site créancier) : débit trésorerie / crédit liaison [agence débitrice] → créance soldée.
+ * Entre les deux, le solde de la liaison au niveau de l'organisation vaut le montant en route.
  *
  * Le compte de trésorerie de chaque jambe est déjà résolu par le
  * CompteTresorerie du mouvement — jamais via CompteMappingResolver (qui ne
@@ -41,11 +49,7 @@ class MouvementFondsComptabilisationService
         $origine = $mouvement->compteTresorerieOrigine;
 
         $lignes = [
-            [
-                'role' => 'fonds_transit',
-                'sens' => 'debit',
-                'montant' => (float) $mouvement->montant,
-            ],
+            $this->ligneContrepartie($mouvement, 'debit', $mouvement->siteDestination),
             [
                 'compte_comptable_id' => $origine->compte_comptable_id,
                 'sens' => 'credit',
@@ -77,11 +81,7 @@ class MouvementFondsComptabilisationService
                 'montant' => (float) $mouvement->montant,
                 'libelle' => "Réception fonds {$mouvement->reference} — {$destination->libelle}",
             ],
-            [
-                'role' => 'fonds_transit',
-                'sens' => 'credit',
-                'montant' => (float) $mouvement->montant,
-            ],
+            $this->ligneContrepartie($mouvement, 'credit', $mouvement->siteOrigine),
         ];
 
         return $this->ecritures->comptabiliser(
@@ -94,5 +94,27 @@ class MouvementFondsComptabilisationService
             siteId: $mouvement->site_destination_id,
             createdBy: $mouvement->received_by,
         );
+    }
+
+    /**
+     * Transit (58) pour un mouvement ordinaire ; liaison (181, tiers = agence d'en face) pour un
+     * règlement inter-agences.
+     *
+     * @return array<string, mixed>
+     */
+    private function ligneContrepartie(MouvementFonds $mouvement, string $sens, ?Site $agenceEnFace): array
+    {
+        if (! $mouvement->isReglementAgences()) {
+            return ['role' => 'fonds_transit', 'sens' => $sens, 'montant' => (float) $mouvement->montant];
+        }
+
+        return [
+            'role' => 'liaison',
+            'sens' => $sens,
+            'montant' => (float) $mouvement->montant,
+            'tiers_type' => 'agence',
+            'tiers_model' => $agenceEnFace,
+            'libelle' => "Règlement inter-agences {$mouvement->reference} — {$agenceEnFace?->nom}",
+        ];
     }
 }

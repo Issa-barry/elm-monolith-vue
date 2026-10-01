@@ -2,7 +2,9 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import type {
+    EncaissementAgences,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -23,6 +25,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Building2,
     CreditCard,
     History,
     MoreVertical,
@@ -35,6 +38,7 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import EncaisserAutreAgenceDialog from './partials/EncaisserAutreAgenceDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface EncaissementItem {
@@ -71,6 +75,8 @@ interface FactureItem {
     peut_encaisser_especes: boolean;
     /** Moyens hors espèces de l'agence de la facture (un par support actif). */
     moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     created_at: string;
     encaissements: EncaissementItem[];
 }
@@ -246,6 +252,14 @@ const factureActive = ref<FactureItem | null>(null);
 const encaissProcessing = ref(false);
 const encaissErrors = ref<Record<string, string>>({});
 
+// ── Commande d'une autre agence (ADR 0012) ────────────────────────────────────
+// Visible seulement avec les deux permissions vérifiées par le serveur
+// (RechercherFactureAutreAgenceController / StoreEncaissementVenteController).
+const autreAgenceVisible = ref(false);
+const peutEncaisserAutreAgence = computed(
+    () => can('factures.encaisser') && can('factures.encaisser_autre_agence'),
+);
+
 // ── Dialog historique ─────────────────────────────────────────────────────────
 const historyVisible = ref(false);
 const factureHistory = ref<FactureItem | null>(null);
@@ -317,7 +331,16 @@ function _progressPercent(f: FactureItem): number {
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Factures</span>
-                <div class="w-8" />
+                <button
+                    v-if="peutEncaisserAutreAgence"
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                    title="Encaisser une commande d'une autre agence"
+                    @click="autreAgenceVisible = true"
+                >
+                    <Building2 class="h-5 w-5" />
+                </button>
+                <div v-else class="w-8" />
             </div>
 
             <!-- Bandeau filtre livreur (mobile) -->
@@ -391,7 +414,20 @@ function _progressPercent(f: FactureItem): number {
             </div>
 
             <!-- Search -->
-            <div class="border-t border-b px-4 py-2">
+            <div class="space-y-2 border-t border-b px-4 py-2">
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            saved-filter-scope="factures"
+                            url="/backoffice/factures"
+                            :base-params="filterBaseParams"
+                            :values="filterValues"
+                            :result-count="factures.length"
+                            :fields="filterFields"
+                        />
+                    </template>
+                </ListPageActions>
                 <div class="relative">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -483,7 +519,7 @@ function _progressPercent(f: FactureItem): number {
         <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
         <div class="hidden flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Factures de vente
@@ -491,6 +527,30 @@ function _progressPercent(f: FactureItem): number {
                     <p class="mt-1 text-sm text-muted-foreground">
                         Suivi et encaissement des factures.
                     </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <ListPageActions>
+                        <template #filters>
+                            <DataFilters
+                                trigger-only
+                                saved-filter-scope="factures"
+                                url="/backoffice/factures"
+                                :base-params="filterBaseParams"
+                                :values="filterValues"
+                                :result-count="factures.length"
+                                :fields="filterFields"
+                            />
+                        </template>
+                    </ListPageActions>
+                    <Button
+                        v-if="peutEncaisserAutreAgence"
+                        variant="outline"
+                        data-testid="ouvrir-encaissement-autre-agence"
+                        @click="autreAgenceVisible = true"
+                    >
+                        <Building2 class="mr-1.5 h-4 w-4" />
+                        Encaisser une commande d'une autre agence
+                    </Button>
                 </div>
             </div>
 
@@ -574,15 +634,6 @@ function _progressPercent(f: FactureItem): number {
                     </p>
                 </div>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                url="/backoffice/factures"
-                :base-params="filterBaseParams"
-                :values="filterValues"
-                :result-count="factures.length"
-                :fields="filterFields"
-            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
@@ -944,7 +995,13 @@ function _progressPercent(f: FactureItem): number {
             :especes-disponibles="factureActive?.peut_encaisser_especes ?? true"
             :processing="encaissProcessing"
             :errors="encaissErrors"
+            :encaissement-agences="factureActive?.encaissement_agences ?? null"
             @submit="handleEncaissSubmit"
+        />
+
+        <EncaisserAutreAgenceDialog
+            v-if="peutEncaisserAutreAgence"
+            v-model:visible="autreAgenceVisible"
         />
     </AppLayout>
 </template>

@@ -54,9 +54,13 @@ class MouvementFondsService
      * Le support de trésorerie de destination est facultatif ici : choisi au
      * moment de la réception (cf. docblock de la classe et de `recevoir()`).
      *
+     * `$nature` : `inter_sites` pour tout mouvement créé depuis l'écran Mouvements ;
+     * `reglement_agences` uniquement via ReglementInterAgencesService, qui y rattache les
+     * encaissements réglés (ADR 0012) — jamais une valeur venue de la requête.
+     *
      * @param  array{site_origine_id:string,site_destination_id:string,compte_tresorerie_origine_id:string,compte_tresorerie_destination_id?:?string,montant:float,moyen_transfert?:?string,reference_externe?:?string,justificatif_path?:?string,commentaire?:?string,echeance_debut?:?string,echeance_fin?:?string}  $data
      */
-    public function creerBrouillon(string $organizationId, array $data, ?string $createdBy): MouvementFonds
+    public function creerBrouillon(string $organizationId, array $data, ?string $createdBy, NatureMouvementFonds $nature = NatureMouvementFonds::INTER_SITES): MouvementFonds
     {
         if ($data['site_origine_id'] === $data['site_destination_id']) {
             throw new \InvalidArgumentException('Le site d\'origine et le site de destination doivent être différents.');
@@ -87,7 +91,7 @@ class MouvementFondsService
 
         return MouvementFonds::create([
             'organization_id' => $organizationId,
-            'nature' => NatureMouvementFonds::INTER_SITES->value,
+            'nature' => $nature->value,
             'site_origine_id' => $data['site_origine_id'],
             'site_destination_id' => $data['site_destination_id'],
             'compte_tresorerie_origine_id' => $origine->id,
@@ -189,9 +193,8 @@ class MouvementFondsService
      * qu'il s'agisse d'un versement de caisse dédiée (`interne_caisses`) ou d'un mouvement entre
      * agences (`inter_sites`, cf. revue produit du 22/09/2026 : rien n'empêchait jusque-là un
      * envoi entre agences depuis une caisse à sec, seul le versement de caisse dédiée l'avait).
-     * Appelé sous verrou de la caisse (`lockForUpdate()`) : le solde est relu ici, jamais transmis
-     * par l'appelant ni mis en cache — deux envois qui se succèdent (concurremment ou non) relisent
-     * chacun le solde déjà diminué par le précédent, jamais le solde d'avant.
+     * Contrôle de solde sous verrou partagé avec les paiements de fiche
+     * (TresorerieDisponibiliteService::garantirSoldeSuffisant()).
      */
     private function garantirSoldeSuffisant(MouvementFonds $mouvement, ?\DateTimeInterface $dateEnvoi): void
     {
@@ -209,15 +212,11 @@ class MouvementFondsService
             ]);
         }
 
-        $solde = $this->disponibilite->soldePourSupport($source, Carbon::instance($dateEnvoi ?? now()));
-
-        if ((float) $mouvement->montant > $solde + 0.004) {
-            $disponible = number_format(max($solde, 0), 0, ',', ' ');
-            $demande = number_format((float) $mouvement->montant, 0, ',', ' ');
-            throw ValidationException::withMessages([
-                'montant' => "Solde insuffisant : {$disponible} GNF disponible dans « {$source->libelle} » pour un envoi de {$demande} GNF.",
-            ]);
-        }
+        $this->disponibilite->garantirSoldeSuffisant(
+            $source->id,
+            (float) $mouvement->montant,
+            Carbon::instance($dateEnvoi ?? now()),
+        );
     }
 
     /**
@@ -355,6 +354,7 @@ class MouvementFondsService
                 'cancelled_by' => $userId,
                 'motif_annulation' => $motif,
             ]);
+            $this->libererLignesReglement($verrouille);
 
             return $verrouille->fresh();
         });
@@ -412,8 +412,23 @@ class MouvementFondsService
                 'cancelled_by' => $userId,
                 'motif_annulation' => $motif,
             ]);
+            $this->libererLignesReglement($verrouille);
 
             return $verrouille->fresh();
         });
+    }
+
+    /**
+     * Règlement inter-agences annulé (brouillon) ou retourné (fonds revenus à l'agence débitrice) :
+     * ses encaissements redeviennent « à verser » et peuvent entrer dans un nouveau règlement. Les
+     * lignes restent en base pour l'historique (ADR 0012). Sans effet pour les autres natures.
+     */
+    private function libererLignesReglement(MouvementFonds $mouvement): void
+    {
+        if (! $mouvement->isReglementAgences()) {
+            return;
+        }
+
+        $mouvement->lignesReglement()->update(['encaissement_actif_id' => null]);
     }
 }

@@ -10,6 +10,7 @@ use App\Models\FactureVente;
 use App\Models\PieceComptable;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Traduit le cycle de vente (facture, encaissement) en écritures comptables —
@@ -168,6 +169,18 @@ class VenteComptabilisationService
         return $pieceVente !== null && $pieceVente->created_at->lte($retour->created_at);
     }
 
+    /**
+     * Encaissement reçu par l'agence de la facture : une pièce ENCAISSEMENT_VENTE_RECU (débit
+     * trésorerie, crédit client) sur ce site.
+     *
+     * Encaissement reçu par une AUTRE agence (ADR 0012) : deux pièces mono-site, comme un mouvement
+     * de fonds — la trésorerie réelle est chez l'agence qui encaisse, le client et la vente restent
+     * entièrement à l'agence de la commande, et la dette de l'une envers l'autre est portée par le
+     * compte de liaison (tiers = agence contrepartie) :
+     *  - ENCAISSEMENT_VENTE_RECU, site d'encaissement : débit trésorerie / crédit liaison [agence de la commande] ;
+     *  - ENCAISSEMENT_VENTE_POUR_COMPTE, site de la commande : débit liaison [agence qui a encaissé] / crédit client.
+     * Les deux réussissent ou échouent ensemble ; chacune reste idempotente (rattrapage comptable).
+     */
     public function comptabiliserEncaissementVente(EncaissementVente $encaissement): ?PieceComptable
     {
         $montant = round((float) $encaissement->montant, 2);
@@ -175,12 +188,14 @@ class VenteComptabilisationService
             return null;
         }
 
-        $encaissement->loadMissing('facture.commande.client');
+        $encaissement->loadMissing('facture.commande.client', 'facture.site', 'siteEncaissement');
         $facture = $encaissement->facture;
         if (! $facture) {
             return null;
         }
         $client = $facture->commande?->client;
+        $siteEncaissementId = $encaissement->site_encaissement_id ?? $facture->site_id;
+        $pourAutreAgence = $encaissement->estPourAutreAgence();
 
         $ligneClient = [
             'role' => 'client',
@@ -192,23 +207,85 @@ class VenteComptabilisationService
             $ligneClient['tiers_model'] = $client;
         }
 
-        // Espèces encaissées par un agent qui a une caisse dédiée sur ce site : la ligne de
-        // trésorerie vise directement le sous-compte de SA caisse (le moteur accepte un compte
-        // déjà résolu, comme pour la charge d'une dépense) au lieu du compte 571000 partagé —
-        // cf. CaisseAgentResolver pour les conditions exactes. Le crédit reste sur le compte
-        // client : le produit est déjà constaté à la facturation (VENTE_FACTUREE).
-        //
-        // Mobile Money, virement, chèque : l'utilisateur a choisi le support de l'agence qui reçoit
-        // l'argent (`compte_tresorerie_id`, décision du 24/09/2026) — la ligne débite SON compte,
-        // jamais un compte déduit du seul opérateur (un wallet sans support retombait sur 561000,
-        // invisible dans Trésorerie > Supports). Le journal reste résolu par le moyen de paiement.
-        // Un encaissement antérieur (sans support) garde la résolution par compta_mappings :
-        // l'historique n'est jamais reclassé (ADR 0001).
+        $ligneCredit = $pourAutreAgence
+            ? [
+                'role' => 'liaison',
+                'sens' => 'credit',
+                'montant' => $montant,
+                'tiers_type' => 'agence',
+                'tiers_model' => $facture->site,
+                'libelle' => 'Encaissement facture '.$facture->reference.' pour le compte de '.$facture->site?->nom,
+            ]
+            : $ligneClient;
+
+        return DB::transaction(function () use ($encaissement, $facture, $montant, $siteEncaissementId, $pourAutreAgence, $ligneCredit, $ligneClient) {
+            $piece = $this->ecritures->comptabiliser(
+                evenement: EvenementComptable::ENCAISSEMENT_VENTE_RECU,
+                source: $encaissement,
+                // encaissements_ventes ne porte pas organization_id (pas de FK dédiée dans
+                // ce module, historique antérieur au multi-tenant strict) — toujours dérivé
+                // de la facture parente.
+                organizationId: $facture->organization_id,
+                dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
+                libelle: 'Encaissement facture '.$facture->reference,
+                lignes: [
+                    $this->ligneTresorerieEncaissement($encaissement, $facture, $montant),
+                    $ligneCredit,
+                ],
+                siteId: $siteEncaissementId,
+                createdBy: $encaissement->created_by,
+            );
+
+            if ($pourAutreAgence) {
+                $this->ecritures->comptabiliser(
+                    evenement: EvenementComptable::ENCAISSEMENT_VENTE_POUR_COMPTE,
+                    source: $encaissement,
+                    organizationId: $facture->organization_id,
+                    dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
+                    libelle: 'Encaissement facture '.$facture->reference.' reçu par '.$encaissement->siteEncaissement?->nom,
+                    lignes: [
+                        [
+                            'role' => 'liaison',
+                            'sens' => 'debit',
+                            'montant' => $montant,
+                            'tiers_type' => 'agence',
+                            'tiers_model' => $encaissement->siteEncaissement,
+                        ],
+                        $ligneClient,
+                    ],
+                    siteId: $facture->site_id,
+                    createdBy: $encaissement->created_by,
+                );
+            }
+
+            return $piece;
+        });
+    }
+
+    /**
+     * Espèces encaissées par un agent qui a une caisse dédiée sur le site d'encaissement : la ligne
+     * de trésorerie vise directement le sous-compte de SA caisse (le moteur accepte un compte déjà
+     * résolu, comme pour la charge d'une dépense) au lieu du compte 571000 partagé — cf.
+     * CaisseAgentResolver pour les conditions exactes. Le crédit reste sur le compte client (ou la
+     * liaison) : le produit est déjà constaté à la facturation (VENTE_FACTUREE).
+     *
+     * Mobile Money, virement, chèque : l'utilisateur a choisi le support de l'agence qui reçoit
+     * l'argent (`compte_tresorerie_id`, décision du 24/09/2026) — la ligne débite SON compte,
+     * jamais un compte déduit du seul opérateur (un wallet sans support retombait sur 561000,
+     * invisible dans Trésorerie > Supports). Le journal reste résolu par le moyen de paiement.
+     * Un encaissement antérieur (sans support) garde la résolution par compta_mappings :
+     * l'historique n'est jamais reclassé (ADR 0001).
+     *
+     * @return array<string, mixed>
+     */
+    private function ligneTresorerieEncaissement(EncaissementVente $encaissement, FactureVente $facture, float $montant): array
+    {
         $caisse = $this->caisses->pourEncaissement($encaissement, $facture);
         $support = $caisse === null && $encaissement->compte_tresorerie_id
             ? $encaissement->compteTresorerie
             : null;
-        $ligneTresorerie = match (true) {
+
+        return match (true) {
             $support !== null => [
                 'compte_comptable_id' => $support->compte_comptable_id,
                 'journal_role' => 'tresorerie',
@@ -234,23 +311,6 @@ class VenteComptabilisationService
                 'libelle' => 'Encaissement facture '.$facture->reference.' — '.$caisse->libelle,
             ],
         };
-
-        return $this->ecritures->comptabiliser(
-            evenement: EvenementComptable::ENCAISSEMENT_VENTE_RECU,
-            source: $encaissement,
-            // encaissements_ventes ne porte pas organization_id (pas de FK dédiée dans
-            // ce module, historique antérieur au multi-tenant strict) — toujours dérivé
-            // de la facture parente.
-            organizationId: $facture->organization_id,
-            dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
-            libelle: 'Encaissement facture '.$facture->reference,
-            lignes: [
-                $ligneTresorerie,
-                $ligneClient,
-            ],
-            siteId: $facture->site_id,
-            createdBy: $encaissement->created_by,
-        );
     }
 
     /**
