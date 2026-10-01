@@ -401,11 +401,12 @@ class CommissionEnveloppeGenerator
     }
 
     /**
-     * Type de période de paiement qui paie une cible — sert à refuser d'ajouter une cible
-     * manquante dans une période déjà validée/clôturée (montants figés, cf.
-     * PeriodeCalculatorService::needsRecalcul()) : la part n'y serait jamais payée.
+     * Période clôturée qui paierait une cible manquante : on refuse d'y ajouter la part, qui n'y
+     * serait jamais payée. Une période seulement validée, même déjà payée, l'accepte : elle est
+     * rouverte et la part va sur une fiche complémentaire (ADR 0010, point 4, cf.
+     * PeriodeValidationService::rouvrirSiDesynchronisee()).
      */
-    private static function periodeFigeePour(string $organizationId, string $cibleType, Carbon $date): ?PaiementPeriode
+    private static function periodeClotureePour(string $organizationId, string $cibleType, Carbon $date): ?PaiementPeriode
     {
         $type = match ($cibleType) {
             CommissionCibleType::CODE_PROPRIETAIRE => TypePeriodePaiement::PROPRIETAIRE,
@@ -421,7 +422,7 @@ class CommissionEnveloppeGenerator
 
         return PaiementPeriode::where('organization_id', $organizationId)
             ->where('type', $type->value)
-            ->whereIn('statut', [StatutPeriodePaiement::VALIDEE->value, StatutPeriodePaiement::CLOTUREE->value])
+            ->where('statut', StatutPeriodePaiement::CLOTUREE->value)
             ->whereDate('date_debut', '<=', $date)
             ->whereDate('date_fin', '>=', $date)
             ->first();
@@ -966,16 +967,15 @@ class CommissionEnveloppeGenerator
 
             foreach (array_keys($enveloppesACreer) as $cle) {
                 $cibleType = explode(':', (string) $cle)[0];
-                $periode = self::periodeFigeePour($ctx->organizationId, $cibleType, $earnedAt);
+                $periode = self::periodeClotureePour($ctx->organizationId, $cibleType, $earnedAt);
                 if ($periode) {
                     $erreurs[] = self::erreurCible(
                         $cibleType,
                         CommissionMotifNonGeneration::PERIODE_FIGEE,
                         sprintf(
-                            'la période de paiement %s couvrant le %s est %s — la part manquante ne peut plus y être ajoutée.',
+                            'la période de paiement %s couvrant le %s est clôturée — la part manquante ne peut plus y être ajoutée.',
                             $periode->reference,
                             $earnedAt->format('d/m/Y'),
-                            $periode->statut === StatutPeriodePaiement::CLOTUREE ? 'clôturée' : 'validée',
                         ),
                         (float) $enveloppesACreer[$cle]['montant'],
                         ['periode_id' => $periode->id, 'periode_reference' => $periode->reference],

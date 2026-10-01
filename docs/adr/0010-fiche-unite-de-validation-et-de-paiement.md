@@ -58,6 +58,15 @@ recevoir de commission ou de dépense tardive (contrainte d'unicité période ×
 - Au lot 1, le paiement reste conditionné à la validation de la période (inchangé) : le mécanisme
   de fiche complémentaire est en place mais ne se déclenche en pratique qu'au lot 2, lorsque le
   recalcul pourra toucher une période dont une fiche est déjà payée.
+- **Activation anticipée du point 4 (30/09/2026, décision utilisateur)** : deux parts Livreur
+  manquantes (386 000 GNF) ne pouvaient plus être payées, leur période étant validée et déjà payée.
+  La réouverture automatique d'une période validée est désormais faite même si elle a reçu des
+  paiements (`PeriodeValidationService::rouvrirSiDesynchronisee()`), et la relance d'une génération
+  partielle n'est plus refusée que sur une période clôturée
+  (`CommissionEnveloppeGenerator::periodeClotureePour()`). Les fiches figées restent intactes, la
+  commission tardive va sur une fiche complémentaire, payable dès que la période est revalidée. Le
+  reste du lot 2 (paiement par fiche sans validation de la période, points 1, 2, 6, 7) n'est pas
+  concerné.
 - **Limite existante non modifiée** : une fiche ordinaire (non complémentaire) dont les déductions
   dépassent les gains reste ramenée à 0 sans report, comme avant l'ADR.
 - La numérotation « ADR 0009 » est déjà utilisée par le chantier « paiement de fiche = décaissement

@@ -68,14 +68,17 @@ test('Commissions > Ventes — valider directement une ligne "À valider" sans p
 
     await confirmAlertDialog(page, 'Valider');
 
-    // L'action Valider a été consommée : le bouton disparaît et le badge passe à « Validée —
-    // période en attente » (cf. docs/commissions.md, correctif du 27/09/2026) — la part est
-    // pré-validée côté serveur (validated_at) sans transiter par l'écran Périodes, mais rien
-    // n'est encore payable tant que la période n'est pas validée.
+    // L'action Valider a été consommée : le bouton disparaît et la ligne ne reste jamais « À
+    // valider ». Le badge dépend de la période de la vente (cf. docs/commissions.md) :
+    // - aucune période encore calculée → « Validée — période en attente » (correctif du
+    //   27/09/2026), rien n'est payable ;
+    // - période déjà existante (ex. créée et payée par commission-v2-full-chain.spec.ts, qui
+    //   partage ce livreur) → réouverture puis revalidation automatique (ADR 0008, révisé le
+    //   30/09/2026 par ADR 0010 point 4) : la part devient payable, badge « Impayé »/« Partiel ».
     await expect(validerBtn).toBeHidden({ timeout: 15_000 });
     await expect(
-        row.getByText(/^validée — période en attente$/i),
-    ).toBeVisible();
+        row.getByText(/^(validée — période en attente|impayé|partiel)$/i),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText(/^à valider$/i)).toHaveCount(0);
 });
 

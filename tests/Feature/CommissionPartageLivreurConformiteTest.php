@@ -9,6 +9,7 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
@@ -23,6 +24,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -579,7 +581,7 @@ class CommissionPartageLivreurConformiteTest extends TestCase
         $this->assertSame(2, CommissionEnveloppe::where('source_id', $commande->id)->count());
     }
 
-    public function test_relance_refusee_si_la_periode_livreur_est_deja_validee(): void
+    public function test_relance_refusee_si_la_periode_livreur_est_cloturee(): void
     {
         ['commande' => $commande, 'equipe' => $equipe, 'vehicule' => $vehicule, 'livreurs' => $l] = $this->commandePartielle();
 
@@ -589,7 +591,7 @@ class CommissionPartageLivreurConformiteTest extends TestCase
             'type' => TypePeriodePaiement::LIVREUR->value,
             'date_debut' => '2026-09-01',
             'date_fin' => '2026-09-15',
-            'statut' => StatutPeriodePaiement::VALIDEE->value,
+            'statut' => StatutPeriodePaiement::CLOTUREE->value,
         ]);
 
         Carbon::setTestNow('2026-09-20 09:00:00');
@@ -599,6 +601,62 @@ class CommissionPartageLivreurConformiteTest extends TestCase
         $this->assertStringContainsString('PAY-202609-Q1-LIV', session('errors')->first('commissions'));
         $this->assertFalse(CommissionEnveloppe::where('source_id', $commande->id)->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->exists());
         $this->assertSame(CommissionGenerationStatut::PARTIEL, $this->derniereTentative($commande)->statut);
+    }
+
+    /**
+     * ADR 0010, point 4 : une période seulement validée, même déjà payée, accepte la part
+     * manquante — elle est rouverte, la fiche payée reste intacte et la part va sur une fiche
+     * complémentaire.
+     */
+    public function test_relance_sur_une_periode_livreur_validee_et_payee_cree_une_fiche_complementaire(): void
+    {
+        ['commande' => $commande, 'equipe' => $equipe, 'vehicule' => $vehicule, 'livreurs' => $l] = $this->commandePartielle();
+
+        $periode = PaiementPeriode::create([
+            'organization_id' => $this->org->id,
+            'reference' => 'PAY-202609-Q1-LIV',
+            'type' => TypePeriodePaiement::LIVREUR->value,
+            'date_debut' => '2026-09-01',
+            'date_fin' => '2026-09-15',
+            'statut' => StatutPeriodePaiement::VALIDEE->value,
+            'calculated_at' => '2026-09-14 09:00:00',
+        ]);
+        $payee = PaiementFiche::create([
+            'organization_id' => $this->org->id,
+            'periode_id' => $periode->id,
+            'reference' => 'FP-202609-0001',
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $l[0]->id,
+            'beneficiaire_nom' => $l[0]->nom_complet,
+            'rang' => 1,
+            'montant_brut' => 5000,
+            'total_deductions' => 0,
+            'montant_net' => 5000,
+            'montant_paye' => 5000,
+            'statut' => StatutFichePaiement::PAYE->value,
+        ]);
+
+        Carbon::setTestNow('2026-09-20 09:00:00');
+        $this->patchEquipe($equipe, $vehicule, $l, [600, 400])->assertSessionHasNoErrors();
+        $this->actingAs($this->user)->post(route('ventes.commissions.relancer', $commande))->assertSessionHasNoErrors();
+
+        $livreur = CommissionEnveloppe::where('source_id', $commande->id)->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->firstOrFail();
+        $this->assertSame('2026-09-12', $livreur->earned_at->toDateString(), 'Date de gain d\'origine, même période.');
+        $this->assertSame(CommissionGenerationStatut::SUCCES, $this->derniereTentative($commande)->statut);
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::CALCULEE, $periode->statut, 'rouverte : les nouvelles parts livreur attendent leur validation');
+
+        $fiches = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $l[0]->id)->orderBy('rang')->get();
+        $this->assertCount(2, $fiches);
+        $this->assertSame($payee->id, $fiches[0]->id, 'la fiche payée garde son identité');
+        $this->assertSame(5000.0, (float) $fiches[0]->montant_net);
+        $this->assertSame(5000.0, (float) $fiches[0]->montant_paye);
+        $this->assertSame(2, $fiches[1]->rang);
+        $this->assertSame(6000.0, (float) $fiches[1]->montant_net);
+
+        $autre = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $l[1]->id)->sole();
+        $this->assertSame(4000.0, (float) $autre->montant_net);
     }
 
     public function test_relance_sans_effet_sur_une_commande_dont_la_commission_a_ete_annulee(): void

@@ -355,19 +355,33 @@ class CommissionSiteTest extends TestCase
         $this->assertSame(StatutCommission::IMPAYE, $this->partSite($tardive)->statut);
     }
 
-    /** @test */
-    public function une_periode_deja_payee_n_est_jamais_rouverte(): void
+    /**
+     * ADR 0010, point 4 : une période déjà payée est rouverte comme les autres ; la fiche payée
+     * reste intacte et la commission tardive va sur une fiche complémentaire.
+     *
+     * @test
+     */
+    public function une_periode_deja_payee_est_rouverte_avec_une_fiche_complementaire(): void
     {
         $periode = $this->periodeSite();
         $this->genererCommissionPourSite($this->site, 200, 5);
+        $payee = $periode->fiches()->firstOrFail();
         $periode->fiches()->update(['montant_paye' => 500]);
 
         $this->genererCommissionPourSite($this->site, 100, 3);
 
         $periode->refresh();
-        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->statut);
-        $this->assertSame(500.0, (float) $periode->fiches()->sum('montant_paye'), 'aucun paiement supprimé');
-        $this->assertSame(1, app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode)['nombre'], 'la commission tardive reste signalée');
+        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->statut, 'rouverte, recalculée puis revalidée automatiquement');
+        $this->assertSame(0, app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode)['nombre']);
+
+        $fiches = $periode->fiches()->orderBy('rang')->get();
+        $this->assertCount(2, $fiches);
+        $this->assertSame($payee->id, $fiches[0]->id, 'la fiche payée garde son identité');
+        $this->assertEqualsWithDelta(1000.0, (float) $fiches[0]->montant_net, 0.01);
+        $this->assertSame(500.0, (float) $fiches[0]->montant_paye, 'aucun paiement supprimé');
+        $this->assertSame(2, $fiches[1]->rang);
+        $this->assertSame($payee->id, $fiches[1]->fiche_origine_id);
+        $this->assertEqualsWithDelta(300.0, (float) $fiches[1]->montant_net, 0.01);
     }
 
     /**

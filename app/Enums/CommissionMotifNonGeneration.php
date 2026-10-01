@@ -53,7 +53,7 @@ enum CommissionMotifNonGeneration: string
             self::CONSULTANT_NON_DESIGNE => 'Désignez un consultant sur le barème Consultant de la catégorie (Paramètres > Commissions), puis relancez.',
             self::CONSULTANT_INACTIF => 'Réactivez le consultant ou désignez-en un autre sur le barème de la catégorie, puis relancez.',
             self::SITE_MANQUANT => 'Rattachez l\'opération à un site, puis relancez.',
-            self::PERIODE_FIGEE => 'La part ne peut plus être ajoutée à une période validée ou clôturée : rouvrez la période si c\'est possible, sinon régularisez manuellement.',
+            self::PERIODE_FIGEE => 'Période seulement validée (même déjà payée) : relancez, la période est rouverte et la part va sur une fiche complémentaire. Période clôturée : la part ne peut plus y être ajoutée, régularisez manuellement.',
             self::ERREUR_TECHNIQUE => 'Consultez le message d\'erreur ; si la cause est corrigée, relancez.',
         };
     }
