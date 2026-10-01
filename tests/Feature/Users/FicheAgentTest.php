@@ -20,7 +20,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -161,7 +164,7 @@ class FicheAgentTest extends TestCase
         $this->actingAs($this->user)->get(route('users.show', $etranger))->assertForbidden();
     }
 
-    public function test_sans_users_update_ni_modifier_ni_mot_de_passe(): void
+    public function test_sans_users_update_pas_de_bouton_modifier(): void
     {
         $lecteur = $this->creerUtilisateurNonAdmin($this->siteA, ['users.read'], 'Fanta', 'Camara');
 
@@ -324,23 +327,46 @@ class FicheAgentTest extends TestCase
         $this->assertSame('Carburant', $depenses['lignes'][0]['type']);
     }
 
-    // ── Mot de passe ─────────────────────────────────────────────────────────
+    // ── Mot de passe : jamais modifiable par un tiers (ADR 0015) ─────────────
 
-    public function test_le_mot_de_passe_change_depuis_la_fiche_ramene_sur_la_fiche(): void
+    public function test_aucun_ecran_ne_permet_de_changer_le_mot_de_passe_d_un_autre_compte(): void
     {
-        $this->actingAs($this->user)
-            ->put(route('users.update-password', $this->agent), [
+        $this->assertFalse(Route::has('users.update-password'));
+
+        $hash = $this->agent->password;
+        $superAdmin = $this->creerSuperAdmin();
+
+        $this->actingAs($superAdmin)
+            ->put('/backoffice/users/'.$this->agent->id.'/password', [
                 'password' => 'Nouveau123',
                 'password_confirmation' => 'Nouveau123',
-                'depuis_fiche' => true,
             ])
-            ->assertRedirect(route('users.show', ['user' => $this->agent, 'tab' => 'mot-de-passe']));
+            ->assertNotFound();
 
-        $this->actingAs($this->user)
-            ->put(route('users.update-password', $this->agent), [
-                'password' => 'Autre1234',
-                'password_confirmation' => 'Autre1234',
+        // Un champ `password` glissé dans la modification du compte est ignoré.
+        $this->actingAs($superAdmin)
+            ->put(route('users.update', $this->agent), [
+                'prenom' => 'Ousmane',
+                'nom' => 'Sidibé',
+                'telephone' => '+224620000077',
+                'role' => 'manager',
+                'site_id' => $this->siteA->id,
+                'password' => 'Nouveau123',
+                'password_confirmation' => 'Nouveau123',
             ])
-            ->assertRedirect(route('users.edit', $this->agent));
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($hash, $this->agent->fresh()->password);
+        $this->assertFalse(Hash::check('Nouveau123', $this->agent->fresh()->password));
+    }
+
+    private function creerSuperAdmin(): User
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->siteA->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $superAdmin;
     }
 }

@@ -8,20 +8,24 @@ L'édition reste sur le formulaire existant `users.edit`, ouvert par le bouton *
   Utilisateurs. Accès : `UserPolicy::view` (`users.read`, même organisation ; super admin partout).
 - Entrées : nom du compte dans **Comptes** (console et liste organisation), action « Voir la
   fiche » du menu de la ligne, fil d'Ariane et bouton Retour du formulaire d'édition.
-- Onglet actif dans l'URL (`?tab=informations|mot-de-passe|situation|depenses`, `useUrlTab`).
+- Onglet actif dans l'URL (`?tab=informations|situation|depenses`, `useUrlTab`).
   Un onglet non autorisé n'est jamais affiché ; un `?tab=` non autorisé retombe sur Informations.
 
 ## Onglets
 
 | Onglet | Visible si | Contenu |
 |---|---|---|
-| Informations | toujours | nom, matricule, téléphone, e-mail, rôle, agences (défaut signalé), statut du compte, localisation ; bouton **Modifier** si `UserPolicy::update` |
-| Mot de passe | `UserPolicy::update` | même requête que `users.edit` (`PUT users/{user}/password`) ; `depuis_fiche=1` ramène sur la fiche, sans ce paramètre la redirection reste `users.edit` |
+| Informations | toujours | nom complet, matricule, téléphone, e-mail, rôle, agences (défaut signalé), statut du compte, localisation ; bouton **Modifier** si `UserPolicy::update` |
 | Situation | voir « Droits de la Situation » | tableau de bord de l'activité de l'agent |
 | Dépenses | `depenses.read` + module Dépenses actif | dépenses saisies par l'agent |
 
 Chaque onglet sensible est calculé côté serveur : la prop vaut `null` quand le consulteur n'y a pas
 droit (`situation`, `lien_rapport`, `depenses`), et le frontend masque l'onglet.
+
+**Pas d'onglet Mot de passe** (ADR 0015) : personne ne définit le mot de passe d'un autre compte,
+ni sur la fiche, ni dans « Modifier le compte ». L'agent gère le sien dans Paramètres → Mot de passe ;
+en cas d'oubli, il passe par le lien de réinitialisation. Le formulaire d'édition a une flèche de
+retour vers la fiche à côté de son titre.
 
 ## Situation
 
@@ -81,7 +85,7 @@ Employé (`beneficiaire_type = employe`, même `Personne`).
 
 - Backend : `User\ShowUserController`, `Agents\AgentSituationService`, `Agents\AgentDepensesService`,
   `RapportPerimetreResolver::pourFicheAgent()`, `Support\Situation\SituationVentesAgregats`.
-- Frontend : `pages/Users/Show.vue`, `pages/Users/partials/Agent{Situation,Depenses,MotDePasse}Tab.vue`,
+- Frontend : `pages/Users/Show.vue`, `pages/Users/partials/Agent{Situation,Depenses}Tab.vue`,
   composants partagés `components/situation/*`, types `types/agent-fiche.ts`.
 - Tests : `tests/Feature/Users/FicheAgentTest.php`, `pages/Users/__tests__/Show.spec.ts`,
   `pages/Users/partials/__tests__/AgentTabs.spec.ts`.

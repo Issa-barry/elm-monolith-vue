@@ -19,7 +19,7 @@ import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { confirm } from '@/routes/two-factor';
 import { Form } from '@inertiajs/vue3';
 import { useClipboard } from '@vueuse/core';
-import { Check, Copy, ScanLine } from 'lucide-vue-next';
+import { Check, ScanLine } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 
@@ -217,6 +217,7 @@ watch(
                                         class="h-full w-full bg-background p-3 text-foreground"
                                     />
                                     <button
+                                        title="Cliquez pour copier la clé de configuration"
                                         @click="copy(manualSetupKey || '')"
                                         class="relative block h-auto border-l border-border px-3 hover:bg-muted"
                                     >
@@ -224,7 +225,11 @@ watch(
                                             v-if="copied"
                                             class="w-4 text-green-500"
                                         />
-                                        <Copy v-else class="w-4" />
+                                        <i
+                                            v-else
+                                            class="pi pi-clipboard"
+                                            style="font-size: 1rem"
+                                        />
                                     </button>
                                 </template>
                             </div>

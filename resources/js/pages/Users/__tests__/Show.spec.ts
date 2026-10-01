@@ -35,9 +35,6 @@ const stubs = {
     AgentDepensesTab: {
         template: '<div data-testid="agent-depenses-panel" />',
     },
-    AgentMotDePasseTab: {
-        template: '<div data-testid="agent-mot-de-passe-panel" />',
-    },
     StatusDot: {
         props: ['status', 'label'],
         template: '<span>{{ label }}</span>',
@@ -127,15 +124,10 @@ describe('Fiche agent', () => {
         ).toBe('/backoffice/users/agent-1/edit');
     });
 
-    it('propose les quatre onglets quand le consulteur a tous les droits', () => {
+    it('propose Informations, Situation et Dépenses, jamais Mot de passe', () => {
         const wrapper = monter();
 
-        for (const onglet of [
-            'informations',
-            'mot-de-passe',
-            'situation',
-            'depenses',
-        ]) {
+        for (const onglet of ['informations', 'situation', 'depenses']) {
             expect(
                 wrapper.find(`[data-testid="agent-${onglet}-tab"]`).exists(),
             ).toBe(true);
@@ -143,9 +135,25 @@ describe('Fiche agent', () => {
         expect(
             wrapper.find('[data-testid="agent-depenses-tab"]').text(),
         ).toContain('4');
+        // Le mot de passe reste sous le seul contrôle de son titulaire (ADR 0015).
+        expect(
+            wrapper.find('[data-testid="agent-mot-de-passe-tab"]').exists(),
+        ).toBe(false);
+        expect(wrapper.find('input[type="password"]').exists()).toBe(false);
     });
 
-    it('masque Modifier, Mot de passe, Situation et Dépenses sans les droits', () => {
+    it('affiche le matricule dans les informations', () => {
+        expect(monter().find('[data-testid="agent-matricule"]').text()).toBe(
+            '580273',
+        );
+        expect(
+            monter({ user: { ...user, matricule: null } })
+                .find('[data-testid="agent-matricule"]')
+                .text(),
+        ).toBe('Non attribué');
+    });
+
+    it('masque Modifier, Situation et Dépenses sans les droits', () => {
         const wrapper = monter({
             peut_modifier: false,
             situation: null,

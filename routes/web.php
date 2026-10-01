@@ -198,7 +198,6 @@ use App\Http\Controllers\User\IndexUserController;
 use App\Http\Controllers\User\RejectAccountUserController;
 use App\Http\Controllers\User\ShowUserController;
 use App\Http\Controllers\User\StoreUserController;
-use App\Http\Controllers\User\UpdatePasswordUserController;
 use App\Http\Controllers\User\UpdateUserController;
 use App\Http\Controllers\User\ValidateAccountUserController;
 use App\Http\Controllers\UserInvitation\DestroyUserInvitationController;
@@ -670,7 +669,6 @@ Route::prefix('backoffice')->group(function () {
             Route::get('users/{user}', ShowUserController::class)->name('users.show');
             Route::match(['put', 'patch'], 'users/{user}', UpdateUserController::class)->name('users.update');
             Route::delete('users/{user}', DestroyUserController::class)->name('users.destroy');
-            Route::put('users/{user}/password', UpdatePasswordUserController::class)->name('users.update-password');
             Route::patch('users/{user}/validate', ValidateAccountUserController::class)->name('users.validate');
             Route::patch('users/{user}/reject', RejectAccountUserController::class)->name('users.reject');
             Route::get('roles', IndexRoleController::class)->name('roles.index');

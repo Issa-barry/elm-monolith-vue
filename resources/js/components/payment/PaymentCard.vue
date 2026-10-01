@@ -553,11 +553,7 @@ function handleSubmit() {
                     <button
                         type="button"
                         class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-foreground transition-colors hover:bg-muted/70"
-                        :title="
-                            factureCopiee
-                                ? 'Copié'
-                                : 'Copier le numéro de facture'
-                        "
+                        title="Cliquez pour copier le numéro de facture"
                         @click="copierFactureUtilisee"
                     >
                         {{ factureReferenceUtilisee }}
@@ -565,7 +561,7 @@ function handleSubmit() {
                             :class="
                                 factureCopiee
                                     ? 'pi pi-check text-green-600'
-                                    : 'pi pi-copy'
+                                    : 'pi pi-clipboard'
                             "
                             style="font-size: 0.75rem"
                         />

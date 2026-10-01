@@ -17,7 +17,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CircleHelp,
-    KeyRound,
     Pencil,
     Receipt,
     TrendingUp,
@@ -25,7 +24,6 @@ import {
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AgentDepensesTab from './partials/AgentDepensesTab.vue';
-import AgentMotDePasseTab from './partials/AgentMotDePasseTab.vue';
 import AgentSituationTab from './partials/AgentSituationTab.vue';
 
 // Chaque onglet sensible arrive à null quand le consulteur n'y a pas droit (calculé côté serveur).
@@ -47,11 +45,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.user.nom_complet, href: '#' },
 ];
 
-type Onglet = 'informations' | 'mot-de-passe' | 'situation' | 'depenses';
+type Onglet = 'informations' | 'situation' | 'depenses';
 
 const ONGLETS: Onglet[] = [
     'informations',
-    ...(props.peut_modifier ? (['mot-de-passe'] as const) : []),
     ...(props.situation ? (['situation'] as const) : []),
     ...(props.depenses ? (['depenses'] as const) : []),
 ];
@@ -172,20 +169,6 @@ const classeOnglet = (cible: Onglet) =>
                     </button>
 
                     <button
-                        v-if="peut_modifier"
-                        type="button"
-                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        :class="classeOnglet('mot-de-passe')"
-                        data-testid="agent-mot-de-passe-tab"
-                        @click="choisirOnglet('mot-de-passe')"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <KeyRound class="h-4 w-4" />
-                            Mot de passe
-                        </span>
-                    </button>
-
-                    <button
                         v-if="situation"
                         type="button"
                         class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
@@ -224,13 +207,8 @@ const classeOnglet = (cible: Onglet) =>
                     </button>
                 </aside>
 
-                <AgentMotDePasseTab
-                    v-if="activeTab === 'mot-de-passe' && peut_modifier"
-                    :agent-id="user.id"
-                />
-
                 <AgentSituationTab
-                    v-else-if="activeTab === 'situation' && situation"
+                    v-if="activeTab === 'situation' && situation"
                     :agent-id="user.id"
                     :periode="situation_periode"
                     :data="situation"
@@ -276,11 +254,17 @@ const classeOnglet = (cible: Onglet) =>
                             >
                                 {{ user.nom_complet || '—' }}
                             </p>
+                        </div>
+
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Matricule
+                            </p>
                             <p
-                                v-if="user.matricule"
-                                class="mt-1 text-xs text-muted-foreground"
+                                class="mt-1 font-mono text-sm font-medium"
+                                data-testid="agent-matricule"
                             >
-                                Matricule {{ user.matricule }}
+                                {{ user.matricule || 'Non attribué' }}
                             </p>
                         </div>
 
@@ -361,9 +345,7 @@ const classeOnglet = (cible: Onglet) =>
                             />
                         </div>
 
-                        <div
-                            class="rounded-lg border bg-background p-4 sm:col-span-2"
-                        >
+                        <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
                                 Localisation
                             </p>
