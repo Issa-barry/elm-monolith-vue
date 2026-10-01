@@ -1,12 +1,12 @@
-import PaiementsChart from '@/pages/Vehicules/partials/situation/PaiementsChart.vue';
-import ProduitsVendusChart from '@/pages/Vehicules/partials/situation/ProduitsVendusChart.vue';
+import PaiementsChart from '@/components/situation/PaiementsChart.vue';
+import ProduitsVendusChart from '@/components/situation/ProduitsVendusChart.vue';
 import SituationVentesSection from '@/pages/Vehicules/partials/situation/SituationVentesSection.vue';
 import type {
     SituationPaiements,
     SituationPeriode,
     SituationProduitVendu,
     SituationVentesData,
-} from '@/types/vehicule-situation';
+} from '@/types/situation';
 import { mount } from '@vue/test-utils';
 import Chart from 'primevue/chart';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,9 +1,6 @@
 import SituationTab from '@/pages/Vehicules/partials/SituationTab.vue';
 import SituationVentesSection from '@/pages/Vehicules/partials/situation/SituationVentesSection.vue';
-import type {
-    SituationPeriode,
-    SituationVentesData,
-} from '@/types/vehicule-situation';
+import type { SituationPeriode, SituationVentesData } from '@/types/situation';
 import { mount } from '@vue/test-utils';
 import Select from 'primevue/select';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

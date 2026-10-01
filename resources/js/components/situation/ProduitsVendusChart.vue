@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
 import { formatGNF, formatQuantite } from '@/lib/utils';
-import type { SituationProduitVendu } from '@/types/vehicule-situation';
+import type { SituationProduitVendu } from '@/types/situation';
 import type { Plugin } from 'chart.js';
 import Chart from 'primevue/chart';
 import { computed, onMounted, ref, watch } from 'vue';

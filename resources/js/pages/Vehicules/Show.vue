@@ -16,7 +16,7 @@ import { type BreadcrumbItem } from '@/types';
 import type {
     SituationPeriode,
     SituationVentesData,
-} from '@/types/vehicule-situation';
+} from '@/types/situation';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,

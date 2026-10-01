@@ -42,8 +42,15 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptes', href: '/backoffice/comptes' },
-    { title: `${props.user.prenom} ${props.user.nom}`, href: '#' },
+    {
+        title: `${props.user.prenom} ${props.user.nom}`,
+        href: `/backoffice/users/${props.user.id}`,
+    },
+    { title: 'Modifier', href: '#' },
 ];
+
+// Retour vers la fiche agent, point d'entrée de la consultation.
+const ficheHref = `/backoffice/users/${props.user.id}`;
 
 const DIAL_MAP: Record<string, string> = {
     GN: '+224',
@@ -140,7 +147,7 @@ function submitPassword() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/backoffice/comptes"
+                    :href="ficheHref"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -159,25 +166,35 @@ function submitPassword() {
         <div class="pb-6 sm:p-6">
             <!-- Titre desktop -->
             <div class="hidden px-6 pt-6 pb-0 sm:block">
-                <div class="mb-6">
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Modifier le compte
-                    </h1>
-                    <p
-                        class="mt-1 flex items-center gap-2 text-sm font-medium text-muted-foreground"
+                <div class="mb-6 flex items-center gap-3">
+                    <Link
+                        :href="ficheHref"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
+                        aria-label="Retour à la fiche"
+                        data-testid="user-edit-back"
                     >
-                        {{ user.prenom }} {{ user.nom }}
-                        <span
-                            v-if="user.matricule"
-                            class="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-                            >{{ user.matricule }}</span
+                        <ArrowLeft class="h-4 w-4" />
+                    </Link>
+                    <div>
+                        <h1 class="text-2xl font-semibold tracking-tight">
+                            Modifier le compte
+                        </h1>
+                        <p
+                            class="mt-1 flex items-center gap-2 text-sm font-medium text-muted-foreground"
                         >
-                        <span
-                            v-if="is_me"
-                            class="rounded bg-muted px-1.5 py-0.5 text-[10px]"
-                            >Moi</span
-                        >
-                    </p>
+                            {{ user.prenom }} {{ user.nom }}
+                            <span
+                                v-if="user.matricule"
+                                class="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                                >{{ user.matricule }}</span
+                            >
+                            <span
+                                v-if="is_me"
+                                class="rounded bg-muted px-1.5 py-0.5 text-[10px]"
+                                >Moi</span
+                            >
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -229,7 +246,7 @@ function submitPassword() {
                         :sites="sites"
                         :is-edit="true"
                         :show-password="false"
-                        back-href="/backoffice/comptes"
+                        :back-href="ficheHref"
                         @submit="submitInfo"
                         @update:form="Object.assign(infoForm, $event)"
                         @clear-error="infoForm.clearErrors($event as any)"
@@ -303,7 +320,7 @@ function submitPassword() {
                         <div
                             class="hidden items-center justify-between sm:flex"
                         >
-                            <Link href="/backoffice/comptes">
+                            <Link :href="ficheHref">
                                 <button
                                     type="button"
                                     class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-accent"

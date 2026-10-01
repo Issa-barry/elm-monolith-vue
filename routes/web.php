@@ -196,6 +196,7 @@ use App\Http\Controllers\User\DestroyUserController;
 use App\Http\Controllers\User\EditUserController;
 use App\Http\Controllers\User\IndexUserController;
 use App\Http\Controllers\User\RejectAccountUserController;
+use App\Http\Controllers\User\ShowUserController;
 use App\Http\Controllers\User\StoreUserController;
 use App\Http\Controllers\User\UpdatePasswordUserController;
 use App\Http\Controllers\User\UpdateUserController;
@@ -666,6 +667,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('users/create', CreateUserController::class)->name('users.create');
             Route::post('users', StoreUserController::class)->name('users.store');
             Route::get('users/{user}/edit', EditUserController::class)->name('users.edit');
+            Route::get('users/{user}', ShowUserController::class)->name('users.show');
             Route::match(['put', 'patch'], 'users/{user}', UpdateUserController::class)->name('users.update');
             Route::delete('users/{user}', DestroyUserController::class)->name('users.destroy');
             Route::put('users/{user}/password', UpdatePasswordUserController::class)->name('users.update-password');

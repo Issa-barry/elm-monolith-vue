@@ -23,6 +23,7 @@ import {
     Building2,
     CheckCircle,
     Clock,
+    Eye,
     MoreVertical,
     Pencil,
     Plus,
@@ -349,7 +350,13 @@ function confirmReject(u: StaffUser) {
                                     <div
                                         class="flex items-center gap-1.5 font-medium"
                                     >
-                                        {{ data.nom_complet }}
+                                        <Link
+                                            :href="`/backoffice/users/${data.id}`"
+                                            class="hover:underline"
+                                            data-testid="user-fiche-link"
+                                        >
+                                            {{ data.nom_complet }}
+                                        </Link>
                                         <span
                                             v-if="data.is_me"
                                             class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -477,6 +484,18 @@ function confirmReject(u: StaffUser) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem
+                                            v-if="can('users.read')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/backoffice/users/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir la fiche
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="
                                                 data.is_pending_validation &&

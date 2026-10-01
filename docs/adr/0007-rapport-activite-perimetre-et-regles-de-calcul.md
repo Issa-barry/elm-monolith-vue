@@ -41,7 +41,7 @@ graphique, non filtrée par agence.
 
 - Une annulation, un retour ou un encaissement antidaté modifie après coup les chiffres d'une période
   passée : documenté, et les encaissements saisis un autre jour sont signalés.
-- Les références Mobile Money sont contrôlées dans toute l'organisation (doublons entre agents ou
+- Les références Mobile Money sont contrôlées dans toute l'organisation, tous opérateurs confondus depuis l'ADR 0014 (doublons entre agents ou
   agences), avec le détail limité au périmètre de l'utilisateur.
 - `SituationPeriode` devient partagée (paramètre d'URL et période par défaut configurables) ; le
   comportement de la fiche véhicule est inchangé.

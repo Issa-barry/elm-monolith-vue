@@ -24,7 +24,12 @@ class UpdatePasswordUserController extends Controller
 
         $user->update(['password' => $data['password']]);
 
-        return redirect()->route('users.edit', $user)
+        // Le même formulaire existe sur la fiche agent (onglet Mot de passe) : on y reste.
+        $retour = $request->boolean('depuis_fiche')
+            ? route('users.show', ['user' => $user, 'tab' => 'mot-de-passe'])
+            : route('users.edit', $user);
+
+        return redirect($retour)
             ->with('success', "Mot de passe de {$user->name} mis à jour.");
     }
 }

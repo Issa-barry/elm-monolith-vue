@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Controller;
+use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Services\AuditLogService;
@@ -15,6 +16,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\Tresorerie\MoyensEncaissementResolver;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -113,6 +115,10 @@ class StoreEncaissementVenteController extends Controller
             $data['operateur_mobile_money'] = $support->operateur_mobile_money?->value;
         }
 
+        if ($data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value) {
+            $data['reference_paiement'] = $this->referenceMobileMoneyLibre($facture_vente, $data['reference_paiement']);
+        }
+
         $data['date_encaissement'] ??= now()->toDateString();
 
         // Espèces = argent physiquement détenu par l'auteur : il doit atterrir dans SA caisse
@@ -205,10 +211,56 @@ class StoreEncaissementVenteController extends Controller
                     }
                 }
             });
+        } catch (UniqueConstraintViolationException $e) {
+            // Saisie concurrente de la même référence entre le contrôle ci-dessus et l'insertion :
+            // la transaction est annulée, l'utilisateur reçoit le même message (facture de l'autre
+            // saisie, désormais validée) — jamais l'erreur SQL.
+            if (! EncaissementVente::estDoublonReferenceMobileMoney($e)) {
+                throw $e;
+            }
+
+            throw $this->referenceDejaUtilisee(
+                EncaissementVente::factureUtilisantReferenceMobileMoney($facture_vente->organization_id, $data['reference_paiement']),
+            );
         } catch (\RuntimeException $e) {
             return back()->withErrors(['comptabilisation' => "Encaissement non enregistré : {$e->getMessage()}"]);
         }
 
         return redirect()->back()->with('success', 'Encaissement enregistre.');
+    }
+
+    /**
+     * Une référence Mobile Money ne sert qu'une fois dans l'organisation, quels que soient la vente,
+     * l'agence, l'agent ou l'opérateur (ADR 0014). Ce contrôle donne le message ; l'index unique de
+     * `cle_reference_mobile_money` tranche entre deux saisies simultanées (catch de __invoke).
+     */
+    private function referenceMobileMoneyLibre(FactureVente $facture, ?string $reference): ?string
+    {
+        $reference = EncaissementVente::normaliserReference($reference);
+
+        $factureUtilisatrice = EncaissementVente::factureUtilisantReferenceMobileMoney($facture->organization_id, $reference);
+        if ($factureUtilisatrice !== null) {
+            throw $this->referenceDejaUtilisee($factureUtilisatrice);
+        }
+
+        return $reference;
+    }
+
+    /**
+     * Le message nomme la facture qui utilise déjà la référence ; `reference_paiement_facture` porte
+     * ce numéro seul, que PaymentCard rend copiable. Sans facture identifiable, message générique.
+     */
+    private function referenceDejaUtilisee(?string $factureReference): ValidationException
+    {
+        if (blank($factureReference)) {
+            return ValidationException::withMessages([
+                'reference_paiement' => EncaissementVente::MESSAGE_REFERENCE_MOBILE_MONEY_UTILISEE,
+            ]);
+        }
+
+        return ValidationException::withMessages([
+            'reference_paiement' => "Référence déjà utilisée — facture {$factureReference}",
+            'reference_paiement_facture' => $factureReference,
+        ]);
     }
 }
