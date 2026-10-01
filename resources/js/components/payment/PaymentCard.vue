@@ -181,6 +181,25 @@ const montant = ref<number | null>(null);
 const selectedKey = ref(modeInitial());
 const referencePaiement = ref('');
 
+// Référence Mobile Money déjà utilisée (ADR 0014) : le serveur nomme la facture concernée dans le
+// message et envoie son numéro seul dans `reference_paiement_facture`, rendu copiable ici.
+const factureReferenceUtilisee = computed(
+    () => props.errors?.reference_paiement_facture ?? '',
+);
+const messageReferenceUtilisee = computed(() => {
+    const message = props.errors?.reference_paiement ?? '';
+    const position = message.lastIndexOf(factureReferenceUtilisee.value);
+
+    return position > 0 ? message.slice(0, position).trimEnd() : message;
+});
+const factureCopiee = ref(false);
+
+async function copierFactureUtilisee() {
+    await navigator.clipboard.writeText(factureReferenceUtilisee.value);
+    factureCopiee.value = true;
+    setTimeout(() => (factureCopiee.value = false), 2000);
+}
+
 function modeByKey(key: string): ModeOption | undefined {
     return modeOptions.value.find((m) => m.key === key);
 }
@@ -525,7 +544,31 @@ function handleSubmit() {
                     :class="{ 'p-invalid': errors?.reference_paiement }"
                 />
                 <p
-                    v-if="errors?.reference_paiement"
+                    v-if="
+                        errors?.reference_paiement && factureReferenceUtilisee
+                    "
+                    class="mt-1 flex flex-wrap items-center gap-1 text-xs text-destructive"
+                >
+                    {{ messageReferenceUtilisee }}
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-foreground transition-colors hover:bg-muted/70"
+                        title="Cliquez pour copier le numéro de facture"
+                        @click="copierFactureUtilisee"
+                    >
+                        {{ factureReferenceUtilisee }}
+                        <i
+                            :class="
+                                factureCopiee
+                                    ? 'pi pi-check text-green-600'
+                                    : 'pi pi-clipboard'
+                            "
+                            style="font-size: 0.75rem"
+                        />
+                    </button>
+                </p>
+                <p
+                    v-else-if="errors?.reference_paiement"
                     class="mt-1 text-xs text-destructive"
                 >
                     {{ errors.reference_paiement }}
@@ -534,27 +577,29 @@ function handleSubmit() {
         </div>
 
         <template #footer>
-            <Button variant="outline" :disabled="processing" @click="close">
-                Annuler
-            </Button>
-            <Button
-                :disabled="
-                    processing ||
-                    !!refusAgence ||
-                    !montant ||
-                    !modeActif ||
-                    soldeInsuffisant ||
-                    (referencePaiementRequise && !referencePaiement)
-                "
-                @click="handleSubmit"
-            >
-                <HandCoins v-if="!processing" class="mr-1.5 h-4 w-4" />
-                <span
-                    v-else
-                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                />
-                Confirmer
-            </Button>
+            <div class="flex w-full items-center justify-between gap-3">
+                <Button variant="outline" :disabled="processing" @click="close">
+                    Annuler
+                </Button>
+                <Button
+                    :disabled="
+                        processing ||
+                        !!refusAgence ||
+                        !montant ||
+                        !modeActif ||
+                        soldeInsuffisant ||
+                        (referencePaiementRequise && !referencePaiement)
+                    "
+                    @click="handleSubmit"
+                >
+                    <HandCoins v-if="!processing" class="mr-1.5 h-4 w-4" />
+                    <span
+                        v-else
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    Confirmer
+                </Button>
+            </div>
         </template>
     </Dialog>
 </template>

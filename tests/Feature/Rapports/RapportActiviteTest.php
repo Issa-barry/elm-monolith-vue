@@ -382,10 +382,17 @@ class RapportActiviteTest extends TestCase
         $facture = $this->vente($this->siteA, $this->agentA, 2_000_000);
         $factureB = $this->vente($this->siteB, $this->agentSiteB, 500_000, '2026-09-10 09:00:00');
 
+        // Depuis l'ADR 0014, la base refuse tout nouveau doublon : ceux-ci sont des doublons historiques,
+        // antérieurs à la règle (référence réécrite directement, sans clé d'unicité).
+        $historique = function (EncaissementVente $e, string $reference): void {
+            DB::table('encaissements_ventes')->where('id', $e->id)->update(['reference_paiement' => $reference, 'cle_reference_mobile_money' => null]);
+        };
+
         $ok = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', 'OM-UNIQUE', 'orange_money');
-        $doublon = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', ' om-777 ', 'orange_money');
+        $doublon = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', 'TMP-1', 'orange_money');
+        $historique($doublon, ' om-777 ');
         $this->encaisser($factureB, $this->agentSiteB, 100_000, 'mobile_money', '2026-09-10', 'OM-777', 'orange_money');
-        $autreOperateur = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', 'OM-UNIQUE', 'kulu');
+        $autreOperateur = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', 'KULU-1', 'kulu');
         $sansReference = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', null, 'orange_money');
         $ancien = $this->encaisser($facture, $this->agentA, 100_000, 'mobile_money', '2026-09-26', null, 'orange_money');
         DB::table('encaissements_ventes')->where('id', $ancien->id)->update(['created_at' => '2026-09-10 10:00:00']);
@@ -394,13 +401,20 @@ class RapportActiviteTest extends TestCase
         $parId = collect($mm['lignes'])->keyBy('id');
 
         $this->assertNull($parId[$ok->id]['anomalie']);
-        $this->assertNull($parId[$autreOperateur->id]['anomalie'], 'Même référence, autre opérateur : pas un doublon.');
+        $this->assertNull($parId[$autreOperateur->id]['anomalie']);
         $this->assertSame('reference_dupliquee', $parId[$doublon->id]['anomalie']);
         $this->assertSame([], $parId[$doublon->id]['autres_utilisations'], "L'autre utilisation est hors du périmètre de l'agent.");
         $this->assertSame(1, $parId[$doublon->id]['autres_hors_perimetre']);
         $this->assertSame('reference_absente', $parId[$sansReference->id]['anomalie']);
         $this->assertSame('anterieure_obligation', $parId[$ancien->id]['anomalie']);
         $this->assertSame([1, 1, 1], [$mm['resume']['reference_absente'], $mm['resume']['reference_dupliquee'], $mm['resume']['anterieure_obligation']]);
+
+        // Même référence chez un autre opérateur : doublon aussi (ADR 0014 — avant, l'opérateur les distinguait).
+        $historique($autreOperateur, 'om-unique');
+        $parId = collect($this->props($this->agentA, 'ma-situation')['rapport']['mobile_money']['lignes'])->keyBy('id');
+        $this->assertSame('reference_dupliquee', $parId[$autreOperateur->id]['anomalie']);
+        $this->assertSame('reference_dupliquee', $parId[$ok->id]['anomalie']);
+        $this->assertSame($ok->id, $parId[$autreOperateur->id]['autres_utilisations'][0]['id']);
 
         $admin = collect($this->props($this->user, 'rapports.activite')['rapport']['mobile_money']['lignes'])->keyBy('id');
         $this->assertSame($factureB->reference, $admin[$doublon->id]['autres_utilisations'][0]['facture_reference']);

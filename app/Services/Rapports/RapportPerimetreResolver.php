@@ -70,6 +70,51 @@ class RapportPerimetreResolver
     }
 
     /**
+     * Périmètre de l'onglet Situation de la fiche agent (docs/fiche-agent.md), ou null quand le
+     * consulteur n'a pas le droit de voir les chiffres de cet agent (onglet masqué) :
+     *
+     * - sa propre fiche avec `rapports.read_own` : mêmes chiffres que « Ma situation » ;
+     * - sinon `rapports.read`, et l'agent doit être l'un des agents des agences du consulteur
+     *   (mêmes agences et mêmes agents que le filtre Agent du rapport d'activité) ; les chiffres
+     *   sont alors limités à ces agences, exactement comme le rapport filtré sur cet agent.
+     *
+     * `users.read` seul ne donne jamais accès au chiffre d'affaires ou aux encaissements d'un agent.
+     */
+    public function pourFicheAgent(User $consulteur, User $agent, SituationPeriode $periode): ?RapportPerimetre
+    {
+        if ($agent->organization_id === null) {
+            return null;
+        }
+
+        if ($consulteur->id === $agent->id && $consulteur->can('rapports.read_own')) {
+            return new RapportPerimetre(
+                organizationId: $agent->organization_id,
+                siteIds: null,
+                agentId: $agent->id,
+                periode: $periode,
+                maSituation: true,
+            );
+        }
+
+        if (! $consulteur->can('rapports.read')) {
+            return null;
+        }
+
+        $siteIds = $this->sitesAutorises($consulteur);
+        if ($siteIds !== null && ! $this->agentsPour($agent->organization_id, $siteIds)->contains('id', $agent->id)) {
+            return null;
+        }
+
+        return new RapportPerimetre(
+            organizationId: $agent->organization_id,
+            siteIds: $siteIds,
+            agentId: $agent->id,
+            periode: $periode,
+            maSituation: false,
+        );
+    }
+
+    /**
      * Agences proposées au filtre Agence : celles que l'utilisateur peut voir.
      *
      * @return Collection<int, array{id: string, nom: string}>

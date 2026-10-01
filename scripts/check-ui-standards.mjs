@@ -14,6 +14,9 @@
  *     standardisation se fait page par page, une page absente de la liste
  *     n'est pas encore contrôlée et ne casse pas le CI.
  *  3. Toast PrimeVue placé ailleurs qu'en haut à droite.
+ *  4. Icône de copie (presse-papiers) autre que `pi pi-clipboard`,
+ *     `pi pi-clipboard` utilisée ailleurs que pour une copie, ou bouton de
+ *     copie sans infobulle title="Cliquez pour copier …".
  *
  * Pourquoi un script dédié plutôt qu'une règle ESLint custom : ESLint analyse
  * du JS/TS, pas des classes Tailwind dans un template Vue. Une règle AST
@@ -63,6 +66,78 @@ const LIST_PAGE_ACTIONS_IMPORT_RE =
     /from\s+['"]@\/components\/ListPageActions\.vue['"]/;
 const DATAFILTERS_TAG_RE = /<DataFilters\b/g;
 const TRIGGER_ONLY_RE = /\btrigger-only\b|:trigger-only\s*=/;
+
+// Icône de copie : `pi pi-clipboard` et elle seule (décision du 01/10/2026), et
+// réservée à la copie. Interdits : les icônes de copie Lucide et `pi-copy`. Une
+// `pi-clipboard` dans un fichier qui ne copie rien dans le presse-papiers
+// (navigator.clipboard / useClipboard) est un détournement de l'icône.
+const LUCIDE_IMPORT_RE =
+    /import\s*\{([^}]*)\}\s*from\s*['"]lucide-vue-next['"]/g;
+const LUCIDE_COPY_ICON_RE = /^(?:Copy|CopyCheck|ClipboardCopy)(?:Icon)?$/;
+const PI_COPY_RE = /\bpi-copy\b/g;
+const PI_CLIPBOARD_RE = /\bpi-clipboard\b/g;
+const CLIPBOARD_USAGE_RE = /navigator\.clipboard|useClipboard\b/;
+
+function lineOf(content, index) {
+    return content.slice(0, index).split('\n').length;
+}
+
+function checkCopyIcons(content) {
+    const hits = [];
+
+    for (const match of content.matchAll(LUCIDE_IMPORT_RE)) {
+        const icones = match[1]
+            .split(',')
+            .map((nom) => nom.trim().split(/\s+as\s+/)[0])
+            .filter((nom) => LUCIDE_COPY_ICON_RE.test(nom));
+        if (icones.length > 0) {
+            hits.push({
+                line: lineOf(content, match.index),
+                detail: `Icône de copie Lucide (${icones.join(', ')}) détectée. Toute icône de copie doit être PrimeIcons : <i class="pi pi-clipboard" />.`,
+            });
+        }
+    }
+
+    for (const match of content.matchAll(PI_COPY_RE)) {
+        hits.push({
+            line: lineOf(content, match.index),
+            detail: 'Icône `pi-copy` détectée. Toute icône de copie doit être `pi pi-clipboard`.',
+        });
+    }
+
+    const copieDansLeFichier = CLIPBOARD_USAGE_RE.test(content);
+    for (const match of content.matchAll(PI_CLIPBOARD_RE)) {
+        if (!copieDansLeFichier) {
+            hits.push({
+                line: lineOf(content, match.index),
+                detail: "`pi pi-clipboard` est réservée à l'action de copie, or ce fichier ne copie rien dans le presse-papiers (navigator.clipboard / useClipboard). Choisis une autre icône.",
+            });
+        } else if (!boutonDeCopieExplicite(content, match.index)) {
+            hits.push({
+                line: lineOf(content, match.index),
+                detail: 'Le bouton qui porte `pi pi-clipboard` doit expliciter la copie au survol : title="Cliquez pour copier …" (ex: "Cliquez pour copier le numéro de facture").',
+            });
+        }
+    }
+
+    return hits;
+}
+
+// Infobulle obligatoire : la balise <button>/<Button> ouvrante la plus proche
+// avant l'icône doit porter un title commençant par « Cliquez pour copier ».
+const BUTTON_OPEN_RE = /<(?:button|Button)\b/g;
+const TITLE_COPIE_RE = /(?<![:\w-])title\s*=\s*["']Cliquez pour copier \S/;
+
+function boutonDeCopieExplicite(content, iconIndex) {
+    const ouvertures = [
+        ...content.slice(0, iconIndex).matchAll(BUTTON_OPEN_RE),
+    ];
+    const derniere = ouvertures.pop();
+    if (!derniere) return false;
+
+    const finBalise = content.indexOf('>', derniere.index);
+    return TITLE_COPIE_RE.test(content.slice(derniere.index, finBalise + 1));
+}
 
 // Détecte un champ de recherche "search" fait maison branché directement sur un
 // <input> (bypass total de DataFilters), PAS le cas légitime d'un ref `search`
@@ -268,6 +343,15 @@ function main() {
                 });
             }
 
+            for (const hit of checkCopyIcons(content)) {
+                violations.push({
+                    file: relPath,
+                    line: hit.line,
+                    type: 'copy-icon',
+                    detail: hit.detail,
+                });
+            }
+
             for (const hit of checkListPageActions(relPath, content)) {
                 violations.push({
                     file: relPath,
@@ -302,7 +386,7 @@ function main() {
 
     if (violations.length === 0) {
         console.log(
-            '✓ Standards UI (StatusDot / DataFilters / ListPageActions / Toast top-right) respectés.',
+            '✓ Standards UI (StatusDot / DataFilters / ListPageActions / Toast top-right / icône de copie) respectés.',
         );
         return;
     }

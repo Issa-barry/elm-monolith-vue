@@ -7,6 +7,7 @@ use App\Enums\OperateurMobileMoney;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Models\CompteTresorerie;
+use App\Models\EncaissementVente;
 use App\Services\Tresorerie\FicheCaisseService;
 use App\Support\Rapports\RapportPerimetre;
 use Carbon\CarbonImmutable;
@@ -223,7 +224,7 @@ class RapportActiviteService
 
     /**
      * Encaissements Mobile Money de la période et contrôle de leurs références : absente (après
-     * l'obligation), ou déjà utilisée pour le même opérateur n'importe où dans l'organisation —
+     * l'obligation), ou déjà utilisée (tous opérateurs confondus, ADR 0014) n'importe où dans l'organisation —
      * même hors période, agence ou agent filtrés. Le détail d'une autre utilisation n'est montré que
      * si elle est dans le périmètre de l'utilisateur ; sinon elle est seulement comptée.
      *
@@ -252,7 +253,7 @@ class RapportActiviteService
             ->values();
 
         $lignes = $this->lignesEncaissements($base(), $limite)->map(function (array $l) use ($anomalies, $doublons) {
-            $cle = $this->cleReference($l['operateur_mobile_money'], $l['reference_paiement']);
+            $cle = $this->cleReference($l['reference_paiement']);
             $autres = $cle !== null ? ($doublons[$cle] ?? collect())->reject(fn (array $d) => $d['id'] === $l['id']) : collect();
 
             return [
@@ -541,16 +542,14 @@ class RapportActiviteService
 
     // ── Références Mobile Money ──────────────────────────────────────────────
 
-    private function cleReference(?string $operateur, ?string $reference): ?string
+    private function cleReference(?string $reference): ?string
     {
-        $ref = mb_strtoupper(trim((string) $reference));
-
-        return $ref === '' ? null : ($operateur ?? '').'|'.$ref;
+        return EncaissementVente::normaliserReference($reference);
     }
 
     /**
      * Toutes les utilisations, dans l'organisation, des références présentes dans la période —
-     * regroupées par (opérateur, référence normalisée), seulement celles utilisées plus d'une fois.
+     * regroupées par référence normalisée (tous opérateurs confondus, ADR 0014), seulement celles utilisées plus d'une fois.
      *
      * @param  Collection<int, object>  $lignes
      * @return array<string, Collection<int, array<string, mixed>>>
@@ -581,7 +580,7 @@ class RapportActiviteService
         }
 
         return $utilisations
-            ->groupBy(fn ($u) => $this->cleReference($u->operateur_mobile_money, $u->reference_paiement))
+            ->groupBy(fn ($u) => $this->cleReference($u->reference_paiement))
             ->filter(fn (Collection $groupe) => $groupe->count() > 1)
             ->map(fn (Collection $groupe) => $groupe->map(fn ($u) => [
                 'id' => $u->id,
@@ -598,7 +597,7 @@ class RapportActiviteService
      */
     private function anomalie(object $l, array $doublons): ?string
     {
-        $cle = $this->cleReference($l->operateur_mobile_money, $l->reference_paiement);
+        $cle = $this->cleReference($l->reference_paiement);
 
         if ($cle === null) {
             $saisiLe = $l->created_at ? CarbonImmutable::parse($l->created_at) : null;

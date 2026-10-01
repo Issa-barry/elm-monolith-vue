@@ -10,8 +10,10 @@ withDefaults(
         icon: Component;
         tone?: 'primary' | 'success' | 'warning' | 'info';
         highlight?: boolean;
+        /** Précision sous la valeur, ex. « 3 dépenses ». */
+        detail?: string;
     }>(),
-    { unit: undefined, tone: 'primary', highlight: false },
+    { unit: undefined, tone: 'primary', highlight: false, detail: undefined },
 );
 
 const TONES = {
@@ -52,6 +54,9 @@ const TONES = {
             >
                 {{ unit }}
             </span>
+        </p>
+        <p v-if="detail" class="mt-1 text-xs text-muted-foreground">
+            {{ detail }}
         </p>
     </div>
 </template>

@@ -12,12 +12,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 class EncaissementVente extends Model
 {
     use HasFactory, HasUlids;
+
+    public const MESSAGE_REFERENCE_MOBILE_MONEY_UTILISEE = 'Cette référence Mobile Money a déjà été utilisée.';
 
     protected $table = 'encaissements_ventes';
 
@@ -46,6 +49,13 @@ class EncaissementVente extends Model
 
     protected static function booted(): void
     {
+        // Une référence Mobile Money ne sert qu'une fois par organisation, tous opérateurs confondus
+        // (règle du 01/10/2026, ADR 0014) : `cle_reference_mobile_money` porte l'index unique, dernière
+        // protection contre deux saisies simultanées. Calculée ici pour que tout appelant (contrôleur,
+        // seeder, import...) y soit soumis, et seulement quand ses entrées changent : un doublon
+        // historique, laissé sans clé par la migration, reste modifiable sans faire échouer l'index.
+        static::saving(fn (EncaissementVente $e) => $e->appliquerCleReferenceMobileMoney());
+
         static::creating(function (EncaissementVente $e) {
             if (Auth::check()) {
                 $e->created_by = Auth::id();
@@ -121,6 +131,64 @@ class EncaissementVente extends Model
                 $ecritures->contrepasser($piece, 'Encaissement supprimé');
             }
         }
+    }
+
+    // ── Référence Mobile Money ───────────────────────────────────────────────
+
+    /** Espaces de bord et casse ignorés : « om123 », « OM123 » et «  OM123  » sont la même référence. */
+    public static function normaliserReference(?string $reference): ?string
+    {
+        $reference = mb_strtoupper(trim((string) $reference));
+
+        return $reference === '' ? null : $reference;
+    }
+
+    public static function cleReferenceMobileMoney(?string $organizationId, ?string $reference): ?string
+    {
+        $reference = static::normaliserReference($reference);
+
+        return $organizationId === null || $reference === null ? null : $organizationId.'|'.$reference;
+    }
+
+    /**
+     * Référence (VTE-…) de la facture qui utilise déjà cette référence Mobile Money ; chaîne vide si
+     * la facture n'a pas de référence, null si la référence Mobile Money est libre.
+     */
+    public static function factureUtilisantReferenceMobileMoney(string $organizationId, ?string $reference): ?string
+    {
+        $cle = static::cleReferenceMobileMoney($organizationId, $reference);
+        if ($cle === null) {
+            return null;
+        }
+
+        $utilisation = static::query()
+            ->join('factures_ventes as f', 'f.id', '=', 'encaissements_ventes.facture_vente_id')
+            ->where('encaissements_ventes.cle_reference_mobile_money', $cle)
+            ->first(['f.reference']);
+
+        return $utilisation ? (string) $utilisation->reference : null;
+    }
+
+    private function appliquerCleReferenceMobileMoney(): void
+    {
+        if ($this->exists && ! $this->isDirty(['mode_paiement', 'reference_paiement', 'facture_vente_id'])) {
+            return;
+        }
+
+        if ($this->mode_paiement !== ModePaiement::MOBILE_MONEY) {
+            $this->cle_reference_mobile_money = null;
+
+            return;
+        }
+
+        $this->reference_paiement = static::normaliserReference($this->reference_paiement);
+        $this->cle_reference_mobile_money = static::cleReferenceMobileMoney($this->facture?->organization_id, $this->reference_paiement);
+    }
+
+    /** Le doublon refusé par la base vient-il de l'index des références Mobile Money (et pas d'une autre contrainte) ? */
+    public static function estDoublonReferenceMobileMoney(UniqueConstraintViolationException $e): bool
+    {
+        return str_contains($e->getMessage(), 'cle_reference_mobile_money');
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

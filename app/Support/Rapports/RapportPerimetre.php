@@ -25,14 +25,32 @@ final class RapportPerimetre
         public readonly bool $maSituation,
     ) {}
 
+    /**
+     * « Toute la période » (fiche agent seulement : le rapport et « Ma situation » ne la proposent
+     * pas) n'a pas de bornes : on couvre tout l'historique, y compris une date d'encaissement
+     * saisie dans le futur. Toute autre période sans bornes retombe sur aujourd'hui.
+     */
     public function debut(): CarbonImmutable
     {
+        if ($this->toutePeriode()) {
+            return CarbonImmutable::create(1970, 1, 1)->startOfDay();
+        }
+
         return $this->periode->debut ?? CarbonImmutable::now()->startOfDay();
     }
 
     public function fin(): CarbonImmutable
     {
+        if ($this->toutePeriode()) {
+            return CarbonImmutable::create(9999, 12, 31)->endOfDay();
+        }
+
         return $this->periode->fin ?? CarbonImmutable::now()->endOfDay();
+    }
+
+    private function toutePeriode(): bool
+    {
+        return $this->periode->cle === SituationPeriode::TOUT && $this->periode->debut === null;
     }
 
     public function aucuneAgence(): bool

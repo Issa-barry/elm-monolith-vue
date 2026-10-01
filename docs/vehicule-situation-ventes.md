@@ -158,10 +158,14 @@ Backend — une section = un service + une prop Inertia :
 - `Vehicule::commandesVentes()` (relation inverse de `CommandeVente::vehicule()`).
 
 Frontend :
-- `Vehicules/partials/SituationTab.vue` : coque (titre, filtre de période partagé, sections).
-- `Vehicules/partials/situation/` : `SituationSection` (enveloppe réutilisable d'une section),
-  `SituationKpiCard`, `SituationVentesSection`, `ProduitsVendusChart`, `PaiementsChart`.
-- Types partagés : `resources/js/types/vehicule-situation.ts`.
+- `Vehicules/partials/SituationTab.vue` : coque (en-tête + sections du véhicule).
+- Composants partagés avec la fiche agent (docs/fiche-agent.md), dans `components/situation/` :
+  `SituationEntete` (titre + filtre de période), `SituationSection` (enveloppe d'une section),
+  `SituationKpiCard`, `ProduitsVendusChart`, `PaiementsChart`.
+- Propre au véhicule : `Vehicules/partials/situation/SituationVentesSection.vue`.
+- Agrégats partagés côté backend : `App\Support\Situation\SituationVentesAgregats` (produits
+  vendus, situation des paiements), appelé par `VehiculeSituationVentesService`.
+- Types partagés : `resources/js/types/situation.ts`.
 - Graphiques : `primevue/chart` (Chart.js) + `useChartTheme`, comme les widgets dashboard Apollo
   déjà présents (`components/dashboard/ventes/*`) — aucune dépendance ajoutée.
 - Grilles adaptatives par **container queries** (Tailwind v4) : graphiques côte à côte dès que la

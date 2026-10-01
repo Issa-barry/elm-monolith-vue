@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import PaiementsChart from '@/components/situation/PaiementsChart.vue';
+import ProduitsVendusChart from '@/components/situation/ProduitsVendusChart.vue';
+import SituationKpiCard from '@/components/situation/SituationKpiCard.vue';
+import SituationSection from '@/components/situation/SituationSection.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import type { AppPageProps } from '@/types';
-import type {
-    SituationPeriode,
-    SituationVentesData,
-} from '@/types/vehicule-situation';
+import type { SituationPeriode, SituationVentesData } from '@/types/situation';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     ArrowRight,
@@ -15,10 +16,6 @@ import {
     WalletCards,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
-import PaiementsChart from './PaiementsChart.vue';
-import ProduitsVendusChart from './ProduitsVendusChart.vue';
-import SituationKpiCard from './SituationKpiCard.vue';
-import SituationSection from './SituationSection.vue';
 
 const props = defineProps<{
     // Texte cherché par le filtre « Véhicule » de l'écran Ventes (nom ou immatriculation).

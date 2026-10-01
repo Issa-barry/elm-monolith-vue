@@ -7,6 +7,7 @@ use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -755,9 +756,9 @@ class UserControllerTest extends TestCase
         $this->assertEquals($targetSite2->id, $defaultSite->id);
     }
 
-    // ── update password ───────────────────────────────────────────────────────
+    // ── mot de passe : jamais défini par un tiers (ADR 0015) ─────────────────
 
-    public function test_update_password_changes_password(): void
+    public function test_aucune_route_ne_permet_de_changer_le_mot_de_passe_d_un_autre_compte(): void
     {
         $this->createRole('manager');
 
@@ -765,49 +766,50 @@ class UserControllerTest extends TestCase
         $admin = $this->superAdmin($org);
         $target = User::factory()->create(['organization_id' => $org->id]);
         $target->assignRole('manager');
+        $originalHash = $target->password;
 
+        $this->assertFalse(Route::has('users.update-password'));
         $this->actingAs($admin)
-            ->put(route('users.update-password', $target), [
+            ->put('/backoffice/users/'.$target->id.'/password', [
                 'password' => 'NewPass456',
                 'password_confirmation' => 'NewPass456',
             ])
+            ->assertNotFound();
+
+        $this->assertSame($originalHash, $target->fresh()->password);
+    }
+
+    public function test_update_ignore_un_mot_de_passe_envoye(): void
+    {
+        $this->createRole('manager');
+
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $target = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000097',
+        ]);
+        $target->assignRole('manager');
+        $target->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        $originalHash = $target->password;
+
+        $this->actingAs($admin)
+            ->put(route('users.update', $target), [
+                'prenom' => $target->prenom,
+                'nom' => $target->nom,
+                'email' => null,
+                'telephone' => '+224620000097',
+                'role' => 'manager',
+                'site_id' => $site->id,
+                'password' => 'NewPass456',
+                'password_confirmation' => 'NewPass456',
+            ])
+            ->assertSessionHasNoErrors()
             ->assertRedirect(route('users.edit', $target));
 
-        $this->assertTrue(Hash::check('NewPass456', $target->fresh()->password));
-    }
-
-    public function test_update_password_fails_with_short_password(): void
-    {
-        $this->createRole('manager');
-
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-        $target = User::factory()->create(['organization_id' => $org->id]);
-        $target->assignRole('manager');
-
-        $this->actingAs($admin)
-            ->put(route('users.update-password', $target), [
-                'password' => 'Ab1',
-                'password_confirmation' => 'Ab1',
-            ])
-            ->assertSessionHasErrors('password');
-    }
-
-    public function test_update_password_fails_with_mismatch(): void
-    {
-        $this->createRole('manager');
-
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-        $target = User::factory()->create(['organization_id' => $org->id]);
-        $target->assignRole('manager');
-
-        $this->actingAs($admin)
-            ->put(route('users.update-password', $target), [
-                'password' => 'NewPass456',
-                'password_confirmation' => 'Different456',
-            ])
-            ->assertSessionHasErrors('password');
+        $this->assertSame($originalHash, $target->fresh()->password);
+        $this->assertFalse(Hash::check('NewPass456', $target->fresh()->password));
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
