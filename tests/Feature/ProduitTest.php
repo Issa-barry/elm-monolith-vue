@@ -14,9 +14,11 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use App\Services\VarianteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -32,6 +34,19 @@ class ProduitTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+
+        // $this->user est admin_entreprise (via makeUserWithPermissions) — depuis le 2026-09-06,
+        // DroitAjustementStockService ne le bypasse plus (cf. sa docblock de classe) : cette
+        // ligne reproduit le provisioning de continuité qu'InstallationService::install() pose
+        // désormais pour toute organisation réelle, pour ne pas casser tous les tests
+        // d'ajustement de stock qui s'appuient sur ce compte par défaut.
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
     }
 
     /** Résout l'id du type par défaut (code stable) pour une organisation — la provisionne
@@ -257,6 +272,15 @@ class ProduitTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
 
     public function test_store_creates_produit_and_redirects(): void
@@ -275,6 +299,46 @@ class ProduitTest extends TestCase
         ]);
         $this->assertDatabaseHas('produit_variantes', [
             'prix_achat' => 1000,
+            'is_default' => true,
+        ]);
+    }
+
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.store'), [
+                'nom' => 'Rouleau plastique',
+                'produit_type_id' => $this->typeId('materiel'),
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(403);
+    }
+
+    /**
+     * Correctif du 30/08/2026 : le type par défaut « Matière de production » (non vendable,
+     * achetée puis consommée en fabrication) portait un champ_prix_reference = 'prix_achat'
+     * hérité d'un défaut buggé — ProduitService::raisonIncoherencePrix() comparait alors un
+     * prix_vente jamais saisi pour ce type (toujours 0) au prix d'achat, rejetant SYSTÉMATIQUEMENT
+     * toute création, quel que soit le prix d'achat renseigné (bug réel signalé en usage).
+     */
+    public function test_store_matiere_production_reussit_malgre_labsence_de_prix_de_vente(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Bouchon 28mm',
+                'produit_type_id' => $this->typeId('matiere_production'),
+                'statut' => 'actif',
+                'prix_achat' => 150,
+            ]);
+
+        $produit = Produit::where('nom', 'Bouchon 28mm')->first();
+        $response->assertRedirect(route('produits.show', $produit));
+        $this->assertDatabaseHas('produit_variantes', [
+            'produit_id' => $produit->id,
+            'prix_achat' => 150,
             'is_default' => true,
         ]);
     }
@@ -627,6 +691,17 @@ class ProduitTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_show_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, []);
+        $sansDroit->sites()->attach($this->defaultSite()->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.show', $produit))
+            ->assertStatus(403);
+    }
+
     // ── edit ──────────────────────────────────────────────────────────────────
 
     public function test_edit_returns_200_for_authorized_user(): void
@@ -636,6 +711,26 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('produits.edit', $produit))
             ->assertStatus(200);
+    }
+
+    public function test_edit_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.edit', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_edit_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.edit', $produit))
+            ->assertStatus(403);
     }
 
     // ── update ────────────────────────────────────────────────────────────────
@@ -792,6 +887,34 @@ class ProduitTest extends TestCase
         $this->assertTrue($produit->variantes->every(fn ($v) => (int) $v->prix_achat === 8000));
     }
 
+    public function test_update_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Nouveau nom produit',
+                'produit_type_id' => $this->typeId('materiel', $otherOrg),
+                'statut' => 'actif',
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Nouveau nom produit',
+                'produit_type_id' => $this->typeId('materiel'),
+                'statut' => 'actif',
+            ])
+            ->assertStatus(403);
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_produit_and_redirects(): void
@@ -815,6 +938,49 @@ class ProduitTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->delete(route('produits.destroy', $produit))
+            ->assertStatus(403);
+    }
+
+    // ── archiver ──────────────────────────────────────────────────────────────
+
+    public function test_archiver_archives_produit_and_redirects(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.archiver', $produit))
+            ->assertRedirect();
+
+        $this->assertSame('archive', $produit->fresh()->statut->value);
+    }
+
+    public function test_archiver_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->patch(route('produits.archiver', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_archiver_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->patch(route('produits.archiver', $produit))
+            ->assertStatus(403);
+    }
+
     // ── ajuster-stock ─────────────────────────────────────────────────────────
 
     public function test_ajuster_stock_augmente_le_stock(): void
@@ -827,6 +993,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 20,
                 'motif_type' => 'apres_production',
             ])
@@ -861,6 +1028,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 15,
                 'motif_type' => 'perte',
             ])
@@ -892,6 +1060,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -932,6 +1101,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -950,6 +1120,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -967,6 +1138,7 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -987,6 +1159,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $otherSite->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1001,6 +1174,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'diminuer' => 5,
                 'motif_type' => 'correction_stock',
@@ -1016,6 +1190,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('augmenter');
@@ -1029,6 +1204,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 0,
             ])
             ->assertSessionHasErrors('augmenter');
@@ -1036,6 +1212,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => -5,
             ])
             ->assertSessionHasErrors('diminuer');
@@ -1049,6 +1226,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'apres_achat',
             ])
@@ -1066,6 +1244,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'apres_achat',
             ])
@@ -1089,6 +1268,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 100,
                 'motif_type' => 'correction_stock',
             ])
@@ -1110,6 +1290,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
             ])
             ->assertStatus(403);
@@ -1133,12 +1314,106 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 9999,
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 
         $this->assertSame($countBefore, MouvementStock::where('produit_variante_id', $varianteId)->count());
+    }
+
+    // ── ajuster-stock : date métier ──────────────────────────────────────────────
+
+    public function test_ajuster_stock_echoue_sans_date(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_echoue_avec_date_future(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => now()->addDay()->toDateString(),
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_echoue_avec_date_invalide(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => 'pas-une-date',
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('date');
+    }
+
+    public function test_ajuster_stock_accepte_aujourdhui_comme_date(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => now()->toDateString(),
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+    }
+
+    /**
+     * La date métier saisie par l'utilisateur doit être persistée telle quelle sur le
+     * mouvement — distincte de created_at (horodatage technique, toujours "maintenant"). Un
+     * ajustement peut légitimement être daté d'hier (rattrapage d'un oubli de saisie), sans que
+     * cela ne modifie le calcul stock_avant/stock_apres (toujours basé sur l'état réel actuel du
+     * stock, jamais rejoué à la date choisie).
+     */
+    public function test_ajuster_stock_enregistre_la_date_saisie_par_lutilisateur(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+        $hier = now()->subDay()->toDateString();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'date' => $hier,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $mouvement = MouvementStock::where('produit_variante_id', $this->varianteId($produit))->firstOrFail();
+
+        $this->assertSame($hier, $mouvement->date->toDateString());
+        $this->assertNotNull($mouvement->created_at);
+        // created_at reste "aujourd'hui" (horodatage technique de création), même si la date
+        // métier saisie est antérieure — les deux ne sont jamais confondues.
+        $this->assertSame(now()->toDateString(), $mouvement->created_at->toDateString());
     }
 
     // ── historique ────────────────────────────────────────────────────────────
@@ -1158,6 +1433,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1166,9 +1442,11 @@ class ProduitTest extends TestCase
             ->getJson(route('produits.historique', $produit));
 
         $response->assertStatus(200)
-            ->assertJsonStructure(['ajustements', 'modifications']);
+            ->assertJsonStructure(['ajustements' => [['date', 'created_at']], 'modifications']);
 
         $this->assertNotEmpty($response->json('ajustements'));
+        // La date métier (d/m/Y) est distincte de created_at (horodatage technique, d/m/Y H:i).
+        $this->assertSame(now()->format('d/m/Y'), $response->json('ajustements.0.date'));
     }
 
     // ── Sécurité multi-agences ────────────────────────────────────────────────
@@ -1196,6 +1474,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $autresSite->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -1235,6 +1514,7 @@ class ProduitTest extends TestCase
         $this->actingAs($employe)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1272,6 +1552,7 @@ class ProduitTest extends TestCase
         $this->actingAs($employe)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $siteInterdit->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -1313,6 +1594,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 50,
                 'motif_type' => 'correction_stock',
             ])
@@ -1345,6 +1627,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1374,6 +1657,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 15,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1404,6 +1688,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 20,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1470,6 +1755,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1477,6 +1763,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site2->id,
+                'date' => now()->toDateString(),
                 'diminuer' => 5,
                 'motif_type' => 'correction_stock',
             ]);
@@ -1614,6 +1901,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'augmenter' => 5,
                 'motif_type' => 'correction_stock',
             ])
@@ -1629,6 +1917,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
+                'date' => now()->toDateString(),
                 'variante_id' => $varianteA->id,
                 'augmenter' => 7,
                 'motif_type' => 'apres_achat',
@@ -1762,5 +2051,299 @@ class ProduitTest extends TestCase
                 ],
             ])
             ->assertStatus(403);
+    }
+
+    // ── Baseline pré-extraction pilote (contrôleurs mono-action Variantes) ──────
+    // Ces tests capturent le comportement ACTUEL de updateVariante/variantesIndex/
+    // variantesBulkUpdate avant leur déplacement vers
+    // app/Http/Controllers/Produits/Variantes/*Controller.php — garde-fous de non-régression,
+    // pas une spécification de ce que le comportement "devrait" être.
+
+    /** Utilisateur de la même organisation, sans `produits.update` — pour distinguer le refus
+     * d'accès intra-organisation du refus cross-organisation déjà couvert ci-dessus. Rattaché
+     * au site par défaut de l'org : un utilisateur sans site est redirigé par
+     * RequireSiteAssigned avant d'atteindre la policy, ce qui fausserait ces tests (cf. régression
+     * onboarding site déjà rencontrée sur ce type de test). */
+    private function utilisateurSansPermissionUpdate(): User
+    {
+        $user = $this->makeUserWithPermissions($this->org, ['produits.read']);
+        $site = Site::where('organization_id', $this->org->id)->first();
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
+    }
+
+    public function test_update_variante_partielle_conserve_les_champs_non_envoyes(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $prixVenteOriginal = (int) $variante->prix_vente;
+        $prixAchatOriginal = (int) $variante->prix_achat;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'is_active' => false,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $variante->id,
+            'is_active' => false,
+            'prix_vente' => $prixVenteOriginal,
+            'prix_achat' => $prixAchatOriginal,
+        ]);
+    }
+
+    public function test_update_variante_ignore_un_sku_envoye_dans_le_payload(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $skuOriginal = $variante->sku;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'sku' => 'AUTRE-SKU-999',
+                'prix_vente' => (int) $variante->prix_vente,
+                'prix_achat' => (int) $variante->prix_achat,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', ['id' => $variante->id, 'sku' => $skuOriginal]);
+    }
+
+    public function test_update_variante_partielle_valide_le_prix_vente_effectif(): void
+    {
+        // makeProduitDecline() crée un produit ACHAT_VENTE avec prix_achat=1000/prix_vente=2000.
+        // On n'envoie QUE prix_vente, sous le prix_achat existant (jamais renvoyé) : la règle
+        // doit être vérifiée sur les valeurs EFFECTIVES (existant + soumis), pas seulement sur
+        // les champs présents dans le payload.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 500,
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertDatabaseMissing('produit_variantes', ['id' => $variante->id, 'prix_vente' => 500]);
+    }
+
+    public function test_update_variante_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 3000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_variantes_index_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->get(route('produits.variantes.index', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [['id' => $variante->id, 'prix_vente' => 3000]],
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_variante_priorise_lautorisation_sur_un_payload_invalide(): void
+    {
+        // Payload invalide (prix_vente <= prix_achat) ET utilisateur non autorisé : l'autorisation
+        // (L929) est vérifiée avant la validation (L932) — doit rester 403, jamais 422.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 1000,
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_update_priorise_lautorisation_sur_un_payload_invalide(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $sansDroit = $this->utilisateurSansPermissionUpdate();
+
+        $this->actingAs($sansDroit)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $variante->id, 'prix_vente' => 900, 'prix_achat' => 900],
+                ],
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_variante_etrangere_avec_prix_invalide_retourne_404_avant_validation(): void
+    {
+        // L'appartenance (abort_unless, L930) est vérifiée avant la validation (L932) : une
+        // variante étrangère reste 404 même si le payload violerait aussi la règle de prix.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $varianteEtrangere]), [
+                'prix_vente' => 500,
+                'prix_achat' => 500,
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_bulk_update_ligne_de_forme_invalide_retourne_422_avant_verification_dappartenance(): void
+    {
+        // Contrairement à l'individuel : la validation de FORME (L1007, sur tout le tableau) a
+        // lieu avant la transaction et donc avant toute vérification d'appartenance par ligne.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteEtrangere->id, 'prix_vente' => 'pas-un-nombre'],
+                ],
+            ])
+            ->assertSessionHasErrors('variantes.0.prix_vente');
+    }
+
+    public function test_bulk_update_ligne_de_forme_valide_mais_etrangere_retourne_404_avant_regle_de_prix(): void
+    {
+        // Forme valide (types corrects) mais variante étrangère ET prix qui violerait la règle
+        // métier si elle était atteinte : le firstOrFail() scopé au produit (L1024-1025, dans la
+        // transaction) précède validerPrixSelonType() (L1031) — toujours 404, jamais 422.
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteEtrangere = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteEtrangere->id, 'prix_vente' => 500, 'prix_achat' => 500],
+                ],
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_bulk_update_rollback_conserve_les_valeurs_dorigine_de_toutes_les_lignes(): void
+    {
+        // Renforce test_bulk_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat() : vérifie
+        // la valeur d'ORIGINE exacte de TOUTES les lignes (pas seulement l'absence de la nouvelle
+        // valeur sur une seule ligne).
+        $produit = $this->makeProduitDecline($this->org);
+        [$varianteA, $varianteB] = $produit->variantes->all();
+        $prixVenteAOriginal = (int) $varianteA->prix_vente;
+        $prixAchatAOriginal = (int) $varianteA->prix_achat;
+        $isActiveAOriginal = $varianteA->is_active;
+        $prixVenteBOriginal = (int) $varianteB->prix_vente;
+        $prixAchatBOriginal = (int) $varianteB->prix_achat;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteA->id, 'prix_vente' => 3000, 'is_active' => false],
+                    ['id' => $varianteB->id, 'prix_vente' => 900, 'prix_achat' => 900],
+                ],
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $varianteA->id,
+            'prix_vente' => $prixVenteAOriginal,
+            'prix_achat' => $prixAchatAOriginal,
+            'is_active' => $isActiveAOriginal,
+        ]);
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $varianteB->id,
+            'prix_vente' => $prixVenteBOriginal,
+            'prix_achat' => $prixAchatBOriginal,
+        ]);
+    }
+
+    public function test_update_variante_retourne_422_json_pour_une_requete_json(): void
+    {
+        // Même route web/Inertia : une requête qui accepte le JSON (Accept: application/json,
+        // posé automatiquement par putJson()) reçoit une erreur 422 JSON, pas une redirection
+        // avec erreurs en session — distinction à préserver telle quelle après extraction.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->putJson(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 500,
+                'prix_achat' => 1000,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('prix_vente');
+    }
+
+    public function test_options_variante_identiques_et_dans_le_meme_ordre_entre_show_edit_et_variantes_index(): void
+    {
+        // varianteOptions() (méthode privée de ProduitController) est appelée par show(), edit()
+        // et variantesIndex() — son extraction vers un formatter partagé ne doit rien changer aux
+        // données ni à l'ordre des options retournées par ces trois pages.
+        $produit = Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit multi-options',
+            'produit_type_id' => $this->typeId('achat_vente'),
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 2000,
+        ]);
+        app(VarianteService::class)->genererVariantes($produit, [
+            ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
+            ['nom' => 'Taille', 'valeurs' => ['S', 'M']],
+        ]);
+        $produit->refresh();
+        $varianteId = $produit->variantes->first()->id;
+
+        $optionsShow = null;
+        $optionsEdit = null;
+        $optionsIndex = null;
+
+        $this->actingAs($this->user)->get(route('produits.show', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsShow, $varianteId) {
+                $variantes = $page->toArray()['props']['produit']['variantes'];
+                $optionsShow = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->actingAs($this->user)->get(route('produits.edit', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsEdit, $varianteId) {
+                $variantes = $page->toArray()['props']['produit']['variantes'];
+                $optionsEdit = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->actingAs($this->user)->get(route('produits.variantes.index', $produit))
+            ->assertInertia(function (Assert $page) use (&$optionsIndex, $varianteId) {
+                $variantes = $page->toArray()['props']['variantes'];
+                $optionsIndex = collect($variantes)->firstWhere('id', $varianteId)['options'];
+            });
+
+        $this->assertNotEmpty($optionsShow);
+        $this->assertSame($optionsShow, $optionsEdit);
+        $this->assertSame($optionsShow, $optionsIndex);
+        $this->assertSame(['Couleur', 'Taille'], array_column($optionsShow, 'option'));
     }
 }

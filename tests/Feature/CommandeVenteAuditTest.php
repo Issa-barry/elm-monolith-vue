@@ -31,7 +31,7 @@ class CommandeVenteAuditTest extends TestCase
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete', 'ventes.annuler']);
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
-        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // Ventes\StoreCommandeVenteController (23/08/2026, cf. CommandeVenteService::
         // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 

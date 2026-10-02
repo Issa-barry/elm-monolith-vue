@@ -12,7 +12,7 @@ use Inertia\Response;
 
 /**
  * CRUD de fonctions RH en self-service, strictement isolé par organisation — mirroring du gating
- * de RoleController (aucune permission granulaire dédiée : écran de paramétrage organisationnel,
+ * des contrôleurs Role\* (aucune permission granulaire dédiée : écran de paramétrage organisationnel,
  * pas une ressource métier CRUD). Une fonction ne contient jamais de permission.
  *
  * Aucune fonction système, aucune suggestion de profil d'accès (décision finale du 2026-08-21) :
@@ -76,7 +76,7 @@ class FonctionRhController extends Controller
 
         // Toujours back() + flash de l'id créé, jamais de redirection vers une autre page : la
         // création se fait exclusivement en popup (écran Fonctions RH ou sélecteur embarqué dans
-        // un formulaire Employé/validation de compte), mirroring CategorieController::store().
+        // un formulaire Employé/validation de compte), mirroring StoreCategorieController.
         return back()
             ->with('success', 'Fonction créée.')
             ->with('created_fonction_rh_id', $fonction->id);

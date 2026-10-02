@@ -24,18 +24,20 @@ use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\PeriodeCalculatorService;
+use App\Services\Tresorerie\DecaissementFicheResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class PaiementPeriodeTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private ?CommissionProcessus $processusVente = null;
 
@@ -515,6 +517,149 @@ class PaiementPeriodeTest extends TestCase
         ]);
     }
 
+    private function makeLivreur(string $nom = 'Mamadou Diallo'): Livreur
+    {
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => $nom,
+            'prenom' => 'Test',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'nom_complet' => $nom,
+            'is_active' => true,
+        ]);
+    }
+
+    /** Période calculée via l'ouverture de la page, puis forcée à VALIDEE (fiches figées). */
+    private function makePeriodeValideeAvecUneFiche(): PaiementPeriode
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $this->makeEnveloppeAvecPart(300000, null, $this->makeLivreur());
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $periode->refresh()->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        return $periode;
+    }
+
+    public function test_bouton_valider_actif_sur_une_periode_calculee(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $this->makeEnveloppeAvecPart(300000, null, $this->makeLivreur());
+        $periode = $this->makePeriode();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CALCULEE->value)
+                ->where('can.valider', true)
+                ->where('validation.possible', true)
+                ->where('validation.raison', null)
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+    }
+
+    public function test_bouton_valider_desactive_sur_une_periode_validee_sans_nouvelle_commission(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('can.valider', true)
+                ->where('validation.possible', false)
+                ->where('validation.raison', 'Période déjà validée — aucune nouvelle commission à valider.')
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+    }
+
+    /**
+     * Période validée ET déjà payée en partie : une commission arrivée ensuite la rouvre quand
+     * même (ADR 0010, point 4) — la fiche payée n'est jamais recalculée, la nouvelle commission
+     * a sa propre fiche.
+     */
+    public function test_commission_arrivee_apres_validation_rouvre_la_periode_payee_sans_toucher_la_fiche_payee(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $payee = $periode->fiches()->firstOrFail();
+        $periode->fiches()->update(['montant_paye' => 1000]);
+
+        $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CALCULEE->value)
+                ->where('validation.possible', true)
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+
+        $this->assertSame(2, PaiementFiche::where('periode_id', $periode->id)->count(), 'la nouvelle commission a sa fiche');
+        $this->assertSame(1000.0, (float) $payee->fresh()->montant_paye, 'la fiche payée est conservée telle quelle');
+        $this->assertSame(1000.0, (float) PaiementFiche::where('periode_id', $periode->id)->sum('montant_paye'));
+    }
+
+    /** Une période clôturée n'est jamais rouverte : la commission tardive y reste signalée. */
+    public function test_commission_arrivee_apres_cloture_est_seulement_signalee(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
+
+        $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CLOTUREE->value)
+                ->where('validation.possible', false)
+                ->where('validation.commissions_hors_fiches.nombre', 1)
+                ->where('validation.commissions_hors_fiches.montant', 45000)
+                ->where('validation.raison', fn (string $raison) => str_contains($raison, 'arrivées après la validation'))
+            );
+
+        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count());
+    }
+
+    /** Sans paiement, la commission tardive rouvre la période à l'ouverture de la page (ADR 0008). */
+    public function test_commission_arrivee_apres_validation_rouvre_la_periode_non_payee(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+
+        $this->makeEnveloppeAvecPart(45000, null, $this->makeLivreur('Oumar Bah'));
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('periode.statut', StatutPeriodePaiement::CALCULEE->value)
+                ->where('validation.possible', true)
+                ->where('validation.commissions_hors_fiches.nombre', 0)
+            );
+
+        $this->assertSame(2, PaiementFiche::where('periode_id', $periode->id)->count(), 'la nouvelle commission a sa fiche');
+        $this->assertNull($periode->fresh()->validated_at);
+    }
+
+    public function test_revalider_une_periode_validee_est_refuse_meme_pour_le_super_admin(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $periode->update(['validated_at' => '2026-06-10 12:00:00']);
+
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $this->user->assignRole('super_admin');
+
+        $this->actingAs($this->user->fresh())
+            ->post(route('comptabilite.periodes.valider', $periode))
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Seule une période calculée peut être validée.');
+
+        $this->assertSame('2026-06-10 12:00:00', $periode->fresh()->validated_at->toDateTimeString());
+    }
+
     public function test_sans_droit_comptabilite_ne_peut_pas_resoudre_une_periode(): void
     {
         Role::firstOrCreate(['name' => 'employe', 'guard_name' => 'web']);
@@ -592,11 +737,14 @@ class PaiementPeriodeTest extends TestCase
         $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
 
         $fiche = PaiementFiche::where('periode_id', $periode->id)->firstOrFail();
+        $siteTresorerie = app(DecaissementFicheResolver::class)->siteTresorerie($fiche);
+        $this->assertNotNull($siteTresorerie, 'La fiche doit avoir une agence de trésorerie (agence ou siège principal).');
+        $this->equiperPayeurEspeces($this->user, $siteTresorerie);
         $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => 300000,
             'mode_paiement' => 'especes',
             'date_paiement' => '2026-06-15',
-        ]);
+        ])->assertSessionHasNoErrors();
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.periodes.cloturer', $periode))

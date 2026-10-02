@@ -13,6 +13,7 @@ enum CategorieDepense: string
     // nouvelle/incohérente, cf. décision produit "commission consultant" 2026-08-22. Couvre
     // tout Prestataire (consultant, machiniste, mécanicien...), pas seulement les consultants.
     case PRESTATAIRE = 'prestataire';
+    case CLIENT = 'client';
 
     public function label(): string
     {
@@ -23,6 +24,7 @@ enum CategorieDepense: string
             self::EMPLOYE => 'Salarié',
             self::INTERNE => 'Interne',
             self::PRESTATAIRE => 'Prestataire',
+            self::CLIENT => 'Client',
         };
     }
 
@@ -35,6 +37,7 @@ enum CategorieDepense: string
             self::EMPLOYE => 'Salarié',
             self::INTERNE => 'Dépense interne',
             self::PRESTATAIRE => 'Prestataire',
+            self::CLIENT => 'Client',
         };
     }
 
@@ -47,6 +50,7 @@ enum CategorieDepense: string
             self::EMPLOYE => 'Cette dépense sera déduite du salaire mensuel du salarié sélectionné.',
             self::INTERNE => 'Aucune retenue ne sera générée. Cette dépense est interne à l\'agence.',
             self::PRESTATAIRE => 'Cette dépense sera déduite de la commission du prestataire sélectionné, si applicable.',
+            self::CLIENT => 'Cette dépense sera déduite du cashback du client sélectionné.',
         };
     }
 
@@ -64,6 +68,7 @@ enum CategorieDepense: string
             self::PROPRIETAIRE => 'proprietaires',
             self::VEHICULE => 'vehicules',
             self::PRESTATAIRE => 'prestataires',
+            self::CLIENT => 'clients',
         };
     }
 
@@ -76,6 +81,7 @@ enum CategorieDepense: string
             self::PROPRIETAIRE => 'commission_proprietaire',
             self::VEHICULE => 'commission_proprietaire',
             self::PRESTATAIRE => 'commission_prestataire',
+            self::CLIENT => 'commission_cashback',
         };
     }
 

@@ -24,6 +24,8 @@ class Site extends Model
         'type',
         'statut',
         'is_siege_principal',
+        'approbation_reception_logistique_obligatoire',
+        'commissions_active',
         'localisation',
         'pays',
         'ville',
@@ -42,6 +44,8 @@ class Site extends Model
             'type' => SiteType::class,
             'statut' => SiteStatut::class,
             'is_siege_principal' => 'boolean',
+            'approbation_reception_logistique_obligatoire' => 'boolean',
+            'commissions_active' => 'boolean',
         ];
     }
 
@@ -185,5 +189,31 @@ class Site extends Model
     public function isActive(): bool
     {
         return $this->statut === SiteStatut::ACTIVE;
+    }
+
+    /**
+     * Garde-fou métier indépendant du statut opérationnel : quand `false`, la cible de commission
+     * `CommissionCibleType::CODE_SITE` n'est plus générée pour ce site (cf.
+     * CommissionEnveloppeGenerator::genererDepuisContexte(), docs/commissions.md COMM-013).
+     * N'affecte JAMAIS les autres bénéficiaires (équipe de livraison, propriétaire, consultant) —
+     * décision produit du 13/09/2026, scope volontairement limité à la seule part du site.
+     */
+    public function commissionsActives(): bool
+    {
+        return (bool) $this->commissions_active;
+    }
+
+    /**
+     * Réglage effectif d'approbation admin de la réception logistique pour CE site — dérogation
+     * du site si explicitement configurée (true/false), sinon repli sur le réglage organisation
+     * (cf. Parametre::isApprobationReceptionLogistiqueObligatoire()). Même principe que
+     * SolvabiliteService::resoudrePlafondVehicule()/resoudrePlafondClient(), sans second flag
+     * "dérogation activée" : `null` sur la colonne suffit à distinguer "pas configuré" de
+     * true/false, contrairement à un seuil entier (0 y serait ambigu).
+     */
+    public function approbationReceptionObligatoireEffective(): bool
+    {
+        return $this->approbation_reception_logistique_obligatoire
+            ?? Parametre::isApprobationReceptionLogistiqueObligatoire($this->organization_id);
     }
 }

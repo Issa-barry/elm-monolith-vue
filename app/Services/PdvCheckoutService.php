@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Enums\CategorieTarifaireVehicule;
+use App\Enums\ClientType;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
@@ -50,7 +52,7 @@ class PdvCheckoutService
                 Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
             }
 
-            // Même règle de solvabilité que le back-office (CommandeVenteController::store()),
+            // Même règle de solvabilité que le back-office (Ventes\StoreCommandeVenteController),
             // sur le même service — le PDV créait auparavant sa facture sans AUCUN contrôle
             // d'impayés, quel que soit le paramétrage de l'organisation (trou identifié le
             // 18/08/2026). Exécuté sous le verrou ci-dessus pour rester fiable en concurrence.
@@ -60,8 +62,28 @@ class PdvCheckoutService
                 $data['client_id'] ?? null,
             );
 
-            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             $client = ! empty($data['client_id']) ? Client::query()->select(['id', 'type'])->find($data['client_id']) : null;
+
+            // Grossiste : tarification catégorie × mode (Enlèvement/Livraison), non pertinente au
+            // comptoir — jamais servi via PDV, cf. docs/grossiste.md. Décision de périmètre
+            // (05/09/2026) : passer par une commande de vente (Ventes\StoreCommandeVenteController), seul
+            // point d'entrée qui connaît le mode de remise.
+            if ($client?->type === ClientType::GROSSISTE) {
+                throw ValidationException::withMessages([
+                    'client_id' => 'Un client Grossiste ne peut pas être servi au comptoir — créez une commande de vente.',
+                ]);
+            }
+
+            // Chargé une fois ici (organisation vérifiée) — sert à la fois à dériver
+            // nature_operation (DISTRIBUTION_CLIENT exige livraison_logistique=true, jamais la
+            // seule présence d'un véhicule, cf. NatureOperation::deriverParDefaut()) et à calculer
+            // l'éligibilité aux commissions selon la nature réellement résolue ci-dessous.
+            $vehiculePourNature = ! empty($data['vehicule_id'])
+                ? Vehicule::query()->where('organization_id', $user->organization_id)->find($data['vehicule_id'])
+                : null;
+            $natureOperation = NatureOperation::deriverParDefaut($client?->type, $vehiculePourNature);
+
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $natureOperation);
             [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule, $client);
 
             $commande = CommandeVente::create([
@@ -73,6 +95,7 @@ class PdvCheckoutService
                 'total_commande' => $total,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
+                'nature_operation' => $natureOperation->value,
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,
@@ -258,7 +281,7 @@ class PdvCheckoutService
             // non — il retombe lui-même sur prix_vente hors du cas fabricable+client. Fabricable
             // + client : ce prix gouverne SEUL le total, sans passer par le mode de tarification
             // véhicule/client (qui basculerait sinon un client Externe entier sur prix_usine,
-            // ignorant le prix_externe qu'on vient de résoudre) — cf. CommandeVenteController::
+            // ignorant le prix_externe qu'on vient de résoudre) — cf. CommandeVenteFormBuilder::
             // buildLignesDataAndTotal() pour le même correctif côté back-office.
             $ligneFabricablePourClient = PrixVenteNatureResolver::estFabricable($variante) && $client;
             $prixVente = PrixVenteNatureResolver::resolve($variante, $client);

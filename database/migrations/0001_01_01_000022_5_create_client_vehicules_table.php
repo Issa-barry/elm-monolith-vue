@@ -25,7 +25,7 @@ return new class extends Migration
             $table->string('chauffeur_nom', 100)->nullable();
             // Téléphone chauffeur facultatif, mais dès qu'il est saisi il est validé/normalisé
             // selon un code pays choisi en liste déroulante (Guinée par défaut) — cf.
-            // ClientVehicleController et PhoneNormalizer.
+            // Clients\{Store,Update}VehiculeClientController et PhoneNormalizer.
             $table->string('chauffeur_telephone', 20)->nullable();
             $table->string('chauffeur_code_pays', 2)->nullable();
             $table->string('chauffeur_code_phone_pays', 10)->nullable();

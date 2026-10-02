@@ -2,10 +2,17 @@
 
 namespace Tests\Feature\Jobs;
 
+use App\Contracts\SmsGateway;
+use App\Enums\CommunicationEvent;
+use App\Enums\CommunicationModule;
+use App\Enums\CommunicationRecipientType;
+use App\Enums\MessageChannel;
 use App\Enums\StatutTransfert;
 use App\Jobs\NotifierLivreursTransfertJob;
+use App\Models\CommunicationRule;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
+use App\Models\MessageLog;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -82,7 +89,7 @@ class NotifierLivreursTransfertJobTest extends TestCase
         $org = Organization::factory()->create();
         [$transfert, $livreurUser] = $this->makeTransfertAvecEquipe($org);
 
-        (new NotifierLivreursTransfertJob($transfert->id, $transfert->reference))->handle();
+        app()->call([new NotifierLivreursTransfertJob($transfert->id, $transfert->reference), 'handle']);
 
         Notification::assertSentTo($livreurUser, TransfertCreeNotification::class);
         Http::assertSent(fn ($request) => str_contains($request->url(), 'exp.host'));
@@ -96,7 +103,7 @@ class NotifierLivreursTransfertJobTest extends TestCase
         $org = Organization::factory()->create();
         [$transfert, $livreurUser] = $this->makeTransfertAvecEquipe($org, livreurPrefs: ['livraisons' => false]);
 
-        (new NotifierLivreursTransfertJob($transfert->id, $transfert->reference))->handle();
+        app()->call([new NotifierLivreursTransfertJob($transfert->id, $transfert->reference), 'handle']);
 
         Notification::assertNotSentTo($livreurUser, TransfertCreeNotification::class);
         Http::assertNothingSent();
@@ -111,9 +118,84 @@ class NotifierLivreursTransfertJobTest extends TestCase
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
         $transfert = $this->makeTransfert($org, $vehicule, null);
 
-        (new NotifierLivreursTransfertJob($transfert->id, $transfert->reference))->handle();
+        app()->call([new NotifierLivreursTransfertJob($transfert->id, $transfert->reference), 'handle']);
 
         Notification::assertNothingSent();
         Http::assertNothingSent();
+    }
+
+    // ── Notifications transactionnelles SMS/WhatsApp (07/09/2026) ──────────────
+
+    public function test_also_sends_a_transactional_sms_to_the_livreur_when_the_rule_is_enabled(): void
+    {
+        Notification::fake();
+        Http::fake(['*' => Http::response(['data' => []], 200)]);
+        $gateway = new class implements SmsGateway
+        {
+            public array $sentTo = [];
+
+            public function isConfigured(): bool
+            {
+                return true;
+            }
+
+            public function send(string $phoneNumber, string $message): ?string
+            {
+                $this->sentTo[] = $phoneNumber;
+
+                return 'fake-id';
+            }
+        };
+        $this->app->instance(SmsGateway::class, $gateway);
+
+        $org = Organization::factory()->create();
+        CommunicationRule::create([
+            'organization_id' => $org->id,
+            'module' => CommunicationModule::LOGISTIQUE,
+            'event' => CommunicationEvent::TRANSFERT_CREE,
+            'recipient_type' => CommunicationRecipientType::LIVREUR,
+            'client_type' => null,
+            'channel' => MessageChannel::SMS,
+            'enabled' => true,
+        ]);
+        [$transfert, $livreurUser] = $this->makeTransfertAvecEquipe($org);
+
+        app()->call([new NotifierLivreursTransfertJob($transfert->id, $transfert->reference), 'handle']);
+
+        $this->assertSame([$livreurUser->telephone], $gateway->sentTo);
+        $log = MessageLog::sole();
+        $this->assertSame('transfert_cree', $log->purpose);
+        $this->assertSame($transfert->getMorphClass(), $log->messageable_type);
+    }
+
+    public function test_does_not_send_a_transactional_sms_when_no_rule_is_configured(): void
+    {
+        Notification::fake();
+        Http::fake(['*' => Http::response(['data' => []], 200)]);
+        $gateway = new class implements SmsGateway
+        {
+            public array $sentTo = [];
+
+            public function isConfigured(): bool
+            {
+                return true;
+            }
+
+            public function send(string $phoneNumber, string $message): ?string
+            {
+                $this->sentTo[] = $phoneNumber;
+
+                return 'fake-id';
+            }
+        };
+        $this->app->instance(SmsGateway::class, $gateway);
+
+        $org = Organization::factory()->create();
+        [$transfert] = $this->makeTransfertAvecEquipe($org);
+
+        app()->call([new NotifierLivreursTransfertJob($transfert->id, $transfert->reference), 'handle']);
+
+        $this->assertEmpty($gateway->sentTo);
+        $this->assertSame(0, MessageLog::count());
     }
 }

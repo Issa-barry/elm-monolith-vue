@@ -33,6 +33,7 @@ class EquipeLivraisonPartageCategorie extends Model
 
     protected $fillable = [
         'equipe_id',
+        'processus_id',
         'categorie_id',
         'livreur_id',
         'part_pourcentage',
@@ -74,6 +75,11 @@ class EquipeLivraisonPartageCategorie extends Model
     public function equipe(): BelongsTo
     {
         return $this->belongsTo(EquipeLivraison::class, 'equipe_id');
+    }
+
+    public function processus(): BelongsTo
+    {
+        return $this->belongsTo(CommissionProcessus::class, 'processus_id');
     }
 
     public function categorie(): BelongsTo

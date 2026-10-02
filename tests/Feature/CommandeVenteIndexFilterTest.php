@@ -141,6 +141,28 @@ class CommandeVenteIndexFilterTest extends TestCase
 
     // ── Véhicule ──────────────────────────────────────────────────────────────
 
+    public function test_index_exposes_vehicle_photo_or_null_for_mobile_consultation(): void
+    {
+        $avecPhoto = $this->makeVehicule(['photo_path' => 'vehicules/camion-test.webp']);
+        $sansPhoto = $this->makeVehicule(['photo_path' => null]);
+
+        foreach ([[$avecPhoto, '/storage/vehicules/camion-test.webp'], [$sansPhoto, null], [null, null]] as [$vehicule, $photoUrl]) {
+            $commande = $this->makeCommande(['vehicule_id' => $vehicule?->id]);
+
+            $this->actingAs($this->user)
+                ->get(route('ventes.index', ['numero_commande' => $commande->reference]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->component('Ventes/Index')
+                    ->has('commandes', 1)
+                    ->where('commandes.0.id', $commande->id)
+                    ->where('commandes.0.vehicule_nom', $vehicule?->nom_vehicule)
+                    ->where('commandes.0.vehicule_immatriculation', $vehicule?->immatriculation)
+                    ->where('commandes.0.vehicule_photo_url', $photoUrl),
+                );
+        }
+    }
+
     public function test_filter_by_vehicule_nom(): void
     {
         $v1 = $this->makeVehicule(['nom_vehicule' => 'Camion Alpha']);

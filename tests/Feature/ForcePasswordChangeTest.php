@@ -11,7 +11,8 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * EnsurePasswordIsNotExpired + ForcePasswordChangeController — un compte avec
+ * EnsurePasswordIsNotExpired + Auth\ForcePasswordChange\{Show,Update}ForcePasswordChangeController
+ * — un compte avec
  * must_change_password=true (cf. InstallApp) ne doit accéder à rien d'autre tant qu'il n'a pas
  * défini son propre mot de passe, y compris en tapant une URL directement.
  */

@@ -45,7 +45,11 @@ export async function creerCommande(
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', { name: /confirmer et créer/i });
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution", cf.
+    // Create.vue::confirmationActionLabel), scopé au dialog (régression E2E corrigée le 31/08/2026).
+    const confirmerEtCreerBtn = page
+        .getByRole('dialog')
+        .getByRole('button', { name: /créer la (commande|distribution)/i });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
     await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, { timeout: 30_000 });
@@ -93,11 +97,15 @@ export async function configurerPartageEquipe(
     await expect(dialog.getByText(new RegExp(categorieNom, 'i'))).toBeVisible({
         timeout: 10_000,
     });
-    await expect(
-        dialog.getByText(
-            new RegExp(`${montantPattern(livraisonMontant)}.*unité.*Livreur`, 'i'),
+    const categorieRow = dialog
+        .getByRole('row')
+        .filter({ hasText: new RegExp(categorieNom, 'i') });
+    await expect(categorieRow).toContainText(
+        new RegExp(
+            `${montantPattern(livraisonMontant)}\\s*GNF\\s*/\\s*${montantPattern(livraisonMontant)}\\s*GNF`,
+            'i',
         ),
-    ).toBeVisible();
+    );
     await expect(dialog.getByText(/répartition complète/i)).toBeVisible({
         timeout: 5_000,
     });
@@ -128,9 +136,10 @@ export async function demarrerEtValiderChargement(page: Page): Promise<void> {
     });
     await expect(chargementDialog).toBeVisible({ timeout: 10_000 });
     await chargementDialog.getByRole('button', { name: /valider le chargement/i }).click();
-    await expect(page.locator('body')).toContainText(/chargement validé|livraison/i, {
-        timeout: 30_000,
-    });
+    // « livraison » figure déjà sur la page avant validation (« Vente avec livraison ») : on
+    // attend que l'action ait disparu, sinon l'encaissement reste refusé (chargement non validé).
+    await expect(chargementDialog).toBeHidden({ timeout: 30_000 });
+    await expect(validerChargementBtn).toBeHidden({ timeout: 30_000 });
 }
 
 /**
@@ -168,7 +177,7 @@ export async function encaisserFacture(
     }
     await montantInput.press('Tab');
 
-    const validerEncaissement = dialog.getByRole('button', { name: /confirmer le paiement/i });
+    const validerEncaissement = dialog.getByRole('button', { name: /^confirmer$/i });
     await expect(validerEncaissement).toBeEnabled({ timeout: 5_000 });
     await validerEncaissement.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });

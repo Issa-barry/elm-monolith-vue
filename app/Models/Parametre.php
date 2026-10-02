@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,7 +78,7 @@ class Parametre extends Model
      * l'organisation suivent la même politique"), et jamais appliqué aux transferts ni aux
      * ajustements manuels (cf. TransfertLogistiqueService::checkDisponibiliteStockSource(),
      * toujours strict). Éditée depuis Paramètres > Paramètres produits (cf.
-     * StockAjustementController), pas depuis l'écran générique ParametreController (groupe
+     * StockAjustementController), pas depuis l'écran générique EditParametreController (groupe
      * GROUPE_VENTES exclu de cet écran) — le groupe ne détermine que la catégorisation, pas
      * l'écran d'édition.
      */
@@ -98,6 +99,34 @@ class Parametre extends Model
 
     public const CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE = 'ventes_declencheur_commission_logistique';
 
+    /**
+     * Niveau de confirmation des annulations exceptionnelles (cf. AnnulationExceptionnelleService,
+     * ModeConfirmationAnnulationExceptionnelle) — défaut EMAIL_CODE (décision produit du
+     * 24/09/2026) : une organisation qui n'a jamais configuré ce paramètre exige le code envoyé
+     * par e-mail. Modifiable uniquement avec `parametres.update` ET `ventes.annuler_exceptionnel`.
+     */
+    public const CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION = 'ventes_annulation_exceptionnelle_confirmation';
+
+    /**
+     * Sous déclencheur RECEPTION_EFFECTUEE : gouverne si l'admin doit explicitement cliquer
+     * "Approuver la réception" avant que CommissionTriggerService::onTransfertReceptionEffectuee()
+     * ne soit invoqué, ou si TransfertLogistiqueService::avancerStatut() l'invoque lui-même dès
+     * que le transfert atteint RECEPTION (validation_reception mis à 'accord' automatiquement,
+     * validated_by null pour distinguer une auto-approbation d'une décision humaine). Sans effet
+     * sous CHARGEMENT_VALIDE : onTransfertReceptionEffectuee() y est déjà un no-op, la commission
+     * étant née au départ — cf. COMM-007. N'a jamais été configurable avant le 07/09/2026 :
+     * l'approbation admin était systématiquement obligatoire, ce qui reste le défaut (true).
+     *
+     * Depuis le 07/09/2026, ce paramètre n'est plus que le DÉFAUT organisation : un site peut
+     * s'en écarter via sa propre colonne `sites.approbation_reception_logistique_obligatoire`
+     * (dérogation explicite, résolue par le SITE DESTINATION du transfert — cf.
+     * Site::approbationReceptionObligatoireEffective(),
+     * TransfertLogistiqueService::approbationReceptionObligatoire()). Cette méthode
+     * (`Parametre::isApprobationReceptionLogistiqueObligatoire()`) reste le SEUL point lu quand
+     * aucun site n'a de dérogation configurée pour lui.
+     */
+    public const CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE = 'logistique_approbation_reception_obligatoire';
+
     public const CLE_MAX_PHOTOS_PRODUIT = 'max_photos_produit';
 
     public const CLE_MAX_OPTIONS_PRODUIT = 'max_options_produit';
@@ -107,8 +136,8 @@ class Parametre extends Model
     public const CLE_MAX_VARIANTES_PRODUIT = 'max_variantes_produit';
 
     // ── Thème global (preset PrimeVue / couleur principale / surface) ──────────
-    // Administré via ThemeController, jamais via ParametreController générique
-    // (cf. ParametreController::update() qui refuse explicitement ce groupe) —
+    // Administré via ThemeController, jamais via EditParametreController générique
+    // (cf. UpdateParametreController::__invoke() qui refuse explicitement ce groupe) —
     // la validation contre la politique de l'environnement (ThemePolicyService)
     // ne doit avoir qu'un seul point d'entrée.
     public const CLE_THEME_PRESET = 'theme_preset';
@@ -184,6 +213,8 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_STOCK_NEGATIF,
             self::CLE_DECLENCHEUR_COMMISSION_VENTE,
             self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE,
+            self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION,
+            self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE,
             self::CLE_MAX_PHOTOS_PRODUIT,
             self::CLE_MAX_OPTIONS_PRODUIT,
             self::CLE_MAX_VALEURS_OPTION,
@@ -365,6 +396,27 @@ class Parametre extends Model
         return DeclencheurCommissionLogistique::tryFrom($valeur) ?? DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE;
     }
 
+    public static function getModeConfirmationAnnulationExceptionnelle(string $orgId): ModeConfirmationAnnulationExceptionnelle
+    {
+        $valeur = self::get($orgId, self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION, ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE->value);
+
+        return ModeConfirmationAnnulationExceptionnelle::tryFrom((string) $valeur) ?? ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE;
+    }
+
+    public static function setModeConfirmationAnnulationExceptionnelle(string $orgId, ModeConfirmationAnnulationExceptionnelle $mode): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION],
+            [
+                'valeur' => $mode->value,
+                'type' => self::TYPE_STRING,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Niveau de confirmation des annulations exceptionnelles (code e-mail ou confirmation simple)',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_ANNULATION_EXCEPTIONNELLE_CONFIRMATION));
+    }
+
     public static function setDeclencheurCommissionLogistique(string $orgId, DeclencheurCommissionLogistique $declencheur): void
     {
         static::updateOrCreate(
@@ -377,6 +429,30 @@ class Parametre extends Model
             ],
         );
         Cache::forget(self::cacheKey($orgId, self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE));
+    }
+
+    /**
+     * Défaut OUI (true) : comportement historique — l'approbation admin de la réception reste
+     * toujours obligatoire pour une organisation n'ayant jamais explicitement configuré ce
+     * paramètre (cf. set() ci-dessous, qui écrit une ligne réelle en base).
+     */
+    public static function isApprobationReceptionLogistiqueObligatoire(string $orgId): bool
+    {
+        return (bool) self::get($orgId, self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE, true);
+    }
+
+    public static function setApprobationReceptionLogistiqueObligatoire(string $orgId, bool $valeur): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE],
+            [
+                'valeur' => $valeur ? '1' : '0',
+                'type' => self::TYPE_BOOLEAN,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Exiger une approbation admin de la réception avant de générer la commission logistique (sous déclencheur RECEPTION_EFFECTUEE)',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_LOGISTIQUE_APPROBATION_RECEPTION_OBLIGATOIRE));
     }
 
     public static function getMaxPhotosProduit(string $orgId): int

@@ -7,7 +7,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Règle de cohérence de la dérogation d'impayés — partagée par VehiculeController et
- * ClientController pour ne jamais laisser deux implémentations indépendantes diverger (cf.
+ * UpdateDerogationClientController pour ne jamais laisser deux implémentations indépendantes diverger (cf.
  * rapport du 28/08/2026 : le principe est identique pour les deux entités, seul le libellé du
  * message change). Extrait de VehiculeController::ensureDerogationCoherente() (décision produit
  * du 22/08/2026), désormais réutilisé tel quel pour les clients.

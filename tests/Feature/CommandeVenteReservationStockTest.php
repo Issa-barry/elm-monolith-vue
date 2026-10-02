@@ -45,7 +45,7 @@ class CommandeVenteReservationStockTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'pdv.create']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,

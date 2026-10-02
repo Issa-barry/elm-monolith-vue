@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\NatureMouvementFonds;
 use App\Enums\StatutMouvementFonds;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Document métier du transfert d'argent entre deux sites (agence -> siège =
@@ -17,6 +19,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Chaque transition transactionnelle est portée par MouvementFondsService,
  * jamais directement par le modèle (garde-fous idempotence/permissions/
  * verrouillage de période comptable centralisés là-bas).
+ *
+ * `nature` distingue le mouvement entre agences (`inter_sites`, historique) du versement d'une
+ * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site) et du
+ * règlement inter-agences (`reglement_agences`, lié à des encaissements précis) — cf.
+ * NatureMouvementFonds.
  */
 class MouvementFonds extends Model
 {
@@ -27,6 +34,7 @@ class MouvementFonds extends Model
     protected $fillable = [
         'organization_id',
         'reference',
+        'nature',
         'site_origine_id',
         'site_destination_id',
         'compte_tresorerie_origine_id',
@@ -59,6 +67,7 @@ class MouvementFonds extends Model
             'echeance_debut' => 'date',
             'echeance_fin' => 'date',
             'statut' => StatutMouvementFonds::class,
+            'nature' => NatureMouvementFonds::class,
         ];
     }
 
@@ -122,6 +131,12 @@ class MouvementFonds extends Model
         return $this->belongsTo(PieceComptable::class, 'piece_comptable_reception_id');
     }
 
+    /** Encaissements reversés par un règlement inter-agences (vide pour les autres natures). */
+    public function lignesReglement(): HasMany
+    {
+        return $this->hasMany(MouvementFondsEncaissement::class, 'mouvement_fonds_id');
+    }
+
     public function createur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -157,6 +172,30 @@ class MouvementFonds extends Model
     public function isTerminal(): bool
     {
         return $this->statut->isTerminal();
+    }
+
+    public function isInterne(): bool
+    {
+        return $this->nature === NatureMouvementFonds::INTERNE_CAISSES;
+    }
+
+    public function isReglementAgences(): bool
+    {
+        return $this->nature === NatureMouvementFonds::REGLEMENT_AGENCES;
+    }
+
+    /**
+     * Versement de caisse dont la réception a été confirmée par la personne qui l'a envoyé —
+     * autorisé depuis le 27/09/2026 si son rôle a `tresorerie.recevoir` (ADR 0001) : simple
+     * information de traçabilité affichée dans Mouvements (« Confirmé par l'expéditeur »), jamais
+     * un blocage.
+     */
+    public function confirmeParExpediteur(): bool
+    {
+        return $this->isInterne()
+            && $this->sent_by !== null
+            && $this->received_by !== null
+            && $this->sent_by === $this->received_by;
     }
 
     /** Remise agence -> siège : le site d'origine n'est pas de type siège, la destination l'est. */

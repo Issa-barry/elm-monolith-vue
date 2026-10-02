@@ -1121,7 +1121,8 @@
                                             "type": [
                                                 "string",
                                                 "null"
-                                            ]
+                                            ],
+                                            "description": "R\u00e9solution centralis\u00e9e dans QrPayloadResolver (cf. sa docblock) \u2014 avant\nextraction, cette m\u00e9thode cherchait le proprietaire/livreur par t\u00e9l\u00e9phone\nSANS jamais tenter le user_id d'abord, et sans aucune restriction\nd'organisation ni de \"profil non r\u00e9clam\u00e9\" (cf. audit backend du 26/08/2026)."
                                         },
                                         "context": {
                                             "type": "object",
@@ -2556,7 +2557,9 @@
                                                         "Livr\u00e9e",
                                                         "\u00c0 encaisser",
                                                         "Cl\u00f4tur\u00e9e",
-                                                        "Annul\u00e9e"
+                                                        "Annul\u00e9e",
+                                                        "Retourn\u00e9e",
+                                                        "Annul\u00e9e (erreur de saisie)"
                                                     ]
                                                 },
                                                 "site_source": {
@@ -3367,6 +3370,8 @@
                                 "facturation",
                                 "cloturee",
                                 "annulee",
+                                "retournee",
+                                "annulee_erreur_saisie",
                                 null
                             ]
                         }
@@ -5478,7 +5483,7 @@
             },
             "UpdateProfileRequest": {
                 "type": "object",
-                "description": "Champs modifiables par le titulaire du compte lui-m\u00eame \u2014 uniquement la\nlocalisation. Volontairement exclus (d\u00e9cision du 26/08/2026, cf. rapport) :\nnom/prenom (identit\u00e9 civile), telephone/email (identifiants de connexion,\nunicit\u00e9 par organisation \u00e0 revalider), raison_sociale/type (identit\u00e9 l\u00e9gale)\net is_active (jamais en self-service) \u2014 ces champs restent r\u00e9serv\u00e9s au\nbackoffice, coh\u00e9rent avec la s\u00e9paration d\u00e9j\u00e0 en place partout ailleurs dans\nl'application entre \u00e9dition \"propri\u00e9taire\" (self-service) et \u00e9dition \"staff\"\n(ProprietaireController, ClientController...).",
+                "description": "Champs modifiables par le titulaire du compte lui-m\u00eame \u2014 uniquement la\nlocalisation. Volontairement exclus (d\u00e9cision du 26/08/2026, cf. rapport) :\nnom/prenom (identit\u00e9 civile), telephone/email (identifiants de connexion,\nunicit\u00e9 par organisation \u00e0 revalider), raison_sociale/type (identit\u00e9 l\u00e9gale)\net is_active (jamais en self-service) \u2014 ces champs restent r\u00e9serv\u00e9s au\nbackoffice, coh\u00e9rent avec la s\u00e9paration d\u00e9j\u00e0 en place partout ailleurs dans\nl'application entre \u00e9dition \"propri\u00e9taire\" (self-service) et \u00e9dition \"staff\"\n(ProprietaireController, UpdateClientController...).",
                 "properties": {
                     "pays": {
                         "type": [

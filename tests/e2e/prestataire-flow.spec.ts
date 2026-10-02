@@ -60,7 +60,12 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
 }) => {
     const prenom = await createPrestataire(page, `${Date.now()}`.slice(-6));
 
-    const search = await getVisibleSearchInput(page);
+    // Re-récupéré via getVisibleSearchInput() à chaque recherche (jamais le même
+    // Locator réutilisé après une navigation) : sur une page DataFilters
+    // trigger-only, ce Locator est scopé au drawer Filtres, qui se referme à
+    // chaque rechargement — un `.fill()` dessus après coup n'a plus rien à cibler
+    // et attend indéfiniment (pas de timeout explicite), jusqu'au timeout du test.
+    let search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -90,6 +95,7 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
     });
 
     await page.goto('/backoffice/prestataires');
+    search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -105,7 +111,7 @@ test('create prestataire -> delete from list', async ({ page }) => {
         `${Date.now()}${randomDigits(2)}`.slice(-8),
     );
 
-    const search = await getVisibleSearchInput(page);
+    let search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -124,6 +130,7 @@ test('create prestataire -> delete from list', async ({ page }) => {
         .click();
 
     await page.waitForLoadState('networkidle');
+    search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

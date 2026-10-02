@@ -45,7 +45,7 @@ function submit() {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-            // Flashée par CategorieController::store() — cf. HandleInertiaRequests::share().
+            // Flashée par StoreCategorieController — cf. HandleInertiaRequests::share().
             const page = usePage();
             const createdId = (page.props as any).flash
                 ?.created_categorie_id as string | undefined;

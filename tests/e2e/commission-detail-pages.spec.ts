@@ -4,20 +4,37 @@ import { closeFilterDrawerIfOpen, login } from './helpers';
 test.setTimeout(120_000);
 
 /**
- * Vérifie que les 3 pages détail commission (Vente / Logistique / Propriétaire)
- * partagent désormais la même UI : 4 cartes résumé maximum, mêmes tabs, même dialog de
- * paiement. La logistique s'appuie sur les transferts créés via UI dans
- * global-setup.ts (aucun seeder). Vente et Propriétaire dépendent de
- * CommissionsSeeder, désactivé dans DatabaseSeeder — ces deux tests prennent
- * donc la première ligne disponible et se "skip" proprement si la liste est
- * vide plutôt que d'échouer sur des données qui n'existent pas.
+ * Vérifie que les pages détail commission (Livreurs [vente + transferts logistique
+ * unifiés] / Propriétaire) partagent la même UI : 4 cartes résumé maximum, mêmes
+ * tabs, même dialog de paiement. Depuis la fusion Vente/Logistique du 04/09/2026
+ * (cf. docs/commissions.md, section Historique/héritage) : l'écran dédié
+ * `/commissions/logistique` est un legacy sans point d'entrée UI qui ne reçoit plus
+ * aucune nouvelle donnée — toute commission issue d'un transfert logistique
+ * apparaît désormais sur `/commissions/vente` ("Commissions des livreurs"), au même
+ * titre qu'une commission de vente, avec la provenance indiquée par la colonne/
+ * filtre "Processus". Les tests logistique ciblent donc cette même URL.
+ *
+ * La logistique s'appuie sur les transferts créés via UI dans global-setup.ts
+ * (aucun seeder). Vente et Propriétaire dépendent de CommissionsSeeder, désactivé
+ * dans DatabaseSeeder — ces deux tests prennent donc la première ligne disponible
+ * et se "skip" proprement si la liste est vide plutôt que d'échouer sur des
+ * données qui n'existent pas.
  *
  * Les tests logistique ciblent Thierno SALL (elm-2, 4 800 GNF impayé) plutôt
- * qu'Aissatou BALDÉ car logistique-commission-flow.spec.ts paie intégralement
- * Aissatou — Thierno reste impayé quelle que soit l'ordre d'exécution parallèle.
+ * qu'Aissatou BALDÉ car logistique-flow.spec.ts paie intégralement Aissatou —
+ * Thierno reste impayé quelle que soit l'ordre d'exécution parallèle.
  */
 
 const TAB_LABELS = ['Informations', 'Dépenses', 'Paiements', 'Historique'];
+
+/**
+ * Ouvre la fiche d'un livreur depuis la liste « Commissions des livreurs » en cliquant sur la
+ * cellule du nom : un clic au centre de la ligne peut tomber sur une cellule Véhicule/Processus/
+ * Statut en `@click.stop` (selon la largeur des colonnes), et la navigation n'a alors pas lieu.
+ */
+async function ouvrirDetailLivreur(row: import('@playwright/test').Locator) {
+    await row.locator('td').nth(1).click();
+}
 
 async function assertSummaryCardsAndTabs(
     page: import('@playwright/test').Page,
@@ -51,8 +68,11 @@ async function assertSummaryCardsAndTabs(
     }
 
     for (const label of TAB_LABELS) {
+        // CommissionDetailTabs.vue rend des <button role="tab"> dans un tablist ARIA —
+        // le rôle accessible calculé est "tab" (le role explicite prime sur l'implicite
+        // du <button>), pas "button".
         await expect(
-            page.getByRole('button', { name: label, exact: false }).first(),
+            page.getByRole('tab', { name: label, exact: false }).first(),
         ).toBeVisible();
     }
 }
@@ -153,7 +173,9 @@ test('les quatre listes de commissions partagent le même socle et conservent le
     const pages = [
         {
             path: '/backoffice/comptabilite/commissions/vente',
-            title: /commissions? des livreurs sur les ventes/i,
+            // "Commissions des livreurs" depuis la fusion Vente/Logistique du 04/09/2026
+            // (cf. docblock en tête de fichier) — plus de mention "sur les ventes".
+            title: /^commissions des livreurs$/i,
             filters: ['Statut', 'Période'],
         },
         {
@@ -249,40 +271,35 @@ test('Commission propriètaire — compteur compact et fenêtre des véhicules c
     await expect(dialog).toBeHidden();
 });
 
-test('détail Commission logistique — 4 cartes, tabs, dialog paiement', async ({
+test('détail Commission livreur (transfert logistique) — 4 cartes, tabs, jamais de paiement direct', async ({
     page,
 }) => {
     await login(page);
-    await page.goto('/backoffice/comptabilite/commissions/logistique');
+    // Écran dédié "Logistique" fusionné dans "Commissions des livreurs" (cf. docblock
+    // en tête de fichier) — la commission de transfert de Thierno y apparaît désormais.
+    await page.goto('/backoffice/comptabilite/commissions/vente');
 
     const row = page
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await row.click();
+    await ouvrirDetailLivreur(row);
 
     await expect(page).toHaveURL(
-        /\/comptabilite\/commissions\/logistique\/livreurs\/[a-z0-9]+$/,
+        /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Dépenses');
+    await assertSummaryCardsAndTabs(page, 'Dépenses', true);
 
     // Onglet Dépenses désormais disponible pour la logistique.
-    await page.getByRole('button', { name: 'Dépenses', exact: false }).click();
+    await page.getByRole('tab', { name: 'Dépenses', exact: false }).click();
     await expect(page.locator('body')).toBeVisible();
 
-    // Bouton Payer présent (solde impayé) et ouvre le dialog partagé.
-    const payButton = page.getByRole('button', { name: /^payer/i });
-    await expect(payButton).toBeVisible({ timeout: 10_000 });
-    await payButton.click();
-
-    const dialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /Thierno/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.getByText(/solde à payer/i)).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Jamais de bouton Payer ici, même avec un reste à payer : le paiement passe uniquement
+    // par Comptabilité > Fiches de paiement (cf. CommissionVenteController::showLivreur()).
+    await expect(page.getByText(/reste à payer/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^payer/i })).toHaveCount(0);
 });
 
 test('détail Commission vente — 4 cartes et tabs identiques', async ({
@@ -298,7 +315,7 @@ test('détail Commission vente — 4 cartes et tabs identiques', async ({
         'Aucun bénéficiaire seedé pour Commission vente dans cet environnement (CommissionsSeeder désactivé).',
     );
 
-    await row.click();
+    await ouvrirDetailLivreur(row);
 
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
@@ -345,7 +362,7 @@ test('détail Commission propriétaire — libellé « Dépenses véhicules »',
 
     await assertSummaryCardsAndTabs(page, 'Dépenses véhicules', true);
 
-    await page.getByRole('button', { name: 'Dépenses', exact: false }).click();
+    await page.getByRole('tab', { name: 'Dépenses', exact: false }).click();
     await expect(page.locator('body')).toContainText(
         /véhicules|aucune dépense/i,
     );
@@ -370,7 +387,7 @@ test('filtres globaux Commission vente — URL persiste et Réinitialiser foncti
         'Aucun bénéficiaire seedé pour Commission vente dans cet environnement (CommissionsSeeder désactivé).',
     );
 
-    await row.click();
+    await ouvrirDetailLivreur(row);
     await expect(page).toHaveURL(
         /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
         { timeout: 20_000 },
@@ -402,19 +419,21 @@ test('filtres globaux Commission vente — URL persiste et Réinitialiser foncti
     await expect(page).not.toHaveURL(/periode=/, { timeout: 15_000 });
 });
 
-test('filtres globaux présents et identiques sur Commission logistique et propriétaire', async ({
+test('filtres globaux présents et identiques sur Commission livreur (logistique) et propriétaire', async ({
     page,
 }) => {
     await login(page);
 
-    await page.goto('/backoffice/comptabilite/commissions/logistique');
+    // Écran dédié "Logistique" fusionné dans "Commissions des livreurs" (cf. docblock
+    // en tête de fichier) — la commission de transfert de Thierno y apparaît désormais.
+    await page.goto('/backoffice/comptabilite/commissions/vente');
     const logistiqueRow = page
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(logistiqueRow).toBeVisible({ timeout: 20_000 });
-    await logistiqueRow.click();
+    await ouvrirDetailLivreur(logistiqueRow);
     await expect(page).toHaveURL(
-        /\/comptabilite\/commissions\/logistique\/livreurs\/[a-z0-9]+$/,
+        /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
         { timeout: 20_000 },
     );
     await expect(page.getByTestId('commission-global-filters')).toBeVisible({

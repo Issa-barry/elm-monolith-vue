@@ -2,9 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Enums\CommunicationEvent;
+use App\Enums\CommunicationModule;
 use App\Models\CommandeVente;
 use App\Models\Livreur;
 use App\Notifications\CommandeValideeNotification;
+use App\Services\Communications\TransactionalCommunicationDispatcher;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
 use Illuminate\Bus\Queueable;
@@ -26,6 +29,15 @@ use Illuminate\Queue\SerializesModels;
  * Collecte destinataires/préférences/push centralisée dans
  * NotificationDispatcher — avant ce correctif, cette logique était dupliquée
  * ici (et absente de NotifierLivreursTransfertJob).
+ *
+ * Depuis le 07/09/2026 (cf. rapport notifications de commande), déclenche
+ * AUSSI les notifications transactionnelles SMS/WhatsApp configurables (cf.
+ * TransactionalCommunicationDispatcher) pour l'événement `commande_confirmee`
+ * — même point d'accroche métier que le push ci-dessus (mêmes livreurs,
+ * réutilise la collection déjà chargée), mais logique de règles/canal
+ * totalement séparée : NotificationDispatcher exige un compte User connecté,
+ * le dispatcher transactionnel résout le téléphone directement sur Livreur,
+ * indépendamment d'un compte.
  */
 class NotifierLivreursCommandeVenteJob implements ShouldQueue
 {
@@ -38,7 +50,7 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
         private readonly string $reference,
     ) {}
 
-    public function handle(): void
+    public function handle(TransactionalCommunicationDispatcher $communications): void
     {
         $commande = CommandeVente::with(['site:id,nom', 'vehicule.equipe.livreurs'])
             ->find($this->commandeId);
@@ -63,5 +75,15 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
                 'data' => ['type' => 'commande_vente_validee', 'commande_id' => $this->commandeId],
             ],
         );
+
+        foreach ($livreurs as $livreur) {
+            $communications->notifierLivreur(
+                CommunicationModule::VENTES,
+                CommunicationEvent::COMMANDE_CONFIRMEE,
+                $livreur,
+                $commande,
+                $this->reference,
+            );
+        }
     }
 }

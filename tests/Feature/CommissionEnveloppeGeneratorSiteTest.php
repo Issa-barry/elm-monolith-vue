@@ -3,13 +3,16 @@
 namespace Tests\Feature;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
+use App\Enums\PrestataireType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
@@ -18,6 +21,8 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
+use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -84,6 +89,31 @@ class CommissionEnveloppeGeneratorSiteTest extends TestCase
             'effective_from' => now()->subDay()->toDateString(),
             'statut' => 'active',
         ]);
+    }
+
+    private function creerConsultant(): Prestataire
+    {
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Abdoulaye',
+        ]);
+
+        $prestataire = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'type' => PrestataireType::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+
+        CommissionConsultantAffectation::create([
+            'organization_id' => $this->org->id,
+            'prestataire_id' => $prestataire->id,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+
+        return $prestataire;
     }
 
     /** @return array{vehicule: Vehicule} véhicule minimal requis par le moteur, sans lien avec le site testé. */
@@ -351,5 +381,134 @@ class CommissionEnveloppeGeneratorSiteTest extends TestCase
         $part->refresh();
         $this->assertEqualsWithDelta($montantAvant, (float) $part->montant_brut, 0.01);
         $this->assertSame($this->site->id, $part->beneficiaire_id);
+    }
+
+    // ── commissions_active (COMM-013, garde-fou par site — cf. docs/commissions.md) ────────────
+
+    /** @test */
+    public function site_commissions_desactivees_bloque_uniquement_la_cible_site(): void
+    {
+        $this->site->update(['commissions_active' => false]);
+
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_SITE, 200, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600, CommissionScopeType::CATEGORIE, $categorie->id);
+        $consultant = $this->creerConsultant();
+        $this->creerRegle(CommissionCibleType::CODE_CONSULTANT, 100, CommissionScopeType::CATEGORIE, $categorie->id, $consultant->id);
+
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, $this->site, [[$produit, 3]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        // Cible SITE bloquée par le réglage du site : aucune enveloppe.
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id, 'cible_type' => CommissionCibleType::CODE_SITE,
+        ]);
+        // Propriétaire et Consultant : totalement épargnés par le réglage du site, générés
+        // normalement (décision produit 13/09/2026 — ce réglage ne prive jamais un tiers externe
+        // de sa propre commission).
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id, 'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+        ]);
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id, 'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+        ]);
+    }
+
+    /**
+     * Régression (bug repéré en usage réel le 13/09/2026, corrigé le jour même) : la première
+     * version traitait un site désactivé comme une résolution ratée (message dans $erreurs), ce
+     * qui plaçait systématiquement la tentative en PARTIEL. Or `CommandeVente::
+     * commissionsPretesPourCloture()` n'autorise la clôture que sous SUCCES — un site désactivé,
+     * configuration délibérée et permanente, bloquait alors ad vitam toute commande de ce site,
+     * avec un "Relancer la génération" voué à échouer indéfiniment. La cible SITE doit être
+     * traitée comme si le site n'existait pas pour la commission, jamais comme un échec.
+     */
+    /** @test */
+    public function site_commissions_desactivees_ne_place_jamais_la_tentative_en_partiel(): void
+    {
+        $this->site->update(['commissions_active' => false]);
+
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_SITE, 200, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600, CommissionScopeType::CATEGORIE, $categorie->id);
+
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, $this->site, [[$produit, 3]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $this->assertDatabaseHas('commission_generation_attempts', [
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->processus->id,
+            'statut' => CommissionGenerationStatut::SUCCES->value,
+            'motif_erreur' => null,
+        ]);
+    }
+
+    /** @test */
+    public function desactivation_apres_generation_ne_supprime_ni_nannule_lenveloppe_deja_creee(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_SITE, 200, CommissionScopeType::CATEGORIE, $categorie->id);
+        $produit = $this->makeProduit($categorie->id);
+
+        ['vehicule' => $vehicule1] = $this->makeVehiculeAvecEquipe();
+        $commandeAvant = $this->creerCommandeAvecLignes($vehicule1, $this->site, [[$produit, 2]]);
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commandeAvant);
+
+        $enveloppeAvant = CommissionEnveloppe::where('source_id', $commandeAvant->id)
+            ->where('cible_type', CommissionCibleType::CODE_SITE)->firstOrFail();
+        $montantAvant = (float) $enveloppeAvant->montant_total;
+
+        // Désactivation du site APRÈS coup — ne doit jamais toucher ce qui existe déjà.
+        $this->site->update(['commissions_active' => false]);
+
+        $statutAvant = $enveloppeAvant->statut;
+        $enveloppeAvant->refresh();
+        $this->assertEquals($statutAvant, $enveloppeAvant->statut, 'le statut de l\'enveloppe existante ne doit jamais changer suite à la désactivation du site');
+        $this->assertEqualsWithDelta($montantAvant, (float) $enveloppeAvant->montant_total, 0.01);
+        $this->assertDatabaseHas('commission_enveloppes', ['id' => $enveloppeAvant->id]);
+
+        // Une NOUVELLE opération, elle, ne génère plus rien pour la cible SITE.
+        ['vehicule' => $vehicule2] = $this->makeVehiculeAvecEquipe();
+        $commandeApres = $this->creerCommandeAvecLignes($vehicule2, $this->site, [[$produit, 2]]);
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commandeApres);
+
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commandeApres->id, 'cible_type' => CommissionCibleType::CODE_SITE,
+        ]);
+    }
+
+    /** @test */
+    public function reactivation_permet_de_nouveau_la_generation_pour_les_nouvelles_operations(): void
+    {
+        $this->site->update(['commissions_active' => false]);
+
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_SITE, 200, CommissionScopeType::CATEGORIE, $categorie->id);
+        $produit = $this->makeProduit($categorie->id);
+
+        ['vehicule' => $vehicule1] = $this->makeVehiculeAvecEquipe();
+        $commandePendantDesactivation = $this->creerCommandeAvecLignes($vehicule1, $this->site, [[$produit, 2]]);
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commandePendantDesactivation);
+
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commandePendantDesactivation->id, 'cible_type' => CommissionCibleType::CODE_SITE,
+        ]);
+
+        $this->site->update(['commissions_active' => true]);
+
+        ['vehicule' => $vehicule2] = $this->makeVehiculeAvecEquipe();
+        $commandeApresReactivation = $this->creerCommandeAvecLignes($vehicule2, $this->site, [[$produit, 2]]);
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commandeApresReactivation);
+
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commandeApresReactivation->id, 'cible_type' => CommissionCibleType::CODE_SITE,
+        ]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -9,27 +10,6 @@ use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
-    private const RESOURCES = [
-        // Personnes
-        'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
-        // Véhicules & logistique terrain
-        'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
-        // Commerce
-        'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
-        // Opérations
-        'logistique', 'transferts', 'receptions',
-        // Finances
-        'depenses', 'comptabilite', 'journal-financier', 'tresorerie',
-        // RH
-        'rh-employes', 'rh-contrats', 'rh-paie',
-        // Administration
-        'users',
-        // Paramètres
-        'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
-    ];
-
-    private const ACTIONS = ['create', 'read', 'update', 'delete'];
-
     /**
      * Ne crée JAMAIS de compte de démo, ni d'organisation — sécurité indépendante d'APP_ENV,
      * garantie par le fait que ce seeder ne touche plus qu'à des données globales (permissions,
@@ -60,67 +40,17 @@ class RolesAndPermissionsSeeder extends Seeder
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         // ── 1. Permissions ────────────────────────────────────────────────────
-        foreach (self::RESOURCES as $resource) {
-            foreach (self::ACTIONS as $action) {
-                Permission::firstOrCreate(['name' => "{$resource}.{$action}"]);
-            }
+        // Source de vérité unique : App\Support\Permissions\PermissionCatalog (CRUD +
+        // standalone) — ne plus lister les permissions à la main ici, cf. sa docblock.
+        foreach (PermissionCatalog::allPermissionNames() as $name) {
+            Permission::firstOrCreate(['name' => $name]);
         }
-
-        // Permissions standalone (hors matrice CRUD standard)
-        // — Existantes —
-        Permission::firstOrCreate(['name' => 'logistique.commission.verser']);
-        Permission::firstOrCreate(['name' => 'ventes.qte.update']);
-        Permission::firstOrCreate(['name' => 'ventes.prix.update']);
-        Permission::firstOrCreate(['name' => 'rh-paie.validate']);
-        Permission::firstOrCreate(['name' => 'rh-paie.pay']);
-        Permission::firstOrCreate(['name' => 'rh-paie.close']);
-        // — Import flotte (propriétaires + véhicules + livreurs) —
-        Permission::firstOrCreate(['name' => 'imports-flotte.create']);
-        Permission::firstOrCreate(['name' => 'imports-flotte.read']);
-        // — Import produits (création + mise à jour en masse) —
-        Permission::firstOrCreate(['name' => 'imports-produits.create']);
-        Permission::firstOrCreate(['name' => 'imports-produits.read']);
-        // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
-        Permission::firstOrCreate(['name' => 'pieces-identite.download']);
-        Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
-        Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
-        Permission::firstOrCreate(['name' => 'comptabilite.payer']);
-        // — Trésorerie (mouvements de fonds agence <-> siège) —
-        Permission::firstOrCreate(['name' => 'tresorerie.envoyer']);
-        Permission::firstOrCreate(['name' => 'tresorerie.recevoir']);
-        Permission::firstOrCreate(['name' => 'tresorerie.annuler']);
-        Permission::firstOrCreate(['name' => 'tresorerie.rejeter']);
-        Permission::firstOrCreate(['name' => 'tresorerie.confirmer_retour']);
-        Permission::firstOrCreate(['name' => 'tresorerie.gerer_soldes_ouverture']);
-        Permission::firstOrCreate(['name' => 'tresorerie.exporter']);
-        // — Dépenses (workflow) —
-        Permission::firstOrCreate(['name' => 'depenses.soumettre']);
-        Permission::firstOrCreate(['name' => 'depenses.valider']);
-        Permission::firstOrCreate(['name' => 'depenses.rejeter']);
-        Permission::firstOrCreate(['name' => 'depenses.annuler']);
-        // — Produits —
-        Permission::firstOrCreate(['name' => 'produits.ajuster_stock']);
-        // — Ventes (workflow) —
-        Permission::firstOrCreate(['name' => 'ventes.confirmer']);
-        Permission::firstOrCreate(['name' => 'ventes.annuler']);
-        Permission::firstOrCreate(['name' => 'ventes.demarrer_chargement']);
-        Permission::firstOrCreate(['name' => 'ventes.valider_chargement']);
-        // — Factures —
-        Permission::firstOrCreate(['name' => 'factures.encaisser']);
-        Permission::firstOrCreate(['name' => 'factures.annuler']);
-        // — Commissions / Salaires —
-        Permission::firstOrCreate(['name' => 'commissions.payer']);
-        Permission::firstOrCreate(['name' => 'commissions.cloturer']);
-        Permission::firstOrCreate(['name' => 'commissions.exporter']);
-        // — Logistique (workflow) —
-        Permission::firstOrCreate(['name' => 'logistique.valider_chargement']);
-        Permission::firstOrCreate(['name' => 'logistique.valider_reception']);
-        Permission::firstOrCreate(['name' => 'logistique.cloturer']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         // Rôles système (organization_id NULL, partagés par toutes les organisations) — seul
         // super_admin est protégé contre le renommage/suppression (règle centralisée dans
-        // RoleController, jamais une colonne : cf. sa docblock). Les 7 autres sont désormais des
+        // App\Support\Permissions\RoleAccess, jamais une colonne : cf. sa docblock). Les 7 autres
+        // sont désormais des
         // rôles métier ordinaires, modifiables/supprimables comme n'importe quel rôle créé via le
         // CRUD, simplement pré-remplis ici pour ne pas partir d'une organisation vide.
         // Le label est réassigné à chaque exécution (idempotent) plutôt que seulement à la
@@ -135,19 +65,27 @@ class RolesAndPermissionsSeeder extends Seeder
             'proprietaire' => 'Propriétaire',
             'livreur' => 'Livreur',
         ];
+        $roles = [];
         foreach ($labels as $name => $label) {
-            Role::updateOrCreate(['name' => $name, 'organization_id' => null], ['label' => $label]);
+            $roles[$name] = Role::updateOrCreate(['name' => $name, 'organization_id' => null], ['label' => $label]);
         }
 
-        $superAdmin = Role::whereNull('organization_id')->where('name', 'super_admin')->firstOrFail();
-        $adminEntreprise = Role::whereNull('organization_id')->where('name', 'admin_entreprise')->firstOrFail();
-        $manager = Role::whereNull('organization_id')->where('name', 'manager')->firstOrFail();
-        $commerciale = Role::whereNull('organization_id')->where('name', 'commerciale')->firstOrFail();
-        $comptable = Role::whereNull('organization_id')->where('name', 'comptable')->firstOrFail();
+        // super_admin (verrouillé) reçoit toujours TOUTES les permissions, y compris celles
+        // ajoutées au catalogue depuis le dernier déploiement.
+        $roles['super_admin']->syncPermissions(Permission::all());
 
-        $superAdmin->syncPermissions(Permission::all());
+        // Les autres rôles sont configurables dans /backoffice/roles : leur matrice par défaut
+        // n'est posée qu'à la CRÉATION du rôle. Ce seeder tourne à chaque déploiement — la
+        // resynchroniser écrasait silencieusement les permissions cochées par l'utilisateur
+        // (incident 2026-09-28, rôle commerciale). Accorder une nouvelle permission aux rôles
+        // existants passe par une migration de backfill additive (cf. 2026_09_13_140136_*).
+        $parDefaut = static function (Role $role, array $permissions): void {
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($permissions);
+            }
+        };
 
-        $adminEntreprise->syncPermissions([
+        $parDefaut($roles['admin_entreprise'], [
             // Personnes
             'clients.create',           'clients.read',           'clients.update',           'clients.delete',
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
@@ -158,6 +96,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'imports-flotte.create',    'imports-flotte.read',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
+            'imports-vehicules-maj.create', 'imports-vehicules-maj.read',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update', 'equipes-livraison.delete',
             'sites.create',             'sites.read',             'sites.update',             'sites.delete',
@@ -172,10 +111,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
+            'ventes.valider_reception', 'ventes.enregistrer_retour', 'ventes.exporter',
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
             'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',      'fournisseurs.delete',
             'factures.create',          'factures.read',          'factures.update',          'factures.delete',
-            'factures.encaisser',       'factures.annuler',
+            'factures.encaisser',       'factures.encaisser_autre_agence', 'factures.annuler',
             'commissions.create',       'commissions.read',       'commissions.update',       'commissions.delete',
             'commissions.payer',        'commissions.cloturer',   'commissions.exporter',
             'cashback.create',          'cashback.read',          'cashback.update',          'cashback.delete',
@@ -194,8 +134,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.create', 'journal-financier.read', 'journal-financier.update', 'journal-financier.delete',
             'tresorerie.create',        'tresorerie.read',        'tresorerie.update',        'tresorerie.delete',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
-            'tresorerie.confirmer_retour',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+            'tresorerie.confirmer_retour', 'tresorerie.verser',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
+            // Rapports
+            'rapports.read_own',        'rapports.read',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',       'rh-employes.delete',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
@@ -203,6 +145,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
             // Administration
             'users.create',             'users.read',             'users.update',
+            'communications.read',      'communications.manage',
             // Paramètres
             'parametres.read',          'parametres.update',
             'parametres-produits.read', 'parametres-produits.update',
@@ -212,7 +155,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'modules-metier.read',      'modules-metier.update',
         ]);
 
-        $manager->syncPermissions([
+        $parDefaut($roles['manager'], [
             // Personnes
             'clients.create',           'clients.read',           'clients.update',
             'prestataires.create',      'prestataires.read',      'prestataires.update',
@@ -221,6 +164,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'pieces-identite.read',     'pieces-identite.download',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',
+            'imports-vehicules-maj.create', 'imports-vehicules-maj.read',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update',
             'sites.create',             'sites.read',             'sites.update',
@@ -235,6 +179,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
+            'ventes.valider_reception', 'ventes.enregistrer_retour', 'ventes.exporter',
             'achats.create',            'achats.read',            'achats.update',
             'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',
             'factures.read',            'factures.create',
@@ -254,7 +199,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'comptabilite.read',        'comptabilite.payer',
             'journal-financier.read',
             'tresorerie.create',        'tresorerie.read',
-            'tresorerie.envoyer',       'tresorerie.recevoir',
+            'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.verser',
+            'tresorerie.rejeter',
+            // Rapports
+            'rapports.read_own',        'rapports.read',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
@@ -262,13 +210,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',
             // Administration
             'users.read',
+            'communications.read',
             // Paramètres
             'parametres.read',
             'parametres-produits.read',
             'parametres-ventes.read',
         ]);
 
-        $commerciale->syncPermissions([
+        $parDefaut($roles['commerciale'], [
             'clients.create',      'clients.read',      'clients.update',
             'prestataires.create', 'prestataires.read', 'prestataires.update',
             'livreurs.create',     'livreurs.read',     'livreurs.update',
@@ -286,13 +235,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'factures.read',
             'cashback.read',
             'pdv.create',          'pdv.read',          'pdv.update',
+            'rapports.read_own',
         ]);
 
-        $comptable->syncPermissions([
+        $parDefaut($roles['comptable'], [
             'clients.read',           'prestataires.read',  'livreurs.read',
             'proprietaires.read',     'vehicules.read',     'equipes-livraison.read',
             'sites.read',             'produits.read',      'categories.read',    'options.read',    'type-produits.read',    'packings.read',
-            'ventes.read',
+            'ventes.read',            'ventes.exporter',
             'factures.read',          'factures.encaisser',
             'commissions.read',       'commissions.payer',  'commissions.cloturer', 'commissions.exporter',
             'logistique.read',
@@ -302,10 +252,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.read',
             'tresorerie.create',      'tresorerie.read',        'tresorerie.update',
             'tresorerie.envoyer',     'tresorerie.recevoir',    'tresorerie.annuler',     'tresorerie.rejeter',
-            'tresorerie.confirmer_retour',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
+            'tresorerie.confirmer_retour', 'tresorerie.verser',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
+            'rapports.read_own',      'rapports.read',
         ]);
     }
 }

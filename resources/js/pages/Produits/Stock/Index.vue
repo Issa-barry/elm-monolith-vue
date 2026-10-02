@@ -48,13 +48,15 @@ interface StockRow {
     qte_bloquee: number | null;
     qte_entrante: number | null;
     seuil_effectif: number;
-    statut: 'disponible' | 'stock_faible' | 'rupture';
+    disponible_sur_site: boolean;
+    statut: 'disponible' | 'stock_faible' | 'rupture' | 'stock_negatif';
     statut_label: string;
     dernier_mouvement: {
         type: 'entree' | 'sortie';
         quantite: number;
         motif_label: string | null;
-        created_at: string;
+        /** Date métier de l'opération (jamais l'horodatage technique de création). */
+        date: string;
     } | null;
     can_ajuster: boolean;
 }
@@ -88,6 +90,7 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    date: string;
     created_at: string;
 }
 
@@ -164,7 +167,12 @@ const hasActiveFilters = computed(() =>
 );
 
 function clearFilters(): void {
-    router.get(STOCK_URL, {}, { preserveScroll: true, replace: true });
+    // all=1 : réinitialisation explicite, la vue par défaut ne doit pas se réappliquer.
+    router.get(
+        STOCK_URL,
+        { all: '1' },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 function formatNombre(value: number | null): string {
@@ -313,6 +321,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     <template #filters>
                         <DataFilters
                             trigger-only
+                            saved-filter-scope="stock"
                             :url="STOCK_URL"
                             :values="filters"
                             :sites="sites"
@@ -340,43 +349,66 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                 <div class="overflow-x-auto" data-testid="stock-table-scroll">
                     <table
                         data-testid="stock-table"
-                        class="w-full min-w-[1180px] text-sm"
+                        class="text-sm whitespace-nowrap"
+                        style="width: max-content; min-width: 100%"
                     >
                         <thead
                             class="border-b bg-muted/40 text-xs text-muted-foreground"
                         >
                             <tr>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[240px] px-4 py-3 text-left font-medium"
+                                >
                                     Produit
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[150px] px-4 py-3 text-left font-medium"
+                                >
                                     Agence
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Physique
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Engagé
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Bloqué
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[110px] px-4 py-3 text-right font-medium"
+                                >
                                     Disponible
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Entrant
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Alerte à
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[170px] px-4 py-3 text-left font-medium"
+                                >
                                     État
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[220px] px-4 py-3 text-left font-medium"
+                                >
                                     Dernier mouvement
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[130px] px-4 py-3 text-right font-medium"
+                                >
                                     Actions
                                 </th>
                             </tr>
@@ -387,13 +419,16 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 :key="row.variante_id + '-' + row.site_id"
                                 class="transition-colors hover:bg-muted/25"
                             >
-                                <td class="px-4 py-3">
+                                <td
+                                    class="max-w-[280px] px-4 py-3 whitespace-normal"
+                                >
                                     <Link
                                         :href="
                                             '/backoffice/produits/' +
                                             row.produit_id
                                         "
-                                        class="hover:text-primary hover:underline"
+                                        class="line-clamp-2 hover:text-primary hover:underline"
+                                        :title="row.produit_nom"
                                     >
                                         {{ row.produit_nom }}
                                     </Link>
@@ -460,12 +495,22 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ formatNombre(row.seuil_effectif) }}
+                                    {{
+                                        row.disponible_sur_site
+                                            ? formatNombre(row.seuil_effectif)
+                                            : '—'
+                                    }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <StatusDot
+                                        v-if="row.disponible_sur_site"
                                         :status="row.statut"
                                         :label="row.statut_label"
+                                    />
+                                    <StatusDot
+                                        v-else
+                                        label="Non disponible"
+                                        dot-class="bg-zinc-400 dark:bg-zinc-500"
                                     />
                                 </td>
                                 <td class="px-4 py-3">
@@ -504,7 +549,11 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                                 row.dernier_mouvement
                                                     .motif_label
                                             "
-                                            class="text-xs whitespace-nowrap text-muted-foreground"
+                                            class="max-w-[220px] truncate text-xs text-muted-foreground"
+                                            :title="
+                                                row.dernier_mouvement
+                                                    .motif_label
+                                            "
                                         >
                                             {{
                                                 row.dernier_mouvement
@@ -514,9 +563,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         <div
                                             class="text-xs whitespace-nowrap text-muted-foreground"
                                         >
-                                            {{
-                                                row.dernier_mouvement.created_at
-                                            }}
+                                            {{ row.dernier_mouvement.date }}
                                         </div>
                                     </div>
                                     <span v-else class="text-muted-foreground"
@@ -625,8 +672,14 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                             </div>
                         </div>
                         <StatusDot
+                            v-if="row.disponible_sur_site"
                             :status="row.statut"
                             :label="row.statut_label"
+                        />
+                        <StatusDot
+                            v-else
+                            label="Non disponible"
+                            dot-class="bg-zinc-400 dark:bg-zinc-500"
                         />
                     </div>
 
@@ -684,10 +737,11 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     <div
                         class="mt-3 flex items-center justify-between text-xs text-muted-foreground"
                     >
-                        <span
+                        <span v-if="row.disponible_sur_site"
                             >Alerte à
                             {{ formatNombre(row.seuil_effectif) }}</span
                         >
+                        <span v-else>Non disponible sur cette agence</span>
                         <span v-if="row.dernier_mouvement" class="text-right">
                             <span
                                 class="font-medium"
@@ -700,7 +754,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                     mouvementSigneLabel(row.dernier_mouvement)
                                 }}</span
                             >
-                            · {{ row.dernier_mouvement.created_at }}
+                            · {{ row.dernier_mouvement.date }}
                         </span>
                         <span v-else>Aucun mouvement</span>
                     </div>

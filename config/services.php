@@ -57,4 +57,17 @@ return [
         'vapid_subject' => env('WEB_PUSH_VAPID_SUBJECT'),
     ],
 
+    // SMS OTP (canal `sms`, cf. App\Services\Otp\Channels\SmsOtpChannel) —
+    // fournisseur Nimba SMS (Guinée), App\Services\Sms\NimbaSmsGateway.
+    // Authentification HTTP Basic Auth (service_id/secret_token) construite
+    // par NimbaSmsGateway, jamais un en-tête Authorization stocké séparément.
+    // Absence de config = canal SMS silencieusement indisponible
+    // (NimbaSmsGateway::isConfigured() -> SmsOtpChannel::isAvailable()),
+    // jamais une erreur — même convention que 'web_push' ci-dessus.
+    'nimba_sms' => [
+        'service_id' => env('NIMBA_SMS_SERVICE_ID'),
+        'secret_token' => env('NIMBA_SMS_SECRET_TOKEN'),
+        'sender_name' => env('NIMBA_SMS_SENDER_NAME'),
+    ],
+
 ];

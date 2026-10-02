@@ -8,19 +8,24 @@ use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
+use App\Support\Commission\CommissionSourceSiteFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -50,12 +55,15 @@ class CommissionProprietaireController extends Controller
 
     /**
      * Écran "Commission propriétaire" — cf. CommissionVenteController::index()
-     * pour le raisonnement (collection plutôt que SQL brut, can_pay/can_payer
-     * toujours false : paiement exclusivement via Fiches de paiement).
+     * pour le raisonnement (collection plutôt que SQL brut ; le bouton Payer d'une ligne
+     * enregistre le paiement sur la fiche de la période, cf. FichePayableResolver).
      */
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-proprietaires');
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -66,6 +74,10 @@ class CommissionProprietaireController extends Controller
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
+        // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
+        // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
+        // et CommissionProcessusFilter).
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $isAdmin = $user->isAdmin();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
@@ -87,12 +99,17 @@ class CommissionProprietaireController extends Controller
             });
 
         if ($isAdmin && ! empty($filtreSiteIds)) {
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+            // Cf. docblock de CommissionSourceSiteFilter : jamais whereHas('enveloppe.source.site',
+            // ...) en chaîne à points, qui plante dès que CommandeVente ET TransfertLogistique
+            // coexistent en base.
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
         } elseif (! $isAdmin) {
             // Pour un non-admin, une collection vide signifie qu'aucun site n'est accessible ;
             // l'absence de restriction reste exclusivement reservee aux administrateurs.
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $siteIds));
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $siteIds));
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         $allParts = $query->get();
         $partsParProprio = $allParts->groupBy('beneficiaire_id');
@@ -172,9 +189,16 @@ class CommissionProprietaireController extends Controller
             fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
         );
 
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(
+            $user,
+            CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            $partsParProprio->keys()->map(fn ($id) => (string) $id)->all(),
+            $filtrePeriode,
+        );
+
         $beneficiaires = $partsParProprio->map(function (Collection $parts, string $proprioId) use (
             $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
-            $proprietaires,
+            $proprietaires, $fichesPayables,
         ) {
             // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
             // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
@@ -209,7 +233,8 @@ class CommissionProprietaireController extends Controller
                 $statutGlobal,
                 $labelsParStatut[$statutGlobal] ?? $statutGlobal,
             );
-            $resolved['can_pay'] = false;
+            $fiche = $fichesPayables->get($proprioId);
+            $resolved['can_pay'] = $fiche !== null;
 
             $beneficiaire = $proprietaires->get($proprioId);
             // Liste derivee uniquement des ventes portant les parts affichees : un vehicule
@@ -257,7 +282,11 @@ class CommissionProprietaireController extends Controller
                 'total_genere' => $buckets['total_genere'],
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
+                // Toujours exposé, même filtré sur un seul processus (décision produit du
+                // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
+                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 ...$resolved,
+                'fiche_a_payer' => $fiche,
             ];
         })->values();
 
@@ -306,12 +335,15 @@ class CommissionProprietaireController extends Controller
         $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, $dateAffichee);
 
         return Inertia::render('Comptabilite/CommissionProprietaire/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'filtre_nom' => $filtreNom,
             'filtre_telephone' => $filtreTelephone,
             'filtre_statut' => $filtreStatut,
             'filtre_site_ids' => $filtreSiteIds,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
@@ -322,25 +354,26 @@ class CommissionProprietaireController extends Controller
                 'statut_label' => $periodeAffichee->statut_label,
             ] : null,
             'sites' => $sites,
-            'can_payer' => false,
+            'can_payer' => $user->can('comptabilite.payer'),
         ]);
     }
 
     public function show(Request $request, string $proprietaireId): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $orgId = auth()->user()->organization_id;
 
         $proprio = Proprietaire::find($proprietaireId);
         $nom = $proprio ? trim(($proprio->prenom ?? '').' '.($proprio->nom ?? '')) : '—';
 
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('beneficiaire_id', $proprietaireId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $vehicules = Vehicule::where('proprietaire_id', $proprietaireId)
             ->where('organization_id', $orgId)
@@ -422,7 +455,7 @@ class CommissionProprietaireController extends Controller
                 return false;
             }
 
-            if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
+            if (! empty($siteIds) && ! in_array($p->enveloppe?->siteResponsableId(), $siteIds, true)) {
                 return false;
             }
 
@@ -431,8 +464,9 @@ class CommissionProprietaireController extends Controller
 
         // total_brut/total_net/solde restent calculés exclusivement sur les parts déjà actives
         // (jamais CREEE) — jamais mélangées à une commission pas encore éligible au paiement
-        // (cf. $buckets ci-dessous, décision produit du 20/08/2026).
-        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        // (cf. $buckets ci-dessous, décision produit du 20/08/2026). Une part ANNULEE reste listée
+        // (traçabilité) mais ne représente plus de créance : exclue de tous les montants.
+        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => ! in_array($p->statut, [StatutCommission::CREEE, StatutCommission::ANNULEE], true));
         $totalBrut = (float) $activeParts->sum('montant_brut');
         $totalAPayer = (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
         $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
@@ -485,6 +519,7 @@ class CommissionProprietaireController extends Controller
 
                 $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
+                $annulee = $first->statut === StatutCommission::ANNULEE;
 
                 return [
                     'commission_id' => $enveloppe?->id,
@@ -499,7 +534,8 @@ class CommissionProprietaireController extends Controller
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantAPayer - $montantVerse),
+                    'reste' => $annulee ? 0.0 : max(0.0, $montantAPayer - $montantVerse),
+                    'annulee' => $annulee,
                     'statut' => $first->statut?->label(),
                     'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
                     'periode' => $periodeCode,
@@ -594,6 +630,8 @@ class CommissionProprietaireController extends Controller
             ],
             'vehicules_disponibles' => $vehiculesDisponibles,
             'agences_disponibles' => $agencesDisponibles,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'can_payer' => false,
         ]);
     }
@@ -638,7 +676,7 @@ class CommissionProprietaireController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -650,12 +688,14 @@ class CommissionProprietaireController extends Controller
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
         $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
             $filtrePeriode,
             $filtreSiteIds,
             $restreindreAuxSites,
+            $filtreProcessus,
         );
         $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
 
@@ -689,7 +729,7 @@ class CommissionProprietaireController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -701,12 +741,14 @@ class CommissionProprietaireController extends Controller
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
         $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
             $filtrePeriode,
             $filtreSiteIds,
             $restreindreAuxSites,
+            $filtreProcessus,
         );
         $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
         $siteGroups = $this->buildSiteGroups($rows);
@@ -728,12 +770,16 @@ class CommissionProprietaireController extends Controller
         return $pdf->download('commissions-proprietaires-'.now()->format('Y-m-d').'.pdf');
     }
 
-    /** @return array{0: Collection<int, CommissionEnveloppePart>, 1: array<string, float>, 2: array<string, string>} */
+    /**
+     * @param  array<int, string>  $filtreProcessus
+     * @return array{0: Collection<int, CommissionEnveloppePart>, 1: array<string, float>, 2: array<string, string>}
+     */
     private function loadPartsForExport(
         string $orgId,
         string $filtrePeriode,
         array $filtreSiteIds = [],
         bool $restreindreAuxSites = false,
+        array $filtreProcessus = [],
     ): array {
         $query = CommissionEnveloppePart::with(['enveloppe.source.site:id,nom', 'enveloppe.source.vehicule:id,nom_vehicule,immatriculation'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
@@ -747,8 +793,11 @@ class CommissionProprietaireController extends Controller
             });
 
         if ($restreindreAuxSites) {
-            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+            // Cf. docblock de CommissionSourceSiteFilter.
+            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         $parts = $query->get();
 
@@ -871,7 +920,7 @@ class CommissionProprietaireController extends Controller
                 'reste' => $solde,
                 'statut_code' => $statutCode,
                 'statut' => $statutCode === StatutCommission::CREEE->value
-                    ? 'Partage à valider'
+                    ? 'À valider'
                     : StatutCommission::from($statutCode)->label(),
             ];
         });

@@ -105,11 +105,13 @@ class CompteTresorerieControllerTest extends TestCase
             'site_id' => $site->id,
             'compte_comptable_id' => $compteMM->id,
             'type' => 'mobile_money',
+            'operateur_mobile_money' => 'kulu',
             'libelle' => '',
         ]);
 
         $this->assertDatabaseHas('compta_supports_tresorerie', ['site_id' => $site->id, 'libelle' => "Banque de {$site->nom}"]);
-        $this->assertDatabaseHas('compta_supports_tresorerie', ['site_id' => $site->id, 'libelle' => "Mobile Money de {$site->nom}"]);
+        // Chaque opérateur a son propre support : le libellé automatique le nomme.
+        $this->assertDatabaseHas('compta_supports_tresorerie', ['site_id' => $site->id, 'libelle' => "Kulu de {$site->nom}"]);
     }
 
     public function test_store_conserve_un_libelle_renseigne(): void
@@ -191,6 +193,7 @@ class CompteTresorerieControllerTest extends TestCase
                 'site_id' => $site->id,
                 'compte_comptable_id' => $compteDjomy->id,
                 'type' => 'mobile_money',
+                'operateur_mobile_money' => 'paycard',
                 'libelle' => '',
             ])
             ->assertSessionHasNoErrors();
@@ -399,5 +402,116 @@ class CompteTresorerieControllerTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('Caisse renommée', $support->fresh()->libelle);
+    }
+
+    // ── Mobile Money : un opérateur, un compte à part (décision du 24/09/2026) ─────────────
+
+    /** @param  array<string, mixed>  $donnees */
+    private function creerMobileMoney(string $numero, ?string $operateur, array $donnees = [])
+    {
+        return $this->actingAs($this->user)
+            ->from(route('comptabilite.tresorerie.supports.index'))
+            ->post(route('comptabilite.tresorerie.supports.store'), array_merge([
+                'site_id' => $this->user->sites()->first()->id,
+                'compte_comptable_id' => CompteComptable::where('organization_id', $this->org->id)->where('numero', $numero)->firstOrFail()->id,
+                'type' => 'mobile_money',
+                'operateur_mobile_money' => $operateur,
+            ], $donnees));
+    }
+
+    public function test_store_mobile_money_exige_son_operateur(): void
+    {
+        $this->creerMobileMoney('561400', null)->assertSessionHasErrors('operateur_mobile_money');
+        $this->creerMobileMoney('561400', 'autre')->assertSessionHasErrors('operateur_mobile_money');
+
+        $this->assertDatabaseCount('compta_supports_tresorerie', 0);
+    }
+
+    public function test_store_refuse_le_compte_d_un_autre_operateur(): void
+    {
+        $this->creerMobileMoney('561100', 'kulu')->assertSessionHasErrors('compte_comptable_id');
+
+        $this->assertDatabaseCount('compta_supports_tresorerie', 0);
+    }
+
+    public function test_store_enregistre_l_operateur_du_support(): void
+    {
+        $this->creerMobileMoney('561400', 'kulu')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('compta_supports_tresorerie', [
+            'organization_id' => $this->org->id,
+            'type' => 'mobile_money',
+            'operateur_mobile_money' => 'kulu',
+            'actif' => false,
+        ]);
+    }
+
+    public function test_deux_mobile_money_d_une_agence_ne_partagent_jamais_un_compte(): void
+    {
+        $this->creerMobileMoney('561000', 'kulu')->assertSessionHasNoErrors();
+        $this->creerMobileMoney('561000', 'paycard')->assertSessionHasErrors('compte_comptable_id');
+
+        // Même compte dans une AUTRE agence : autorisé (le solde se calcule par agence et compte).
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
+        $this->creerMobileMoney('561000', 'kulu', ['site_id' => $autreSite->id])->assertSessionHasNoErrors();
+
+        $this->assertSame(2, CompteTresorerie::where('type', 'mobile_money')->count());
+    }
+
+    public function test_l_operateur_n_est_jamais_enregistre_hors_mobile_money(): void
+    {
+        $this->actingAs($this->user)->post(route('comptabilite.tresorerie.supports.store'), [
+            'site_id' => $this->user->sites()->first()->id,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $this->org->id)->where('numero', '521000')->firstOrFail()->id,
+            'type' => 'banque',
+            'operateur_mobile_money' => 'kulu',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(CompteTresorerie::where('type', 'banque')->firstOrFail()->operateur_mobile_money);
+    }
+
+    public function test_update_renseigne_l_operateur_d_un_support_existant(): void
+    {
+        $site = $this->user->sites()->first();
+        $compte = CompteComptable::where('organization_id', $this->org->id)->where('numero', '561000')->firstOrFail();
+        $support = CompteTresorerie::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+            'compte_comptable_id' => $compte->id,
+            'type' => 'mobile_money',
+            'libelle' => 'Mobile Money de Matoto',
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('comptabilite.tresorerie.supports.update', $support), [
+                'libelle' => 'Mobile Money de Matoto',
+                'type' => 'mobile_money',
+                'operateur_mobile_money' => 'soutra_money',
+                'compte_comptable_id' => $compte->id,
+                'actif' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('soutra_money', $support->fresh()->operateur_mobile_money->value);
+    }
+
+    public function test_index_expose_l_operateur_et_les_operateurs_proposables(): void
+    {
+        $site = $this->user->sites()->first();
+        CompteTresorerie::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $this->org->id)->where('numero', '561100')->firstOrFail()->id,
+            'type' => 'mobile_money',
+            'operateur_mobile_money' => 'orange_money',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.tresorerie.supports.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('comptes.0.operateur_mobile_money', 'orange_money')
+                ->where('comptes.0.operateur_label', 'Orange Money')
+                ->where('comptes.0.libelle', "Orange Money de {$site->nom}")
+                ->where('operateur_options', fn ($options) => collect($options)->pluck('value')->all() === ['orange_money', 'kulu', 'soutra_money', 'momo', 'paycard']));
     }
 }

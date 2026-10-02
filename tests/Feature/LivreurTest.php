@@ -46,6 +46,22 @@ class LivreurTest extends TestCase
             ->assertStatus(403);
     }
 
+    // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_show_staff_pointe_vers_la_fiche_commissions_livreur(): void
+    {
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('livreurs.show', $livreur))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Livreurs/Show')
+                ->where('is_staff', true)
+                ->where('commissions_url', route('comptabilite.commissions.vente.livreur', $livreur->id))
+            );
+    }
+
     // ── store (JSON API) ──────────────────────────────────────────────────────
 
     public function test_store_creates_livreur_and_returns_json(): void
@@ -146,9 +162,29 @@ class LivreurTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->patch(route('livreurs.approuver', $livreur))
+            ->patchJson(route('livreurs.approuver', $livreur))
             ->assertStatus(200)
             ->assertJson(['is_active' => true]);
+
+        $this->assertTrue($livreur->fresh()->is_active);
+    }
+
+    /**
+     * La liste des livreurs approuve/réactive via Inertia (router.patch) : une réponse JSON y
+     * déclenche l'erreur « réponse non Inertia » au lieu de rafraîchir la liste.
+     */
+    public function test_approuver_depuis_la_liste_inertia_redirige(): void
+    {
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->from(route('livreurs.index'))
+            ->patch(route('livreurs.approuver', $livreur), [], ['X-Inertia' => 'true'])
+            ->assertRedirect(route('livreurs.index'))
+            ->assertSessionHas('success');
 
         $this->assertTrue($livreur->fresh()->is_active);
     }

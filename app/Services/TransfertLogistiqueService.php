@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Enums\StatutTransfert;
+use App\Models\Parametre;
+use App\Models\ProduitVariante;
 use App\Models\TransfertLogistique;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -58,10 +60,45 @@ class TransfertLogistiqueService
             // Entrée stock destination : marchandises reçues (RECEPTION)
             if ($suivant === StatutTransfert::RECEPTION) {
                 MouvementStockService::enregistrerEntreeDestination($transfert);
+
+                // Approbation admin non requise (réglage du SITE DESTINATION si dérogation
+                // explicite, sinon repli sur le paramètre organisation — défaut = requise, cf.
+                // Site::approbationReceptionObligatoireEffective()) : la réception vaut
+                // directement accord, sans clic manuel "Approuver la réception". validated_by
+                // reste null pour distinguer cette auto-approbation d'une décision humaine. Le
+                // déclenchement réel de la commission suit ensuite exactement la même règle que
+                // l'accord manuel (cf. CommissionTriggerService::onTransfertReceptionEffectuee(),
+                // no-op sous CHARGEMENT_VALIDE puisque la commission existe déjà depuis le départ).
+                if (! self::approbationReceptionObligatoire($transfert)) {
+                    $transfert->update([
+                        'validation_reception' => 'accord',
+                        'validated_by' => null,
+                        'validated_at' => now(),
+                    ]);
+
+                    CommissionTriggerService::onTransfertReceptionEffectuee($transfert);
+
+                    TransfertActiviteService::log($transfert, 'validation_admin_auto');
+                }
             }
         });
 
         return $transfert->fresh();
+    }
+
+    /**
+     * Résout si l'approbation admin de la réception est obligatoire pour CE transfert —
+     * dérogation du site destination si explicitement configurée, sinon repli sur le paramètre
+     * organisation (cf. Site::approbationReceptionObligatoireEffective()). `?? Parametre::...`
+     * en filet de sécurité pur (site_destination_id ne devrait jamais être null à ce stade du
+     * workflow, cf. checkChargement()), jamais un cas réellement atteint en pratique.
+     */
+    private static function approbationReceptionObligatoire(TransfertLogistique $transfert): bool
+    {
+        $transfert->loadMissing('siteDestination');
+
+        return $transfert->siteDestination?->approbationReceptionObligatoireEffective()
+            ?? Parametre::isApprobationReceptionLogistiqueObligatoire($transfert->organization_id);
     }
 
     /**
@@ -158,28 +195,67 @@ class TransfertLogistiqueService
 
     /**
      * Vérifie, ligne par ligne, que la quantité chargée ne dépasse pas le stock disponible du
-     * site source — TOUJOURS strict, même pour un produit dont autorise_vente_stock_negatif
-     * est actif : ce paramètre est réservé au PDV et aux commandes vente (cf. Produit et
-     * décision produit du 23/08/2026), jamais aux transferts — un transfert déplace un stock
-     * qui doit déjà exister physiquement ailleurs, contrairement à une vente client. Avant ce
-     * correctif, aucun contrôle n'existait ici : MouvementStockService::appliquer() clampait
-     * silencieusement la sortie source à 0 (cf. audit stock du 23/08/2026). Ignore les lignes
-     * dont le produit ne gère pas de stock (type service).
+     * site source — cf. verifierDisponibiliteLignes() ci-dessous, point d'entrée unique
+     * réutilisé par TransfertLogistiqueController::store()/update() (création/modification,
+     * 04/09/2026 — avant ce correctif, un transfert pouvait être créé avec une quantité
+     * demandée supérieure au stock, le seul contrôle existant intervenait au chargement) ET ce
+     * contrôle au chargement. Le stock a pu changer entre les deux étapes (autre transfert/vente
+     * entre-temps) : chaque contrôle reste indispensable même si le précédent a déjà validé le
+     * transfert à son étape.
      */
     private static function checkDisponibiliteStockSource(TransfertLogistique $t, array &$errors): void
     {
-        $t->loadMissing('lignes.variante.produit.produitType');
+        $t->loadMissing('lignes');
 
-        foreach ($t->lignes as $ligne) {
-            $produit = $ligne->variante?->produit;
+        $lignes = $t->lignes->map(fn ($l) => [
+            'variante_id' => $l->variante_id,
+            'quantite' => $l->quantite_chargee,
+        ])->all();
+
+        self::verifierDisponibiliteLignes($t->site_source_id, $lignes, $errors);
+    }
+
+    /**
+     * Cœur RÉUTILISABLE du contrôle de disponibilité — jamais dupliqué en logique dans les
+     * contrôleurs. Vérifie que chaque ligne (variante_id => quantité) ne dépasse pas le stock
+     * disponible du site source donné. Contrairement à l'équivalent côté vente
+     * (CommandeVenteService::verifierDisponibiliteLignes()), AUCUN court-circuit
+     * Parametre::isVentesAutoriseesSansStock() ici : ce paramètre est réservé au PDV et aux
+     * commandes vente (décision produit du 23/08/2026), jamais aux transferts — un transfert
+     * déplace un stock qui doit déjà exister physiquement ailleurs, contrairement à une vente
+     * client. Avant le correctif du 23/08/2026, aucun contrôle n'existait au chargement :
+     * MouvementStockService::appliquer() clampait silencieusement la sortie source à 0 (cf.
+     * audit stock du 23/08/2026). Ignore les lignes dont le produit ne gère pas de stock (type
+     * service). Appelée par :
+     *  - TransfertLogistiqueController::store()/update() (création/modification, 04/09/2026) ;
+     *  - checkDisponibiliteStockSource() ci-dessus (chargement).
+     *
+     * @param  array<int, array{variante_id: string, quantite: int}>  $lignes
+     * @param  array<int, string>  $errors  Passé par référence, une entrée par ligne en anomalie.
+     */
+    public static function verifierDisponibiliteLignes(string $siteSourceId, array $lignes, array &$errors): void
+    {
+        if (empty($lignes)) {
+            return;
+        }
+
+        $varianteIds = array_column($lignes, 'variante_id');
+        $variantes = ProduitVariante::with('produit.produitType')
+            ->whereIn('id', $varianteIds)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($lignes as $ligne) {
+            $variante = $variantes->get($ligne['variante_id']);
+            $produit = $variante?->produit;
             if (! $produit?->produitType?->gere_stock) {
                 continue;
             }
 
-            $disponible = MouvementStockService::quantiteDisponible($ligne->variante_id, $t->site_source_id);
+            $disponible = MouvementStockService::quantiteDisponible($ligne['variante_id'], $siteSourceId);
 
-            if ($ligne->quantite_chargee > $disponible) {
-                $errors[] = "Stock insuffisant pour « {$produit->nom} » sur le site source : {$ligne->quantite_chargee} demandés, {$disponible} disponibles.";
+            if ($ligne['quantite'] > $disponible) {
+                $errors[] = "Stock insuffisant pour « {$produit->nom} » sur le site source : {$ligne['quantite']} demandés, {$disponible} disponibles.";
             }
         }
     }

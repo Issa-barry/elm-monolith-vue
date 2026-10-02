@@ -76,6 +76,7 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
 - Le workflow ne deploie pas `storage/` ni `.env`.
 - Le workflow utilise `--delete` avec `rsync`: les fichiers supprimes dans le repo seront supprimes sur le serveur (sauf exclusions).
 - Eviter `migrate:fresh --seed` en production.
+- Ne jamais renommer, scinder ou supprimer une migration deja deployee : sur une base qui a joue l'ancien nom, le nouveau nom est rejoue et echoue (`Duplicate column name`). Ajouter une nouvelle migration a la place ; si un renommage est inevitable, proteger `up()`/`down()` avec `Schema::hasColumn` / `hasTable` (cas `add_reference_paiement_to_encaissements_ventes_table`, deploiement formation du 2026-09-20).
 
 ## Lancer un deploiement manuel
 

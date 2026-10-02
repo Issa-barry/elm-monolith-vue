@@ -19,17 +19,19 @@ use App\Services\PeriodePaiementService;
 use App\Services\Tresorerie\FinancementAgenceService;
 use App\Services\Tresorerie\MouvementFondsService;
 use App\Services\Tresorerie\SoldeOuvertureTresorerieService;
+use App\Services\Tresorerie\SupportTresorerieValidationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class FinancementAgenceServiceTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     private FinancementAgenceService $service;
 
@@ -149,6 +151,67 @@ class FinancementAgenceServiceTest extends TestCase
         $this->assertSame('a_financer', $row['statut']);
     }
 
+    /**
+     * Décision du 2026-09-19 : une caisse dédiée à un agent démarre à 0, sans solde
+     * d'ouverture, et n'entre pas dans le disponible. Elle ne doit donc jamais rendre
+     * la position du site « non fiable » (positionFiable() ne regarde que l'agence).
+     */
+    public function test_une_caisse_dediee_sans_solde_ouverture_ne_rend_pas_la_position_non_fiable(): void
+    {
+        $this->validerSoldeOuverture(100_000);
+        $this->creerCaisseActive($this->agence->id, $this->creerAgent($this->agence)->id);
+        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
+
+        $row = collect($this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1'))->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame('a_financer', $row['statut']);
+        $this->assertSame(100_000.0, $row['disponible']);
+        $this->assertSame(200_000.0, $row['a_financer']);
+    }
+
+    /**
+     * Un support d'agence en brouillon est inutilisable et hors position : il ne rend pas le site
+     * « non fiable » avant sa validation. Une fois validé, il doit avoir un solde d'ouverture validé
+     * comme n'importe quel support actif (règle historique de positionFiable()).
+     */
+    public function test_un_support_d_agence_en_brouillon_ne_rend_pas_la_position_non_fiable_jusqu_a_sa_validation(): void
+    {
+        $this->validerSoldeOuverture(100_000);
+        $banque = CompteTresorerie::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->agence->id,
+            'compte_comptable_id' => CompteComptable::where('organization_id', $this->org->id)->where('numero', '521000')->firstOrFail()->id,
+            'type' => 'banque',
+            'libelle' => 'Banque en préparation',
+            'actif' => false,
+        ]);
+        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
+
+        $ligne = fn () => collect($this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1'))->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame('a_financer', $ligne()['statut'], 'brouillon : hors position');
+        $this->assertSame(200_000.0, $ligne()['a_financer']);
+
+        app(SupportTresorerieValidationService::class)->valider($banque, $this->user);
+
+        $this->assertSame('donnees_incompletes', $ligne()['statut'], 'validé sans solde d\'ouverture : position incomplète');
+    }
+
+    /** L'argent encore détenu par un agent ne réduit pas le besoin de financement avant versement. */
+    public function test_l_argent_d_une_caisse_dediee_ne_reduit_pas_le_a_financer(): void
+    {
+        $this->validerSoldeOuverture(100_000);
+        $caisse = $this->creerCaisseActive($this->agence->id, $this->creerAgent($this->agence)->id);
+        $this->alimenterCaisse($caisse, 250_000);
+        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
+
+        $row = collect($this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1'))->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame(100_000.0, $row['disponible'], 'seule la caisse de l\'agence compte');
+        $this->assertSame(200_000.0, $row['a_financer']);
+        $this->assertSame('a_financer', $row['statut']);
+    }
+
     public function test_disponible_suffisant_ne_demande_aucun_financement(): void
     {
         $this->validerSoldeOuverture(500_000);
@@ -172,6 +235,9 @@ class FinancementAgenceServiceTest extends TestCase
             ['organization_id' => $this->org->id, 'site_id' => $siege->id, 'compte_comptable_id' => $compteCaisse->id],
             ['type' => 'caisse', 'libelle' => 'Caisse Siège'],
         );
+        // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi ;
+        // montant confortablement au-dessus de tout $montant utilisé dans ce fichier.
+        $this->alimenterCaisse($caisseSiege, 10_000_000);
 
         $mvtService = app(MouvementFondsService::class);
         $mouvement = $mvtService->creerBrouillon($this->org->id, [

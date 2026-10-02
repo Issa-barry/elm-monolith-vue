@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
  * automatiquement éligible au cashback (règle métier confirmée le 28/08/2026), donc les clients
  * concernés reçoivent aussi `cashback_eligible = true` ici. Aucun effet rétroactif sur les
  * transactions déjà historiques : CashbackService ne consulte `cashback_eligible` qu'au moment
- * d'un nouvel encaissement (EncaissementVenteController), jamais pour recalculer une vente déjà
+ * d'un nouvel encaissement (Ventes\StoreEncaissementVenteController), jamais pour recalculer une vente déjà
  * traitée — cf. audit du 28/08/2026.
  *
  * `externe` reste inchangé (aucune migration de donnée nécessaire pour lui). `distributeur` est

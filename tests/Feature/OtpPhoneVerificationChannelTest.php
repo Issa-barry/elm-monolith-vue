@@ -8,6 +8,7 @@ use App\Enums\OtpPurpose;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
+use App\Services\Otp\OtpFallbackTarget;
 use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -37,7 +38,12 @@ class OtpPhoneVerificationChannelTest extends TestCase
                 return $this->c;
             }
 
-            public function send(string $destination, string $code, OtpPurpose $purpose): void
+            public function isAvailable(): bool
+            {
+                return true;
+            }
+
+            public function send(string $destination, string $code, OtpPurpose $purpose, ?OtpFallbackTarget $fallback = null): void
             {
                 $this->sent[] = compact('destination', 'code', 'purpose');
             }

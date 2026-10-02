@@ -14,12 +14,13 @@ use Illuminate\Support\Facades\Schema;
  *  - `code` : trinôme/abréviation métier (ex: "PDG"), unique par organisation.
  *  - `organization_id` : null pour les 8 rôles système partagés (créés par
  *    RolesAndPermissionsSeeder, jamais dupliqués) ; rempli pour tout rôle créé via le CRUD
- *    (RoleController) — chaque organisation a ses propres rôles métier, jamais partagés entre
+ *    (contrôleurs Role\*) — chaque organisation a ses propres rôles métier, jamais partagés entre
  *    elles (la table `roles` de Spatie est globale par défaut, sans cette colonne deux
  *    organisations SaaS se partageraient silencieusement les mêmes rôles/permissions).
  *
  * "Rôle système protégé" n'est plus une colonne (l'ancien `is_system`, retiré) : c'est désormais
- * une règle unique, centralisée dans RoleController — `name === 'super_admin'` — cf. sa docblock.
+ * une règle unique, centralisée dans App\Support\Permissions\RoleAccess — `name === 'super_admin'`
+ * — cf. sa docblock.
  *
  * La contrainte unique d'origine de Spatie (`name`, `guard_name`, globale) est remplacée par une
  * contrainte scopée par organisation : deux organisations peuvent avoir un rôle de même nom

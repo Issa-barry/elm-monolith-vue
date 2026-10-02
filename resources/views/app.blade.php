@@ -37,6 +37,10 @@
         <link rel="icon" href="{{ ($appearance ?? 'light') === 'dark' ? '/favicon-dark.svg' : '/favicon.svg' }}" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+        {{-- PWA — cf. docs/pwa.md. Pas de donnée de session/utilisateur dans le manifest. --}}
+        <link rel="manifest" href="/manifest.json">
+        <meta name="theme-color" content="#fafafa">
+
         {{-- For 'system' appearance, the server can't know the OS preference; correct the favicon client-side --}}
         <script>
             if (window.__isDark && '{{ $appearance ?? "light" }}' === 'system') {

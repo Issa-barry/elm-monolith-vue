@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\MouvementFonds;
+use App\Models\Site;
 use App\Models\User;
 
 /**
@@ -11,6 +12,12 @@ use App\Models\User;
  * réception ou conteste — jamais la même personne des deux côtés d'affilée
  * sauf si admin (autorité globale sur l'organisation, comme
  * TransfertLogistiquePolicy).
+ *
+ * Pour un versement de caisse (`interne_caisses`), origine et destination sont le même site :
+ * depuis le 27/09/2026 (ADR 0001), il n'y a plus de séparation par personne — confirmer ou
+ * contester dépend uniquement de la permission du rôle (`tresorerie.recevoir`,
+ * `tresorerie.rejeter`), y compris pour l'envoyeur ; une auto-confirmation reste tracée
+ * (MouvementFonds::confirmeParExpediteur()).
  */
 class MouvementFondsPolicy
 {
@@ -27,6 +34,21 @@ class MouvementFondsPolicy
     public function create(User $user): bool
     {
         return $user->can('tresorerie.create');
+    }
+
+    /**
+     * Régler une dette inter-agences (ADR 0012) : « Régler » crée ET envoie le règlement en une seule
+     * opération — il faut donc les deux droits (création, envoi) et, comme pour tout envoi, être
+     * affecté à l'agence débitrice (admin : toute l'organisation). Seule garantie d'autorisation :
+     * le `peut_regler` des écrans n'en est que le reflet.
+     */
+    public function regler(User $user, Site $debiteur): bool
+    {
+        if (! $user->can('tresorerie.create') || ! $user->can('tresorerie.envoyer') || $user->organization_id !== $debiteur->organization_id) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($debiteur->id);
     }
 
     public function envoyer(User $user, MouvementFonds $mouvement): bool

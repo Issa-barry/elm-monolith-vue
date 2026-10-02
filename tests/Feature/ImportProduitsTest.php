@@ -135,6 +135,70 @@ class ImportProduitsTest extends TestCase
         $this->actingAs($user)->get(route('produits.imports.create'))->assertStatus(403);
     }
 
+    public function test_index_returns_200_for_authorized_user(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('produits.imports.index'))
+            ->assertStatus(200);
+    }
+
+    public function test_index_returns_403_without_permission(): void
+    {
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $user->assignRole('manager');
+
+        $this->actingAs($user)->get(route('produits.imports.index'))->assertStatus(403);
+    }
+
+    public function test_index_ne_retourne_que_les_imports_de_lorganisation(): void
+    {
+        $import = $this->importer([$this->ligne()]);
+
+        $autreOrg = Organization::factory()->create();
+        $autreUser = User::factory()->create(['organization_id' => $autreOrg->id]);
+        ImportProduits::create([
+            'organization_id' => $autreOrg->id,
+            'user_id' => $autreUser->id,
+            'fichier_original' => 'autre.xlsx',
+            'fichier_path' => 'imports-produits/autre/autre.xlsx',
+            'statut' => 'analyse',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.imports.index'));
+
+        $response->assertStatus(200);
+        $props = $response->original->getData()['page']['props'];
+        $this->assertCount(1, $props['imports']);
+        $this->assertSame($import->id, $props['imports'][0]['id']);
+    }
+
+    public function test_show_returns_200_for_authorized_user(): void
+    {
+        $import = $this->importer([$this->ligne()]);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.imports.show', $import))
+            ->assertStatus(200);
+    }
+
+    public function test_show_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $autreUser = User::factory()->create(['organization_id' => $autreOrg->id]);
+        $import = ImportProduits::create([
+            'organization_id' => $autreOrg->id,
+            'user_id' => $autreUser->id,
+            'fichier_original' => 'autre.xlsx',
+            'fichier_path' => 'imports-produits/autre/autre.xlsx',
+            'statut' => 'analyse',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.imports.show', $import))
+            ->assertStatus(403);
+    }
+
     public function test_modele_returns_200_for_authorized_user(): void
     {
         $this->actingAs($this->user)

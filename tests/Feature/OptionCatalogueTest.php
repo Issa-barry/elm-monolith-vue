@@ -105,6 +105,15 @@ class OptionCatalogueTest extends TestCase
             ->assertSessionHasErrors('nom');
     }
 
+    public function test_store_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['options.read']);
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.options.store'), ['nom' => 'Taille'])
+            ->assertStatus(403);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_modifies_option(): void
@@ -124,6 +133,16 @@ class OptionCatalogueTest extends TestCase
         $option = $this->makeOption($otherOrg);
 
         $this->actingAs($this->user)
+            ->put(route('produits.options.update', $option), ['nom' => 'Test'])
+            ->assertStatus(403);
+    }
+
+    public function test_update_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $option = $this->makeOption($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['options.read']);
+
+        $this->actingAs($sansDroit)
             ->put(route('produits.options.update', $option), ['nom' => 'Test'])
             ->assertStatus(403);
     }
@@ -162,6 +181,16 @@ class OptionCatalogueTest extends TestCase
         $this->assertDatabaseHas('option_catalogues', ['id' => $option->id, 'deleted_at' => null]);
     }
 
+    public function test_destroy_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $option = $this->makeOption($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['options.read']);
+
+        $this->actingAs($sansDroit)
+            ->delete(route('produits.options.destroy', $option))
+            ->assertStatus(403);
+    }
+
     // ── valeurs ───────────────────────────────────────────────────────────────
 
     public function test_store_valeur_ajoute_une_valeur_au_catalogue(): void
@@ -188,6 +217,16 @@ class OptionCatalogueTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_store_valeur_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $option = $this->makeOption($this->org);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['options.read']);
+
+        $this->actingAs($sansDroit)
+            ->post(route('produits.options.valeurs.store', $option), ['valeur' => 'Rouge'])
+            ->assertStatus(403);
+    }
+
     public function test_destroy_valeur_supprime_la_valeur(): void
     {
         $option = $this->makeOption($this->org);
@@ -198,5 +237,27 @@ class OptionCatalogueTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseMissing('option_catalogue_valeurs', ['id' => $valeur->id]);
+    }
+
+    public function test_destroy_valeur_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $option = $this->makeOption($otherOrg);
+        $valeur = $option->valeurs()->create(['valeur' => 'Noir', 'position' => 0]);
+
+        $this->actingAs($this->user)
+            ->delete(route('produits.options.valeurs.destroy', [$option, $valeur]))
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_valeur_refuse_utilisateur_sans_permission_meme_organisation(): void
+    {
+        $option = $this->makeOption($this->org);
+        $valeur = $option->valeurs()->create(['valeur' => 'Noir', 'position' => 0]);
+        $sansDroit = $this->makeUserWithPermissions($this->org, ['options.read']);
+
+        $this->actingAs($sansDroit)
+            ->delete(route('produits.options.valeurs.destroy', [$option, $valeur]))
+            ->assertStatus(403);
     }
 }

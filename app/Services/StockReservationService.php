@@ -116,7 +116,7 @@ class StockReservationService
     /**
      * $orgId explicite dans CHAQUE recherche (25/08/2026) — jusqu'ici, seule l'unicité globale
      * des ULID source_id empêchait une fuite entre organisations ; ce filtre est désormais une
-     * défense explicite, cohérente avec le reste du module (MouvementStockService, StockController),
+     * défense explicite, cohérente avec le reste du module (MouvementStockService, IndexStockController),
      * plutôt qu'une dépendance implicite à l'unicité des identifiants.
      */
     private static function terminer(string $sourceType, string $sourceId, string $siteId, string $orgId, StatutReservationStock $statutFinal): void

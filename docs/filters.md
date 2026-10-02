@@ -39,6 +39,7 @@ Les filtres avancés sont appliqués uniquement au clic sur **Appliquer les filt
 | `searchKey` | `string` | — | Si fourni, inclut la valeur de recherche dans les params serveur |
 | `resultCount` | `number` | **requis** | Nombre de résultats affichés |
 | `fields` | `FilterField[]` | **requis** | Configuration des champs du drawer |
+| `triggerTarget` | `HTMLElement \| null` | `null` | Élément où déplacer le bouton **Filtres** (ex. en-tête de page, à côté de « Nouveau ») ; voir [Bouton « Filtres » dans l'en-tête](#bouton--filtres--dans-len-tête-triggertarget) |
 
 ## v-model
 
@@ -66,8 +67,12 @@ interface FilterField {
   type: FilterFieldType
   options?: Array<{ value: string | number; label: string }>
   placeholder?: string
-  startKey?: string     // date-range uniquement : nom du param début
-  endKey?: string       // date-range uniquement : nom du param fin
+  startKey?: string     // date-range / period : nom du param début
+  endKey?: string       // date-range / period : nom du param fin
+  inline?: boolean      // dans la barre plutôt que dans le drawer
+  searchable?: boolean  // select uniquement : liste avec recherche par nom + croix d'effacement
+  wide?: boolean        // champ inline plus large (280 px au lieu de 180) pour un libellé long
+  defaultValue?: string // period uniquement : raccourci par défaut (non envoyé, pas un filtre actif)
 }
 
 type FilterFieldType =
@@ -76,6 +81,7 @@ type FilterFieldType =
   | 'multi-select'
   | 'date'
   | 'date-range'
+  | 'period'
   | 'number'
   | 'boolean'
 ```
@@ -97,6 +103,19 @@ La différence entre les deux est sémantique — en pratique ils s'affichent id
 
 La valeur interne est toujours un `string[]`. Vide `[]` = Tous = paramètre omis de l'URL.
 
+### `select` avec recherche (`searchable: true`)
+Pour choisir **une entité par son nom** dans une liste trop longue pour être parcourue à l'œil (une caisse,
+un client…), un `select` peut être `searchable` : `FilterSearchSelect` (PrimeVue Select avec champ de
+recherche, croix d'effacement, libellé complet affiché) remplace la liste à cocher. Le contrat ne change
+pas : l'état interne reste un `string[]` d'au plus une valeur, et **c'est l'identifiant (`value`) qui part au
+serveur**, jamais le libellé — le filtrage se fait côté backend. Ajouter `wide: true` (champ `inline`) pour
+que le nom choisi s'affiche en entier dans la barre.
+
+```typescript
+{ key: 'caisse_id', label: 'Caisse', type: 'select', inline: true, searchable: true, wide: true,
+  placeholder: 'Rechercher une caisse…', options: caisses }  // caisses: [{ value: id, label: nom }]
+```
+
 ### `text`
 Champ texte libre.
 ```typescript
@@ -110,6 +129,18 @@ Par défaut, génère les params `${key}_debut` et `${key}_fin`. Surchargeables 
 { key: 'date', label: 'Période', type: 'date-range', startKey: 'date_debut', endKey: 'date_fin' }
 ```
 
+### `period`
+Raccourcis de période (Aujourd'hui, Hier, Cette semaine, Ce mois…) **résolus côté serveur**, plus
+« Période personnalisée » qui affiche deux dates. Les `options` viennent du backend
+(`SituationPeriode::pourFront()`), jamais calculées dans le navigateur (fuseau et début de semaine
+restent ceux de l'application). Un raccourci envoie `key=<valeur>` ; `personnalisee` envoie
+`startKey`/`endKey` (défaut `date_from`/`date_to`) ; `defaultValue` n'est pas envoyé et ne compte pas
+comme filtre actif. Utilisé par le rapport d'activité (cf. [rapports.md](rapports.md)).
+```typescript
+{ key: 'periode', label: 'Période', type: 'period', inline: true, defaultValue: 'aujourd_hui',
+  startKey: 'date_from', endKey: 'date_to', options: periode.options }
+```
+
 ### `date`
 Champ date unique.
 ```typescript
@@ -117,10 +148,28 @@ Champ date unique.
 ```
 
 ### `number`
-Champ numérique.
+Champ numérique, dans le drawer ou — avec `inline: true` — directement dans la barre (même gabarit
+que le champ `text` : libellé au-dessus, `h-9`, 180 px, **Entrée** applique ; spinners du navigateur
+masqués). Une valeur vide est omise de l'URL.
+
+Pour une plage (montant, quantité…), déclarer **deux** champs `number` : le backend applique
+`>=` sur la borne min et `<=` sur la borne max (bornes incluses) et ignore une valeur non numérique.
 ```typescript
-{ key: 'montant_min', label: 'Montant minimum', type: 'number' }
+// Dans le tiroir du bouton « Filtres » (défaut) ; ajouter `inline: true` pour les mettre dans la barre.
+{ key: 'montant_min', label: 'Montant min', type: 'number', placeholder: '0' },
+{ key: 'montant_max', label: 'Montant max', type: 'number', placeholder: '0' },
 ```
+Exemple en production : `Comptabilite/MouvementsFonds/Index.vue` (barre : Agence → **Caisse** (recherche par
+nom) → Référence → Nature ; **Origine / Destination** (position de la caisse), **Statut, agences d'origine et
+de destination et Montant min/max dans le tiroir « Filtres »**, dont le bouton est placé dans l'en-tête à côté
+de « Nouveau mouvement » ; backend dans `MouvementFondsController::index`).
+
+Filtre Caisse de Mouvements de fonds : `caisse_id` (identifiant d'un support de trésorerie) filtre les
+mouvements où cette caisse est l'**origine OU la destination** (`compte_tresorerie_origine_id` /
+`compte_tresorerie_destination_id`) ; `caisse_role` (`origine` | `destination`, facultatif) restreint à une
+seule position et est **ignoré sans caisse**. Les caisses proposées sont celles qui figurent sur un mouvement
+que l'utilisateur peut voir (un non-admin ne découvre jamais une caisse hors de ses agences) ; deux caisses
+de même nom sont distinguées par leur agence. Les filtres se cumulent (ET) avec tous les autres.
 
 ### `boolean`
 PrimeVue Select avec les options Tous / Oui / Non. Émet `'1'`, `'0'` ou `''`.
@@ -303,6 +352,42 @@ Pour ajouter des contrôles directement dans la barre (hors drawer) :
 
 ---
 
+## Bouton « Filtres » dans l'en-tête (`triggerTarget`)
+
+Deux façons de placer le bouton **Filtres** dans l'en-tête de page, à côté de « Nouveau » :
+
+- **`trigger-only`** — tous les champs vont dans le tiroir et la page n'a pas de barre de filtres
+  (Ventes, Produits, Supports…).
+- **`triggerTarget`** — la page garde des champs directement dans la barre (`inline: true`) **et** déplace
+  le bouton **Filtres** (donc le tiroir des champs sans `inline`) dans l'en-tête. C'est **une seule instance**
+  de `DataFilters` : le bouton est simplement téléporté (`<Teleport>`), l'état reste partagé. Le bouton
+  « Appliquer les filtres » du tiroir envoie aussi les champs de la barre, « Réinitialiser » vide tout, et le
+  badge du bouton ne compte que les filtres du tiroir.
+
+```vue
+<script setup lang="ts">
+const filtresHote = ref<HTMLElement | null>(null)
+</script>
+
+<template>
+    <ListPageActions>
+        <template #filters><div ref="filtresHote" class="contents"></div></template>
+        <template #primary><Link href="…">Nouveau mouvement</Link></template>
+    </ListPageActions>
+
+    <DataFilters url="…" :values="filters" :fields="filterFields" :trigger-target="filtresHote" />
+</template>
+```
+
+- Le conteneur cible est un `<div class="contents">` placé dans le slot `#filters` de `ListPageActions` :
+  l'ordre standard des actions d'en-tête (Exporter → Importer → Filtres → Nouveau) est ainsi conservé, et
+  le conteneur vide n'ajoute aucun espace.
+- Tant que la cible n'existe pas (premier rendu, avant que le `ref` soit posé) ou si `triggerTarget` n'est pas
+  fourni, le bouton reste dans la barre : le comportement historique est inchangé.
+- Exemple en production : `Comptabilite/MouvementsFonds/Index.vue`.
+
+---
+
 ## Réinitialisation
 
 Clic sur **Réinitialiser** (dans la barre ou dans le drawer) :
@@ -310,6 +395,71 @@ Clic sur **Réinitialiser** (dans la barre ou dans le drawer) :
 2. Vide `search`
 3. Appelle `router.get(url, baseParams)` si `url` est fourni
 4. Émet `@reset`
+
+---
+
+## Vues enregistrées (« Mes vues »)
+
+Prop `savedFilterScope` : affiche le bouton **Mes vues** (`SavedViews.vue`) à côté de **Filtres**.
+L'utilisateur enregistre les critères courants sous un nom, les réapplique en un clic, et peut
+marquer une vue comme **vue par défaut** (appliquée à l'ouverture de la liste sans paramètre).
+
+Listes activées :
+
+| Scope | Page | Critères enregistrables | Partage |
+|---|---|---|---|
+| `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
+| `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
+
+Règles (garanties par `SavedFilterService`) :
+- lecture/écriture exigent la permission de la liste déclarée dans `authorize` (`viewAny` Produit pour les deux scopes) ;
+  un scope inconnu répond 404 ; les vues sont isolées par organisation **et** par scope ;
+- seuls les critères du scope sont acceptés (`array:` strict) — un critère d'une autre liste est refusé ;
+- une vue **personnelle** n'est visible que de son auteur ; une vue **partagée** exige la permission
+  de partage du scope et reste en lecture seule pour les autres utilisateurs ;
+- un non-admin ne peut enregistrer que ses agences ; `site_scope = mine` (« Adapter la vue aux agences
+  de chaque utilisateur ») se résout au moment de l'application ;
+- les critères de la vue remplacent ceux de l'URL, la liste reste seule autorité métier (aucun calcul
+  n'est porté par la vue). Sur Stock, un non-admin reste limité à ses agences quoi que contienne la vue ;
+- `DataFilters` envoie `all=1` lors d'un filtrage/réinitialisation manuel : la vue par défaut ne se
+  réapplique alors pas. Toute réinitialisation propre à une page doit aussi envoyer `all=1`.
+
+### Architecture — un seul moteur, une configuration par liste
+
+| Élément | Rôle | Modifier quand… |
+|---|---|---|
+| `app/Support/SavedFilters/SavedFilterScopes.php` | **Configuration** : une entrée par liste (`authorize`, `share`, `sites`, `criteria` + règles) | on active les vues sur une nouvelle liste ou on ajoute un critère |
+| `app/Services/SavedFilterService.php` | **Moteur** : stockage, visibilité, partage, vue par défaut, « mes agences », validation | on change le comportement pour toutes les listes |
+| `app/Http/Controllers/SavedFilters/*` + routes `saved-filters/{scope}` | API JSON commune (liste, créer, renommer, supprimer, défaut) | jamais pour une liste précise |
+| `resources/js/components/filters/SavedViews.vue` | **UX unique** : menu Mes vues, dialogues, étoile « par défaut » | on change le design ou le parcours partout |
+| `DataFilters.vue` (prop `savedFilterScope`) | Intègre `SavedViews`, fournit les critères courants et leur libellé | — |
+
+Tables : `saved_filters` (vues, par organisation/auteur/scope) et `saved_filter_preferences` (vue par
+défaut **par utilisateur** et par scope — choisir une vue partagée comme défaut n'affecte personne d'autre).
+
+### Ajouter les vues sur une nouvelle liste (sans recopier de code)
+
+Ventes, Factures et Véhicules utilisent les scopes `ventes`, `factures` et `vehicules`.
+Le partage exige `ventes.update` (ventes/factures) ou `vehicules.update`. La vue des ventes
+ne s'applique pas à Distribution, même si ces pages partagent un contrôleur.
+Les filtres des véhicules sont appliqués côté serveur par `VehiculeIndexFilters` ; les compteurs
+restent globaux. Le type et l'agence du propriétaire sont enregistrés par identifiant, tandis
+que `site_ids[]` désigne l'agence du véhicule. Sur Factures, une vue sans période conserve le
+mois courant et `periode=tout` permet de voir toutes les dates.
+
+Les listes comptables utilisent également ce moteur via la prop `savedFilterScope` de
+`CommissionIndexLayout.vue` : `commissions-livreurs`, `commissions-proprietaires`,
+`commissions-sites`, `commissions-consultants` et `cashback`. Chaque liste conserve ses propres
+vues et sa préférence par défaut. La lecture reprend `canReadCommissions()` pour les commissions
+et la policy cashback ; le partage exige respectivement `commissions.update` et `cashback.update`.
+Les consultants et le cashback n'exposent pas l'option « mes agences », leurs listes n'ayant pas
+ce filtre. Les critères sont validés côté serveur et les identifiants sont limités à l'organisation.
+
+1. `SavedFilterScopes::all()` : ajouter l'entrée du scope (mêmes clés que les paramètres de requête de la liste).
+2. Contrôleur Index : `$savedView = app(SavedFilterService::class)->applyToRequest($request, '<scope>');`
+   **avant** de lire les filtres, puis exposer `'saved_view' => $savedView` aux props Inertia.
+3. Page : `<DataFilters saved-filter-scope="<scope>" … />` ; toute réinitialisation propre à la page envoie `all=1`.
+4. Tests : une vue du scope est appliquée par la liste (modèle : `tests/Feature/StockSavedViewsTest.php`).
 
 ---
 

@@ -16,7 +16,7 @@ use Tests\TestCase;
 
 /**
  * Vérifie que l'API expose exactement la même logique que
- * ClientDashboardController::storeVehicleProposal() (Inertia) — les deux
+ * StoreVehicleProposalClientDashboardController (Inertia) — les deux
  * appellent VehicleProposalService, jamais un moteur dupliqué.
  */
 class PropositionsVehiculeControllerTest extends TestCase

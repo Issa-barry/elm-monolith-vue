@@ -15,6 +15,7 @@
  * Run: E2E_SKIP_GLOBAL_SETUP=1 npx playwright test tests/e2e/commission-site-flow.spec.ts --workers=1
  */
 import { expect, test } from '@playwright/test';
+import { configurerBareme, montantPattern } from './commissions/helpers';
 import { loginAsElmV2Demo } from './helpers';
 
 test.setTimeout(120_000);
@@ -28,40 +29,26 @@ test.beforeEach(async ({ page }) => {
 test('définir un barème "Site" par catégorie dans Paramètres > Commissions', async ({
     page,
 }) => {
+    await configurerBareme(page, {
+        categorieNom: CATEGORIE_NOM,
+        montants: { site: 1000 },
+    });
+
     await page.goto('/settings/commissions');
     await expect(
         page.getByRole('heading', { name: /^commissions$/i }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Colonne "Site" présente à côté de Propriétaire/Livraison — jamais un onglet séparé, jamais
+    // Colonne "Site" présente à côté de Propriétaire/Livreur — jamais un onglet séparé, jamais
     // de mention résiduelle de "gérants dépôt".
-    await expect(
-        page.getByRole('columnheader', { name: /^site$/i }),
-    ).toBeVisible();
-    await expect(
-        page.getByRole('columnheader', { name: /gérants? dépôt/i }),
-    ).toHaveCount(0);
+    await expect(page.getByText('Site', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/gérants? dépôt/i)).toHaveCount(0);
 
     const row = page
-        .locator('tbody tr', { hasText: new RegExp(CATEGORIE_NOM, 'i') })
+        .locator('[data-testid^="commission-row-"]', { hasText: CATEGORIE_NOM })
         .first();
     await expect(row).toBeVisible({ timeout: 15_000 });
-
-    // Ordre des colonnes cible : Propriétaire, Livraison, Site (cf. CommissionRegleController).
-    const siteCell = row.getByRole('button').nth(2);
-    await siteCell.click();
-
-    const dialog = page.getByRole('dialog', { name: /site/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await dialog.locator('#cr-montant').fill('1000');
-    await dialog.getByRole('button', { name: /enregistrer/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
-
-    // Toast de succès en haut (jamais en bas), cf. mission §10.
-    await expect(page.getByText(/barème enregistré/i)).toBeVisible({
-        timeout: 10_000,
-    });
-    await expect(siteCell).toContainText(/1.?000/);
+    await expect(row).toContainText(new RegExp(montantPattern(1000)));
 });
 
 test("l'écran Comptabilité > Commission sites se charge avec ses filtres et ses cartes de synthèse", async ({
@@ -121,7 +108,7 @@ test('la navigation latérale regroupe les commissions sous Comptabilité', asyn
 
     const commissionsItem = accountingItem
         .locator('[data-sidebar="menu-sub-item"]')
-        .filter({ has: commissionsButton });
+        .filter({ has: page.getByRole('button', { name: /^commissions$/i }) });
     await commissionsItem.getByRole('link', { name: /^sites$/i }).click();
 
     await expect(page).toHaveURL(/\/comptabilite\/commissions\/sites$/, {

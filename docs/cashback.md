@@ -38,18 +38,23 @@ Un client de nature `revendeur` :
 - ne peut jamais être enregistré avec `cashback_montant_par_pack` vide ou `≤ 0`.
 
 Garanti côté backend par [`CashbackEligibiliteService`](../app/Services/CashbackEligibiliteService.php),
-seul point d'entrée appelé par `ClientController::store()`/`update()` — jamais une règle
+seul point d'entrée appelé par `StoreClientController`/`UpdateClientController` — jamais une règle
 dupliquée côté frontend uniquement. `ClientForm.vue` reflète cette règle en n'affichant même
 plus de choix Oui/Non pour un Revendeur (juste un badge verrouillé « Cashback actif »), pour ne
 jamais laisser croire que « Non » serait sélectionnable.
 
-Pour Externe/Distributeur, le cashback reste facultatif, mais s'il est activé le montant par
-pack redevient obligatoire (même service, même règle, sans le caractère automatique).
+Pour Externe/Distributeur, le cashback est **désactivé par défaut** (`cashback_eligible = false`,
+valeur par défaut de la colonne) et reste facultatif — l'utilisateur l'active explicitement au cas
+par cas. S'il est activé, le montant par pack redevient obligatoire (même service, même règle,
+sans le caractère automatique). Côté formulaire (`ClientForm.vue`), tout changement de nature
+réinitialise le toggle à sa valeur par défaut (`true` pour Revendeur, `false` pour Externe/
+Distributeur) afin qu'un « Oui » hérité d'un Revendeur quitté ne se propage jamais silencieusement
+vers une autre nature.
 
 ## Génération — moment et formule
 
 **Moment (inchangé, CASHBACK non concerné)** : le cashback naît au paiement complet de la
-facture (`EncaissementVenteController`, transition `!étaitPayée && estPayéeMaintenant`), gardé
+facture (`Ventes\StoreEncaissementVenteController`, transition `!étaitPayée && estPayéeMaintenant`), gardé
 derrière `Feature::CASHBACK`. Ce déclencheur préexistait à ce chantier et n'a pas été modifié —
 seule la **formule** de calcul change.
 

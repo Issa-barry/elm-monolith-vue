@@ -20,7 +20,7 @@ use Illuminate\Http\Request;
  *
  * Priorité d'affichage si un compte cumule plusieurs profils (ex: proprietaire
  * ET client) : proprietaire > client > livreur, cohérent avec
- * ClientDashboardController::resolveQrPayload().
+ * QrCodeClientDashboardController::resolveQrPayload().
  */
 class ProfileController extends Controller
 {

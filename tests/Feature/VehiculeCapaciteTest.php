@@ -44,10 +44,11 @@ class VehiculeCapaciteTest extends TestCase
             'vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete',
             'type-vehicules.read', 'type-vehicules.create', 'type-vehicules.update', 'type-vehicules.delete',
             'logistique.read', 'logistique.create', 'logistique.update',
+            'pdv.create',
         ]);
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
-        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // Ventes\StoreCommandeVenteController (23/08/2026, cf. CommandeVenteService::
         // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
@@ -621,6 +622,10 @@ class VehiculeCapaciteTest extends TestCase
         $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 70]);
         $siteDestination = $this->makeSiteDestination($this->org);
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+        // Correctif du 04/09/2026 (TransfertLogistiqueService::verifierDisponibiliteLignes()
+        // désormais appelée dès store()) : un transfert exige un stock suffisant sur le site
+        // source pour être créé.
+        $this->seedVarianteStockSuffisant($produitSachet->variantePrincipale()->first(), $this->defaultSite);
 
         // Bien en dessous du plafond (70) — la logistique n'exige jamais un chargement complet,
         // contrairement à la vente (pas de paramètre équivalent).

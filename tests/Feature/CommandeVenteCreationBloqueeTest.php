@@ -20,7 +20,7 @@ use Tests\TestCase;
  * Le bouton « Nouvelle commande » de la page Ventes (et l'accès direct à sa route) est bloqué
  * uniquement quand la politique globale interdit la vente sans stock (Parametre::
  * isVentesAutoriseesSansStock()) ET que le site personnel de l'utilisateur (celui que
- * CommandeVenteController::getUserSiteModel() utilisera réellement pour la commande) n'a
+ * CommandeVenteFormBuilder::getUserSiteModel() utilisera réellement pour la commande) n'a
  * absolument AUCUN produit vendable maintenant — cf. CommandeVenteService::
  * siteAutoriseNouvelleCommande() / StockStatutService::sitePossedeStockVendable(). C'est une
  * EXISTENCE ("le site a-t-il quelque chose à vendre ?"), jamais une somme de quantités : un
@@ -59,7 +59,7 @@ class CommandeVenteCreationBloqueeTest extends TestCase
 
         // Type explicitement vendable ('fabricable') : le type par défaut de
         // makeProduitAvecVariante() ('materiel') a gere_stock=true MAIS vendable=false — jamais
-        // proposé à la vente (cf. CommandeVenteController::produitsActifs(), qui filtre déjà
+        // proposé à la vente (cf. CommandeVenteFormBuilder::produitsActifs(), qui filtre déjà
         // vendable=true) et donc jamais compté par stockTotalVendableSite().
         $this->produit = $this->makeProduitAvecVariante(
             $this->org,

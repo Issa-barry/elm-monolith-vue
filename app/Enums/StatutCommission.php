@@ -28,7 +28,7 @@ enum StatutCommission: string
             self::IMPAYE => 'bg-red-500',
             self::PARTIEL => 'bg-amber-500',
             self::PAYE => 'bg-emerald-500',
-            self::ANNULEE => 'bg-zinc-400 dark:bg-zinc-500',
+            self::ANNULEE => 'bg-red-500',
         };
     }
 

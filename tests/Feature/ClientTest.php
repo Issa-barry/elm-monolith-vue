@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\EntrepriseTierce;
+use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Parametre;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,7 +65,7 @@ class ClientTest extends TestCase
 
     // ── store ─────────────────────────────────────────────────────────────────
 
-    public function test_store_creates_client_and_redirects_to_edit(): void
+    public function test_store_creates_client_and_redirects_to_show(): void
     {
         $response = $this->actingAs($this->user)
             ->post(route('clients.store'), [
@@ -77,7 +79,7 @@ class ClientTest extends TestCase
             ->where('nom_complet', 'Aissatou Diallo')
             ->firstOrFail();
 
-        $response->assertRedirect(route('clients.edit', $client));
+        $response->assertRedirect(route('clients.show', $client));
 
         $this->assertDatabaseHas('clients', [
             'nom_complet' => 'Aissatou Diallo',
@@ -335,6 +337,118 @@ class ClientTest extends TestCase
                 'is_active' => true,
             ])
             ->assertRedirect(route('clients.edit', $client));
+    }
+
+    public function test_store_duplicate_telephone_message_nomme_lautre_client(): void
+    {
+        Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Amadou Diallo',
+            'telephone' => '+224622000001',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Un Autre',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+            ]);
+
+        $response->assertSessionHasErrors('telephone');
+        $this->assertStringContainsString('Amadou Diallo', session('errors')->get('telephone')[0]);
+    }
+
+    // ── vérification live du téléphone (verifierTelephone) ──────────────────────
+
+    public function test_verifier_telephone_signale_un_autre_client_comme_bloquant(): void
+    {
+        Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Amadou Diallo',
+            'telephone' => '+224622000010',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('clients.verifier-telephone', [
+                'telephone' => '622000010',
+                'code_phone_pays' => '+224',
+            ]));
+
+        $response->assertOk()->assertJson([
+            'found' => true,
+            'blocking' => true,
+            'type' => 'client',
+            'label' => 'Client',
+            'nom' => 'Amadou Diallo',
+        ]);
+    }
+
+    public function test_verifier_telephone_signale_un_fournisseur_comme_non_bloquant(): void
+    {
+        $entreprise = EntrepriseTierce::resoudreOuCreer($this->org->id, [
+            'raison_sociale' => 'Société Baldé SARL',
+            'telephone' => '+224622000011',
+        ]);
+        Fournisseur::create([
+            'organization_id' => $this->org->id,
+            'entreprise_tierce_id' => $entreprise->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('clients.verifier-telephone', [
+                'telephone' => '622000011',
+                'code_phone_pays' => '+224',
+            ]));
+
+        $response->assertOk()->assertJson([
+            'found' => true,
+            'blocking' => false,
+            'type' => 'fournisseur',
+            'label' => 'Fournisseur',
+            'nom' => 'Société Baldé SARL',
+        ]);
+    }
+
+    public function test_verifier_telephone_ne_trouve_rien_pour_un_numero_libre(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->getJson(route('clients.verifier-telephone', [
+                'telephone' => '699999999',
+                'code_phone_pays' => '+224',
+            ]));
+
+        $response->assertOk()->assertJson(['found' => false]);
+    }
+
+    public function test_verifier_telephone_exclut_le_client_en_cours_dedition(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000012',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('clients.verifier-telephone', [
+                'telephone' => '622000012',
+                'code_phone_pays' => '+224',
+                'client_id' => $client->id,
+            ]));
+
+        $response->assertOk()->assertJson(['found' => false]);
+    }
+
+    public function test_verifier_telephone_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->getJson(route('clients.verifier-telephone', [
+                'telephone' => '622000013',
+                'code_phone_pays' => '+224',
+            ]))
+            ->assertStatus(403);
     }
 
     public function test_update_refuses_telephone_conflict_with_other_client(): void
@@ -734,6 +848,25 @@ class ClientTest extends TestCase
         $this->assertTrue($client->fresh()->cashback_eligible);
     }
 
+    public function test_update_cashback_depuis_la_fiche_refuse_sans_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $client = Client::factory()->create([
+            'organization_id' => $user->organization_id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => 450,
+            ])
+            ->assertStatus(403);
+
+        $this->assertFalse($client->fresh()->cashback_eligible);
+    }
+
     public function test_update_cashback_depuis_la_fiche_est_isole_par_organisation(): void
     {
         $otherOrg = Organization::factory()->create();
@@ -768,7 +901,7 @@ class ClientTest extends TestCase
                 'code_pays' => 'GN',
                 'ville' => 'Conakry',
             ])
-            ->assertRedirect(); // redirige vers edit du nouveau client
+            ->assertRedirect(); // redirige vers la fiche détail du nouveau client
 
         $this->assertDatabaseHas('clients', [
             'nom_complet' => 'Mariama Sylla',
@@ -943,6 +1076,19 @@ class ClientTest extends TestCase
         $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_derogation_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+        $client = Client::factory()->create(['organization_id' => $user->organization_id]);
+
+        $this->actingAs($user)
             ->patch(route('clients.derogation-impayes.update', $client), [
                 'derogation_impayes_autorisee' => true,
                 'seuil_derogation_impayes' => 5_000_000,

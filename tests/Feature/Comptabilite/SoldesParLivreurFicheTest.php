@@ -97,8 +97,8 @@ class SoldesParLivreurFicheTest extends TestCase
             'montant_brut' => $ficheNet,
             'total_deductions' => 0,
             'montant_net' => $ficheNet,
-            'montant_paye' => $fichePaye,
-            'statut' => $fichePaye >= $ficheNet ? 'paye' : ($fichePaye > 0 ? 'partiellement_paye' : 'a_payer'),
+            'montant_paye' => 0,
+            'statut' => 'a_payer',
         ]);
 
         PaiementFicheLigne::create([
@@ -109,6 +109,13 @@ class SoldesParLivreurFicheTest extends TestCase
             'libelle' => 'Commission logistique test',
             'montant' => $part->montant_net,
             'ordre' => 1,
+        ]);
+
+        // Paiement posé après les lignes, comme dans le flux réel : une fiche payée est figée
+        // et ses lignes deviennent intouchables (ADR 0010).
+        $fiche->update([
+            'montant_paye' => $fichePaye,
+            'statut' => $fichePaye >= $ficheNet ? 'paye' : ($fichePaye > 0 ? 'partiellement_paye' : 'a_payer'),
         ]);
 
         return $fiche;

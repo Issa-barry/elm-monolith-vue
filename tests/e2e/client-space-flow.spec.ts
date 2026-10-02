@@ -36,7 +36,7 @@ test('client space pages are accessible for proprietaire account', async ({
             timeout: 15_000,
         },
     );
-    await expect(profileHeader).toContainText(/proprietaire/i, {
+    await expect(profileHeader).toContainText(/propri[ée]taire/i, {
         timeout: 15_000,
     });
 

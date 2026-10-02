@@ -80,11 +80,31 @@ class DepenseCreationScopeTest extends TestCase
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
-    public function test_admin_peut_creer_depense_sans_droit_configure(): void
+    /**
+     * Depuis le 2026-09-06, admin_entreprise ne bypasse plus DroitCreationDepenseService::peutCreer()
+     * — reproduit ici le provisioning de continuité qu'InstallationService::install() pose
+     * désormais pour toute organisation réelle (cf. sa docblock de classe).
+     */
+    public function test_admin_avec_droit_configure_peut_creer_depense(): void
     {
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'admin_entreprise',
+            'perimetre' => 'toutes_agences',
+            'is_actif' => true,
+            'peut_valider' => true,
+        ]);
+
         $this->actingAs($this->adminUser())
             ->post('/backoffice/depenses', $this->storePayload())
             ->assertRedirect();
+    }
+
+    public function test_admin_sans_droit_configure_recoit_403(): void
+    {
+        $this->actingAs($this->adminUser())
+            ->post('/backoffice/depenses', $this->storePayload())
+            ->assertForbidden();
     }
 
     public function test_commerciale_sans_droit_recoit_403(): void

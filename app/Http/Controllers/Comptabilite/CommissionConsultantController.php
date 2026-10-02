@@ -8,14 +8,18 @@ use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Prestataire;
+use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
+use App\Services\SavedFilterService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -40,8 +44,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * compris un ancien consultant remplacé ou désactivé depuis (cf. mission §3) : le groupBy sur
  * beneficiaire_id — jamais un filtre sur "le consultant actuel" — garantit cette persistance.
  * Mêmes conventions que les autres écrans Commission v2 : cartes de synthèse, DataFilters,
- * StatusDot, exports, jamais de paiement direct (chaîne unique via Comptabilité > Fiches de
- * paiement).
+ * StatusDot, exports. Le bouton Payer d'une ligne enregistre le paiement sur la fiche de la
+ * période (FichePayableResolver) — jamais une chaîne de paiement parallèle.
  */
 class CommissionConsultantController extends Controller
 {
@@ -56,7 +60,10 @@ class CommissionConsultantController extends Controller
 
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'commissions-consultants');
 
         [$list, $meta] = $this->resolveBeneficiaires($request);
         $orgId = auth()->user()->organization_id;
@@ -78,15 +85,18 @@ class CommissionConsultantController extends Controller
             : [];
 
         return Inertia::render('Comptabilite/CommissionConsultant/Index', [
+            'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $meta['search'],
             'filtre_statut' => $meta['filtre_statut'],
             'filtre_consultant_id' => $meta['filtre_consultant_id'],
+            'filtre_processus' => $meta['filtre_processus'],
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $meta['filtre_periode'],
             'periodes_disponibles' => $periodesDisponibles,
             'consultants_options' => $meta['consultants_options'],
-            'can_payer' => false,
+            'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
 
@@ -100,20 +110,21 @@ class CommissionConsultantController extends Controller
      */
     public function show(Request $request, string $consultantId): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
 
         $orgId = auth()->user()->organization_id;
 
         $prestataire = Prestataire::with(['personne', 'entrepriseTierce'])->find($consultantId);
         $nom = $prestataire?->nom_complet ?? '—';
 
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
             ->where('beneficiaire_id', $consultantId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->where('cible_type', CommissionCibleType::CODE_CONSULTANT))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $filters = CommissionDetailFilters::fromRequest($request);
         $periodeFilter = $filters['periode'];
@@ -258,6 +269,8 @@ class CommissionConsultantController extends Controller
                 'site_ids' => [],
                 'periode_range' => $periodeRange,
             ],
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'can_payer' => false,
         ]);
     }
@@ -279,6 +292,10 @@ class CommissionConsultantController extends Controller
             $filtrePeriode = '';
         }
         $filtreConsultantId = $this->scalarInput($request, 'consultant_id');
+        // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
+        // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
+        // et CommissionProcessusFilter).
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $query = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
@@ -296,6 +313,8 @@ class CommissionConsultantController extends Controller
             $query->where('beneficiaire_id', $filtreConsultantId);
         }
 
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
+
         $allParts = $query->get();
         $partsParConsultant = $allParts->groupBy('beneficiaire_id');
 
@@ -305,9 +324,10 @@ class CommissionConsultantController extends Controller
             ->whereIn('id', $allConsultantIds)
             ->get()
             ->keyBy('id');
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(auth()->user(), CommissionEnveloppePart::TYPE_PRESTATAIRE, $allConsultantIds, $filtrePeriode);
 
         $beneficiaires = $partsParConsultant->map(function (Collection $parts, string $consultantId) use (
-            $fraisDepensesParConsultant, $prestatairesById,
+            $fraisDepensesParConsultant, $prestatairesById, $fichesPayables,
         ) {
             $prestataire = $prestatairesById->get($consultantId);
             $fraisDepenses = $fraisDepensesParConsultant[$consultantId] ?? 0.0;
@@ -346,8 +366,12 @@ class CommissionConsultantController extends Controller
                 'total_genere' => $buckets['total_genere'],
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
-                // Jamais payable depuis cet écran, cf. docblock de classe.
-                'can_pay' => false,
+                // Toujours exposé, même filtré sur un seul processus (décision produit du
+                // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
+                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
+                // Payable uniquement via la fiche due de la période, cf. docblock de classe.
+                'can_pay' => $fichesPayables->has($consultantId),
+                'fiche_a_payer' => $fichesPayables->get($consultantId),
             ];
         })->values();
 
@@ -376,6 +400,7 @@ class CommissionConsultantController extends Controller
             'filtre_statut' => $filtreStatut,
             'filtre_periode' => $filtrePeriode,
             'filtre_consultant_id' => $filtreConsultantId,
+            'filtre_processus' => $filtreProcessus,
             'consultants_options' => $consultantsOptions,
         ]];
     }
@@ -383,7 +408,7 @@ class CommissionConsultantController extends Controller
     private function statutLabel(string $statut): string
     {
         return match ($statut) {
-            StatutCommission::CREEE->value => 'Créée',
+            StatutCommission::CREEE->value => 'À valider',
             StatutCommission::IMPAYE->value => 'Impayé',
             StatutCommission::PARTIEL->value => 'Partiel',
             StatutCommission::PAYE->value => 'Payé',
@@ -394,8 +419,8 @@ class CommissionConsultantController extends Controller
 
     /**
      * Dépenses attribuées directement au prestataire (beneficiaire_type=prestataire) —
-     * mécanisme désormais pleinement fonctionnel (CategorieDepense::PRESTATAIRE, cf.
-     * DepenseController), contrairement au même point resté un no-op documenté côté Commission
+     * mécanisme désormais pleinement fonctionnel (CategorieDepense::PRESTATAIRE, cf. module
+     * Dépenses, App\Http\Controllers\Depenses\StoreDepenseController), contrairement au même point resté un no-op documenté côté Commission
      * sites : une dépense créée avec ce bénéficiaire est réellement déduite ici.
      *
      * @param  array<int, string>  $consultantIds
@@ -428,7 +453,7 @@ class CommissionConsultantController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
         abort_unless(auth()->user()->can('commissions.exporter'), 403);
 
         [$rows] = $this->resolveBeneficiaires($request);
@@ -458,7 +483,7 @@ class CommissionConsultantController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->canReadCommissions(), 403);
         abort_unless(auth()->user()->can('commissions.exporter'), 403);
 
         [$rows] = $this->resolveBeneficiaires($request);

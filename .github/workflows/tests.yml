@@ -11,19 +11,62 @@ jobs:
   ci:
     name: PHPUnit
     runs-on: ubuntu-latest
+    # contents: read suffit : la dernière étape (mise à jour de la variable de dépôt
+    # PHPUNIT_PASSED_FINGERPRINTS) utilise un PAT dédié (secret PHPUNIT_FP_PAT), pas
+    # GITHUB_TOKEN — cf. commentaire sur cette étape pour pourquoi actions: write ne
+    # suffirait pas.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Empreinte du code qui influence réellement le résultat de PHPUnit (tout sauf la
+      # doc et les workflows CI). dev→pre-prod→production→main est un flux de PROMOTION
+      # pure (branch-flow.yml n'autorise que dev→pre-prod, pre-prod→production,
+      # production→main) : une PR de promotion sans nouveau commit reteste un code déjà
+      # validé une étape plus tôt. `git ls-tree` est content-addressed (les hash changent
+      # dès qu'un fichier change), donc cette empreinte est stable tant que le contenu
+      # testable ne change pas, même si le commit de merge lui a un SHA différent à
+      # chaque étape.
+      - name: Compute test fingerprint
+        id: fp
+        run: |
+          FP=$(git ls-tree -r HEAD | awk -F'\t' '
+            $2 !~ /^\.github\// && $2 !~ /^docs\// && $2 !~ /^README/ && $2 !~ /^CHANGELOG/ && $2 !~ /\.md$/
+          ' | sha256sum | cut -d' ' -f1)
+          echo "fp=$FP" >> "$GITHUB_OUTPUT"
+
+      # actions/cache ne peut PAS servir ici : un cache créé pendant une PR est scopé à
+      # `refs/pull/N/merge` et n'est restaurable que par des re-runs de CETTE PR (doc
+      # GitHub "Restrictions for accessing a cache") — inutilisable pour partager un
+      # résultat entre la PR dev→pre-prod et la PR pre-prod→production suivante. On
+      # utilise donc une variable de dépôt (repository variable), visible par toutes les
+      # branches sans restriction de scope.
+      - name: Check if this exact code was already validated
+        id: skip_check
+        run: |
+          if echo '${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}' | grep -q "${{ steps.fp.outputs.fp }}"; then
+            echo "Empreinte déjà validée par une étape précédente du flux dev→pre-prod→production→main — PHPUnit sauté."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # NOTE sur tous les `if:` de ce job : un `if:` personnalisé sur une step GitHub Actions
+      # SUPPRIME le garde-fou implicite success() (documenté : "the moment you write a custom
+      # if, that implicit check is dropped") — sans le `success() &&` explicite ci-dessous, un
+      # échec de composer/npm laisserait quand même tourner les steps suivantes.
       - name: Setup PHP
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.4
-          extensions: pcov
           tools: composer:v2
 
       - name: Cache Composer dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: vendor
@@ -31,51 +74,166 @@ jobs:
           restore-keys: composer-
 
       - name: Setup Node
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install Node dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm ci
 
       - name: Install PHP dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Copy environment file
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: cp .env.example .env
 
       - name: Generate application key
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: php artisan key:generate
 
+      # Requis avant les tests : certaines pages Inertia rendues en Feature test
+      # (@vite dans resources/views/app.blade.php) ont besoin de public/build/manifest.json.
       - name: Build assets
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm run build
 
-      - name: Run PHPUnit with coverage
-        run: ./vendor/bin/phpunit --coverage-clover coverage/clover.xml
+      # Suite complète (3727 tests) parallélisée sur les 4 vCPU du runner via paratest
+      # (auparavant : phpunit mono-processus, ~47 min à chaque run — cf. run #33674536588).
+      # sqlite :memory: isole nativement chaque process paratest : aucune config DB par
+      # worker n'est nécessaire. Coverage retiré de ce gate (pcov ajoutait du surcoût à
+      # chaque run et coverage/clover.xml n'était consommé par aucun outil — ni Codecov ni
+      # Sonar ne sont configurés dans ce dépôt) ; à réintroduire séparément (job dédié, non
+      # bloquant) si un besoin de suivi de couverture apparaît.
+      #
+      # continue-on-error : validé le 2026-09-04, la parallélisation expose un problème
+      # PRÉEXISTANT de non-isolation entre tests (au moins un test mute un état process-wide,
+      # probablement via config() — ex: app.deployment_mode dans ProductionDeploySeedingTest/
+      # InstallWizardTest/InstallAppTest — sans le restaurer) : 4 tests de
+      # DepenseParametrageTest échouent uniquement quand combinés à d'autres fichiers dans un
+      # même worker, alors qu'ils passent à 100% isolés ou en série. Ce n'est pas un bug
+      # introduit par ce chantier — l'ordre fixe de phpunit en série l'a toujours masqué — mais
+      # tant que la vraie cause (hors périmètre ici) n'est pas corrigée, le run parallèle seul
+      # n'est pas un gate fiable. D'où les deux étapes suivantes : les échecs du run parallèle
+      # sont rejoués en série (1 process, isolation garantie) avant de faire échouer le gate.
+      - name: Run PHPUnit (parallel)
+        id: parallel_run
+        if: success() && steps.skip_check.outputs.skip != 'true'
+        continue-on-error: true
+        run: php artisan test --parallel --processes=4 --log-junit=storage/logs/paratest-junit.xml
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage/clover.xml
-          retention-days: 1
+      - name: Extract failed tests from parallel run
+        id: failed_tests
+        if: success() && steps.parallel_run.outcome == 'failure'
+        run: |
+          FILTER=$(php -r '
+            $doc = new DOMDocument();
+            $doc->load("storage/logs/paratest-junit.xml");
+            $names = [];
+            foreach ($doc->getElementsByTagName("testcase") as $tc) {
+                if ($tc->getElementsByTagName("failure")->length > 0 || $tc->getElementsByTagName("error")->length > 0) {
+                    $names[] = preg_quote($tc->getAttribute("class"), "/") . "::" . preg_quote($tc->getAttribute("name"), "/");
+                }
+            }
+            echo implode("|", array_unique($names));
+          ')
+          echo "filter=$FILTER" >> "$GITHUB_OUTPUT"
+          echo "Échecs en parallèle à revalider en série : ${FILTER:-<aucun test identifiable — crash infra, pas un échec de test>}"
 
-  e2e:
-    name: E2E
+      - name: Rerun failed tests in serial mode (isolation check)
+        if: success() && steps.parallel_run.outcome == 'failure'
+        run: |
+          if [ -z "${{ steps.failed_tests.outputs.filter }}" ]; then
+            echo "Le run parallèle a échoué sans échec de test individuel identifiable (crash/erreur infra) — gate en échec."
+            exit 1
+          fi
+          php artisan test --filter='${{ steps.failed_tests.outputs.filter }}'
+
+      # Enregistre l'empreinte comme validée pour que les PR de promotion suivantes
+      # (pre-prod→production, production→main) sautent PHPUnit sur ce même code. success()
+      # ici couvre les deux cas légitimes (run parallèle direct OK, ou rejeu en série des
+      # échecs OK) puisqu'une vraie panne à n'importe quelle étape précédente (pas de
+      # continue-on-error sur le rejeu série) rend success() faux.
+      #
+      # continue-on-error : garde-fou de robustesse. Cette étape a échoué en continu le
+      # 2026-09-04 (run #33915634101, 403 "Resource not accessible by integration") tant
+      # qu'elle utilisait GITHUB_TOKEN : l'API REST "repos/.../actions/variables" exclut
+      # délibérément ce token, même avec `actions: write` déclaré et
+      # default_workflow_permissions=write au niveau du dépôt — seul un PAT (ou une GitHub
+      # App dédiée) peut écrire une variable de dépôt. D'où PHPUNIT_FP_PAT ci-dessous : un
+      # fine-grained PAT scopé à ce repo avec la permission "Variables: write" (à créer
+      # dans Settings > Developer settings > Personal access tokens, puis à stocker comme
+      # secret de dépôt). continue-on-error reste en place au cas où ce PAT expire ou est
+      # révoqué : dans ce cas, seule la déduplication inter-étapes est perdue pour ce run,
+      # pas le gate PHPUnit lui-même (les tests ont déjà tourné à l'étape précédente).
+      - name: Record fingerprint as validated
+        if: success() && steps.skip_check.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.PHPUNIT_FP_PAT }}
+        run: |
+          CURRENT='${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}'
+          NEW=$(echo "${CURRENT:-[]}" | jq -c --arg fp "${{ steps.fp.outputs.fp }}" '(. + [$fp]) | unique | .[-30:]')
+          if ! gh api -X PATCH "repos/${{ github.repository }}/actions/variables/PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"; then
+            gh api -X POST "repos/${{ github.repository }}/actions/variables" -f name="PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"
+          fi
+
+  # Fail-safe partagé par e2e-full et e2e-smoke : le E2E tourne par défaut, il n'est
+  # skippé que si TOUS les fichiers modifiés sont de la doc (README.md, docs/**, **/*.md).
+  # Dès qu'un seul fichier hors doc change (y compris .github/**), non_docs=true. Job à
+  # part (pas juste un step) car ces deux jobs doivent pouvoir sauter tout leur setup
+  # (checkout, composer, mysql...) sur une PR 100% doc, pas seulement leurs tests.
+  changes:
+    name: Detect non-doc changes
     runs-on: ubuntu-latest
-    # Re-repassé en smoke-only le 26/08/2026 : la suite complète (173 tests, 43 fichiers)
-    # dépasse maintenant systématiquement le timeout même remonté à 90 min (job tué par le
-    # timeout à ~1h30, jamais un vrai flake — cf. run annulé PR #411). workers=1 empêche
-    # de paralléliser pour compenser (session cookie partagée, cf. step "Run full E2E
-    # tests" dans git blame). Fix réel (sharding en jobs parallèles isolés, ou nettoyage
-    # de la suite pendant la refonte gérant/prestataire) remis à plus tard volontairement.
-    timeout-minutes: 20
+    outputs:
+      non_docs: ${{ steps.filter.outputs.non_docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            non_docs:
+              - '!README.md'
+              - '!docs/**'
+              - '!**/*.md'
+
+  e2e-full:
+    name: E2E full (shard ${{ matrix.shard }}/4)
+    needs: changes
+    # dev → pre-prod : suite complète, seule promotion qui la justifie (cf. e2e-smoke et
+    # le job absent sur pre-prod → production → main plus bas).
+    # Désactivé du 2026-09-01 au 2026-09-03 (`false &&` ci-devant) pour accélérer une MEP
+    # urgente, réactivé ensuite comme prévu — cf. commit qui a introduit ce commentaire.
+    if: github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
+    runs-on: ubuntu-latest
+    # Shardée le 31/08/2026 (remplace le mode smoke-only introduit le 26/08/2026) : la
+    # suite complète (173 tests, 43 fichiers) en --workers=1 dans UN SEUL job dépassait
+    # systématiquement le timeout même remonté à 90 min (job tué par le timeout à ~1h30,
+    # jamais un vrai flake — cf. run annulé PR #411, et historique complet dans git blame
+    # de ce fichier). workers=1 reste nécessaire *à l'intérieur* d'un job (tous les tests
+    # y partagent le même cookie de session issu de global-setup.ts : avec workers>1 un
+    # worker peut âger le flash Laravel d'un autre entre son POST et son GET) — mais rien
+    # n'empêche de répartir les fichiers sur plusieurs jobs matrix isolés (chacun son
+    # service MySQL, son serveur `php artisan serve --env=e2e`, son cookie de session),
+    # ce que `playwright test --shard` fait nativement. 4 shards : ~43 fichiers/job, large
+    # marge sous ce timeout au vu du temps par test observé lors de la réactivation.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # .env.e2e (chargé par `php artisan serve --env=e2e`, cf. playwright.config.ts) pointe
     # sur une vraie base MySQL isolée (elm_monolithe_e2e), pas sqlite — sans ce service le
     # serveur E2E n'a aucune base à joindre : soit 500 immédiat sur /login (connexion
     # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
-    # flow local `npm run e2e:db:reset` (voir package.json).
+    # flow local `npm run e2e:db:reset` (voir package.json). Un service par job de matrix :
+    # chaque shard a la sienne, aucun partage de données entre shards.
     services:
       mysql:
         image: mysql:8.0
@@ -147,11 +305,19 @@ jobs:
       # Base dédiée à `php artisan serve --env=e2e` (cf. .env.e2e) — le service
       # mysql ci-dessus est vide au démarrage à part la DB elm_monolithe_e2e créée
       # par MYSQL_DATABASE ; il faut encore la migrer/seeder avant que Playwright
-      # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local.
+      # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local — y compris
+      # le seeder ElmV2DemoSeeder (organisation "Eau La Maman V2 Demo", cf. son commentaire),
+      # absent du DatabaseSeeder par défaut et donc jamais rejoué par --seed seul. Sans cette
+      # 2e commande, le compte +224600000201 (loginAsElmV2Demo(), tests/e2e/helpers.ts)
+      # n'existe pas en CI : les 9 specs commission-*/commissions/* qui l'utilisent échouent
+      # systématiquement sur "Numéro de téléphone ou mot de passe incorrect" (confirmé en CI
+      # le 05/09/2026, run #1128 — ce step divergeait du script local depuis l'introduction du
+      # seeder le 20/08/2026, jamais répercuté ici).
       - name: Prepare E2E database (.env.e2e)
         run: |
           php artisan config:clear
           php artisan migrate:fresh --seed --env=e2e --force
+          php artisan db:seed --class=ElmV2DemoSeeder --env=e2e --force
 
       # APP_ENV=e2e (pas juste VITE_*) : les actions Wayfinder générées pendant ce build
       # (resources/js/actions/**) embarquent une URL absolue lue depuis config('app.url'),
@@ -162,10 +328,134 @@ jobs:
           VITE_SHOW_ENTITY_STATS_CARDS: 'true'
         run: npm run e2e:build
 
-      # Smoke uniquement pour l'instant (cf. step "Run smoke E2E tests" plus bas) — quelques
-      # tests, largement sous la barre des 20 min ; le budget large reste une marge de
-      # sécurité (setup PHP/Node/Playwright + build), pas un dimensionnement pour la suite
-      # complète (historique de cette dernière dans git blame si besoin de la restaurer).
+      # workers=1 : tous les tests d'un même job partagent le même cookie de session
+      # (chargé depuis .auth/user.json, cf. commentaire du job ci-dessus) — nécessaire
+      # même en étant shardé, chaque shard restant un job à lui seul avec son propre
+      # global-setup.ts.
+      - name: Run E2E shard
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+        run: npx playwright test --shard=${{ matrix.shard }}/4 --workers=1
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full-shard-${{ matrix.shard }}
+          path: playwright-report
+          retention-days: 7
+
+  # Nom de contexte stable pour la ruleset GitHub "Protection pre-prod" : un job matrix
+  # (e2e-full ci-dessus) n'expose PAS un statut par nom fixe (ce sont "E2E full (shard
+  # 1/4)" … "4/4)"), donc rien à référencer dans required_status_checks qui survive à
+  # un changement du nombre de shards. Piège déjà vécu le 2026-09-01 (PR #427) avec
+  # l'ancien check `E2E`, resté bloqué en "Waiting" indéfiniment après le passage au
+  # sharding — cf. mémoire e2e-full-disabled-mep. `if: always()` : ce job doit s'exécuter
+  # (et donc reporter un statut) même si un shard échoue ou si e2e-full est skip (PR
+  # 100% doc, ou base_ref != pre-prod) — sinon la ruleset resterait bloquée en "Waiting".
+  e2e-full-gate:
+    name: E2E full
+    needs: e2e-full
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifie le résultat agrégé des 4 shards
+        run: |
+          result="${{ needs.e2e-full.result }}"
+          echo "e2e-full result: $result"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            exit 1
+          fi
+
+  e2e-smoke:
+    name: E2E smoke
+    needs: changes
+    # pre-prod → production : smoke tests only (fast gate before deploy), pas la suite
+    # complète (déjà passée sur dev → pre-prod, cf. e2e-full ci-dessus).
+    # production → main : aucun E2E — main ne reçoit qu'un commit déjà déployé et déjà
+    # smoke-testé, PHPUnit (job `ci`) suffit ici (github.base_ref ne vaut alors ni
+    # 'pre-prod' ni 'production', donc ni e2e-full ni e2e-smoke ne tournent).
+    if: github.base_ref == 'production' && needs.changes.outputs.non_docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: elm_monolithe_e2e
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          tools: composer:v2
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      # Cache miss → télécharge le binaire ET installe les dépendances système (apt)
+      - name: Install Playwright browser + system deps (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Cache hit → binaire déjà restauré, on installe seulement les paquets système (rapide)
+      - name: Install Playwright system deps only (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Prepare Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --seed --force
+
+      - name: Prepare E2E database (.env.e2e)
+        run: |
+          php artisan config:clear
+          php artisan migrate:fresh --seed --env=e2e --force
+
+      - name: Build assets
+        env:
+          VITE_SHOW_ENTITY_STATS_CARDS: 'true'
+        run: npm run e2e:build
+
       - name: Run smoke E2E tests
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
@@ -175,6 +465,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ github.base_ref }}
+          name: playwright-report-smoke
           path: playwright-report
           retention-days: 7

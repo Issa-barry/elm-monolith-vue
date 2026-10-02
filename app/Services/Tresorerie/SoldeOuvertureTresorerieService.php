@@ -9,6 +9,7 @@ use App\Models\SoldeOuvertureTresorerie;
 use App\Services\Comptabilite\EcritureComptableService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Enregistre puis valide le solde d'ouverture d'un support de trésorerie. La
@@ -28,6 +29,20 @@ class SoldeOuvertureTresorerieService
     {
         if ($compteTresorerie->organization_id !== $organizationId) {
             throw new \InvalidArgumentException('Support de trésorerie hors organisation.');
+        }
+
+        if ($compteTresorerie->isDediee()) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_id' => "Une caisse dédiée à un agent n'a pas de solde d'ouverture : elle démarre à 0 et s'alimente depuis la caisse de l'agence.",
+            ]);
+        }
+
+        // Un support en brouillon est inutilisable : pas de solde d'ouverture (donc pas de pièce
+        // comptable) avant sa validation (SupportTresorerieValidationService).
+        if (! $compteTresorerie->estValide()) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_id' => "« {$compteTresorerie->libelle} » n'est pas encore validé : validez le support avant de saisir son solde d'ouverture.",
+            ]);
         }
 
         if ($compteTresorerie->soldeOuverture()->exists()) {

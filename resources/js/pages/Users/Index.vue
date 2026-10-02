@@ -77,7 +77,6 @@ const props = defineProps<{
     validation_fonction_options: FonctionRhOption[];
     type_employe_options: Option[];
     statut_employe_options: Option[];
-    role_labels: Record<string, string>;
 }>();
 
 const { can } = usePermissions();
@@ -408,10 +407,7 @@ function confirmReject(u: StaffUser) {
                         style="width: 180px"
                     >
                         <template #body="{ data }">
-                            <RoleBadges
-                                :roles="data.roles"
-                                :role-labels="props.role_labels"
-                            />
+                            <RoleBadges :roles="data.roles" />
                         </template>
                     </Column>
 

@@ -9,6 +9,7 @@ use App\Models\Produit;
 use App\Models\ProduitType;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use App\Services\ProduitSeuilAlerteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -55,7 +56,6 @@ class ProduitApiTest extends TestCase
             'nom' => 'Produit test',
             'produit_type_id' => $this->typeId($typeCode, $org),
             'statut' => 'actif',
-            'alerte_stock_active' => false,
         ], $overrides);
 
         if ($typeCode !== 'service' && ! isset($payload['prix_achat'])) {
@@ -140,6 +140,23 @@ class ProduitApiTest extends TestCase
             ]);
     }
 
+    public function test_show_resout_alerte_stock_active_pour_le_site_par_defaut_de_lutilisateur(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = $this->makeProduit($this->org);
+        $siteDefaut = $this->user->sites()->first();
+
+        // Activation par site (cf. ProduitSeuilAlerteService) : le champ API alerte_stock_active
+        // reflète désormais le site PAR DÉFAUT de l'utilisateur qui consulte, jamais un choix
+        // global — cf. ProduitResource::alerteActivePourRequete().
+        app(ProduitSeuilAlerteService::class)->definir($produit, $siteDefaut->id, true, 5);
+
+        $this->getJson(route('api.backoffice.produits.show', $produit))
+            ->assertOk()
+            ->assertJsonFragment(['alerte_stock_active' => true]);
+    }
+
     public function test_show_expose_le_fournisseur(): void
     {
         Sanctum::actingAs($this->user, ['*']);
@@ -190,7 +207,6 @@ class ProduitApiTest extends TestCase
             'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 1500,
-            'alerte_stock_active' => false,
         ]);
 
         $response->assertCreated()

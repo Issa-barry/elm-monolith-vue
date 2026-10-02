@@ -231,4 +231,62 @@ class CommissionRegleResolverTest extends TestCase
 
         $this->assertNull($resolue);
     }
+
+    // ── R1 (24/09/2026) : résolution par date, même d'une règle depuis remplacée ─
+
+    private function creerVersion(float $montant, string $statut, string $du, ?string $au = null): CommissionRegle
+    {
+        return CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $this->processus->id,
+            'libelle' => 'Livreur — Bouteille',
+            'scope_type' => CommissionScopeType::CATEGORIE->value,
+            'scope_id' => 'cat-1',
+            'cible_type' => 'equipe_livraison',
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => $montant,
+            'effective_from' => $du,
+            'effective_to' => $au,
+            'statut' => $statut,
+        ]);
+    }
+
+    private function resoudreAu(string $date): ?CommissionRegle
+    {
+        return CommissionRegleResolver::resolve(
+            $this->org->id, $this->processus->id, 'equipe_livraison',
+            varianteId: null, produitId: null, categorieId: 'cat-1',
+            date: Carbon::parse($date),
+        );
+    }
+
+    /** @test */
+    public function une_regle_remplacee_reste_applicable_sur_sa_propre_fenetre(): void
+    {
+        $ancienne = $this->creerVersion(800, 'remplacee', '2026-08-01', '2026-09-09');
+        $nouvelle = $this->creerVersion(1000, 'active', '2026-09-10');
+
+        $this->assertSame($ancienne->id, $this->resoudreAu('2026-09-05')?->id, 'Une date passée garde le barème alors en vigueur.');
+        $this->assertSame($ancienne->id, $this->resoudreAu('2026-09-09')?->id, 'effective_to est inclusif.');
+        $this->assertSame($nouvelle->id, $this->resoudreAu('2026-09-10')?->id);
+        $this->assertNull($this->resoudreAu('2026-07-31'), 'Avant toute version : aucune règle.');
+    }
+
+    /** @test */
+    public function un_brouillon_nest_jamais_applicable(): void
+    {
+        $this->creerVersion(1000, 'brouillon', '2026-09-01');
+
+        $this->assertNull($this->resoudreAu('2026-09-15'));
+    }
+
+    /** @test */
+    public function une_regle_retiree_nest_plus_applicable_apres_sa_fin(): void
+    {
+        $this->creerVersion(800, 'remplacee', '2026-08-01', '2026-09-09');
+
+        $this->assertNotNull($this->resoudreAu('2026-09-09'));
+        $this->assertNull($this->resoudreAu('2026-09-10'));
+    }
 }

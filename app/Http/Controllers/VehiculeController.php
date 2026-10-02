@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Enums\CategorieVehicule;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Depense;
+use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
@@ -19,9 +21,21 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
+use App\Services\Commission\CommissionPartageLivraisonValidator;
+use App\Services\Commission\CommissionProcessusDefaults;
+use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
+use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
+use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
+use App\Services\Vehicules\VehiculeListExport;
+use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\SavedFilters\SavedFilterScopes;
+use App\Support\Vehicules\SituationPeriode;
+use App\Support\Vehicules\VehiculeIndexFilters;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -31,10 +45,14 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class VehiculeController extends Controller
 {
-    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+    public function __construct(
+        private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+        private readonly VehiculeSituationVentesService $situationVentesService,
+    ) {}
 
     private function vehiculeData(Vehicule $v): array
     {
@@ -70,6 +88,18 @@ class VehiculeController extends Controller
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
+            'agence_id' => $agence?->id,
+            // Parrainage (phase 1, sans commission ni historique — cf.
+            // docs/parrainage-vehicule.md). code_pays exposé (contrairement à proprietaire_*)
+            // car édité en place depuis cette fiche, pas via une page dédiée avec splitPhone().
+            'parrain_id' => $v->parrain_id,
+            'parrain_nom_complet' => $v->parrain?->nom_complet,
+            'parrain_telephone' => $v->parrain?->telephone,
+            'parrain_code_phone_pays' => $v->parrain?->code_phone_pays,
+            'parrain_code_pays' => $v->parrain?->code_pays,
+            'parrain_pays' => $v->parrain?->pays,
+            'parrain_ville' => $v->parrain?->ville,
+            'parrain_adresse' => $v->parrain?->adresse,
             'equipe_id' => $equipe?->id,
             'equipe_nom' => $equipe ? $v->nom_vehicule : null,
             'livreur_principal_nom' => $membres->first()
@@ -80,9 +110,14 @@ class VehiculeController extends Controller
             // données historiques sans nom_complet) est déjà composé ici pour
             // ne pas dupliquer cette logique côté frontend — voir self::membreLabel().
             'equipe_membres' => $this->membresAvecLabel($membres)->map(fn ($m) => [
+                'livreur_id' => $m['membre']->livreur_id,
                 'livreur_nom' => $m['label'],
                 'telephone' => $m['membre']->livreur?->telephone ?? null,
                 'role' => $m['membre']->role,
+                // Un livreur inactif (désactivé ou auto-inscrit non approuvé) peut rester membre :
+                // sans ce statut, l'équipe paraît complète alors que la distribution est refusée.
+                'livreur_actif' => (bool) ($m['membre']->livreur?->is_active ?? false),
+                'livreur_a_un_compte' => $m['membre']->livreur?->user_id !== null,
                 'taux_commission' => (float) $m['membre']->taux_commission,
                 'montant_par_pack' => (int) $m['membre']->montant_par_pack,
             ])->values()->all(),
@@ -144,19 +179,93 @@ class VehiculeController extends Controller
         return $this->membresAvecLabel(collect([$m]))->first()['label'];
     }
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.categorie'])
-            ->where('organization_id', auth()->user()->organization_id)
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedViews = app(SavedFilterService::class);
+        $savedView = $savedViews->applyToRequest($request, 'vehicules');
+        $filters = $request->only($savedViews->filterKeys($request->user(), 'vehicules'));
+        $filters = array_filter($filters, fn ($value) => $value !== null);
+        $filters = validator($filters, [
+            ...SavedFilterScopes::all($request->user())['vehicules']['criteria'],
+            'site_ids' => ['array'],
+            'site_ids.*' => ['ulid'],
+        ])->validate();
+
+        $orgId = auth()->user()->organization_id;
+        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
+            ->where('organization_id', $orgId)
             ->orderBy('nom_vehicule')
-            ->get()
-            ->map(fn (Vehicule $v) => $this->vehiculeData($v));
+            ->get();
+        $partages = PartageConformiteVehiculesService::statuts($orgId, $modeles);
+
+        $vehicules = $modeles->map(fn (Vehicule $v) => [
+            ...$this->vehiculeData($v),
+            'partages_commission' => $partages[$v->id] ?? [],
+        ]);
 
         return Inertia::render('Vehicules/Index', [
-            'vehicules' => $vehicules,
+            'saved_view' => $savedView,
+            'filters' => $filters,
+            'vehicules' => VehiculeIndexFilters::apply($vehicules, $filters),
+            'vehicule_stats' => VehiculeIndexFilters::stats($vehicules),
+            'types_options' => $vehicules->unique('type_vehicule_id')->sortBy('type_label')
+                ->map(fn ($v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_label']])->values(),
+            'agences_proprietaires_options' => $vehicules->whereNotNull('agence_id')->unique('agence_id')->sortBy('agence_nom')
+                ->map(fn ($v) => ['value' => $v['agence_id'], 'label' => $v['agence_nom']])->values(),
         ]);
+    }
+
+    /**
+     * Export "Exporter les véhicules" — instantané en lecture seule de la liste (mêmes colonnes
+     * que Vehicules/Index.vue), jamais réimportable — à ne pas confondre avec exportMaj()
+     * ci-dessous ("Exporter pour mise à jour"), qui produit un gabarit réimportable restreint aux
+     * seuls champs modifiables.
+     */
+    public function export()
+    {
+        $this->authorize('viewAny', Vehicule::class);
+
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites.categorie'])
+            ->where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom_vehicule')
+            ->get();
+
+        return Excel::download(
+            new VehiculeListExport($vehicules),
+            'vehicules-'.now()->format('Y-m-d').'.xlsx'
+        );
+    }
+
+    /**
+     * Export "Exporter pour mise à jour" — une ligne par véhicule de l'organisation, préremplie
+     * avec son état réel (site, capacités, usages), destinée à être réimportée telle quelle via
+     * ImportVehiculesMajController après modification des seules colonnes autorisées. Gardée sur
+     * ce contrôleur (et non ImportVehiculesMajController) car c'est un export de l'état courant
+     * des véhicules, symétrique de l'action "Exporter" déjà présente sur d'autres pages de
+     * liste — jamais un import flotte : ces deux imports/exports restent des chemins séparés.
+     */
+    public function exportMaj()
+    {
+        $this->authorize('viewAny', Vehicule::class);
+
+        $orgId = auth()->user()->organization_id;
+
+        $vehicules = Vehicule::with(['site', 'capacites'])
+            ->where('organization_id', $orgId)
+            ->orderBy('nom_vehicule')
+            ->get();
+
+        $categories = Categorie::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get();
+
+        return Excel::download(
+            new ExportVehiculesMajExport($vehicules, $categories),
+            'export-vehicules-maj.xlsx'
+        );
     }
 
     public function create(Request $request): Response|RedirectResponse
@@ -256,11 +365,31 @@ class VehiculeController extends Controller
             ->with('success', 'Véhicule créé avec succès.');
     }
 
-    public function show(Vehicule $vehicule): Response
+    public function show(Request $request, Vehicule $vehicule, CommandeVenteFormBuilder $commandeFormBuilder): Response
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
+        // "Processus disponible" ≠ "processus obligatoire" (révisé le 31/08/2026) : un véhicule
+        // Vente-only n'a jamais Distribution client/Transfert logistique à configurer, et
+        // inversement un véhicule Logistique-only n'a jamais Vente — cf.
+        // CommissionProcessusDefaults::codesApplicablesPourVehicule(), source unique partagée avec
+        // EquipeLivraisonController. Un véhicule sans aucun usage actif (cas transitoire) retombe
+        // sur la liste complète pour ne jamais afficher un écran cassé — aucun partage n'y sera de
+        // toute façon jamais exigé (CommissionPartageLivraisonCategorieChecker reste la garde réelle).
+        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
+            $vehicule,
+            CommissionRegleController::processusCodesDisponibles(),
+        );
+        if (empty($codesApplicables)) {
+            $codesApplicables = CommissionRegleController::processusCodesDisponibles();
+        }
+
+        $processusCode = $request->query('processus', $codesApplicables[0]);
+        if (! in_array($processusCode, $codesApplicables, true)) {
+            $processusCode = $codesApplicables[0];
+        }
+
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -276,6 +405,9 @@ class VehiculeController extends Controller
                 'statut' => $d->statut,
                 'commentaire' => $d->commentaire,
             ]);
+
+        $situationPeriode = SituationPeriode::depuisRequete($request);
+        $situationVentes = $this->situationVentesService->pourVehicule($vehicule, $situationPeriode);
 
         $equipe = $vehicule->equipe;
         $equipeData = null;
@@ -308,14 +440,25 @@ class VehiculeController extends Controller
                 'membres' => $membres,
                 // Partage Livraison PAR CATÉGORIE existant (V2) — clé par livreur_id,
                 // la popup résout elle-même l'index membre correspondant côté client.
-                'partages_categorie' => $this->partagesCategorieExistants($equipe->id),
+                // Scopé au processus actif : vente/distribution_client/logistique_transfert
+                // ont chacun leur propre partage, jamais un fallback silencieux entre eux.
+                'partages_categorie' => $this->partagesCategorieExistants($equipe->id, $vehicule->organization_id, $processusCode),
             ];
         }
 
         return Inertia::render('Vehicules/Show', [
             'vehicule' => $this->vehiculeData($vehicule),
+            // Même règle que le refus serveur d'une distribution (CommandeVenteFormBuilder) :
+            // la fiche annonce le blocage avant qu'une commande ne soit tentée.
+            'distribution_chauffeur_motif' => $vehicule->livraison_logistique
+                ? $commandeFormBuilder->motifChauffeurIndisponible(
+                    $commandeFormBuilder->resolveVehiculeAvecEquipe($vehicule->id, $vehicule->organization_id),
+                )
+                : null,
             'depenses' => $depenses,
             'equipe' => $equipeData,
+            'situation_ventes' => $situationVentes,
+            'situation_periode' => $situationPeriode->pourFront(),
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
@@ -323,7 +466,19 @@ class VehiculeController extends Controller
             // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
             // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
             // barème par cible peut différer d'une catégorie à l'autre).
-            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id),
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id, $processusCode),
+            'statuts_partage_commission' => $equipe
+                ? $this->statutsPartageCommission($equipe->id, $vehicule->organization_id, $vehicule->type_vehicule_id, $codesApplicables)
+                : [],
+            'processus_actif' => $processusCode,
+            // Filtré aux processus applicables à cet usage véhicule : un onglet/une colonne
+            // "Distribution client" ou "Transfert logistique" n'a jamais de sens pour un véhicule
+            // Vente-only, ni "Vente" pour un véhicule Logistique-only (cf.
+            // CommissionProcessusDefaults::codesApplicablesPourVehicule()).
+            'processus_options' => array_map(
+                fn (string $code) => ['value' => $code, 'label' => CommissionRegleController::processusLabel($code)],
+                $codesApplicables,
+            ),
         ]);
     }
 
@@ -424,7 +579,7 @@ class VehiculeController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'capacites']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
@@ -514,7 +669,7 @@ class VehiculeController extends Controller
      * dans la requête : omis, le plafond déjà enregistré en base est conservé tel quel (ex:
      * réactiver une dérogation précédemment désactivée sans ressaisir son montant) — fourni, il
      * remplace la valeur actuelle. Réutilise ensureDerogationCoherente() tel quel (même règle,
-     * jamais dupliquée). Même schéma que CategorieController::toggle().
+     * jamais dupliquée). Même schéma que ToggleCategorieController.
      */
     public function updateDerogation(Request $request, Vehicule $vehicule): RedirectResponse
     {
@@ -607,10 +762,10 @@ class VehiculeController extends Controller
      * fiche véhicule d'un Tricycle affichait le barème Livreur standard (300)
      * au lieu de son exception (250), menant à un partage équipe incohérent.
      */
-    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null): array
+    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null, string $processusCode = CommissionProcessus::CODE_VENTE): array
     {
         $processus = CommissionProcessus::where('organization_id', $orgId)
-            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->where('code', $processusCode)
             ->first();
 
         if (! $processus) {
@@ -681,9 +836,18 @@ class VehiculeController extends Controller
      * membre_ordre ici puisque l'ordre peut légitimement différer d'un
      * chargement à l'autre).
      */
-    private function partagesCategorieExistants(string $equipeId): array
+    private function partagesCategorieExistants(string $equipeId, string $orgId, string $processusCode = CommissionProcessus::CODE_VENTE): array
     {
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', $processusCode)
+            ->first();
+
+        if (! $processus) {
+            return [];
+        }
+
         return EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processus->id)
             ->whereNull('effective_to')
             ->get()
             ->groupBy('categorie_id')
@@ -696,6 +860,66 @@ class VehiculeController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * État du partage Livreur pour chaque catégorie et chaque processus APPLICABLE à l'usage du
+     * véhicule ($codesApplicables, cf. show()) — un processus que le véhicule n'est pas autorisé à
+     * exercer n'apparaît jamais ici, jamais comme « à faire » (révisé le 31/08/2026). « fait »
+     * signifie que les montants fixes actifs passent la même validation stricte que celle
+     * utilisée lors de l'enregistrement et de la génération.
+     *
+     * @param  array<int, string>  $codesApplicables
+     */
+    private function statutsPartageCommission(string $equipeId, string $orgId, ?string $typeVehiculeId, array $codesApplicables): array
+    {
+        $codes = $codesApplicables;
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->whereIn('code', $codes)
+            ->get()
+            ->keyBy('code');
+
+        $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->whereIn('processus_id', $processus->pluck('id'))
+            ->whereNull('effective_to')
+            ->get()
+            ->groupBy(fn (EquipeLivraisonPartageCategorie $partage) => $partage->processus_id.'|'.$partage->categorie_id
+            );
+
+        $statuts = [];
+        // « fait » = même règle que la commande et l'enregistrement de l'équipe (décision du
+        // 24/09/2026) : somme exacte ET chaque membre actif présent (0 GNF accepté).
+        $equipe = EquipeLivraison::find($equipeId);
+        $membresRequis = $equipe ? CommissionPartageLivraisonCategorieChecker::membresRequis($equipe)->keys() : collect();
+
+        foreach ($codes as $code) {
+            $processusCourant = $processus->get($code);
+            $baremes = $this->baremesCommissionParCategorie($orgId, $typeVehiculeId, $code);
+
+            foreach ($baremes as $bareme) {
+                $categorieId = $bareme['categorie_id'];
+                $enveloppe = (int) $bareme['montant_livraison'];
+
+                if ($enveloppe <= 0) {
+                    $statuts[$categorieId][$code] = 'non_requis';
+
+                    continue;
+                }
+
+                $lignes = $processusCourant
+                    ? $partages->get($processusCourant->id.'|'.$categorieId, collect())
+                    : collect();
+
+                try {
+                    CommissionPartageLivraisonValidator::valider($lignes, $enveloppe, $membresRequis);
+                    $statuts[$categorieId][$code] = 'fait';
+                } catch (\InvalidArgumentException) {
+                    $statuts[$categorieId][$code] = 'a_faire';
+                }
+            }
+        }
+
+        return $statuts;
     }
 
     private function proprietairesOptions(): array

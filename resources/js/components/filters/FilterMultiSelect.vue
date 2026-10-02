@@ -14,8 +14,23 @@ const props = withDefaults(
         disabled?: boolean;
         // Quand true, un model vide = "tous sélectionnés" (admin : toutes les agences)
         emptyMeansAll?: boolean;
+        // Pour DataFilters field.type === 'select' : au plus UNE valeur cochée à la fois. Sans
+        // cette contrainte, PrimeVue MultiSelect laisse cocher plusieurs cases (l'utilisateur peut
+        // cocher "Tous"/plusieurs statuts), mais DataFilters::buildParams() n'envoie jamais que la
+        // 1ère valeur du tableau au serveur — l'utilisateur croit avoir élargi le filtre alors que
+        // le résultat reste silencieusement identique à un seul choix (régression constatée le
+        // 02/09/2026 sur le filtre Processus : cocher Tous/Vente/Distribution/Transfert envoyait
+        // quand même ?processus=vente). Cocher une nouvelle valeur remplace l'ancienne au lieu de
+        // s'y ajouter ; l'en-tête générique "Tous" (qui coche tout, sémantiquement incohérent en
+        // single-select) est masqué.
+        singleSelect?: boolean;
     }>(),
-    { placeholder: 'Tous', disabled: false, emptyMeansAll: false },
+    {
+        placeholder: 'Tous',
+        disabled: false,
+        emptyMeansAll: false,
+        singleSelect: false,
+    },
 );
 
 const model = defineModel<(string | number)[]>({ default: () => [] });
@@ -44,6 +59,23 @@ function toggleAll() {
 
 function handleChange(newVal: (string | number)[]) {
     if (props.disabled) return;
+
+    if (props.singleSelect) {
+        // Ne garde jamais plus d'une valeur : celle qui vient d'être cochée remplace l'ancienne
+        // (comportement radio via des cases à cocher). Décocher l'unique valeur cochée vide le
+        // filtre, exactement comme un select classique sans valeur choisie.
+        if (newVal.length === 0) {
+            model.value = [];
+
+            return;
+        }
+        const previous = (model.value ?? []).map(String);
+        const newlyChecked = newVal.find((v) => !previous.includes(String(v)));
+        model.value = [newlyChecked ?? newVal[newVal.length - 1]];
+
+        return;
+    }
+
     model.value = newVal;
 }
 </script>
@@ -68,7 +100,11 @@ function handleChange(newVal: (string | number)[]) {
         }"
         @update:model-value="handleChange"
     >
-        <template #header>
+        <!-- "Tous" (cocher toutes les options à la fois) n'a pas de sens pour un champ
+        single-select (field.type === 'select') : cet en-tête générique de sélection multiple est
+        donc masqué dans ce mode, jamais affiché à côté d'options qui ne peuvent être cochées
+        qu'une à la fois. -->
+        <template v-if="!singleSelect" #header>
             <div
                 class="flex items-center gap-2 border-b px-3 py-2"
                 :class="

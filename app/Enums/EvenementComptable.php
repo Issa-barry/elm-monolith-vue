@@ -35,8 +35,18 @@ enum EvenementComptable: string
     // chargées), jamais la création de la facture (encore une estimation) ni la
     // livraison physique (statut LIVREE, purement logistique).
     case VENTE_FACTUREE = 'vente_facturee';
+    // Régularisation d'une facture déjà comptabilisée après un retour de livraison avant
+    // encaissement (App\Models\CommandeVenteRetour) — écriture inverse de VENTE_FACTUREE sur la
+    // seule valeur retournée (débit Ventes, crédit Client), une pièce par retour, jamais une
+    // contrepassation de la pièce d'origine (des retours partiels successifs se cumuleraient).
+    case VENTE_RETOUR = 'vente_retour';
     // Fait générateur = EncaissementVente créé (chaque encaissement, partiel ou total).
     case ENCAISSEMENT_VENTE_RECU = 'encaissement_vente_recu';
+    // Jambe « agence de la commande » d'un encaissement réalisé par une AUTRE agence (ADR 0012) :
+    // débit liaison (tiers = agence qui a encaissé) / crédit client, sur le site de la commande. La
+    // pièce ENCAISSEMENT_VENTE_RECU, elle, est alors posée sur le site d'encaissement : débit
+    // trésorerie / crédit liaison (tiers = agence de la commande).
+    case ENCAISSEMENT_VENTE_POUR_COMPTE = 'encaissement_vente_pour_compte';
     // Paiement de salaire (PaiePaiement) — jambe trésorerie uniquement (pas
     // d'engagement/dette préalable comptabilisé, cf. PaieComptabilisationService) :
     // couvre juste la sortie de caisse/banque nécessaire au calcul du disponible
@@ -76,7 +86,9 @@ enum EvenementComptable: string
             self::DEPENSE_AVANCE_TIERS_VALIDEE => 'Dépense imputée à un tiers (avance)',
             self::REGULARISATION_CLOTURE_FICHE => 'Régularisation de clôture (fiche non validée)',
             self::VENTE_FACTUREE => 'Vente facturée',
+            self::VENTE_RETOUR => 'Retour de livraison (régularisation de facture)',
             self::ENCAISSEMENT_VENTE_RECU => 'Encaissement client reçu',
+            self::ENCAISSEMENT_VENTE_POUR_COMPTE => 'Encaissement reçu par une autre agence',
             self::PAIEMENT_SALAIRE => 'Paiement salaire',
             self::MOUVEMENT_FONDS_ENVOYE => 'Mouvement de fonds — envoi',
             self::MOUVEMENT_FONDS_RECU => 'Mouvement de fonds — réception',
