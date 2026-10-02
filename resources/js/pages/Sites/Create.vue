@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { useConfirm } from 'primevue/useconfirm';
 import SiteForm from './partials/SiteForm.vue';
 
 interface Option {
@@ -11,8 +12,9 @@ interface Option {
     label: string;
 }
 
-defineProps<{
+const props = defineProps<{
     types: Option[];
+    tresorerie_principale: { id: string; nom: string } | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -28,10 +30,29 @@ const form = useForm({
     quartier: null as string | null,
     telephone: null as string | null,
     commissions_active: true,
+    is_central_tresorerie: false,
 });
 
-function submit() {
+const confirm = useConfirm();
+
+function envoyer() {
     form.post('/backoffice/sites');
+}
+
+function submit() {
+    const actuelle = props.tresorerie_principale;
+    if (form.is_central_tresorerie && actuelle) {
+        confirm.require({
+            header: 'Changer la trésorerie principale ?',
+            message: `Le site « ${actuelle.nom} » est actuellement la trésorerie principale. Si vous continuez, « ${form.nom} » deviendra la nouvelle trésorerie principale.`,
+            acceptLabel: 'Changer',
+            rejectLabel: 'Annuler',
+            accept: envoyer,
+        });
+
+        return;
+    }
+    envoyer();
 }
 </script>
 

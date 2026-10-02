@@ -42,7 +42,20 @@ trésorerie : c'était déjà un rôle financier, pas un rang administratif.
    normalisation signalée à l'analyse. L'import ne désigne jamais de site central.
 8. **Affichage** : un site de type `autre` s'affiche sous son seul nom (« Matoto », pas « Autre de
    Matoto »). Le rôle central est signalé dans la liste et sur la fiche du site.
-9. **Hors de ce lot** :
+9. **Changer de trésorerie principale** : interrupteur « Trésorerie principale » dans le
+   formulaire Site (création et modification).
+   - Il est réservé à la permission dédiée `tresorerie.designer_principale` : absent de l'écran
+     sans elle, et refusé côté serveur (403). Par défaut, seul le super administrateur l'a ;
+     elle s'attribue à d'autres rôles depuis la page Rôles. `sites.update` ne suffit pas, car
+     changer de site central redirige tous les règlements inter-agences.
+   - L'activer sur un autre site transfère le rôle, après une confirmation qui nomme
+     l'ancienne et la nouvelle trésorerie principale.
+   - On ne la retire jamais en la décochant : l'interrupteur est verrouillé sur le site actuel,
+     et un décochage envoyé au serveur est refusé. Une organisation ne se retrouve donc pas
+     sans trésorerie principale par erreur.
+   - Une valeur envoyée inchangée est ignorée : un utilisateur sans la permission peut modifier
+     le reste du site.
+10. **Hors de ce lot** :
    - aucun changement de comportement de `parent_id` (toujours sans règle métier) ;
    - aucune `designation` (siège national, régional, préfectoral) ;
    - aucun changement des règles de trésorerie de l'ADR 0016 : la destination unique reste le site
@@ -54,8 +67,10 @@ trésorerie : c'était déjà un rôle financier, pas un rang administratif.
   siège principal ». ADR 0009 et 0016, `docs/tresorerie-inter-agences.md`, `docs/encaissements.md` et
   `docs/commissions.md` sont alignés.
 - Une organisation existante sans site central reste sans site central : le paiement d'une fiche
-  sans agence reste bloqué avec un message explicite, comme avant. Aucun écran ne permet encore de
-  changer de site central (`designer()` n'est appelé par aucune route). Ce sera un chantier distinct,
-  avec sa propre permission.
+  sans agence reste bloqué avec un message explicite, comme avant, jusqu'à ce qu'un titulaire de
+  `tresorerie.designer_principale` en désigne une depuis le formulaire Site.
+- La colonne a été renommée dès ce lot, plutôt que de garder `is_siege_principal` derrière un
+  nouveau libellé. Le renommage ne touche aucune valeur, il est couvert par la suite de tests, et
+  il évite un nom technique qui contredit la règle.
 - Une organisation régionale (désignation, droits ou remontée des fonds par la hiérarchie) demandera
   une nouvelle décision. Elle remplacerait la règle « destination unique » de l'ADR 0016.

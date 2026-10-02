@@ -31,7 +31,11 @@ la liste des sites). Les noms techniques gardent `central` (`is_central_tresorer
   l'ancien.
 - **Indépendant du type** : une agence peut être la trésorerie principale.
 - **Désignation** : le premier site créé à l'installation devient la trésorerie principale. Aucune autre
-  création de site ne le désigne. Aucun écran ne permet encore d'en changer.
+  création de site ne la désigne automatiquement.
+- **Changement** : interrupteur « Trésorerie principale » du formulaire Site (création et
+  modification), réservé à `tresorerie.designer_principale` (par défaut : super administrateur).
+  L'activer sur un autre site transfère le rôle, après confirmation. On ne la retire jamais en la
+  décochant : l'interrupteur est verrouillé sur la trésorerie principale actuelle.
 - **Utilisation** (`SiteCentralTresorerieResolver`) :
   - paiement d'une fiche sans agence (ADR 0009) ;
   - détenteur proposé par défaut pour un compte de trésorerie commun (ADR 0016) ;

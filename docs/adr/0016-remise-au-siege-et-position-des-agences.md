@@ -1,174 +1,170 @@
-# ADR 0016 — Remise au siège et position de trésorerie des agences
+# ADR 0016 — Remise à la trésorerie principale et position de trésorerie des agences
 
 - **Date** : 2026-10-02
-- **Statut** : proposé — règles 1 à 3 et comptes communs validés le 2026-10-02 ; lot 0.1 à 0.3
-  livré le 2026-10-02 ; points de conception 4 à 7 à confirmer avant le lot 1
+- **Statut** : accepté le 2026-10-02 (règles métier) — aucun lot de calcul ni de remise développé ;
+  le compte commun (lot 0) est abandonné, son code non commité est à retirer avant tout commit
 - **Périmètre** : trésorerie (financement des agences, mouvements de fonds, inter-agences),
   comptabilité générale — complète et amende [ADR 0012](0012-encaissement-inter-agences-et-reglement.md)
-- **Liens** : [tresorerie-inter-agences.md](../tresorerie-inter-agences.md),
-  `FinancementAgenceService`, `ObligationsAgenceService`, `DetteInterAgencesService`,
-  `TresorerieDisponibiliteService`, `SiteCentralTresorerieResolver` (ADR 0017 : le « siège » est le
-  site central de trésorerie, un rôle explicite du site, indépendant de son type)
+- **Liens** : [ADR 0017](0017-type-de-site-et-site-central-de-tresorerie.md) (trésorerie principale
+  = rôle `Site::is_central_tresorerie`, badge « Trésorerie principale », `SiteCentralTresorerieResolver`),
+  [tresorerie-inter-agences.md](../tresorerie-inter-agences.md), `FinancementAgenceService`,
+  `ObligationsAgenceService`, `DetteInterAgencesService`, `TresorerieDisponibiliteService`
 
 ## Contexte
 
-Le fonctionnement réel de l'entreprise est centralisé : une agence garde de quoi payer ses dépenses
-locales et remet le reste au site central de trésorerie (Matoto). Si elle n'a pas assez, le siège la finance.
+Le fonctionnement de l'entreprise est centralisé : chaque agence encaisse sur ses propres supports
+(caisse, Mobile Money, banque), garde de quoi payer ses obligations locales et remet le reste à la
+**trésorerie principale** (aujourd'hui Matoto). Si elle n'a pas assez, la trésorerie principale la
+finance.
 
 Le code connaît déjà la moitié de ce circuit : `FinancementAgenceService` calcule
 `à financer = max(0, total à régler − disponible − fonds en transit)`. Il manque l'autre moitié :
-ce que l'agence doit **remettre**. Aujourd'hui une remise au siège est un « Transfert entre
-agences » ordinaire, sans montant attendu ni suivi.
+ce que l'agence doit **remettre**. Aujourd'hui une remise est un « Transfert entre agences »
+ordinaire, sans montant attendu ni suivi.
 
-ADR 0012 a créé la dette inter-agences (commande de A encaissée par B → B doit à A) et la règle
-« le financement déduira du disponible de B ce qu'il doit aux autres agences » (lot 3, non livré).
-Construire les remises au siège à côté, sans les articuler, ferait compter deux fois le même argent :
-Cba devrait 800 000 à Matoto au titre de l'inter-agences ET les mêmes 800 000 dans sa remise.
+ADR 0012 a créé la dette inter-agences (commande de A encaissée par B → B doit à A). Construire les
+remises à côté sans les articuler ferait compter deux fois le même argent : Cba devrait 800 000 à
+Matoto au titre de l'inter-agences ET les mêmes 800 000 dans sa remise.
 
-## Décision
+## Décision (validée le 2026-10-02)
 
-### Règles métier (validées le 2026-10-02)
+### 1. Supports : chaque agence a les siens
 
-1. **Fonds encaissés pour une autre agence** : remis **à 100 %** au siège, encaissement par
-   encaissement. Ils ne financent jamais les dépenses locales de l'agence qui les a encaissés. Leur
-   remise au siège **solde aussi la dette inter-agences** correspondante : un encaissement ne fait
-   l'objet que d'une seule sortie physique.
-2. **Fonds propres** : l'agence réserve ses obligations restantes de la **prochaine échéance** —
-   commissions livreurs, propriétaires, salaires (les contributeurs actuels
-   d'`ObligationsAgenceService`). Le surplus est l'**excédent à remettre** au siège.
-3. **Fonds propres insuffisants** : le siège finance la différence (`FinancementAgenceService`,
-   inchangé dans son principe).
+- Chaque agence possède ses propres supports de trésorerie, Mobile Money compris (un par opérateur,
+  numéro du compte affiché à l'encaissement). Le **site détenteur** d'un support est l'agence
+  concernée (`compta_supports_tresorerie.site_id`) ; il n'existe aucun propriétaire « Organisation ».
+  Le compte Mobile Money de Matoto est simplement détenu par Matoto.
+- L'argent encaissé reste dans la trésorerie de l'agence **jusqu'à sa remise** à la trésorerie
+  principale. Quand l'agence a plusieurs comptes pour un opérateur, l'agent choisit celui sur lequel
+  le client a payé (aucun routage automatique).
+- **Pas de compte commun** utilisé directement par plusieurs agences (cf. « Abandonné »).
 
-Un seul calcul, dans `FinancementAgenceService`, produit les trois montants :
+### 2. Fonds d'une autre agence : remis en totalité
+
+Un encaissement d'une commande d'une autre agence (dette ADR 0012) n'appartient pas à l'agence qui
+le détient : il est **exclu de son disponible**, ne paie jamais ses obligations et est **remis en
+totalité** à la trésorerie principale, encaissement par encaissement. Cette remise **solde aussi la
+dette inter-agences** : un encaissement ne fait l'objet que d'une seule sortie physique.
+
+### 3. Fonds propres : l'agence garde ses obligations locales, remet le reste
+
+L'agence conserve le montant de ses obligations locales — les postes actuels
+d'`ObligationsAgenceService` :
+
+| Obligation | Échéance |
+|---|---|
+| Commissions des livreurs | P1 (le 15) et P2 (fin de mois) |
+| Paiements aux propriétaires | fin de mois |
+| Salaires | fin de mois |
+
+Montant conservé = **obligations de la prochaine échéance + obligations échues encore impayées**
+(une commission en retard n'est jamais remise à la trésorerie principale). Les fiches de paiement
+restent payées par l'agence sur sa propre trésorerie (ADR 0009). Le surplus est l'**excédent à
+remettre**. Si les fonds propres ne suffisent pas, la trésorerie principale finance la différence.
+
+D'autres obligations (dépenses validées non payées…) n'entreront dans le montant conservé que par un
+nouvel `ObligationContributor`, jamais par une condition ad hoc.
+
+### 4. Un seul calcul
+
+`FinancementAgenceService` produit tous les montants, pour chaque agence autre que la trésorerie
+principale :
 
 ```
-disponible propre    = disponible agence − fonds dus à d'autres agences présents dans ses supports
-réserve              = obligations restantes jusqu'à la prochaine échéance incluse
-à financer           = max(0, réserve − disponible propre − fonds en transit vers l'agence)
-excédent à remettre  = max(0, disponible propre − réserve)
-remise obligatoire   = fonds encaissés pour d'autres agences, non encore engagés
-total à remettre     = remise obligatoire + excédent à remettre
+disponible propre     = disponible agence − fonds d'autres agences présents dans ses supports
+à conserver           = obligations de la prochaine échéance + obligations échues impayées
+à financer            = max(0, à conserver − disponible propre − fonds en transit vers l'agence)
+excédent à remettre   = max(0, disponible propre − à conserver)
+remise obligatoire    = fonds d'autres agences non encore engagés dans une remise
+total à remettre      = remise obligatoire + excédent à remettre
 ```
 
-Exemple (Cba) : 800 000 encaissés pour Matoto, 200 000 propres, 700 000 de réserve
-→ remise obligatoire 800 000, à financer 500 000 — jamais « 1 000 000 − 700 000 = 300 000 ».
+Exemples (Kankan, 1 500 000 à conserver, 1 000 000 appartenant à Cba) :
 
-Les autres dépenses (catégories de dépenses validées non payées) entreront plus tard dans la réserve
-sous la forme d'un nouvel `ObligationContributor`, jamais d'une condition ad hoc.
+| Fonds propres | Remise obligatoire | Excédent | À financer | Total à remettre |
+|---|---|---|---|---|
+| 2 000 000 | 1 000 000 | 500 000 | 0 | 1 500 000 |
+| 1 000 000 | 1 000 000 | 0 | 500 000 | 1 000 000 |
 
-### Comptes Mobile Money communs (fait métier donné le 2026-10-02)
+Dans le second cas, on ne calcule jamais « 2 000 000 − 1 500 000 = 500 000 » sur l'ensemble : le
+million de Cba est remis, et Kankan est financée pour ses propres obligations.
 
-Le compte Orange Money de l'organisation, et les autres comptes Mobile Money, sont **un seul compte
-utilisé par toutes les agences**. Un paiement reçu dessus est **déjà centralisé** : l'agence qui a
-encaissé n'a rien à remettre physiquement, ni au siège ni à l'agence de la commande.
+Espèces encore dans les caisses d'agents : elles ne sont pas dans le disponible de l'agence tant
+qu'elles n'ont pas été versées à la caisse de l'agence (décision du 2026-09-19). On ne déduit donc du
+disponible que les fonds d'autres agences présents dans les **supports de l'agence** ; pour les
+espèces, la part qui dépasse le solde des caisses d'agents de l'agence (les espèces dues sont
+réputées rester d'abord chez les agents). La remise obligatoire reste de 100 % de la dette.
 
-D'où la règle générale : **ce qui compte n'est pas l'agence qui encaisse, mais l'agence qui détient
-l'argent**, c'est-à-dire celle du support sur lequel il est arrivé. L'agence qui encaisse reste
-toujours tracée (`site_encaissement_id`), quel que soit le support.
+### 5. Destination : la trésorerie principale, toujours
 
-| Paiement | Détient l'argent | Remise physique |
-|---|---|---|
-| Espèces (caisse d'agent puis caisse de l'agence) | Agence qui encaisse | Oui, selon les règles 1 et 2 |
-| Mobile Money sur un compte commun | Siège | Non |
-| Virement sur un compte bancaire commun | Siège | Non |
-| Compte propre à une agence | Cette agence | Oui |
+Toute remise part vers le site `is_central_tresorerie` (`SiteCentralTresorerieResolver::central()`),
+jamais choisi à la main :
 
-Le code ne représente pas encore cette réalité : chaque agence a son propre support Mobile Money
-(« Orange Money de Cba », « Mobile Money de Kouria », « Mobile Money de Matoto »), tous sur le même
-compte comptable mais avec une écriture par agence. Conséquences actuelles :
+- commande de la trésorerie principale encaissée par B : règlement B → trésorerie principale
+  (liaison 181000, inchangé) ;
+- commande d'une agence tierce A encaissée par B : B remet à la trésorerie principale T ; trois
+  pièces de liaison — B : débit 181000 [A] / crédit trésorerie ; T : débit trésorerie / crédit
+  181000 [A] ; A : débit 181000 [T] / crédit 181000 [B]. Les fonds de A sont physiquement chez T ;
+  A en garde le droit comptablement (créance sur T) et reste financée par T selon la règle 3 ;
+- commande de A encaissée par la trésorerie principale elle-même : rien à remettre ; la dette prend
+  le statut « À la trésorerie principale » sans mouvement.
 
-- l'écran Inter-agences demande à Cba de « Régler » 800 000 à Matoto pour VTE-280926-001, payée en
-  Orange Money : cet argent est déjà sur le compte commun ;
-- le disponible d'une agence (`disponiblePourSite()`) compte un solde Mobile Money qu'elle ne
-  détient pas ; le besoin de financement est donc sous-estimé ;
-- le solde de « Orange Money de Cba » est fictif : seul le total de toutes les agences correspond au
-  compte réel.
+Le règlement direct B → A (agence qui n'est pas la trésorerie principale), possible depuis ADR 0012,
+disparaît : **amende le point 5 d'ADR 0012**.
 
-Décision (lots 0.1 à 0.3, livrés le 2026-10-02) :
+### 6. Frais de transfert : à la charge de l'agence qui remet
 
-- **Un compte appartient toujours à un site.** Il n'existe pas de propriétaire « Organisation » : la
-  comptabilité est par site. Un compte commun est détenu par un site (`site_id`), par défaut le site
-  central de trésorerie (Matoto), un autre si le compte est réellement tenu ailleurs ; il est utilisé
-  par les agences cochées. `parent_id` des sites n'intervient pas (aucune portée métier).
-- **Une agence peut avoir son propre compte ET utiliser le compte commun** pour le même opérateur.
-  Aucun routage automatique : la fenêtre de paiement propose un moyen par compte (« Kulu — compte
-  commun (Matoto) », avec son numéro) et **l'agent choisit le compte sur lequel le client a réellement
-  payé**. Un Mobile Money n'est jamais présélectionné.
-- **Trois informations distinctes sur l'encaissement** : l'agence qui encaisse
-  (`site_encaissement_id`, traçabilité, rapports « Encaissée à ») ; le compte qui reçoit
-  (`compte_tresorerie_id`) ; l'agence qui **détient** l'argent (`site_detenteur_id` = site du compte,
-  figé à la création). Écritures, dette et règlements inter-agences suivent la détentrice :
-  - commande de la détentrice payée sur son compte commun, quelle que soit l'agence qui encaisse :
-    une seule pièce chez la détentrice, aucune dette ;
-  - commande d'une autre agence A payée sur le compte commun détenu par S : pièces de liaison
-    S → A comme en ADR 0012 (la détentrice doit à A), jamais une dette de l'agence qui a encaissé.
-- **Encaissement seulement** : payer depuis un compte commun (paiement de fiche) n'est pas ouvert ;
-  les décaissements ne voient que les comptes propres de l'agence (question 4 bis ci-dessous).
+Les frais d'un transfert de remise (Mobile Money ou banque) sont une **charge de l'agence qui
+remet**, distincte du montant remis : la trésorerie principale reçoit le montant remis en entier, et
+les fonds d'une autre agence ne sont jamais diminués des frais.
 
-### Points de conception à confirmer
+Exemple : Cba remet 1 000 000, frais 10 000 → Matoto reçoit 1 000 000 ; le support de Cba diminue de
+1 010 000 (1 000 000 remis + 10 000 de frais, charge de Cba). Les frais sont pris sur les fonds
+propres de l'agence, jamais sur la remise obligatoire.
 
-4. **Espèces encore dans les caisses d'agents.** `disponiblePourSite()` exclut les caisses dédiées
-   (décision du 2026-09-19). Retirer du disponible des espèces dues qui sont encore chez l'agent
-   le ferait baisser deux fois et ferait sur-financer l'agence. Proposition : ne déduire que les fonds
-   dus **présents dans les supports de l'agence**. Pour les espèces, seulement la part qui dépasse
-   le solde des caisses d'agents de l'agence (les espèces dues sont réputées rester d'abord chez les
-   agents). Les paiements sur un support commun ne sont jamais dans le disponible de l'agence.
-   La remise obligatoire reste de 100 % de la dette en espèces ou sur support propre.
-4 bis. **Supports communs, reste à décider** : qui peut payer depuis un compte commun (site
-   central seul, ou agences avec écriture de financement) ; reprise des supports Mobile Money par
-   agence existants (nouvelle pièce de reclassement, aucune écriture existante modifiée) et sort des
-   dettes inter-agences déjà ouvertes sur ces supports. Si le site central a aussi son propre compte
-   du même opérateur, il lui faut un compte comptable distinct (sinon les deux soldes, même site et
-   même compte, sont indiscernables — refusé à la création).
-5. **Réserve = restant échu + prochaine échéance.** Une obligation d'une échéance passée encore
-   impayée reste réservée : l'agence ne remet pas au siège l'argent d'une commission en retard.
-   Prochaine échéance = P1 (jusqu'au 15) ou P2 (fin de mois) selon la date du calcul.
-6. **Destination unique = site central de trésorerie.** Tout règlement de dette inter-agences part
-   vers le site central (`SiteCentralTresorerieResolver::central()`, ADR 0017) :
-   - commande du siège encaissée par B : inchangé (règlement B → siège, liaison 181000) ;
-   - commande d'une agence tierce A encaissée par B : B remet au siège ; trois pièces de liaison
-     (B : débit 181000 [A] / crédit trésorerie ; siège : débit trésorerie / crédit 181000 [A] ;
-     A : débit 181000 [siège] / crédit 181000 [B]). La créance de A passe de B au siège ; A ne
-     reçoit rien physiquement et reste financée par le siège selon la règle 3 ;
-   - commande de A **encaissée par le siège** : rien à remettre, l'argent est déjà au siège. La dette
-     prend le statut « Au siège » sans mouvement : la liaison comptable porte déjà « le siège doit à A ».
-   Le règlement direct B → A (agence non siège), possible depuis ADR 0012, disparaît : **amende le
-   point 5 d'ADR 0012** (la destination n'est plus l'agence de la commande mais le siège).
-7. **Une action « Remettre au siège », deux mouvements.** La part obligatoire est un règlement
-   inter-agences (encaissements liés, liaison 181000) ; l'excédent est un transfert ordinaire vers le
-   siège (transit 588000, montant proposé = excédent, modifiable à la baisse). Les deux sont créés et
-   envoyés dans une seule transaction, comme « Régler » (ADR 0012, point 8). La réception par le
-   siège reste celle de l'écran Mouvements.
+À construire : aujourd'hui un mouvement de fonds suppose montant envoyé = montant reçu et le plan
+comptable n'a pas de compte de frais de transfert — compte de charge à paramétrer dans
+`compta_mappings` (jamais un numéro codé en dur).
+
+### 7. Une action « Remettre à la trésorerie principale »
+
+Une seule action crée et envoie la remise, dans une transaction, comme « Régler » (ADR 0012, point
+8) : la part obligatoire est un règlement inter-agences (encaissements liés, liaison 181000) ;
+l'excédent, un transfert vers la trésorerie principale (transit 588000, montant proposé = excédent,
+modifiable à la baisse) ; les frais, une écriture de charge chez l'agence. La réception reste celle
+de l'écran Mouvements. Aucune échéance de remise (« en retard ») tant que le métier n'a pas fixé de
+délai.
 
 ## Découpage
 
-- **Lot 0 — supports communs** (préalable : sans lui, le disponible des agences reste faux) :
-  - **0.1–0.2, livrés le 2026-10-02** : un support d'agence est « propre » ou « commun » ; un compte
-    commun a une agence détentrice (`site_id`, choisie à la création, jamais modifiée) et des
-    agences utilisatrices (`compta_support_tresorerie_agences`, détentrice comprise). Création et
-    modification dans Trésorerie → Supports, filtre Nature « Compte commun ». Une caisse n'est
-    jamais commune ; une agence n'utilise qu'un compte commun Mobile Money par compte comptable.
-    **Aucun effet encore** sur les encaissements, les soldes ou la dette inter-agences ;
-  - **0.3, livré le 2026-10-02** : numéro du compte (`numero`) affiché à l'encaissement ; site
-    central proposé comme détentrice d'un compte commun ; un compte commun est proposé à
-    l'encaissement dans ses agences utilisatrices, à côté de leurs comptes propres ;
-    `encaissements_ventes.site_detenteur_id` (historique = agence d'encaissement, valeur exacte) ;
-    écritures, dette, règlement, annulation exceptionnelle et « à reverser » du rapport d'activité
-    suivent la détentrice ; fiche commande : « Compte commun de {détentrice} » ;
-  - **0.4** : reprise des supports Mobile Money par agence (« Orange Money de Cba »…) vers le
-    compte commun (pièce de reclassement, aucune écriture existante modifiée) — après accord.
-- **Lot 1 — calcul** : `FinancementAgenceService` produit disponible propre, réserve, à financer,
-  excédent, remise obligatoire ; écran Financement : position de chaque agence (besoin OU
-  excédent, plus la remise obligatoire). Livre au passage le « financement déduit la dette » prévu
-  au lot 3 d'ADR 0012. Aucun mouvement, aucune écriture.
-- **Lot 2 — remise** : action « Remettre au siège » (point 7), destination forcée au siège,
-  comptabilité tierce (point 6), statut « Au siège ».
-- **Lot 3 — vue siège** : « Remises au siège » côté siège (à recevoir par agence, en cours, reçu,
-  détail jusqu'aux commandes), Situation de trésorerie, E2E.
+- **Préalable — retirer le compte commun** (code non commité du 2026-10-02) : option « Compte
+  commun » de Supports, table `compta_support_tresorerie_agences`, colonne `commun`,
+  `encaissements_ventes.site_detenteur_id` et ses usages (dette, écritures, règlement, annulation,
+  rapport, fiche commande), paramètre `avecComptesCommuns`. **Conserver** le numéro du compte
+  (`compta_supports_tresorerie.numero`) affiché à l'encaissement. Retrait fichier par fichier : ces
+  fichiers portent aussi les changements de l'ADR 0017.
+- **Lot 1 — calcul** : `FinancementAgenceService` produit disponible propre, à conserver, à
+  financer, excédent, remise obligatoire ; écran Financement : position de chaque agence (besoin OU
+  à remettre, plus la remise obligatoire). Livre au passage le « financement déduit la dette » prévu
+  au lot 3 d'ADR 0012. Aucun mouvement, aucune écriture. **À valider avant le lot 2.**
+- **Lot 2 — remise** : action « Remettre à la trésorerie principale » (point 7), destination
+  automatique (point 5), écritures tierces, frais de transfert (point 6).
+- **Lot 3 — vue trésorerie principale** : remises à recevoir par agence, en cours, reçues, détail
+  jusqu'aux commandes ; Situation de trésorerie ; E2E.
+
+## Abandonné : le compte commun (2026-10-02)
+
+Un compte Mobile Money commun, détenu par un site et utilisé par plusieurs agences, a été développé
+le 2026-10-02 (argent comptabilisé chez la détentrice, `site_detenteur_id` distinct de l'agence qui
+encaisse), puis abandonné le même jour : le métier a confirmé que chaque agence a son propre compte et
+reverse ses fonds à la trésorerie principale. Si le besoin revient : un compte appartient toujours à
+un site ; l'agence qui encaisse (traçabilité) et l'agence qui détient l'argent (écritures, dette)
+sont deux informations distinctes ; jamais de routage automatique.
 
 ## Conséquences
 
 - L'écran Inter-agences garde son rôle de traçabilité (« commande de A encaissée à B ») ; il ne
-  déclenche plus de paiement vers une agence non siège.
-- Aucune échéance de remise (« en retard ») tant qu'aucun délai de remise n'est fixé par le métier.
+  déclenche plus de paiement vers une agence qui n'est pas la trésorerie principale.
 - Les remises « Transfert entre agences » déjà enregistrées ne sont pas reclassées.
+- La trésorerie principale ne se remet rien à elle-même : ses propres encaissements sont déjà
+  centralisés.

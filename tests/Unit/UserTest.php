@@ -88,9 +88,11 @@ class UserTest extends TestCase
      * annulation exceptionnelle d'une commande saisie par erreur — cf. AnnulationExceptionnelleService) = 200,
      * puis `rapports.read_own` et `rapports.read` (26/09/2026, rapport d'activité et « Ma situation » —
      * cf. RapportPerimetreResolver) = 202, puis `factures.encaisser_autre_agence` (29/09/2026, encaisser
-     * dans son agence une commande d'une autre agence — cf. AgenceEncaissementResolver, ADR 0012) = 203.
+     * dans son agence une commande d'une autre agence — cf. AgenceEncaissementResolver, ADR 0012) = 203,
+     * puis `tresorerie.designer_principale` (02/10/2026, transfert de la trésorerie principale depuis le
+     * formulaire Site — cf. SiteFormSupport::resoudreTresoreriePrincipale(), ADR 0017) = 204.
      */
-    public function test_permissions_map_returns_203_keys(): void
+    public function test_permissions_map_returns_204_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -98,7 +100,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(203, $map);
+        $this->assertCount(204, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void
