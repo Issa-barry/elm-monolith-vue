@@ -391,7 +391,7 @@ class VersementCaisseAgentServiceTest extends TestCase
 
     public function test_un_mouvement_entre_agences_reste_de_nature_inter_sites_et_refuse_le_meme_site(): void
     {
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $caisseSiege = $this->creerCaisseAgence($siege, 'Caisse Siège');
 
         $mouvement = $this->service->creerBrouillon($this->org->id, [
@@ -418,7 +418,7 @@ class VersementCaisseAgentServiceTest extends TestCase
         $fin = Carbon::now()->endOfMonth();
 
         // Témoin : un vrai envoi du siège vers l'agence, en transit, est bien compté.
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $caisseSiege = $this->creerCaisseAgence($siege, 'Caisse Siège');
         // garantirSoldeSuffisant() (règle du 22/09/2026) exige un solde disponible avant l'envoi.
         $this->alimenterCaisse($caisseSiege, 50_000);

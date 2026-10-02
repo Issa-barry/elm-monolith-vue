@@ -131,7 +131,7 @@ class CaisseAgentImpactTresorerieTest extends TestCase
 
     private function siegeAvecCaisse(): array
     {
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $caisse = CompteTresorerie::create([
             'organization_id' => $this->org->id,
             'site_id' => $siege->id,

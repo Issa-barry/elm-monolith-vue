@@ -62,7 +62,7 @@ class ProductionDeploySeedingTest extends TestCase
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
             'site' => [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::BOUTIQUE->value,
                 'ville' => 'Conakry',
                 'quartier' => 'Matoto',
             ],

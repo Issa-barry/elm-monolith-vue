@@ -60,7 +60,10 @@ const compte = (surcharge: Partial<CompteTresorerie>): CompteTresorerie => ({
     operateur_mobile_money: null,
     operateur_label: null,
     libelle: 'Caisse-espèce',
+    numero: null,
     nature: 'agence',
+    commun: false,
+    agences_utilisatrices: [],
     agent: null,
     compte_comptable_id: 'cc1',
     compte_numero: '571000',
@@ -128,6 +131,7 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             },
             sites: [],
             type_options: [],
+            site_central_tresorerie_id: null,
             operateur_options: [],
             destinations_versement: [],
             agents: [],
@@ -313,6 +317,32 @@ describe('Supports de trésorerie — tableau', () => {
         const [ligne] = lignes(monter([compte({ compte_numero: null })]));
 
         expect(ligne.find('[data-testid="support-compte"]').text()).toBe('—');
+    });
+
+    it('signale un compte commun, son agence détentrice et les agences qui l’utilisent', () => {
+        const [commun, propre] = lignes(
+            monter([
+                compte({
+                    id: 'c-om',
+                    libelle: 'Orange Money',
+                    type: 'mobile_money',
+                    commun: true,
+                    agences_utilisatrices: [
+                        { id: 's2', nom: 'Cba' },
+                        { id: 's1', nom: 'Matoto' },
+                    ],
+                }),
+                compte({ id: 'c-agence' }),
+            ]),
+        );
+
+        expect(commun.findAll('td')[0].text()).toBe('Matoto');
+        const mention = commun.find('[data-testid="support-commun"]');
+        expect(mention.text()).toBe('Compte commun · utilisé par Cba, Matoto');
+        expect(mention.attributes('title')).toContain('détenu par Matoto');
+        expect(propre.find('[data-testid="support-commun"]').exists()).toBe(
+            false,
+        );
     });
 });
 

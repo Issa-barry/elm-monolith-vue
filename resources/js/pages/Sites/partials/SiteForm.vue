@@ -56,7 +56,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         "
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
-                        placeholder="Siège principal"
+                        placeholder="Ex : Matoto"
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}

@@ -31,7 +31,7 @@ use Tests\TestCase;
 
 /**
  * Payer une fiche = décaissement réel (ADR 0009) : l'argent sort d'un support de trésorerie de
- * l'agence de la fiche (siège principal pour une fiche sans agence) — caisse dédiée du payeur en
+ * l'agence de la fiche (site central de trésorerie pour une fiche sans agence) — caisse dédiée du payeur en
  * espèces, compte Mobile Money/banque sinon. Solde insuffisant = refus serveur, sans aucun effet.
  */
 class PaiementFicheDecaissementTest extends TestCase
@@ -283,12 +283,12 @@ class PaiementFicheDecaissementTest extends TestCase
             );
     }
 
-    // ── Fiche sans agence : siège principal ───────────────────────────────────
+    // ── Fiche sans agence : site central de trésorerie ───────────────────────────────────
 
-    public function test_fiche_consultant_sans_agence_payee_depuis_le_siege_principal(): void
+    public function test_fiche_consultant_sans_agence_payee_depuis_le_site_central_de_tresorerie(): void
     {
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
-        $this->assertTrue((bool) $siege->fresh()->is_siege_principal);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
+        $this->assertTrue((bool) $siege->fresh()->is_central_tresorerie);
         // Une caisse dédiée n'existe que pour un agent rattaché à l'agence.
         $this->user->sites()->attach($siege->id, ['role' => 'employe', 'is_default' => false]);
         $caisseSiege = $this->equiperPayeurEspeces($this->user, $siege->id, 1_000_000);
@@ -300,13 +300,13 @@ class PaiementFicheDecaissementTest extends TestCase
         $this->assertSame($siege->id, PaiementFichePaiement::where('fiche_id', $fiche->id)->value('site_id'));
     }
 
-    public function test_fiche_sans_agence_et_sans_siege_principal_bloquee(): void
+    public function test_fiche_sans_agence_et_sans_site_central_bloquee(): void
     {
         $this->equiperPayeurEspeces($this->user, $this->agence->id);
         $fiche = $this->fiche(null, 250_000, 'prestataire', $this->prestataire()->id);
 
         $this->payer($fiche, ['montant' => 100_000, 'mode_paiement' => 'especes'])
-            ->assertSessionHasErrors(['compte_tresorerie_id' => DecaissementFicheResolver::MESSAGE_SANS_SIEGE]);
+            ->assertSessionHasErrors(['compte_tresorerie_id' => DecaissementFicheResolver::MESSAGE_SANS_SITE_CENTRAL]);
 
         $this->assertDatabaseCount('paiement_fiche_paiements', 0);
     }
@@ -341,6 +341,6 @@ class PaiementFicheDecaissementTest extends TestCase
             ->get($fiche->beneficiaire_id);
 
         $this->assertNull($presentee['tresorerie']['site_id']);
-        $this->assertSame(DecaissementFicheResolver::MESSAGE_SANS_SIEGE, $presentee['tresorerie']['message']);
+        $this->assertSame(DecaissementFicheResolver::MESSAGE_SANS_SITE_CENTRAL, $presentee['tresorerie']['message']);
     }
 }

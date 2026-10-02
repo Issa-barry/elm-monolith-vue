@@ -58,11 +58,11 @@ enum DomaineActivite: string
     public function siteTypes(): array
     {
         return match ($this) {
-            self::COMMERCE_DISTRIBUTION => [SiteType::SIEGE, SiteType::BOUTIQUE, SiteType::DEPOT],
-            self::INDUSTRIE_FABRICATION => [SiteType::SIEGE, SiteType::USINE, SiteType::DEPOT, SiteType::BOUTIQUE],
-            self::RESTAURATION => [SiteType::SIEGE, SiteType::RESTAURANT, SiteType::DEPOT],
-            self::LOGISTIQUE_TRANSPORT => [SiteType::SIEGE, SiteType::AGENCE, SiteType::DEPOT],
-            self::AUTRE => [SiteType::SIEGE, SiteType::AGENCE, SiteType::AUTRE],
+            self::COMMERCE_DISTRIBUTION => [SiteType::BOUTIQUE, SiteType::DEPOT],
+            self::INDUSTRIE_FABRICATION => [SiteType::USINE, SiteType::DEPOT, SiteType::BOUTIQUE],
+            self::RESTAURATION => [SiteType::RESTAURANT, SiteType::DEPOT],
+            self::LOGISTIQUE_TRANSPORT => [SiteType::AGENCE, SiteType::DEPOT],
+            self::AUTRE => [SiteType::AGENCE, SiteType::AUTRE],
         };
     }
 

@@ -13,9 +13,8 @@ trait HasInstallAppHelper
      * CLI devient "Email" (pas "Email (facultatif)") et enchaîne sur la vérification par code —
      * OTP_FIXED_CODE=123456 dans .env.testing rend ce code déterministe (cf. config/otp.php).
      *
-     * Site : "Siège" est toujours la première suggestion proposée par askSite() (cf.
-     * DomaineActivite::siteTypes(), qui liste SIEGE en premier pour tous les domaines), d'où le
-     * choix par défaut ci-dessous.
+     * Site : "Boutique / Point de vente" est la première suggestion proposée par askSite() pour le
+     * domaine par défaut ci-dessous (cf. DomaineActivite::siteTypes()), d'où le choix par défaut.
      */
     protected function runInstall(
         string $orgNom = 'ELM Test',
@@ -23,7 +22,7 @@ trait HasInstallAppHelper
         string $password = 'Sup3r$ecretPwd',
         DomaineActivite $domaine = DomaineActivite::COMMERCE_DISTRIBUTION,
         string $email = 'issa@gmail.com',
-        SiteType $siteType = SiteType::SIEGE,
+        SiteType $siteType = SiteType::BOUTIQUE,
         string $siteVille = 'Conakry',
         string $siteQuartier = 'Matoto',
     ): PendingCommand {

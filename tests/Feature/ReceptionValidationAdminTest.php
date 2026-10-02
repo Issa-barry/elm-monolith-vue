@@ -84,7 +84,7 @@ class ReceptionValidationAdminTest extends TestCase
         }
 
         $this->siteSrc = $this->makeSite('Site Source');
-        $this->siteDest = $this->makeSite('Site Destination', 'siege');
+        $this->siteDest = $this->makeSite('Site Destination', 'agence');
 
         // Admin
         $this->admin = User::factory()->create(['organization_id' => $this->org->id]);

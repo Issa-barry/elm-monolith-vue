@@ -90,7 +90,7 @@ class CommissionTriggerLogistiqueTest extends TestCase
         }
 
         $this->siteSrc = $this->makeSite('Site Source');
-        $this->siteDest = $this->makeSite('Site Destination', 'siege');
+        $this->siteDest = $this->makeSite('Site Destination', 'agence');
 
         $this->admin = User::factory()->create(['organization_id' => $this->org->id]);
         $this->admin->assignRole('admin_entreprise');

@@ -16,7 +16,8 @@ class SitesSeeder extends Seeder
 
         $matoto = $this->upsertSite($org->id, [
             'nom' => 'Matoto',
-            'type' => SiteType::SIEGE->value,
+            'type' => SiteType::AGENCE->value,
+            'is_central_tresorerie' => true,
             'ville' => 'Conakry',
             'quartier' => 'Matoto',
             'telephone' => '+224664039160',
@@ -92,6 +93,10 @@ class SitesSeeder extends Seeder
             'quartier' => $data['quartier'],
             'parent_id' => $parentId,
         ]);
+
+        if (isset($data['is_central_tresorerie'])) {
+            $site->is_central_tresorerie = $data['is_central_tresorerie'];
+        }
 
         if (! $site->exists || empty($site->telephone)) {
             $site->telephone = $data['telephone'];

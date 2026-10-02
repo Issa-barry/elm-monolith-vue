@@ -381,7 +381,7 @@ class VersementCaisseAgentControllerTest extends TestCase
     public function test_le_filtre_nature_de_l_ecran_mouvements(): void
     {
         $versement = $this->versementEnvoye();
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $caisseSiege = $this->creerCaisseAgence($siege, 'Caisse Siège');
         $entreAgences = app(MouvementFondsService::class)->creerBrouillon($this->org->id, [
             'site_origine_id' => $siege->id,

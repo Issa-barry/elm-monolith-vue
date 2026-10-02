@@ -8,9 +8,7 @@ use App\Models\Site;
 use Illuminate\Database\Seeder;
 
 /**
- * Deux boutiques pour la démo — le projet n'a pas de type "boutique" dans
- * SiteType (siege/usine/depot/agence uniquement) : AGENCE est le plus
- * proche d'un point de vente.
+ * Deux boutiques pour la démo, typées AGENCE (antérieures au type BOUTIQUE de SiteType).
  */
 class FelloDemoSitesSeeder extends Seeder
 {

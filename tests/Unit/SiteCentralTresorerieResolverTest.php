@@ -2,83 +2,81 @@
 
 namespace Tests\Unit;
 
-use App\Exceptions\Tresorerie\SiegePrincipalIndisponibleException;
+use App\Exceptions\Tresorerie\SiteCentralTresorerieIndisponibleException;
 use App\Models\Organization;
 use App\Models\Site;
-use App\Services\Tresorerie\SiegeResolverService;
+use App\Services\Tresorerie\SiteCentralTresorerieResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class SiegeResolverServiceTest extends TestCase
+class SiteCentralTresorerieResolverTest extends TestCase
 {
     use RefreshDatabase;
 
-    private SiegeResolverService $service;
+    private SiteCentralTresorerieResolver $service;
 
     private Organization $org;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = app(SiegeResolverService::class);
+        $this->service = app(SiteCentralTresorerieResolver::class);
         $this->org = Organization::factory()->create();
     }
 
-    public function test_le_premier_site_siege_devient_automatiquement_principal(): void
+    public function test_le_site_central_peut_etre_une_agence(): void
     {
-        $site = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Siège',
-            'type' => 'siege',
-            'localisation' => 'Conakry',
-        ]);
+        $agence = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence', 'is_central_tresorerie' => true]);
 
-        $this->assertTrue($site->fresh()->is_siege_principal);
-        $this->assertSame($site->id, $this->service->principal($this->org->id)->id);
+        $this->assertSame($agence->id, $this->service->central($this->org->id)->id);
     }
 
-    public function test_un_deuxieme_site_siege_ne_devient_pas_principal_automatiquement(): void
+    public function test_aucun_site_n_est_central_par_simple_creation(): void
     {
-        $premier = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège A', 'type' => 'siege', 'localisation' => 'Conakry']);
-        $second = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège B', 'type' => 'siege', 'localisation' => 'Kindia']);
+        Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence']);
 
-        $this->assertTrue($premier->fresh()->is_siege_principal);
-        $this->assertFalse($second->fresh()->is_siege_principal);
-        $this->assertSame($premier->id, $this->service->principal($this->org->id)->id);
+        $this->assertNull($this->service->centralOuNull($this->org->id));
     }
 
-    public function test_assigner_principal_retire_le_flag_de_l_ancien(): void
+    public function test_designer_retire_le_role_a_l_ancien_site_central(): void
     {
-        $premier = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège A', 'type' => 'siege', 'localisation' => 'Conakry']);
-        $second = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège B', 'type' => 'siege', 'localisation' => 'Kindia']);
+        $premier = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence', 'is_central_tresorerie' => true]);
+        $depot = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
 
-        $this->service->assignerPrincipal($second);
+        $this->service->designer($depot);
 
-        $this->assertFalse($premier->fresh()->is_siege_principal);
-        $this->assertTrue($second->fresh()->is_siege_principal);
-        $this->assertSame($second->id, $this->service->principal($this->org->id)->id);
+        $this->assertFalse($premier->fresh()->is_central_tresorerie);
+        $this->assertTrue($depot->fresh()->is_central_tresorerie);
+        $this->assertSame($depot->id, $this->service->central($this->org->id)->id);
     }
 
-    public function test_aucun_siege_leve_une_exception_explicite(): void
+    public function test_creer_un_second_site_central_retire_le_role_au_premier(): void
     {
-        $this->expectException(SiegePrincipalIndisponibleException::class);
-        $this->service->principal($this->org->id);
+        $premier = Site::create(['organization_id' => $this->org->id, 'nom' => 'A', 'type' => 'agence', 'is_central_tresorerie' => true]);
+        $second = Site::create(['organization_id' => $this->org->id, 'nom' => 'B', 'type' => 'usine', 'is_central_tresorerie' => true]);
+
+        $this->assertFalse($premier->fresh()->is_central_tresorerie);
+        $this->assertTrue($second->fresh()->is_central_tresorerie);
+        $this->assertSame(1, Site::where('organization_id', $this->org->id)->where('is_central_tresorerie', true)->count());
     }
 
-    public function test_assigner_principal_refuse_un_site_qui_n_est_pas_de_type_siege(): void
+    public function test_aucun_site_central_leve_une_exception_explicite(): void
     {
-        $depot = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot', 'localisation' => 'Conakry']);
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->service->assignerPrincipal($depot);
+        $this->expectException(SiteCentralTresorerieIndisponibleException::class);
+        $this->service->central($this->org->id);
     }
 
     public function test_isole_les_organisations(): void
     {
-        Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
         $autreOrg = Organization::factory()->create();
+        $central = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence', 'is_central_tresorerie' => true]);
+        $centralAutreOrg = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Kaloum', 'type' => 'agence', 'is_central_tresorerie' => true]);
 
-        $this->expectException(SiegePrincipalIndisponibleException::class);
-        $this->service->principal($autreOrg->id);
+        $this->assertTrue($central->fresh()->is_central_tresorerie);
+        $this->assertTrue($centralAutreOrg->fresh()->is_central_tresorerie);
+        $this->assertSame($central->id, $this->service->central($this->org->id)->id);
+
+        $this->expectException(SiteCentralTresorerieIndisponibleException::class);
+        $this->service->central(Organization::factory()->create()->id);
     }
 }

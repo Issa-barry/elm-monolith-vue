@@ -29,7 +29,7 @@ class ShowCommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'facture.encaissements.siteEncaissement', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'facture.encaissements.siteEncaissement', 'facture.encaissements.siteDetenteur', 'commissions', 'activites.user', 'retours.createdBy', 'retours.lignes']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
@@ -272,6 +272,11 @@ class ShowCommandeVenteController extends Controller
                     // Agence qui a reçu l'argent, toujours affichée (ADR 0012) ; le reversement n'existe
                     // que pour un encaissement reçu par une autre agence que celle de la commande.
                     'encaisse_a' => $e->siteEncaissement?->nom,
+                    // Payé sur un compte commun détenu par une autre agence (ADR 0016) : c'est elle
+                    // qui détient l'argent, et le doit éventuellement à l'agence de la commande.
+                    'detenu_par' => $e->site_detenteur_id && $e->site_detenteur_id !== $e->site_encaissement_id
+                        ? $e->siteDetenteur?->nom
+                        : null,
                     'pour_autre_agence' => $e->estPourAutreAgence(),
                     'reversement' => $reversements[$e->id] ?? null,
                     'id' => $e->id,

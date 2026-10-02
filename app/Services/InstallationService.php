@@ -484,6 +484,9 @@ class InstallationService
             'quartier' => $quartier,
             'telephone' => $user->telephone,
             'pays' => $user->pays,
+            // Premier site de l'organisation = site central de trésorerie (ADR 0017), quel que
+            // soit son type : une organisation n'est jamais installée sans site central.
+            'is_central_tresorerie' => true,
         ]);
 
         $user->sites()->syncWithoutDetaching([$site->id => ['role' => 'employe', 'is_default' => true]]);

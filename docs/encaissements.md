@@ -64,6 +64,25 @@ sans support dans l'agence n'apparaît pas. Chaque support représente un compte
   561400), le valider : Kulu apparaît alors dans la liste des moyens de cette agence, sans changement
   de code.
 
+### Comptes communs (02/10/2026, ADR 0016)
+
+Un compte (Mobile Money ou banque, jamais une caisse) peut être **commun** : détenu par un site
+(par défaut le site central de trésorerie) et utilisé par plusieurs agences (Trésorerie > Supports).
+
+- Dans chaque agence utilisatrice, il est proposé **à côté** des comptes propres de l'agence, un
+  moyen par compte : « Kulu — compte commun (Matoto) », avec le **numéro du compte**
+  (`compta_supports_tresorerie.numero`) sous le libellé. Une agence peut donc avoir son propre
+  Orange Money et utiliser aussi celui de l'organisation.
+- **Aucun routage automatique** : l'agent choisit le compte sur lequel le client a réellement payé
+  (un Mobile Money n'est jamais présélectionné). Choisir à sa place classerait l'argent sur le mauvais
+  compte, sans que personne ne le voie.
+- L'encaissement enregistre l'agence qui **détient** l'argent (`site_detenteur_id`, site du compte),
+  distincte de l'agence qui encaisse (`site_encaissement_id`, traçabilité). La pièce de trésorerie est
+  posée chez la détentrice ; une dette inter-agences n'existe que si la détentrice n'est pas l'agence
+  de la commande (cf. [tresorerie-inter-agences.md](tresorerie-inter-agences.md)).
+- Réservé à l'**encaissement** : un paiement de fiche (sortie d'argent) ne propose jamais un compte
+  commun (`MoyensEncaissementResolver` sans `avecComptesCommuns`).
+
 **Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste
 (`pourSite()`/`parSite()`), exposée par les écrans sous `moyens_encaissement`, et
 `StoreEncaissementVenteController` la rejoue (`supportPour()`) : le `compte_tresorerie_id` envoyé
@@ -262,7 +281,7 @@ active de l'auteur sur le site de la facture.**
 `PaymentCard` sert aussi à **payer** une fiche de commission (jamais une fiche salarié : les salaires
 se paient depuis Comptabilité > Paiement salaire), en
 mode `sens="decaissement"` : mêmes moyens (`MoyensEncaissementResolver` sur l'agence de la fiche, ou le
-siège principal pour une fiche sans agence), même caisse dédiée pour les espèces (celle du payeur),
+site central de trésorerie pour une fiche sans agence, ADR 0017), même caisse dédiée pour les espèces (celle du payeur),
 même règle de référence. En plus : solde disponible du moyen choisi (`solde_disponible`,
 `soldeEspeces`) et « Confirmer » désactivé s'il est insuffisant ; le refus réel est serveur, sous
 verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`, partagé avec les mouvements de

@@ -1254,8 +1254,9 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   permettait un double paiement non comptabilisé.
 
 - **D'où sort l'argent** : espèces → caisse dédiée active **du payeur** ; Mobile Money / virement /
-  chèque → support actif choisi. Uniquement les moyens de **l'agence de la fiche** — ou du **siège
-  principal** pour une fiche sans agence (consultant). Aucun siège principal → paiement bloqué.
+  chèque → support actif choisi. Uniquement les moyens de **l'agence de la fiche** — ou du **site
+  central de trésorerie** (ADR 0017) pour une fiche sans agence (consultant). Aucun site central →
+  paiement bloqué.
 - **Mêmes moyens et même fenêtre que l'encaissement** (`PaymentCard`, mode `decaissement`) : titre
   « Payer une commission livreur/propriétaire/site/consultant », Bénéficiaire, Période (« 16–30
   septembre 2026 (P2) »), Référence, Montant dû, Déjà payé, bloc « Reste à payer ». Solde disponible

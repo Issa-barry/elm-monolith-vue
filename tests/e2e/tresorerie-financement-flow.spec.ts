@@ -7,8 +7,8 @@
  * à financer) est couvert en profondeur côté Feature (FinancementAgenceServiceTest,
  * MouvementFondsServiceTest) — ce fichier vérifie le câblage UI de bout en bout.
  *
- * Utilise l'organisation "elm" par défaut (login()) — Matoto y est déjà le site de type
- * "siege" (cf. capture d'écran du produit, is_siege_principal auto-assigné par Site::boot()).
+ * Utilise l'organisation "elm" par défaut (login()) — Matoto y est le site central de trésorerie
+ * (agence, is_central_tresorerie posé par SitesSeeder, ADR 0017).
  *
  * Run: npx playwright test tests/e2e/tresorerie-financement-flow.spec.ts --workers=1
  */

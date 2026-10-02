@@ -183,7 +183,7 @@ class FicheCommissionSiteEtConsultantTest extends TestCase
     public function test_suppression_du_paiement_contrepasse_la_piece(): void
     {
         $org = $this->makeOrg();
-        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $fiche = $this->fiche($org, 'site', 'site', $site, 30_000);
         app(FicheComptabilisationService::class)->comptabiliserFicheValidee($fiche);
 
