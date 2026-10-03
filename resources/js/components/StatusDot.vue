@@ -120,6 +120,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_remettre: 'bg-amber-500',
     // Le site central lui-même (ADR 0017) : une information, pas une situation à traiter.
     tresorerie_principale: 'bg-blue-500',
+    // Remises des agences au Trésor principal (ADR 0016).
+    remise_en_cours: 'bg-blue-500',
+    partiellement_remis: 'bg-amber-500',
+    remis: 'bg-emerald-500',
+    rien_a_remettre: 'bg-emerald-500',
     donnees_incompletes: 'bg-amber-500',
     stock_negatif: 'bg-orange-500',
 };

@@ -341,6 +341,10 @@ const mainNavItems = computed((): NavItem[] => {
                                       title: 'Inter-agences',
                                       href: '/backoffice/comptabilite/tresorerie/inter-agences',
                                   },
+                                  {
+                                      title: 'Remises des agences',
+                                      href: '/backoffice/comptabilite/tresorerie/remises',
+                                  },
                               ]
                             : []),
                     ],

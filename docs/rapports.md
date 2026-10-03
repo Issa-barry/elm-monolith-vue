@@ -93,9 +93,17 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
 - Libellé affiché à l'écran et dans les exports : **« Dettes clients »** (ce que les clients doivent
   encore à l'entreprise), terme compris sur le terrain ; « créance » reste le terme du code et de la
   comptabilité (décision du 26/09/2026, simple changement de libellé, aucune règle modifiée).
-- Factures **impayées** ou **partielles**, **état actuel, toutes dates confondues** : la période ne
-  s'y applique pas, pour que les vieilles dettes restent visibles. Agent = créateur de la vente.
-  Agence = agence de la commande (« Créée à »), avec « Encaissée à » pour les paiements partiels.
+- **Dettes clients sur la période** (depuis le 03/10/2026) : factures **créées dans la période
+  filtrée** (même date que les ventes, `factures_ventes.created_at`) et encore **impayées** ou
+  **partielles** à l'état actuel. Le filtre de période pilote toute la page, cartes et détail
+  (total, nombre, impayées, partielles, plus ancienne, liste) ; l'en-tête du détail affiche la période.
+  Remplace la règle du 26/09/2026 « état actuel, toutes dates confondues » : avec « Aujourd'hui », les
+  dettes des jours précédents restaient affichées, ce qui rendait la page incohérente avec son filtre.
+- Le **reste** d'une facture est inchangé : état actuel, paiements reçus après la période compris.
+- L'**encours client à date** (toutes les factures encore dues à la fin de la période, quelle que
+  soit leur date de création) n'est pas affiché ici : évolution à part si le besoin se confirme.
+- Agent = créateur de la vente. Agence = agence de la commande (« Créée à »), avec « Encaissée à »
+  pour les paiements partiels.
 - Une facture « Créée » n'est pas encore une créance (elle devient impayée à la livraison).
 - Historique « créances au 15/09 » (reconstitution à une date passée) : hors lot 1.
 

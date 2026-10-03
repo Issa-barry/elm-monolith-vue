@@ -175,7 +175,7 @@ const cartes = computed((): Carte[] => {
             cle: 'creances',
             libelle: 'Dettes clients',
             valeur: formatGNF(r.creances.resume.reste),
-            detail: `${pluriel(r.creances.resume.nombre, 'facture')} · toutes dates`,
+            detail: pluriel(r.creances.resume.nombre, 'facture'),
             avertissement: null,
         },
         {
@@ -423,9 +423,9 @@ const chiffresMobileMoney = computed(() =>
                             Consultez les ventes, les encaissements, les dettes
                             clients et les caisses du périmètre sélectionné.
                             Cliquez sur une carte pour afficher son détail. Les
-                            dettes clients et les soldes actuels des caisses
-                            portent sur toutes les dates ; les ventes et les
-                            encaissements suivent la période choisie.
+                            ventes, les encaissements et les dettes clients
+                            suivent la période choisie ; le solde actuel des
+                            caisses porte sur toutes les dates.
                         </InfoTooltip>
                     </h1>
                     <p
@@ -665,15 +665,15 @@ const chiffresMobileMoney = computed(() =>
             >
                 <EnTeteSection
                     titre="Dettes clients"
-                    contexte="Situation actuelle · Toutes dates"
-                    aide="Ce que les clients doivent encore : état actuel, toutes dates confondues — la période choisie ne s'applique pas ici."
+                    :contexte="periode.libelle"
+                    aide="Factures créées sur la période que les clients doivent encore. Reste : état actuel de ces factures, paiements reçus après la période compris."
                     :chiffres="chiffresDettes"
                 />
                 <ListeFactures
                     :lignes="rapport.creances.lignes"
                     :afficher-agent="!maSituation"
                     afficher-anciennete
-                    vide="Aucune dette client en cours."
+                    vide="Aucune dette client sur la période."
                 />
                 <p
                     v-if="tronque(rapport.creances)"

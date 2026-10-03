@@ -67,7 +67,7 @@ class RapportActiviteExport implements WithMultipleSheets
         foreach ($e['par_moyen'] as $moyen) {
             $lignes[] = ['  dont '.$moyen['libelle'], $moyen['montant']];
         }
-        $lignes[] = ['Dettes clients en cours (état actuel, toutes dates)', $c['nombre']];
+        $lignes[] = ['Dettes clients sur la période (factures de la période encore dues)', $c['nombre']];
         $lignes[] = ['  dont impayées', $c['impayees']];
         $lignes[] = ['  dont partielles', $c['partielles']];
         $lignes[] = ['Reste dû', $c['reste']];

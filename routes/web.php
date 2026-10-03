@@ -56,6 +56,7 @@ use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
+use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
@@ -799,6 +800,10 @@ Route::prefix('backoffice')->group(function () {
                 Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
                 Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
                 Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
+
+                // Remises des agences à la trésorerie principale (ADR 0016) : vue du Trésor principal.
+                Route::get('remises', [RemisesAgencesController::class, 'index'])->name('remises.index');
+                Route::get('remises/{site}', [RemisesAgencesController::class, 'show'])->name('remises.show');
 
                 Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
                 Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');

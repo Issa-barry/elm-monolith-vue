@@ -25,13 +25,17 @@ graphique, non filtrée par agence.
    une facture, le brouillon n'en a pas, `validated_at` n'est pas renseigné partout, le PDV n'a pas de
    livraison, et le tableau de bord utilise déjà cette date.
 4. **Blocs indépendants** : ventes (agent = vendeur, date de facture), encaissements (agent = auteur,
-   `date_encaissement`), créances (état actuel, toutes dates). Aucun « reste » calculé par différence
+   `date_encaissement`), créances (factures de la période encore dues, cf. point 5). Aucun « reste » calculé par différence
    entre blocs — l'agent qui encaisse n'est pas toujours celui qui a vendu, et un encaissement du jour
    solde souvent une vente ancienne.
    Depuis l'ADR 0012 (29/09/2026), deux axes d'agence : ventes et créances → agence de la
    commande ; encaissements → agence qui a reçu l'argent (`site_encaissement_id`). Les écrans et
    exports affichent « Créée à » et « Encaissée à ».
 5. **Créances à l'état actuel** en lot 1 ; la reconstitution à une date passée est une évolution.
+   **Révisé le 03/10/2026** : les créances suivent la période du filtre comme les autres blocs —
+   factures créées dans la période et encore impayées ou partielles (reste = état actuel). La règle
+   initiale « toutes dates confondues » rendait la page incohérente avec son filtre. L'encours client
+   à date (dettes antérieures toujours dues) reste une évolution distincte.
 6. **Caisse = grand livre** (solde de début + mouvements = solde de fin), dans un service et un
    composant réutilisés par la future fiche caisse. L'onglet s'appelle « Caisse » : sans comptage
    physique, aucun écart n'est affiché.
