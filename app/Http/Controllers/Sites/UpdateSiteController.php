@@ -32,9 +32,11 @@ class UpdateSiteController extends Controller
             'quartier' => 'nullable|string|max:100',
             'telephone' => 'nullable|string|max:50',
             'commissions_active' => 'sometimes|boolean',
+            'is_central_tresorerie' => 'sometimes|boolean',
         ], SiteFormSupport::messages());
 
         $data = SiteFormSupport::normalizeStrings($data);
+        $data = SiteFormSupport::resoudreTresoreriePrincipale($data, $request->user(), $site);
 
         $site->update($data);
 

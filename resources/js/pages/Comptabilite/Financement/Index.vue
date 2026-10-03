@@ -19,23 +19,40 @@ interface Row {
     proprietaires: number;
     salaires: number;
     total_a_regler: number;
+    /** Obligations échues encore impayées (mois précédents, 1re quinzaine vue en fin de mois). */
+    arrieres: number;
+    /** Ce que l'agence garde : total à régler + impayés échus (ADR 0016). */
+    a_conserver: number;
     disponible: number | null;
+    /** Argent d'autres agences présent dans ses supports : jamais pour ses obligations. */
+    fonds_autres_agences: number | null;
+    disponible_propre: number | null;
     fonds_en_transit: number | null;
     deja_finance: number | null;
     a_financer: number | null;
+    remise_obligatoire: number | null;
+    excedent_a_remettre: number | null;
+    total_a_remettre: number | null;
+    est_tresorerie_principale: boolean;
     statut:
         | 'couvert'
         | 'a_financer'
         | 'fonds_en_transit'
+        | 'a_remettre'
+        | 'tresorerie_principale'
         | 'donnees_incompletes';
 }
 
 type Totaux = {
     total_a_regler: number;
+    arrieres: number;
+    a_conserver: number;
     disponible: number;
+    fonds_autres_agences: number;
     fonds_en_transit: number;
     deja_finance: number;
     a_financer: number;
+    total_a_remettre: number;
 };
 
 const props = defineProps<{
@@ -155,8 +172,19 @@ const statutLabels: Record<Row['statut'], string> = {
     couvert: 'Couvert',
     a_financer: 'À financer',
     fonds_en_transit: 'Fonds en transit',
+    a_remettre: 'À remettre',
+    tresorerie_principale: 'Trésorerie principale',
     donnees_incompletes: 'Données incomplètes',
 };
+
+function montantOuTiret(valeur: number | null): string {
+    return valeur === null ? '—' : formatGNF(valeur);
+}
+
+// Détail de la remise en infobulle : la part obligatoire (argent d'autres agences) et l'excédent propre.
+function detailRemise(row: Row): string {
+    return `Argent d'autres agences : ${formatGNF(row.remise_obligatoire ?? 0)} · Excédent propre : ${formatGNF(row.excedent_a_remettre ?? 0)}`;
+}
 
 // DataFilters attend { id, nom } (convention Site), pas { value, label }.
 const sitesPourFiltre = computed(() =>
@@ -191,16 +219,24 @@ function nouveauFinancementHref(row: Row): string {
                     Financement des agences
                 </h1>
                 <p class="text-sm text-muted-foreground">
-                    Complément réel à envoyer à chaque agence, une fois sa
-                    trésorerie disponible déduite.
+                    Ce que chaque agence conserve pour ses obligations, ce
+                    qu'elle remet à la trésorerie principale et ce qu'elle doit
+                    en recevoir.
                 </p>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-sm text-muted-foreground">Total à régler</p>
+                    <p class="text-sm text-muted-foreground">À conserver</p>
                     <p class="mt-1 text-2xl font-bold tabular-nums">
-                        {{ formatGNF(total_general.total_a_regler) }}
+                        {{ formatGNF(total_general.a_conserver) }}
+                    </p>
+                    <p
+                        v-if="total_general.arrieres > 0"
+                        class="mt-0.5 text-xs text-muted-foreground"
+                    >
+                        dont {{ formatGNF(total_general.arrieres) }} d'impayés
+                        échus
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
@@ -210,10 +246,29 @@ function nouveauFinancementHref(row: Row): string {
                     <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(total_general.disponible) }}
                     </p>
+                    <p
+                        v-if="total_general.fonds_autres_agences > 0"
+                        class="mt-0.5 text-xs text-muted-foreground"
+                    >
+                        dont
+                        {{ formatGNF(total_general.fonds_autres_agences) }}
+                        appartenant à d'autres agences
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
                     <p class="text-sm text-muted-foreground">
-                        À financer par le siège
+                        À remettre à la trésorerie principale
+                    </p>
+                    <p
+                        class="mt-1 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        data-testid="financement-total-a-remettre"
+                    >
+                        {{ formatGNF(total_general.total_a_remettre) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-4">
+                    <p class="text-sm text-muted-foreground">
+                        À financer par la trésorerie principale
                     </p>
                     <p
                         class="mt-1 text-2xl font-bold text-orange-600 tabular-nums dark:text-orange-400"
@@ -284,6 +339,12 @@ function nouveauFinancementHref(row: Row): string {
                                 Disponible
                             </th>
                             <th
+                                class="px-4 py-3 text-right font-medium"
+                                title="Argent encaissé pour d'autres agences : remis en totalité, jamais utilisé pour les obligations de l'agence."
+                            >
+                                Autres agences
+                            </th>
+                            <th
                                 v-for="col in colonnesVisibles"
                                 :key="col"
                                 class="px-4 py-3 text-right font-medium"
@@ -292,6 +353,15 @@ function nouveauFinancementHref(row: Row): string {
                             </th>
                             <th class="px-4 py-3 text-right font-medium">
                                 Total à régler
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium"
+                                title="Obligations échues encore impayées : mois précédents et, en fin de mois, la 1re quinzaine."
+                            >
+                                Impayés échus
+                            </th>
+                            <th class="px-4 py-3 text-right font-medium">
+                                À conserver
                             </th>
                             <th class="px-4 py-3 text-right font-medium">
                                 Fonds en transit
@@ -302,7 +372,12 @@ function nouveauFinancementHref(row: Row): string {
                             <th
                                 class="px-4 py-3 text-right font-semibold text-foreground"
                             >
-                                À envoyer
+                                À financer
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-semibold text-foreground"
+                            >
+                                À remettre
                             </th>
                             <th class="px-4 py-3 text-left font-medium">
                                 Statut
@@ -329,10 +404,16 @@ function nouveauFinancementHref(row: Row): string {
                                 </Link>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
+                                {{ montantOuTiret(row.disponible) }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right tabular-nums"
+                                data-testid="financement-autres-agences"
+                            >
                                 {{
-                                    row.disponible === null
-                                        ? '—'
-                                        : formatGNF(row.disponible)
+                                    row.fonds_autres_agences
+                                        ? formatGNF(row.fonds_autres_agences)
+                                        : '—'
                                 }}
                             </td>
                             <td
@@ -344,6 +425,14 @@ function nouveauFinancementHref(row: Row): string {
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(row.total_a_regler) }}
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums">
+                                {{
+                                    row.arrieres ? formatGNF(row.arrieres) : '—'
+                                }}
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums">
+                                {{ formatGNF(row.a_conserver) }}
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{
@@ -362,11 +451,18 @@ function nouveauFinancementHref(row: Row): string {
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
                             >
-                                {{
-                                    row.a_financer === null
-                                        ? '—'
-                                        : formatGNF(row.a_financer)
-                                }}
+                                {{ montantOuTiret(row.a_financer) }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right font-semibold tabular-nums"
+                                data-testid="financement-a-remettre"
+                                :title="
+                                    row.total_a_remettre
+                                        ? detailRemise(row)
+                                        : undefined
+                                "
+                            >
+                                {{ montantOuTiret(row.total_a_remettre) }}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap">
                                 <StatusDot
@@ -389,7 +485,7 @@ function nouveauFinancementHref(row: Row): string {
                         </tr>
                         <tr v-if="rows.length === 0">
                             <td
-                                :colspan="8 + colonnesVisibles.length"
+                                :colspan="12 + colonnesVisibles.length"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
                                 Aucune agence pour cette période.

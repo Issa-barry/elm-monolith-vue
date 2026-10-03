@@ -22,7 +22,7 @@ const scenario = {
     email: 'moussa.e2e@gmail.com',
     password: 'Sup3r$ecretPwd99',
     domaineLabel: 'Commerce',
-    siteTypeLabel: 'Siège',
+    siteTypeLabel: 'Boutique',
     siteVille: 'Freetown',
     siteQuartier: 'Aberdeen',
 };

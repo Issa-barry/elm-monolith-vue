@@ -13,10 +13,7 @@ import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
 import SituationTab from '@/pages/Vehicules/partials/SituationTab.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
-import type {
-    SituationPeriode,
-    SituationVentesData,
-} from '@/types/vehicule-situation';
+import type { SituationPeriode, SituationVentesData } from '@/types/situation';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,

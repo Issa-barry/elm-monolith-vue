@@ -1,6 +1,6 @@
 # Standards UI — à respecter impérativement
 
-Les règles 1 et 2 ci-dessous sont contrôlées automatiquement par
+Les règles 1, 2 et 4 ci-dessous sont contrôlées automatiquement par
 `node scripts/check-ui-standards.mjs`, exécuté dans le CI (`.github/workflows/lint.yml`, job
 `quality`, step "Check UI standards"). Une PR qui les viole échoue le check **avant merge**.
 Lance `npm run lint:standards` en local pour vérifier avant de pousser. La règle 3 n'est pas
@@ -68,9 +68,28 @@ doit refléter l'état d'autorisation réel, jamais laisser deviner une action q
   redondant mais reste sans risque — pas obligatoire dans ce cas précis.
 - S'applique aussi aux liens de navigation (sidebar, etc.) menant vers une action protégée.
 
+## 4. Icône de copie : `pi pi-clipboard`, et seulement pour copier
+
+Toute action qui copie une valeur dans le presse-papiers (numéro de facture, lien, clé...) utilise
+l'icône PrimeIcons `pi pi-clipboard` — et cette icône ne sert **qu'à** cela :
+
+```vue
+<button type="button" title="Cliquez pour copier le numéro de facture" @click="copier">
+    <i :class="copie ? 'pi pi-check' : 'pi pi-clipboard'" />
+</button>
+```
+
+- **Infobulle obligatoire** : le bouton porte un `title` statique qui commence par
+  « Cliquez pour copier » suivi de ce qui est copié (« … le numéro de facture », « … le lien de
+  connexion »).
+- **Interdit** : les icônes de copie Lucide (`Copy`, `CopyCheck`, `ClipboardCopy`) et `pi-copy`.
+- **Interdit** : `pi pi-clipboard` dans un fichier qui ne copie rien (pas de `navigator.clipboard`
+  ni de `useClipboard`) — choisis une autre icône.
+- La coche de confirmation après copie reste libre (`pi pi-check` recommandé).
+
 ## Échappatoire
 
 Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est
 en fait une catégorie), ajoute le commentaire `ui-standard-ignore-file` n'importe où dans le
-fichier `.vue` pour désactiver les deux checks sur ce fichier. À utiliser avec parcimonie — c'est
+fichier `.vue` pour désactiver les checks sur ce fichier. À utiliser avec parcimonie — c'est
 une échappatoire, pas un moyen de contourner la règle par défaut.

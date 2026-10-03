@@ -244,7 +244,7 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
 
     private function makeTransfert(int $qteChargee = 100, int $qteRecue = 100, bool $enReception = false): TransfertLogistique
     {
-        $siteDest = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site Destination', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siteDest = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site Destination', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
 
         $transfert = TransfertLogistique::create([
             'organization_id' => $this->org->id,

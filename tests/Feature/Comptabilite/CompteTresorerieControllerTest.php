@@ -81,7 +81,9 @@ class CompteTresorerieControllerTest extends TestCase
                 'libelle' => '',
             ])
             ->assertRedirect(route('comptabilite.tresorerie.supports.index'))
-            ->assertSessionHasNoErrors();
+            ->assertSessionHasNoErrors()
+            // Le formulaire ne propose plus de saisie : le message annonce le nom généré.
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, "« Caisse de {$site->nom} »"));
 
         $this->assertDatabaseHas('compta_supports_tresorerie', [
             'site_id' => $site->id,
@@ -513,5 +515,31 @@ class CompteTresorerieControllerTest extends TestCase
                 ->where('comptes.0.operateur_label', 'Orange Money')
                 ->where('comptes.0.libelle', "Orange Money de {$site->nom}")
                 ->where('operateur_options', fn ($options) => collect($options)->pluck('value')->all() === ['orange_money', 'kulu', 'soutra_money', 'momo', 'paycard']));
+    }
+
+    /** Numéro du compte (numéro marchand) : affiché à l'encaissement, conservé quand il n'est pas renvoyé. */
+    public function test_le_numero_du_compte_est_enregistre_expose_et_conserve(): void
+    {
+        $compte = CompteComptable::where('organization_id', $this->org->id)->where('numero', '561100')->firstOrFail();
+
+        $this->creerMobileMoney('561100', 'orange_money', ['numero' => '+224 620 00 00 00'])->assertSessionHasNoErrors();
+        $support = CompteTresorerie::where('type', 'mobile_money')->firstOrFail();
+        $this->assertSame('+224 620 00 00 00', $support->numero);
+
+        // Activation depuis le menu ⋮ : le numéro n'est pas envoyé, il reste inchangé.
+        $this->actingAs($this->user)
+            ->put(route('comptabilite.tresorerie.supports.update', $support), [
+                'libelle' => $support->libelle,
+                'type' => 'mobile_money',
+                'operateur_mobile_money' => 'orange_money',
+                'compte_comptable_id' => $compte->id,
+                'actif' => false,
+            ])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('+224 620 00 00 00', $support->fresh()->numero);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.tresorerie.supports.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('comptes.0.numero', '+224 620 00 00 00'));
     }
 }

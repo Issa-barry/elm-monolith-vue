@@ -60,6 +60,7 @@ const compte = (surcharge: Partial<CompteTresorerie>): CompteTresorerie => ({
     operateur_mobile_money: null,
     operateur_label: null,
     libelle: 'Caisse-espèce',
+    numero: null,
     nature: 'agence',
     agent: null,
     compte_comptable_id: 'cc1',

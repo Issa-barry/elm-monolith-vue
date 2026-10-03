@@ -44,7 +44,7 @@ class MouvementFondsServiceTest extends TestCase
         $this->siege = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Siège',
-            'type' => 'siege',
+            'type' => 'agence', 'is_central_tresorerie' => true,
             'localisation' => 'Conakry',
         ]);
         $this->agence = Site::create([

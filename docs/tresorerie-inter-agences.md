@@ -5,6 +5,12 @@ Décision : [ADR 0012](adr/0012-encaissement-inter-agences-et-reglement.md). Ét
 (29/09/2026) — écran Trésorerie → Inter-agences, règlement dans l'interface, Mouvements, fiche
 commande, compteur. Lot 3 : rapports, Situation, financement, E2E.
 
+> **Évolution décidée — [ADR 0016](adr/0016-remise-au-siege-et-position-des-agences.md)**
+> (accepté le 02/10/2026, pas encore développée) : toute remise part vers la trésorerie principale
+> (`is_central_tresorerie`, ADR 0017). Pour une commande de la trésorerie principale, rien ne change ;
+> pour une commande d'une agence tierce, l'agence qui détient l'argent le remet à la trésorerie
+> principale (plus de règlement direct vers l'agence de la commande), avec écritures de liaison.
+
 ## Exemple
 
 Commande de **Matoto (A)**, 500 000 GNF. Le client paie à **Kindia (B)**.
@@ -181,6 +187,7 @@ l'agence de la commande.
 
 ## Hors lots 1 et 2
 
-- Situation de trésorerie (colonnes À verser / À recevoir) et financement (disponible de B diminué
-  de ce qu'il doit : `DetteInterAgencesService::aVerserParSite()`), E2E — lot 3.
+- Situation de trésorerie (colonnes À verser / À recevoir), E2E — lot 3. Le financement déduit
+  désormais du disponible de B ce qu'il détient pour d'autres agences, et le compte comme remise
+  obligatoire (ADR 0016, lot 1, 03/10/2026 — écran Financement).
 - Les sorties d'argent de B ne sont pas bloquées par la dette (décision du 29/09/2026).

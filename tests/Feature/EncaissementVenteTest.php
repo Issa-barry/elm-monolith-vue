@@ -575,6 +575,7 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => 'orange_money',
                         'compte_tresorerie_id' => $orange->id,
                         'reference_requise' => true,
+                        'numero' => null,
                     ],
                     [
                         'key' => "virement:{$banque->id}",
@@ -583,6 +584,7 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => null,
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => true,
+                        'numero' => null,
                     ],
                     [
                         'key' => "cheque:{$banque->id}",
@@ -591,6 +593,7 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => null,
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => false,
+                        'numero' => null,
                     ],
                 ]));
     }

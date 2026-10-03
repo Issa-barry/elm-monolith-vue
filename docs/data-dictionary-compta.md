@@ -131,6 +131,8 @@ Ce document distingue deux couches, volontairement séparées :
   `NULL` = support de l'agence (tous les supports historiques) ; renseigné = caisse dédiée. La
   « nature » est **dérivée** de cette colonne, jamais stockée. Voir la section « Caisses dédiées à
   un agent » ci-dessous.
+- **`numero`** (nullable, depuis le 2026-10-02) : numéro du compte (numéro marchand Mobile Money,
+  numéro bancaire), affiché à l'encaissement pour que l'agent choisisse le compte réellement payé.
 - **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
   (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
 - **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour

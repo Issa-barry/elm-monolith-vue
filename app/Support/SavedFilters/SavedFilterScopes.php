@@ -7,7 +7,9 @@ use App\Enums\SiteType;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
+use App\Enums\StatutSupportTresorerie;
 use App\Enums\StockStatut;
+use App\Enums\TypeSupportTresorerie;
 use App\Models\CashbackTransaction;
 use App\Models\CommandeVente;
 use App\Models\Produit;
@@ -47,6 +49,17 @@ final class SavedFilterScopes
         ];
 
         return [
+            'tresorerie-supports' => [
+                'authorize' => fn (User $user): bool => $user->can('tresorerie.read') || $user->can('tresorerie.gerer_soldes_ouverture'),
+                'share' => 'tresorerie.gerer_soldes_ouverture',
+                'sites' => true,
+                'criteria' => [
+                    'statut' => [Rule::enum(StatutSupportTresorerie::class)],
+                    'type' => [Rule::enum(TypeSupportTresorerie::class)],
+                    'nature' => [Rule::in(['agence', 'dediee'])],
+                    'agent_id' => ['ulid', Rule::exists('users', 'id')->where('organization_id', $org)],
+                ],
+            ],
             'ventes' => [
                 'authorize' => ['viewAny', CommandeVente::class],
                 'share' => 'ventes.update',

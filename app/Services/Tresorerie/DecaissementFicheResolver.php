@@ -17,12 +17,12 @@ use Illuminate\Validation\ValidationException;
  * - espèces = caisse dédiée active DU PAYEUR sur cette agence (CaisseAgentResolver).
  *
  * Agence de trésorerie : celle de la fiche ; une fiche sans agence (consultant) est payée depuis
- * le siège principal de l'organisation — jamais depuis l'agence de l'utilisateur, jamais un choix
- * manuel. Sans siège principal configuré, le paiement est impossible.
+ * le site central de trésorerie de l'organisation (ADR 0017) — jamais depuis l'agence de l'utilisateur, jamais un choix
+ * manuel. Sans site central de trésorerie configuré, le paiement est impossible.
  */
 class DecaissementFicheResolver
 {
-    public const MESSAGE_SANS_SIEGE = "Aucun siège principal n'est configuré pour cette organisation. Le paiement ne peut pas être effectué.";
+    public const MESSAGE_SANS_SITE_CENTRAL = "Aucun site n'est désigné comme trésorerie principale pour cette organisation. Le paiement ne peut pas être effectué.";
 
     public const MESSAGE_SANS_CAISSE = "Vous ne disposez pas d'une caisse active sur ce site : impossible de payer en espèces. Contactez votre responsable pour qu'il vous en crée une.";
 
@@ -31,14 +31,14 @@ class DecaissementFicheResolver
     public function __construct(
         private readonly MoyensEncaissementResolver $moyens,
         private readonly CaisseAgentResolver $caisses,
-        private readonly SiegeResolverService $sieges,
+        private readonly SiteCentralTresorerieResolver $siteCentral,
         private readonly TresorerieDisponibiliteService $disponibilite,
     ) {}
 
-    /** Agence d'où sort l'argent, ou null si la fiche n'a pas d'agence et qu'aucun siège principal n'existe. */
+    /** Agence d'où sort l'argent, ou null si la fiche n'a pas d'agence et qu'aucun site central de trésorerie n'existe. */
     public function siteTresorerie(PaiementFiche $fiche): ?string
     {
-        return $fiche->site_id ?? $this->sieges->principalOuNull($fiche->organization_id)?->id;
+        return $fiche->site_id ?? $this->siteCentral->centralOuNull($fiche->organization_id)?->id;
     }
 
     /**
@@ -73,7 +73,7 @@ class DecaissementFicheResolver
                 'moyens' => $siteId ? $moyensParSite->get($siteId, []) : [],
                 'especes_disponibles' => $caisse !== null,
                 'solde_especes' => $caisse ? $this->disponibilite->soldePourSupport($caisse, now()) : null,
-                'message' => $siteId ? null : self::MESSAGE_SANS_SIEGE,
+                'message' => $siteId ? null : self::MESSAGE_SANS_SITE_CENTRAL,
             ];
         })->all();
     }
@@ -88,7 +88,7 @@ class DecaissementFicheResolver
     {
         $siteId = $this->siteTresorerie($fiche);
         if (! $siteId) {
-            throw ValidationException::withMessages(['compte_tresorerie_id' => self::MESSAGE_SANS_SIEGE]);
+            throw ValidationException::withMessages(['compte_tresorerie_id' => self::MESSAGE_SANS_SITE_CENTRAL]);
         }
 
         if ($modePaiement === ModePaiement::ESPECES->value) {

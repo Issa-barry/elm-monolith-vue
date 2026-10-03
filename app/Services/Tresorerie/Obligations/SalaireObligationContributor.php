@@ -4,6 +4,7 @@ namespace App\Services\Tresorerie\Obligations;
 
 use App\Models\PaieLigne;
 use App\Services\PaieCalculService;
+use Carbon\CarbonInterface;
 
 /**
  * Salaires — mensuel, sourcé directement sur PaieLigne/PaiePeriode (jamais via
@@ -39,6 +40,24 @@ class SalaireObligationContributor implements ObligationContributor
             ->get(['id', 'employe_id', 'net', 'reste_a_payer'])
             ->each(function (PaieLigne $ligne) use (&$besoin) {
                 ObligationAccumulator::ajouter($besoin, $ligne->employe?->site_id, 'salaires', (float) $ligne->reste_a_payer, (float) $ligne->net);
+            });
+    }
+
+    public function arrieres(string $organizationId, CarbonInterface $debutMois, array &$arrieres): void
+    {
+        $annee = $debutMois->year;
+        $mois = $debutMois->month;
+
+        PaieLigne::where('reste_a_payer', '>', 0)
+            ->whereHas('periode', fn ($q) => $q
+                ->where('organization_id', $organizationId)
+                ->where(fn ($avant) => $avant
+                    ->where('annee', '<', $annee)
+                    ->orWhere(fn ($meme) => $meme->where('annee', $annee)->where('mois', '<', $mois))))
+            ->with('employe:id,site_id')
+            ->get(['id', 'employe_id', 'reste_a_payer'])
+            ->each(function (PaieLigne $ligne) use (&$arrieres) {
+                ObligationAccumulator::ajouterArriere($arrieres, $ligne->employe?->site_id, (float) $ligne->reste_a_payer);
             });
     }
 

@@ -12,7 +12,6 @@ use App\Support\User\UserPrivilegeGuard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class UpdateUserController extends Controller
@@ -39,7 +38,6 @@ class UpdateUserController extends Controller
             // qui liste des agents de toutes les organisations — sans ce scope, un site
             // d'une autre organisation resterait accepté par `exists:sites,id` seul.
             'site_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $user->organization_id)],
-            'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
             'is_active' => 'boolean',
         ], [
             'prenom.required' => 'Le prénom est obligatoire.',
@@ -50,7 +48,6 @@ class UpdateUserController extends Controller
             'role.exists' => 'Rôle invalide.',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Site invalide.',
-            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
         UserIdentitySync::assertIdentityUnique($data['telephone'], $data['email'] ?? null, $user->id);
@@ -71,11 +68,9 @@ class UpdateUserController extends Controller
         UserIdentitySync::syncTelephoneIdentity($user, $data['telephone']);
         UserIdentitySync::syncEmailIdentity($user, $data['email'] ?? null);
 
-        $userUpdate = ['is_active' => $data['is_active'] ?? $user->is_active];
-        if (! empty($data['password'])) {
-            $userUpdate['password'] = $data['password'];
-        }
-        $user->update($userUpdate);
+        // Jamais de mot de passe ici : seul son titulaire le change (Paramètres → Mot de passe) ou
+        // le réinitialise par le lien reçu (ADR 0015). Un champ `password` envoyé est ignoré.
+        $user->update(['is_active' => $data['is_active'] ?? $user->is_active]);
 
         // syncRoles() remplace TOUS les rôles — un compte qui cumule ce rôle staff
         // avec un rôle client/proprietaire/livreur (ex: un admin qui possède aussi

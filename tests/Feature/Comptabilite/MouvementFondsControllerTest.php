@@ -35,7 +35,7 @@ class MouvementFondsControllerTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['tresorerie.create', 'tresorerie.read', 'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter', 'tresorerie.confirmer_retour']);
 
-        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $this->agence = $this->user->sites()->first();
 
         $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();
@@ -150,7 +150,7 @@ class MouvementFondsControllerTest extends TestCase
         // Site dédié : le solde se calcule par (compte_comptable_id, site_id), jamais par
         // compte_tresorerie_id (compta_ecritures n'a pas cette colonne) — réutiliser le site du
         // siège aurait hérité des 50 000 000 déjà alimentés sur caisseSiege dans setUp().
-        $autreSiege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Autre siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $autreSiege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Autre siège', 'type' => 'agence', 'localisation' => 'Conakry']);
         $caisseVide = CompteTresorerie::create([
             'organization_id' => $this->org->id, 'site_id' => $autreSiege->id,
             'compte_comptable_id' => $this->caisseSiege->compte_comptable_id, 'type' => 'caisse', 'libelle' => 'Caisse à sec',
@@ -188,7 +188,7 @@ class MouvementFondsControllerTest extends TestCase
     public function test_isole_les_organisations(): void
     {
         $autreOrg = Organization::factory()->create();
-        $autreSite1 = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S1', 'type' => 'siege', 'localisation' => 'X']);
+        $autreSite1 = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S1', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'X']);
         $autreSite2 = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S2', 'type' => 'agence', 'localisation' => 'X']);
         $compteAutre = CompteComptable::where('organization_id', $autreOrg->id)->where('numero', '571000')->firstOrFail();
         $compteTresoAutre1 = CompteTresorerie::create(['organization_id' => $autreOrg->id, 'site_id' => $autreSite1->id, 'compte_comptable_id' => $compteAutre->id, 'type' => 'caisse', 'libelle' => 'C1']);
@@ -412,7 +412,7 @@ class MouvementFondsControllerTest extends TestCase
         $this->jeuDeMouvementsPourFiltres();
 
         $autreOrg = Organization::factory()->create();
-        $siteEtranger = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Site étranger', 'type' => 'siege', 'localisation' => 'X']);
+        $siteEtranger = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Site étranger', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'X']);
 
         $this->assertSame([], $this->montantsIndex(['site_origine_id' => $siteEtranger->id]));
         $this->assertSame([], $this->montantsIndex(['site_destination_id' => $siteEtranger->id]));
@@ -556,7 +556,7 @@ class MouvementFondsControllerTest extends TestCase
         $this->jeuDeMouvementsPourCaisses();
 
         $autreOrg = Organization::factory()->create();
-        $autreSite = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Site étranger', 'type' => 'siege', 'localisation' => 'X']);
+        $autreSite = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Site étranger', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'X']);
         $caisseEtrangere = $this->creerCaisse($autreSite, 'Caisse étrangère', $autreOrg);
         MouvementFonds::create([
             'organization_id' => $autreOrg->id, 'site_origine_id' => $autreSite->id, 'site_destination_id' => $autreSite->id,

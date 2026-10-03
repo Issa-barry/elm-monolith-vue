@@ -66,6 +66,7 @@ interface Site {
     statut: string | null;
     statut_label: string;
     commissions_active: boolean;
+    is_central_tresorerie: boolean;
     localisation: string | null;
     pays: string | null;
     ville: string | null;
@@ -444,8 +445,20 @@ function confirmRejectMember(m: Membre) {
                 "
             >
                 <template #subtitle>
-                    <p class="mt-1 font-mono text-sm text-muted-foreground">
-                        {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                    <p
+                        class="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm text-muted-foreground"
+                    >
+                        <span>
+                            {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                        </span>
+                        <span
+                            v-if="site.is_central_tresorerie"
+                            class="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-xs font-medium text-primary"
+                            title="Site qui centralise les flux de trésorerie de l'organisation"
+                        >
+                            <i class="pi pi-wallet text-[10px]" />
+                            Trésorerie principale
+                        </span>
                     </p>
                 </template>
                 <template #actions>

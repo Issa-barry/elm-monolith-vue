@@ -80,7 +80,7 @@ class MoyensEncaissementResolver
                     ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
                     ->whereIn('operateur_mobile_money', array_map(fn (OperateurMobileMoney $o) => $o->value, OperateurMobileMoney::avecWallet()))))
             ->orderBy('libelle')
-            ->get(['id', 'site_id', 'type', 'operateur_mobile_money', 'libelle']);
+            ->get(['id', 'site_id', 'type', 'operateur_mobile_money', 'libelle', 'numero']);
     }
 
     /**
@@ -128,6 +128,8 @@ class MoyensEncaissementResolver
             'operateur_mobile_money' => $operateur?->value,
             'compte_tresorerie_id' => $support->id,
             'reference_requise' => $referenceRequise,
+            // Numéro du compte (numéro marchand) : l'agent le compare au reçu du client.
+            'numero' => $support->numero,
         ];
     }
 }

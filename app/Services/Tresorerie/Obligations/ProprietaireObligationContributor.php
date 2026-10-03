@@ -6,6 +6,7 @@ use App\Enums\TypePeriodePaiement;
 use App\Models\PaiementFiche;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use Carbon\CarbonInterface;
 
 /**
  * Commissions propriétaires — une seule colonne mensuelle : les deux
@@ -42,6 +43,18 @@ class ProprietaireObligationContributor implements ObligationContributor
                     ObligationAccumulator::ajouter($besoin, $fiche->site_id, 'proprietaires', $fiche->montant_restant, (float) $fiche->montant_net);
                 });
         }
+    }
+
+    public function arrieres(string $organizationId, CarbonInterface $debutMois, array &$arrieres): void
+    {
+        PaiementFiche::where('organization_id', $organizationId)
+            ->where('beneficiaire_type', 'proprietaire')
+            ->whereColumn('montant_paye', '<', 'montant_net')
+            ->whereHas('periode', fn ($q) => $q->whereDate('date_fin', '<', $debutMois->toDateString()))
+            ->get(['site_id', 'montant_net', 'montant_paye'])
+            ->each(function (PaiementFiche $fiche) use (&$arrieres) {
+                ObligationAccumulator::ajouterArriere($arrieres, $fiche->site_id, $fiche->montant_restant);
+            });
     }
 
     public function detail(string $organizationId, int $annee, int $mois, ?string $siteId): array

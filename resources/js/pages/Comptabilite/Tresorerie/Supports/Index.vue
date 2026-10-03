@@ -38,8 +38,10 @@ import {
     PiggyBank,
     Plus,
     Power,
+    TriangleAlert,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Message from 'primevue/message';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -194,7 +196,7 @@ const form = useForm({
     type: 'caisse',
     operateur_mobile_money: '',
     compte_comptable_id: '',
-    libelle: '',
+    numero: '',
     moyen_paiement_defaut: '',
 });
 
@@ -235,28 +237,6 @@ watch([() => form.site_id, () => form.nature], () => {
     }
 });
 
-// Aperçu du libellé auto-généré si l'utilisateur ne saisit rien — la valeur
-// réelle est calculée côté serveur (App\Models\CompteTresorerie::boot()),
-// ceci n'est qu'un aperçu pour que l'utilisateur comprenne ce qui sera créé.
-const libellePreview = computed(() => {
-    if (form.nature === 'dediee') {
-        const agent = props.agents.find((a) => a.id === form.agent_id);
-        return agent
-            ? `Automatique : Caisse ${agent.nom}`
-            : 'Libellé (optionnel)';
-    }
-    const site = props.sites.find((s) => s.id === form.site_id);
-    const type = props.type_options.find((t) => t.value === form.type);
-    if (!site || !type) return 'Libellé (optionnel)';
-    const operateur =
-        form.type === 'mobile_money'
-            ? props.operateur_options.find(
-                  (o) => o.value === form.operateur_mobile_money,
-              )
-            : undefined;
-    return `Automatique : ${operateur?.label ?? type.label} de ${site.nom}`;
-});
-
 function ouvrirCreation() {
     form.reset();
     form.clearErrors();
@@ -271,7 +251,6 @@ function creerSupport() {
                   nature: data.nature,
                   site_id: data.site_id,
                   agent_id: data.agent_id,
-                  libelle: data.libelle,
               }
             : {
                   nature: data.nature,
@@ -282,7 +261,7 @@ function creerSupport() {
                           ? data.operateur_mobile_money
                           : null,
                   compte_comptable_id: data.compte_comptable_id,
-                  libelle: data.libelle,
+                  numero: data.numero,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
               },
     ).post(URL_SUPPORTS, {
@@ -299,6 +278,7 @@ function creerSupport() {
 
 const editForm = useForm({
     libelle: '',
+    numero: '',
     type: '',
     operateur_mobile_money: '',
     compte_comptable_id: '',
@@ -340,6 +320,7 @@ watch(
 function ouvrirEdition(compte: CompteTresorerie) {
     editForm.clearErrors();
     editForm.libelle = compte.libelle;
+    editForm.numero = compte.numero ?? '';
     editForm.type = compte.type;
     editForm.operateur_mobile_money = compte.operateur_mobile_money ?? '';
     editForm.compte_comptable_id = compte.compte_comptable_id;
@@ -648,6 +629,7 @@ const selectClass =
                     <template #filters>
                         <DataFilters
                             trigger-only
+                            saved-filter-scope="tresorerie-supports"
                             :url="URL_SUPPORTS"
                             :values="filters"
                             :fields="filterFields"
@@ -721,6 +703,13 @@ const selectClass =
                             <td class="px-4 py-4 align-middle">{{ c.site }}</td>
                             <td class="px-4 py-4 align-middle">
                                 <div class="font-medium">{{ c.libelle }}</div>
+                                <div
+                                    v-if="c.numero"
+                                    class="text-xs text-muted-foreground tabular-nums"
+                                    data-testid="support-numero"
+                                >
+                                    N° {{ c.numero }}
+                                </div>
                                 <div
                                     v-if="alerte"
                                     class="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
@@ -1154,12 +1143,11 @@ const selectClass =
                     <option value="agence">Caisse de l'agence</option>
                     <option value="dediee">Caisse dédiée à un agent</option>
                 </select>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    {{
-                        form.nature === 'dediee'
-                            ? 'Alimentée par ses encaissements en espèces.'
-                            : "Caisse de l'agence, compte bancaire ou compte Mobile Money."
-                    }}
+                <p
+                    v-if="form.nature === 'agence'"
+                    class="mt-1 text-xs text-muted-foreground"
+                >
+                    Caisse de l'agence, compte bancaire ou compte Mobile Money.
                 </p>
                 <p
                     v-if="form.errors.nature"
@@ -1198,13 +1186,31 @@ const selectClass =
                             {{ a.nom }}
                         </option>
                     </select>
-                    <p
+                    <Message
                         v-if="form.site_id && agentsEligibles.length === 0"
-                        class="mt-1 text-xs text-muted-foreground"
+                        severity="warn"
+                        variant="outlined"
+                        size="small"
+                        :closable="false"
+                        :pt="{ content: { class: 'items-start!' } }"
+                        class="mt-2"
                     >
-                        Aucun agent disponible : il doit être rattaché à cette
-                        agence et ne pas déjà avoir de caisse dédiée active.
-                    </p>
+                        <template #icon>
+                            <TriangleAlert
+                                class="mt-0.5 h-4 w-4 shrink-0"
+                                aria-hidden="true"
+                            />
+                        </template>
+                        <div
+                            class="space-y-1 text-sm leading-relaxed font-normal"
+                        >
+                            <p class="font-semibold">Aucun agent disponible</p>
+                            <p>
+                                L'agent doit être rattaché à cette agence et ne
+                                pas avoir de caisse dédiée active.
+                            </p>
+                        </div>
+                    </Message>
                     <p
                         v-if="form.errors.agent_id"
                         class="mt-1 text-xs text-destructive"
@@ -1212,14 +1218,34 @@ const selectClass =
                         {{ form.errors.agent_id }}
                     </p>
                 </div>
-                <p
-                    class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground"
+                <Message
+                    severity="info"
+                    variant="outlined"
+                    size="small"
+                    :closable="false"
+                    :pt="{
+                        root: { role: 'note', 'aria-live': 'off' },
+                        content: { class: 'items-start!' },
+                    }"
                 >
-                    Type : Caisse. Le compte comptable est créé automatiquement.
-                    La caisse démarre à 0 GNF : elle s'alimente par les
-                    encaissements en espèces de l'agent ou par un transfert
-                    depuis la caisse de l'agence.
-                </p>
+                    <template #icon>
+                        <Info
+                            class="mt-0.5 h-4 w-4 shrink-0"
+                            aria-hidden="true"
+                        />
+                    </template>
+                    <div class="space-y-1 text-sm leading-relaxed font-normal">
+                        <p class="font-semibold">
+                            Caisse en espèces · 0 GNF au départ
+                        </p>
+                        <p>Compte comptable créé automatiquement.</p>
+                        <p>
+                            <span class="font-medium">Alimentation :</span>
+                            encaissements en espèces de l'agent ou transfert
+                            depuis la caisse de l'agence.
+                        </p>
+                    </div>
+                </Message>
             </template>
 
             <template v-else>
@@ -1318,23 +1344,24 @@ const selectClass =
                 </p>
             </div>
 
-            <div>
-                <Label
-                    for="sup-libelle"
-                    class="mb-1.5 block text-xs font-medium"
-                    >Nom de la caisse (optionnel)</Label
+            <div v-if="form.nature !== 'dediee' && form.type !== 'caisse'">
+                <Label for="sup-numero" class="mb-1.5 block text-xs font-medium"
+                    >Numéro du compte (optionnel)</Label
                 >
                 <Input
-                    id="sup-libelle"
-                    v-model="form.libelle"
-                    :placeholder="libellePreview"
-                    :class="{ 'border-destructive': form.errors.libelle }"
+                    id="sup-numero"
+                    v-model="form.numero"
+                    placeholder="Ex. numéro marchand +224 6XX XX XX XX"
                 />
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Affiché à l'encaissement : l'agent vérifie que le client a
+                    payé sur ce compte.
+                </p>
                 <p
-                    v-if="form.errors.libelle"
+                    v-if="form.errors.numero"
                     class="mt-1 text-xs text-destructive"
                 >
-                    {{ form.errors.libelle }}
+                    {{ form.errors.numero }}
                 </p>
             </div>
 
@@ -1485,6 +1512,20 @@ const selectClass =
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ editForm.errors.operateur_mobile_money }}
+                    </p>
+                </div>
+                <div v-if="editForm.type !== 'caisse'">
+                    <Label
+                        for="edit-numero"
+                        class="mb-1.5 block text-xs font-medium"
+                        >Numéro du compte</Label
+                    >
+                    <Input id="edit-numero" v-model="editForm.numero" />
+                    <p
+                        v-if="editForm.errors.numero"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ editForm.errors.numero }}
                     </p>
                 </div>
             </template>

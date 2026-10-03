@@ -41,7 +41,7 @@ class MouvementFondsBadgeNotificationTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['tresorerie.create', 'tresorerie.read', 'tresorerie.envoyer', 'tresorerie.recevoir']);
 
-        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         // Le site créé par initOrgAndUser() : c'est celui de l'utilisateur, l'« agence » destinataire des tests.
         $this->agence = $this->user->sites()->first();
 
@@ -182,7 +182,7 @@ class MouvementFondsBadgeNotificationTest extends TestCase
     public function test_ignore_un_mouvement_d_une_autre_organisation(): void
     {
         $autreOrg = Organization::factory()->create();
-        $autreSiteOrigine = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S1', 'type' => 'siege', 'localisation' => 'X']);
+        $autreSiteOrigine = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S1', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'X']);
         // Même ID de site que l'agence de l'utilisateur ? Impossible (ULID généré) — la portée
         // organisation_id suffit, ce test vérifie qu'aucune fuite inter-organisation n'existe.
         $autreSiteDestination = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'S2', 'type' => 'agence', 'localisation' => 'X']);

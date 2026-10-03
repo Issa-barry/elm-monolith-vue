@@ -738,7 +738,7 @@ class PaiementPeriodeTest extends TestCase
 
         $fiche = PaiementFiche::where('periode_id', $periode->id)->firstOrFail();
         $siteTresorerie = app(DecaissementFicheResolver::class)->siteTresorerie($fiche);
-        $this->assertNotNull($siteTresorerie, 'La fiche doit avoir une agence de trésorerie (agence ou siège principal).');
+        $this->assertNotNull($siteTresorerie, 'La fiche doit avoir une agence de trésorerie (agence ou site central de trésorerie).');
         $this->equiperPayeurEspeces($this->user, $siteTresorerie);
         $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => 300000,

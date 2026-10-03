@@ -57,7 +57,7 @@ class OnboardingSiteTest extends TestCase
     public function test_connexion_redirige_vers_dashboard_quand_un_site_existe_deja(): void
     {
         $user = $this->makeSuperAdmin();
-        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'siege']);
+        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'agence']);
 
         $this->post(route('login.store'), [
             'telephone' => $user->telephone,
@@ -73,14 +73,14 @@ class OnboardingSiteTest extends TestCase
             ->get(route('onboarding.site.show'))
             ->assertInertia(fn ($page) => $page
                 ->component('Onboarding/Site')
-                ->where('types_suggeres', fn ($types) => collect($types)->pluck('value')->all() === ['siege', 'restaurant', 'depot'])
+                ->where('types_suggeres', fn ($types) => collect($types)->pluck('value')->all() === ['restaurant', 'depot'])
             );
     }
 
     public function test_onboarding_redirige_vers_dashboard_si_un_site_existe_deja(): void
     {
         $user = $this->makeSuperAdmin();
-        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'siege']);
+        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'agence']);
 
         $this->actingAs($user)
             ->get(route('onboarding.site.show'))
@@ -93,13 +93,14 @@ class OnboardingSiteTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('onboarding.site.store'), [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::AGENCE->value,
                 'ville' => 'Conakry', 'quartier' => 'Matoto',
             ])
             ->assertRedirect(route('dashboard'));
 
         $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
-        $this->assertSame(SiteType::SIEGE, $site->type);
+        $this->assertSame(SiteType::AGENCE, $site->type);
+        $this->assertTrue($site->isCentralTresorerie(), 'Le premier site devient le site central de trésorerie (ADR 0017).');
         $this->assertSame('Conakry', $site->ville);
         $this->assertSame('Matoto', $site->quartier);
 
@@ -110,7 +111,7 @@ class OnboardingSiteTest extends TestCase
 
     /**
      * Le nom n'est plus saisi pendant l'onboarding : généré automatiquement (cf.
-     * SiteNamingService::generateName()) — "Siège de Matoto" ("{Type} de {Quartier}"), jamais
+     * SiteNamingService::generateName()) — "Agence de Matoto" ("{Type} de {Quartier}"), jamais
      * numéroté (aucune contrainte d'unicité réelle sur `sites.nom`, cf. docblock du service).
      */
     public function test_le_nom_du_site_est_genere_automatiquement(): void
@@ -118,13 +119,13 @@ class OnboardingSiteTest extends TestCase
         $user = $this->makeSuperAdmin();
 
         $this->actingAs($user)->post(route('onboarding.site.store'), [
-            'type' => SiteType::SIEGE->value,
+            'type' => SiteType::AGENCE->value,
             'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
-        $this->assertSame('Siège de Matoto', $site->nom);
-        $this->assertNotSame('Siège de Siège Matoto', $site->nom);
+        $this->assertSame('Agence de Matoto', $site->nom);
+        $this->assertNotSame('Agence de Agence Matoto', $site->nom);
     }
 
     /**
@@ -136,7 +137,7 @@ class OnboardingSiteTest extends TestCase
         $user = $this->makeSuperAdmin();
 
         $this->actingAs($user)->post(route('onboarding.site.store'), [
-            'type' => SiteType::SIEGE->value,
+            'type' => SiteType::AGENCE->value,
             'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
@@ -162,14 +163,14 @@ class OnboardingSiteTest extends TestCase
         $user = $this->makeSuperAdmin();
 
         $this->actingAs($user)
-            ->post(route('onboarding.site.store'), ['type' => SiteType::SIEGE->value])
+            ->post(route('onboarding.site.store'), ['type' => SiteType::AGENCE->value])
             ->assertSessionHasErrors(['ville', 'quartier']);
     }
 
     public function test_store_refuse_si_un_site_existe_deja(): void
     {
         $user = $this->makeSuperAdmin();
-        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'siege']);
+        Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'agence']);
 
         $this->actingAs($user)
             ->post(route('onboarding.site.store'), [

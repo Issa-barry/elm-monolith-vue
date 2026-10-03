@@ -410,9 +410,15 @@ Listes activées :
 |---|---|---|---|
 | `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
 | `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
+| `tresorerie-supports` | `/backoffice/comptabilite/tresorerie/supports` | `statut`, `type`, `nature`, `agent_id`, `site_ids`, `site_scope` | `tresorerie.gerer_soldes_ouverture` |
+
+Les supports de trésorerie reprennent l'accès de leur liste : `tresorerie.read` **ou**
+`tresorerie.gerer_soldes_ouverture`. Les vues filtrent les supports et leurs cartes de synthèse ;
+la portée des agences reste contrôlée côté serveur, et l'agent est enregistré par identifiant.
 
 Règles (garanties par `SavedFilterService`) :
-- lecture/écriture exigent la permission de la liste déclarée dans `authorize` (`viewAny` Produit pour les deux scopes) ;
+
+- lecture/écriture exigent la permission de la liste déclarée dans `authorize` (`viewAny` Produit pour `produits` et `stock`) ;
   un scope inconnu répond 404 ; les vues sont isolées par organisation **et** par scope ;
 - seuls les critères du scope sont acceptés (`array:` strict) — un critère d'une autre liste est refusé ;
 - une vue **personnelle** n'est visible que de son auteur ; une vue **partagée** exige la permission

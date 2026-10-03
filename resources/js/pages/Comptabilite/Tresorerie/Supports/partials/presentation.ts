@@ -22,6 +22,8 @@ export interface CompteTresorerie {
     operateur_mobile_money: string | null;
     operateur_label: string | null;
     libelle: string;
+    /** Numéro du compte (numéro marchand, numéro bancaire), affiché à l'encaissement. */
+    numero: string | null;
     nature: Nature;
     agent: { id: string; nom: string } | null;
     compte_comptable_id: string;

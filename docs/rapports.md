@@ -107,7 +107,7 @@ Encaissements Mobile Money de la période, par opérateur, avec contrôle des r�
 |---|---|---|
 | Référence absente | Encaissement **saisi à partir du 14/09/2026** sans référence (obligatoire depuis cette date) | Avertissement (orange) |
 | Sans référence, antérieur | Saisi **avant** le 14/09/2026 : pas une anomalie | Neutre |
-| Référence déjà utilisée | Même référence (espaces et casse ignorés) **pour le même opérateur**, **n'importe où dans l'organisation**, même hors période, agence ou agent filtrés | Avertissement (orange) |
+| Référence déjà utilisée | Même référence (espaces et casse ignorés), **tous opérateurs confondus** (ADR 0014), **n'importe où dans l'organisation**, même hors période, agence ou agent filtrés. Depuis le 01/10/2026 la saisie d'un doublon est refusée : ne peuvent plus apparaître que des doublons historiques | Avertissement (orange) |
 
 Une autre utilisation n'est détaillée (facture, date) que si elle est dans le périmètre de
 l'utilisateur ; sinon elle est seulement comptée (« N hors de votre périmètre »). Aucun rapprochement

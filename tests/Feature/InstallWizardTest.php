@@ -10,6 +10,7 @@ use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\ProduitType;
+use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Services\InstallationService;
@@ -69,7 +70,7 @@ class InstallWizardTest extends TestCase
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
             'site' => [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::BOUTIQUE->value,
                 'ville' => 'Conakry',
                 'quartier' => 'Matoto',
             ],
@@ -233,6 +234,17 @@ class InstallWizardTest extends TestCase
         $this->assertFalse($user->must_change_password);
     }
 
+    /** ADR 0017 : le premier site devient le site central de trésorerie, quel que soit son type. */
+    public function test_le_premier_site_installe_est_le_site_central_de_tresorerie(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $site = Site::where('organization_id', $org->id)->sole();
+        $this->assertSame(SiteType::BOUTIQUE, $site->type);
+        $this->assertTrue($site->isCentralTresorerie());
+    }
+
     /**
      * La détection pays/indicatif reste générique (PhoneCountryInfo/libphonenumber, cf.
      * resolveTelephone()) — seule l'installation elle-même restreint ensuite à Guinée/Sierra
@@ -282,7 +294,7 @@ class InstallWizardTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
             ],
             'site' => [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::BOUTIQUE->value,
                 'ville' => 'Conakry',
                 'quartier' => 'Matoto',
             ],
@@ -622,7 +634,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Alpha', 'nom' => 'A', 'telephone' => '+224622111111',
                 'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
+            site: ['type' => SiteType::BOUTIQUE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
         app(InstallationService::class)->install(
             organisation: ['nom' => 'Org B', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
@@ -630,7 +642,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Beta', 'nom' => 'B', 'telephone' => '+224622222222',
                 'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
+            site: ['type' => SiteType::BOUTIQUE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
 
         $orgA = Organization::where('slug', 'org-a')->firstOrFail();
@@ -690,7 +702,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Issa', 'nom' => 'BARRY', 'telephone' => '+224622000099', 'email' => null,
                 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
+            site: ['type' => SiteType::BOUTIQUE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
     }
 

@@ -22,6 +22,7 @@ final class SiteDataFormatter
             'statut' => $s->statut?->value,
             'statut_label' => $s->statut_label,
             'commissions_active' => $s->commissions_active,
+            'is_central_tresorerie' => $s->isCentralTresorerie(),
             'localisation' => $s->localisation,
             'pays' => $s->pays,
             'ville' => $s->ville,

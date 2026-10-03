@@ -755,20 +755,21 @@ class ModelTest extends TestCase
 
     // ── Site ──────────────────────────────────────────────────────────────────
 
-    public function test_site_is_siege_returns_true(): void
+    public function test_site_central_de_tresorerie_independant_du_type(): void
     {
         $org = $this->makeOrg();
-        $site = Site::create([
+        $agence = Site::create([
             'organization_id' => $org->id,
-            'nom' => 'HQ',
-            'type' => 'siege',
-            'localisation' => 'Conakry',
+            'nom' => 'Matoto',
+            'type' => 'agence',
+            'is_central_tresorerie' => true,
         ]);
 
-        $this->assertTrue($site->isSiege());
+        $this->assertTrue($agence->isCentralTresorerie());
+        $this->assertSame('Agence de Matoto', $agence->label);
     }
 
-    public function test_site_is_siege_returns_false_for_depot(): void
+    public function test_site_n_est_pas_central_par_defaut(): void
     {
         $org = $this->makeOrg();
         $site = Site::create([
@@ -778,7 +779,15 @@ class ModelTest extends TestCase
             'localisation' => 'Conakry',
         ]);
 
-        $this->assertFalse($site->isSiege());
+        $this->assertFalse($site->isCentralTresorerie());
+    }
+
+    public function test_site_de_type_autre_s_affiche_sous_son_seul_nom(): void
+    {
+        $org = $this->makeOrg();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'autre']);
+
+        $this->assertSame('Matoto', $site->label);
     }
 
     public function test_site_is_active_returns_true(): void
@@ -823,7 +832,7 @@ class ModelTest extends TestCase
     {
         $org = $this->makeOrg();
         Site::create(['organization_id' => $org->id, 'nom' => 'D', 'type' => 'depot', 'localisation' => 'X']);
-        Site::create(['organization_id' => $org->id, 'nom' => 'S', 'type' => 'siege', 'localisation' => 'X']);
+        Site::create(['organization_id' => $org->id, 'nom' => 'S', 'type' => 'agence', 'localisation' => 'X']);
 
         $depots = Site::duType('depot')->where('organization_id', $org->id)->get();
         $this->assertCount(1, $depots);

@@ -263,9 +263,14 @@ class EnumsTest extends TestCase
 
     // ── SiteType ──────────────────────────────────────────────────────────────
 
+    public function test_le_type_siege_n_existe_plus(): void
+    {
+        $this->assertNull(SiteType::tryFrom('siege'));
+        $this->assertNotContains('siege', array_column(SiteType::options(), 'value'));
+    }
+
     public function test_site_type_labels(): void
     {
-        $this->assertSame('Siège', SiteType::SIEGE->label());
         $this->assertSame('Usine', SiteType::USINE->label());
         $this->assertSame('Dépôt', SiteType::DEPOT->label());
         $this->assertSame('Agence', SiteType::AGENCE->label());
@@ -277,7 +282,7 @@ class EnumsTest extends TestCase
     public function test_site_type_options(): void
     {
         $options = SiteType::options();
-        $this->assertCount(7, $options);
+        $this->assertCount(6, $options);
     }
 
     // ── ProduitType ───────────────────────────────────────────────────────────

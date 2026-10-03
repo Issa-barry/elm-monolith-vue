@@ -40,6 +40,7 @@ class CompteTresorerie extends Model
         'type',
         'operateur_mobile_money',
         'libelle',
+        'numero',
         'moyen_paiement_defaut',
         'actif',
         'valide_le',

@@ -11,6 +11,7 @@ use App\Models\CompteTresorerie;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Comptabilite\SupportTresorerieTypeResolver;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\CaisseAgentService;
 use App\Services\Tresorerie\SupportTresorerieValidationService;
@@ -46,10 +47,13 @@ class CompteTresorerieController extends Controller
         private readonly SiteScopeService $siteScope,
     ) {}
 
-    public function index(Request $request, SupportTresorerieTypeResolver $typeResolver): Response
+    public function index(Request $request, SupportTresorerieTypeResolver $typeResolver, SavedFilterService $savedFilters): Response
     {
         $user = auth()->user();
         abort_unless($user->can('tresorerie.read') || $user->can('tresorerie.gerer_soldes_ouverture'), 403);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = $savedFilters->applyToRequest($request, 'tresorerie-supports');
 
         $orgId = $user->organization_id;
         $peutGerer = $user->can('tresorerie.gerer_soldes_ouverture');
@@ -127,6 +131,7 @@ class CompteTresorerieController extends Controller
                     'operateur_mobile_money' => $c->operateur_mobile_money?->value,
                     'operateur_label' => $c->operateur_mobile_money?->label(),
                     'libelle' => $c->libelle,
+                    'numero' => $c->numero,
                     'nature' => $c->isDediee() ? 'dediee' : 'agence',
                     'agent' => $c->agent ? ['id' => $c->agent->id, 'nom' => $c->agent->name] : null,
                     'compte_comptable_id' => $c->compte_comptable_id,
@@ -162,6 +167,7 @@ class CompteTresorerieController extends Controller
         return Inertia::render('Comptabilite/Tresorerie/Supports/Index', [
             'comptes' => $comptes,
             'filters' => $filters,
+            'saved_view' => $savedView,
             'sites' => Site::where('organization_id', $orgId)
                 ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('id', $sitesAccessibles))
                 ->orderBy('nom')
@@ -226,6 +232,7 @@ class CompteTresorerieController extends Controller
             // Facultatif : généré automatiquement ("{Type} de {Site}") par
             // CompteTresorerie::boot() si laissé vide — cf. revue du 2026-08-22.
             'libelle' => ['nullable', 'string', 'max:150'],
+            'numero' => ['nullable', 'string', 'max:50'],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
             ...$this->reglesOperateur(),
         ]);
@@ -246,9 +253,9 @@ class CompteTresorerieController extends Controller
         }
 
         // Brouillon : inutilisable jusqu'à sa validation (SupportTresorerieValidationService).
-        CompteTresorerie::create([...$data, 'organization_id' => $orgId, 'actif' => false]);
+        $support = CompteTresorerie::create([...$data, 'organization_id' => $orgId, 'actif' => false]);
 
-        return back()->with('success', "Support de trésorerie créé en brouillon : il devra être validé avant d'être utilisable.");
+        return back()->with('success', "Support « {$support->libelle} » créé en brouillon : il devra être validé avant d'être utilisable.");
     }
 
     public function update(Request $request, CompteTresorerie $compteTresorerie, SupportTresorerieTypeResolver $typeResolver)
@@ -274,6 +281,7 @@ class CompteTresorerieController extends Controller
 
         $data = $request->validate([
             'libelle' => ['required', 'string', 'max:150'],
+            'numero' => ['sometimes', 'nullable', 'string', 'max:50'],
             'type' => ['required', Rule::enum(TypeSupportTresorerie::class)],
             'compte_comptable_id' => ['required', Rule::exists('compta_comptes', 'id')->where('organization_id', $orgId)],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],

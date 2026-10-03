@@ -5,7 +5,7 @@ import type {
     SituationPaiementCategorie,
     SituationPaiementCode,
     SituationPaiements,
-} from '@/types/vehicule-situation';
+} from '@/types/situation';
 import { CircleAlert, CircleCheck, Contrast } from 'lucide-vue-next';
 import Chart from 'primevue/chart';
 import { onMounted, ref, watch } from 'vue';

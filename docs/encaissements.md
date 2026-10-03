@@ -64,6 +64,11 @@ sans support dans l'agence n'apparaît pas. Chaque support représente un compte
   561400), le valider : Kulu apparaît alors dans la liste des moyens de cette agence, sans changement
   de code.
 
+**Numéro du compte** (`compta_supports_tresorerie.numero`, 02/10/2026) : affiché sous chaque moyen
+dans la fenêtre de paiement (« N° … »). Quand une agence a plusieurs comptes pour un opérateur,
+l'agent choisit celui sur lequel le client a réellement payé — jamais de routage automatique ni de
+Mobile Money présélectionné.
+
 **Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste
 (`pourSite()`/`parSite()`), exposée par les écrans sous `moyens_encaissement`, et
 `StoreEncaissementVenteController` la rejoue (`supportPour()`) : le `compte_tresorerie_id` envoyé
@@ -112,8 +117,37 @@ Champ `reference_paiement` (nullable, string 190) sur `encaissements_ventes`, re
 
 Contrôle dans le rapport d'activité ([rapports.md](rapports.md), RAP-007) : un Mobile Money saisi
 depuis le **14/09/2026** sans référence est signalé ; plus ancien, il est « antérieur à
-l'obligation » ; une même référence réutilisée pour le même opérateur dans l'organisation est
-signalée comme déjà utilisée.
+l'obligation » ; une même référence utilisée plusieurs fois dans l'organisation (doublon
+historique, tous opérateurs confondus) est signalée comme déjà utilisée.
+
+## Unicité des références Mobile Money (01/10/2026, ADR 0014)
+
+**Une référence de transaction Mobile Money ne sert qu'une fois dans l'organisation**, quels que
+soient la vente, l'agence, l'agent ou l'**opérateur** (`123456` chez Orange Money bloque `123456`
+chez Kulu). Les autres modes ne sont pas concernés : Espèces sans référence, Virement et Chèque
+peuvent réutiliser une référence.
+
+- **Normalisation** : espaces de bord et casse ignorés (`om123`, `OM123`, ` OM123 ` sont la même
+  référence). La référence d'un nouvel encaissement Mobile Money est enregistrée normalisée
+  (majuscules, sans espaces de bord).
+- **Message** : « Référence déjà utilisée — facture VTE-011026-001 » sur le champ
+  `reference_paiement`, jamais l'erreur SQL. Le numéro seul est aussi renvoyé dans
+  `reference_paiement_facture` : PaymentCard l'affiche en puce copiable en un clic. Sans facture
+  identifiable, repli sur « Cette référence Mobile Money a déjà été utilisée. ». La facture est
+  nommée même si elle est hors du périmètre d'agences de l'utilisateur (même organisation).
+- **Deux niveaux de protection** : contrôle dans `StoreEncaissementVenteController` (message),
+  puis index unique sur `encaissements_ventes.cle_reference_mobile_money`
+  (`organisation|RÉFÉRENCE`), calculée par le modèle `EncaissementVente` pour tout appelant. Deux
+  saisies simultanées de la même référence : la seconde est refusée par la base, sa transaction
+  est annulée (aucune pièce comptable) et l'utilisateur reçoit le même message.
+- **Suppression** : un encaissement supprimé (suppression, annulation exceptionnelle) libère sa
+  référence.
+- **Isolation** : l'unicité est par organisation — une organisation ne voit jamais, même
+  indirectement, les références d'une autre.
+- **Historique** : les doublons antérieurs à la règle ne sont ni modifiés ni supprimés. Le plus
+  ancien encaissement de chaque groupe porte la clé (la référence reste bloquée), les suivants
+  restent sans clé. `php artisan encaissements:doublons-reference-mobile-money
+  [--organization=ID]` les liste, en lecture seule ; leur régularisation est une décision humaine.
 
 ## Une seule liste déroulante côté UI — `resources/js/components/payment/PaymentCard.vue`
 
@@ -233,7 +267,7 @@ active de l'auteur sur le site de la facture.**
 `PaymentCard` sert aussi à **payer** une fiche de commission (jamais une fiche salarié : les salaires
 se paient depuis Comptabilité > Paiement salaire), en
 mode `sens="decaissement"` : mêmes moyens (`MoyensEncaissementResolver` sur l'agence de la fiche, ou le
-siège principal pour une fiche sans agence), même caisse dédiée pour les espèces (celle du payeur),
+site central de trésorerie pour une fiche sans agence, ADR 0017), même caisse dédiée pour les espèces (celle du payeur),
 même règle de référence. En plus : solde disponible du moyen choisi (`solde_disponible`,
 `soldeEspeces`) et « Confirmer » désactivé s'il est insuffisant ; le refus réel est serveur, sous
 verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`, partagé avec les mouvements de
