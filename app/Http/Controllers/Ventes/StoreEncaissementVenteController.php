@@ -104,7 +104,6 @@ class StoreEncaissementVenteController extends Controller
                 $siteEncaissementId,
                 $data['compte_tresorerie_id'],
                 $data['mode_paiement'],
-                avecComptesCommuns: true,
             );
 
             if (! $support) {

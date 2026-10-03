@@ -73,9 +73,7 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   soit la date ou le vendeur de la vente.
 - **Agence = agence qui a reçu l'argent** (`encaissements_ventes.site_encaissement_id`, ADR 0012 —
   axe trésorerie), pas celle de la commande. Colonnes **« Créée à »** (agence de la commande) et
-  **« Encaissée à »** ; quand elles diffèrent et que l'agence qui a encaissé détient l'argent (pas
-  un paiement sur un compte commun détenu ailleurs — ADR 0016, `site_detenteur_id`), la ligne porte
-  « pour {agence} · à reverser » et le
+  **« Encaissée à »** ; quand elles diffèrent, la ligne porte « pour {agence} · à reverser » et le
   résumé ajoute **« Pour d'autres agences (à reverser) »** — dans le rapport d'activité des
   responsables seulement : **« Ma situation »** ne montre jamais à l'agent ce que son agence doit
   reverser (lui remet tout à la caisse de sa propre agence ; la carte « Ma caisse » indique « À

@@ -173,14 +173,12 @@ class VenteComptabilisationService
      * Encaissement reçu par l'agence de la facture : une pièce ENCAISSEMENT_VENTE_RECU (débit
      * trésorerie, crédit client) sur ce site.
      *
-     * Encaissement dont l'argent est détenu par une AUTRE agence (ADR 0012) : deux pièces mono-site,
-     * comme un mouvement de fonds — la trésorerie réelle est chez l'agence DÉTENTRICE, celle du support
-     * qui a reçu l'argent (ADR 0016 : un compte commun peut être détenu par une autre agence que celle
-     * qui encaisse ; sinon c'est l'agence qui encaisse). Le client et la vente restent
+     * Encaissement reçu par une AUTRE agence (ADR 0012) : deux pièces mono-site, comme un mouvement
+     * de fonds — la trésorerie réelle est chez l'agence qui encaisse, le client et la vente restent
      * entièrement à l'agence de la commande, et la dette de l'une envers l'autre est portée par le
      * compte de liaison (tiers = agence contrepartie) :
-     *  - ENCAISSEMENT_VENTE_RECU, site détenteur : débit trésorerie / crédit liaison [agence de la commande] ;
-     *  - ENCAISSEMENT_VENTE_POUR_COMPTE, site de la commande : débit liaison [agence détentrice] / crédit client.
+     *  - ENCAISSEMENT_VENTE_RECU, site d'encaissement : débit trésorerie / crédit liaison [agence de la commande] ;
+     *  - ENCAISSEMENT_VENTE_POUR_COMPTE, site de la commande : débit liaison [agence qui a encaissé] / crédit client.
      * Les deux réussissent ou échouent ensemble ; chacune reste idempotente (rattrapage comptable).
      */
     public function comptabiliserEncaissementVente(EncaissementVente $encaissement): ?PieceComptable
@@ -190,14 +188,13 @@ class VenteComptabilisationService
             return null;
         }
 
-        $encaissement->loadMissing('facture.commande.client', 'facture.site', 'siteDetenteur', 'siteEncaissement');
+        $encaissement->loadMissing('facture.commande.client', 'facture.site', 'siteEncaissement');
         $facture = $encaissement->facture;
         if (! $facture) {
             return null;
         }
         $client = $facture->commande?->client;
-        $siteDetenteurId = $encaissement->siteDetenteurId() ?? $facture->site_id;
-        $siteDetenteur = $encaissement->siteDetenteur ?? $encaissement->siteEncaissement;
+        $siteEncaissementId = $encaissement->site_encaissement_id ?? $facture->site_id;
         $pourAutreAgence = $encaissement->estPourAutreAgence();
 
         $ligneClient = [
@@ -221,7 +218,7 @@ class VenteComptabilisationService
             ]
             : $ligneClient;
 
-        return DB::transaction(function () use ($encaissement, $facture, $montant, $siteDetenteurId, $siteDetenteur, $pourAutreAgence, $ligneCredit, $ligneClient) {
+        return DB::transaction(function () use ($encaissement, $facture, $montant, $siteEncaissementId, $pourAutreAgence, $ligneCredit, $ligneClient) {
             $piece = $this->ecritures->comptabiliser(
                 evenement: EvenementComptable::ENCAISSEMENT_VENTE_RECU,
                 source: $encaissement,
@@ -235,7 +232,7 @@ class VenteComptabilisationService
                     $this->ligneTresorerieEncaissement($encaissement, $facture, $montant),
                     $ligneCredit,
                 ],
-                siteId: $siteDetenteurId,
+                siteId: $siteEncaissementId,
                 createdBy: $encaissement->created_by,
             );
 
@@ -245,14 +242,14 @@ class VenteComptabilisationService
                     source: $encaissement,
                     organizationId: $facture->organization_id,
                     dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
-                    libelle: 'Encaissement facture '.$facture->reference.' reçu par '.$siteDetenteur?->nom,
+                    libelle: 'Encaissement facture '.$facture->reference.' reçu par '.$encaissement->siteEncaissement?->nom,
                     lignes: [
                         [
                             'role' => 'liaison',
                             'sens' => 'debit',
                             'montant' => $montant,
                             'tiers_type' => 'agence',
-                            'tiers_model' => $siteDetenteur,
+                            'tiers_model' => $encaissement->siteEncaissement,
                         ],
                         $ligneClient,
                     ],

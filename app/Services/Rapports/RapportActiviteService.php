@@ -135,12 +135,9 @@ class RapportActiviteService
             ->selectRaw('COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
             ->first();
 
-        // Encaissés par l'agence pour des commandes d'autres agences et dont elle détient l'argent :
-        // à reverser (ADR 0012). Payés sur un compte commun détenu ailleurs : rien à reverser par
-        // elle (ADR 0016).
+        // Encaissés par l'agence pour des commandes d'autres agences : à reverser (ADR 0012).
         $pourAutres = $this->encaissementsBase($p)
-            ->whereColumn('ev.site_detenteur_id', '<>', 'fv.site_id')
-            ->whereColumn('ev.site_detenteur_id', 'ev.site_encaissement_id')
+            ->whereColumn('ev.site_encaissement_id', '<>', 'fv.site_id')
             ->selectRaw('COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
             ->first();
 
@@ -420,7 +417,6 @@ class RapportActiviteService
             ->select([
                 'ev.id', 'ev.date_encaissement', 'ev.created_at', 'ev.montant', 'ev.mode_paiement',
                 'ev.operateur_mobile_money', 'ev.reference_paiement',
-                'ev.site_encaissement_id', 'ev.site_detenteur_id', 'fv.site_id as facture_site_id',
                 'fv.id as facture_id', 'fv.reference as facture_reference',
                 'se.nom as encaisse_a',
                 ...$this->colonnesNoms(),
@@ -450,19 +446,9 @@ class RapportActiviteService
                     // « Créée à » (agence de la commande) et « Encaissée à » (agence qui a reçu l'argent).
                     'site_nom' => $l->site_nom,
                     'encaisse_a' => $l->encaisse_a ?? $l->site_nom,
-                    // À reverser par l'agence qui a encaissé : elle détient l'argent d'une autre agence
-                    // (jamais pour un paiement sur un compte commun détenu ailleurs, ADR 0016).
-                    'pour_autre_agence' => $this->aReverserParEncaisseur($l),
+                    'pour_autre_agence' => $l->encaisse_a !== null && $l->site_nom !== null && $l->encaisse_a !== $l->site_nom,
                 ];
             });
-    }
-
-    private function aReverserParEncaisseur(object $l): bool
-    {
-        $encaisseur = $l->site_encaissement_id ?? $l->facture_site_id;
-        $detenteur = $l->site_detenteur_id ?? $encaisseur;
-
-        return $detenteur !== null && $detenteur === $encaisseur && $detenteur !== $l->facture_site_id;
     }
 
     /**

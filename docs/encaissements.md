@@ -64,24 +64,10 @@ sans support dans l'agence n'apparaît pas. Chaque support représente un compte
   561400), le valider : Kulu apparaît alors dans la liste des moyens de cette agence, sans changement
   de code.
 
-### Comptes communs (02/10/2026, ADR 0016)
-
-Un compte (Mobile Money ou banque, jamais une caisse) peut être **commun** : détenu par un site
-(par défaut le site central de trésorerie) et utilisé par plusieurs agences (Trésorerie > Supports).
-
-- Dans chaque agence utilisatrice, il est proposé **à côté** des comptes propres de l'agence, un
-  moyen par compte : « Kulu — compte commun (Matoto) », avec le **numéro du compte**
-  (`compta_supports_tresorerie.numero`) sous le libellé. Une agence peut donc avoir son propre
-  Orange Money et utiliser aussi celui de l'organisation.
-- **Aucun routage automatique** : l'agent choisit le compte sur lequel le client a réellement payé
-  (un Mobile Money n'est jamais présélectionné). Choisir à sa place classerait l'argent sur le mauvais
-  compte, sans que personne ne le voie.
-- L'encaissement enregistre l'agence qui **détient** l'argent (`site_detenteur_id`, site du compte),
-  distincte de l'agence qui encaisse (`site_encaissement_id`, traçabilité). La pièce de trésorerie est
-  posée chez la détentrice ; une dette inter-agences n'existe que si la détentrice n'est pas l'agence
-  de la commande (cf. [tresorerie-inter-agences.md](tresorerie-inter-agences.md)).
-- Réservé à l'**encaissement** : un paiement de fiche (sortie d'argent) ne propose jamais un compte
-  commun (`MoyensEncaissementResolver` sans `avecComptesCommuns`).
+**Numéro du compte** (`compta_supports_tresorerie.numero`, 02/10/2026) : affiché sous chaque moyen
+dans la fenêtre de paiement (« N° … »). Quand une agence a plusieurs comptes pour un opérateur,
+l'agent choisit celui sur lequel le client a réellement payé — jamais de routage automatique ni de
+Mobile Money présélectionné.
 
 **Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste
 (`pourSite()`/`parSite()`), exposée par les écrans sous `moyens_encaissement`, et

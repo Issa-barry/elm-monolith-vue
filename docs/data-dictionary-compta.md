@@ -133,24 +133,10 @@ Ce document distingue deux couches, volontairement séparées :
   un agent » ci-dessous.
 - **`numero`** (nullable, depuis le 2026-10-02) : numéro du compte (numéro marchand Mobile Money,
   numéro bancaire), affiché à l'encaissement pour que l'agent choisisse le compte réellement payé.
-- **`commun`** (booléen, défaut false, depuis le 2026-10-02, ADR
-  [0016](adr/0016-remise-au-siege-et-position-des-agences.md)) : **compte commun** utilisé par
-  plusieurs agences (ex. le compte Orange Money de l'organisation). `site_id` est alors l'**agence
-  détentrice** : celle qui porte réellement le compte et son solde au grand livre, choisie à la
-  création et jamais modifiée. Seuls une banque ou un Mobile Money peuvent être communs (une caisse
-  est propre à son agence). Les supports existants sont restés propres (`commun` = false).
 - **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
   (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
 - **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour
   les caisses dédiées, "argent détenu par agent".
-
-### `compta_support_tresorerie_agences`
-- **Rôle** : agences qui utilisent un **compte commun**, agence détentrice comprise (ajoutée
-  automatiquement). Au moins une autre agence que la détentrice. Une agence n'utilise qu'un seul
-  compte commun Mobile Money par compte comptable. Vide pour un support propre.
-- **PK** : (`compte_tresorerie_id`, `site_id`). **FK** : `compte_tresorerie_id` →
-  `compta_supports_tresorerie` (`cascadeOnDelete`) ; `site_id` → `sites` (`cascadeOnDelete`).
-- **Usage BI** : distinguer l'agence qui encaisse de l'agence qui détient les fonds.
 
 ### `compta_soldes_ouverture`
 - **Rôle** : solde d'ouverture d'un support de trésorerie — au plus un par support (unique),
@@ -511,7 +497,7 @@ le versement de cashback, désormais comptabilisé via `CashbackComptabilisation
 | `paiement_fiches` + `paiement_fiche_lignes` + `paiement_fiche_paiements` | Fiches de paiement propriétaires/livreurs/sites/consultants (commissions à régler) | `FicheComptabilisationService` | `fiche_proprietaire_validee`, `fiche_livreur_validee`, `fiche_site_validee`, `fiche_consultant_validee`, `paiement_proprietaire`, `paiement_livreur`, `paiement_site`, `paiement_consultant`, `regularisation_cloture_fiche` |
 | `commissions_ventes` / `commissions_logistiques` + tables de parts/ajustements | Calcul des commissions par vehicule/livreur/site/consultant | Indirectement, via les fiches de paiement qui les agrègent | — |
 | `factures_ventes` | Facturation client | `VenteComptabilisationService` | `vente_facturee` |
-| `encaissements_ventes` | Encaissement client. `site_encaissement_id` = agence qui a réalisé l'encaissement (traçabilité ; celle de la facture, sauf encaissement dans une autre agence — ADR 0012 ; historique repris avec le site de la facture). `site_detenteur_id` (depuis le 2026-10-02, ADR 0016) = agence qui **détient** l'argent, site du compte qui l'a reçu : différente de `site_encaissement_id` seulement pour un compte commun détenu ailleurs ; porte la pièce de trésorerie et la dette inter-agences (historique = `site_encaissement_id`) | `VenteComptabilisationService` | `encaissement_vente_recu`, `encaissement_vente_pour_compte` |
+| `encaissements_ventes` | Encaissement client. `site_encaissement_id` = agence qui a réellement reçu l'argent (celle de la facture, sauf encaissement dans une autre agence — ADR 0012 ; historique repris avec le site de la facture) | `VenteComptabilisationService` | `encaissement_vente_recu`, `encaissement_vente_pour_compte` |
 | `mouvement_fonds_encaissements` | Lignes d'un règlement inter-agences (ADR 0012) : encaissements précis reversés par un mouvement `reglement_agences`. `encaissement_actif_id` (unique, NULL une fois le règlement annulé/retourné) interdit en base qu'un encaissement soit dans deux règlements actifs | — (écritures portées par le mouvement) | — |
 | `paie_paiements` | Paiement de salaire | `PaieComptabilisationService` (jambe trésorerie uniquement, pas d'engagement préalable) | `paiement_salaire` |
 | `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement), ou — `nature = interne_caisses` depuis le 2026-09-19 — versement d'une caisse dédiée à un agent vers une caisse de l'agence, au sein d'un même site (cf. « Caisses dédiées à un agent » ; `nature` vaut `inter_sites` pour tout l'existant), ou — `nature = reglement_agences` depuis le 2026-09-29 — règlement inter-agences lié à des encaissements précis (ADR 0012, contrepartie 181000 au lieu de 588000). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. `compte_tresorerie_origine_id` est choisi à la création (l'émetteur sait d'où part l'argent) ; `compte_tresorerie_destination_id` est nullable et choisi par le destinataire au moment de `MouvementFondsService::recevoir()`, pas à la création — le site destinataire est connu à l'avance, mais pas forcément la caisse/wallet précis qui recevra réellement les fonds (revue produit du 2026-09-13). | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |

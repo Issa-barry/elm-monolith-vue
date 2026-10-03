@@ -38,12 +38,13 @@ import {
     PiggyBank,
     Plus,
     Power,
+    TriangleAlert,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Message from 'primevue/message';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
-import AgencesUtilisatricesField from './partials/AgencesUtilisatricesField.vue';
 import {
     actionsMenu,
     alerteSoldeOuverture,
@@ -51,7 +52,7 @@ import {
     natureAffichee,
     resumeSupports,
     type CompteTresorerie,
-    type NatureCreation,
+    type Nature,
 } from './partials/presentation';
 
 interface Agent {
@@ -71,8 +72,6 @@ const props = defineProps<{
     };
     sites: { id: string; nom: string }[];
     type_options: { value: string; label: string }[];
-    /** Détentrice proposée pour un compte commun : le site central de trésorerie (ADR 0016, 0017). */
-    site_central_tresorerie_id: string | null;
     operateur_options: { value: string; label: string }[];
     destinations_versement: { id: string; site_id: string; libelle: string }[];
     agents: Agent[];
@@ -134,8 +133,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Nature',
         type: 'select',
         options: [
-            { value: 'agence', label: "Support propre à l'agence" },
-            { value: 'commun', label: 'Compte commun à plusieurs agences' },
+            { value: 'agence', label: "Caisse de l'agence" },
             { value: 'dediee', label: 'Caisse dédiée à un agent' },
         ],
     },
@@ -192,44 +190,17 @@ function comptesCompatibles(type: string) {
 const createOpen = ref(false);
 
 const form = useForm({
-    nature: 'agence' as NatureCreation,
+    nature: 'agence' as Nature,
     site_id: '',
-    agences_utilisatrices: [] as string[],
     agent_id: '',
     type: 'caisse',
     operateur_mobile_money: '',
     compte_comptable_id: '',
-    libelle: '',
     numero: '',
     moyen_paiement_defaut: '',
 });
 
 const comptesFiltres = computed(() => comptesCompatibles(form.type));
-
-// Une caisse est un lieu physique, propre à son agence : un compte commun est une banque ou un
-// Mobile Money (règle vérifiée côté serveur).
-const typesCreation = computed(() =>
-    form.nature === 'commun'
-        ? props.type_options.filter((t) => t.value !== 'caisse')
-        : props.type_options,
-);
-
-watch(
-    () => form.nature,
-    (nature) => {
-        if (nature === 'commun' && form.type === 'caisse') {
-            form.type = 'mobile_money';
-        }
-        // Un compte commun est détenu par défaut par le site central de trésorerie, modifiable.
-        if (
-            nature === 'commun' &&
-            !form.site_id &&
-            props.site_central_tresorerie_id
-        ) {
-            form.site_id = props.site_central_tresorerie_id;
-        }
-    },
-);
 
 // Présélectionne le compte quand une seule option est compatible avec le type,
 // sinon laisse l'utilisateur choisir. Rappelée à l'ouverture du dialogue : le
@@ -266,28 +237,6 @@ watch([() => form.site_id, () => form.nature], () => {
     }
 });
 
-// Aperçu du libellé auto-généré si l'utilisateur ne saisit rien — la valeur
-// réelle est calculée côté serveur (App\Models\CompteTresorerie::boot()),
-// ceci n'est qu'un aperçu pour que l'utilisateur comprenne ce qui sera créé.
-const libellePreview = computed(() => {
-    if (form.nature === 'dediee') {
-        const agent = props.agents.find((a) => a.id === form.agent_id);
-        return agent
-            ? `Automatique : Caisse ${agent.nom}`
-            : 'Libellé (optionnel)';
-    }
-    const site = props.sites.find((s) => s.id === form.site_id);
-    const type = props.type_options.find((t) => t.value === form.type);
-    if (!site || !type) return 'Libellé (optionnel)';
-    const operateur =
-        form.type === 'mobile_money'
-            ? props.operateur_options.find(
-                  (o) => o.value === form.operateur_mobile_money,
-              )
-            : undefined;
-    return `Automatique : ${operateur?.label ?? type.label} de ${site.nom}`;
-});
-
 function ouvrirCreation() {
     form.reset();
     form.clearErrors();
@@ -302,22 +251,16 @@ function creerSupport() {
                   nature: data.nature,
                   site_id: data.site_id,
                   agent_id: data.agent_id,
-                  libelle: data.libelle,
               }
             : {
                   nature: data.nature,
                   site_id: data.site_id,
-                  agences_utilisatrices:
-                      data.nature === 'commun'
-                          ? data.agences_utilisatrices
-                          : undefined,
                   type: data.type,
                   operateur_mobile_money:
                       data.type === 'mobile_money'
                           ? data.operateur_mobile_money
                           : null,
                   compte_comptable_id: data.compte_comptable_id,
-                  libelle: data.libelle,
                   numero: data.numero,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
               },
@@ -336,8 +279,6 @@ function creerSupport() {
 const editForm = useForm({
     libelle: '',
     numero: '',
-    commun: false,
-    agences_utilisatrices: [] as string[],
     type: '',
     operateur_mobile_money: '',
     compte_comptable_id: '',
@@ -380,10 +321,6 @@ function ouvrirEdition(compte: CompteTresorerie) {
     editForm.clearErrors();
     editForm.libelle = compte.libelle;
     editForm.numero = compte.numero ?? '';
-    editForm.commun = compte.commun;
-    editForm.agences_utilisatrices = compte.agences_utilisatrices.map(
-        (a) => a.id,
-    );
     editForm.type = compte.type;
     editForm.operateur_mobile_money = compte.operateur_mobile_money ?? '';
     editForm.compte_comptable_id = compte.compte_comptable_id;
@@ -401,9 +338,6 @@ function enregistrerEdition() {
                 ? { libelle: data.libelle, actif: data.actif }
                 : {
                       ...data,
-                      agences_utilisatrices: data.commun
-                          ? data.agences_utilisatrices
-                          : undefined,
                       operateur_mobile_money:
                           data.type === 'mobile_money'
                               ? data.operateur_mobile_money
@@ -695,6 +629,7 @@ const selectClass =
                     <template #filters>
                         <DataFilters
                             trigger-only
+                            saved-filter-scope="tresorerie-supports"
                             :url="URL_SUPPORTS"
                             :values="filters"
                             :fields="filterFields"
@@ -774,19 +709,6 @@ const selectClass =
                                     data-testid="support-numero"
                                 >
                                     N° {{ c.numero }}
-                                </div>
-                                <div
-                                    v-if="c.commun"
-                                    class="mt-0.5 text-xs text-muted-foreground"
-                                    :title="`Compte commun détenu par ${c.site} : l'argent reçu reste à ${c.site}, quelle que soit l'agence qui encaisse.`"
-                                    data-testid="support-commun"
-                                >
-                                    Compte commun · utilisé par
-                                    {{
-                                        c.agences_utilisatrices
-                                            .map((a) => a.nom)
-                                            .join(', ')
-                                    }}
                                 </div>
                                 <div
                                     v-if="alerte"
@@ -1186,12 +1108,7 @@ const selectClass =
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="creerSupport">
             <div>
                 <Label for="sup-site" class="mb-1.5 block text-xs font-medium">
-                    {{
-                        form.nature === 'commun'
-                            ? 'Agence détentrice'
-                            : 'Agence'
-                    }}
-                    <span class="text-destructive">*</span>
+                    Agence <span class="text-destructive">*</span>
                 </Label>
                 <select
                     id="sup-site"
@@ -1203,13 +1120,6 @@ const selectClass =
                         {{ s.nom }}
                     </option>
                 </select>
-                <p
-                    v-if="form.nature === 'commun'"
-                    class="mt-1 text-xs text-muted-foreground"
-                >
-                    L'agence à laquelle le compte est réellement rattaché : elle
-                    porte son solde. Ne peut plus être changée ensuite.
-                </p>
                 <p
                     v-if="form.errors.site_id"
                     class="mt-1 text-xs text-destructive"
@@ -1230,20 +1140,14 @@ const selectClass =
                     v-model="form.nature"
                     :class="selectClass"
                 >
-                    <option value="agence">Support propre à l'agence</option>
-                    <option value="commun">
-                        Compte commun à plusieurs agences
-                    </option>
+                    <option value="agence">Caisse de l'agence</option>
                     <option value="dediee">Caisse dédiée à un agent</option>
                 </select>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    {{
-                        form.nature === 'dediee'
-                            ? 'Alimentée par ses encaissements en espèces.'
-                            : form.nature === 'commun'
-                              ? 'Compte bancaire ou Mobile Money utilisé par plusieurs agences, détenu par une seule.'
-                              : "Caisse de l'agence, compte bancaire ou compte Mobile Money."
-                    }}
+                <p
+                    v-if="form.nature === 'agence'"
+                    class="mt-1 text-xs text-muted-foreground"
+                >
+                    Caisse de l'agence, compte bancaire ou compte Mobile Money.
                 </p>
                 <p
                     v-if="form.errors.nature"
@@ -1282,13 +1186,31 @@ const selectClass =
                             {{ a.nom }}
                         </option>
                     </select>
-                    <p
+                    <Message
                         v-if="form.site_id && agentsEligibles.length === 0"
-                        class="mt-1 text-xs text-muted-foreground"
+                        severity="warn"
+                        variant="outlined"
+                        size="small"
+                        :closable="false"
+                        :pt="{ content: { class: 'items-start!' } }"
+                        class="mt-2"
                     >
-                        Aucun agent disponible : il doit être rattaché à cette
-                        agence et ne pas déjà avoir de caisse dédiée active.
-                    </p>
+                        <template #icon>
+                            <TriangleAlert
+                                class="mt-0.5 h-4 w-4 shrink-0"
+                                aria-hidden="true"
+                            />
+                        </template>
+                        <div
+                            class="space-y-1 text-sm leading-relaxed font-normal"
+                        >
+                            <p class="font-semibold">Aucun agent disponible</p>
+                            <p>
+                                L'agent doit être rattaché à cette agence et ne
+                                pas avoir de caisse dédiée active.
+                            </p>
+                        </div>
+                    </Message>
                     <p
                         v-if="form.errors.agent_id"
                         class="mt-1 text-xs text-destructive"
@@ -1296,14 +1218,34 @@ const selectClass =
                         {{ form.errors.agent_id }}
                     </p>
                 </div>
-                <p
-                    class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground"
+                <Message
+                    severity="info"
+                    variant="outlined"
+                    size="small"
+                    :closable="false"
+                    :pt="{
+                        root: { role: 'note', 'aria-live': 'off' },
+                        content: { class: 'items-start!' },
+                    }"
                 >
-                    Type : Caisse. Le compte comptable est créé automatiquement.
-                    La caisse démarre à 0 GNF : elle s'alimente par les
-                    encaissements en espèces de l'agent ou par un transfert
-                    depuis la caisse de l'agence.
-                </p>
+                    <template #icon>
+                        <Info
+                            class="mt-0.5 h-4 w-4 shrink-0"
+                            aria-hidden="true"
+                        />
+                    </template>
+                    <div class="space-y-1 text-sm leading-relaxed font-normal">
+                        <p class="font-semibold">
+                            Caisse en espèces · 0 GNF au départ
+                        </p>
+                        <p>Compte comptable créé automatiquement.</p>
+                        <p>
+                            <span class="font-medium">Alimentation :</span>
+                            encaissements en espèces de l'agent ou transfert
+                            depuis la caisse de l'agence.
+                        </p>
+                    </div>
+                </Message>
             </template>
 
             <template v-else>
@@ -1321,7 +1263,7 @@ const selectClass =
                             :class="selectClass"
                         >
                             <option
-                                v-for="t in typesCreation"
+                                v-for="t in type_options"
                                 :key="t.value"
                                 :value="t.value"
                             >
@@ -1420,35 +1362,6 @@ const selectClass =
                     class="mt-1 text-xs text-destructive"
                 >
                     {{ form.errors.numero }}
-                </p>
-            </div>
-
-            <AgencesUtilisatricesField
-                v-if="form.nature === 'commun' && form.site_id"
-                v-model="form.agences_utilisatrices"
-                :sites="sites"
-                :detentrice-id="form.site_id"
-                :error="form.errors.agences_utilisatrices"
-                id-prefix="sup-agence"
-            />
-
-            <div>
-                <Label
-                    for="sup-libelle"
-                    class="mb-1.5 block text-xs font-medium"
-                    >Nom de la caisse (optionnel)</Label
-                >
-                <Input
-                    id="sup-libelle"
-                    v-model="form.libelle"
-                    :placeholder="libellePreview"
-                    :class="{ 'border-destructive': form.errors.libelle }"
-                />
-                <p
-                    v-if="form.errors.libelle"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ form.errors.libelle }}
                 </p>
             </div>
 
@@ -1614,37 +1527,6 @@ const selectClass =
                     >
                         {{ editForm.errors.numero }}
                     </p>
-                </div>
-                <div v-if="editForm.type !== 'caisse'" class="space-y-3">
-                    <label
-                        for="edit-commun"
-                        class="flex cursor-pointer items-center gap-2 text-sm"
-                    >
-                        <input
-                            id="edit-commun"
-                            v-model="editForm.commun"
-                            type="checkbox"
-                            class="h-4 w-4"
-                            data-testid="edit-commun"
-                        />
-                        Compte commun à plusieurs agences
-                    </label>
-                    <p class="text-xs text-muted-foreground">
-                        Agence détentrice :
-                        <span class="font-medium text-foreground">{{
-                            editDialogPour.site
-                        }}</span>
-                        — elle porte le solde de ce compte et ne peut pas être
-                        changée.
-                    </p>
-                    <AgencesUtilisatricesField
-                        v-if="editForm.commun"
-                        v-model="editForm.agences_utilisatrices"
-                        :sites="sites"
-                        :detentrice-id="editDialogPour.site_id"
-                        :error="editForm.errors.agences_utilisatrices"
-                        id-prefix="edit-agence"
-                    />
                 </div>
             </template>
 

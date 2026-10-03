@@ -2,6 +2,8 @@
 
 namespace App\Services\Tresorerie\Obligations;
 
+use Carbon\CarbonInterface;
+
 /**
  * Un type d'obligation contribuant au besoin de financement d'une agence
  * (commissions livreurs, propriétaires, salaires, et demain "Site"/
@@ -46,6 +48,16 @@ interface ObligationContributor
      * @param  array<string, array<string, float>>  $besoin
      */
     public function collecter(string $organizationId, int $annee, int $mois, array &$besoin): void;
+
+    /**
+     * Restants encore impayés des mois antérieurs à $debutMois (ADR 0016 : l'agence conserve aussi
+     * ses obligations échues impayées), par agence (sentinel ObligationAccumulator::SANS_AGENCE
+     * pour « sans agence »). Lecture seule : seules les périodes déjà existantes sont lues, aucune
+     * n'est créée ni recalculée.
+     *
+     * @param  array<string, float>  $arrieres
+     */
+    public function arrieres(string $organizationId, CarbonInterface $debutMois, array &$arrieres): void;
 
     /**
      * Détail par bénéficiaire (drill-down), pour une agence donnée (null = "sans agence") —

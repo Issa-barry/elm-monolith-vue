@@ -18,4 +18,15 @@ final class ObligationAccumulator
         $besoin[$cle][$colonne] = ($besoin[$cle][$colonne] ?? 0.0) + $restant;
         $besoin[$cle]["{$colonne}_du"] = ($besoin[$cle]["{$colonne}_du"] ?? 0.0) + $du;
     }
+
+    /** @param  array<string, float>  $arrieres */
+    public static function ajouterArriere(array &$arrieres, ?string $siteId, float $restant): void
+    {
+        if ($restant <= 0.0) {
+            return;
+        }
+
+        $cle = $siteId ?? self::SANS_AGENCE;
+        $arrieres[$cle] = ($arrieres[$cle] ?? 0.0) + $restant;
+    }
 }
