@@ -116,6 +116,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_financer: 'bg-orange-500',
     // Encaissement reçu pour une autre agence, pas encore reversé : à faire, pas une erreur (ADR 0012).
     a_verser: 'bg-amber-500',
+    // Agence qui doit remettre des fonds à la trésorerie principale : à faire, pas une erreur (ADR 0016).
+    a_remettre: 'bg-amber-500',
+    // Le site central lui-même (ADR 0017) : une information, pas une situation à traiter.
+    tresorerie_principale: 'bg-blue-500',
     donnees_incompletes: 'bg-amber-500',
     stock_negatif: 'bg-orange-500',
 };

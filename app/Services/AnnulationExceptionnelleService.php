@@ -559,9 +559,9 @@ class AnnulationExceptionnelleService
         $comptes = $piece->lignes()->where('debit', '>', 0)->pluck('compte_comptable_id');
         $supports = CompteTresorerie::forOrg($commande->organization_id)->whereIn('compte_comptable_id', $comptes)->get();
 
-        // L'argent est allé dans un support de l'agence qui le détient (celle du support choisi —
-        // ADR 0012 et 0016 ; à défaut, celle de la facture).
-        $siteEncaissement = $encaissement->siteDetenteurId() ?? $commande->facture?->site_id;
+        // L'argent est allé dans un support de l'agence qui a encaissé (celle de la facture, sauf
+        // encaissement dans une autre agence — ADR 0012).
+        $siteEncaissement = $encaissement->site_encaissement_id ?? $commande->facture?->site_id;
 
         return $supports->first(fn (CompteTresorerie $s) => $s->isDediee())
             ?? $supports->first(fn (CompteTresorerie $s) => $s->site_id === $siteEncaissement)

@@ -1,8 +1,8 @@
 # ADR 0016 — Remise à la trésorerie principale et position de trésorerie des agences
 
 - **Date** : 2026-10-02
-- **Statut** : accepté le 2026-10-02 (règles métier) — aucun lot de calcul ni de remise développé ;
-  le compte commun (lot 0) est abandonné, son code non commité est à retirer avant tout commit
+- **Statut** : accepté le 2026-10-02 (règles métier) — compte commun retiré et lot 1 (calcul, écran
+  Financement) livrés le 2026-10-03, **à valider avant le lot 2** ; lots 2 et 3 non développés
 - **Périmètre** : trésorerie (financement des agences, mouvements de fonds, inter-agences),
   comptabilité générale — complète et amende [ADR 0012](0012-encaissement-inter-agences-et-reglement.md)
 - **Liens** : [ADR 0017](0017-type-de-site-et-site-central-de-tresorerie.md) (trésorerie principale
@@ -137,16 +137,27 @@ délai.
 
 ## Découpage
 
-- **Préalable — retirer le compte commun** (code non commité du 2026-10-02) : option « Compte
-  commun » de Supports, table `compta_support_tresorerie_agences`, colonne `commun`,
-  `encaissements_ventes.site_detenteur_id` et ses usages (dette, écritures, règlement, annulation,
-  rapport, fiche commande), paramètre `avecComptesCommuns`. **Conserver** le numéro du compte
-  (`compta_supports_tresorerie.numero`) affiché à l'encaissement. Retrait fichier par fichier : ces
-  fichiers portent aussi les changements de l'ADR 0017.
-- **Lot 1 — calcul** : `FinancementAgenceService` produit disponible propre, à conserver, à
-  financer, excédent, remise obligatoire ; écran Financement : position de chaque agence (besoin OU
-  à remettre, plus la remise obligatoire). Livre au passage le « financement déduit la dette » prévu
-  au lot 3 d'ADR 0012. Aucun mouvement, aucune écriture. **À valider avant le lot 2.**
+- **Préalable — retirer le compte commun, fait le 2026-10-03** : le code avait été commité et poussé
+  sur `dev` (commit afa4c6e4), ses migrations ne sont donc pas supprimées ; la migration
+  `2026_10_03_100000_retirer_compte_commun_des_supports_tresorerie` retire `commun`,
+  `compta_support_tresorerie_agences` et `encaissements_ventes.site_detenteur_id` (elle s'arrête si
+  un compte commun a réellement servi). Le code revient au comportement d'ADR 0012. **Conservé** : le
+  numéro du compte (`compta_supports_tresorerie.numero`), affiché sous chaque moyen à l'encaissement.
+- **Lot 1 — calcul, livré le 2026-10-03** : `FinancementAgenceService::calculerPourEcheance()` ajoute
+  à chaque ligne `arrieres`, `a_conserver`, `fonds_autres_agences`, `disponible_propre`,
+  `remise_obligatoire`, `excedent_a_remettre`, `total_a_remettre`, `est_tresorerie_principale` ;
+  `a_financer` = max(0, à conserver − disponible propre − transit). Statuts : « À remettre »
+  (`a_remettre`) quand rien n'est à financer mais qu'un montant est à remettre, « Trésorerie
+  principale » pour le site central (ni remise ni financement). Impayés échus : mois antérieurs lus
+  par `ObligationContributor::arrieres()` (périodes existantes seulement, aucune créée) et, en vue
+  « Fin de mois », les restants de la 1re quinzaine. Écran Financement : colonnes « Autres agences »,
+  « Impayés échus », « À conserver », « À financer », « À remettre » (détail en infobulle) ; cartes
+  « À conserver », « À remettre à la trésorerie principale », « À financer par la trésorerie
+  principale ». Livre le « financement déduit la dette » prévu au lot 3 d'ADR 0012. Aucun
+  mouvement, aucune écriture. **À valider avant le lot 2.**
+  Limites connues : la vue par défaut reste « Mois complet » (conserve tout le mois, plus prudent que
+  la seule prochaine échéance) ; pour une période passée, le statut des dettes est celui
+  d'aujourd'hui ; la part « espèces chez les agents » est une estimation (cf. point 4).
 - **Lot 2 — remise** : action « Remettre à la trésorerie principale » (point 7), destination
   automatique (point 5), écritures tierces, frais de transfert (point 6).
 - **Lot 3 — vue trésorerie principale** : remises à recevoir par agence, en cours, reçues, détail

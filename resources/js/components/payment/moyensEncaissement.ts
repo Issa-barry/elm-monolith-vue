@@ -22,9 +22,6 @@ export interface MoyenEncaissement {
     reference_requise: boolean;
     /** Numéro du compte (numéro marchand) : l'agent le compare au reçu du client. */
     numero?: string | null;
-    /** Agence qui détiendra l'argent : celle du compte (un compte commun peut être détenu ailleurs, ADR 0016). */
-    site_detenteur_id?: string | null;
-    site_detenteur_nom?: string | null;
     /** Décaissement uniquement (paiement de fiche) : solde disponible du support, grand livre. */
     solde_disponible?: number | null;
 }
@@ -42,9 +39,6 @@ export interface ModeOption {
     soldeDisponible?: number | null;
     /** Numéro du compte, affiché sous le moyen. */
     numero?: string | null;
-    /** Agence détentrice du compte — absente pour les espèces (agence qui encaisse). */
-    siteDetenteurId?: string | null;
-    siteDetenteurNom?: string | null;
     icon: LucideIcon;
     /** Repère visuel (pas un logo de marque). */
     badgeClass: string;
@@ -135,8 +129,6 @@ function versOption(moyen: MoyenEncaissement): ModeOption {
         requiresReference: moyen.reference_requise,
         soldeDisponible: moyen.solde_disponible ?? null,
         numero: moyen.numero ?? null,
-        siteDetenteurId: moyen.site_detenteur_id ?? null,
-        siteDetenteurNom: moyen.site_detenteur_nom ?? null,
     };
 
     if (moyen.mode_paiement === 'mobile_money') {

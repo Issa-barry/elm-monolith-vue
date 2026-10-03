@@ -27,7 +27,6 @@ class EncaissementVente extends Model
     protected $fillable = [
         'facture_vente_id',
         'site_encaissement_id',
-        'site_detenteur_id',
         'montant',
         'date_encaissement',
         'mode_paiement',
@@ -66,14 +65,6 @@ class EncaissementVente extends Model
             // le comportement de tous les encaissements antérieurs à l'ADR 0012.
             if (! $e->site_encaissement_id) {
                 $e->site_encaissement_id = $e->facture?->site_id;
-            }
-
-            // Agence qui détient l'argent (ADR 0016) : celle du support qui le reçoit — un compte
-            // commun est détenu par une autre agence que celle qui encaisse. Espèces (caisse dédiée
-            // de l'agent sur l'agence d'encaissement) et historique : l'agence d'encaissement.
-            if (! $e->site_detenteur_id) {
-                $e->site_detenteur_id = ($e->compte_tresorerie_id ? CompteTresorerie::whereKey($e->compte_tresorerie_id)->value('site_id') : null)
-                    ?? $e->site_encaissement_id;
             }
         });
 
@@ -207,24 +198,10 @@ class EncaissementVente extends Model
         return $this->belongsTo(FactureVente::class, 'facture_vente_id');
     }
 
-    /** Agence qui a réalisé l'encaissement (ADR 0012) — traçabilité, jamais la détentrice des fonds. */
+    /** Agence qui a réellement reçu l'argent (ADR 0012) — celle de la facture sauf encaissement dans une autre agence. */
     public function siteEncaissement(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'site_encaissement_id');
-    }
-
-    /**
-     * Agence qui détient l'argent reçu (ADR 0016) : celle du support choisi. Égale à l'agence
-     * d'encaissement sauf paiement sur un compte commun détenu par une autre agence.
-     */
-    public function siteDetenteur(): BelongsTo
-    {
-        return $this->belongsTo(Site::class, 'site_detenteur_id');
-    }
-
-    public function siteDetenteurId(): ?string
-    {
-        return $this->site_detenteur_id ?? $this->site_encaissement_id;
     }
 
     /** Lignes de règlement inter-agences (actives et historiques). */
@@ -247,19 +224,16 @@ class EncaissementVente extends Model
     // ── Inter-agences (ADR 0012) ──────────────────────────────────────────────
 
     /**
-     * L'argent est détenu par une autre agence que celle de la commande : l'agence détentrice (celle
-     * du support qui l'a reçu, ADR 0016) le doit à l'agence de la commande jusqu'au règlement
-     * inter-agences. Un paiement sur un compte commun détenu par l'agence de la commande ne crée
-     * aucune dette, quelle que soit l'agence qui a encaissé.
+     * L'argent a été reçu par une autre agence que celle de la commande : l'agence qui a encaissé
+     * le doit à l'agence de la commande jusqu'au règlement inter-agences.
      */
     public function estPourAutreAgence(): bool
     {
         $siteFacture = $this->facture?->site_id;
-        $detenteur = $this->siteDetenteurId();
 
         return $siteFacture !== null
-            && $detenteur !== null
-            && $detenteur !== $siteFacture;
+            && $this->site_encaissement_id !== null
+            && $this->site_encaissement_id !== $siteFacture;
     }
 
     public function ligneReglementActive(): ?MouvementFondsEncaissement

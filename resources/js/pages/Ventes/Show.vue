@@ -83,11 +83,9 @@ interface Encaissement {
     reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
-    /** Agence qui a réalisé l'encaissement (ADR 0012). */
+    /** Agence qui a reçu l'argent (ADR 0012). */
     encaisse_a: string | null;
-    /** Agence qui détient l'argent quand il a été payé sur son compte commun (ADR 0016), sinon null. */
-    detenu_par: string | null;
-    /** Argent détenu par une autre agence que celle de la commande : un reversement est dû. */
+    /** Reçu par une autre agence que celle de la commande : un reversement est dû. */
     pour_autre_agence: boolean;
     /** Reversement à l'agence de la commande — seulement pour un encaissement reçu ailleurs. */
     reversement: {
@@ -2003,13 +2001,6 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                                 <span class="text-foreground"
                                                     >Encaissé à
                                                     {{ enc.encaisse_a }}</span
-                                                >
-                                                <span
-                                                    v-if="enc.detenu_par"
-                                                    class="block text-muted-foreground"
-                                                    data-testid="encaissement-compte-commun"
-                                                    >Compte commun de
-                                                    {{ enc.detenu_par }}</span
                                                 >
                                                 <StatusDot
                                                     v-if="enc.reversement"
