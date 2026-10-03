@@ -430,50 +430,6 @@ describe('PaymentCard — agence d’encaissement (ADR 0012)', () => {
         expect(bandeau.text()).toBe('Kindia devra reverser à Matoto.');
     });
 
-    it('suit l’agence qui détient l’argent : rien à reverser sur le compte commun de l’agence de la commande', async () => {
-        const communMatoto = {
-            key: 'mobile_money:s-commun',
-            label: 'Kulu — compte commun (Matoto)',
-            mode_paiement: 'mobile_money',
-            operateur_mobile_money: 'kulu',
-            compte_tresorerie_id: 's-commun',
-            reference_requise: true,
-            numero: '+224 620 00 00 00',
-            site_detenteur_id: 'site-a',
-            site_detenteur_nom: 'Matoto',
-        };
-        const wrapper = monter({
-            agences: [
-                AGENCES[0],
-                {
-                    ...AGENCES[1],
-                    moyens: [
-                        {
-                            ...MOYEN_KINDIA,
-                            site_detenteur_id: 'site-b',
-                            site_detenteur_nom: 'Kindia',
-                        },
-                        communMatoto,
-                    ],
-                },
-            ],
-            agenceDefaut: 'site-b',
-            agenceCommande: AGENCE_COMMANDE,
-        });
-
-        selectMode(wrapper).vm.$emit('update:modelValue', communMatoto.key);
-        await nextTick();
-        expect(
-            wrapper.find('[data-testid="bandeau-autre-agence"]').exists(),
-        ).toBe(false);
-
-        selectMode(wrapper).vm.$emit('update:modelValue', MOYEN_KINDIA.key);
-        await nextTick();
-        expect(wrapper.get('[data-testid="bandeau-autre-agence"]').text()).toBe(
-            'Kindia devra reverser à Matoto.',
-        );
-    });
-
     it('soumet l’agence d’encaissement avec le support de cette agence', async () => {
         const wrapper = monter({
             agences: AGENCES,

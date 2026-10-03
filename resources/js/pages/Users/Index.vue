@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
 import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -81,6 +82,10 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<StaffUser>(
+    (u) => `/backoffice/users/${u.id}`,
+);
 const confirm = useConfirm();
 const toast = useToast();
 const page = usePage();
@@ -331,6 +336,8 @@ function confirmReject(u: StaffUser) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Avatar + nom -->
                     <Column

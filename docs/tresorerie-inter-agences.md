@@ -5,17 +5,11 @@ Décision : [ADR 0012](adr/0012-encaissement-inter-agences-et-reglement.md). Ét
 (29/09/2026) — écran Trésorerie → Inter-agences, règlement dans l'interface, Mouvements, fiche
 commande, compteur. Lot 3 : rapports, Situation, financement, E2E.
 
-> **Évolution proposée — [ADR 0016](adr/0016-remise-au-siege-et-position-des-agences.md)** :
-> les fonds encaissés pour une autre agence sont remis au site central de trésorerie, et cette remise
-> solde la dette inter-agences (plus de règlement direct vers une agence non centrale). Statut :
-> proposé.
->
-> **Déjà en vigueur (02/10/2026, ADR 0016 lot 0.3)** : la dette suit l'agence qui **détient**
-> l'argent (`encaissements_ventes.site_detenteur_id`, site du compte qui l'a reçu), pas l'agence qui
-> encaisse. Payé sur un compte commun détenu par l'agence de la commande : aucune dette, même encaissé
-> ailleurs. Payé sur un compte commun détenu par S pour une commande de A : S doit à A. Partout
-> ci-dessous, « l'agence qui a encaissé » (B) se lit « l'agence qui détient l'argent » ; l'agence qui
-> a encaissé reste affichée (détail Inter-agences, fiche commande « Compte commun de S »).
+> **Évolution décidée — [ADR 0016](adr/0016-remise-au-siege-et-position-des-agences.md)**
+> (accepté le 02/10/2026, pas encore développée) : toute remise part vers la trésorerie principale
+> (`is_central_tresorerie`, ADR 0017). Pour une commande de la trésorerie principale, rien ne change ;
+> pour une commande d'une agence tierce, l'agence qui détient l'argent le remet à la trésorerie
+> principale (plus de règlement direct vers l'agence de la commande), avec écritures de liaison.
 
 ## Exemple
 
@@ -193,6 +187,7 @@ l'agence de la commande.
 
 ## Hors lots 1 et 2
 
-- Situation de trésorerie (colonnes À verser / À recevoir) et financement (disponible de B diminué
-  de ce qu'il doit : `DetteInterAgencesService::aVerserParSite()`), E2E — lot 3.
+- Situation de trésorerie (colonnes À verser / À recevoir), E2E — lot 3. Le financement déduit
+  désormais du disponible de B ce qu'il détient pour d'autres agences, et le compte comme remise
+  obligatoire (ADR 0016, lot 1, 03/10/2026 — écran Financement).
 - Les sorties d'argent de B ne sont pas bloquées par la dette (décision du 29/09/2026).

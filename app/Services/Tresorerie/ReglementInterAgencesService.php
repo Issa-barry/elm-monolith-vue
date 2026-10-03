@@ -123,7 +123,7 @@ class ReglementInterAgencesService
             if (! $encaissement->estPourAutreAgence()) {
                 $refus("L'encaissement de la facture {$facture->reference} a été reçu par l'agence de la commande : il n'y a rien à reverser.");
             }
-            if ($encaissement->siteDetenteurId() !== $siteDebiteurId || $facture->site_id !== $siteCreancierId) {
+            if ($encaissement->site_encaissement_id !== $siteDebiteurId || $facture->site_id !== $siteCreancierId) {
                 $refus("L'encaissement de la facture {$facture->reference} ne concerne pas ces deux agences : un règlement ne couvre qu'un seul sens (agence qui a encaissé → agence de la commande).");
             }
         }

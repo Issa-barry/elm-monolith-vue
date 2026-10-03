@@ -6,6 +6,7 @@ use App\Enums\TypePeriodePaiement;
 use App\Models\PaiementFiche;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use Carbon\CarbonInterface;
 
 /**
  * Commissions livreurs — seul type d'obligation avec DEUX colonnes mensuelles
@@ -47,6 +48,18 @@ class LivreurObligationContributor implements ObligationContributor
                     ObligationAccumulator::ajouter($besoin, $fiche->site_id, $colonne, $fiche->montant_restant, (float) $fiche->montant_net);
                 });
         }
+    }
+
+    public function arrieres(string $organizationId, CarbonInterface $debutMois, array &$arrieres): void
+    {
+        PaiementFiche::where('organization_id', $organizationId)
+            ->where('beneficiaire_type', 'livreur')
+            ->whereColumn('montant_paye', '<', 'montant_net')
+            ->whereHas('periode', fn ($q) => $q->whereDate('date_fin', '<', $debutMois->toDateString()))
+            ->get(['site_id', 'montant_net', 'montant_paye'])
+            ->each(function (PaiementFiche $fiche) use (&$arrieres) {
+                ObligationAccumulator::ajouterArriere($arrieres, $fiche->site_id, $fiche->montant_restant);
+            });
     }
 
     public function detail(string $organizationId, int $annee, int $mois, ?string $siteId): array

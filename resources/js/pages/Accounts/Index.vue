@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -51,6 +52,13 @@ const props = defineProps<{
 const confirm = useConfirm();
 const toast = useToast();
 const { can, hasRole } = usePermissions();
+
+// Seuls les comptes agent ont une fiche (users.show) ; les lignes client/inscrit restent inertes.
+const { onRowClick, bodyRowPt } = useClickableTableRow<Account>((a) =>
+    a.type === 'agent' && can('users.read')
+        ? `/backoffice/users/${a.id}`
+        : null,
+);
 
 const TYPE_LABELS: Record<string, string> = {
     agent: 'Agent',
@@ -260,6 +268,8 @@ function confirmToggle(a: Account) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Utilisateur -->
                     <Column

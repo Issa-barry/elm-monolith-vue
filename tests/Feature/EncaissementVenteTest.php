@@ -564,9 +564,6 @@ class EncaissementVenteTest extends TestCase
         $this->creerSupportAgence($facture->site_id, 'mobile_money', '561200', 'momo')->update(['actif' => false]);
         $this->creerSupportAgence($facture->site_id, 'mobile_money', '561000');
 
-        // Agence qui détiendra l'argent (ADR 0016) : celle du compte, ici l'agence de la facture.
-        $site = Site::whereKey($facture->site_id)->value('nom');
-
         $this->actingAs($user)->get(route('ventes.show', $commande))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -579,8 +576,6 @@ class EncaissementVenteTest extends TestCase
                         'compte_tresorerie_id' => $orange->id,
                         'reference_requise' => true,
                         'numero' => null,
-                        'site_detenteur_id' => $facture->site_id,
-                        'site_detenteur_nom' => $site,
                     ],
                     [
                         'key' => "virement:{$banque->id}",
@@ -590,8 +585,6 @@ class EncaissementVenteTest extends TestCase
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => true,
                         'numero' => null,
-                        'site_detenteur_id' => $facture->site_id,
-                        'site_detenteur_nom' => $site,
                     ],
                     [
                         'key' => "cheque:{$banque->id}",
@@ -601,8 +594,6 @@ class EncaissementVenteTest extends TestCase
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => false,
                         'numero' => null,
-                        'site_detenteur_id' => $facture->site_id,
-                        'site_detenteur_nom' => $site,
                     ],
                 ]));
     }

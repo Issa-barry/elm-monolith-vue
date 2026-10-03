@@ -231,9 +231,26 @@ test('créer, envoyer et recevoir un mouvement de fonds', async ({ page }) => {
             await creation
                 .locator('#sup-compte')
                 .selectOption({ label: '571000 — Caisse' });
-            await creation.locator('#sup-libelle').fill(libelle);
             await creation
                 .getByRole('button', { name: /créer la caisse/i })
+                .click();
+
+            // Le nom est toujours généré à la création (pas de saisie) : on le lit dans le
+            // message de succès, puis on renomme la caisse via « Modifier » pour la retrouver.
+            const succes = page.getByText(/créé en brouillon/i).first();
+            await expect(succes).toBeVisible({ timeout: 10_000 });
+            const nomAuto = (await succes.textContent())?.match(
+                /«\s*(.+?)\s*»/,
+            )?.[1];
+            expect(nomAuto).toBeTruthy();
+            await actionDuMenu(
+                page.locator('tbody tr', { hasText: nomAuto! }).first(),
+                /modifier/i,
+            );
+            const edition = page.getByRole('dialog');
+            await edition.locator('#edit-libelle').fill(libelle);
+            await edition
+                .getByRole('button', { name: /^enregistrer$/i })
                 .click();
             await expect(page.getByText(libelle)).toBeVisible({
                 timeout: 10_000,

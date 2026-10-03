@@ -8,7 +8,6 @@ use App\Enums\TypeSupportTresorerie;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
@@ -21,11 +20,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * Un support sans `agent_id` appartient à l'agence ; avec `agent_id`, c'est une
  * caisse dédiée à cet agent (toujours de type Caisse, avec son propre sous-compte
  * comptable — cf. CaisseAgentService). La « nature » est donc dérivée d'`agent_id`.
- *
- * Compte commun (ADR 0016) : `site_id` est toujours l'agence DÉTENTRICE — celle qui porte
- * réellement le compte et son solde au grand livre. Un compte commun (`commun`) est en plus
- * utilisé par d'autres agences (`agencesUtilisatrices`, détentrice comprise) : l'agence qui
- * réalise une opération n'est alors pas celle qui détient les fonds.
  *
  * Cycle de vie : un support est créé en brouillon (inutilisable), validé par un utilisateur
  * habilité (`valide_le`, `valide_par_id` — cf. SupportTresorerieValidationService), puis actif ;
@@ -42,7 +36,6 @@ class CompteTresorerie extends Model
         'organization_id',
         'site_id',
         'agent_id',
-        'commun',
         'compte_comptable_id',
         'type',
         'operateur_mobile_money',
@@ -60,7 +53,6 @@ class CompteTresorerie extends Model
             'type' => TypeSupportTresorerie::class,
             'operateur_mobile_money' => OperateurMobileMoney::class,
             'actif' => 'boolean',
-            'commun' => 'boolean',
             'valide_le' => 'datetime',
         ];
     }
@@ -150,13 +142,6 @@ class CompteTresorerie extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
-    }
-
-    /** Agences qui utilisent un compte commun, détentrice comprise (vide pour un support propre). */
-    public function agencesUtilisatrices(): BelongsToMany
-    {
-        return $this->belongsToMany(Site::class, 'compta_support_tresorerie_agences', 'compte_tresorerie_id', 'site_id')
-            ->withTimestamps();
     }
 
     public function agent(): BelongsTo

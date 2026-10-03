@@ -4,9 +4,6 @@ import type { Component } from 'vue';
 
 export type Nature = 'agence' | 'dediee';
 
-/** Choix du formulaire de création : un support d'agence peut être propre ou commun (ADR 0016). */
-export type NatureCreation = 'agence' | 'commun' | 'dediee';
-
 /**
  * Cycle de vie d'un support (dérivé côté serveur de sa validation et de son activation) :
  * un support est créé en brouillon, inutilisable, puis validé — il devient alors actif — et peut
@@ -28,10 +25,6 @@ export interface CompteTresorerie {
     /** Numéro du compte (numéro marchand, numéro bancaire), affiché à l'encaissement. */
     numero: string | null;
     nature: Nature;
-    /** Compte commun (ADR 0016) : `site` est l'agence détentrice, qui porte le solde. */
-    commun: boolean;
-    /** Agences qui utilisent un compte commun, détentrice comprise — vide pour un support propre. */
-    agences_utilisatrices: { id: string; nom: string }[];
     agent: { id: string; nom: string } | null;
     compte_comptable_id: string;
     compte_numero: string | null;
