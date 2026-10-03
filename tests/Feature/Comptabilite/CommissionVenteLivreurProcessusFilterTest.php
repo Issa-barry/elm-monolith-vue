@@ -281,7 +281,7 @@ class CommissionVenteLivreurProcessusFilterTest extends TestCase
     {
         $livreur = $this->makeLivreur();
         $siteSource = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site Source', 'type' => 'depot']);
-        $siteDestination = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site Dest', 'type' => 'siege']);
+        $siteDestination = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site Dest', 'type' => 'agence', 'is_central_tresorerie' => true]);
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'livraison_logistique' => true]);
         $equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,

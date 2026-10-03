@@ -107,7 +107,7 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Email', 'issa@gmail.com')
             ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
-            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Type de site', SiteType::BOUTIQUE->label())
             ->expectsQuestion('Ville', 'Conakry')
             ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(1);
@@ -191,7 +191,7 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Email', 'autre@gmail.com')
             ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
-            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Type de site', SiteType::BOUTIQUE->label())
             ->expectsQuestion('Ville', 'Conakry')
             ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(1);
@@ -211,7 +211,7 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
-            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Type de site', SiteType::BOUTIQUE->label())
             ->expectsQuestion('Ville', 'Conakry')
             ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(0);

@@ -23,9 +23,10 @@ qu'une commission était payée. L'écran de paiement était aussi différent de
 2. **Mêmes moyens que l'encaissement** : liste et contrôle serveur rejouent
    `MoyensEncaissementResolver` (supports) et `CaisseAgentResolver` (caisse du payeur) — aucune règle
    parallèle. Référence obligatoire pour les moyens qui l'exigent (Mobile Money, virement).
-3. **Agence de trésorerie** = agence de la fiche ; **fiche sans agence (consultant) → siège
-   principal** (`SiegeResolverService`). Jamais l'agence de l'utilisateur, jamais un choix manuel.
-   Sans siège principal : paiement bloqué (« Aucun siège principal n'est configuré… »).
+3. **Agence de trésorerie** = agence de la fiche ; **fiche sans agence (consultant) → site
+   central de trésorerie** (`SiteCentralTresorerieResolver`, ADR 0017 — anciennement « siège
+   principal »). Jamais l'agence de l'utilisateur, jamais un choix manuel. Sans site central :
+   paiement bloqué (« Aucun site central de trésorerie n'est configuré… »).
 4. **Solde insuffisant = paiement refusé côté serveur**, sous verrou du support avec relecture du
    solde au grand livre (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`, désormais
    partagé avec les mouvements de fonds). Refus = aucun effet : ni paiement, ni allocation aux

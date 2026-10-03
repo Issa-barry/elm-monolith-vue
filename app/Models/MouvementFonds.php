@@ -198,15 +198,15 @@ class MouvementFonds extends Model
             && $this->sent_by === $this->received_by;
     }
 
-    /** Remise agence -> siège : le site d'origine n'est pas de type siège, la destination l'est. */
+    /** Remise agence -> siège : la destination est le site central de trésorerie, pas l'origine (ADR 0017). */
     public function estRemiseAuSiege(): bool
     {
-        return $this->siteDestination?->isSiege() === true && $this->siteOrigine?->isSiege() !== true;
+        return $this->siteDestination?->isCentralTresorerie() === true && $this->siteOrigine?->isCentralTresorerie() !== true;
     }
 
-    /** Financement siège -> agence : le site d'origine est de type siège. */
+    /** Financement siège -> agence : l'origine est le site central de trésorerie (ADR 0017). */
     public function estFinancementDepuisSiege(): bool
     {
-        return $this->siteOrigine?->isSiege() === true;
+        return $this->siteOrigine?->isCentralTresorerie() === true;
     }
 }

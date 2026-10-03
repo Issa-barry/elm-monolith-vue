@@ -227,8 +227,8 @@ class FinancementAgenceServiceTest extends TestCase
     private function envoyerFinancementVersAgence(float $montant, ?string $echeanceDebut = null, ?string $echeanceFin = null): void
     {
         $siege = Site::firstOrCreate(
-            ['organization_id' => $this->org->id, 'type' => 'siege'],
-            ['nom' => 'Siège', 'localisation' => 'Conakry'],
+            ['organization_id' => $this->org->id, 'is_central_tresorerie' => true],
+            ['nom' => 'Siège', 'type' => 'agence', 'localisation' => 'Conakry'],
         );
         $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();
         $caisseSiege = CompteTresorerie::firstOrCreate(

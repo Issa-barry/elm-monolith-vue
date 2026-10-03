@@ -5,6 +5,18 @@ Décision : [ADR 0012](adr/0012-encaissement-inter-agences-et-reglement.md). Ét
 (29/09/2026) — écran Trésorerie → Inter-agences, règlement dans l'interface, Mouvements, fiche
 commande, compteur. Lot 3 : rapports, Situation, financement, E2E.
 
+> **Évolution proposée — [ADR 0016](adr/0016-remise-au-siege-et-position-des-agences.md)** :
+> les fonds encaissés pour une autre agence sont remis au site central de trésorerie, et cette remise
+> solde la dette inter-agences (plus de règlement direct vers une agence non centrale). Statut :
+> proposé.
+>
+> **Déjà en vigueur (02/10/2026, ADR 0016 lot 0.3)** : la dette suit l'agence qui **détient**
+> l'argent (`encaissements_ventes.site_detenteur_id`, site du compte qui l'a reçu), pas l'agence qui
+> encaisse. Payé sur un compte commun détenu par l'agence de la commande : aucune dette, même encaissé
+> ailleurs. Payé sur un compte commun détenu par S pour une commande de A : S doit à A. Partout
+> ci-dessous, « l'agence qui a encaissé » (B) se lit « l'agence qui détient l'argent » ; l'agence qui
+> a encaissé reste affichée (détail Inter-agences, fiche commande « Compte commun de S »).
+
 ## Exemple
 
 Commande de **Matoto (A)**, 500 000 GNF. Le client paie à **Kindia (B)**.

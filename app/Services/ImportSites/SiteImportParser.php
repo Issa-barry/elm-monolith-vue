@@ -56,6 +56,9 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
  */
 class SiteImportParser
 {
+    /** Libellé de l'ancien type `siege` (ADR 0017), toujours accepté à l'import. */
+    private const ALIAS_TYPE_SIEGE = 'Siège';
+
     public function analyserFichier(string $absolutePath, string $orgId): array
     {
         $spreadsheet = IOFactory::load($absolutePath);
@@ -175,6 +178,11 @@ class SiteImportParser
         $type = null;
         if ($typeSaisi === '') {
             $erreurs[] = "Ligne {$numeroLigne} — `type` : obligatoire.";
+        } elseif (ImportTextNormalizer::normalize($typeSaisi) === ImportTextNormalizer::normalize(self::ALIAS_TYPE_SIEGE)) {
+            // Ancien type retiré (ADR 0017) : les fichiers déjà en circulation restent valides,
+            // reclassés comme la migration (`autre`). Le rôle de site central ne s'importe pas.
+            $type = SiteType::AUTRE;
+            $normalisations[] = "\"{$typeSaisi}\" → \"{$type->label()}\" (le type « Siège » n'existe plus)";
         } else {
             $type = ReferenceValueResolver::matchExact($typeSaisi, SiteType::cases(), fn (SiteType $t) => $t->label());
             if ($type && $type->label() !== $typeSaisi) {

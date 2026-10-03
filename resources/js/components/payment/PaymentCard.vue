@@ -125,12 +125,24 @@ const especesEffectives = computed(() =>
         ? (agenceActive.value?.peut_encaisser_especes ?? false)
         : props.especesDisponibles,
 );
+// Agence qui détiendra l'argent : celle du compte choisi (un compte commun peut être détenu par
+// une autre agence, ADR 0016), sinon l'agence qui encaisse (espèces, aucun mode choisi).
+const detenteur = computed(() => {
+    const mode = modeByKey(selectedKey.value);
+    if (mode?.siteDetenteurId) {
+        return { id: mode.siteDetenteurId, nom: mode.siteDetenteurNom ?? '' };
+    }
+
+    return agenceActive.value
+        ? { id: agenceActive.value.site_id, nom: agenceActive.value.nom }
+        : null;
+});
 const pourAutreAgence = computed(
     () =>
         avecChoixAgence.value &&
         !!agenceDeLaCommande.value &&
-        !!agenceActive.value &&
-        agenceActive.value.site_id !== agenceDeLaCommande.value.id,
+        !!detenteur.value &&
+        detenteur.value.id !== agenceDeLaCommande.value.id,
 );
 
 const modeOptions = computed(() =>
@@ -381,7 +393,7 @@ function handleSubmit() {
                     class="mt-2 text-sm leading-relaxed text-foreground"
                     data-testid="bandeau-autre-agence"
                 >
-                    {{ agenceActive?.nom }} devra reverser à
+                    {{ detenteur?.nom }} devra reverser à
                     {{ agenceDeLaCommande?.nom }}.
                 </p>
             </div>
@@ -468,6 +480,12 @@ function handleSubmit() {
                                 />
                             </span>
                             <span>{{ option.label }}</span>
+                            <span
+                                v-if="option.numero"
+                                class="text-xs text-muted-foreground tabular-nums"
+                                data-testid="moyen-numero"
+                                >N° {{ option.numero }}</span
+                            >
                             <span
                                 v-if="modeIndisponible(option)"
                                 class="text-xs text-muted-foreground"

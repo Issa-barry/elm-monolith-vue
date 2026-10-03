@@ -13,10 +13,12 @@ use App\Models\User;
 use App\Services\Comptabilite\SupportTresorerieTypeResolver;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\CaisseAgentService;
+use App\Services\Tresorerie\SiteCentralTresorerieResolver;
 use App\Services\Tresorerie\SupportTresorerieValidationService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -37,6 +39,10 @@ use Inertia\Response;
  *
  * Un support est créé en brouillon (inutilisable) puis validé par `tresorerie.valider_supports`
  * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif.
+ *
+ * Compte commun (ADR 0016) : un support d'agence peut être utilisé par plusieurs agences. `site_id`
+ * reste l'agence détentrice (fixée à la création, jamais modifiée : elle porte les écritures) ;
+ * les agences utilisatrices, détentrice comprise, sont dans `agencesUtilisatrices`.
  */
 class CompteTresorerieController extends Controller
 {
@@ -44,6 +50,7 @@ class CompteTresorerieController extends Controller
         private readonly CaisseAgentService $caisseAgent,
         private readonly TresorerieDisponibiliteService $disponibilite,
         private readonly SiteScopeService $siteScope,
+        private readonly SiteCentralTresorerieResolver $siteCentral,
     ) {}
 
     public function index(Request $request, SupportTresorerieTypeResolver $typeResolver): Response
@@ -66,7 +73,7 @@ class CompteTresorerieController extends Controller
         ];
 
         $query = CompteTresorerie::forOrg($orgId)
-            ->with(['site:id,nom', 'compte:id,numero,libelle', 'soldeOuverture', 'agent.personne', 'validePar.personne']);
+            ->with(['site:id,nom', 'compte:id,numero,libelle', 'soldeOuverture', 'agent.personne', 'validePar.personne', 'agencesUtilisatrices:id,nom']);
 
         if ($sitesAccessibles !== null) {
             $query->whereIn('site_id', $sitesAccessibles);
@@ -78,7 +85,9 @@ class CompteTresorerieController extends Controller
             $query->where('type', $filters['type']);
         }
         if ($filters['nature'] === 'agence') {
-            $query->agence();
+            $query->agence()->where('commun', false);
+        } elseif ($filters['nature'] === 'commun') {
+            $query->agence()->where('commun', true);
         } elseif ($filters['nature'] === 'dediee') {
             $query->dediees();
         }
@@ -127,7 +136,13 @@ class CompteTresorerieController extends Controller
                     'operateur_mobile_money' => $c->operateur_mobile_money?->value,
                     'operateur_label' => $c->operateur_mobile_money?->label(),
                     'libelle' => $c->libelle,
+                    'numero' => $c->numero,
                     'nature' => $c->isDediee() ? 'dediee' : 'agence',
+                    'commun' => (bool) $c->commun,
+                    'agences_utilisatrices' => $c->commun
+                        ? $c->agencesUtilisatrices->sortBy(fn (Site $s) => mb_strtolower($s->nom))
+                            ->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values()->all()
+                        : [],
                     'agent' => $c->agent ? ['id' => $c->agent->id, 'nom' => $c->agent->name] : null,
                     'compte_comptable_id' => $c->compte_comptable_id,
                     'compte_numero' => $c->compte?->numero,
@@ -167,6 +182,9 @@ class CompteTresorerieController extends Controller
                 ->orderBy('nom')
                 ->get(['id', 'nom']),
             'type_options' => TypeSupportTresorerie::options(),
+            // Détentrice proposée par défaut pour un compte commun : le site central de trésorerie
+            // (ADR 0016, 0017) — modifiable si le compte est tenu ailleurs.
+            'site_central_tresorerie_id' => $this->siteCentral->centralOuNull($orgId)?->id,
             'operateur_options' => OperateurMobileMoney::optionsAvecWallet(),
             'destinations_versement' => $destinationsVersement->map(fn (CompteTresorerie $c) => [
                 'id' => $c->id,
@@ -205,7 +223,7 @@ class CompteTresorerieController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $request->validate(['nature' => ['nullable', Rule::in(['agence', 'dediee'])]]);
+        $request->validate(['nature' => ['nullable', Rule::in(['agence', 'commun', 'dediee'])]]);
 
         if ($request->input('nature') === 'dediee') {
             $data = $request->validate([
@@ -226,6 +244,7 @@ class CompteTresorerieController extends Controller
             // Facultatif : généré automatiquement ("{Type} de {Site}") par
             // CompteTresorerie::boot() si laissé vide — cf. revue du 2026-08-22.
             'libelle' => ['nullable', 'string', 'max:150'],
+            'numero' => ['nullable', 'string', 'max:50'],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
             ...$this->reglesOperateur(),
         ]);
@@ -245,8 +264,16 @@ class CompteTresorerieController extends Controller
             ]);
         }
 
+        $commun = $request->input('nature') === 'commun';
+        $agences = $commun ? $this->verifierCompteCommun($request, $orgId, $data, null) : [];
+
         // Brouillon : inutilisable jusqu'à sa validation (SupportTresorerieValidationService).
-        CompteTresorerie::create([...$data, 'organization_id' => $orgId, 'actif' => false]);
+        DB::transaction(function () use ($data, $orgId, $commun, $agences) {
+            $support = CompteTresorerie::create([...$data, 'organization_id' => $orgId, 'commun' => $commun, 'actif' => false]);
+            if ($commun) {
+                $support->agencesUtilisatrices()->sync($agences);
+            }
+        });
 
         return back()->with('success', "Support de trésorerie créé en brouillon : il devra être validé avant d'être utilisable.");
     }
@@ -274,6 +301,7 @@ class CompteTresorerieController extends Controller
 
         $data = $request->validate([
             'libelle' => ['required', 'string', 'max:150'],
+            'numero' => ['sometimes', 'nullable', 'string', 'max:50'],
             'type' => ['required', Rule::enum(TypeSupportTresorerie::class)],
             'compte_comptable_id' => ['required', Rule::exists('compta_comptes', 'id')->where('organization_id', $orgId)],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
@@ -311,7 +339,21 @@ class CompteTresorerieController extends Controller
             ]);
         }
 
-        $compteTresorerie->update($data);
+        // `commun` absent (ex. activation depuis le menu ⋮) : le caractère commun et les agences
+        // utilisatrices restent inchangés.
+        $commun = $request->has('commun') ? $request->boolean('commun') : (bool) $compteTresorerie->commun;
+        $agences = $commun && $request->has('commun')
+            ? $this->verifierCompteCommun($request, $orgId, [...$data, 'site_id' => $compteTresorerie->site_id], $compteTresorerie)
+            : null;
+
+        DB::transaction(function () use ($compteTresorerie, $data, $commun, $agences) {
+            $compteTresorerie->update([...$data, 'commun' => $commun]);
+            if (! $commun) {
+                $compteTresorerie->agencesUtilisatrices()->detach();
+            } elseif ($agences !== null) {
+                $compteTresorerie->agencesUtilisatrices()->sync($agences);
+            }
+        });
 
         return back()->with('success', 'Support de trésorerie mis à jour.');
     }
@@ -441,6 +483,64 @@ class CompteTresorerieController extends Controller
         }
 
         return $operateur->value;
+    }
+
+    /**
+     * Compte commun (ADR 0016) : utilisé par au moins une autre agence que sa détentrice, jamais une
+     * caisse (un lieu physique, propre à une agence). Pour un Mobile Money, une agence n'utilise
+     * qu'un seul compte commun par compte comptable — sinon l'encaissement ne saurait lequel
+     * proposer. Retourne les agences utilisatrices à enregistrer, détentrice comprise.
+     *
+     * @param  array<string, mixed>  $data  type, compte_comptable_id, site_id (détentrice)
+     * @return list<string>
+     *
+     * @throws ValidationException
+     */
+    private function verifierCompteCommun(Request $request, string $orgId, array $data, ?CompteTresorerie $courant): array
+    {
+        $request->validate([
+            'agences_utilisatrices' => ['required', 'array'],
+            'agences_utilisatrices.*' => ['string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+        ], [
+            'agences_utilisatrices.required' => 'Choisissez les agences qui utilisent ce compte commun.',
+        ]);
+
+        if ($data['type'] === TypeSupportTresorerie::CAISSE->value) {
+            throw ValidationException::withMessages([
+                'type' => 'Une caisse est propre à son agence : seuls un compte bancaire ou un compte Mobile Money peuvent être communs.',
+            ]);
+        }
+
+        $agences = collect((array) $request->input('agences_utilisatrices'))
+            ->push($data['site_id'])
+            ->unique()
+            ->values();
+
+        if ($agences->count() < 2) {
+            throw ValidationException::withMessages([
+                'agences_utilisatrices' => "Un compte commun doit être utilisé par au moins une autre agence que l'agence détentrice.",
+            ]);
+        }
+
+        if ($data['type'] === TypeSupportTresorerie::MOBILE_MONEY->value) {
+            $conflit = CompteTresorerie::forOrg($orgId)
+                ->where('commun', true)
+                ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
+                ->where('compte_comptable_id', $data['compte_comptable_id'])
+                ->when($courant, fn ($q) => $q->whereKeyNot($courant->id))
+                ->whereHas('agencesUtilisatrices', fn ($q) => $q->whereIn('sites.id', $agences->all()))
+                ->with(['agencesUtilisatrices' => fn ($q) => $q->whereIn('sites.id', $agences->all())])
+                ->first();
+
+            if ($conflit) {
+                $noms = $conflit->agencesUtilisatrices->pluck('nom')->implode(', ');
+                throw ValidationException::withMessages([
+                    'agences_utilisatrices' => "{$noms} utilise déjà le compte commun « {$conflit->libelle} » sur ce compte comptable.",
+                ]);
+            }
+        }
+
+        return $agences->all();
     }
 
     private function comptesDeTresorerieDisponibles(string $orgId): Collection

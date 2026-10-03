@@ -209,7 +209,7 @@ class CommissionEnveloppeGeneratorSiteTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         $this->creerRegle(CommissionCibleType::CODE_SITE, 200, CommissionScopeType::CATEGORIE, $categorie->id);
 
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $this->user->sites()->attach($siege->id, ['role' => 'employe', 'is_default' => false]);
 
         ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe();

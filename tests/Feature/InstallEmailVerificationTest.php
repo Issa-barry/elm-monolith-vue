@@ -144,7 +144,7 @@ class InstallEmailVerificationTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
             ],
             'site' => [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::BOUTIQUE->value,
                 'ville' => 'Conakry',
                 'quartier' => 'Matoto',
             ],

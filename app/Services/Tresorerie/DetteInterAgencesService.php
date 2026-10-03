@@ -11,9 +11,11 @@ use Illuminate\Support\Collection;
 
 /**
  * Dette inter-agences (ADR 0012), dérivée des encaissements eux-mêmes — jamais d'une table de
- * dettes ni d'un montant saisi : un encaissement dont l'agence d'encaissement diffère de l'agence
- * de la commande EST une ligne de dette (agence qui a encaissé → agence de la commande), de son
- * montant exact. Un encaissement ne peut donc jamais compter deux fois, et sa suppression
+ * dettes ni d'un montant saisi : un encaissement dont l'argent est détenu par une autre agence que
+ * celle de la commande EST une ligne de dette (agence détentrice → agence de la commande), de son
+ * montant exact. La détentrice est l'agence du support qui a reçu l'argent (ADR 0016) : l'agence
+ * qui encaisse, sauf paiement sur un compte commun détenu par une autre agence. L'agence qui a
+ * encaissé reste affichée (traçabilité). Un encaissement ne peut donc jamais compter deux fois, et sa suppression
  * (contrepassée) fait disparaître la dette.
  *
  * Statut d'une ligne, selon le règlement inter-agences actif qui la couvre :
@@ -54,9 +56,9 @@ class DetteInterAgencesService
     public function lignes(string $organizationId, ?string $siteDebiteurId = null, ?string $siteCreancierId = null): Collection
     {
         $encaissements = $this->requete($organizationId)
-            ->when($siteDebiteurId, fn (Builder $q) => $q->where('encaissements_ventes.site_encaissement_id', $siteDebiteurId))
+            ->when($siteDebiteurId, fn (Builder $q) => $q->where('encaissements_ventes.site_detenteur_id', $siteDebiteurId))
             ->when($siteCreancierId, fn (Builder $q) => $q->where('fv.site_id', $siteCreancierId))
-            ->with(['facture.commande.client', 'facture.site', 'siteEncaissement', 'creator'])
+            ->with(['facture.commande.client', 'facture.site', 'siteDetenteur', 'siteEncaissement', 'creator'])
             ->orderBy('encaissements_ventes.date_encaissement')
             ->get();
 
@@ -73,8 +75,9 @@ class DetteInterAgencesService
                 'mode_paiement' => $e->mode_paiement?->value,
                 'mode_paiement_label' => $e->operateur_mobile_money?->label() ?? $e->mode_paiement?->label(),
                 'reference_paiement' => $e->reference_paiement,
-                'site_debiteur_id' => $e->site_encaissement_id,
-                'site_debiteur_nom' => $e->siteEncaissement?->nom,
+                'site_debiteur_id' => $e->site_detenteur_id,
+                'site_debiteur_nom' => $e->siteDetenteur?->nom,
+                'site_encaissement_nom' => $e->siteEncaissement?->nom,
                 'site_creancier_id' => $e->facture?->site_id,
                 'site_creancier_nom' => $e->facture?->site?->nom,
                 'facture_reference' => $e->facture?->reference,
@@ -194,7 +197,7 @@ class DetteInterAgencesService
             ->keyBy('encaissement_actif_id');
     }
 
-    /** Encaissements dont l'agence d'encaissement diffère de l'agence de la commande. */
+    /** Encaissements dont l'argent est détenu par une autre agence que celle de la commande. */
     public function requete(string $organizationId): Builder
     {
         return EncaissementVente::query()
@@ -203,7 +206,7 @@ class DetteInterAgencesService
             ->where('fv.organization_id', $organizationId)
             ->whereNull('fv.deleted_at')
             ->whereNotNull('fv.site_id')
-            ->whereNotNull('encaissements_ventes.site_encaissement_id')
-            ->whereColumn('encaissements_ventes.site_encaissement_id', '<>', 'fv.site_id');
+            ->whereNotNull('encaissements_ventes.site_detenteur_id')
+            ->whereColumn('encaissements_ventes.site_detenteur_id', '<>', 'fv.site_id');
     }
 }

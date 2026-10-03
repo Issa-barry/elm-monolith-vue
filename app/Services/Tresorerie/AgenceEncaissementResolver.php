@@ -117,7 +117,7 @@ class AgenceEncaissementResolver
         $affectes = $this->sitesAffectes($user, $organizationId);
         $peutAutreAgence = $user->can(self::PERMISSION);
         $defaut = $this->siteParDefaut($user);
-        $moyensParSite = $this->moyens->parSite($organizationId, $affectes->pluck('id'));
+        $moyensParSite = $this->moyens->parSite($organizationId, $affectes->pluck('id'), avecComptesCommuns: true);
         $caisses = $this->caisses->sitesAvecCaisseActive($organizationId, (string) $user->id);
         $nomsCommande = Site::where('organization_id', $organizationId)
             ->whereIn('id', $factures->pluck('site_id')->filter()->unique()->values())

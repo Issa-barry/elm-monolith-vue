@@ -34,7 +34,7 @@ class TresorerieDisponibiliteServiceTest extends TestCase
         $this->initOrgAndUser(['tresorerie.create']);
         $this->service = app(TresorerieDisponibiliteService::class);
 
-        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
         $this->agence = Site::create(['organization_id' => $this->org->id, 'nom' => 'Agence', 'type' => 'agence', 'localisation' => 'Conakry']);
 
         $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();

@@ -201,7 +201,7 @@ class CommissionGenereeNotificationTest extends TestCase
         Parametre::setDeclencheurCommissionLogistique($org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
 
         $siteSource = Site::create(['organization_id' => $org->id, 'nom' => 'Source', 'type' => 'depot', 'localisation' => 'Conakry']);
-        $siteDest = Site::create(['organization_id' => $org->id, 'nom' => 'Destination', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siteDest = Site::create(['organization_id' => $org->id, 'nom' => 'Destination', 'type' => 'agence', 'is_central_tresorerie' => true, 'localisation' => 'Conakry']);
 
         $livreurUser = $this->makeLivreurUser($org);
 

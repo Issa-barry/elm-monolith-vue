@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { useConfirm } from 'primevue/useconfirm';
 import SiteForm from './partials/SiteForm.vue';
 
 interface Option {
@@ -20,11 +21,13 @@ interface SiteData {
     quartier: string | null;
     telephone: string | null;
     commissions_active: boolean;
+    is_central_tresorerie: boolean;
 }
 
 const props = defineProps<{
     site: SiteData;
     types: Option[];
+    tresorerie_principale: { id: string; nom: string } | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -42,10 +45,33 @@ const form = useForm({
     quartier: props.site.quartier,
     telephone: props.site.telephone,
     commissions_active: props.site.commissions_active,
+    is_central_tresorerie: props.site.is_central_tresorerie,
 });
 
-function submit() {
+const confirm = useConfirm();
+
+function envoyer() {
     form.post(`/backoffice/sites/${props.site.id}`);
+}
+
+function submit() {
+    const actuelle = props.tresorerie_principale;
+    if (
+        form.is_central_tresorerie &&
+        !props.site.is_central_tresorerie &&
+        actuelle
+    ) {
+        confirm.require({
+            header: 'Changer la trésorerie principale ?',
+            message: `Le site « ${actuelle.nom} » est actuellement la trésorerie principale. Si vous continuez, « ${form.nom} » deviendra la nouvelle trésorerie principale.`,
+            acceptLabel: 'Changer',
+            rejectLabel: 'Annuler',
+            accept: envoyer,
+        });
+
+        return;
+    }
+    envoyer();
 }
 </script>
 
@@ -94,6 +120,7 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :types="types"
+                :est-tresorerie-principale="site.is_central_tresorerie"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

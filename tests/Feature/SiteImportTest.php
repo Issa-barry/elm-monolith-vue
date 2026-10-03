@@ -34,7 +34,7 @@ class SiteImportTest extends TestCase
         return array_replace([
             'nom' => 'Matoto',
             'code_facultatif' => '',
-            'type' => 'Siège',
+            'type' => 'Agence',
             'ville_obligatoire' => 'Conakry',
             'quartier_obligatoire' => 'Matoto',
             'telephone_obligatoire' => '+224664039160',
@@ -164,6 +164,29 @@ class SiteImportTest extends TestCase
         $this->assertStringContainsString('MagasinX', $json['lignes'][0]['erreurs'][0]);
     }
 
+    public function test_ancien_type_siege_reste_accepte_et_importe_comme_autre(): void
+    {
+        $json = $this->analyser([
+            $this->ligne(['nom' => 'Matoto', 'type' => 'Siège']),
+            $this->ligne(['nom' => 'Kaloum', 'type' => 'siege', 'telephone_obligatoire' => '+224622671016']),
+        ]);
+
+        $this->assertSame(0, $json['nb_erreurs']);
+        $this->assertSame('autre', $json['lignes'][0]['data']['type']);
+        $this->assertSame('autre', $json['lignes'][1]['data']['type']);
+        $this->assertStringContainsString('« Siège » n\'existe plus', $json['lignes'][0]['normalisations'][0]);
+    }
+
+    public function test_import_d_un_ancien_siege_ne_designe_pas_de_site_central(): void
+    {
+        $json = $this->confirmer([$this->ligne(['nom' => 'Matoto', 'type' => 'Siège'])]);
+
+        $this->assertTrue($json['execute']);
+        $site = Site::where('organization_id', $this->org->id)->where('nom', 'Matoto')->firstOrFail();
+        $this->assertSame('autre', $site->type->value);
+        $this->assertFalse($site->isCentralTresorerie());
+    }
+
     public function test_analyser_flags_invalid_phone(): void
     {
         $json = $this->analyser([
@@ -195,7 +218,7 @@ class SiteImportTest extends TestCase
 
     public function test_analyser_detects_existing_parent_in_db(): void
     {
-        Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
+        Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
 
         $json = $this->analyser([
             $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => 'Matoto', 'telephone_obligatoire' => '+224626078393']),
@@ -239,7 +262,7 @@ class SiteImportTest extends TestCase
 
     public function test_analyser_detects_existing_site_by_nom_case_insensitive(): void
     {
-        Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
+        Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
 
         $json = $this->analyser([
             $this->ligne(['nom' => 'MATOTO']),
@@ -254,7 +277,7 @@ class SiteImportTest extends TestCase
     public function test_analyser_is_scoped_to_organization(): void
     {
         $autreOrg = Organization::factory()->create();
-        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Matoto', 'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
+        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Matoto', 'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
 
         // Même nom mais dans une autre organisation : ne doit pas être détecté
         // comme existant côté organisation courante.
@@ -308,7 +331,7 @@ class SiteImportTest extends TestCase
         ]);
 
         $json = $this->confirmer([
-            $this->ligne(['nom' => 'Matoto', 'type' => 'Siège', 'ville_obligatoire' => 'Conakry']),
+            $this->ligne(['nom' => 'Matoto', 'type' => 'Agence', 'ville_obligatoire' => 'Conakry']),
         ]);
 
         $this->assertTrue($json['execute']);
@@ -335,7 +358,7 @@ class SiteImportTest extends TestCase
     public function test_confirmer_is_scoped_to_organization(): void
     {
         $autreOrg = Organization::factory()->create();
-        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Matoto', 'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
+        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Matoto', 'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto']);
 
         $json = $this->confirmer([
             $this->ligne(['nom' => 'Matoto']),
@@ -360,7 +383,7 @@ class SiteImportTest extends TestCase
     {
         Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->analyser([
@@ -535,7 +558,7 @@ class SiteImportTest extends TestCase
     {
         $existant = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->confirmer([
@@ -556,7 +579,7 @@ class SiteImportTest extends TestCase
     {
         Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $this->confirmer([
@@ -591,7 +614,7 @@ class SiteImportTest extends TestCase
     {
         $existant = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $this->confirmer([
@@ -606,7 +629,7 @@ class SiteImportTest extends TestCase
     {
         $existant = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $this->confirmer([
@@ -633,7 +656,7 @@ class SiteImportTest extends TestCase
     {
         $existant = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
             'description' => 'Site historique', 'longitude' => -13.6773, 'latitude' => 9.5370,
         ]);
 
@@ -687,7 +710,7 @@ class SiteImportTest extends TestCase
         ]);
 
         $json = $this->confirmer([
-            $this->ligne(['nom' => 'Matoto', 'type' => 'Siège', 'ville_obligatoire' => 'Conakry']),
+            $this->ligne(['nom' => 'Matoto', 'type' => 'Agence', 'ville_obligatoire' => 'Conakry']),
         ]);
 
         $this->assertTrue($json['execute']);
@@ -712,7 +735,7 @@ class SiteImportTest extends TestCase
         // réimporter).
         $archive = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Ancien Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
         $archive->delete();
 
@@ -729,7 +752,7 @@ class SiteImportTest extends TestCase
     {
         Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->analyser([
@@ -747,7 +770,7 @@ class SiteImportTest extends TestCase
     {
         Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->confirmer([
@@ -787,7 +810,7 @@ class SiteImportTest extends TestCase
         // entre l'analyse du parent et l'exécution.
         $matoto = Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->confirmer([
@@ -820,7 +843,7 @@ class SiteImportTest extends TestCase
     {
         Site::create([
             'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
-            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+            'type' => 'agence', 'ville' => 'Conakry', 'quartier' => 'Matoto',
         ]);
 
         $json = $this->analyser([

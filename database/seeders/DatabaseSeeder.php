@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             ClientsInscriptionSeeder::class,    // 2 clients sans compte (lookup inscription)
             PrestatairesSeeder::class,          // Prestataires de service (démo "elm")
             FournisseursSeeder::class,          // Fournisseurs (entité séparée, cf. FournisseurController)
-            SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
+            SitesSeeder::class,                 // Sites (agence centrale, usines, dépôts)
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites
             AdminEntrepriseSeeder::class,       // Comptes admin_entreprise additionnels (Matoto)
             // CategorieDefaultSeeder volontairement absent : "elm" n'a pas encore besoin de

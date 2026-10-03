@@ -101,7 +101,7 @@ export interface TresorerieFiche {
     moyens: MoyenEncaissement[];
     especes_disponibles: boolean;
     solde_especes: number | null;
-    /** Paiement impossible (ex : fiche sans agence et aucun siège principal). */
+    /** Paiement impossible (ex : fiche sans agence et aucun site central de trésorerie). */
     message: string | null;
 }
 

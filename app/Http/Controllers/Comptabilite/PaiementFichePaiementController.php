@@ -94,7 +94,7 @@ class PaiementFichePaiementController extends Controller
                 $paiement = PaiementFichePaiement::create([
                     'fiche_id' => $fiche->id,
                     'organization_id' => $fiche->organization_id,
-                    // Agence d'où sort l'argent (siège principal pour une fiche sans agence) : la
+                    // Agence d'où sort l'argent (site central de trésorerie pour une fiche sans agence) : la
                     // pièce comptable et le solde du support sont rattachés à ce site.
                     'site_id' => $support->site_id,
                     'montant' => $data['montant'],
