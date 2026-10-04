@@ -524,3 +524,34 @@ describe('PaymentCard — agences fournies par l’écran (encaissementAgences)'
         expect(wrapper.emitted('submit')).toBeUndefined();
     });
 });
+
+describe('PaymentCard — acompte de précommande (ADR 0019)', () => {
+    it('pré-saisit le montant initial et affiche le minimum', () => {
+        const wrapper = monter({ montantInitial: 30_000, minMontant: 30_000 });
+
+        expect(
+            wrapper.findComponent(InputNumberFactice).props('modelValue'),
+        ).toBe(30_000);
+        expect(wrapper.text()).toContain('Minimum');
+    });
+
+    it('bloque la confirmation sous le minimum et ne soumet rien', async () => {
+        const wrapper = monter({ montantInitial: 20_000, minMontant: 30_000 });
+
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+        await confirmer(wrapper).trigger('click');
+
+        expect(wrapper.emitted('submit')).toBeUndefined();
+    });
+
+    it('soumet un acompte égal ou supérieur au minimum', async () => {
+        const wrapper = monter({ montantInitial: 30_000, minMontant: 30_000 });
+
+        await confirmer(wrapper).trigger('click');
+
+        expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+            montant: 30_000,
+            mode_paiement: 'especes',
+        });
+    });
+});

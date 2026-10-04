@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Comptabilite\CommissionMonitoring;
 use App\Http\Controllers\Controller;
 use App\Services\Commission\CommissionMonitoringService;
 use App\Services\SiteScopeService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -12,16 +13,21 @@ use Illuminate\Http\Request;
  * Relance (unitaire ou multiple) des anomalies sélectionnées dans Commissions → Monitoring —
  * via le moteur officiel uniquement (CommissionMonitoringService::relancer()). Chaque opération
  * est relancée indépendamment : un succès partiel est rapporté tel quel, jamais annulé.
+ *
+ * Une relance multiple est envoyée par l'écran en lots successifs (réponse JSON agrégée côté
+ * écran) : LOT_MAX borne la durée d'une requête, sous le délai nginx (incident 504 du 03/10/2026).
  */
 class RelancerCommissionMonitoringController extends Controller
 {
-    public function __invoke(Request $request, CommissionMonitoringService $monitoring, SiteScopeService $siteScope): RedirectResponse
+    public const LOT_MAX = 25;
+
+    public function __invoke(Request $request, CommissionMonitoringService $monitoring, SiteScopeService $siteScope): RedirectResponse|JsonResponse
     {
         $user = $request->user();
         abort_unless($user->can('commissions.update'), 403);
 
         $valides = $request->validate([
-            'anomalies' => ['required', 'array', 'min:1', 'max:200'],
+            'anomalies' => ['required', 'array', 'min:1', 'max:'.self::LOT_MAX],
             'anomalies.*' => ['required', 'string', 'max:200'],
         ]);
 
@@ -31,6 +37,14 @@ class RelancerCommissionMonitoringController extends Controller
             $user->id,
             $user->isAdmin() ? null : $siteScope->accessibleSiteIds($user),
         );
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'regularisees' => count($resultat['regularisees']),
+                'sans_objet' => count($resultat['sans_objet']),
+                'echecs' => $resultat['echecs'],
+            ]);
+        }
 
         $regularisees = count($resultat['regularisees']);
         $sansObjet = count($resultat['sans_objet']);

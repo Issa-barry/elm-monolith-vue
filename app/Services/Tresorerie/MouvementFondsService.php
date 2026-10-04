@@ -8,6 +8,7 @@ use App\Enums\TypeSupportTresorerie;
 use App\Exceptions\Tresorerie\TransitionMouvementFondsInvalideException;
 use App\Models\CompteTresorerie;
 use App\Models\MouvementFonds;
+use App\Models\User;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\MouvementFondsComptabilisationService;
 use Illuminate\Support\Carbon;
@@ -39,9 +40,16 @@ use Illuminate\Validation\ValidationException;
  * (`tresorerie.recevoir`, `tresorerie.rejeter`) : l'envoyeur peut confirmer son propre versement
  * s'il en a le droit (décision du 27/09/2026, cf. ADR 0001) — `sent_by` / `received_by` le tracent.
  *
- * Solde suffisant contrôlé sous verrou À L'ENVOI, pour les DEUX natures (garantirSoldeSuffisant(),
+ * Son sens inverse, l'approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR
+ * 0018, cf. approvisionnerCaisseAgent()), suit le même workflow et les mêmes écritures : seul l'agent
+ * titulaire de la caisse destinataire confirme ou conteste la réception
+ * (MouvementFonds::receptionReserveeA()), jamais un tiers ni un administrateur à sa place. Un
+ * responsable peut approvisionner sa propre caisse et confirmer lui-même si son rôle a
+ * `tresorerie.recevoir` (révision du 04/10/2026), tracé comme pour un versement.
+ *
+ * Solde suffisant contrôlé sous verrou À L'ENVOI, pour TOUTES les natures (garantirSoldeSuffisant(),
  * revue produit du 22/09/2026) : une caisse dont le solde disponible est nul ou insuffisant ne
- * peut envoyer aucun montant, entre agences comme en versement de caisse dédiée.
+ * peut envoyer aucun montant.
  */
 class MouvementFondsService
 {
@@ -167,6 +175,83 @@ class MouvementFondsService
         });
     }
 
+    /**
+     * Approvisionnement de la caisse dédiée d'un agent depuis une caisse de l'agence, au sein d'un
+     * même site (ADR 0018) : crée le mouvement (nature `approvisionnement_caisse`) ET l'envoie en une
+     * seule opération, comme verserCaisseAgent() dans l'autre sens. La caisse de l'agence baisse dès
+     * l'envoi (pièce vers le compte de transit) ; celle de l'agent n'augmente qu'à la confirmation de
+     * réception PAR L'AGENT LUI-MÊME (recevoir()).
+     *
+     * Règles garanties ici, sous verrou sur la caisse source :
+     *  - source = caisse (type Caisse) d'AGENCE active et validée — jamais une banque, un compte
+     *    Mobile Money ni la caisse d'un agent ;
+     *  - destination = caisse dédiée ACTIVE du même site ;
+     *  - l'envoyeur n'approvisionne sa propre caisse que si son rôle lui permet d'en confirmer
+     *    lui-même la réception (`tresorerie.recevoir`) — sinon l'argent resterait bloqué en transit ;
+     *  - montant > 0 et au plus égal au solde de la caisse source au grand livre (envoyer()).
+     */
+    public function approvisionnerCaisseAgent(string $organizationId, CompteTresorerie $source, string $destinationId, float $montant, ?string $motif, string $userId): MouvementFonds
+    {
+        return DB::transaction(function () use ($organizationId, $source, $destinationId, $montant, $motif, $userId) {
+            $caisse = CompteTresorerie::forOrg($organizationId)->whereKey($source->id)->lockForUpdate()->first();
+
+            if (! $caisse || $caisse->isDediee() || $caisse->type !== TypeSupportTresorerie::CAISSE) {
+                throw ValidationException::withMessages([
+                    'compte_tresorerie_id' => 'Seule une caisse de l\'agence peut approvisionner la caisse d\'un agent.',
+                ]);
+            }
+            if (! $caisse->actif) {
+                throw ValidationException::withMessages([
+                    'compte_tresorerie_id' => $this->supportInactif($caisse, 'elle ne peut pas approvisionner un agent'),
+                ]);
+            }
+
+            $destination = CompteTresorerie::forOrg($organizationId)->find($destinationId);
+            $this->verifierDestinationDeLApprovisionnement($caisse, $destination, $userId);
+
+            if ($montant <= 0) {
+                throw ValidationException::withMessages(['montant' => 'Le montant de l\'approvisionnement doit être positif.']);
+            }
+
+            $mouvement = MouvementFonds::create([
+                'organization_id' => $organizationId,
+                'nature' => NatureMouvementFonds::APPROVISIONNEMENT_CAISSE->value,
+                'site_origine_id' => $caisse->site_id,
+                'site_destination_id' => $caisse->site_id,
+                'compte_tresorerie_origine_id' => $caisse->id,
+                'compte_tresorerie_destination_id' => $destination->id,
+                'montant' => $montant,
+                'moyen_transfert' => 'especes',
+                'commentaire' => $motif !== null && trim($motif) !== '' ? trim($motif) : null,
+                'statut' => StatutMouvementFonds::BROUILLON->value,
+                'created_by' => $userId,
+            ]);
+
+            return $this->envoyer($mouvement, $userId);
+        });
+    }
+
+    private function verifierDestinationDeLApprovisionnement(CompteTresorerie $source, ?CompteTresorerie $destination, string $userId): void
+    {
+        $champ = 'compte_tresorerie_destination_id';
+
+        if (! $destination) {
+            throw ValidationException::withMessages([$champ => 'Caisse de l\'agent introuvable.']);
+        }
+        if (! $destination->isDediee()) {
+            throw ValidationException::withMessages([$champ => "« {$destination->libelle} » n'est pas la caisse d'un agent : un approvisionnement va vers la caisse dédiée d'un agent."]);
+        }
+        if (! $destination->actif) {
+            throw ValidationException::withMessages([$champ => $this->supportInactif($destination)]);
+        }
+        if ($destination->site_id !== $source->site_id) {
+            throw ValidationException::withMessages([$champ => 'La caisse de l\'agent doit appartenir à la même agence que la caisse source.']);
+        }
+        if ($destination->agent_id === $userId && ! User::find($userId)?->can('tresorerie.recevoir')) {
+            throw ValidationException::withMessages([$champ => 'Votre rôle ne vous permet pas de confirmer vous-même la réception : votre caisse doit être approvisionnée par une autre personne.']);
+        }
+    }
+
     private function verifierDestinationDuVersement(CompteTresorerie $source, ?CompteTresorerie $destination): void
     {
         $champ = 'compte_tresorerie_destination_id';
@@ -270,6 +355,7 @@ class MouvementFondsService
             $this->garantirSoldeSuffisant($verrouille, $dateEnvoi);
 
             $verrouille->date_envoi = $dateEnvoi ?? now();
+            $verrouille->sent_at = now();
             $verrouille->sent_by = $userId;
             $verrouille->statut = StatutMouvementFonds::ENVOYE->value;
             $verrouille->save();
@@ -305,28 +391,20 @@ class MouvementFondsService
             if ($destination->site_id !== $verrouille->site_destination_id) {
                 throw new \InvalidArgumentException('Le support de trésorerie choisi ne correspond pas au site de destination du mouvement.');
             }
-            $this->refuserCaisseDediee($destination, 'compte_tresorerie_destination_id');
+            if ($verrouille->isApprovisionnement()) {
+                // La caisse destinataire EST la caisse dédiée de l'agent : seul lui confirme.
+                $this->garantirReceptionParLeBeneficiaire($verrouille, $userId, 'confirmer la réception', 'tresorerie.recevoir');
+            } else {
+                $this->refuserCaisseDediee($destination, 'compte_tresorerie_destination_id');
+            }
             $this->refuserSupportNonValide($destination, 'compte_tresorerie_destination_id');
 
-            if ($verrouille->isInterne()) {
-                // La caisse de destination d'un versement est fixée à l'envoi : la réception la
-                // confirme, elle ne la remplace pas.
-                if ($destination->id !== $verrouille->compte_tresorerie_destination_id) {
-                    throw ValidationException::withMessages([
-                        'compte_tresorerie_destination_id' => 'La caisse de destination d\'un versement est fixée à l\'envoi et ne peut pas être changée.',
-                    ]);
-                }
-                if (! $destination->actif) {
-                    throw ValidationException::withMessages([
-                        'compte_tresorerie_destination_id' => $this->supportInactif(
-                            $destination,
-                            $destination->estValide() ? 'réactivez-la avant de confirmer la réception' : 'validez-la avant de confirmer la réception',
-                        ),
-                    ]);
-                }
+            if ($verrouille->isInterne() || $verrouille->isApprovisionnement()) {
+                $this->verifierDestinationFixee($verrouille, $destination);
             }
 
             $verrouille->date_reception = $dateReception ?? now();
+            $verrouille->received_at = now();
             $verrouille->received_by = $userId;
             $verrouille->compte_tresorerie_destination_id = $destination->id;
             $verrouille->statut = StatutMouvementFonds::RECU->value;
@@ -337,6 +415,51 @@ class MouvementFondsService
 
             return $verrouille->fresh();
         });
+    }
+
+    /**
+     * Versement et approvisionnement ont leur caisse de destination fixée à l'envoi : la réception
+     * la confirme, elle ne la remplace pas — et cette caisse doit encore être active.
+     */
+    private function verifierDestinationFixee(MouvementFonds $mouvement, CompteTresorerie $destination): void
+    {
+        if ($destination->id !== $mouvement->compte_tresorerie_destination_id) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_destination_id' => 'La caisse de destination est fixée à l\'envoi et ne peut pas être changée.',
+            ]);
+        }
+        if (! $destination->actif) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_destination_id' => $this->supportInactif(
+                    $destination,
+                    $destination->estValide() ? 'réactivez-la avant de confirmer la réception' : 'validez-la avant de confirmer la réception',
+                ),
+            ]);
+        }
+    }
+
+    /**
+     * Réception d'un approvisionnement (ADR 0018) : seul l'agent titulaire de la caisse destinataire
+     * confirme ou conteste — jamais un tiers, jamais un administrateur à sa place. S'il a lui-même
+     * remis l'argent, son rôle doit avoir la permission de l'action (comme pour un versement).
+     * Garantie réelle de la règle, indépendante de la policy (que le Gate::before du super admin
+     * court-circuite).
+     */
+    private function garantirReceptionParLeBeneficiaire(MouvementFonds $mouvement, ?string $userId, string $action, string $permissionSiRemettant): void
+    {
+        $mouvement->loadMissing('compteTresorerieDestination');
+        $beneficiaire = $mouvement->beneficiaireId();
+
+        if ($userId === null || $beneficiaire === null || $userId !== $beneficiaire) {
+            throw ValidationException::withMessages([
+                'mouvement' => "Seul l'agent titulaire de la caisse approvisionnée peut {$action}.",
+            ]);
+        }
+        if ($userId === $mouvement->sent_by && ! User::find($userId)?->can($permissionSiRemettant)) {
+            throw ValidationException::withMessages([
+                'mouvement' => "Votre rôle ne vous permet pas de {$action} d'un approvisionnement que vous avez vous-même remis.",
+            ]);
+        }
     }
 
     /** Annulation : uniquement tant qu'aucun fonds n'a quitté l'origine (BROUILLON). */
@@ -366,15 +489,19 @@ class MouvementFondsService
      * une preuve que l'argent est physiquement revenu à l'origine, seulement
      * qu'un litige existe (revue Codex du 2026-08-22). Le mouvement reste "en
      * transit" (cf. StatutMouvementFonds::isEnTransit()) jusqu'à ce
-     * qu'une investigation tranche via recevoir() ou confirmerRetour().
+     * qu'une investigation tranche via recevoir() ou confirmerRetour(). Pour un
+     * approvisionnement, seul l'agent bénéficiaire peut contester (ADR 0018).
      */
     public function contester(MouvementFonds $mouvement, ?string $userId, string $motif): MouvementFonds
     {
-        return DB::transaction(function () use ($mouvement, $motif) {
+        return DB::transaction(function () use ($mouvement, $userId, $motif) {
             $verrouille = MouvementFonds::whereKey($mouvement->id)->lockForUpdate()->firstOrFail();
 
             if ($verrouille->statut !== StatutMouvementFonds::ENVOYE) {
                 throw TransitionMouvementFondsInvalideException::pour($verrouille, 'contester', [StatutMouvementFonds::ENVOYE]);
+            }
+            if ($verrouille->isApprovisionnement()) {
+                $this->garantirReceptionParLeBeneficiaire($verrouille, $userId, 'contester la réception', 'tresorerie.rejeter');
             }
 
             $verrouille->update([
@@ -400,6 +527,14 @@ class MouvementFondsService
 
             if ($verrouille->statut !== StatutMouvementFonds::CONTESTE) {
                 throw TransitionMouvementFondsInvalideException::pour($verrouille, 'confirmerRetour', [StatutMouvementFonds::CONTESTE]);
+            }
+            // Approvisionnement contesté : le retour est constaté côté agence, jamais par l'agent qui
+            // a lui-même déclaré ne rien avoir reçu.
+            $verrouille->loadMissing('compteTresorerieDestination');
+            if ($verrouille->isApprovisionnement() && $userId !== null && $userId === $verrouille->beneficiaireId()) {
+                throw ValidationException::withMessages([
+                    'mouvement' => "L'agent bénéficiaire ne peut pas confirmer lui-même le retour des fonds : c'est à l'agence de le constater.",
+                ]);
             }
 
             if ($verrouille->pieceEnvoi) {

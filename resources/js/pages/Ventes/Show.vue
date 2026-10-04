@@ -25,6 +25,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    CalendarClock,
     CheckCircle,
     CheckCircle2,
     ExternalLink,
@@ -81,6 +82,8 @@ interface Encaissement {
     mode_paiement_label: string;
     operateur_mobile_money_label: string | null;
     reference_paiement: string | null;
+    /** Acompte de précommande, reçu avant la remise (ADR 0019). */
+    est_acompte: boolean;
     note: string | null;
     created_by: string | null;
     /** Agence qui a reçu l'argent (ADR 0012). */
@@ -191,6 +194,9 @@ interface CommandeData {
     mode_tarification_label: string | null;
     mode_remise_grossiste: string | null;
     mode_remise_grossiste_label: string | null;
+    est_precommande: boolean;
+    date_remise_prevue: string | null;
+    en_retard: boolean;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -786,6 +792,9 @@ const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
 const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
+const estPrecommandeReservee = computed(
+    () => props.commande.statut === 'reservee',
+);
 
 const currentStepIdx = computed(() => {
     if (
@@ -794,6 +803,9 @@ const currentStepIdx = computed(() => {
         props.commande.is_annulee_erreur_saisie
     )
         return -1;
+    // Précommande pas encore remise (ADR 0019) : rien n'est chargé ni facturé — seule la 1re étape,
+    // libellée « Réservée », est en cours (frise dédiée aux précommandes : lot 2).
+    if (estPrecommandeReservee.value) return 0;
     if (isCommandeDirecte.value) {
         if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
         if (props.facture?.statut === 'payee')
@@ -852,6 +864,7 @@ const commissionsAvecAnomalie = computed(
 );
 
 function stepLabel(idx: number, defaultLabel: string): string {
+    if (idx === 0 && estPrecommandeReservee.value) return 'Réservée';
     return idx === COMMISSIONS_STEP_IDX.value && commissionsAvecAnomalie.value
         ? 'À régulariser'
         : defaultLabel;
@@ -1039,6 +1052,33 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <span class="text-sm text-muted-foreground">{{
                                 commande.created_at
                             }}</span>
+                        </div>
+                        <!-- Marqueur de type (pas un statut) — retard en ambre, jamais en rouge. -->
+                        <div
+                            v-if="commande.est_precommande"
+                            class="mt-2 flex flex-wrap items-center gap-2 text-sm"
+                        >
+                            <span
+                                class="inline-flex items-center gap-1 rounded border border-blue-300 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:text-blue-300"
+                            >
+                                <CalendarClock class="h-3.5 w-3.5" />
+                                Précommande
+                            </span>
+                            <span
+                                v-if="commande.date_remise_prevue"
+                                :class="
+                                    commande.en_retard
+                                        ? 'font-medium text-amber-700 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
+                            >
+                                {{
+                                    commande.en_retard
+                                        ? 'En retard — remise prévue le'
+                                        : 'Remise prévue le'
+                                }}
+                                {{ commande.date_remise_prevue }}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -2030,6 +2070,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
                                         >
                                             {{ enc.reference_paiement ?? '—' }}
+                                            <span
+                                                v-if="enc.est_acompte"
+                                                class="ml-1 text-xs font-medium text-blue-700 dark:text-blue-300"
+                                                >· Acompte</span
+                                            >
                                         </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"

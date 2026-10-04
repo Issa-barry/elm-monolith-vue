@@ -120,7 +120,7 @@ class CommissionsAuditerVentesCommand extends Command
         }
 
         $this->table(
-            ['Commande', 'Numéro', 'Statut génération', 'Motif'],
+            ['Commande', 'Référence', 'Statut génération', 'Motif'],
             $anomalies->map(function (CommandeVente $commande) use ($processusId) {
                 $derniere = $processusId
                     ? CommissionGenerationAttempt::where('source_type', CommandeVente::class)
@@ -132,7 +132,7 @@ class CommissionsAuditerVentesCommand extends Command
 
                 return [
                     $commande->id,
-                    $commande->numero,
+                    $commande->reference,
                     $derniere?->statut->label() ?? 'Jamais tentée',
                     $derniere?->motif_erreur ?? '—',
                 ];

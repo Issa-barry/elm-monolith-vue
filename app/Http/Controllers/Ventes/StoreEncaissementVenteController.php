@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Ventes;
 
 use App\Enums\AuditEvent;
-use App\Enums\ModePaiement;
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Controller;
 use App\Models\EncaissementVente;
@@ -13,20 +12,19 @@ use App\Services\AuditLogService;
 use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
-use App\Services\Tresorerie\AgenceEncaissementResolver;
-use App\Services\Tresorerie\CaisseAgentResolver;
-use App\Services\Tresorerie\MoyensEncaissementResolver;
+use App\Services\Ventes\SaisieEncaissementVente;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Laravel\Pennant\Feature;
 
 class StoreEncaissementVenteController extends Controller
 {
-    public function __construct(private readonly AuditLogService $auditService) {}
+    public function __construct(
+        private readonly AuditLogService $auditService,
+        private readonly SaisieEncaissementVente $saisie,
+    ) {}
 
     public function __invoke(Request $request, FactureVente $facture_vente): RedirectResponse
     {
@@ -53,86 +51,20 @@ class StoreEncaissementVenteController extends Controller
 
         $montantRestant = $facture_vente->montant_restant;
 
-        // mode_paiement reste l'une des 4 valeurs génériques (especes/mobile_money/virement/cheque)
-        // attendues par la comptabilisation — jamais un opérateur (cf. docs/encaissements.md).
-        // Hors espèces, l'utilisateur choisit un SUPPORT de trésorerie de l'agence de la facture
-        // (`compte_tresorerie_id`, décision du 24/09/2026) : c'est lui qui détermine le compte
-        // débité et, pour le Mobile Money, l'opérateur — jamais une valeur libre venue du
-        // navigateur. Référence obligatoire pour Mobile Money et Virement (rapprochement).
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
-            'date_encaissement' => 'nullable|date',
-            'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'compte_tresorerie_id' => [
-                'nullable', 'string',
-                'required_unless:mode_paiement,'.ModePaiement::ESPECES->value,
-            ],
-            'reference_paiement' => [
-                'nullable', 'string', 'max:190',
-                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
-            ],
-            'note' => 'nullable|string|max:2000',
-            'site_encaissement_id' => 'nullable|string',
+            ...SaisieEncaissementVente::regles(),
         ], [
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit etre superieur a 0.',
             'montant.max' => 'Le montant ne peut pas depasser le restant du.',
-            'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
-            'mode_paiement.in' => 'Mode de paiement invalide.',
-            'compte_tresorerie_id.required_unless' => 'Choisissez le compte qui reçoit ce paiement.',
-            'reference_paiement.required_if' => 'La reference du paiement est obligatoire pour ce mode de paiement.',
+            ...SaisieEncaissementVente::messages(),
         ]);
 
-        // Agence qui reçoit réellement l'argent (ADR 0012) : toujours une agence de l'utilisateur qui
-        // encaisse — jamais l'agence de la facture par défaut ; une agence autre que celle de la
-        // commande exige `factures.encaisser_autre_agence` ; sans agence d'affectation, refus.
-        // Tout ce qui suit (moyens, caisse dédiée, pièce comptable) se rapporte à CETTE agence.
-        $siteEncaissementId = app(AgenceEncaissementResolver::class)->resoudre(
-            $request->user(),
-            $facture_vente,
-            $data['site_encaissement_id'] ?? null,
-        );
-
-        // Un moyen n'est accepté que s'il figure dans la liste proposée pour l'agence d'encaissement
-        // (support actif de cette agence, du bon type/opérateur) — même source que PaymentCard.
-        $data['operateur_mobile_money'] = null;
-        if ($data['mode_paiement'] === ModePaiement::ESPECES->value) {
-            $data['compte_tresorerie_id'] = null;
-        } else {
-            $support = app(MoyensEncaissementResolver::class)->supportPour(
-                $facture_vente->organization_id,
-                $siteEncaissementId,
-                $data['compte_tresorerie_id'],
-                $data['mode_paiement'],
-            );
-
-            if (! $support) {
-                throw ValidationException::withMessages([
-                    'compte_tresorerie_id' => "Ce moyen de paiement n'est pas disponible dans l'agence d'encaissement : aucun support de trésorerie actif ne peut le recevoir.",
-                ]);
-            }
-
-            $data['operateur_mobile_money'] = $support->operateur_mobile_money?->value;
-        }
-
-        if ($data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value) {
-            $data['reference_paiement'] = $this->referenceMobileMoneyLibre($facture_vente, $data['reference_paiement']);
-        }
-
-        $data['date_encaissement'] ??= now()->toDateString();
-
-        // Espèces = argent physiquement détenu par l'auteur : il doit atterrir dans SA caisse
-        // dédiée, jamais sur le compte partagé de l'agence (règle du 23/09/2026 — avant elle, un
-        // agent sans caisse pouvait encaisser et l'argent retombait sur 571000 sans responsable).
-        // Vérifié ici, côté serveur, quel que soit l'état du bouton désactivé dans PaymentCard :
-        // le frontend n'est jamais la seule protection (CLAUDE.md §9).
-        app(CaisseAgentResolver::class)->garantirCaissePourEspeces(
-            $data['mode_paiement'],
-            (string) auth()->id(),
-            $facture_vente,
-            $data['date_encaissement'],
-            $siteEncaissementId,
-        );
+        // Agence d'encaissement, support, référence Mobile Money unique et caisse dédiée pour les
+        // espèces : contrôles partagés avec l'acompte de précommande (cf. SaisieEncaissementVente).
+        $data = [...$data, ...$this->saisie->preparer($request->user(), $facture_vente, $data)];
+        $siteEncaissementId = $data['site_encaissement_id'];
 
         // Transaction : l'encaissement, la transition de statut de la facture (donc la
         // naissance éventuelle de la commission de vente sous FACTURE_ENCAISSEE — cf.
@@ -219,7 +151,7 @@ class StoreEncaissementVenteController extends Controller
                 throw $e;
             }
 
-            throw $this->referenceDejaUtilisee(
+            throw $this->saisie->referenceDejaUtilisee(
                 EncaissementVente::factureUtilisantReferenceMobileMoney($facture_vente->organization_id, $data['reference_paiement']),
             );
         } catch (\RuntimeException $e) {
@@ -227,40 +159,5 @@ class StoreEncaissementVenteController extends Controller
         }
 
         return redirect()->back()->with('success', 'Encaissement enregistre.');
-    }
-
-    /**
-     * Une référence Mobile Money ne sert qu'une fois dans l'organisation, quels que soient la vente,
-     * l'agence, l'agent ou l'opérateur (ADR 0014). Ce contrôle donne le message ; l'index unique de
-     * `cle_reference_mobile_money` tranche entre deux saisies simultanées (catch de __invoke).
-     */
-    private function referenceMobileMoneyLibre(FactureVente $facture, ?string $reference): ?string
-    {
-        $reference = EncaissementVente::normaliserReference($reference);
-
-        $factureUtilisatrice = EncaissementVente::factureUtilisantReferenceMobileMoney($facture->organization_id, $reference);
-        if ($factureUtilisatrice !== null) {
-            throw $this->referenceDejaUtilisee($factureUtilisatrice);
-        }
-
-        return $reference;
-    }
-
-    /**
-     * Le message nomme la facture qui utilise déjà la référence ; `reference_paiement_facture` porte
-     * ce numéro seul, que PaymentCard rend copiable. Sans facture identifiable, message générique.
-     */
-    private function referenceDejaUtilisee(?string $factureReference): ValidationException
-    {
-        if (blank($factureReference)) {
-            return ValidationException::withMessages([
-                'reference_paiement' => EncaissementVente::MESSAGE_REFERENCE_MOBILE_MONEY_UTILISEE,
-            ]);
-        }
-
-        return ValidationException::withMessages([
-            'reference_paiement' => "Référence déjà utilisée — facture {$factureReference}",
-            'reference_paiement_facture' => $factureReference,
-        ]);
     }
 }

@@ -197,8 +197,10 @@ class VenteComptabilisationService
         $siteEncaissementId = $encaissement->site_encaissement_id ?? $facture->site_id;
         $pourAutreAgence = $encaissement->estPourAutreAgence();
 
+        // Acompte de précommande (ADR 0019) : la vente n'est pas encore réalisée, l'argent reçu est
+        // une avance (419100) — imputée sur le compte client seulement à la remise.
         $ligneClient = [
-            'role' => 'client',
+            'role' => $encaissement->est_acompte ? 'avance_client' : 'client',
             'sens' => 'credit',
             'montant' => $montant,
         ];
@@ -227,7 +229,7 @@ class VenteComptabilisationService
                 // de la facture parente.
                 organizationId: $facture->organization_id,
                 dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
-                libelle: 'Encaissement facture '.$facture->reference,
+                libelle: ($encaissement->est_acompte ? 'Acompte précommande ' : 'Encaissement facture ').$facture->reference,
                 lignes: [
                     $this->ligneTresorerieEncaissement($encaissement, $facture, $montant),
                     $ligneCredit,

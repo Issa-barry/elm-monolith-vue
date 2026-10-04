@@ -23,6 +23,12 @@ class CommandeVentePolicy
         return $user->can('ventes.create');
     }
 
+    /** Création d'une précommande, acompte initial compris (ADR 0019) — permission dédiée. */
+    public function precommander(User $user): bool
+    {
+        return $user->can('ventes.precommander');
+    }
+
     public function update(User $user, CommandeVente $commande): bool
     {
         return $user->can('ventes.update')

@@ -152,7 +152,7 @@ Ce document distingue deux couches, volontairement séparées :
 |---|---|---|---|
 | `vente_facturee` | Facture quitte le statut CREEE | Engagement, shadow (try/catch, ne bloque jamais la vente) | `client` (411) / `produit_vente` (701) |
 | `vente_retour` | Retour de livraison avant encaissement (`CommandeVenteRetour`), cf. `retour-commande.md` | Régularisation de la facture déjà comptabilisée, shadow (try/catch, ne bloque jamais le retour) — une pièce par retour, écriture inverse de `vente_facturee` sur la valeur retournée ; échec tracé dans le journal d'activité de la commande, repris par `comptabilite:rattraper --type=retour`, contrôlé par `comptabilite:auditer` | `produit_vente` (701, débit) / `client` (411, crédit) — mêmes comptes que `vente_facturee` |
-| `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`). Encaissement reçu par une **autre agence** que celle de la commande (ADR 0012) : pièce posée sur le site d'encaissement, `liaison` (181000, tiers = agence de la commande) au lieu de `client` |
+| `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) — ou `avance_client` (419100) pour un **acompte de précommande** (`est_acompte`, vente pas encore réalisée, ADR 0019) — / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`). Encaissement reçu par une **autre agence** que celle de la commande (ADR 0012) : pièce posée sur le site d'encaissement, `liaison` (181000, tiers = agence de la commande) au lieu de `client` |
 | `encaissement_vente_pour_compte` | `EncaissementVente` créé par une autre agence que celle de la commande (ADR 0012) | Règlement, **bloquant**, même transaction que `encaissement_vente_recu` | `liaison` (181000, débit, tiers = agence qui a encaissé) / `client` (411) — site de la commande |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
@@ -421,8 +421,68 @@ mouvements entre agences).
   - **Mouvements** : « En attente de confirmation » sous le statut de tout versement Envoyé, visible
     de l'envoyeur comme du destinataire.
   Après la réception : la caisse de l'agence est créditée, « en cours de versement » retombe à 0.
-- **Non traité** : le sens inverse (alimenter une caisse dédiée depuis la caisse de l'agence) ; un
-  contrôle de solde pour les mouvements entre agences (il n'en existe toujours pas).
+- **Sens inverse — approvisionnement de la caisse d'un agent** (livré le 04/10/2026, [ADR
+  0018](adr/0018-approvisionnement-caisse-agent.md)) : voir la section suivante.
+
+### Approvisionnement de la caisse d'un agent (ADR 0018)
+
+Une agence remet des espèces de **sa caisse** à la **caisse dédiée d'un agent** (même agence), par
+exemple pour qu'il paie une commission en espèces (ADR 0009 : les espèces d'un paiement sortent de la
+caisse dédiée du payeur).
+
+- **Où** : Trésorerie → Supports, bouton « Approvisionner un agent » sur la ligne de la caisse de
+  l'agence. On choisit l'agent (caisses dédiées actives de l'agence ; la sienne seulement si son
+  rôle a `tresorerie.recevoir`), le montant
+  (solde disponible affiché) et un motif facultatif. Nature du mouvement :
+  `approvisionnement_caisse` (« Approvisionnement de caisse »), distincte du versement pour ne jamais
+  mélanger les calculs qui supposent un versement agent → agence (en cours de versement, Financement,
+  remises ADR 0016).
+- **Règles (serveur, `MouvementFondsService::approvisionnerCaisseAgent()`)** : source = caisse (type
+  Caisse) **d'agence** active — jamais une banque, un Mobile Money ni la caisse d'un agent ;
+  destination = caisse dédiée **active** du **même site** ; l'envoyeur n'approvisionne **sa propre
+  caisse** que si son rôle a `tresorerie.recevoir` (sinon il ne pourrait pas confirmer et l'argent
+  resterait bloqué en transit) ; montant > 0 et au plus égal au solde de la caisse source au grand livre (sous
+  verrou). Création et envoi en une seule opération, comme le versement : pas de brouillon, donc pas
+  d'annulation.
+- **Droit d'envoyer** : `tresorerie.envoyer` + rattachement à l'agence (admins : toutes)
+  — `CompteTresoreriePolicy::approvisionner()`. Ce droit ne donne jamais celui de confirmer pour un
+  autre agent.
+- **Réception par le titulaire** : **seul l'agent titulaire** de la caisse destinataire confirme
+  (« J'ai reçu les espèces ») ou conteste — **aucune permission requise**, et ni un tiers, ni un
+  administrateur, ni un super administrateur ne peuvent le faire à sa place
+  (`MouvementFonds::receptionReserveeA()`, revérifiée par le service car le `Gate::before` du super
+  admin court-circuite les policies).
+- **Sa propre caisse (révision du 04/10/2026)** : un responsable (admin, manager…) gère à la fois sa
+  caisse dédiée et celle de l'agence. Il peut s'approvisionner lui-même et confirmer lui-même la
+  réception si son rôle a `tresorerie.recevoir` (contester : `tresorerie.rejeter`), comme pour un
+  versement (ADR 0001). L'auto-confirmation est tracée (`sent_by` = `received_by`, « Confirmé par
+  l'expéditeur » dans Mouvements). Sans ces permissions, sa caisse ne lui est pas proposée et le
+  serveur refuse.
+- **Contestation / retour** : l'agent conteste (« je n'ai rien reçu ») ; le retour est constaté
+  **côté agence** (`tresorerie.confirmer_retour`), jamais par l'agent lui-même ; il contrepasse la
+  pièce d'envoi et recrédite la caisse de l'agence. Un approvisionnement contesté reste confirmable
+  par l'agent (l'argent a finalement été reçu).
+- **Soldes et écritures** : mêmes pièces que tout mouvement — envoi : débit 588000 (transit) / crédit
+  caisse de l'agence ; réception : débit sous-compte de la caisse de l'agent (571001…) / crédit 588000.
+  Tant que l'agent n'a pas confirmé, le montant n'est dans **aucun** solde et n'est pas utilisable.
+- **Traçabilité** : `sent_by` (remis par) et `received_by` (reçu par), avec l'**heure** de chaque
+  étape (`sent_at`, `received_at`, ajoutés le 04/10/2026 pour tous les mouvements ; nuls pour les
+  mouvements antérieurs). L'écran Mouvements affiche la date et l'heure quand elles sont connues.
+- **Affichages** :
+  - **Supports** : sous le solde de la caisse de l'agent, « À confirmer par l'agent : X GNF »
+    (`TresorerieDisponibiliteService::approvisionnementsEnCours()`, lecture seule, jamais ajouté au
+    solde).
+  - **Mouvements** : affiché caisse → caisse, « À confirmer par <agent> » tant qu'Envoyé ou Contesté ;
+    « Confirmer réception » et « Contester » n'apparaissent que chez l'agent bénéficiaire.
+  - **Ma situation** (tous les rôles) : bloc « Espèces à confirmer » avec « Confirmer la réception »
+    et « Contester » ; badge sur le menu « Ma situation ». L'agent n'a besoin d'aucun accès à la
+    trésorerie.
+  - **Fiche caisse** (onglet Caisse du rapport) : catégorie « Approvisionnements reçus de l'agence ».
+- Une caisse d'agent ne peut pas être désactivée tant qu'un approvisionnement vers elle est Envoyé
+  ou Contesté.
+- **Non traité** : l'approvisionnement direct entre deux caisses d'agents (l'argent passe toujours
+  par la caisse de l'agence). Le solde de la caisse source est contrôlé à l'envoi pour **toutes** les
+  natures de mouvement (`MouvementFondsService::envoyer()`).
 
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
 Le calcul existe depuis le 26/09/2026 : `FicheCaisseService` (tableau de caisse tiré du grand livre,

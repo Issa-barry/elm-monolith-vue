@@ -39,6 +39,7 @@ use App\Http\Controllers\Clients\UpdateTarifsGrossisteClientController;
 use App\Http\Controllers\Clients\UpdateVehiculeClientController;
 use App\Http\Controllers\Clients\VerifierTelephoneClientController;
 use App\Http\Controllers\CommandeAchatController;
+use App\Http\Controllers\Comptabilite\ApprovisionnerCaisseAgentController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -217,6 +218,7 @@ use App\Http\Controllers\Ventes\CheckPartageCommissionCommandeVenteController;
 use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
 use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\CreateCommandeVenteController;
+use App\Http\Controllers\Ventes\CreatePrecommandeController;
 use App\Http\Controllers\Ventes\DemanderCodeAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
@@ -232,6 +234,7 @@ use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\ShowCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
+use App\Http\Controllers\Ventes\StorePrecommandeController;
 use App\Http\Controllers\Ventes\UpdateCommandeVenteController;
 use App\Http\Controllers\Ventes\ValiderCommandeVenteController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
@@ -419,6 +422,12 @@ Route::prefix('backoffice')->group(function () {
             // rester identique à celui de ventes.show : show(CommandeVente $vente) résout le
             // binding implicite par nom de paramètre, pas par position.
             Route::get('distributions/{vente}', ShowCommandeVenteController::class)->name('distributions.show');
+            // Précommandes (ADR 0019) : liste = même contrôleur que ventes.index, filtrée sur
+            // est_precommande par nom de route ; création sur ses propres routes, jamais via un
+            // sélecteur du formulaire de vente (deux points d'entrée distincts).
+            Route::get('precommandes', IndexCommandeVenteController::class)->name('precommandes.index');
+            Route::get('precommandes/create', CreatePrecommandeController::class)->name('precommandes.create');
+            Route::post('precommandes', StorePrecommandeController::class)->name('precommandes.store');
             Route::patch('ventes/{commande_vente}/valider', ValiderCommandeVenteController::class)->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', AnnulerCommandeVenteController::class)->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', AvancerStatutVenteController::class)->name('ventes.statut.avancer');
@@ -794,6 +803,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
+                Route::post('supports/{compteTresorerie}/approvisionner', ApprovisionnerCaisseAgentController::class)->name('supports.approvisionner');
 
                 // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
                 // et leur règlement (création + envoi en une opération).

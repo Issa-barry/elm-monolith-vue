@@ -278,34 +278,126 @@ function basculer(id: string, coche: boolean) {
         : selection.value.filter((s) => s !== id);
 }
 
-function relancer(ids: string[]) {
+// Lots successifs : chaque requête reste courte (sous le délai nginx), quelle que soit la
+// taille de la sélection — même plafond serveur : RelancerCommissionMonitoringController::LOT_MAX.
+const LOT_RELANCE = 10;
+const progression = ref<{ fait: number; total: number } | null>(null);
+
+interface ResultatRelance {
+    regularisees: number;
+    sans_objet: number;
+    echecs: { reference: string; message: string }[];
+}
+
+async function relancerLot(ids: string[]): Promise<ResultatRelance> {
+    const response = await fetch(`${URL_MONITORING}/relancer`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': decodeURIComponent(
+                document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)?.[1] ??
+                    '',
+            ),
+        },
+        body: JSON.stringify({ anomalies: ids }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+        const premiere = Object.values(data?.errors ?? {}).flat()[0];
+        throw new Error(
+            typeof premiere === 'string'
+                ? premiere
+                : (data?.message ?? 'La relance a échoué.'),
+        );
+    }
+    return data as ResultatRelance;
+}
+
+// Mêmes messages que la réponse non-JSON de RelancerCommissionMonitoringController.
+function afficherResultat(r: ResultatRelance, interruption: string | null) {
+    const prefixe =
+        r.regularisees > 0
+            ? `${r.regularisees} commission(s) régularisée(s). `
+            : '';
+    let detailMessage: string;
+    let severity: 'success' | 'warn' | 'error';
+
+    if (interruption !== null) {
+        detailMessage = `${prefixe}Relance interrompue : ${interruption}`;
+        severity = 'error';
+    } else if (r.echecs.length > 0) {
+        const premier = r.echecs[0];
+        detailMessage =
+            prefixe +
+            (r.echecs.length === 1
+                ? `La génération a de nouveau échoué pour ${premier.reference} : ${premier.message}`
+                : `${r.echecs.length} anomalie(s) toujours en échec (ex. ${premier.reference} : ${premier.message}).`);
+        severity = r.regularisees > 0 ? 'warn' : 'error';
+    } else if (r.regularisees === 0 && r.sans_objet === 0) {
+        detailMessage = 'Aucune anomalie ouverte à relancer dans la sélection.';
+        severity = 'error';
+    } else {
+        detailMessage =
+            r.regularisees === 1 && r.sans_objet === 0
+                ? 'Commission régularisée avec succès.'
+                : (
+                      prefixe +
+                      (r.sans_objet > 0
+                          ? `${r.sans_objet} anomalie(s) désormais sans objet.`
+                          : '')
+                  ).trim();
+        severity = 'success';
+    }
+
+    toast.add({
+        group: 'top',
+        severity,
+        summary: 'Relance',
+        detail: detailMessage,
+        life: severity === 'success' ? 4000 : 8000,
+    });
+}
+
+async function relancer(ids: string[]) {
     if (relanceEnCours.value || ids.length === 0) return;
     relanceEnCours.value = true;
-    router.post(
-        `${URL_MONITORING}/relancer`,
-        { anomalies: ids },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                selection.value = [];
-                detail.value = null;
-            },
-            onError: (errors) =>
-                toast.add({
-                    group: 'top',
-                    severity: 'error',
-                    summary: 'Relance',
-                    detail:
-                        errors.relance ??
-                        errors.anomalies ??
-                        'La relance a échoué.',
-                    life: 8000,
-                }),
-            onFinish: () => {
-                relanceEnCours.value = false;
-            },
+    progression.value = { fait: 0, total: ids.length };
+
+    const cumul: ResultatRelance = {
+        regularisees: 0,
+        sans_objet: 0,
+        echecs: [],
+    };
+    let interruption: string | null = null;
+    try {
+        for (let i = 0; i < ids.length; i += LOT_RELANCE) {
+            const r = await relancerLot(ids.slice(i, i + LOT_RELANCE));
+            cumul.regularisees += r.regularisees;
+            cumul.sans_objet += r.sans_objet;
+            cumul.echecs.push(...r.echecs);
+            progression.value = {
+                fait: Math.min(i + LOT_RELANCE, ids.length),
+                total: ids.length,
+            };
+        }
+    } catch (e) {
+        interruption = e instanceof Error ? e.message : 'La relance a échoué.';
+    }
+
+    afficherResultat(cumul, interruption);
+    if (interruption === null && cumul.echecs.length === 0) {
+        selection.value = [];
+        detail.value = null;
+    }
+
+    router.reload({
+        onFinish: () => {
+            relanceEnCours.value = false;
+            progression.value = null;
         },
-    );
+    });
 }
 
 // ── Détail ───────────────────────────────────────────────────────────────────
@@ -377,10 +469,19 @@ function montant(val: number | null | undefined): string {
                                 class="mr-1.5 h-3.5 w-3.5"
                                 :class="relanceEnCours && 'animate-spin'"
                             />
-                            Relancer la sélection
-                            <span v-if="selection.length > 0"
-                                >({{ selection.length }})</span
+                            <template
+                                v-if="progression && progression.total > 1"
                             >
+                                Relance {{ progression.fait }}/{{
+                                    progression.total
+                                }}…
+                            </template>
+                            <template v-else>
+                                Relancer la sélection
+                                <span v-if="selection.length > 0"
+                                    >({{ selection.length }})</span
+                                >
+                            </template>
                         </Button>
                     </template>
                 </ListPageActions>

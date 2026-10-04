@@ -82,7 +82,7 @@ test('Produits vers Stock, filtres, historique et ajustement', async ({
     await page.keyboard.press('Escape');
     await expect(historyDialog).toBeHidden();
 
-    // Colonne « Physique » (index 2 : Produit, Agence, Physique, Engagé, Bloqué, Disponible…) —
+    // Colonne « Physique » (index 2 : Produit, Agence, Physique, Réservé, Bloqué, Disponible…) —
     // c'est le stock PHYSIQUE que la modale « Ajuster » modifie, jamais le disponible.
     const physiqueCell = filteredRow.locator('td').nth(2);
     const physiqueAvant = Number(

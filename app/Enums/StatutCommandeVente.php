@@ -26,6 +26,11 @@ enum StatutCommandeVente: string
      * (encaissements contrepassés, stock réintégré, cashback retiré) n'existent que sur ce chemin.
      */
     case ANNULEE_ERREUR_SAISIE = 'annulee_erreur_saisie';
+    /**
+     * Précommande enregistrée (ADR 0019) : stock réservé, facture encore « Créée », acompte éventuel
+     * reçu en avance client. Rien n'est encore sorti du stock ni vendu — hors chiffre d'affaires.
+     */
+    case RESERVEE = 'reservee';
 
     public function label(): string
     {
@@ -40,6 +45,7 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'Annulée',
             self::RETOURNEE => 'Retournée',
             self::ANNULEE_ERREUR_SAISIE => 'Annulée (erreur de saisie)',
+            self::RESERVEE => 'Réservée',
         };
     }
 
@@ -56,6 +62,7 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'danger',
             self::RETOURNEE => 'warn',
             self::ANNULEE_ERREUR_SAISIE => 'danger',
+            self::RESERVEE => 'info',
         };
     }
 
@@ -72,6 +79,7 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'bg-red-400',
             self::RETOURNEE => 'bg-orange-500',
             self::ANNULEE_ERREUR_SAISIE => 'bg-red-500',
+            self::RESERVEE => 'bg-blue-500',
         };
     }
 

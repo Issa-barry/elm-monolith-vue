@@ -116,6 +116,13 @@ class FactureVente extends Model
             return false;
         }
 
+        // Facture d'une précommande pas encore remise (ADR 0019) : seuls des acomptes la créditent,
+        // et ils ne la font jamais passer « Payée » — sinon commission et cashback partiraient avant
+        // toute remise. Elle ne quitte « Créée » qu'à son activation, à la remise.
+        if ($this->isCreee() && $this->commande?->est_precommande) {
+            return false;
+        }
+
         $etaitPayee = $this->statut_facture === StatutFactureVente::PAYEE;
 
         $encaisse = (float) $this->encaissements()->sum('montant');

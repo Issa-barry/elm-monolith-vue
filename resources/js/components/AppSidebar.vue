@@ -53,6 +53,10 @@ const transfertsAReceptionner = computed(
 const mouvementsFondsAConfirmer = computed(
     () => ((page.props as any).mouvements_fonds_a_confirmer as number) ?? 0,
 );
+// Espèces remises à l'agent, en attente de SA confirmation (ADR 0018) : badge sur « Ma situation ».
+const approvisionnementsAConfirmer = computed(
+    () => ((page.props as any).approvisionnements_a_confirmer as number) ?? 0,
+);
 
 /** Guard combiné permission + module actif */
 const canSee = (permission: PermissionKey, module: string): boolean =>
@@ -125,6 +129,8 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
+            // Suivi des précommandes (ADR 0019) : même permission de lecture que les commandes.
+            { title: 'Précommandes', href: '/backoffice/precommandes' },
             {
                 title: 'Distribution',
                 href: '/backoffice/distributions',
@@ -411,6 +417,10 @@ const mainNavItems = computed((): NavItem[] => {
         rapportsSousItems.push({
             title: 'Ma situation',
             href: '/backoffice/ma-situation',
+            badge:
+                approvisionnementsAConfirmer.value > 0
+                    ? approvisionnementsAConfirmer.value
+                    : undefined,
         });
     if (can('rapports.read'))
         rapportsSousItems.push({

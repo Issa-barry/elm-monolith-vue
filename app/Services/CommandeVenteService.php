@@ -33,6 +33,28 @@ class CommandeVenteService
      * par variante reste fait au moment réel de la vente (PDV, chargement de commande), jamais
      * dupliqué ici.
      */
+    public const MESSAGE_PRECOMMANDE_NON_CONFIGUREE = "Les précommandes ne sont pas encore configurées : choisissez d'abord si l'acompte est obligatoire dans Paramètres → Ventes → Précommandes.";
+
+    public const MESSAGE_PRECOMMANDE_SANS_STOCK = 'Impossible de créer une précommande : aucun stock disponible pour ce site.';
+
+    /**
+     * Pourquoi une précommande ne peut pas être créée sur ce site, ou null (ADR 0019) : paramétrage
+     * d'acompte jamais choisi (décision D6), ou aucun stock disponible — contrôle STRICT, jamais de
+     * réservation à découvert quelle que soit la politique de vente sans stock (décision D3).
+     */
+    public static function raisonPrecommandeImpossible(string $orgId, string $siteId): ?string
+    {
+        if (! Parametre::isPrecommandeConfiguree($orgId)) {
+            return self::MESSAGE_PRECOMMANDE_NON_CONFIGUREE;
+        }
+
+        if (! app(StockStatutService::class)->sitePossedeStockVendable($orgId, $siteId)) {
+            return self::MESSAGE_PRECOMMANDE_SANS_STOCK;
+        }
+
+        return null;
+    }
+
     public static function siteAutoriseNouvelleCommande(string $orgId, string $siteId): bool
     {
         if (Parametre::isVentesAutoriseesSansStock($orgId)) {
@@ -105,6 +127,33 @@ class CommandeVenteService
     }
 
     /**
+     * Précommande (ADR 0019) : BROUILLON → RESERVEE. Réserve chaque ligne en mode STRICT — jamais à
+     * découvert, quelle que soit la politique de vente sans stock (décision D3) — et crée la facture
+     * en « Créée » : rien n'est sorti du stock ni vendu. L'acompte éventuel est enregistré par
+     * l'appelant dans la même transaction (Ventes\StorePrecommandeController).
+     */
+    public static function enregistrerPrecommande(CommandeVente $commande): void
+    {
+        abort_if(! $commande->est_precommande, 422, 'Cette commande n\'est pas une précommande.');
+        abort_if(! $commande->isBrouillon(), 422, 'Seule une précommande en cours de création peut être enregistrée.');
+
+        $commande->loadMissing('lignes');
+        if ($commande->lignes->isEmpty()) {
+            throw ValidationException::withMessages([
+                'lignes' => 'La précommande doit contenir au moins une ligne produit.',
+            ]);
+        }
+
+        DB::transaction(function () use ($commande) {
+            self::reserverLignes($commande, strict: true);
+
+            $commande->update(['statut' => StatutCommandeVente::RESERVEE]);
+
+            self::creerFactureInitiale($commande);
+        });
+    }
+
+    /**
      * A_CHARGER : réserve la quantité demandée de chaque ligne — le disponible baisse dès la
      * confirmation, jamais seulement au chargement (cf. StockReservationService, correctif du
      * 24/08/2026 : avant cela, deux commandes concurrentes pouvaient toutes deux être confirmées
@@ -116,11 +165,11 @@ class CommandeVenteService
      * endroit réellement protégé contre la concurrence), ce contrôle-ci n'est qu'un pré-filtre
      * offrant un message d'erreur groupé.
      */
-    private static function reserverLignes(CommandeVente $commande): void
+    private static function reserverLignes(CommandeVente $commande, bool $strict = false): void
     {
         $commande->load('lignes.variante.produit.produitType');
         $userId = Auth::id();
-        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
+        $autoriseVenteStockNegatif = ! $strict && Parametre::isVentesAutoriseesSansStock($commande->organization_id);
 
         foreach ($commande->lignes as $ligne) {
             $produit = $ligne->variante?->produit;
@@ -833,10 +882,11 @@ class CommandeVenteService
      *
      * @param  array<int, array{ligne_id?: string, variante_id: string, quantite: int}>  $lignes
      * @param  array<int, string>  $errors  Passé par référence, une entrée par ligne en anomalie.
+     * @param  bool  $strict  ignore la politique de vente sans stock (précommande, ADR 0019)
      */
-    public static function verifierDisponibiliteLignes(string $orgId, string $siteId, array $lignes, array &$errors): void
+    public static function verifierDisponibiliteLignes(string $orgId, string $siteId, array $lignes, array &$errors, bool $strict = false): void
     {
-        if (Parametre::isVentesAutoriseesSansStock($orgId)) {
+        if (! $strict && Parametre::isVentesAutoriseesSansStock($orgId)) {
             return;
         }
 

@@ -47,6 +47,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     commissions_a_verser: 'bg-blue-500',
     // Encaissement reçu pour une autre agence, reversement parti mais pas encore reçu (ADR 0012).
     en_cours_versement: 'bg-blue-500',
+    // Précommande enregistrée, stock réservé, pas encore remise (StatutCommandeVente::RESERVEE,
+    // ADR 0019). À ne pas confondre avec `reserve` (gris, règlement inter-agences).
+    reservee: 'bg-blue-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".

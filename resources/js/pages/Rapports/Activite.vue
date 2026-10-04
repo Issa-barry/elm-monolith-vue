@@ -22,6 +22,9 @@ import {
 } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
+import ApprovisionnementsAConfirmer, {
+    type ApprovisionnementAConfirmer,
+} from './partials/ApprovisionnementsAConfirmer.vue';
 import CarteSection from './partials/CarteSection.vue';
 import EnTeteSection from './partials/EnTeteSection.vue';
 import { dateFr, pluriel } from './partials/format';
@@ -56,6 +59,8 @@ const props = defineProps<{
     agent: { id: string; nom: string } | null;
     limite_lignes: number;
     rapport: RapportActivite;
+    /** « Ma situation » seulement : espèces remises à l'agent, en attente de SA confirmation (ADR 0018). */
+    approvisionnements_en_attente?: ApprovisionnementAConfirmer[];
 }>();
 
 const page = usePage();
@@ -531,6 +536,11 @@ const chiffresMobileMoney = computed(() =>
                     </template>
                 </ListPageActions>
             </div>
+
+            <ApprovisionnementsAConfirmer
+                v-if="maSituation && approvisionnements_en_attente?.length"
+                :approvisionnements="approvisionnements_en_attente"
+            />
 
             <!-- Cartes-onglets : chaque carte résume un bloc et en ouvre le détail -->
             <div

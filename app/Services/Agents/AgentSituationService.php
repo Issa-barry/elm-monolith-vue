@@ -32,6 +32,8 @@ class AgentSituationService
         StatutCommandeVente::ANNULEE,
         StatutCommandeVente::ANNULEE_ERREUR_SAISIE,
         StatutCommandeVente::RETOURNEE,
+        // Précommande pas encore remise (ADR 0019) : rien n'est vendu, sa facture n'est que « Créée ».
+        StatutCommandeVente::RESERVEE,
     ];
 
     public function __construct(private readonly RapportActiviteService $rapport) {}

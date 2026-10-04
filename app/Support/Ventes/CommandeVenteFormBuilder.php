@@ -86,6 +86,17 @@ final class CommandeVenteFormBuilder
      * vers la liste des ventes avec un flash 'error', affiché en toast top-right côté
      * Ventes/Index.vue (règle projet : jamais de switch de position pour ce Toast).
      */
+    /**
+     * Même garde-fou pour une précommande (ADR 0019) : paramétrage d'acompte choisi (D6) et stock
+     * disponible, toujours en strict (D3) — cf. CommandeVenteService::raisonPrecommandeImpossible().
+     */
+    public function redirectSiPrecommandeBloquee(string $orgId, string $siteId): ?RedirectResponse
+    {
+        $raison = CommandeVenteService::raisonPrecommandeImpossible($orgId, $siteId);
+
+        return $raison === null ? null : redirect()->route('precommandes.index')->with('error', $raison);
+    }
+
     public function redirectSiCreationBloquee(string $orgId, string $siteId): ?RedirectResponse
     {
         if (CommandeVenteService::siteAutoriseNouvelleCommande($orgId, $siteId)) {
@@ -106,9 +117,10 @@ final class CommandeVenteFormBuilder
      * Le formulaire ne propose pour l'instant qu'un sélecteur de produit (pas de sélecteur de
      * variante — Phase 3) : on filtre/affiche donc sur la variante par défaut (ou la première).
      */
-    public function produitsActifs(string $orgId, ?string $siteId = null): Collection
+    public function produitsActifs(string $orgId, ?string $siteId = null, bool $stockStrict = false): Collection
     {
-        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($orgId);
+        // Précommande (ADR 0019) : jamais de réservation à découvert, quelle que soit la politique.
+        $autoriseVenteStockNegatif = ! $stockStrict && Parametre::isVentesAutoriseesSansStock($orgId);
 
         $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
@@ -185,8 +197,8 @@ final class CommandeVenteFormBuilder
         $query = Vehicule::with([
             'typeVehicule',
             'capacites.categorie',
-            'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
-            'equipe.membres.livreur',
+            'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')->with('personne'),
+            'equipe.membres.livreur.personne',
         ])
             ->where('organization_id', $orgId)
             ->where('is_active', true);
@@ -229,7 +241,8 @@ final class CommandeVenteFormBuilder
 
     public function clientsActifs(string $orgId): Collection
     {
-        return Client::where('organization_id', $orgId)
+        return Client::with('vehicules')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->orderBy('nom_complet')
             ->get()
@@ -242,7 +255,7 @@ final class CommandeVenteFormBuilder
                 // Véhicules externes mémorisés — facultatifs, jamais un prérequis pour vendre
                 // à ce client (cf. ClientVehicle).
                 'vehicules' => $c->type === ClientType::EXTERNE
-                    ? $c->vehicules()->get()->map(fn ($cv) => [
+                    ? $c->vehicules->map(fn ($cv) => [
                         'id' => $cv->id,
                         'libelle_affiche' => $cv->libelle_affiche,
                     ])->values()
@@ -851,7 +864,7 @@ final class CommandeVenteFormBuilder
      *
      * @throws ValidationException si au moins une ligne dépasse le disponible
      */
-    public function assertStockDisponiblePourLignes(string $orgId, string $siteId, array $lignesData): void
+    public function assertStockDisponiblePourLignes(string $orgId, string $siteId, array $lignesData, bool $strict = false): void
     {
         $errors = [];
 
@@ -860,6 +873,7 @@ final class CommandeVenteFormBuilder
             $siteId,
             array_map(fn (array $l) => ['variante_id' => $l['variante_id'], 'quantite' => $l['quantite_demandee']], $lignesData),
             $errors,
+            $strict,
         );
 
         if (! empty($errors)) {

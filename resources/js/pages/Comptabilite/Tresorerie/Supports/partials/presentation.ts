@@ -45,6 +45,14 @@ export interface CompteTresorerie {
     en_cours_versement: number;
     versements_en_cours: number;
     peut_verser: boolean;
+    /**
+     * Approvisionnements envoyés vers cette caisse d'agent, pas encore confirmés par l'agent (ADR
+     * 0018) : sortis de la caisse de l'agence, pas encore dans `solde`. Jamais disponible.
+     */
+    en_cours_approvisionnement: number;
+    approvisionnements_en_cours: number;
+    /** Caisse de l'agence pouvant approvisionner un agent (permission, agence, état, solde). */
+    peut_approvisionner: boolean;
     solde_ouverture: { id: string; montant: number; statut: string } | null;
 }
 

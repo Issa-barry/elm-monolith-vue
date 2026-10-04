@@ -49,6 +49,11 @@ class CommandeVente extends Model
         'reception_validee_at',
         'validated_at',
         'closed_at',
+        'est_precommande',
+        'date_remise_prevue',
+        'preparation_lancee_at',
+        'preparee_at',
+        'remise_at',
         'created_by',
         'updated_by',
         'numero',
@@ -73,6 +78,11 @@ class CommandeVente extends Model
             'reception_validee_at' => 'datetime',
             'validated_at' => 'datetime',
             'closed_at' => 'datetime',
+            'est_precommande' => 'boolean',
+            'date_remise_prevue' => 'date:Y-m-d',
+            'preparation_lancee_at' => 'datetime',
+            'preparee_at' => 'datetime',
+            'remise_at' => 'datetime',
         ];
     }
 
@@ -267,6 +277,24 @@ class CommandeVente extends Model
     {
         return $this->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
             || $this->mode_remise_grossiste === ModeRemiseGrossiste::LIVRAISON;
+    }
+
+    public function isReservee(): bool
+    {
+        return $this->statut === StatutCommandeVente::RESERVEE;
+    }
+
+    /**
+     * Précommande dont la date prévue est dépassée sans que la marchandise ait été remise (ADR 0019) :
+     * un indicateur dérivé, jamais un statut ni une expiration — la réservation reste active.
+     */
+    public function isEnRetard(): bool
+    {
+        return $this->est_precommande
+            && $this->remise_at === null
+            && $this->date_remise_prevue !== null
+            && $this->date_remise_prevue->lt(today())
+            && $this->isReservee();
     }
 
     public function isAnnulee(): bool

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Enums\ClientType;
 use App\Enums\ModePaiement;
 use App\Enums\ModeRemiseGrossiste;
+use App\Enums\NatureMouvementFonds;
 use App\Enums\OperateurMobileMoney;
 use App\Enums\PackingStatut;
 use App\Enums\PrestataireType;
@@ -175,7 +176,8 @@ class EnumsTest extends TestCase
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        $this->assertCount(10, $options);
+        // 11 depuis RESERVEE (précommande pas encore remise, ADR 0019, 04/10/2026).
+        $this->assertCount(11, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
@@ -426,5 +428,18 @@ class EnumsTest extends TestCase
     public function test_prix_origine_grossiste_label(): void
     {
         $this->assertSame('Prix grossiste', PrixOrigine::GROSSISTE->label());
+    }
+
+    // ── NatureMouvementFonds ──────────────────────────────────────────────────
+
+    /**
+     * SQLite ignore la longueur des varchar : seul ce test protège contre une nature plus longue
+     * que `mouvements_fonds.nature` (40), que MySQL refuserait à l'insertion.
+     */
+    public function test_nature_mouvement_fonds_values_fit_in_column(): void
+    {
+        foreach (NatureMouvementFonds::cases() as $nature) {
+            $this->assertLessThanOrEqual(40, strlen($nature->value), $nature->value);
+        }
     }
 }

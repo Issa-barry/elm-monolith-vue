@@ -58,6 +58,11 @@ interface Mouvement {
     /** Règlement inter-agences (ADR 0012) : encaissements précis reversés — vide sinon. */
     encaissements_regles: EncaissementRegle[];
     detail_reglement_url: string | null;
+    /** Approvisionnement (ADR 0018) : agent titulaire de la caisse, seul à pouvoir confirmer. */
+    beneficiaire: string | null;
+    /** Heure réelle de l'envoi et de la réception (null pour les mouvements antérieurs au 04/10/2026). */
+    envoye_le: string | null;
+    recu_le: string | null;
 }
 
 interface EncaissementRegle {
@@ -109,34 +114,32 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Mouvements de fonds', href: '#' },
 ];
 
-// Barre : Agence → Caisse → Référence → Nature. Le reste (Origine / Destination, Statut, agences
-// d'origine et de destination, montants) est dans le tiroir du bouton « Filtres », lui-même placé
-// dans l'en-tête à côté de « Nouveau mouvement ». « Origine / Destination » ne remplace pas deux
-// listes : c'est la POSITION de la caisse choisie dans le mouvement (sans choix : origine ou
-// destination) — un filtre avancé, pas un besoin de premier niveau.
-const filterFields: FilterField[] = [
+// L'agence est ajoutée par DataFilters, puis viennent statut, recherche et critères métier.
+const filterFields = computed<FilterField[]>(() => [
     {
-        key: 'caisse_id',
-        label: 'Caisse',
+        key: 'statut',
+        label: 'Statut',
         type: 'select',
-        inline: true,
-        searchable: true,
-        wide: true,
-        placeholder: 'Rechercher une caisse…',
-        options: props.caisses_filtre,
+        options: props.statut_options,
     },
     {
         key: 'search',
         label: 'Référence',
         type: 'text',
-        inline: true,
         placeholder: 'MVT-2026-00001',
+    },
+    {
+        key: 'caisse_id',
+        label: 'Caisse',
+        type: 'select',
+        searchable: true,
+        placeholder: 'Rechercher une caisse…',
+        options: props.caisses_filtre,
     },
     {
         key: 'nature',
         label: 'Nature',
         type: 'select',
-        inline: true,
         options: props.nature_options,
     },
     {
@@ -148,12 +151,6 @@ const filterFields: FilterField[] = [
             { value: 'origine', label: 'Origine' },
             { value: 'destination', label: 'Destination' },
         ],
-    },
-    {
-        key: 'statut',
-        label: 'Statut',
-        type: 'select',
-        options: props.statut_options,
     },
     {
         key: 'site_origine_id',
@@ -179,18 +176,32 @@ const filterFields: FilterField[] = [
         type: 'number',
         placeholder: '0',
     },
-];
+]);
 
-// Versement d'une caisse dédiée vers la caisse de l'agence (même agence) : affiché caisse → caisse.
+// Versement (caisse d'agent → caisse de l'agence) et approvisionnement (sens inverse, ADR 0018) :
+// même agence, affichés caisse → caisse, caisse de destination fixée à l'envoi.
 function estVersement(m: Mouvement): boolean {
     return m.nature === 'interne_caisses';
+}
+
+function estApprovisionnement(m: Mouvement): boolean {
+    return m.nature === 'approvisionnement_caisse';
+}
+
+function entreCaisses(m: Mouvement): boolean {
+    return estVersement(m) || estApprovisionnement(m);
 }
 
 function dateFr(date: string): string {
     return new Date(date).toLocaleDateString('fr-FR');
 }
 
-const filtresHote = ref<HTMLElement | null>(null);
+// Jour, et heure quand elle est connue (mouvements horodatés depuis le 04/10/2026).
+function dateHeureFr(jour: string, horodatage: string | null): string {
+    if (!horodatage) return dateFr(jour);
+    const d = new Date(horodatage);
+    return `${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 // DataFilters attend { id, nom } (convention Site), pas { value, label }.
 const sitesPourFiltre = computed(() =>
@@ -259,8 +270,8 @@ const comptesReception = computed(() =>
 
 function ouvrirDialogReception(m: Mouvement) {
     receptionCible.value = m;
-    // Un versement a sa caisse de destination fixée à l'envoi : rien à choisir, on la confirme.
-    receptionCompteId.value = estVersement(m)
+    // Versement ou approvisionnement : caisse de destination fixée à l'envoi, rien à choisir.
+    receptionCompteId.value = entreCaisses(m)
         ? (m.compte_destination_id ?? '')
         : '';
     receptionError.value = '';
@@ -285,6 +296,7 @@ function confirmerReception() {
             onError: (errors) => {
                 receptionError.value =
                     errors.compte_tresorerie_destination_id ??
+                    errors.mouvement ??
                     'Une erreur est survenue.';
             },
         },
@@ -340,7 +352,10 @@ function confirmerMotif() {
                 motifDialogOpen.value = false;
             },
             onError: (errors) => {
-                motifError.value = errors.motif ?? 'Une erreur est survenue.';
+                motifError.value =
+                    errors.motif ??
+                    errors.mouvement ??
+                    'Une erreur est survenue.';
             },
         },
     );
@@ -404,7 +419,15 @@ function confirmerMotif() {
                 </div>
                 <ListPageActions>
                     <template #filters>
-                        <div ref="filtresHote" class="contents"></div>
+                        <DataFilters
+                            trigger-only
+                            saved-filter-scope="mouvements-fonds"
+                            url="/backoffice/comptabilite/tresorerie/mouvements"
+                            :values="filters"
+                            :fields="filterFields"
+                            :sites="sitesPourFiltre"
+                            :result-count="mouvements.total"
+                        />
                     </template>
                     <template #primary>
                         <Link
@@ -417,15 +440,6 @@ function confirmerMotif() {
                     </template>
                 </ListPageActions>
             </div>
-
-            <DataFilters
-                url="/backoffice/comptabilite/tresorerie/mouvements"
-                :values="filters"
-                :fields="filterFields"
-                :sites="sitesPourFiltre"
-                :result-count="mouvements.total"
-                :trigger-target="filtresHote"
-            />
 
             <div class="overflow-x-auto rounded-xl border bg-card">
                 <table class="w-full min-w-[960px] text-sm">
@@ -481,7 +495,7 @@ function confirmerMotif() {
                                 </div>
                             </td>
                             <td class="px-4 py-3">
-                                <template v-if="estVersement(m)">
+                                <template v-if="entreCaisses(m)">
                                     <div class="font-medium">
                                         {{ m.compte_origine ?? '—' }}
                                     </div>
@@ -494,7 +508,7 @@ function confirmerMotif() {
                                 }}</template>
                             </td>
                             <td class="px-4 py-3">
-                                <template v-if="estVersement(m)">
+                                <template v-if="entreCaisses(m)">
                                     <div class="font-medium">
                                         {{ m.compte_destination ?? '—' }}
                                     </div>
@@ -519,7 +533,12 @@ function confirmerMotif() {
                                         v-if="m.date_envoi"
                                         class="text-xs text-muted-foreground"
                                     >
-                                        {{ dateFr(m.date_envoi) }}
+                                        {{
+                                            dateHeureFr(
+                                                m.date_envoi,
+                                                m.envoye_le,
+                                            )
+                                        }}
                                     </div>
                                 </template>
                                 <template v-else>—</template>
@@ -534,7 +553,12 @@ function confirmerMotif() {
                                         v-if="m.date_reception"
                                         class="text-xs text-muted-foreground"
                                     >
-                                        {{ dateFr(m.date_reception) }}
+                                        {{
+                                            dateHeureFr(
+                                                m.date_reception,
+                                                m.recu_le,
+                                            )
+                                        }}
                                     </div>
                                     <div
                                         v-if="m.confirme_par_expediteur"
@@ -561,6 +585,19 @@ function confirmerMotif() {
                                     data-testid="mouvement-en-attente"
                                 >
                                     En attente de confirmation
+                                </div>
+                                <!-- Approvisionnement : seul l'agent bénéficiaire peut confirmer (ADR 0018). -->
+                                <div
+                                    v-if="
+                                        estApprovisionnement(m) &&
+                                        (m.statut === 'envoye' ||
+                                            m.statut === 'conteste')
+                                    "
+                                    class="mt-0.5 text-xs text-muted-foreground"
+                                    data-testid="mouvement-attente-agent"
+                                >
+                                    À confirmer par
+                                    {{ m.beneficiaire ?? "l'agent" }}
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
@@ -706,7 +743,7 @@ function confirmerMotif() {
                     </DialogTitle>
                 </DialogHeader>
                 <div
-                    v-if="receptionCible && estVersement(receptionCible)"
+                    v-if="receptionCible && entreCaisses(receptionCible)"
                     class="space-y-1.5"
                     data-testid="reception-versement"
                 >

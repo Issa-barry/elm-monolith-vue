@@ -72,6 +72,9 @@ class PlanComptableBootstrapService
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
             '658100' => 'Cashback clients accordés',
             '411000' => 'Clients',
+            // Acomptes de précommande (ADR 0019) : argent reçu avant la remise de la marchandise,
+            // imputé sur le compte client seulement quand la vente est réalisée.
+            '419100' => 'Clients — avances et acomptes reçus',
             '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
             '521000' => 'Banque',
@@ -221,6 +224,9 @@ class PlanComptableBootstrapService
             // App\Enums\ModePaiement (especes/mobile_money/virement/cheque), même
             // chaîne de repli CompteMappingResolver.
             ['encaissement_vente_recu', 'client', null, '411000', null],
+            // Acompte de précommande (ADR 0019) : même pièce qu'un encaissement, mais le crédit va
+            // sur les avances clients tant que la vente n'est pas réalisée.
+            ['encaissement_vente_recu', 'avance_client', null, '419100', null],
             ['encaissement_vente_recu', 'tresorerie', null, '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'especes', '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'mobile_money', '561000', 'MM'],

@@ -130,6 +130,7 @@ export type AppPageProps<
     stock_alertes: { ruptures: number; faibles: number; total: number };
     transferts_a_receptionner: number;
     mouvements_fonds_a_confirmer: number;
+    approvisionnements_a_confirmer: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
     seoDefaults: SeoDefaults;
     theme: ThemeSharedProps;

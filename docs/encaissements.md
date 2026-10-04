@@ -283,6 +283,21 @@ création unique (`$facture->encaissements()->create()`), quel que soit l'écran
 frontend reproduit ces règles pour l'UX (champs conditionnels, bouton désactivé) mais n'est jamais
 la seule protection.
 
+## Acompte de précommande (ADR 0019)
+
+Cf. [precommandes.md](precommandes.md). L'acompte versé à la création d'une précommande est un
+`EncaissementVente` marqué `est_acompte = true`, saisi dans la même `PaymentCard` et soumis aux mêmes
+contrôles que tout encaissement — un seul circuit, factorisé dans
+`App\Services\Ventes\SaisieEncaissementVente` (agence, support actif, référence obligatoire et unique,
+caisse dédiée pour les espèces). Différences :
+
+- il est reçu **avant** la remise : c'est la seule exception à « aucun encaissement avant chargement
+  validé » ; il est toujours reçu par l'agence de la précommande (décision D11) ;
+- il est crédité en **avance client (419100)**, pas sur le compte client (411) ;
+- il ne fait **jamais** passer la facture (encore « Créée ») à « Partiel » ou « Payée » : ni
+  commission, ni cashback, ni clôture ;
+- obligatoire ou non, et à quel taux minimum : **Paramètres → Ventes → Précommandes** (D6).
+
 ## Retour de livraison avant encaissement
 
 Cf. [retour-commande.md](retour-commande.md). Tant qu'aucun encaissement n'a eu lieu, un utilisateur

@@ -13,6 +13,7 @@ use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
 use App\Services\ThemePolicyService;
+use App\Services\Tresorerie\ApprovisionnementsAgentService;
 use App\Support\AppVersion;
 use App\Support\Permissions\RoleVisibility;
 use Illuminate\Foundation\Inspiring;
@@ -146,7 +147,8 @@ class HandleInertiaRequests extends Middleware
         }
 
         // Mouvements entre agences ET règlements inter-agences (ADR 0012) : l'agence destinataire doit
-        // confirmer la réception des deux. Les versements de caisse (même agence) restent à part.
+        // confirmer la réception des deux. Les versements de caisse (même agence) restent à part, de
+        // même que les approvisionnements, réservés à l'agent (approvisionnementsAConfirmer()).
         $query = MouvementFonds::where('organization_id', $user->organization_id)
             ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value])
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
@@ -160,6 +162,21 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $query->count();
+    }
+
+    /**
+     * Approvisionnements de SA caisse (ADR 0018) envoyés et pas encore confirmés : seul l'agent
+     * bénéficiaire peut les confirmer, aucune permission n'est requise — il doit donc être prévenu
+     * même sans accès à la trésorerie (badge « Ma situation »).
+     */
+    private function approvisionnementsAConfirmer(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+
+        return app(ApprovisionnementsAgentService::class)->nombreAConfirmer($user);
     }
 
     private function propositionsATraiter(Request $request): int
@@ -354,6 +371,7 @@ class HandleInertiaRequests extends Middleware
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
             'mouvements_fonds_a_confirmer' => $this->mouvementsFondsAConfirmer($request),
+            'approvisionnements_a_confirmer' => $this->approvisionnementsAConfirmer($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),

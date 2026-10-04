@@ -62,6 +62,11 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   déduit : `CommandeVenteService::recalculerTotaux()` réduit le montant net de la facture. Conséquence :
   une annulation ou un retour postérieur modifie le chiffre de la période d'origine.
 - Une facture « Créée » (commande confirmée, pas encore livrée) est une vente.
+- **Exception : précommande pas encore remise** (statut `reservee`, ADR 0019) — **hors chiffre
+  d'affaires** : rien n'est vendu tant que la marchandise n'est pas remise (même règle dans la
+  situation agent et la situation véhicule). Son acompte, lui, est bien un encaissement de la
+  période (argent reçu). La datation de la vente à la remise (`remise_at`, ADR 0007 amendé) arrive
+  avec le lot 2, en même temps que la remise elle-même.
 - Encaissé / reste de ces ventes = **état actuel** (paiements reçus après la période compris).
 - **Agence = agence de la commande** (filtre Agence et colonne **« Créée à »**). La colonne
   **« Encaissée à »** indique où les paiements de la facture ont été reçus (plusieurs agences
@@ -130,10 +135,16 @@ Fiche de chaque **caisse dédiée** du périmètre, calculée par `App\Services\
 - **Tableau de caisse tiré du grand livre** : solde au début (`soldePourSupport(veille du début)`)
   + mouvements de la période = solde à la fin (`soldePourSupport(fin)`). Jamais « encaissements −
   versements de la période ».
-- Mouvements regroupés selon l'**événement réel** de leur pièce : Encaissements espèces, Versements
-  envoyés, Versements renvoyés à l'agent (contrepassation d'un versement retourné), Encaissements
-  annulés (contrepassation, ex. annulation exceptionnelle), autres contrepassations ; tout autre
-  événement garde son libellé comptable.
+- Mouvements regroupés selon l'**événement réel** de leur pièce : Encaissements espèces,
+  Approvisionnements reçus de l'agence (ADR 0018), Versements envoyés, Versements renvoyés à l'agent
+  (contrepassation d'un versement retourné), Encaissements annulés (contrepassation, ex. annulation
+  exceptionnelle), autres contrepassations ; tout autre événement garde son libellé comptable.
+- **Ma situation — Espèces à confirmer** (ADR 0018) : au-dessus des cartes, les approvisionnements de
+  la caisse de l'agent en attente de **sa** confirmation (Envoyés ou Contestés), avec « Confirmer la
+  réception » et « Contester » ; seul l'agent bénéficiaire les voit et agit, sans permission de
+  trésorerie. Un responsable qui a approvisionné sa propre caisse y voit aussi cette remise s'il a
+  `tresorerie.recevoir` (révision du 04/10/2026). Badge sur le menu « Ma situation »
+  (approvisionnements Envoyés).
 - **Solde actuel = « à remettre (théorique) »** : aucun comptage physique n'existe encore.
 - Versements : en cours (envoyés, hors solde), contestés, versements de la période, dernier versement
   et son ancienneté.

@@ -6,6 +6,7 @@ use App\Enums\ClientType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\Client;
+use App\Models\ClientVehicle;
 use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
@@ -19,6 +20,7 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
@@ -163,6 +165,57 @@ class CommandeVenteTest extends TestCase
                 ->where('vehicules.0.id', $vehicule->id)
                 ->where('vehicules.0.capacites.0.capacite_max', 2)
             );
+    }
+
+    /**
+     * Non-régression Sentry PHP-LARAVEL-70 : la page chargeait la personne de chaque livreur
+     * (téléphone) et les véhicules de chaque client externe un par un. Le nombre de requêtes sur
+     * ces tables doit rester constant quel que soit le nombre de véhicules et de clients.
+     */
+    public function test_create_ne_charge_ni_personnes_ni_vehicules_clients_un_par_un(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $vehicule = Vehicule::factory()->create([
+                'organization_id' => $this->org->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => true,
+                'is_active' => true,
+            ]);
+            $equipe = EquipeLivraison::create([
+                'organization_id' => $this->org->id,
+                'vehicule_id' => $vehicule->id,
+                'nom' => "Équipe {$i}",
+                'is_active' => true,
+            ]);
+            foreach (['chauffeur', 'convoyeur'] as $ordre => $role) {
+                $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+                EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => $role, 'ordre' => $ordre]);
+            }
+
+            $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => ClientType::EXTERNE->value]);
+            ClientVehicle::create(['organization_id' => $this->org->id, 'client_id' => $client->id, 'nom_vehicule' => "Camion {$i}"]);
+        }
+
+        $requetes = ['personnes' => 0, 'client_vehicles' => 0];
+        DB::listen(function ($query) use (&$requetes) {
+            foreach (array_keys($requetes) as $table) {
+                if (preg_match('/from [`"]'.$table.'[`"]/i', $query->sql)) {
+                    $requetes[$table]++;
+                }
+            }
+        });
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 5)
+                ->whereNot('vehicules.0.livreur_telephone', null)
+                ->has('clients.0.vehicules', 1)
+            );
+
+        $this->assertLessThanOrEqual(4, $requetes['personnes']);
+        $this->assertLessThanOrEqual(1, $requetes['client_vehicles']);
     }
 
     // ── store ─────────────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ use App\Models\CommissionRegle;
 use App\Models\Prestataire;
 use App\Models\TypeVehicule;
 use App\Services\Commission\CommissionBaremeConfigurationService;
+use App\Services\Commission\CommissionBaremeHistoriqueService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\ReconfigurationPartagesService;
 use Illuminate\Http\JsonResponse;
@@ -189,6 +190,7 @@ class CommissionRegleController extends Controller
         return Inertia::render('settings/CommissionRegles/Index', [
             'processus_actif' => $processusCode,
             'brouillon' => $resumeBrouillon,
+            'historique' => $processus ? CommissionBaremeHistoriqueService::pour($orgId, $processus->id) : [],
             'can_modifier' => auth()->user()->can('parametres.update'),
             'processus_options' => array_map(
                 fn (string $code) => ['value' => $code, 'label' => self::processusLabel($code)],
@@ -493,6 +495,7 @@ class CommissionRegleController extends Controller
             $ancienne->update([
                 'effective_to' => Carbon::parse($effectiveFrom)->subDay()->toDateString(),
                 'statut' => CommissionRegleStatut::REMPLACEE->value,
+                'closed_by' => auth()->id(),
             ]);
         }
 
