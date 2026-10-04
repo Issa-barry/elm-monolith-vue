@@ -50,6 +50,9 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import AnnulationExceptionnelleDialog from './partials/AnnulationExceptionnelleDialog.vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
+import PrecommandeActions, {
+    type PrecommandeData,
+} from './partials/PrecommandeActions.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
 import RetourDialog from './partials/RetourDialog.vue';
 
@@ -243,6 +246,8 @@ interface CommandeData {
     /** Permission `ventes.annuler_exceptionnel` et commande éligible (cf. AnnulationExceptionnelleService). */
     can_annuler_exceptionnel: boolean;
     can_encaisser: boolean;
+    /** Précommande pas encore remise : le prochain encaissement est un acompte (ADR 0019). */
+    encaissement_est_acompte: boolean;
     /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
      * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
     peut_encaisser_especes: boolean;
@@ -304,6 +309,8 @@ const props = defineProps<{
     activites: ActiviteEntry[];
     retours: RetourEntry[];
     motifs_retour: MotifRetour[];
+    /** Données de la précommande (ADR 0019) — null pour une vente ordinaire. */
+    precommande: PrecommandeData | null;
 }>();
 
 const toast = useToast();
@@ -792,8 +799,8 @@ const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
 const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
-const estPrecommandeReservee = computed(
-    () => props.commande.statut === 'reservee',
+const estPrecommandeAvantPreparation = computed(() =>
+    ['reservee', 'a_preparer', 'preparee'].includes(props.commande.statut),
 );
 
 const currentStepIdx = computed(() => {
@@ -803,9 +810,6 @@ const currentStepIdx = computed(() => {
         props.commande.is_annulee_erreur_saisie
     )
         return -1;
-    // Précommande pas encore remise (ADR 0019) : rien n'est chargé ni facturé — seule la 1re étape,
-    // libellée « Réservée », est en cours (frise dédiée aux précommandes : lot 2).
-    if (estPrecommandeReservee.value) return 0;
     if (isCommandeDirecte.value) {
         if (props.commande.is_cloturee) return CLOTUREE_STEP_IDX.value;
         if (props.facture?.statut === 'payee')
@@ -864,7 +868,6 @@ const commissionsAvecAnomalie = computed(
 );
 
 function stepLabel(idx: number, defaultLabel: string): string {
-    if (idx === 0 && estPrecommandeReservee.value) return 'Réservée';
     return idx === COMMISSIONS_STEP_IDX.value && commissionsAvecAnomalie.value
         ? 'À régulariser'
         : defaultLabel;
@@ -1189,8 +1192,21 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 </div>
             </div>
 
-            <!-- Timeline de progression ─────────────────────────────────────── -->
-            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+            <!-- Précommande : étapes, montants et actions (ADR 0019) -->
+            <PrecommandeActions
+                v-if="precommande"
+                :commande-id="commande.id"
+                :reference="commande.reference"
+                :statut="commande.statut"
+                :precommande="precommande"
+            />
+
+            <!-- Timeline de progression — masquée tant que la précommande n'est pas préparée : ses
+                 étapes sont celles de la carte ci-dessus. -->
+            <div
+                v-if="!estPrecommandeAvantPreparation"
+                class="rounded-xl border bg-card px-6 py-4 shadow-sm"
+            >
                 <!-- Annulée -->
                 <div
                     v-if="commande.is_annulee"
@@ -1930,7 +1946,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     @click="openEncaisserDialog"
                                 >
                                     <HandCoins class="mr-2 h-4 w-4" />
-                                    Encaisser
+                                    {{
+                                        commande.encaissement_est_acompte
+                                            ? 'Ajouter un acompte'
+                                            : 'Encaisser'
+                                    }}
                                     {{ formatGNF(facture.montant_restant) }}
                                 </Button>
                             </span>
@@ -2267,7 +2287,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
         <!-- Dialog Encaissement -->
         <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            title="Encaisser un paiement"
+            :title="
+                commande.encaissement_est_acompte
+                    ? 'Ajouter un acompte'
+                    : 'Encaisser un paiement'
+            "
             :solde="facture?.montant_restant ?? 0"
             :moyens="commande.moyens_encaissement"
             :especes-disponibles="commande.peut_encaisser_especes"

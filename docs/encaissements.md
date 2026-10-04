@@ -296,7 +296,14 @@ caisse dédiée pour les espèces). Différences :
 - il est crédité en **avance client (419100)**, pas sur le compte client (411) ;
 - il ne fait **jamais** passer la facture (encore « Créée ») à « Partiel » ou « Payée » : ni
   commission, ni cashback, ni clôture ;
-- obligatoire ou non, et à quel taux minimum : **Paramètres → Ventes → Précommandes** (D6).
+- obligatoire ou non, et à quel taux minimum : **Paramètres → Ventes → Précommandes** (D6) ;
+- des **acomptes complémentaires** sont possibles tant que la précommande n'est pas remise (même
+  route `encaissements.store`, bouton « Ajouter un acompte » de la fiche), toujours reçus par l'agence
+  de la précommande ;
+- à la remise, les acomptes sont imputés sur la facture (419100 → 411000) et le reste dû s'encaisse
+  normalement. Un trop-perçu se rembourse (décaissement ADR 0009, `remboursements_ventes`) et bloque
+  la clôture tant qu'il n'est pas rendu ; le statut et le reste à payer sont calculés **net des
+  remboursements** (`factures_ventes.montant_rembourse`).
 
 ## Retour de livraison avant encaissement
 

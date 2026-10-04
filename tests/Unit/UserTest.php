@@ -91,9 +91,11 @@ class UserTest extends TestCase
      * dans son agence une commande d'une autre agence — cf. AgenceEncaissementResolver, ADR 0012) = 203,
      * puis `tresorerie.designer_principale` (02/10/2026, transfert de la trésorerie principale depuis le
      * formulaire Site — cf. SiteFormSupport::resoudreTresoreriePrincipale(), ADR 0017) = 204, puis
-     * `ventes.precommander` (04/10/2026, création d'une précommande — cf. ADR 0019) = 205.
+     * `ventes.precommander` (04/10/2026, création d'une précommande — cf. ADR 0019) = 205, puis les cinq
+     * permissions du cycle de vie des précommandes (préparer, valider le retrait, rembourser, annuler
+     * avant et après préparation — ADR 0019 lot 2) = 210.
      */
-    public function test_permissions_map_returns_205_keys(): void
+    public function test_permissions_map_returns_210_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -101,7 +103,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(205, $map);
+        $this->assertCount(210, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

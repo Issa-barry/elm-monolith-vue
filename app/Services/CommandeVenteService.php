@@ -13,6 +13,7 @@ use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\ProduitVariante;
 use App\Services\Comptabilite\VenteComptabilisationService;
+use App\Services\Ventes\PrecommandeService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -127,6 +128,18 @@ class CommandeVenteService
     }
 
     /**
+     * Annulation d'une précommande (ADR 0019) — même mécanique que l'annulation normale (réservation
+     * libérée, facture annulée, aucune vente comptabilisée puisque rien n'a été remis). Les acomptes
+     * sont remboursés AVANT par l'appelant (PrecommandeService::annuler()), dans la même transaction.
+     */
+    public static function annulerPrecommande(CommandeVente $commande, string $motif): void
+    {
+        abort_if(! $commande->est_precommande, 422, "Cette commande n'est pas une précommande.");
+
+        self::appliquerAnnulation($commande, StatutCommandeVente::ANNULEE, $motif);
+    }
+
+    /**
      * Précommande (ADR 0019) : BROUILLON → RESERVEE. Réserve chaque ligne en mode STRICT — jamais à
      * découvert, quelle que soit la politique de vente sans stock (décision D3) — et crée la facture
      * en « Créée » : rien n'est sorti du stock ni vendu. L'acompte éventuel est enregistré par
@@ -195,7 +208,7 @@ class CommandeVenteService
      * no-op pour une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée par la
      * validation du chargement (la sortie physique est alors annulée par annulerSortiesStock()).
      */
-    private static function libererLignesReservees(CommandeVente $commande): void
+    public static function libererLignesReservees(CommandeVente $commande): void
     {
         $commande->loadMissing('lignes');
 
@@ -335,7 +348,7 @@ class CommandeVenteService
      * Comptabilité générale, en aval — ne doit jamais empêcher une vente d'être
      * facturée (mode shadow, même principe que DepenseObserver/FicheComptabilisationService).
      */
-    private static function comptabiliserVenteFacturee(FactureVente $facture): void
+    public static function comptabiliserVenteFacturee(FactureVente $facture): void
     {
         try {
             app(VenteComptabilisationService::class)->comptabiliserVenteFacturee($facture);
@@ -415,6 +428,14 @@ class CommandeVenteService
      */
     private static function activerFacture(CommandeVente $commande): void
     {
+        // Précommande (ADR 0019) : statut calculé depuis les acomptes, imputation 419100 → 411000,
+        // cashback et clôture éventuels — cf. PrecommandeService::activerFacture().
+        if ($commande->est_precommande) {
+            app(PrecommandeService::class)->activerFacture($commande);
+
+            return;
+        }
+
         $commande->load('facture');
 
         if ($commande->facture && $commande->facture->statut_facture === StatutFactureVente::CREEE) {
@@ -600,7 +621,7 @@ class CommandeVenteService
      * par produit : c'est checkDisponibiliteStock() qui a déjà statué, en amont, sur ce qui
      * est autorisé.
      */
-    private static function decrementerStock(CommandeVente $commande): void
+    public static function decrementerStock(CommandeVente $commande): void
     {
         $commande->load('lignes.variante.produit.produitType');
         $userId = Auth::id();
@@ -823,6 +844,16 @@ class CommandeVenteService
             $errors[] = 'Toutes les lignes doivent avoir une quantité chargée renseignée.';
 
             return;
+        }
+
+        // Précommande (ADR 0019) : jamais plus que ce qui a été préparé — un supplément est une
+        // nouvelle vente, la précommande ne change pas (règle R15).
+        if ($commande->est_precommande) {
+            foreach ($commande->lignes as $ligne) {
+                if ($ligne->quantite_preparee !== null && $ligne->quantite_chargee > $ligne->quantite_preparee) {
+                    $errors[] = "On ne peut pas charger plus que la quantité préparée ({$ligne->quantite_preparee}) : un supplément se vend à part.";
+                }
+            }
         }
 
         self::checkDisponibiliteStock($commande, $errors);

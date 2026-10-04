@@ -333,6 +333,7 @@ class IndexCommandeVenteController extends Controller
             'est_precommande' => (bool) $c->est_precommande,
             'date_remise_prevue' => $c->date_remise_prevue?->format('d/m/Y'),
             'en_retard' => $c->isEnRetard(),
+            'trop_percu' => $c->est_precommande ? (float) ($c->facture?->tropPercu() ?? 0) : 0.0,
             'processus_code' => $processusCode,
             'processus_label' => CommissionProcessusDefaults::libelle($processusCode),
             'total_commande' => (float) $c->total_commande,

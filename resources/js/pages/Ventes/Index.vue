@@ -67,6 +67,8 @@ interface Commande extends VenteMobile {
     est_precommande: boolean;
     date_remise_prevue: string | null;
     en_retard: boolean;
+    /** Trop-perçu d'une précommande encore à rembourser (ADR 0019). */
+    trop_percu: number;
     quantite_totale: number;
     processus_code: string;
     facture_id: number | null;
@@ -1126,6 +1128,12 @@ function confirmDelete(c: Commande) {
                                             : 'Prévue le'
                                     }}
                                     {{ data.date_remise_prevue }}
+                                </span>
+                                <span
+                                    v-if="data.trop_percu > 0"
+                                    class="font-medium text-amber-700 dark:text-amber-400"
+                                >
+                                    Trop-perçu {{ formatGNF(data.trop_percu) }}
                                 </span>
                             </div>
                         </template>

@@ -62,11 +62,12 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   déduit : `CommandeVenteService::recalculerTotaux()` réduit le montant net de la facture. Conséquence :
   une annulation ou un retour postérieur modifie le chiffre de la période d'origine.
 - Une facture « Créée » (commande confirmée, pas encore livrée) est une vente.
-- **Exception : précommande pas encore remise** (statut `reservee`, ADR 0019) — **hors chiffre
+- **Exception : précommande pas encore remise** (statuts `reservee`, `a_preparer`, `preparee`, ADR 0019) — **hors chiffre
   d'affaires** : rien n'est vendu tant que la marchandise n'est pas remise (même règle dans la
   situation agent et la situation véhicule). Son acompte, lui, est bien un encaissement de la
-  période (argent reçu). La datation de la vente à la remise (`remise_at`, ADR 0007 amendé) arrive
-  avec le lot 2, en même temps que la remise elle-même.
+  période (argent reçu). La date de remise est enregistrée (`remise_at`) ; dater la vente à la
+  remise dans ce rapport (ADR 0007 amendé) est l'objet du lot 4 — d'ici là, une précommande remise
+  compte à la date de création de sa facture.
 - Encaissé / reste de ces ventes = **état actuel** (paiements reçus après la période compris).
 - **Agence = agence de la commande** (filtre Agence et colonne **« Créée à »**). La colonne
   **« Encaissée à »** indique où les paiements de la facture ont été reçus (plusieurs agences

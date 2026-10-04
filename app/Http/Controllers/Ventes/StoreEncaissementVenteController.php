@@ -3,21 +3,18 @@
 namespace App\Http\Controllers\Ventes;
 
 use App\Enums\AuditEvent;
-use App\Features\ModuleFeature;
 use App\Http\Controllers\Controller;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
-use App\Models\Organization;
 use App\Services\AuditLogService;
-use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Ventes\FacturePayeeCascade;
 use App\Services\Ventes\SaisieEncaissementVente;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Pennant\Feature;
 
 class StoreEncaissementVenteController extends Controller
 {
@@ -43,8 +40,11 @@ class StoreEncaissementVenteController extends Controller
         );
 
         $commande = $facture_vente->commande;
+        // Seule exception à « aucun encaissement avant le chargement validé » : une précommande pas
+        // encore remise (ADR 0019), dont tout encaissement est un acompte (avance client 419100).
+        $estAcompte = (bool) $commande?->estPrecommandeAvantRemise();
         abort_unless(
-            ! $commande || $commande->isEncaissable(),
+            ! $commande || $commande->isEncaissable() || $estAcompte,
             422,
             'Le chargement doit être validé avant tout encaissement ou paiement.'
         );
@@ -63,6 +63,10 @@ class StoreEncaissementVenteController extends Controller
 
         // Agence d'encaissement, support, référence Mobile Money unique et caisse dédiée pour les
         // espèces : contrôles partagés avec l'acompte de précommande (cf. SaisieEncaissementVente).
+        // Un acompte est toujours reçu par l'agence de la précommande (décision D11).
+        if ($estAcompte) {
+            $data['site_encaissement_id'] = $commande->site_id;
+        }
         $data = [...$data, ...$this->saisie->preparer($request->user(), $facture_vente, $data)];
         $siteEncaissementId = $data['site_encaissement_id'];
 
@@ -73,7 +77,7 @@ class StoreEncaissementVenteController extends Controller
         // échec en cours de route ne doit jamais laisser une commission générée pour un
         // encaissement finalement non persisté.
         try {
-            DB::transaction(function () use ($facture_vente, $commande, $data, $siteEncaissementId) {
+            DB::transaction(function () use ($facture_vente, $commande, $data, $siteEncaissementId, $estAcompte) {
                 $etaitPayee = $facture_vente->isPayee();
 
                 // Auto-transition LIVRAISON_EN_COURS → LIVREE AVANT l'encaissement :
@@ -100,6 +104,7 @@ class StoreEncaissementVenteController extends Controller
                     'compte_tresorerie_id' => $data['compte_tresorerie_id'],
                     'reference_paiement' => $data['reference_paiement'] ?? null,
                     'note' => $data['note'] ?? null,
+                    'est_acompte' => $estAcompte,
                     'created_by' => auth()->id(),
                 ]);
 
@@ -133,14 +138,10 @@ class StoreEncaissementVenteController extends Controller
                 $facture_vente->refresh();
                 $estPayeeMaintenant = $facture_vente->isPayee();
 
-                // Cashback: declenche uniquement quand la facture passe a "payee".
+                // Cashback : déclenché uniquement quand la facture passe à « Payée » — point commun
+                // avec la remise d'une précommande déjà soldée par ses acomptes.
                 if (! $etaitPayee && $estPayeeMaintenant) {
-                    if ($commande && $commande->organization_id && $commande->client_id) {
-                        $org = Organization::find($commande->organization_id);
-                        if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
-                            app(CashbackService::class)->processVente($commande);
-                        }
-                    }
+                    FacturePayeeCascade::apresPassageEnPayee($commande);
                 }
             });
         } catch (UniqueConstraintViolationException $e) {

@@ -125,11 +125,16 @@ RESERVEE / A_PREPARER / PREPAREE / A_CHARGER ──(Annuler la précommande + re
 | `a_preparer` → `preparee` (retrait) / `a_charger` (livraison) | Valider la préparation | `ventes.preparer` | `quantite_preparee` ≤ demandée ; réservation **réduite** à la quantité préparée (nouvelle primitive `StockReservationService::reduire()`) ; total et facture recalculés |
 | `preparee` → `facturation` | Valider le retrait | `ventes.valider_retrait` | `quantite_chargee` (remise) ≤ préparée ; réservation consommée + sortie de stock (`decrementerStock()` existant) ; total recalculé ; facture activée (§ 8.3) ; `remise_at` ; clôture si soldée |
 | `a_charger` → … | Workflow existant | permissions existantes | Chargement : `quantite_chargee` ≤ préparée ; `remise_at` = validation du chargement |
-| pré-remise → `annulee` | Annuler la précommande | `ventes.annuler_precommande` (+ renforcée après préparation, C1) | Réservation libérée, facture annulée (jamais comptabilisée), remboursement de l'encaissé net |
+| `reservee` → `annulee` | Annuler la précommande | `ventes.annuler_precommande` | Motif (≥ 10 caractères) ; remboursement de l'encaissé net dans la même opération ; réservation libérée ; facture annulée (jamais comptabilisée) |
+| `a_preparer` / `preparee` / `a_charger` → `annulee` | Annuler la précommande — **procédure renforcée** (D1) | `ventes.annuler_precommande_preparee` | Idem + code e-mail si l'organisation l'exige (même réglage que l'annulation exceptionnelle). Jamais une fois le chargement démarré |
 
 « Retirée » n'est pas un statut : la page Précommandes l'affiche pour toute précommande dont
 `remise_at` est renseigné et la commande en `facturation`/`cloturee`. Le statut de paiement reste
 porté par la facture (Payée / Partiel / Impayée), jamais mélangé au statut de commande.
+
+**Livraison déjà soldée par les acomptes** : à la validation du chargement, la commande passe
+directement « Livrée » (sauf réception explicite exigée) — aucun encaissement ne viendra plus la
+faire passer « Livrée », règle habituelle d'une vente standard.
 
 **En retard** : indicateur dérivé (`date_remise_prevue` < aujourd'hui et commande pas encore remise),
 jamais un statut. Couleur **WARNING (ambre)**, pas DANGER : la précommande reste valide et
@@ -200,7 +205,8 @@ contrôles que l'encaissement. V1 : acompte encaissé uniquement par **l'agence 
 ### 8.3 À la remise (retrait validé ou chargement validé)
 1. Total recalculé sur la quantité remise / chargée.
 2. Facture activée (et comptabilisée en vente) avec un statut **calculé depuis l'encaissé net**
-   (Impayée / Partiel / Payée) — aujourd'hui `activerFacture()` force « Impayée ».
+   (Impayée / Partiel / Payée) — `PrecommandeService::activerFacture()`, appelé aussi par
+   `CommandeVenteService::activerFacture()` au chargement validé d'une précommande en livraison.
 3. Imputation des acomptes : écriture 4191 → 411 (§ 9).
 4. Cascade « facture payée » si elle l'est : commission (déclencheur « facture encaissée »),
    cashback, clôture — point unique partagé avec le contrôleur d'encaissement (C9).
@@ -217,6 +223,12 @@ espèces depuis la caisse dédiée du payeur, sinon support actif de l'agence ; 
 selon le moyen ; **solde vérifié sous verrou** (`garantirSoldeSuffisant()`). Montant ≤ trop-perçu
 (ou ≤ encaissé net en cas d'annulation). Trace dans `remboursements_ventes` + écriture.
 
+**Implémentation (lot 2)** : le total remboursé est dénormalisé sur la facture
+(`factures_ventes.montant_rembourse`, 0 pour tout l'historique). `FactureVente::encaisseNet()` =
+encaissé − remboursé sert au statut (`recalculStatut()`), au reste à payer (`montant_restant`) et au
+trop-perçu (`tropPercu()`), sans requête de plus par facture dans les listes. Pour une vente sans
+remboursement, rien ne change.
+
 ## 9. Comptabilité
 
 Nouveau compte bootstrapé **419100 « Clients — avances et acomptes reçus »** (et ajout pour les
@@ -226,10 +238,10 @@ organisations existantes, idempotent : migration `2026_10_04_200200_bootstrap_co
 |---|---|---|
 | Acompte reçu (avant remise) — **lot 1, livré** | D trésorerie (support / sous-compte caisse dédiée) / C **419100** | `encaissement_vente_recu`, rôle `avance_client` |
 | Remise : vente constatée | D 411000 / C 701000 (inchangé) | `vente_facturee` |
-| Remise : imputation des acomptes — lot 2 | D **419100** / C 411000 | `acompte_precommande_impute` (à créer) |
+| Remise : imputation des acomptes — **lot 2, livré** | D **419100** / C 411000 | `acompte_precommande_impute` |
 | Solde encaissé après remise | D trésorerie / C 411000 (inchangé) | `encaissement_vente_recu`, rôle `client` |
-| Remboursement avant remise (annulation) — lot 2 | D **419100** / C trésorerie | `remboursement_client` (à créer) |
-| Remboursement d'un trop-perçu (après remise) — lot 2 | D 411000 / C trésorerie | `remboursement_client` (à créer) |
+| Remboursement avant remise (annulation, trop-perçu après préparation) — **lot 2, livré** | D **419100** / C trésorerie | `remboursement_client` |
+| Remboursement d'un trop-perçu (après remise) — **lot 2, livré** | D 411000 / C trésorerie | `remboursement_client` |
 
 **Choix d'implémentation (lot 1)** : l'acompte garde l'événement `encaissement_vente_recu` — seul le
 rôle crédité change (`avance_client` → 419100 au lieu de `client` → 411000), selon
@@ -240,8 +252,8 @@ tels quels.
 
 - Comptabilisation **bloquante** (même règle que l'encaissement) : un échec annule l'opération.
 - Fiche de caisse (grand livre, ADR 0007 §6) : un acompte en espèces apparaît dans
-  « Encaissements espèces », comme tout argent reçu. La catégorie « Remboursements clients » viendra
-  avec le lot 2.
+  « Encaissements espèces », comme tout argent reçu ; un remboursement en espèces dans
+  « Remboursements clients » (lot 2).
 - Le solde 419100 d'une organisation = acomptes détenus pour des précommandes non remises
   (contrôle de cohérence possible).
 
@@ -344,11 +356,19 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
    `a_preparer` / `preparee` et leurs permissions arrivent avec leurs transitions.
    **À ne pas mettre en production avant le lot 2** : une précommande enregistrée ne peut encore ni
    être remise, ni annulée, ni remboursée.
-2. **Lot 2 — Préparation, retrait, argent** : préparation (réduction de réservation), retrait,
-   activation de facture depuis l'encaissé, imputation, cascade partagée (C9), acomptes
-   complémentaires, remboursement, trop-perçu, annulation avant et après préparation.
-3. **Lot 3 — Livraison** : passage à charger, chargement ≤ préparé, retour et écart de réception
-   avec acomptes (C4, C5).
+2. **Lot 2 — Préparation, retrait, argent** (**livré le 04/10/2026**) : statuts `a_preparer` /
+   `preparee`, préparation (réservation réduite sur place, `StockReservationService::reduire()`),
+   retrait, activation de facture depuis l'encaissé (`PrecommandeService`), imputation 419100 → 411000,
+   cascade cashback partagée (`FacturePayeeCascade`, C9), acomptes complémentaires, trop-perçu
+   bloquant la clôture, remboursement (`remboursements_ventes`), annulation simple et renforcée (code
+   e-mail selon le réglage de l'organisation), cinq permissions + backfill `admin_entreprise` /
+   `manager`. Écran : carte « Précommande » de la fiche (`PrecommandeActions.vue`).
+   **Limites connues, traitées au lot 3** : une précommande livrée avec acompte ne peut pas encore
+   faire l'objet d'un retour (ADR 0003 pas encore amendé dans le code) ni d'un écart de réception
+   inférieur aux acomptes (refus actuel) — le flux bloque, il ne fausse rien.
+3. **Lot 3 — Livraison** : retour et écart de réception avec acomptes (C4, C5). Déjà en place au
+   lot 2 : passage à charger à la validation de la préparation, chargement ≤ préparé, activation de
+   la facture et passage « Livrée » d'une livraison soldée par ses acomptes.
 4. **Lot 4 — Rapports** : date de vente = remise (C3), statuts hors CA, situation véhicule (une
    facture `CREEE` de précommande n'est pas un impayé), catégories de la fiche de caisse.
 

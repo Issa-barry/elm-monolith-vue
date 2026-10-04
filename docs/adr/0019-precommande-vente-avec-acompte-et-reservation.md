@@ -92,12 +92,14 @@ existe pour les fiches (ADR 0009).
 - Plan comptable : compte 419100, ajouté aussi aux organisations existantes. L'acompte réutilise
   l'événement `encaissement_vente_recu` avec un rôle crédité `avance_client` (419100) au lieu de
   `client` : tous les consommateurs de cet événement (contrepassation, rattrapage, journal financier,
-  fiche de caisse, annulation exceptionnelle) restent valables. Deux événements seront ajoutés au
-  lot 2 : `acompte_precommande_impute` et `remboursement_client`.
+  fiche de caisse, annulation exceptionnelle) restent valables. Lot 2 : événements
+  `acompte_precommande_impute` (419100 → 411000 à la remise) et `remboursement_client`.
 - `FactureVente::recalculStatut()` ne fait jamais sortir de « Créée » la facture d'une précommande
-  pas encore remise ; `activerFacture()` calculera le statut depuis l'encaissé net (lot 2).
-- Cashback : son déclenchement, aujourd'hui dans le contrôleur d'encaissement, doit être atteint
-  aussi depuis la remise.
+  pas encore remise ; à la remise, `PrecommandeService::activerFacture()` calcule le statut depuis
+  l'encaissé net. Le total remboursé est dénormalisé (`factures_ventes.montant_rembourse`) : statut,
+  reste à payer et trop-perçu se calculent net des remboursements.
+- Cashback : déclenchement extrait du contrôleur d'encaissement dans `FacturePayeeCascade`,
+  appelé aussi à la remise d'une précommande soldée par ses acomptes.
 - `StockReservationService` gagne une réduction partielle (préparation inférieure à la demande).
 - Rapports : statuts avant remise hors chiffre d'affaires, date de vente = remise, une facture
   « Créée » de précommande n'est pas un impayé (situation véhicule), deux catégories de caisse.

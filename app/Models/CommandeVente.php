@@ -290,11 +290,27 @@ class CommandeVente extends Model
      */
     public function isEnRetard(): bool
     {
+        return $this->estPrecommandeAvantRemise()
+            && $this->date_remise_prevue !== null
+            && $this->date_remise_prevue->lt(today());
+    }
+
+    /**
+     * Précommande dont la marchandise n'est pas encore remise (ADR 0019) : ses encaissements sont des
+     * acomptes (avance client 419100), sa facture reste « Créée ». La remise (retrait validé ou
+     * chargement validé) renseigne `remise_at`.
+     */
+    public function estPrecommandeAvantRemise(): bool
+    {
         return $this->est_precommande
             && $this->remise_at === null
-            && $this->date_remise_prevue !== null
-            && $this->date_remise_prevue->lt(today())
-            && $this->isReservee();
+            && in_array($this->statut, [
+                StatutCommandeVente::RESERVEE,
+                StatutCommandeVente::A_PREPARER,
+                StatutCommandeVente::PREPAREE,
+                StatutCommandeVente::A_CHARGER,
+                StatutCommandeVente::CHARGEMENT_EN_COURS,
+            ], true);
     }
 
     public function isAnnulee(): bool
@@ -399,7 +415,9 @@ class CommandeVente extends Model
         }
 
         $facture = $this->load('facture')->facture;
-        if (! $facture?->isPayee() || ! $this->commissionsPretesPourCloture()) {
+        // Trop-perçu d'une précommande (ADR 0019) : la commande ne se clôture qu'une fois le client
+        // remboursé de ce qu'il a versé en trop.
+        if (! $facture?->isPayee() || $facture->tropPercu() > 0 || ! $this->commissionsPretesPourCloture()) {
             return false;
         }
 

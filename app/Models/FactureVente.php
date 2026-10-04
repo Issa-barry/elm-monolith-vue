@@ -26,6 +26,7 @@ class FactureVente extends Model
         'montant_brut',
         'montant_net',
         'statut_facture',
+        'montant_rembourse',
     ];
 
     protected $appends = ['statut_label', 'montant_encaisse', 'montant_restant'];
@@ -35,6 +36,7 @@ class FactureVente extends Model
         return [
             'montant_brut' => 'decimal:2',
             'montant_net' => 'decimal:2',
+            'montant_rembourse' => 'decimal:2',
             'statut_facture' => StatutFactureVente::class,
         ];
     }
@@ -90,9 +92,42 @@ class FactureVente extends Model
         return (float) $this->encaissements()->sum('montant');
     }
 
+    /** Net des remboursements faits au client (ADR 0019) — identique à l'encaissé pour toute facture jamais remboursée. */
     public function getMontantRestantAttribute(): float
     {
-        return max(0, (float) $this->montant_net - $this->montant_encaisse);
+        return max(0, (float) $this->montant_net - $this->encaisseNet());
+    }
+
+    /** Remboursements faits au client sur cette facture (ADR 0019 : trop-perçu, précommande annulée). */
+    public function remboursements(): HasMany
+    {
+        return $this->hasMany(RemboursementVente::class, 'facture_vente_id');
+    }
+
+    /** Total remboursé, dénormalisé (`factures_ventes.montant_rembourse`), tenu à jour par PrecommandeService. */
+    public function montantRembourse(): float
+    {
+        return round((float) $this->montant_rembourse, 2);
+    }
+
+    /** Argent du client encore détenu : encaissé (acomptes compris) moins déjà remboursé. */
+    public function encaisseNet(): float
+    {
+        return round($this->montant_encaisse - $this->montantRembourse(), 2);
+    }
+
+    /**
+     * Trop-perçu à rendre au client (ADR 0019) : ce qu'il a versé au-delà de ce qui lui est facturé
+     * (quantité préparée ou remise inférieure à la précommande). Dérivé, jamais stocké ; bloque la
+     * clôture tant qu'il n'est pas remboursé (cf. CommandeVente::cloturerSiComplete()).
+     */
+    public function tropPercu(): float
+    {
+        if ($this->isAnnulee()) {
+            return 0.0;
+        }
+
+        return max(0.0, round($this->encaisseNet() - (float) $this->montant_net, 2));
     }
 
     public function isCreee(): bool
@@ -125,7 +160,7 @@ class FactureVente extends Model
 
         $etaitPayee = $this->statut_facture === StatutFactureVente::PAYEE;
 
-        $encaisse = (float) $this->encaissements()->sum('montant');
+        $encaisse = (float) $this->encaissements()->sum('montant') - $this->montantRembourse();
         $net = (float) $this->montant_net;
 
         $this->statut_facture = match (true) {

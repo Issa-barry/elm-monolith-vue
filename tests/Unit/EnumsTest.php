@@ -176,8 +176,8 @@ class EnumsTest extends TestCase
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        // 11 depuis RESERVEE (précommande pas encore remise, ADR 0019, 04/10/2026).
-        $this->assertCount(11, $options);
+        // 13 depuis RESERVEE, A_PREPARER et PREPAREE (cycle de vie des précommandes, ADR 0019).
+        $this->assertCount(13, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
