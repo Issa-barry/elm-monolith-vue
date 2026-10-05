@@ -1186,7 +1186,7 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
     (`validated_at`), exactement comme « Valider le véhicule » de l'écran d'ajustement. Quand la
     dernière commission de la période est validée, la période passe elle-même à « Validée »
     (validation automatique, ADR 0008).
-  - **Valider la période de paiement** (en-tête, anciennement « Valider ») : fait passer la
+  - **Valider la période** (en-tête, anciennement « Valider la période de paiement ») : fait passer la
     période `CALCULEE → VALIDEE`, fige les montants et rend les commissions payables. Toujours
     refusée tant qu'une part n'est pas validée ou qu'un véhicule n'est pas équilibré. Depuis
     l'ADR 0008, rarement nécessaire : la période se valide seule dès que tout est validé.
