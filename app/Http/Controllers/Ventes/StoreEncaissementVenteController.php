@@ -108,6 +108,11 @@ class StoreEncaissementVenteController extends Controller
                     'created_by' => auth()->id(),
                 ]);
 
+                // Acompte complémentaire d'une précommande : même trace au journal que l'acompte de création.
+                if ($commande && $estAcompte) {
+                    CommandeVenteActiviteService::log($commande, 'acompte_recu', ['montant' => (float) $data['montant']]);
+                }
+
                 // Audit: log on the parent commande
                 if ($commande) {
                     $this->auditService->record(

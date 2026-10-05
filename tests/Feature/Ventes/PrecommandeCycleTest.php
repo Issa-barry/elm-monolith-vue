@@ -234,6 +234,9 @@ class PrecommandeCycleTest extends TestCase
         $this->assertTrue($facture->encaissements->every(fn ($e) => $e->est_acompte));
         $this->assertSame(StatutFactureVente::CREEE, $facture->statut_facture);
         $this->assertSame(-50000.0, $this->soldeCompte('419100'));
+        // Journal : l'acompte complémentaire est tracé comme celui de la création.
+        $this->assertSame([30000, 20000], $commande->activites()->where('action', 'acompte_recu')->reorder()->oldest()->orderBy('id')->get()
+            ->map(fn ($a) => (int) $a->details['montant'])->all());
     }
 
     // ── Trop-perçu et remboursement ───────────────────────────────────────────

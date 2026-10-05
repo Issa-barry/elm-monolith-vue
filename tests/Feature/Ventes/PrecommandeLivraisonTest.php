@@ -205,6 +205,11 @@ class PrecommandeLivraisonTest extends TestCase
         $this->assertNotNull($commande->livree_at);
         $this->assertSame(10 * self::CASHBACK_PAR_PACK, (int) $this->cashback($commande)->montant);
         $this->assertNotNull($commande->activites()->where('action', 'livree')->first());
+
+        // Journal : la clôture suit la confirmation, attribuée à l'auteur de l'action qui l'a déclenchée.
+        $dernieres = $commande->activites()->take(2)->get();
+        $this->assertSame(['cloturee', 'livree'], $dernieres->pluck('action')->all());
+        $this->assertSame($this->user->id, $dernieres->first()->user_id);
     }
 
     public function test_confirmer_la_livraison_d_une_precommande_non_soldee_laisse_un_reste_a_encaisser(): void

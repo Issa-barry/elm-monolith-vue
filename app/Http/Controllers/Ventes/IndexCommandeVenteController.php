@@ -12,6 +12,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Support\Ventes\PrecommandeSuivi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -55,7 +56,7 @@ class IndexCommandeVenteController extends Controller
 
         $query = CommandeVente::with([
             'vehicule.proprietaire',
-            'vehicule.equipe.livreurs',
+            'vehicule.equipe.livreurs.personne',
             'client',
             'site',
             'facture.encaissements.creator',
@@ -89,10 +90,6 @@ class IndexCommandeVenteController extends Controller
                 'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
                 default => null,
             };
-        }
-
-        if (! empty($statuts)) {
-            $query->whereIn('statut', $statuts);
         }
 
         if ($statutFacture) {
@@ -207,6 +204,21 @@ class IndexCommandeVenteController extends Controller
             $query->where('nature_operation', $natureFiltree->value);
         }
 
+        // Indicateurs calculés avant les filtres Statut / En retard : ils servent eux-mêmes de filtre
+        // rapide, leurs compteurs ne doivent pas tomber à zéro dès qu'on en sélectionne un.
+        $indicateursPrecommandes = $liste === 'precommandes'
+            ? PrecommandeSuivi::indicateurs((clone $query)->setEagerLoads([])->get(['id', 'statut', 'est_precommande', 'date_remise_prevue', 'remise_at']))
+            : null;
+
+        if (! empty($statuts)) {
+            $query->whereIn('statut', $statuts);
+        }
+
+        $enRetard = $liste === 'precommandes' && $request->boolean('en_retard');
+        if ($enRetard) {
+            $query->enRetard();
+        }
+
         $commandes = $query->get();
         $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee() && ! $c->isAnnuleeErreurSaisie());
         $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
@@ -271,6 +283,7 @@ class IndexCommandeVenteController extends Controller
             'saved_view' => $savedView,
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
+            'indicateurs_precommandes' => $indicateursPrecommandes,
             'nature_filtree' => $natureFiltree->value,
             'liste' => $liste,
             'page_title' => match ($liste) {
@@ -302,6 +315,7 @@ class IndexCommandeVenteController extends Controller
                 'livreur' => $livreur,
                 'numero_commande' => $numeroCommande,
                 'client' => $client,
+                'en_retard' => $enRetard ? '1' : null,
             ],
         ]);
     }
@@ -322,6 +336,9 @@ class IndexCommandeVenteController extends Controller
             $c->mode_remise_grossiste,
         );
 
+        $chauffeur = $c->vehicule?->equipe?->livreurs
+            ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur');
+
         return [
             'id' => $c->id,
             'reference' => $c->reference,
@@ -332,6 +349,8 @@ class IndexCommandeVenteController extends Controller
             'nature_operation' => $c->nature_operation?->value,
             'est_precommande' => (bool) $c->est_precommande,
             'date_remise_prevue' => $c->date_remise_prevue?->format('d/m/Y'),
+            'date_remise_prevue_iso' => $c->date_remise_prevue?->format('Y-m-d'),
+            'precommande_livraison' => $c->est_precommande && $c->vehicule_id !== null,
             'en_retard' => $c->isEnRetard(),
             'trop_percu' => $c->est_precommande ? (float) ($c->facture?->tropPercu() ?? 0) : 0.0,
             'processus_code' => $processusCode,
@@ -341,9 +360,8 @@ class IndexCommandeVenteController extends Controller
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
             'vehicule_photo_url' => $c->vehicule?->photo_url,
-            'chauffeur_nom' => $c->vehicule?->equipe?->livreurs
-                ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur')
-                ?->nom_complet,
+            'chauffeur_nom' => $chauffeur?->nom_complet,
+            'chauffeur_telephone' => $chauffeur?->telephone,
             'client_nom' => $c->client?->nom_complet,
             'client_telephone' => $c->client?->telephone,
             'site_nom' => $c->site?->nom,

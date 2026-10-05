@@ -59,6 +59,7 @@ const base = {
     vehicule_immatriculation: 'RC-1234-A',
     vehicule_photo_url: '/storage/vehicules/ui-preview.svg',
     chauffeur_nom: 'Chauffeur exemple',
+    chauffeur_telephone: '+224613855281',
     client_nom: 'Client exemple',
     client_telephone: '+224622123456',
     site_nom: 'Agence exemple',
@@ -122,6 +123,7 @@ test.beforeEach(async ({ page }) => {
                     client_nom: null,
                     client_telephone: null,
                     chauffeur_nom: null,
+                    chauffeur_telephone: null,
                     processus_code: 'vente',
                     processus_label: 'Vente',
                     statut: 'brouillon',
@@ -251,14 +253,27 @@ for (const width of [360, 390, 480]) {
         const drawer = page.getByRole('dialog', { name: base.reference });
         await expect(drawer).toBeVisible();
         const header = drawer.locator('.p-drawer-header');
-        const statusBox = await header
-            .getByText('Livrée', { exact: true })
-            .boundingBox();
-        const titleBox = await header
-            .getByRole('heading', { name: base.reference })
-            .boundingBox();
-        expect(statusBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width);
-        expect(Math.abs(statusBox!.y - titleBox!.y)).toBeLessThan(4);
+        // Les deux boîtes sont mesurées l'une après l'autre : pendant la montée du tiroir, l'écart
+        // vertical reflète l'animation, pas la mise en page — on attend qu'elle soit finie.
+        const boites = () =>
+            header.evaluate((el) => {
+                const status = [...el.querySelectorAll('*')].find(
+                    (n) => n.textContent?.trim() === 'Livrée',
+                )!;
+                const title = el.querySelector('h1, h2, h3, [role="heading"]')!;
+                return {
+                    status: status.getBoundingClientRect().toJSON(),
+                    title: title.getBoundingClientRect().toJSON(),
+                };
+            });
+        await expect
+            .poll(async () => {
+                const { status, title } = await boites();
+                return Math.abs(status.y - title.y);
+            })
+            .toBeLessThan(4);
+        const { status: statusBox, title: titleBox } = await boites();
+        expect(statusBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
         const qr = drawer
             .getByRole('group', {
                 name: `QR code de la commande ${base.reference}`,
@@ -274,6 +289,7 @@ for (const width of [360, 390, 480]) {
             'http://ui-preview.test/backoffice/ventes',
         );
         await expect(drawer).toContainText('Client exemple');
+        await expect(drawer).toContainText('Tél. chauffeur');
         await expect(drawer).toContainText('10 260 000 GNF');
         await expect(drawer).toContainText('10 000 000 GNF');
         await expect(

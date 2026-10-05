@@ -60,7 +60,9 @@ class AvancerStatutVenteController extends Controller
             default => 'statut_change',
         };
 
-        CommandeVenteActiviteService::log($commande_vente, $action);
+        CommandeVenteActiviteService::log($commande_vente, $action, $action === 'chargement_valide'
+            ? ['quantite' => (int) $commande_vente->load('lignes')->lignes->sum('quantite_chargee')]
+            : []);
 
         // Notifications transactionnelles SMS/WhatsApp (cf. rapport
         // notifications de commande, 07/09/2026) — même point métier exact

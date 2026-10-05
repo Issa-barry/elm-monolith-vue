@@ -11,6 +11,7 @@ export interface VenteMobile {
     vehicule_immatriculation: string | null;
     vehicule_photo_url: string | null;
     chauffeur_nom: string | null;
+    chauffeur_telephone: string | null;
     client_nom: string | null;
     client_telephone: string | null;
     site_nom: string | null;
