@@ -11,6 +11,7 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
+use App\Http\Controllers\Comptabilite\CommissionMonitoring\RelancerCommissionMonitoringController;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -31,12 +32,16 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Notifications\CommissionManquanteNotification;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionMonitoringService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
+use RuntimeException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
@@ -510,5 +515,81 @@ class CommissionMonitoringTest extends TestCase
         $texte = implode("\n", [...$mail->introLines, ...$mail->outroLines]);
         $this->assertStringContainsString('/backoffice/comptabilite/commissions/monitoring?reference=VTE-250926-007', $texte);
         $this->assertStringContainsString('Commissions > Monitoring', $texte);
+    }
+
+    // ── Relance par lots sans email (incident 504 du 03/10/2026) ──────────────
+
+    public function test_premier_echec_alerte_par_email_mais_relance_manuelle_en_echec_jamais(): void
+    {
+        Notification::fake();
+        ['commande' => $commande] = $this->commandePartageNonConforme();
+
+        Notification::assertSentTo($this->user, CommissionManquanteNotification::class,
+            fn (CommissionManquanteNotification $n, array $canaux) => $canaux === ['database', 'mail']);
+
+        Notification::fake();
+        $id = $this->anomalies()->sole()['id'];
+        $this->actingAs($this->user)->from(self::URL)
+            ->post(self::URL.'/relancer', ['anomalies' => [$id]])
+            ->assertSessionHasErrors('relance');
+
+        $this->assertSame(2, CommissionGenerationAttempt::where('source_id', $commande->id)->count());
+        Notification::assertSentTo($this->user, CommissionManquanteNotification::class,
+            fn (CommissionManquanteNotification $n, array $canaux) => $canaux === ['database']);
+    }
+
+    public function test_relance_json_renvoie_le_bilan_du_lot_pour_agregation_par_l_ecran(): void
+    {
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 800);
+        $a = $this->vehicule([500, 450]);
+        $b = $this->vehicule([600, 400]);
+        $this->commandeChargee($a['vehicule']);
+        $commandeB = $this->commandeChargee($b['vehicule']);
+        $this->corrigerPartage($a['equipe'], [500, 300]);
+
+        $this->actingAs($this->user)
+            ->postJson(self::URL.'/relancer', ['anomalies' => $this->anomalies()->pluck('id')->all()])
+            ->assertOk()
+            ->assertJsonPath('regularisees', 1)
+            ->assertJsonPath('sans_objet', 0)
+            ->assertJsonCount(1, 'echecs')
+            ->assertJsonPath('echecs.0.reference', "{$commandeB->reference} — Livreurs");
+    }
+
+    public function test_un_lot_au_dela_du_plafond_est_refuse_sans_aucune_relance(): void
+    {
+        $tentatives = CommissionGenerationAttempt::count();
+        $ids = array_map(fn (int $i) => "vente~id{$i}~p~equipe_livraison", range(1, RelancerCommissionMonitoringController::LOT_MAX + 1));
+
+        $this->actingAs($this->user)
+            ->postJson(self::URL.'/relancer', ['anomalies' => $ids])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('anomalies');
+        $this->assertSame($tentatives, CommissionGenerationAttempt::count());
+    }
+
+    public function test_alerte_envoyee_apres_le_commit_jamais_si_l_operation_est_annulee(): void
+    {
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 800);
+        $v = $this->vehicule([500, 450]);
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $v['vehicule']->id,
+            'commission_eligible_snapshot' => true,
+        ]);
+        Notification::fake();
+
+        try {
+            DB::transaction(function () use ($commande) {
+                CommissionEnveloppeGenerator::genererPourCommandeVente($commande, declencheurUserId: $this->user->id);
+                Notification::assertNothingSent();
+                throw new RuntimeException('Opération appelante annulée');
+            });
+        } catch (RuntimeException $e) {
+            $this->assertSame('Opération appelante annulée', $e->getMessage());
+        }
+
+        Notification::assertNothingSent();
     }
 }

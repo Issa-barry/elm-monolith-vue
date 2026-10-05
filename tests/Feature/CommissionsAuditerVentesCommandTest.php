@@ -114,7 +114,9 @@ class CommissionsAuditerVentesCommandTest extends TestCase
         $this->actingAs($this->user);
         CommandeVenteService::creerFactureDirecte($commande);
 
+        // La référence métier (VTE-…) est affichée, pas le compteur interne `numero`.
         $this->artisan('commissions:auditer-ventes', ['--organization' => [$this->org->id]])
+            ->expectsOutputToContain($commande->fresh()->reference)
             ->assertExitCode(1);
     }
 

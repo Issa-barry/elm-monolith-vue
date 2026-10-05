@@ -29,9 +29,11 @@ class FicheCaisseService
 {
     public const CATEGORIES = [
         'encaissements' => 'Encaissements espèces',
+        'approvisionnements_recus' => "Approvisionnements reçus de l'agence",
         'encaissements_annules' => 'Encaissements annulés (contrepassés)',
         'versements_envoyes' => 'Versements envoyés',
         'versements_renvoyes' => "Versements renvoyés à l'agent",
+        'remboursements_clients' => 'Remboursements clients',
         'contrepassations' => 'Autres contrepassations',
     ];
 
@@ -154,7 +156,11 @@ class FicheCaisseService
 
         return match ($evenement) {
             EvenementComptable::ENCAISSEMENT_VENTE_RECU->value => 'encaissements',
+            // Trop-perçu ou acomptes d'une précommande annulée rendus au client (ADR 0019).
+            EvenementComptable::REMBOURSEMENT_CLIENT->value => 'remboursements_clients',
             EvenementComptable::MOUVEMENT_FONDS_ENVOYE->value => 'versements_envoyes',
+            // Seul un approvisionnement (ADR 0018) crédite une caisse dédiée par un mouvement de fonds.
+            EvenementComptable::MOUVEMENT_FONDS_RECU->value => 'approvisionnements_recus',
             default => $evenement,
         };
     }

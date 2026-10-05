@@ -7,6 +7,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    CalendarClock,
     HandCoins,
     Lock,
     PackageCheck,
@@ -47,6 +48,10 @@ const props = defineProps<{
     annulation_exceptionnelle_confirmation_options: ModeConfirmationOption[];
     /** `parametres.update` ET `ventes.annuler_exceptionnel` — cf. UpdateVenteParametrageController. */
     peut_modifier_confirmation_annulation: boolean;
+    /** Acompte des précommandes (ADR 0019, D6) : règle configurable, taux saisi librement. */
+    /** null tant que l'organisation n'a pas choisi : création de précommandes bloquée. */
+    precommande_acompte_obligatoire: boolean | null;
+    precommande_acompte_min_pct: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -73,7 +78,16 @@ const form = useForm({
     declencheur_commission_vente: props.declencheur_commission_vente,
     annulation_exceptionnelle_confirmation:
         props.annulation_exceptionnelle_confirmation,
+    precommande_acompte_obligatoire: props.precommande_acompte_obligatoire,
+    precommande_acompte_min_pct: props.precommande_acompte_min_pct,
 });
+
+// Acompte obligatoire ⇒ taux strictement positif (refusé aussi côté serveur).
+const tauxAcompteInvalide = computed(
+    () =>
+        form.precommande_acompte_obligatoire &&
+        !(form.precommande_acompte_min_pct >= 1),
+);
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
 
@@ -112,7 +126,17 @@ function toggleRole(role: RoleQuantite, field: EditableRoleField) {
 }
 
 function submit() {
-    form.put('/settings/ventes', {
+    // Tant que l'acompte n'a pas été choisi, rien n'est envoyé pour les précommandes : enregistrer un
+    // autre paramètre ne doit jamais les configurer à la place de l'organisation.
+    form.transform((data) =>
+        data.precommande_acompte_obligatoire === null
+            ? {
+                  ...data,
+                  precommande_acompte_obligatoire: undefined,
+                  precommande_acompte_min_pct: undefined,
+              }
+            : data,
+    ).put('/settings/ventes', {
         preserveScroll: true,
         onSuccess: () => {
             toast.add({
@@ -568,6 +592,117 @@ function onSeuilBlur() {
                     </div>
                 </div>
 
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <CalendarClock class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Précommandes
+                        </h3>
+                    </div>
+
+                    <div
+                        v-if="form.precommande_acompte_obligatoire === null"
+                        role="status"
+                        class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                    >
+                        Non configuré : la création de précommandes reste
+                        bloquée tant que vous n'avez pas choisi si l'acompte est
+                        obligatoire.
+                    </div>
+
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-foreground">
+                                Acompte obligatoire
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Oui : une précommande n'est enregistrée qu'avec
+                                un acompte au moins égal au taux ci-dessous. Non
+                                : elle peut être enregistrée sans acompte.
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <Button
+                                v-for="choix in [
+                                    { valeur: true, libelle: 'Oui' },
+                                    { valeur: false, libelle: 'Non' },
+                                ]"
+                                :key="choix.libelle"
+                                type="button"
+                                size="sm"
+                                :variant="
+                                    form.precommande_acompte_obligatoire ===
+                                    choix.valeur
+                                        ? 'default'
+                                        : 'outline'
+                                "
+                                :disabled="form.processing"
+                                @click="
+                                    form.precommande_acompte_obligatoire =
+                                        choix.valeur
+                                "
+                            >
+                                {{ choix.libelle }}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div class="border-t px-5 py-4">
+                        <label
+                            for="precommande_acompte_min_pct"
+                            class="block text-sm font-medium text-foreground"
+                        >
+                            Taux d'acompte (%)
+                        </label>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Pourcentage du total de la précommande, saisi
+                            librement (1 à 100 % quand l'acompte est
+                            obligatoire).
+                        </p>
+                        <div class="relative mt-2 w-40">
+                            <input
+                                id="precommande_acompte_min_pct"
+                                v-model.number="
+                                    form.precommande_acompte_min_pct
+                                "
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                :disabled="form.processing"
+                                class="h-10 w-full rounded-md border border-input bg-background pr-9 pl-3 text-sm tabular-nums"
+                                :class="{
+                                    'border-destructive':
+                                        tauxAcompteInvalide ||
+                                        form.errors.precommande_acompte_min_pct,
+                                }"
+                            />
+                            <span
+                                class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-muted-foreground"
+                                >%</span
+                            >
+                        </div>
+                        <p
+                            v-if="form.errors.precommande_acompte_min_pct"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.precommande_acompte_min_pct }}
+                        </p>
+                        <p
+                            v-else-if="tauxAcompteInvalide"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            Quand l'acompte est obligatoire, son taux doit être
+                            supérieur à 0 %.
+                        </p>
+                    </div>
+                </div>
+
                 <div
                     v-if="flashSuccess"
                     class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
@@ -577,7 +712,11 @@ function onSeuilBlur() {
 
                 <div class="flex justify-end">
                     <Button
-                        :disabled="form.processing || !form.isDirty"
+                        :disabled="
+                            form.processing ||
+                            !form.isDirty ||
+                            tauxAcompteInvalide
+                        "
                         @click="submit"
                     >
                         Enregistrer

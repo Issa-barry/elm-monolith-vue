@@ -64,7 +64,9 @@ test('la page Financement des agences se charge avec ses cartes et son tableau',
     // pas une ambiguïté de test ; on vérifie juste la présence du texte.
     await expect(page.getByText(/total à régler/i).first()).toBeVisible();
     await expect(page.getByText(/disponible dans les agences/i)).toBeVisible();
-    await expect(page.getByText(/à financer par le siège/i)).toBeVisible();
+    await expect(
+        page.getByText(/à financer par la trésorerie principale/i),
+    ).toBeVisible();
 
     // Sélecteur d'échéance compact (1re quinzaine / Fin de mois / Mois complet).
     await expect(

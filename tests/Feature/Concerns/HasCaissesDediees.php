@@ -105,10 +105,10 @@ trait HasCaissesDediees
     }
 
     /**
-     * Pose au grand livre une pièce qui débite le compte propre de la caisse (le
-     * système n'a pas encore de versement vers une caisse dédiée : c'est la manière
-     * la plus directe d'y mettre un solde). Une seule alimentation par caisse — la
-     * pièce est idempotente par (source, événement).
+     * Pose au grand livre une pièce qui débite le compte propre de la caisse : la manière la
+     * plus directe d'y mettre un solde (l'approvisionnement réel d'une caisse dédiée, ADR 0018,
+     * exige une caisse d'agence approvisionnée et la confirmation de l'agent). Une seule
+     * alimentation par caisse — la pièce est idempotente par (source, événement).
      */
     private function alimenterCaisse(CompteTresorerie $caisse, float $montant): PieceComptable
     {

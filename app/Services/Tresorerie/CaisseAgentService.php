@@ -34,8 +34,9 @@ use Illuminate\Validation\ValidationException;
  *  - une caisse qui détient encore de l'argent, ou dont un versement est en cours (envoyé ou
  *    contesté), ne peut pas être désactivée.
  *
- * Une caisse dédiée démarre à 0, sans solde d'ouverture : son alimentation
- * passe par un transfert depuis la caisse de l'agence.
+ * Une caisse dédiée démarre à 0, sans solde d'ouverture : elle s'alimente par les encaissements en
+ * espèces de l'agent ou par un approvisionnement depuis la caisse de l'agence, confirmé par l'agent
+ * lui-même (MouvementFondsService::approvisionnerCaisseAgent(), ADR 0018).
  */
 class CaisseAgentService
 {
@@ -140,27 +141,7 @@ class CaisseAgentService
             }
 
             if (! $actif && $support->actif) {
-                // Un versement envoyé (ou contesté) n'a pas encore quitté définitivement la caisse :
-                // un retour la recréditerait après désactivation, et une caisse désactivée doit
-                // rester vide. Le solde seul ne le voit pas — l'argent est alors en transit.
-                $versementEnCours = MouvementFonds::where('organization_id', $support->organization_id)
-                    ->where('compte_tresorerie_origine_id', $support->id)
-                    ->where('nature', NatureMouvementFonds::INTERNE_CAISSES->value)
-                    ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value])
-                    ->exists();
-                if ($versementEnCours) {
-                    throw ValidationException::withMessages([
-                        'actif' => 'Un versement de cette caisse est en cours (envoyé ou contesté) : attendez sa réception ou son retour avant de la désactiver.',
-                    ]);
-                }
-
-                $solde = $this->disponibilite->soldePourSupport($support);
-                if (abs($solde) >= 0.005) {
-                    $montant = number_format(abs($solde), 0, ',', ' ');
-                    throw ValidationException::withMessages([
-                        'actif' => "Cette caisse détient encore {$montant} GNF : versez d'abord ce solde à la caisse de l'agence avant de la désactiver.",
-                    ]);
-                }
+                $this->garantirDesactivable($support);
             }
 
             $support->update([
@@ -170,6 +151,47 @@ class CaisseAgentService
 
             return $support->fresh();
         });
+    }
+
+    /**
+     * Une caisse ne se désactive que vide et sans argent en transit, dans un sens comme dans l'autre.
+     */
+    private function garantirDesactivable(CompteTresorerie $support): void
+    {
+        // Un versement envoyé (ou contesté) n'a pas encore quitté définitivement la caisse :
+        // un retour la recréditerait après désactivation, et une caisse désactivée doit
+        // rester vide. Le solde seul ne le voit pas — l'argent est alors en transit.
+        $versementEnCours = MouvementFonds::where('organization_id', $support->organization_id)
+            ->where('compte_tresorerie_origine_id', $support->id)
+            ->where('nature', NatureMouvementFonds::INTERNE_CAISSES->value)
+            ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value])
+            ->exists();
+        if ($versementEnCours) {
+            throw ValidationException::withMessages([
+                'actif' => 'Un versement de cette caisse est en cours (envoyé ou contesté) : attendez sa réception ou son retour avant de la désactiver.',
+            ]);
+        }
+
+        // Sens inverse (ADR 0018) : un approvisionnement en attente créditerait une caisse
+        // désactivée à sa confirmation.
+        $approvisionnementEnCours = MouvementFonds::where('organization_id', $support->organization_id)
+            ->where('compte_tresorerie_destination_id', $support->id)
+            ->where('nature', NatureMouvementFonds::APPROVISIONNEMENT_CAISSE->value)
+            ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value])
+            ->exists();
+        if ($approvisionnementEnCours) {
+            throw ValidationException::withMessages([
+                'actif' => 'Un approvisionnement de cette caisse est en attente (envoyé ou contesté) : attendez sa confirmation par l\'agent ou son retour avant de la désactiver.',
+            ]);
+        }
+
+        $solde = $this->disponibilite->soldePourSupport($support);
+        if (abs($solde) >= 0.005) {
+            $montant = number_format(abs($solde), 0, ',', ' ');
+            throw ValidationException::withMessages([
+                'actif' => "Cette caisse détient encore {$montant} GNF : versez d'abord ce solde à la caisse de l'agence avant de la désactiver.",
+            ]);
+        }
     }
 
     private function verifierAgent(User $agent, Site $site, string $champ): void

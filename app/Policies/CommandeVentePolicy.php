@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\CommandeVente;
 use App\Models\User;
+use App\Services\Ventes\PrecommandeService;
 
 class CommandeVentePolicy
 {
@@ -21,6 +22,52 @@ class CommandeVentePolicy
     public function create(User $user): bool
     {
         return $user->can('ventes.create');
+    }
+
+    /** Création d'une précommande, acompte initial compris (ADR 0019) — permission dédiée. */
+    public function precommander(User $user): bool
+    {
+        return $user->can('ventes.precommander');
+    }
+
+    /** Lancer et valider la préparation d'une précommande (ADR 0019). */
+    public function preparer(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.preparer') && $this->sameOrganization($user, $commande);
+    }
+
+    public function validerRetrait(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.valider_retrait') && $this->sameOrganization($user, $commande);
+    }
+
+    /**
+     * Confirmer la livraison d'une précommande (décision D13) — même permission que la validation de
+     * réception : ceux qui constatent réellement la livraison. L'état est vérifié par
+     * PrecommandeService::confirmerLivraison() (Gate::before du super admin).
+     */
+    public function confirmerLivraison(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.valider_reception') && $this->sameOrganization($user, $commande);
+    }
+
+    /** Rembourser un client (trop-perçu d'une précommande) — sortie réelle de trésorerie. */
+    public function rembourser(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.rembourser') && $this->sameOrganization($user, $commande);
+    }
+
+    /**
+     * Annuler une précommande : procédure simple avant préparation, renforcée ensuite (décision D1).
+     * L'état réel de la commande reste vérifié par PrecommandeService (Gate::before du super admin).
+     */
+    public function annulerPrecommande(User $user, CommandeVente $commande): bool
+    {
+        $permission = PrecommandeService::annulationRenforcee($commande)
+            ? 'ventes.annuler_precommande_preparee'
+            : 'ventes.annuler_precommande';
+
+        return $user->can($permission) && $this->sameOrganization($user, $commande);
     }
 
     public function update(User $user, CommandeVente $commande): bool

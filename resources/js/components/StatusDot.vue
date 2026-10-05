@@ -47,6 +47,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     commissions_a_verser: 'bg-blue-500',
     // Encaissement reçu pour une autre agence, reversement parti mais pas encore reçu (ADR 0012).
     en_cours_versement: 'bg-blue-500',
+    // Précommande enregistrée, stock réservé, pas encore remise (StatutCommandeVente::RESERVEE,
+    // ADR 0019). À ne pas confondre avec `reserve` (gris, règlement inter-agences).
+    reservee: 'bg-blue-500',
+    // Précommande préparée, en attente du client (StatutCommandeVente::PREPAREE).
+    preparee: 'bg-teal-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".
@@ -97,6 +102,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partiellement_paye: 'bg-orange-500',
     partiellement_verse: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    // Précommande en cours de préparation (StatutCommandeVente::A_PREPARER).
+    a_preparer: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',
@@ -120,6 +127,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_remettre: 'bg-amber-500',
     // Le site central lui-même (ADR 0017) : une information, pas une situation à traiter.
     tresorerie_principale: 'bg-blue-500',
+    // Remises des agences au Trésor principal (ADR 0016).
+    remise_en_cours: 'bg-blue-500',
+    partiellement_remis: 'bg-amber-500',
+    remis: 'bg-emerald-500',
+    rien_a_remettre: 'bg-emerald-500',
     donnees_incompletes: 'bg-amber-500',
     stock_negatif: 'bg-orange-500',
 };

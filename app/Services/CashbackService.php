@@ -124,9 +124,9 @@ class CashbackService
      * Quantité de packs ouvrant droit au cashback pour cette vente — réutilise le même repère
      * métier que la tarification par nature de client (PrixVenteNatureResolver::estFabricable()) :
      * seules les lignes de produits fabricables comptent, jamais un matériel/service facturé
-     * accessoirement sur la même commande. Préfère la quantité réellement livrée quand un
-     * chargement véhicule a eu lieu (cf. CommandeVenteLigne::quantite_livree), sinon la quantité
-     * demandée (vente directe client, sans étape de chargement/livraison).
+     * accessoirement sur la même commande. Quantité effective de chaque ligne (décision D14 du
+     * 04/10/2026, toutes ventes) : livrée (retour, réception), sinon chargée ou remise, sinon
+     * demandée — jamais la quantité commandée d'une ligne chargée ou remise en moins.
      */
     private function quantiteEligible(CommandeVente $vente): int
     {
@@ -134,7 +134,7 @@ class CashbackService
 
         return (int) $vente->lignes
             ->filter(fn ($ligne) => $ligne->variante && PrixVenteNatureResolver::estFabricable($ligne->variante))
-            ->sum(fn ($ligne) => (int) ($ligne->quantite_livree ?? $ligne->quantite_demandee));
+            ->sum(fn ($ligne) => $ligne->quantite_effective);
     }
 
     /**

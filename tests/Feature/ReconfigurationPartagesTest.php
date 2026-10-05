@@ -459,11 +459,13 @@ class ReconfigurationPartagesTest extends TestCase
         $groupes = ReconfigurationPartagesService::groupes($this->org->id, $this->processus, $this->brouillon()->lignes, $this->brouillon());
         $this->assertSame([$duo['equipe']->id], $groupes->pluck('equipe_id')->all());
         $this->assertSame([$solo['livreurs'][0]->id => 800], $this->montantsActifs($solo), 'Rien avant la publication.');
+        $this->assertFalse($solo['equipe']->fresh()->is_active);
 
         $this->enregistrerPartages($this->brouillon(), [$this->saisie($duo, [600, 400])]);
         $this->actingAs($this->user)->post(route('settings.commissions.brouillons.publier', $this->brouillon()))->assertSessionHasNoErrors();
 
         $this->assertSame([$solo['livreurs'][0]->id => 1000], $this->montantsActifs($solo), 'Aligné à la publication, même date.');
+        $this->assertTrue($solo['equipe']->fresh()->is_active, 'Brouillon activé à la publication.');
         $this->assertSame(1000, array_sum($this->montantsActifs($duo)));
     }
 
@@ -478,7 +480,7 @@ class ReconfigurationPartagesTest extends TestCase
         CommissionRegle::where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->where('montant', 800)->update(['statut' => 'remplacee', 'effective_to' => '2026-07-31']);
         $solos = [
             $this->equipe([400], nom: 'A'),
-            $this->equipe([400], nom: 'B', equipeActive: false),
+            $this->equipe([400], nom: 'B', equipeActive: false, vehiculeActif: false), // véhicule importé neuf
             $this->equipe([400], nom: 'C', equipeActive: false),
             $this->equipe([300], nom: 'Faux', equipeActive: false), // partage déjà incorrect
         ];
@@ -492,6 +494,8 @@ class ReconfigurationPartagesTest extends TestCase
 
         foreach ($solos as $e) {
             $this->assertSame([$e['livreurs'][0]->id => 800], $this->montantsActifs($e), 'Part réellement enregistrée en base.');
+            $this->assertTrue($e['equipe']->fresh()->is_active, 'Équipe brouillon activée : son partage est désormais conforme.');
+            $this->assertTrue($e['vehicule']->fresh()->is_active, 'Véhicule activé avec son équipe brouillon.');
         }
         $this->assertSame([$solos[3]['livreurs'][0]->id => 300], $this->montantsActifs($solos[3], '2026-09-24'), 'Ancienne version conservée.');
     }

@@ -2,16 +2,19 @@
 
 namespace App\Support\SavedFilters;
 
+use App\Enums\NatureMouvementFonds;
 use App\Enums\ProduitStatut;
 use App\Enums\SiteType;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
+use App\Enums\StatutMouvementFonds;
 use App\Enums\StatutSupportTresorerie;
 use App\Enums\StockStatut;
 use App\Enums\TypeSupportTresorerie;
 use App\Models\CashbackTransaction;
 use App\Models\CommandeVente;
+use App\Models\MouvementFonds;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
@@ -49,6 +52,22 @@ final class SavedFilterScopes
         ];
 
         return [
+            'mouvements-fonds' => [
+                'authorize' => ['viewAny', MouvementFonds::class],
+                'share' => 'tresorerie.update',
+                'sites' => true,
+                'criteria' => [
+                    'statut' => [Rule::enum(StatutMouvementFonds::class)],
+                    'search' => $search,
+                    'nature' => [Rule::enum(NatureMouvementFonds::class)],
+                    'caisse_id' => ['ulid', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $org)],
+                    'caisse_role' => [Rule::in(['origine', 'destination'])],
+                    'site_origine_id' => ['ulid', Rule::exists('sites', 'id')->where('organization_id', $org)],
+                    'site_destination_id' => ['ulid', Rule::exists('sites', 'id')->where('organization_id', $org)],
+                    'montant_min' => ['numeric', 'min:0'],
+                    'montant_max' => ['numeric', 'min:0'],
+                ],
+            ],
             'tresorerie-supports' => [
                 'authorize' => fn (User $user): bool => $user->can('tresorerie.read') || $user->can('tresorerie.gerer_soldes_ouverture'),
                 'share' => 'tresorerie.gerer_soldes_ouverture',

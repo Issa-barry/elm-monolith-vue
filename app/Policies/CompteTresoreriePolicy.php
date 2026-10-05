@@ -57,4 +57,24 @@ class CompteTresoreriePolicy
 
         return $caisse->agent_id === $user->id || $user->can('tresorerie.envoyer');
     }
+
+    /**
+     * Approvisionner la caisse dédiée d'un agent depuis cette caisse de l'agence (ADR 0018) :
+     * `tresorerie.envoyer` (sortie de fonds de la caisse de l'agence), même organisation, agence de
+     * l'utilisateur (admins : toutes). Ce droit ne donne jamais celui de confirmer la réception,
+     * réservée à l'agent bénéficiaire. Type, état et solde de la caisse sont revérifiés par
+     * MouvementFondsService::approvisionnerCaisseAgent() (Gate::before du super admin).
+     */
+    public function approvisionner(User $user, CompteTresorerie $caisse): bool
+    {
+        if (! $user->can('tresorerie.envoyer') || $user->organization_id !== $caisse->organization_id) {
+            return false;
+        }
+
+        if ($caisse->isDediee()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($caisse->site_id);
+    }
 }

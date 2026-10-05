@@ -20,10 +20,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * jamais directement par le modèle (garde-fous idempotence/permissions/
  * verrouillage de période comptable centralisés là-bas).
  *
- * `nature` distingue le mouvement entre agences (`inter_sites`, historique) du versement d'une
- * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site) et du
+ * `nature` distingue le mouvement entre agences (`inter_sites`, historique), le versement d'une
+ * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site), son sens
+ * inverse, l'approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018) et le
  * règlement inter-agences (`reglement_agences`, lié à des encaissements précis) — cf.
- * NatureMouvementFonds.
+ * NatureMouvementFonds. `date_envoi`/`date_reception` sont des jours ; `sent_at`/`received_at`
+ * portent l'heure réelle de chaque étape (renseignés depuis le 04/10/2026).
  */
 class MouvementFonds extends Model
 {
@@ -46,6 +48,8 @@ class MouvementFonds extends Model
         'echeance_fin',
         'date_envoi',
         'date_reception',
+        'sent_at',
+        'received_at',
         'justificatif_path',
         'commentaire',
         'statut',
@@ -64,6 +68,8 @@ class MouvementFonds extends Model
             'montant' => 'decimal:2',
             'date_envoi' => 'date',
             'date_reception' => 'date',
+            'sent_at' => 'datetime',
+            'received_at' => 'datetime',
             'echeance_debut' => 'date',
             'echeance_fin' => 'date',
             'statut' => StatutMouvementFonds::class,
@@ -184,15 +190,44 @@ class MouvementFonds extends Model
         return $this->nature === NatureMouvementFonds::REGLEMENT_AGENCES;
     }
 
+    public function isApprovisionnement(): bool
+    {
+        return $this->nature === NatureMouvementFonds::APPROVISIONNEMENT_CAISSE;
+    }
+
+    /** Agent titulaire de la caisse destinataire d'un approvisionnement (null pour toute autre nature). */
+    public function beneficiaireId(): ?string
+    {
+        return $this->isApprovisionnement() ? $this->compteTresorerieDestination?->agent_id : null;
+    }
+
     /**
-     * Versement de caisse dont la réception a été confirmée par la personne qui l'a envoyé —
-     * autorisé depuis le 27/09/2026 si son rôle a `tresorerie.recevoir` (ADR 0001) : simple
+     * Réception d'un approvisionnement (ADR 0018) : seul l'agent titulaire de la caisse destinataire
+     * confirme ou conteste — jamais un tiers ni un administrateur à sa place. S'il a lui-même remis
+     * l'argent (responsable qui gère sa caisse et celle de l'agence), il le peut si son rôle a la
+     * permission correspondante, comme pour un versement (auto-confirmation tracée, ADR 0018 révisé
+     * le 04/10/2026). Règle d'identité vérifiée hors du Gate pour que le bypass super admin ne
+     * permette pas de confirmer à la place d'un autre agent.
+     */
+    public function receptionReserveeA(User $user, string $permissionSiRemettant = 'tresorerie.recevoir'): bool
+    {
+        $beneficiaire = $this->beneficiaireId();
+
+        return $beneficiaire !== null
+            && $user->organization_id === $this->organization_id
+            && $user->id === $beneficiaire
+            && ($user->id !== $this->sent_by || $user->can($permissionSiRemettant));
+    }
+
+    /**
+     * Versement ou approvisionnement de caisse dont la réception a été confirmée par la personne qui
+     * l'a envoyé — autorisé si son rôle a `tresorerie.recevoir` (ADR 0001, ADR 0018) : simple
      * information de traçabilité affichée dans Mouvements (« Confirmé par l'expéditeur »), jamais
      * un blocage.
      */
     public function confirmeParExpediteur(): bool
     {
-        return $this->isInterne()
+        return ($this->isInterne() || $this->isApprovisionnement())
             && $this->sent_by !== null
             && $this->received_by !== null
             && $this->sent_by === $this->received_by;

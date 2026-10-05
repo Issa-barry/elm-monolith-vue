@@ -54,6 +54,7 @@ class CommissionBaremeConfigurationService
             ->update([
                 'effective_to' => $hier,
                 'statut' => CommissionRegleStatut::REMPLACEE->value,
+                'closed_by' => $userId,
             ]);
 
         foreach ($lignes as $ligne) {
@@ -177,6 +178,7 @@ class CommissionBaremeConfigurationService
             CommissionRegle::whereIn('id', $idsAFermer)->update([
                 'effective_to' => Carbon::parse($today)->subDay()->toDateString(),
                 'statut' => CommissionRegleStatut::REMPLACEE->value,
+                'closed_by' => $userId,
             ]);
         }
 
@@ -256,6 +258,7 @@ class CommissionBaremeConfigurationService
             $ancienne->update([
                 'effective_to' => Carbon::parse($effectiveFrom)->subDay()->toDateString(),
                 'statut' => CommissionRegleStatut::REMPLACEE->value,
+                'closed_by' => $userId,
             ]);
         }
     }

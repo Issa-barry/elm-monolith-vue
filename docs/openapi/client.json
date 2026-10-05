@@ -2559,7 +2559,10 @@
                                                         "Cl\u00f4tur\u00e9e",
                                                         "Annul\u00e9e",
                                                         "Retourn\u00e9e",
-                                                        "Annul\u00e9e (erreur de saisie)"
+                                                        "Annul\u00e9e (erreur de saisie)",
+                                                        "R\u00e9serv\u00e9e",
+                                                        "\u00c0 pr\u00e9parer",
+                                                        "Pr\u00e9par\u00e9e"
                                                     ]
                                                 },
                                                 "site_source": {
@@ -3372,6 +3375,9 @@
                                 "annulee",
                                 "retournee",
                                 "annulee_erreur_saisie",
+                                "reservee",
+                                "a_preparer",
+                                "preparee",
                                 null
                             ]
                         }

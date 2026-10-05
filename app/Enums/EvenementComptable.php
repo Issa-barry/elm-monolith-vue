@@ -70,6 +70,12 @@ enum EvenementComptable: string
     // auparavant la seule trace financière de ce flux (JournalTresorerie),
     // aucune écriture dans compta_ecritures (audit du 2026-08-22).
     case VERSEMENT_CASHBACK = 'versement_cashback';
+    // Précommande remise (ADR 0019) : les acomptes reçus en avance client (419100) sont imputés sur
+    // le compte client (411000) au moment où la vente est réalisée — aucune trésorerie ne bouge.
+    case ACOMPTE_PRECOMMANDE_IMPUTE = 'acompte_precommande_impute';
+    // Remboursement d'un client (RemboursementVente, ADR 0019) : sortie de trésorerie réelle, débit
+    // avance client (précommande non remise) ou compte client (trop-perçu après remise).
+    case REMBOURSEMENT_CLIENT = 'remboursement_client';
 
     public function label(): string
     {
@@ -95,6 +101,8 @@ enum EvenementComptable: string
             self::SOLDE_OUVERTURE_TRESORERIE => 'Solde d\'ouverture trésorerie',
             self::PAIEMENT_COMMISSION_LOGISTIQUE_DIRECT => 'Paiement direct commission logistique',
             self::VERSEMENT_CASHBACK => 'Versement cashback',
+            self::ACOMPTE_PRECOMMANDE_IMPUTE => 'Imputation des acomptes de précommande',
+            self::REMBOURSEMENT_CLIENT => 'Remboursement client',
         };
     }
 }

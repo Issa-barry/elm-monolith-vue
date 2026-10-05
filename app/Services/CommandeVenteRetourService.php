@@ -11,6 +11,7 @@ use App\Models\CommandeVenteLigne;
 use App\Models\CommandeVenteRetour;
 use App\Models\CommandeVenteRetourLigne;
 use App\Services\Comptabilite\VenteComptabilisationService;
+use App\Services\Ventes\PrecommandeService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +34,10 @@ use Illuminate\Validation\ValidationException;
  *    comptabiliserRetourVente()).
  * Un retour total (plus rien de livré sur aucune ligne) passe la commande en RETOURNEE et annule sa
  * facture. Plusieurs retours partiels successifs sont possibles, jusqu'à épuisement des quantités.
+ *
+ * Précommande (ADR 0019, lot 3) : ses acomptes ne bloquent pas le retour ; le statut de la facture
+ * est recalculé depuis l'encaissé net et l'excédent devient un trop-perçu à rembourser — tout
+ * l'encaissé net en cas de retour total.
  */
 class CommandeVenteRetourService
 {
@@ -139,6 +144,7 @@ class CommandeVenteRetourService
 
             $comptabilise = self::comptabiliserRetour($retour, $commande);
             CommissionTriggerService::onRetourEnregistre($commande, $retourTotal);
+            PrecommandeService::apresReductionMontant($commande);
 
             CommandeVenteActiviteService::log(
                 $commande,

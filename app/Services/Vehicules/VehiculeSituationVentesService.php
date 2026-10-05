@@ -34,7 +34,7 @@ class VehiculeSituationVentesService
     public function pourVehicule(Vehicule $vehicule, SituationPeriode $periode): array
     {
         $query = CommandeVente::where('vehicule_id', $vehicule->id)
-            ->whereNotIn('statut', [StatutCommandeVente::BROUILLON->value, StatutCommandeVente::ANNULEE->value, StatutCommandeVente::RETOURNEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value])
+            ->whereNotIn('statut', [StatutCommandeVente::BROUILLON->value, StatutCommandeVente::ANNULEE->value, StatutCommandeVente::RETOURNEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value, StatutCommandeVente::RESERVEE->value, StatutCommandeVente::A_PREPARER->value, StatutCommandeVente::PREPAREE->value])
             ->with(['lignes.variante.produit', 'facture.encaissements'])
             ->orderByDesc('created_at');
 

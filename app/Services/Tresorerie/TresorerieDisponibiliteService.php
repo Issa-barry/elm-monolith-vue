@@ -213,6 +213,34 @@ class TresorerieDisponibiliteService
     }
 
     /**
+     * Approvisionnements de caisses d'agents (`approvisionnement_caisse`, ADR 0018) ENVOYÉS mais pas
+     * encore confirmés par l'agent, par caisse DESTINATAIRE — miroir de versementsEnCours() : ce
+     * montant a déjà quitté la caisse de l'agence (transit) et n'est pas encore dans la caisse de
+     * l'agent, donc dans aucun solde. Information de suivi, jamais du disponible : l'agent ne peut
+     * pas l'utiliser tant qu'il n'a pas confirmé la réception.
+     *
+     * @param  list<string>|null  $supportIds  restreint aux caisses destinataires données (null = toutes)
+     * @return Collection<int, array{compte_tresorerie_id:string, montant:float, nombre:int}>
+     */
+    public function approvisionnementsEnCours(string $organizationId, ?array $supportIds = null): Collection
+    {
+        return MouvementFonds::where('organization_id', $organizationId)
+            ->where('nature', NatureMouvementFonds::APPROVISIONNEMENT_CAISSE->value)
+            ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value])
+            ->whereNotNull('compte_tresorerie_destination_id')
+            ->when($supportIds !== null, fn ($q) => $q->whereIn('compte_tresorerie_destination_id', $supportIds))
+            ->selectRaw('compte_tresorerie_destination_id, COALESCE(SUM(montant), 0) as montant, COUNT(*) as nombre')
+            ->groupBy('compte_tresorerie_destination_id')
+            ->get()
+            ->map(fn ($ligne) => [
+                'compte_tresorerie_id' => $ligne->compte_tresorerie_destination_id,
+                'montant' => round((float) $ligne->montant, 2),
+                'nombre' => (int) $ligne->nombre,
+            ])
+            ->values();
+    }
+
+    /**
      * Solde d'UN support (débit - crédit de son compte sur son site), source de
      * vérité = grand livre. Sans $date, toutes les pièces sont comptées, y
      * compris postdatées : sert à vérifier qu'une caisse est réellement vide

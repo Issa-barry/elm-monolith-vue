@@ -40,7 +40,7 @@ interface StockRow {
     site_id: string;
     site_nom: string;
     site_code: string | null;
-    /** Disponible = physique − engagé − bloqué (bloqué pas encore implémenté). */
+    /** Disponible = physique − réservé − bloqué (bloqué pas encore implémenté). */
     qte_disponible: number;
     qte_physique: number;
     qte_engagee: number;
@@ -373,8 +373,9 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 </th>
                                 <th
                                     class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                    title="Commandes confirmées et précommandes, pas encore sorties du stock"
                                 >
-                                    Engagé
+                                    Réservé
                                 </th>
                                 <th
                                     class="min-w-[96px] px-4 py-3 text-right font-medium"
@@ -703,7 +704,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                         </div>
                         <div>
                             <p class="text-[11px] text-muted-foreground">
-                                Engagé
+                                Réservé
                             </p>
                             <p
                                 class="text-sm font-medium tabular-nums"

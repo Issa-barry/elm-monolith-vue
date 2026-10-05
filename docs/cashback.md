@@ -53,17 +53,20 @@ vers une autre nature.
 
 ## Génération — moment et formule
 
-**Moment (inchangé, CASHBACK non concerné)** : le cashback naît au paiement complet de la
-facture (`Ventes\StoreEncaissementVenteController`, transition `!étaitPayée && estPayéeMaintenant`), gardé
-derrière `Feature::CASHBACK`. Ce déclencheur préexistait à ce chantier et n'a pas été modifié —
-seule la **formule** de calcul change.
+**Moment** : le cashback naît au paiement complet de la facture
+(`Ventes\StoreEncaissementVenteController`, transition `!étaitPayée && estPayéeMaintenant`), gardé
+derrière `Feature::CASHBACK`, via le point unique `Ventes\FacturePayeeCascade`. **Précommande**
+(ADR 0019, D14) : aussi à la remise d'une précommande déjà soldée par ses acomptes, mais **jamais
+tant qu'une précommande est « En livraison »** — le cashback attend la livraison définitive
+(« Confirmer la livraison », encaissement du solde ou validation de réception), pour qu'un retour ou
+un écart pendant la livraison n'ait jamais de gain à reprendre.
 
 **Formule** (`CashbackService::processVente()`) :
 
 ```
 montant_unitaire   = Client::cashback_montant_par_pack
 quantite_eligible  = somme, sur les lignes FABRICABLES de la commande,
-                     de (quantite_livree ?? quantite_demandee)
+                     de la quantité effective (quantite_livree ?? quantite_chargee ?? quantite_demandee)
 montant_total      = quantite_eligible × montant_unitaire
 ```
 
@@ -79,9 +82,12 @@ d'inventer un second indicateur : dans ce catalogue, "fabricable" désigne exact
 produits vendus par pack (packs de bouteilles/sachets). Un produit matériel ou service facturé
 accessoirement sur la même commande n'est jamais compté.
 
-`quantite_livree` prime sur `quantite_demandee` quand elle existe (commande avec véhicule,
-chargement confirmé) — sinon `quantite_demandee` fait foi (vente directe client, sans étape de
-chargement/livraison).
+**Quantité effective** (`CommandeVenteLigne::quantite_effective`, révisée le 04/10/2026 — ADR 0019,
+D14) : `quantite_livree` (renseignée par un retour de livraison ou une validation de réception), sinon
+`quantite_chargee` (chargement validé, ou quantité remise au retrait d'une précommande), sinon
+`quantite_demandee` (vente directe sans étape de chargement). Avant cette révision, la formule
+sautait la quantité chargée : une commande chargée à 90 sur 100 commandés donnait un cashback sur
+100. Les gains déjà créés ne sont pas recalculés.
 
 ## Indépendance
 

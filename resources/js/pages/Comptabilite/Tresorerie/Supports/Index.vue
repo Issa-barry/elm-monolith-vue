@@ -32,6 +32,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowRightLeft,
     CheckCircle2,
+    HandCoins,
     Info,
     MoreVertical,
     Pencil,
@@ -74,6 +75,13 @@ const props = defineProps<{
     type_options: { value: string; label: string }[];
     operateur_options: { value: string; label: string }[];
     destinations_versement: { id: string; site_id: string; libelle: string }[];
+    destinations_approvisionnement: {
+        id: string;
+        site_id: string;
+        libelle: string;
+        agent: string | null;
+        est_ma_caisse: boolean;
+    }[];
     agents: Agent[];
     caisses_dediees_actives: { agent_id: string; site_id: string }[];
     agents_filtre: { value: string; label: string }[];
@@ -584,6 +592,85 @@ function envoyerVersement() {
     });
 }
 
+// ── Approvisionnement de la caisse d'un agent depuis la caisse de l'agence (ADR 0018) ──
+// Crée un mouvement « Envoyé » : la caisse de l'agence baisse tout de suite, celle de l'agent
+// n'augmente qu'à la confirmation de réception par l'agent lui-même (jamais par l'envoyeur).
+
+const approvisionnementCible = ref<CompteTresorerie | null>(null);
+const approvisionnementVisible = computed({
+    get: () => approvisionnementCible.value !== null,
+    set: (visible: boolean) => {
+        if (!visible) approvisionnementCible.value = null;
+    },
+});
+const approvisionnementForm = useForm({
+    compte_tresorerie_destination_id: '',
+    montant: '',
+    motif: 'Approvisionnement caisse agent',
+});
+const approvisionnementMontantDisplay = ref('');
+const erreurCaisseApprovisionnement = computed(
+    () =>
+        (approvisionnementForm.errors as Record<string, string | undefined>)
+            .compte_tresorerie_id,
+);
+
+const agentsAApprovisionner = computed(() =>
+    props.destinations_approvisionnement.filter(
+        (d) => d.site_id === approvisionnementCible.value?.site_id,
+    ),
+);
+const approvisionnementVersMaCaisse = computed(
+    () =>
+        agentsAApprovisionner.value.find(
+            (d) =>
+                d.id === approvisionnementForm.compte_tresorerie_destination_id,
+        )?.est_ma_caisse === true,
+);
+const approvisionnementMontant = computed(() =>
+    Number(approvisionnementForm.montant || 0),
+);
+const soldeApresApprovisionnement = computed(
+    () =>
+        (approvisionnementCible.value?.solde ?? 0) -
+        approvisionnementMontant.value,
+);
+const approvisionnementInvalide = computed(
+    () =>
+        approvisionnementMontant.value <= 0 ||
+        soldeApresApprovisionnement.value < 0 ||
+        !approvisionnementForm.compte_tresorerie_destination_id,
+);
+
+function ouvrirApprovisionnement(compte: CompteTresorerie) {
+    approvisionnementForm.reset();
+    approvisionnementForm.clearErrors();
+    approvisionnementMontantDisplay.value = '';
+    approvisionnementCible.value = compte;
+}
+
+function handleApprovisionnementMontantInput(e: Event) {
+    const { brut, affiche } = lireMontantSaisi(e);
+    approvisionnementForm.montant = brut;
+    approvisionnementMontantDisplay.value = affiche;
+}
+
+function envoyerApprovisionnement() {
+    if (!approvisionnementCible.value || approvisionnementInvalide.value)
+        return;
+
+    approvisionnementForm.post(
+        `${URL_SUPPORTS}/${approvisionnementCible.value.id}/approvisionner`,
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                approvisionnementCible.value = null;
+            },
+        },
+    );
+}
+
 const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:opacity-50';
 </script>
@@ -777,6 +864,19 @@ const selectClass =
                                     En cours de versement :
                                     {{ formatGNF(c.en_cours_versement) }}
                                 </div>
+                                <!-- Approvisionnement envoyé, pas encore confirmé par l'agent : pas encore dans le
+                                     solde ci-dessus, donc pas utilisable. Information de suivi, pas du solde. -->
+                                <div
+                                    v-if="c.en_cours_approvisionnement > 0"
+                                    class="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+                                    :title="`Remis par la caisse de l'agence, en attente de confirmation par l'agent : ce montant n'est pas encore dans le solde de cette caisse et ne peut pas être utilisé.`"
+                                    data-testid="support-en-cours-approvisionnement"
+                                >
+                                    À confirmer par l'agent :
+                                    {{
+                                        formatGNF(c.en_cours_approvisionnement)
+                                    }}
+                                </div>
                             </td>
                             <td class="px-4 py-4 align-middle">
                                 <StatusDot
@@ -819,6 +919,17 @@ const selectClass =
                                             class="mr-1.5 h-3.5 w-3.5"
                                         />
                                         Verser à l'agence
+                                    </Button>
+                                    <Button
+                                        v-if="c.peut_approvisionner"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="support-approvisionner"
+                                        @click="ouvrirApprovisionnement(c)"
+                                    >
+                                        <HandCoins class="mr-1.5 h-3.5 w-3.5" />
+                                        Approvisionner un agent
                                     </Button>
                                     <DropdownMenu v-if="actions.length > 0">
                                         <DropdownMenuTrigger as-child>
@@ -1092,6 +1203,187 @@ const selectClass =
                     :disabled="versementForm.processing || versementInvalide"
                 >
                     {{ versementForm.processing ? 'Envoi…' : 'Envoyer' }}
+                </Button>
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Approvisionnement de la caisse d'un agent depuis la caisse de l'agence (ADR 0018) -->
+    <Dialog
+        v-model:visible="approvisionnementVisible"
+        modal
+        header="Approvisionner un agent"
+        :style="{ width: 'min(480px, 95vw)' }"
+        :dismissable-mask="true"
+    >
+        <form
+            v-if="approvisionnementCible"
+            id="approvisionnement-form"
+            class="space-y-4 pb-1"
+            data-testid="approvisionnement-form"
+            @submit.prevent="envoyerApprovisionnement"
+        >
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span class="text-muted-foreground">Depuis</span>
+                <span class="font-medium">{{
+                    approvisionnementCible.libelle
+                }}</span>
+                <span class="text-muted-foreground">
+                    · {{ approvisionnementCible.site }}
+                </span>
+            </div>
+
+            <div>
+                <Label
+                    for="appro-dest"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Agent bénéficiaire
+                    <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="appro-dest"
+                    v-model="
+                        approvisionnementForm.compte_tresorerie_destination_id
+                    "
+                    :class="selectClass"
+                    data-testid="approvisionnement-agent"
+                >
+                    <option value="" disabled>Choisir un agent…</option>
+                    <option
+                        v-for="d in agentsAApprovisionner"
+                        :key="d.id"
+                        :value="d.id"
+                    >
+                        {{ d.agent ?? d.libelle }} — {{ d.libelle }}
+                    </option>
+                </select>
+                <p
+                    v-if="
+                        approvisionnementForm.errors
+                            .compte_tresorerie_destination_id
+                    "
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{
+                        approvisionnementForm.errors
+                            .compte_tresorerie_destination_id
+                    }}
+                </p>
+            </div>
+
+            <div>
+                <Label
+                    for="appro-montant"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Montant (GNF) <span class="text-destructive">*</span>
+                </Label>
+                <input
+                    id="appro-montant"
+                    :value="approvisionnementMontantDisplay"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="0"
+                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm tabular-nums shadow-sm"
+                    data-testid="approvisionnement-montant"
+                    @input="handleApprovisionnementMontantInput"
+                />
+                <p
+                    v-if="approvisionnementForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ approvisionnementForm.errors.montant }}
+                </p>
+                <dl class="mt-2 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <dt class="text-muted-foreground">Disponible</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums">
+                            {{ formatGNF(approvisionnementCible.solde) }}
+                        </dd>
+                    </div>
+                    <div class="text-right">
+                        <dt class="text-muted-foreground">Reste après envoi</dt>
+                        <dd
+                            class="mt-0.5 font-medium tabular-nums"
+                            :class="{
+                                'text-destructive':
+                                    soldeApresApprovisionnement < 0,
+                            }"
+                            aria-live="polite"
+                        >
+                            {{ formatGNF(soldeApresApprovisionnement) }}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+            <p
+                v-if="soldeApresApprovisionnement < 0"
+                class="text-xs text-destructive"
+                data-testid="approvisionnement-depassement"
+            >
+                Le montant dépasse le solde disponible de la caisse.
+            </p>
+
+            <div>
+                <Label
+                    for="appro-motif"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Motif</Label
+                >
+                <Input id="appro-motif" v-model="approvisionnementForm.motif" />
+                <p
+                    v-if="approvisionnementForm.errors.motif"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ approvisionnementForm.errors.motif }}
+                </p>
+            </div>
+
+            <p
+                v-if="erreurCaisseApprovisionnement"
+                class="text-xs text-destructive"
+            >
+                {{ erreurCaisseApprovisionnement }}
+            </p>
+
+            <p
+                class="text-xs text-muted-foreground"
+                data-testid="approvisionnement-confirmation"
+            >
+                <template v-if="approvisionnementVersMaCaisse">
+                    Votre caisse sera créditée quand vous aurez confirmé la
+                    réception des espèces (dans « Ma situation » ou Mouvements).
+                </template>
+                <template v-else>
+                    La caisse de l'agent sera créditée uniquement quand l'agent
+                    aura lui-même confirmé avoir reçu les espèces (dans « Ma
+                    situation »). Vous ne pouvez pas confirmer à sa place.
+                </template>
+            </p>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="approvisionnementCible = null"
+                    >Annuler</Button
+                >
+                <Button
+                    type="submit"
+                    form="approvisionnement-form"
+                    size="sm"
+                    data-testid="approvisionnement-envoyer"
+                    :disabled="
+                        approvisionnementForm.processing ||
+                        approvisionnementInvalide
+                    "
+                >
+                    {{
+                        approvisionnementForm.processing ? 'Envoi…' : 'Envoyer'
+                    }}
                 </Button>
             </div>
         </template>

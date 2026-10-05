@@ -25,6 +25,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    CalendarClock,
     CheckCircle,
     CheckCircle2,
     ExternalLink,
@@ -49,6 +50,9 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import AnnulationExceptionnelleDialog from './partials/AnnulationExceptionnelleDialog.vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
+import PrecommandeActions, {
+    type PrecommandeData,
+} from './partials/PrecommandeActions.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
 import RetourDialog from './partials/RetourDialog.vue';
 
@@ -81,6 +85,8 @@ interface Encaissement {
     mode_paiement_label: string;
     operateur_mobile_money_label: string | null;
     reference_paiement: string | null;
+    /** Acompte de précommande, reçu avant la remise (ADR 0019). */
+    est_acompte: boolean;
     note: string | null;
     created_by: string | null;
     /** Agence qui a reçu l'argent (ADR 0012). */
@@ -191,6 +197,9 @@ interface CommandeData {
     mode_tarification_label: string | null;
     mode_remise_grossiste: string | null;
     mode_remise_grossiste_label: string | null;
+    est_precommande: boolean;
+    date_remise_prevue: string | null;
+    en_retard: boolean;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -237,6 +246,8 @@ interface CommandeData {
     /** Permission `ventes.annuler_exceptionnel` et commande éligible (cf. AnnulationExceptionnelleService). */
     can_annuler_exceptionnel: boolean;
     can_encaisser: boolean;
+    /** Précommande pas encore remise : le prochain encaissement est un acompte (ADR 0019). */
+    encaissement_est_acompte: boolean;
     /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
      * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
     peut_encaisser_especes: boolean;
@@ -298,6 +309,8 @@ const props = defineProps<{
     activites: ActiviteEntry[];
     retours: RetourEntry[];
     motifs_retour: MotifRetour[];
+    /** Données de la précommande (ADR 0019) — null pour une vente ordinaire. */
+    precommande: PrecommandeData | null;
 }>();
 
 const toast = useToast();
@@ -786,6 +799,9 @@ const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
 const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
+const estPrecommandeAvantPreparation = computed(() =>
+    ['reservee', 'a_preparer', 'preparee'].includes(props.commande.statut),
+);
 
 const currentStepIdx = computed(() => {
     if (
@@ -1040,6 +1056,33 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 commande.created_at
                             }}</span>
                         </div>
+                        <!-- Marqueur de type (pas un statut) — retard en ambre, jamais en rouge. -->
+                        <div
+                            v-if="commande.est_precommande"
+                            class="mt-2 flex flex-wrap items-center gap-2 text-sm"
+                        >
+                            <span
+                                class="inline-flex items-center gap-1 rounded border border-blue-300 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:text-blue-300"
+                            >
+                                <CalendarClock class="h-3.5 w-3.5" />
+                                Précommande
+                            </span>
+                            <span
+                                v-if="commande.date_remise_prevue"
+                                :class="
+                                    commande.en_retard
+                                        ? 'font-medium text-amber-700 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
+                            >
+                                {{
+                                    commande.en_retard
+                                        ? 'En retard — remise prévue le'
+                                        : 'Remise prévue le'
+                                }}
+                                {{ commande.date_remise_prevue }}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -1149,8 +1192,21 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 </div>
             </div>
 
-            <!-- Timeline de progression ─────────────────────────────────────── -->
-            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+            <!-- Précommande : étapes, montants et actions (ADR 0019) -->
+            <PrecommandeActions
+                v-if="precommande"
+                :commande-id="commande.id"
+                :reference="commande.reference"
+                :statut="commande.statut"
+                :precommande="precommande"
+            />
+
+            <!-- Timeline de progression — masquée tant que la précommande n'est pas préparée : ses
+                 étapes sont celles de la carte ci-dessus. -->
+            <div
+                v-if="!estPrecommandeAvantPreparation"
+                class="rounded-xl border bg-card px-6 py-4 shadow-sm"
+            >
                 <!-- Annulée -->
                 <div
                     v-if="commande.is_annulee"
@@ -1890,7 +1946,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     @click="openEncaisserDialog"
                                 >
                                     <HandCoins class="mr-2 h-4 w-4" />
-                                    Encaisser
+                                    {{
+                                        commande.encaissement_est_acompte
+                                            ? 'Ajouter un acompte'
+                                            : 'Encaisser'
+                                    }}
                                     {{ formatGNF(facture.montant_restant) }}
                                 </Button>
                             </span>
@@ -2030,6 +2090,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
                                         >
                                             {{ enc.reference_paiement ?? '—' }}
+                                            <span
+                                                v-if="enc.est_acompte"
+                                                class="ml-1 text-xs font-medium text-blue-700 dark:text-blue-300"
+                                                >· Acompte</span
+                                            >
                                         </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -2222,7 +2287,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
         <!-- Dialog Encaissement -->
         <PaymentCard
             v-model:visible="encaisserDialogVisible"
-            title="Encaisser un paiement"
+            :title="
+                commande.encaissement_est_acompte
+                    ? 'Ajouter un acompte'
+                    : 'Encaisser un paiement'
+            "
             :solde="facture?.montant_restant ?? 0"
             :moyens="commande.moyens_encaissement"
             :especes-disponibles="commande.peut_encaisser_especes"

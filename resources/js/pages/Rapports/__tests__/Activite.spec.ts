@@ -321,18 +321,17 @@ describe('Rapports/Activite', () => {
         ).toBe('true');
     });
 
-    it('garde la portée toutes dates des dettes visible hors de l’aide détaillée', () => {
+    it('les dettes clients suivent la période du filtre global', () => {
         url.valeur = '/backoffice/rapports/activite?tab=creances';
         const wrapper = monter('rapport');
-        expect(wrapper.get('[role="tabpanel"]').text()).toContain(
-            'Situation actuelle · Toutes dates',
-        );
-        const aide = wrapper
-            .get('[role="tabpanel"]')
-            .findComponent(InfoTooltip);
-        expect(aide.text()).toContain(
-            "la période choisie ne s'applique pas ici",
-        );
+        const panneau = wrapper.get('[role="tabpanel"]');
+        expect(panneau.text()).toContain("Aujourd'hui (26/09/2026)");
+        expect(panneau.text()).not.toContain('Toutes dates');
+        expect(
+            wrapper.get('[data-testid="rapport-tab-creances"]').text(),
+        ).not.toContain('toutes dates');
+        const aide = panneau.findComponent(InfoTooltip);
+        expect(aide.text()).toContain('Factures créées sur la période');
         expect(aide.props('label')).toBe('Comprendre : Dettes clients');
     });
 
@@ -357,7 +356,7 @@ describe('Rapports/Activite', () => {
         expect(
             wrapper.get('[data-testid="rapport-tab-creances"]').text(),
         ).toContain('Dettes clients');
-        expect(wrapper.text()).toContain('Aucune dette client en cours.');
+        expect(wrapper.text()).toContain('Aucune dette client sur la période.');
         expect(wrapper.text()).not.toMatch(/créance/i);
 
         url.valeur = '/backoffice/ma-situation?tab=ventes';

@@ -52,7 +52,9 @@ qu'une commission était payée. L'écran de paiement était aussi différent de
 ## Conséquences
 
 - Un utilisateur sans caisse dédiée active sur l'agence ne peut payer qu'en Mobile Money, virement
-  ou chèque (message identique à l'encaissement, adapté à « payer »).
+  ou chèque (message identique à l'encaissement, adapté à « payer »). Depuis le 04/10/2026, une caisse
+  dédiée vide peut être approvisionnée depuis la caisse de l'agence, confirmé par l'agent lui-même
+  (ADR 0018) : c'est le chemin pour payer en espèces avec l'argent de l'agence.
 - Le circuit Paie (`/comptabilite/salaires`) n'est pas modifié. Il a le même défaut que celui corrigé
   ici (mode générique, espèces hors caisse dédiée, pas de contrôle de solde) : son passage au
   décaissement réel est un **chantier séparé**, qui pourra réutiliser `garantirSoldeSuffisant()` et

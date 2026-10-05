@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -17,9 +22,10 @@ import {
 import PartageCommissionAlert from '@/pages/Ventes/partials/PartageCommissionAlert.vue';
 import SolvabiliteAlert from '@/pages/Ventes/partials/SolvabiliteAlert.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CalendarClock,
     CheckCircle2,
     ChevronRight,
     ExternalLink,
@@ -42,7 +48,7 @@ import InputNumber from 'primevue/inputnumber';
 import Popover from 'primevue/popover';
 import Tooltip from 'primevue/tooltip';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const toast = useToast();
 
@@ -195,16 +201,44 @@ const props = defineProps<{
     user_site: UserSite;
     can_modifier_qte: boolean;
     autoriser_saisie_dessous_qte_max: boolean;
+    /** Présent uniquement sur la route « Nouvelle précommande » (ADR 0019) : le contexte est imposé
+     * par le serveur, jamais choisi dans ce formulaire. */
+    precommande?: {
+        acompte_obligatoire: boolean;
+        acompte_min_pct: number;
+        moyens_encaissement: MoyenEncaissement[];
+        peut_encaisser_especes: boolean;
+    } | null;
 }>();
+
+const estPrecommande = computed(() => !!props.precommande);
 
 const { can } = usePermissions();
 const canUpdateUnitPrice = computed(() => can('ventes.prix.update'));
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Ventes', href: '/backoffice/ventes' },
-    { title: 'Nouvelle commande', href: '/backoffice/ventes/create' },
-];
+const breadcrumbs: BreadcrumbItem[] = props.precommande
+    ? [
+          { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+          { title: 'Précommandes', href: '/backoffice/precommandes' },
+          {
+              title: 'Nouvelle précommande',
+              href: '/backoffice/precommandes/create',
+          },
+      ]
+    : [
+          { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+          { title: 'Ventes', href: '/backoffice/ventes' },
+          { title: 'Nouvelle commande', href: '/backoffice/ventes/create' },
+      ];
+const urlRetour = props.precommande
+    ? '/backoffice/precommandes'
+    : '/backoffice/ventes';
+const dateMinPrecommande = new Date().toLocaleDateString('en-CA');
+const OPTIONS_MODE_REMISE: { value: 'retrait' | 'livraison'; label: string }[] =
+    [
+        { value: 'retrait', label: 'Retrait sur site' },
+        { value: 'livraison', label: 'Livraison' },
+    ];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
@@ -223,6 +257,10 @@ const form = useForm({
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
     ] as LigneForm[],
+    // Précommande uniquement (ignorés par la route de vente). Le mode de remise n'est pas stocké :
+    // le serveur le dérive du véhicule et vérifie seulement la cohérence (décision D4).
+    mode_remise: null as 'retrait' | 'livraison' | null,
+    date_remise_prevue: '',
 });
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
@@ -315,6 +353,16 @@ function onVehiculeClear() {
     vehiculeSolvabilite.value = null;
     recomputeAllTotals();
 }
+
+// Retrait sur site : jamais de véhicule (le serveur le refuserait).
+watch(
+    () => form.mode_remise,
+    (mode) => {
+        if (mode === 'retrait' && form.vehicule_id !== null) {
+            onVehiculeClear();
+        }
+    },
+);
 
 // Pré-remplit la quantité de l'unique ligne à la capacité du véhicule POUR LA CATÉGORIE DU
 // PRODUIT déjà choisi sur cette ligne — seulement s'il n'y a qu'une seule ligne avec un produit
@@ -910,8 +958,33 @@ function capaciteLigneClass(qte: number, max: number): string {
     return 'text-emerald-600 dark:text-emerald-400';
 }
 
+// La présélection automatique n'est pas une modification faite par l'utilisateur.
+const saisieInitiale = ref('');
+const showAnnulationDialog = ref(false);
+
+function etatSaisie(): string {
+    return JSON.stringify({
+        donnees: form.data(),
+        vehicule: vehiculeSelected.value,
+        client: clientSelected.value,
+    });
+}
+
+function annulerSaisie(): void {
+    if (form.processing) return;
+    if (etatSaisie() !== saisieInitiale.value) {
+        showAnnulationDialog.value = true;
+        return;
+    }
+    router.visit(urlRetour);
+}
+
+function quitterSaisie(): void {
+    if (!form.processing) router.visit(urlRetour);
+}
+
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
-onMounted(() => {
+onMounted(async () => {
     form.reset();
     vehiculeSelected.value = null;
     clientSelected.value = null;
@@ -923,6 +996,8 @@ onMounted(() => {
         form.lignes[0].prix_vente = first.prix_vente;
         form.lignes[0].total = computeLigneTotal(form.lignes[0]);
     }
+    await nextTick();
+    saisieInitiale.value = etatSaisie();
 });
 
 // ── Type de commande ──────────────────────────────────────────────────────────
@@ -942,6 +1017,10 @@ const confirmationActionLabel = computed(() =>
     form.nature_operation === 'distribution_client'
         ? 'Créer la distribution'
         : 'Créer la commande',
+);
+
+const libelleBoutonCreation = computed(() =>
+    estPrecommande.value ? 'Enregistrer la précommande' : 'Créer la commande',
 );
 
 // ── Blocage impayés ───────────────────────────────────────────────────────────
@@ -968,8 +1047,19 @@ const livreurManquantPourDistribution = computed(() =>
         : null,
 );
 
+// Précommande : client, mode de remise et date obligatoires ; livraison ⇒ véhicule (décision D4).
+const precommandeComplete = computed(
+    () =>
+        !estPrecommande.value ||
+        (form.client_id !== null &&
+            form.mode_remise !== null &&
+            form.date_remise_prevue !== '' &&
+            (form.mode_remise === 'retrait' || form.vehicule_id !== null)),
+);
+
 const canSubmit = computed(
     () =>
+        precommandeComplete.value &&
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         capaciteVehiculeConforme.value &&
@@ -1008,7 +1098,78 @@ function submit() {
     showConfirmDialog.value = true;
 }
 
+// ── Précommande : acompte (ADR 0019) ─────────────────────────────────────────
+// Minimum affiché par confort ; le serveur le recalcule sur le total réellement facturé.
+const acompteObligatoire = computed(
+    () => props.precommande?.acompte_obligatoire ?? false,
+);
+const acompteMinimum = computed(() =>
+    acompteObligatoire.value
+        ? Math.ceil(
+              (totalGeneral.value * (props.precommande?.acompte_min_pct ?? 0)) /
+                  100,
+          )
+        : 0,
+);
+const showAcompteDialog = ref(false);
+const CHAMPS_ACOMPTE = [
+    'acompte_montant',
+    'mode_paiement',
+    'compte_tresorerie_id',
+    'reference_paiement',
+    'reference_paiement_facture',
+    'date_encaissement',
+    'site_encaissement_id',
+];
+// PaymentCard affiche l'erreur de montant sous la clé `montant`.
+const erreursAcompte = computed<Record<string, string>>(() => {
+    const erreurs = form.errors as Record<string, string>;
+    return erreurs.acompte_montant
+        ? { ...erreurs, montant: erreurs.acompte_montant }
+        : erreurs;
+});
+
+function ouvrirAcompte() {
+    showConfirmDialog.value = false;
+    showAcompteDialog.value = true;
+}
+
+function enregistrerPrecommande(acompte: EncaissementPayload | null) {
+    form.transform((data) => ({
+        ...data,
+        acompte_montant: acompte?.montant ?? 0,
+        mode_paiement: acompte?.mode_paiement ?? null,
+        compte_tresorerie_id: acompte?.compte_tresorerie_id ?? null,
+        reference_paiement: acompte?.reference_paiement ?? null,
+    })).post('/backoffice/precommandes', {
+        onError: (errors) => {
+            const surAcompte = Object.keys(errors).some((k) =>
+                CHAMPS_ACOMPTE.includes(k),
+            );
+            // Refus lié au paiement : la fenêtre d'acompte reste ouverte avec son message ; sinon
+            // retour au formulaire, qui affiche l'erreur sous le champ concerné.
+            showAcompteDialog.value = surAcompte && acompte !== null;
+            showConfirmDialog.value = false;
+            if (!showAcompteDialog.value) {
+                toast.add({
+                    group: 'top',
+                    severity: 'error',
+                    summary: 'Précommande non enregistrée',
+                    detail:
+                        Object.values(errors)[0] ??
+                        "La précommande n'a pas pu être enregistrée.",
+                    life: 8000,
+                });
+            }
+        },
+    });
+}
+
 function confirmerEtCreer() {
+    if (estPrecommande.value) {
+        ouvrirAcompte();
+        return;
+    }
     // Sans onError, un refus (ex: stock insuffisant) laissait la modale de confirmation
     // ouverte indéfiniment, masquant le message d'erreur déjà affiché sur le formulaire
     // sous-jacent (form.errors.lignes ci-dessous) — 24/08/2026.
@@ -1037,32 +1198,47 @@ function confirmerEtCreer() {
 </script>
 
 <template>
-    <Head title="Nouvelle commande" />
+    <Head
+        :title="estPrecommande ? 'Nouvelle précommande' : 'Nouvelle commande'"
+    />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Mobile sticky header -->
         <div
             class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
         >
-            <div class="relative flex items-center justify-center px-4 py-3">
-                <Link
-                    href="/backoffice/ventes"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+            <div
+                class="grid grid-cols-[5rem_minmax(0,1fr)_5rem] items-center gap-2 px-4 py-2"
+            >
+                <Button
+                    type="button"
+                    variant="ghost"
+                    class="h-11 justify-start px-0 text-sm text-muted-foreground"
+                    :disabled="form.processing"
+                    @click="annulerSaisie"
                 >
-                    <ArrowLeft class="h-4 w-4" />
-                </Link>
+                    Annuler
+                </Button>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Nouvelle vente
+                        {{
+                            estPrecommande
+                                ? 'Nouvelle précommande'
+                                : 'Nouvelle commande'
+                        }}
                     </h1>
                 </div>
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl p-4 sm:p-6">
+        <div class="vente-create-content mx-auto max-w-5xl p-4 sm:p-6">
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">
-                    Nouvelle commande de vente
+                    {{
+                        estPrecommande
+                            ? 'Nouvelle précommande'
+                            : 'Nouvelle commande de vente'
+                    }}
                 </h1>
                 <!-- <p class="mt-1 text-sm text-muted-foreground">
                     Créez une commande et sa facture sera générée
@@ -1070,11 +1246,35 @@ function confirmerEtCreer() {
                 </p> -->
             </div>
 
-            <form id="vente-form" class="space-y-6" @submit.prevent="submit">
+            <!-- Bandeau précommande (INFO) : rend le parcours impossible à confondre avec une vente. -->
+            <div
+                v-if="estPrecommande"
+                class="mb-6 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+            >
+                <CalendarClock class="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                    <p class="font-semibold">Précommande</p>
+                    <p class="mt-0.5">
+                        Le stock est réservé dès l'enregistrement ; le client
+                        repart sans la marchandise.
+                        {{
+                            acompteObligatoire
+                                ? `Acompte obligatoire : au moins ${precommande?.acompte_min_pct} % du total.`
+                                : 'Acompte facultatif.'
+                        }}
+                    </p>
+                </div>
+            </div>
+
+            <form
+                id="vente-form"
+                class="space-y-5 sm:space-y-6"
+                @submit.prevent="submit"
+            >
                 <!-- En-tête commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
                     <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        class="mb-4 text-base font-semibold text-foreground sm:mb-5 sm:text-sm sm:tracking-wider sm:text-muted-foreground sm:uppercase"
                     >
                         Informations générales
                     </h2>
@@ -1090,9 +1290,79 @@ function confirmerEtCreer() {
                         }}</span>
                     </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <!-- Véhicule -->
+                    <!-- Précommande : mode de remise et date prévue, posés en premier (ADR 0019). -->
+                    <div
+                        v-if="estPrecommande"
+                        class="mb-4 grid gap-4 sm:grid-cols-2"
+                    >
                         <div>
+                            <Label class="mb-1.5 block text-sm">
+                                Mode de remise
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <Button
+                                    v-for="option in OPTIONS_MODE_REMISE"
+                                    :key="option.value"
+                                    type="button"
+                                    :variant="
+                                        form.mode_remise === option.value
+                                            ? 'default'
+                                            : 'outline'
+                                    "
+                                    @click="form.mode_remise = option.value"
+                                >
+                                    {{ option.label }}
+                                </Button>
+                            </div>
+                            <p
+                                v-if="form.errors.mode_remise"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.mode_remise }}
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="date_remise_prevue"
+                                class="mb-1.5 block text-sm"
+                            >
+                                Date prévue
+                                {{
+                                    form.mode_remise === 'livraison'
+                                        ? 'de livraison'
+                                        : 'de retrait'
+                                }}
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <input
+                                id="date_remise_prevue"
+                                v-model="form.date_remise_prevue"
+                                type="date"
+                                :min="dateMinPrecommande"
+                                class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                :class="{
+                                    'border-destructive':
+                                        form.errors.date_remise_prevue,
+                                }"
+                            />
+                            <p
+                                v-if="form.errors.date_remise_prevue"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.date_remise_prevue }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <!-- Véhicule — en précommande, seulement en livraison (décision D4). -->
+                        <div
+                            v-if="
+                                !estPrecommande ||
+                                form.mode_remise === 'livraison'
+                            "
+                        >
                             <Label class="mb-1.5 block text-sm">
                                 Véhicule
                             </Label>
@@ -1772,7 +2042,13 @@ function confirmerEtCreer() {
 
                     <!-- Hint véhicule ou client -->
                     <p
-                        v-if="!form.vehicule_id && !form.client_id"
+                        v-if="estPrecommande && !form.client_id"
+                        class="mt-3 text-xs text-amber-600 dark:text-amber-400"
+                    >
+                        Sélectionnez le client de la précommande.
+                    </p>
+                    <p
+                        v-else-if="!form.vehicule_id && !form.client_id"
                         class="mt-3 text-xs text-amber-600 dark:text-amber-400"
                     >
                         Sélectionnez au moins un véhicule ou un client.
@@ -1817,7 +2093,7 @@ function confirmerEtCreer() {
                 <!-- Lignes de commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
                     <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        class="mb-4 text-base font-semibold text-foreground sm:mb-5 sm:text-sm sm:tracking-wider sm:text-muted-foreground sm:uppercase"
                     >
                         Lignes de commande
                     </h2>
@@ -1843,7 +2119,7 @@ function confirmerEtCreer() {
                             modeTarification === 'prix_usine' ||
                             form.vehicule_id !== null
                         "
-                        class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+                        class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] sm:text-xs"
                     >
                         <span
                             v-if="modeTarification === 'prix_usine'"
@@ -2071,7 +2347,14 @@ function confirmerEtCreer() {
                             class="rounded-xl border bg-muted/20 p-3"
                         >
                             <!-- Produit -->
+                            <Label
+                                :for="`ligne-${index}-produit`"
+                                class="sr-only"
+                            >
+                                Produit de la ligne {{ index + 1 }}
+                            </Label>
                             <Dropdown
+                                :input-id="`ligne-${index}-produit`"
                                 :model-value="ligne.produit_id"
                                 @update:model-value="
                                     onProduitChange(index, $event)
@@ -2093,8 +2376,9 @@ function confirmerEtCreer() {
                             <!-- Qté + Prix -->
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    <Label
+                                        :for="`ligne-${index}-quantite`"
+                                        class="mb-1.5 block text-sm font-medium"
                                     >
                                         <span
                                             class="inline-flex items-center gap-1"
@@ -2105,8 +2389,9 @@ function confirmerEtCreer() {
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
-                                    </p>
+                                    </Label>
                                     <InputNumber
+                                        :input-id="`ligne-${index}-quantite`"
                                         :model-value="ligne.qte"
                                         @update:model-value="
                                             onQteChange(index, $event)
@@ -2124,8 +2409,9 @@ function confirmerEtCreer() {
                                     />
                                 </div>
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    <Label
+                                        :for="`ligne-${index}-prix`"
+                                        class="mb-1.5 block text-sm font-medium"
                                     >
                                         <span
                                             class="inline-flex items-center gap-1"
@@ -2136,8 +2422,9 @@ function confirmerEtCreer() {
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
-                                    </p>
+                                    </Label>
                                     <InputNumber
+                                        :input-id="`ligne-${index}-prix`"
                                         :model-value="ligneUnitPrice(ligne)"
                                         @update:model-value="
                                             onPrixChange(index, $event)
@@ -2146,13 +2433,14 @@ function confirmerEtCreer() {
                                         :disabled="
                                             !ligneUnitPriceEditable(ligne)
                                         "
-                                        :use-grouping="false"
+                                        :use-grouping="true"
+                                        locale="fr-FR"
                                         class="w-full"
                                         input-class="w-full"
                                     />
                                     <p
                                         v-if="ligne.produit_id"
-                                        class="mt-1 text-[11px] text-muted-foreground"
+                                        class="mt-1 text-[13px] text-muted-foreground"
                                     >
                                         {{ ligneOrigineLabel(ligne) }}
                                     </p>
@@ -2165,12 +2453,12 @@ function confirmerEtCreer() {
                             >
                                 <div>
                                     <p
-                                        class="text-[11px] text-muted-foreground"
+                                        class="text-[13px] text-muted-foreground"
                                     >
                                         {{ totalColumnLabel }}
                                     </p>
                                     <p
-                                        class="text-sm font-semibold tabular-nums"
+                                        class="text-base font-semibold tabular-nums"
                                     >
                                         {{
                                             ligne.total > 0
@@ -2183,7 +2471,8 @@ function confirmerEtCreer() {
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    class="h-8 w-8 text-destructive hover:text-destructive"
+                                    class="h-11 w-11 text-destructive hover:text-destructive"
+                                    :aria-label="`Supprimer la ligne ${index + 1}`"
                                     :disabled="form.lignes.length <= 1"
                                     @click="removeLigne(index)"
                                 >
@@ -2194,40 +2483,49 @@ function confirmerEtCreer() {
                     </div>
 
                     <!-- Ajouter + Total -->
-                    <div class="mt-4 flex items-center justify-between">
+                    <div
+                        class="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
+                            class="h-11 text-sm sm:h-8"
                             :disabled="commandeBloquee"
                             @click="addLigne"
                         >
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
-                        <div class="text-right">
+                        <div
+                            class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:block sm:text-right"
+                        >
                             <p
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
+                                class="text-sm text-muted-foreground sm:text-xs sm:tracking-wider sm:uppercase"
                             >
                                 {{ totalCommandeLabel }}
                             </p>
-                            <p class="text-2xl font-bold tabular-nums">
+                            <p
+                                class="text-xl font-bold whitespace-nowrap tabular-nums sm:text-2xl"
+                            >
                                 {{ formatGNF(totalGeneral) }}
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Spacer for mobile sticky footer -->
-                <div class="h-20 sm:hidden" />
-
-                <!-- Footer -->
-                <div class="flex items-center justify-between">
-                    <Link href="/backoffice/ventes">
-                        <Button type="button" variant="outline">Retour</Button>
-                    </Link>
+                <!-- Actions desktop : la barre fixe mobile est l'unique action de création sur téléphone. -->
+                <div class="hidden items-center justify-between sm:flex">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        :disabled="form.processing"
+                        @click="annulerSaisie"
+                    >
+                        Annuler
+                    </Button>
                     <Button type="submit" :disabled="!canSubmit">
-                        Créer la commande
+                        {{ libelleBoutonCreation }}
                     </Button>
                 </div>
             </form>
@@ -2235,13 +2533,47 @@ function confirmerEtCreer() {
 
         <!-- Mobile sticky footer -->
         <div
-            class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+            class="vente-create-mobile-footer fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
         >
-            <Button class="w-full" :disabled="!canSubmit" @click="submit">
+            <Button
+                type="submit"
+                form="vente-form"
+                class="h-12 w-full text-base"
+                :disabled="!canSubmit"
+            >
                 <Save class="mr-2 h-4 w-4" />
-                Créer la commande
+                {{ libelleBoutonCreation }}
             </Button>
         </div>
+
+        <Dialog
+            v-model:visible="showAnnulationDialog"
+            modal
+            header="Annuler la saisie ?"
+            :style="{ width: '26rem', maxWidth: 'calc(100vw - 2rem)' }"
+        >
+            <p class="text-sm leading-relaxed text-muted-foreground">
+                Vos modifications ne sont pas enregistrées. Si vous quittez
+                cette page, elles seront perdues.
+            </p>
+            <template #footer>
+                <div
+                    class="flex w-full flex-col gap-2 sm:flex-row sm:justify-end"
+                >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        class="h-11"
+                        @click="showAnnulationDialog = false"
+                    >
+                        Continuer la saisie
+                    </Button>
+                    <Button type="button" class="h-11" @click="quitterSaisie">
+                        Quitter sans enregistrer
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
 
         <!-- Dialog Confirmation création -->
         <Dialog
@@ -2277,6 +2609,14 @@ function confirmerEtCreer() {
                             Vérifier et confirmer
                         </h2>
                         <span
+                            v-if="estPrecommande"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                        >
+                            <CalendarClock class="h-3.5 w-3.5" />
+                            Précommande
+                        </span>
+                        <span
+                            v-else
                             class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold"
                             :class="
                                 form.nature_operation === 'distribution_client'
@@ -2289,7 +2629,29 @@ function confirmerEtCreer() {
                         </span>
                     </div>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Contrôlez les informations avant la création définitive.
+                        {{
+                            estPrecommande
+                                ? 'Contrôlez la précommande : le stock sera réservé et le client repartira sans la marchandise.'
+                                : 'Contrôlez les informations avant la création définitive.'
+                        }}
+                    </p>
+                    <p
+                        v-if="estPrecommande"
+                        class="mt-1 text-sm font-medium text-blue-800 dark:text-blue-300"
+                    >
+                        {{
+                            form.mode_remise === 'livraison'
+                                ? 'Livraison'
+                                : 'Retrait sur site'
+                        }}
+                        prévu(e) le
+                        {{
+                            form.date_remise_prevue
+                                ? new Date(
+                                      form.date_remise_prevue + 'T00:00:00',
+                                  ).toLocaleDateString('fr-FR')
+                                : '—'
+                        }}
                     </p>
                 </div>
             </template>
@@ -2783,7 +3145,36 @@ function confirmerEtCreer() {
                         <ArrowLeft class="mr-2 h-4 w-4" />
                         Retour à la saisie
                     </Button>
+                    <div
+                        v-if="estPrecommande"
+                        class="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row"
+                    >
+                        <!-- Sans acompte : seulement si l'organisation ne l'exige pas (D6). -->
+                        <Button
+                            v-if="!acompteObligatoire"
+                            type="button"
+                            variant="outline"
+                            class="w-full sm:w-auto"
+                            :disabled="form.processing || commandeBloquee"
+                            @click="enregistrerPrecommande(null)"
+                        >
+                            {{
+                                form.processing
+                                    ? 'Enregistrement…'
+                                    : 'Enregistrer sans acompte'
+                            }}
+                        </Button>
+                        <Button
+                            type="button"
+                            class="w-full sm:w-auto"
+                            :disabled="form.processing || commandeBloquee"
+                            @click="ouvrirAcompte"
+                        >
+                            Saisir l'acompte
+                        </Button>
+                    </div>
                     <Button
+                        v-else
                         type="button"
                         class="w-full sm:w-auto"
                         :disabled="form.processing || commandeBloquee"
@@ -2799,6 +3190,35 @@ function confirmerEtCreer() {
                 </div>
             </div>
         </Dialog>
+
+        <!-- Acompte de la précommande : même fenêtre et mêmes contrôles qu'un encaissement
+             (supports de l'agence, caisse dédiée pour les espèces, référence unique). -->
+        <PaymentCard
+            v-if="precommande"
+            v-model:visible="showAcompteDialog"
+            title="Acompte de la précommande"
+            solde-label="Total de la précommande"
+            :solde="totalGeneral"
+            :montant-initial="acompteMinimum > 0 ? acompteMinimum : null"
+            :min-montant="acompteMinimum"
+            :info-rows="[
+                {
+                    label: 'Client',
+                    value: clientSelected?.nom_complet ?? '—',
+                },
+                {
+                    label: 'Acompte',
+                    value: acompteObligatoire
+                        ? `obligatoire (${precommande.acompte_min_pct} %)`
+                        : 'facultatif',
+                },
+            ]"
+            :moyens="precommande.moyens_encaissement"
+            :especes-disponibles="precommande.peut_encaisser_especes"
+            :processing="form.processing"
+            :errors="erreursAcompte"
+            @submit="enregistrerPrecommande"
+        />
 
         <!-- Dialog Factures impayées -->
         <Dialog
@@ -2982,3 +3402,28 @@ function confirmerEtCreer() {
         </Dialog>
     </AppLayout>
 </template>
+
+<style scoped>
+@media (width < 640px) {
+    .vente-create-content {
+        /* Barre d'action + espace de respiration, sans ajouter un bloc vide au formulaire. */
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .vente-create-mobile-footer {
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .vente-create-content :deep(.p-inputtext),
+    .vente-create-content :deep(.p-inputnumber-input),
+    .vente-create-content :deep(.p-select),
+    .vente-create-content input[type='date'] {
+        min-height: 44px;
+    }
+
+    .vente-create-content :deep(.p-autocomplete-dropdown),
+    .vente-create-content :deep(.p-select-dropdown) {
+        min-width: 44px;
+    }
+}
+</style>

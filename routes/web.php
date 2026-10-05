@@ -39,6 +39,7 @@ use App\Http\Controllers\Clients\UpdateTarifsGrossisteClientController;
 use App\Http\Controllers\Clients\UpdateVehiculeClientController;
 use App\Http\Controllers\Clients\VerifierTelephoneClientController;
 use App\Http\Controllers\CommandeAchatController;
+use App\Http\Controllers\Comptabilite\ApprovisionnerCaisseAgentController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -56,6 +57,7 @@ use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
+use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
@@ -216,6 +218,7 @@ use App\Http\Controllers\Ventes\CheckPartageCommissionCommandeVenteController;
 use App\Http\Controllers\Ventes\CheckSolvabiliteCommandeVenteController;
 use App\Http\Controllers\Ventes\ConfirmerAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\CreateCommandeVenteController;
+use App\Http\Controllers\Ventes\CreatePrecommandeController;
 use App\Http\Controllers\Ventes\DemanderCodeAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\DestroyCommandeVenteController;
 use App\Http\Controllers\Ventes\DestroyEncaissementVenteController;
@@ -225,12 +228,18 @@ use App\Http\Controllers\Ventes\ExportCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexCommandeVenteController;
 use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
+use App\Http\Controllers\Ventes\Precommandes\AnnulationPrecommandeController;
+use App\Http\Controllers\Ventes\Precommandes\LivraisonPrecommandeController;
+use App\Http\Controllers\Ventes\Precommandes\PreparationPrecommandeController;
+use App\Http\Controllers\Ventes\Precommandes\RemboursementPrecommandeController;
+use App\Http\Controllers\Ventes\Precommandes\RetraitPrecommandeController;
 use App\Http\Controllers\Ventes\RechercherFactureAutreAgenceController;
 use App\Http\Controllers\Ventes\RelancerCommissionsCommandeVenteController;
 use App\Http\Controllers\Ventes\ShowAnnulationExceptionnelleController;
 use App\Http\Controllers\Ventes\ShowCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
+use App\Http\Controllers\Ventes\StorePrecommandeController;
 use App\Http\Controllers\Ventes\UpdateCommandeVenteController;
 use App\Http\Controllers\Ventes\ValiderCommandeVenteController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
@@ -418,6 +427,20 @@ Route::prefix('backoffice')->group(function () {
             // rester identique à celui de ventes.show : show(CommandeVente $vente) résout le
             // binding implicite par nom de paramètre, pas par position.
             Route::get('distributions/{vente}', ShowCommandeVenteController::class)->name('distributions.show');
+            // Précommandes (ADR 0019) : liste = même contrôleur que ventes.index, filtrée sur
+            // est_precommande par nom de route ; création sur ses propres routes, jamais via un
+            // sélecteur du formulaire de vente (deux points d'entrée distincts).
+            Route::get('precommandes', IndexCommandeVenteController::class)->name('precommandes.index');
+            Route::get('precommandes/create', CreatePrecommandeController::class)->name('precommandes.create');
+            Route::post('precommandes', StorePrecommandeController::class)->name('precommandes.store');
+            // Cycle de vie d'une précommande (ADR 0019, lot 2).
+            Route::post('ventes/{commande_vente}/precommande/preparation/lancer', [PreparationPrecommandeController::class, 'lancer'])->name('precommandes.preparation.lancer');
+            Route::post('ventes/{commande_vente}/precommande/preparation/valider', [PreparationPrecommandeController::class, 'valider'])->name('precommandes.preparation.valider');
+            Route::post('ventes/{commande_vente}/precommande/retrait', RetraitPrecommandeController::class)->name('precommandes.retrait');
+            Route::post('ventes/{commande_vente}/precommande/livraison/confirmer', LivraisonPrecommandeController::class)->name('precommandes.livraison.confirmer');
+            Route::post('ventes/{commande_vente}/precommande/remboursement', RemboursementPrecommandeController::class)->name('precommandes.remboursement');
+            Route::post('ventes/{commande_vente}/precommande/annulation/code', [AnnulationPrecommandeController::class, 'demanderCode'])->middleware('throttle:10,1')->name('precommandes.annulation.code');
+            Route::post('ventes/{commande_vente}/precommande/annulation', AnnulationPrecommandeController::class)->middleware('throttle:10,1')->name('precommandes.annulation');
             Route::patch('ventes/{commande_vente}/valider', ValiderCommandeVenteController::class)->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', AnnulerCommandeVenteController::class)->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', AvancerStatutVenteController::class)->name('ventes.statut.avancer');
@@ -793,12 +816,17 @@ Route::prefix('backoffice')->group(function () {
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
+                Route::post('supports/{compteTresorerie}/approvisionner', ApprovisionnerCaisseAgentController::class)->name('supports.approvisionner');
 
                 // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
                 // et leur règlement (création + envoi en une opération).
                 Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
                 Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
                 Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
+
+                // Remises des agences à la trésorerie principale (ADR 0016) : vue du Trésor principal.
+                Route::get('remises', [RemisesAgencesController::class, 'index'])->name('remises.index');
+                Route::get('remises/{site}', [RemisesAgencesController::class, 'show'])->name('remises.show');
 
                 Route::get('situation', [SituationTresorerieController::class, 'index'])->name('situation.index');
                 Route::get('situation/{site}', [SituationTresorerieController::class, 'show'])->name('situation.show');

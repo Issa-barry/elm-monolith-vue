@@ -2,7 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
@@ -13,6 +21,7 @@ use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -775,6 +784,71 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
+     * Incident du 04/10/2026 : les 76 équipes de l'import du 22/08 sont restées inactives après
+     * configuration de leur partage — aucune distribution possible, et rien dans l'application ne
+     * permettait de les activer. Parcours complet : import → partage configuré → distribution.
+     */
+    public function test_equipe_importee_sactive_des_que_son_partage_livreur_est_configure(): void
+    {
+        $processus = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Livreur — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 800,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteille', 'statut' => 'actif']);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_logistique' => 'oui']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
+        $livreur = $equipe->membres()->firstOrFail()->livreur;
+        $this->assertFalse($equipe->is_active, 'Brouillon tant que le partage n\'est pas configuré.');
+
+        $formBuilder = app(CommandeVenteFormBuilder::class);
+        $motif = fn () => $formBuilder->motifChauffeurIndisponible($formBuilder->resolveVehiculeAvecEquipe($vehicule->id, $this->org->id));
+        $this->assertStringContainsString('désactivée', $motif());
+
+        $gestionnaire = $this->makeUser(['equipes-livraison.read', 'equipes-livraison.update']);
+        $this->actingAs($gestionnaire)
+            ->patch(route('equipes-livraison.update', $equipe), [
+                'vehicule_id' => $vehicule->id,
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'membres' => [[
+                    'livreur_id' => $livreur->id,
+                    'nom_complet' => $livreur->nom_complet,
+                    'telephone' => '+224623000001',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [['membre_ordre' => 0, 'montant_unitaire' => 800]],
+                ]],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+        $this->assertNull($motif(), 'La distribution n\'est plus refusée pour équipe désactivée.');
+    }
+
+    /**
      * Colonnes dynamiques "capacite__<REFERENCE>" (ex: "capacite__SACHET_EAU") — une par
      * catégorie du catalogue produit à plafonner, en nombre libre (plus de convention à deux
      * colonnes fixes "sachets"/"bouteilles") — cf. ImportFlotteParser::resoudreColonnesCapacite() /
@@ -1214,7 +1288,12 @@ class ImportFlotteTest extends TestCase
         $this->assertSame('Convoyeur-2 Camion 1', $second->nom_complet);
     }
 
-    public function test_confirm_deactivates_already_active_vehicule_when_creating_draft_equipe(): void
+    /**
+     * Règle révisée le 05/10/2026 (le véhicule était auparavant désactivé) : l'équipe brouillon
+     * bloque déjà les distributions à elle seule ; désactiver aussi le véhicule ajoutait un second
+     * blocage, qui restait en place quand l'équipe s'activait par la publication d'un barème.
+     */
+    public function test_confirm_conserve_letat_dun_vehicule_existant_en_creant_une_equipe_brouillon(): void
     {
         // Véhicule déjà existant, actif, sans équipe (cas réel : créé manuellement
         // avant d'avoir une équipe assignée).
@@ -1228,7 +1307,8 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur();
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertFalse($vehicule->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+        $this->assertFalse(EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail()->is_active, 'L\'équipe reste un brouillon.');
     }
 
     public function test_confirm_creates_vehicule_without_equipe_when_no_livreur(): void

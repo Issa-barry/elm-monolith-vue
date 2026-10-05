@@ -85,6 +85,13 @@ class AnnulationExceptionnelleService
             return 'Cette commande est déjà retournée : sa marchandise est revenue et sa facture est annulée.';
         }
 
+        // Précommande (ADR 0019) : acomptes en avance client, imputation 419100 → 411000 à la remise,
+        // remboursements tracés — rien de cela n'est défait par l'annulation exceptionnelle, qui
+        // supprimerait les acomptes sans remboursement. Une précommande s'annule par sa procédure.
+        if ($commande->est_precommande) {
+            return "Une précommande s'annule par « Annuler la précommande », qui rembourse le client.";
+        }
+
         $commande->loadMissing('facture');
         if ($commande->statut->isAnnulable() && (float) ($commande->facture?->montant_encaisse ?? 0) <= 0) {
             return 'Cette commande peut encore être annulée normalement : utilisez « Annuler ».';

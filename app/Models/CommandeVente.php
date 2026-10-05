@@ -49,6 +49,11 @@ class CommandeVente extends Model
         'reception_validee_at',
         'validated_at',
         'closed_at',
+        'est_precommande',
+        'date_remise_prevue',
+        'preparation_lancee_at',
+        'preparee_at',
+        'remise_at',
         'created_by',
         'updated_by',
         'numero',
@@ -73,6 +78,11 @@ class CommandeVente extends Model
             'reception_validee_at' => 'datetime',
             'validated_at' => 'datetime',
             'closed_at' => 'datetime',
+            'est_precommande' => 'boolean',
+            'date_remise_prevue' => 'date:Y-m-d',
+            'preparation_lancee_at' => 'datetime',
+            'preparee_at' => 'datetime',
+            'remise_at' => 'datetime',
         ];
     }
 
@@ -269,6 +279,40 @@ class CommandeVente extends Model
             || $this->mode_remise_grossiste === ModeRemiseGrossiste::LIVRAISON;
     }
 
+    public function isReservee(): bool
+    {
+        return $this->statut === StatutCommandeVente::RESERVEE;
+    }
+
+    /**
+     * Précommande dont la date prévue est dépassée sans que la marchandise ait été remise (ADR 0019) :
+     * un indicateur dérivé, jamais un statut ni une expiration — la réservation reste active.
+     */
+    public function isEnRetard(): bool
+    {
+        return $this->estPrecommandeAvantRemise()
+            && $this->date_remise_prevue !== null
+            && $this->date_remise_prevue->lt(today());
+    }
+
+    /**
+     * Précommande dont la marchandise n'est pas encore remise (ADR 0019) : ses encaissements sont des
+     * acomptes (avance client 419100), sa facture reste « Créée ». La remise (retrait validé ou
+     * chargement validé) renseigne `remise_at`.
+     */
+    public function estPrecommandeAvantRemise(): bool
+    {
+        return $this->est_precommande
+            && $this->remise_at === null
+            && in_array($this->statut, [
+                StatutCommandeVente::RESERVEE,
+                StatutCommandeVente::A_PREPARER,
+                StatutCommandeVente::PREPAREE,
+                StatutCommandeVente::A_CHARGER,
+                StatutCommandeVente::CHARGEMENT_EN_COURS,
+            ], true);
+    }
+
     public function isAnnulee(): bool
     {
         return $this->statut === StatutCommandeVente::ANNULEE;
@@ -297,10 +341,12 @@ class CommandeVente extends Model
     /**
      * Source de vérité unique de « un retour de livraison peut être enregistré maintenant » (cf.
      * CommandeVenteRetourService) : renvoie la raison du refus, ou null si le retour est possible.
-     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé — le premier
-     * encaissement d'une vente standard fait passer la commande en LIVREE (cf.
+     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé hors acompte —
+     * le premier encaissement d'une vente standard fait passer la commande en LIVREE (cf.
      * CommandeVenteService::passerEnLivree()), mais le montant encaissé est aussi contrôlé
-     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API).
+     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API). Les
+     * acomptes d'une précommande, versés avant la livraison, ne la confirment pas (ADR 0019, C4) :
+     * l'excédent éventuel devient un trop-perçu à rembourser.
      * Réservé aux ventes sans réception explicite : une commande à réception explicite (distribution,
      * Grossiste livré) constate déjà ce que le client a accepté via l'écart de réception (cf.
      * CommandeVenteService::validerReception()), avec ses propres règles de stock et de commission.
@@ -317,7 +363,7 @@ class CommandeVente extends Model
 
         $this->loadMissing('lignes', 'facture');
 
-        if ($this->facture && ($this->facture->isAnnulee() || (float) $this->facture->montant_encaisse > 0)) {
+        if ($this->facture && ($this->facture->isAnnulee() || $this->facture->montantEncaisseHorsAcomptes() > 0)) {
             return 'Un retour n\'est plus possible : la facture est annulée ou a déjà reçu un encaissement.';
         }
 
@@ -371,7 +417,9 @@ class CommandeVente extends Model
         }
 
         $facture = $this->load('facture')->facture;
-        if (! $facture?->isPayee() || ! $this->commissionsPretesPourCloture()) {
+        // Trop-perçu d'une précommande (ADR 0019) : la commande ne se clôture qu'une fois le client
+        // remboursé de ce qu'il a versé en trop.
+        if (! $facture?->isPayee() || $facture->tropPercu() > 0 || ! $this->commissionsPretesPourCloture()) {
             return false;
         }
 

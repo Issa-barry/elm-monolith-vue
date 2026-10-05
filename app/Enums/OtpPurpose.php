@@ -24,4 +24,6 @@ enum OtpPurpose: string
     case INVITATION = 'invitation';
     /** Confirmation d'une annulation exceptionnelle de commande par l'utilisateur qui la demande (cf. AnnulationExceptionnelleService). */
     case ANNULATION_EXCEPTIONNELLE = 'annulation_exceptionnelle';
+    /** Confirmation renforcée de l'annulation d'une précommande en préparation ou préparée (ADR 0019, D1). */
+    case ANNULATION_PRECOMMANDE = 'annulation_precommande';
 }

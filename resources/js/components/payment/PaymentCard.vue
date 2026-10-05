@@ -61,6 +61,11 @@ interface Props {
      * fournis par le backend (AgenceEncaissementResolver::pourEcran()) — prioritaire sur les trois
      * props précédentes. L'agence d'encaissement est toujours une agence de l'utilisateur (ADR 0012). */
     encaissementAgences?: EncaissementAgences | null;
+    /** Montant minimum accepté (acompte obligatoire d'une précommande, ADR 0019) — simple confort :
+     * le contrôle réel reste serveur. Absent : aucun minimum au-delà de 1. */
+    minMontant?: number;
+    /** Montant pré-saisi à l'ouverture (défaut : le solde). */
+    montantInitial?: number | null;
 }
 
 // Messages courts d'interface ; les contrôles et messages backend restent inchangés.
@@ -88,6 +93,8 @@ const props = withDefaults(defineProps<Props>(), {
     agenceDefaut: null,
     agenceCommande: null,
     encaissementAgences: null,
+    minMontant: undefined,
+    montantInitial: null,
 });
 
 const decaissement = computed(() => props.sens === 'decaissement');
@@ -211,6 +218,12 @@ const modeActif = computed(() => modeByKey(selectedKey.value));
 const soldeSupport = computed(() =>
     decaissement.value ? (modeActif.value?.soldeDisponible ?? null) : null,
 );
+const montantSousMinimum = computed(
+    () =>
+        props.minMontant !== undefined &&
+        props.minMontant > 0 &&
+        (montant.value ?? 0) < props.minMontant,
+);
 const soldeInsuffisant = computed(
     () =>
         soldeSupport.value !== null &&
@@ -229,7 +242,8 @@ watch(
     () => props.visible,
     (open) => {
         if (open) {
-            montant.value = props.solde > 0 ? props.solde : null;
+            montant.value =
+                props.montantInitial ?? (props.solde > 0 ? props.solde : null);
             siteEncaissementId.value =
                 agenceDefautProposee.value ??
                 agencesProposees.value[0]?.site_id ??
@@ -284,6 +298,7 @@ function handleSubmit() {
     if (!mode || modeIndisponible(mode)) return;
     if (mode.requiresReference && !referencePaiement.value) return;
     if (soldeInsuffisant.value) return;
+    if (montantSousMinimum.value) return;
     emit('submit', {
         montant: montant.value,
         mode_paiement: mode.mode_paiement,
@@ -417,6 +432,17 @@ function handleSubmit() {
                 </div>
                 <p v-if="errors?.montant" class="mt-1 text-xs text-destructive">
                     {{ errors.montant }}
+                </p>
+                <p
+                    v-else-if="minMontant && minMontant > 0"
+                    class="mt-1 text-xs"
+                    :class="
+                        montantSousMinimum
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-muted-foreground'
+                    "
+                >
+                    Minimum : {{ espacer(formatGNF(minMontant)) }}
                 </p>
             </div>
 
@@ -594,6 +620,7 @@ function handleSubmit() {
                         !montant ||
                         !modeActif ||
                         soldeInsuffisant ||
+                        montantSousMinimum ||
                         (referencePaiementRequise && !referencePaiement)
                     "
                     @click="handleSubmit"
