@@ -156,8 +156,9 @@ class PrecommandeService
      * La vente est réalisée (retrait validé ou chargement validé) : la facture quitte « Créée ».
      * Vente constatée (411/701), acomptes encore détenus imputés (419100 → 411000), statut calculé
      * depuis l'encaissé net (Impayée / Partiel / Payée — jamais « Impayée » d'office, contrairement à
-     * une vente sans acompte), puis cashback et clôture si la facture est payée. Appelé dans la
-     * transaction de la remise ; idempotent (sans effet sur une facture déjà activée).
+     * une vente sans acompte), puis cashback et clôture si la facture est payée — pour une livraison,
+     * différés à la livraison définitive (D13, D14). Appelé dans la transaction de la remise ;
+     * idempotent (sans effet sur une facture déjà activée).
      */
     public function activerFacture(CommandeVente $commande): void
     {
@@ -186,21 +187,70 @@ class PrecommandeService
             $facture->recalculStatut();
         }
 
-        $facture->refresh();
-        if ($facture->isPayee()) {
-            // Livraison déjà soldée par les acomptes : aucun encaissement ne viendra la faire passer
-            // « Livrée » (cf. StoreEncaissementVenteController) — elle l'est dès le chargement validé,
-            // sauf si une réception explicite est exigée (distribution, Grossiste livré).
-            $commande->refresh();
-            if ($commande->isLivraisonEnCours() && ! $commande->requiertReceptionExplicite()) {
-                CommandeVenteService::passerEnLivree($commande);
-                CommandeVenteActiviteService::log($commande, 'livree');
-            }
-
+        // Une livraison reste « En livraison » même soldée par ses acomptes : le chargement ne vaut
+        // pas livraison (D13) — cf. confirmerLivraison(). La cascade est alors sans effet (D14).
+        if ($facture->refresh()->isPayee()) {
             FacturePayeeCascade::apresPassageEnPayee($commande->fresh());
         }
 
         $commande->fresh()->cloturerSiComplete();
+    }
+
+    // ── Livraison ────────────────────────────────────────────────────────────
+
+    /**
+     * LIVRAISON_EN_COURS → LIVREE (décision D13) : la marchandise a bien été remise au client. Seul
+     * moyen de confirmer une livraison soldée par ses acomptes — aucun encaissement ne viendra le
+     * faire. Jamais pour une commande à réception explicite (distribution, Grossiste livré), confirmée
+     * par la validation de réception.
+     */
+    public function confirmerLivraison(CommandeVente $commande): void
+    {
+        $this->exigerStatut($commande, [StatutCommandeVente::LIVRAISON_EN_COURS], 'Seule une précommande en livraison peut être confirmée livrée.');
+        abort_if($commande->requiertReceptionExplicite(), 422, 'Cette livraison se confirme par la validation de réception.');
+
+        DB::transaction(function () use ($commande) {
+            $commande = CommandeVente::whereKey($commande->id)->lockForUpdate()->firstOrFail();
+            $this->exigerStatut($commande, [StatutCommandeVente::LIVRAISON_EN_COURS], 'Seule une précommande en livraison peut être confirmée livrée.');
+
+            CommandeVenteService::passerEnLivree($commande);
+            CommandeVenteActiviteService::log($commande, 'livree');
+
+            $this->apresLivraisonDefinitive($commande);
+        });
+    }
+
+    /**
+     * Livraison définitive d'une précommande (confirmée, ou réception validée) : statut de la facture
+     * recalculé depuis l'encaissé net, cashback si elle est payée — différé jusqu'ici (D14) — et
+     * clôture si tout est réglé.
+     */
+    public function apresLivraisonDefinitive(CommandeVente $commande): void
+    {
+        $facture = $commande->fresh('facture')->facture;
+        if (! $facture || $facture->isCreee() || $facture->isAnnulee()) {
+            return;
+        }
+
+        $facture->recalculStatut();
+        if ($facture->isPayee()) {
+            FacturePayeeCascade::apresPassageEnPayee($commande->fresh());
+        }
+
+        $commande->fresh()->cloturerSiComplete();
+    }
+
+    /**
+     * Après un retour de livraison ou un écart de réception (ADR 0019, C4 / C5) : le montant facturé
+     * a baissé, le statut de la facture est recalculé depuis l'encaissé net — « Partiel » peut
+     * devenir « Payée » — et l'excédent éventuel apparaît comme trop-perçu (FactureVente::tropPercu()).
+     */
+    public static function apresReductionMontant(CommandeVente $commande): void
+    {
+        $facture = $commande->fresh('facture')->facture;
+        if ($commande->est_precommande && $facture && ! $facture->isCreee() && ! $facture->isAnnulee()) {
+            $facture->recalculStatut();
+        }
     }
 
     // ── Remboursement ────────────────────────────────────────────────────────

@@ -12,6 +12,25 @@ Décision produit du **23/09/2026** — cf. [ADR 0003](adr/0003-retour-de-livrai
 **demandée** et **chargée** d'origine ne sont jamais modifiées : un retour est un mouvement métier
 tracé, pas une correction silencieuse de la commande.
 
+## Précommandes (amendement du 04/10/2026, ADR 0019 lot 3)
+
+Une précommande livrée a souvent été payée en tout ou partie **avant** la livraison (acomptes).
+Pour elle seulement :
+
+- les **acomptes** (`encaissements_ventes.est_acompte`) ne bloquent pas le retour : seul un
+  encaissement **hors acompte** (le solde, versé après la remise) ferme la fenêtre, comme pour toute
+  vente ;
+- une précommande soldée par ses acomptes reste `livraison_en_cours` après le chargement (elle ne
+  passe « Livrée » qu'à « Confirmer la livraison ») : le retour reste donc possible si la livraison
+  échoue ;
+- après le retour, le statut de la facture est recalculé depuis l'encaissé net ; l'excédent devient
+  un **trop-perçu** à rembourser (« Rembourser le trop-perçu », D 411000 / C trésorerie) et bloque la
+  clôture ;
+- **retour total** : commande `retournee`, facture annulée, mais tout l'encaissé net reste à
+  rembourser au client (`FactureVente::tropPercu()`).
+
+Stock, commission, comptabilité (`vente_retour`) et garde-fous : identiques à une vente standard.
+
 ## Périmètre
 
 - **Toutes les ventes standard** en `livraison_en_cours` : celles dont la livraison est confirmée par
@@ -34,7 +53,7 @@ la relisent). Un retour n'est possible que si :
 |---|---|
 | statut `livraison_en_cours` | la marchandise est partie et n'a pas encore été confirmée livrée |
 | vente sans réception explicite | voir Périmètre |
-| facture non annulée **et** aucun encaissement (`montant_encaisse = 0`) | « avant encaissement » — le premier encaissement fait passer la commande en `livree` ; le montant encaissé est aussi contrôlé directement (un encaissement peut être créé hors du contrôleur : import, API) |
+| facture non annulée **et** aucun encaissement hors acompte | « avant encaissement » — le premier encaissement fait passer la commande en `livree` ; le montant encaissé est aussi contrôlé directement (un encaissement peut être créé hors du contrôleur : import, API). Les acomptes d'une précommande ne comptent pas (cf. ci-dessus) ; une vente ordinaire n'en a jamais |
 | au moins une ligne avec une quantité encore retournable | chargé − déjà retourné > 0 |
 | la commission de la commande est encore **régularisable** | voir Commission |
 

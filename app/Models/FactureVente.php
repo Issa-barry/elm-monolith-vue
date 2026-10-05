@@ -110,6 +110,16 @@ class FactureVente extends Model
         return round((float) $this->montant_rembourse, 2);
     }
 
+    /** Encaissé hors acomptes de précommande (ADR 0019) : ce qui a été payé après la remise. */
+    public function montantEncaisseHorsAcomptes(): float
+    {
+        if ($this->relationLoaded('encaissements')) {
+            return (float) $this->encaissements->where('est_acompte', false)->sum('montant');
+        }
+
+        return (float) $this->encaissements()->where('est_acompte', false)->sum('montant');
+    }
+
     /** Argent du client encore détenu : encaissé (acomptes compris) moins déjà remboursé. */
     public function encaisseNet(): float
     {
@@ -120,11 +130,14 @@ class FactureVente extends Model
      * Trop-perçu à rendre au client (ADR 0019) : ce qu'il a versé au-delà de ce qui lui est facturé
      * (quantité préparée ou remise inférieure à la précommande). Dérivé, jamais stocké ; bloque la
      * clôture tant qu'il n'est pas remboursé (cf. CommandeVente::cloturerSiComplete()).
+     * Facture annulée d'une précommande (retour total, lot 3) : rien n'est plus facturé, tout
+     * l'encaissé net est à rendre — l'annulation d'une précommande, elle, rembourse dans la même
+     * opération et laisse donc 0.
      */
     public function tropPercu(): float
     {
         if ($this->isAnnulee()) {
-            return 0.0;
+            return $this->commande?->est_precommande ? max(0.0, $this->encaisseNet()) : 0.0;
         }
 
         return max(0.0, round($this->encaisseNet() - (float) $this->montant_net, 2));

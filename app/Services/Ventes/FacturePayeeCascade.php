@@ -15,12 +15,20 @@ use Laravel\Pennant\Feature;
  * précommande déjà intégralement payée par ses acomptes (ADR 0019, constat C9) — avant lui, le
  * cashback n'était déclenché que par le contrôleur d'encaissement. Idempotent :
  * CashbackService::processVente() ne crée jamais deux gains pour une même vente.
+ *
+ * Précommande encore « En livraison » : rien (décision D14) — un retour ou un écart peut encore
+ * réduire ce qui est remis. Le cashback est rappelé à la livraison définitive, cf.
+ * PrecommandeService::apresLivraisonDefinitive().
  */
 final class FacturePayeeCascade
 {
     public static function apresPassageEnPayee(?CommandeVente $commande): void
     {
         if (! $commande || ! $commande->organization_id || ! $commande->client_id) {
+            return;
+        }
+
+        if ($commande->est_precommande && $commande->isLivraisonEnCours()) {
             return;
         }
 

@@ -1,10 +1,11 @@
 # ADR 0019 — Précommande : vente marquée, acompte en avance client, réservation stricte
 
 - **Date** : 2026-10-04
-- **Statut** : **accepté le 2026-10-04** — décisions D1 à D12 validées (cf. § 13 de la
+- **Statut** : **accepté le 2026-10-04** — décisions D1 à D14 validées (cf. § 13 de la
   [spécification](../precommandes.md#13-décisions-validées-le-04102026)) ; aucun interrupteur
-  d'activation en V1. Implémentation par lots.
-  **Toute référence D1 à D12 renvoie au § 13 de `docs/precommandes.md` ; en cas de divergence de
+  d'activation en V1. Implémentation par lots. D13 et D14 (lot 3, même jour) révisent la
+  décision 8 sur la livraison soldée et le cashback.
+  **Toute référence D1 à D14 renvoie au § 13 de `docs/precommandes.md` ; en cas de divergence de
   numérotation ou de formulation, ce § 13 fait foi.**
 - **Périmètre** : Ventes (`CommandeVente`), stock (`StockReservation`), encaissements, trésorerie,
   comptabilité, commissions, cashback, rapports — cf. [precommandes.md](../precommandes.md)
@@ -53,6 +54,12 @@ existe pour les fiches (ADR 0009).
    activée avec un statut calculé depuis l'encaissé net ; acomptes imputés (**D 419100 / C 411000**) ;
    cascade « facture payée » (commission, cashback, clôture) par un point unique partagé avec
    l'encaissement. Le solde éventuel est une créance ordinaire, soumise aux règles d'impayés existantes.
+   **Chargement ≠ livraison (D13)** : une précommande en livraison reste « En livraison » après le
+   chargement, même soldée par ses acomptes, jusqu'à « Confirmer la livraison »
+   (`ventes.valider_reception`), l'encaissement du solde ou la validation de réception. **Le
+   cashback attend cette livraison définitive (D14)** et se calcule, pour toutes les ventes, sur la
+   quantité effective (livrée, sinon chargée, sinon commandée). La facture reste activée et
+   comptabilisée au chargement, comme pour toute vente livrée.
 9. **Trop-perçu remboursé**, jamais conservé ni converti en avoir : nouvelle table
    `remboursements_ventes`, décaissement ADR 0009 (solde vérifié sous verrou), clôture bloquée tant
    qu'il reste à rembourser.
@@ -63,7 +70,8 @@ existe pour les fiches (ADR 0009).
 11. **Pas d'expiration automatique** : indicateur dérivé « En retard », en ambre.
 12. **Amendements** : pour une précommande, la date de vente est la date de remise (ADR 0007 §3),
     et un acompte n'empêche ni un retour (ADR 0003) ni un écart de réception : l'excédent devient un
-    trop-perçu.
+    trop-perçu. Seul un encaissement du **solde** ferme la fenêtre de retour. Un retour total annule
+    la facture mais laisse l'encaissé net **à rembourser** au client.
 
 ## Alternatives écartées
 
@@ -99,7 +107,13 @@ existe pour les fiches (ADR 0009).
   l'encaissé net. Le total remboursé est dénormalisé (`factures_ventes.montant_rembourse`) : statut,
   reste à payer et trop-perçu se calculent net des remboursements.
 - Cashback : déclenchement extrait du contrôleur d'encaissement dans `FacturePayeeCascade`,
-  appelé aussi à la remise d'une précommande soldée par ses acomptes.
+  appelé aussi à la remise d'une précommande soldée par ses acomptes ; sans effet tant qu'une
+  précommande est « En livraison » (D14), rappelé à la confirmation de livraison et à la validation
+  de réception. `CashbackService::quantiteEligible()` lit la quantité effective (révision pour
+  toutes les ventes, cf. `docs/cashback.md`).
+- Lot 3 : nouvelle route `precommandes.livraison.confirmer` (permission existante
+  `ventes.valider_reception`, aucune migration). Une livraison soldée chargée sous le lot 2 et déjà
+  passée « Livrée » n'est pas modifiée.
 - `StockReservationService` gagne une réduction partielle (préparation inférieure à la demande).
 - Rapports : statuts avant remise hors chiffre d'affaires, date de vente = remise, une facture
   « Créée » de précommande n'est pas un impayé (situation véhicule), deux catégories de caisse.

@@ -14,6 +14,7 @@ import {
     HandCoins,
     PackageCheck,
     PackageOpen,
+    Truck,
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -39,6 +40,7 @@ export interface PrecommandeData {
     can_lancer_preparation: boolean;
     can_valider_preparation: boolean;
     can_valider_retrait: boolean;
+    can_confirmer_livraison: boolean;
     can_rembourser: boolean;
     can_annuler: boolean;
     annulation_renforcee: boolean;
@@ -62,20 +64,28 @@ const urlBase = computed(
     () => `/backoffice/ventes/${props.commandeId}/precommande`,
 );
 
-// ── Étapes (avant la remise) ─────────────────────────────────────────────────
-const ETAPES = computed(() => [
-    { cle: 'reservee', libelle: 'Réservée' },
-    { cle: 'a_preparer', libelle: 'À préparer' },
+// ── Étapes (jusqu'à la remise) ───────────────────────────────────────────────
+// Le chargement ne vaut pas livraison (D13) : « En livraison » jusqu'à la confirmation.
+const ETAPES = computed(() =>
     props.precommande.livraison
-        ? { cle: 'a_charger', libelle: 'À charger' }
-        : { cle: 'preparee', libelle: 'Préparée' },
-    {
-        cle: 'remise',
-        libelle: props.precommande.livraison ? 'Livrée' : 'Retirée',
-    },
-]);
+        ? [
+              { cle: 'reservee', libelle: 'Réservée' },
+              { cle: 'a_preparer', libelle: 'À préparer' },
+              { cle: 'a_charger', libelle: 'À charger' },
+              { cle: 'livraison_en_cours', libelle: 'En livraison' },
+              { cle: 'remise', libelle: 'Livrée' },
+          ]
+        : [
+              { cle: 'reservee', libelle: 'Réservée' },
+              { cle: 'a_preparer', libelle: 'À préparer' },
+              { cle: 'preparee', libelle: 'Préparée' },
+              { cle: 'remise', libelle: 'Retirée' },
+          ],
+);
 const etapeCourante = computed(() => {
-    const index = ETAPES.value.findIndex((e) => e.cle === props.statut);
+    const statut =
+        props.statut === 'chargement_en_cours' ? 'a_charger' : props.statut;
+    const index = ETAPES.value.findIndex((e) => e.cle === statut);
     return index === -1 ? ETAPES.value.length - 1 : index;
 });
 
@@ -112,6 +122,17 @@ function envoyer(
 
 function lancerPreparation() {
     envoyer(`${urlBase.value}/preparation/lancer`, {}, () => undefined);
+}
+
+// ── Confirmation de livraison ────────────────────────────────────────────────
+const dialogueLivraison = ref(false);
+
+function confirmerLivraison() {
+    envoyer(
+        `${urlBase.value}/livraison/confirmer`,
+        {},
+        () => (dialogueLivraison.value = false),
+    );
 }
 
 // ── Quantités (préparation / retrait) ────────────────────────────────────────
@@ -307,6 +328,15 @@ function annuler(paiement: EncaissementPayload | null) {
                     Valider le retrait
                 </Button>
                 <Button
+                    v-if="precommande.can_confirmer_livraison"
+                    size="sm"
+                    :disabled="enCours"
+                    @click="dialogueLivraison = true"
+                >
+                    <Truck class="mr-2 h-4 w-4" />
+                    Confirmer la livraison
+                </Button>
+                <Button
                     v-if="precommande.can_rembourser"
                     size="sm"
                     variant="outline"
@@ -330,9 +360,9 @@ function annuler(paiement: EncaissementPayload | null) {
             </div>
         </div>
 
-        <!-- Étapes avant la remise — sans objet pour une précommande annulée. -->
+        <!-- Étapes jusqu'à la remise — sans objet pour une précommande annulée ou retournée. -->
         <ol
-            v-if="statut !== 'annulee'"
+            v-if="statut !== 'annulee' && statut !== 'retournee'"
             class="mt-4 flex flex-wrap items-center gap-2 text-xs"
         >
             <li
@@ -470,6 +500,45 @@ function annuler(paiement: EncaissementPayload | null) {
                     class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                 />
                 Confirmer
+            </Button>
+        </template>
+    </Dialog>
+
+    <!-- Confirmation de livraison (D13) -->
+    <Dialog
+        :visible="dialogueLivraison"
+        modal
+        :closable="!enCours"
+        header="Confirmer la livraison"
+        :style="{ width: '480px', maxWidth: 'calc(100vw - 2rem)' }"
+        @update:visible="
+            (v: boolean) => !v && !enCours && (dialogueLivraison = false)
+        "
+    >
+        <p class="text-sm text-muted-foreground">
+            Le client a bien reçu la marchandise chargée. Après confirmation,
+            plus aucun retour de livraison n'est possible.
+            <template v-if="precommande.montants.reste > 0">
+                Le reste à payer
+                <strong class="text-foreground">{{
+                    formatGNF(precommande.montants.reste)
+                }}</strong>
+                pourra ensuite être encaissé.
+            </template>
+        </p>
+        <template #footer>
+            <Button
+                variant="outline"
+                :disabled="enCours"
+                @click="dialogueLivraison = false"
+                >Retour</Button
+            >
+            <Button :disabled="enCours" @click="confirmerLivraison">
+                <span
+                    v-if="enCours"
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                Confirmer la livraison
             </Button>
         </template>
     </Dialog>

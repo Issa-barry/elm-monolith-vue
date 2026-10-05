@@ -522,6 +522,12 @@ class CommandeVenteService
             ]);
 
             CommissionTriggerService::onReceptionValidee($commande->fresh());
+
+            // Précommande (ADR 0019) : la réception validée est la livraison définitive — statut de
+            // facture recalculé sur le réceptionné, cashback différé jusqu'ici (D14), clôture.
+            if ($commande->est_precommande) {
+                app(PrecommandeService::class)->apresLivraisonDefinitive($commande);
+            }
         });
     }
 
@@ -565,12 +571,13 @@ class CommandeVenteService
         // semaine prochaine ») reste possible puisqu'une facture d'une commande à réception
         // explicite (distribution, Grossiste livré) est encaissable dès LIVRAISON_EN_COURS,
         // comme toute vente. Un écart de réception ne doit jamais faire repasser la facture sous
-        // ce qui a déjà été réellement encaissé.
+        // ce qui a déjà été réellement encaissé. Sauf pour une précommande (ADR 0019, C5) : ses
+        // acomptes précèdent toujours la réception, l'excédent devient un trop-perçu à rembourser.
         $commande->load('lignes', 'facture');
         $nouveauTotal = (float) $commande->lignes->sum('total_ligne');
-        $montantEncaisse = (float) ($commande->facture?->montant_encaisse ?? 0);
+        $montantEncaisse = (float) ($commande->facture?->encaisseNet() ?? 0);
 
-        if ($montantEncaisse > $nouveauTotal) {
+        if (! $commande->est_precommande && $montantEncaisse > $nouveauTotal) {
             throw ValidationException::withMessages([
                 'lignes' => 'Impossible de valider cette réception : '
                     .number_format($montantEncaisse, 0, ',', ' ')

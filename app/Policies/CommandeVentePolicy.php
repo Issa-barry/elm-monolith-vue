@@ -41,6 +41,16 @@ class CommandeVentePolicy
         return $user->can('ventes.valider_retrait') && $this->sameOrganization($user, $commande);
     }
 
+    /**
+     * Confirmer la livraison d'une précommande (décision D13) — même permission que la validation de
+     * réception : ceux qui constatent réellement la livraison. L'état est vérifié par
+     * PrecommandeService::confirmerLivraison() (Gate::before du super admin).
+     */
+    public function confirmerLivraison(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.valider_reception') && $this->sameOrganization($user, $commande);
+    }
+
     /** Rembourser un client (trop-perçu d'une précommande) — sortie réelle de trésorerie. */
     public function rembourser(User $user, CommandeVente $commande): bool
     {

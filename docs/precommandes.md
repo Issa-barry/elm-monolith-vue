@@ -1,8 +1,8 @@
 # Précommandes — spécification fonctionnelle et technique V1
 
 - **Date** : 2026-10-04
-- **Statut** : **validée le 2026-10-04** (D1 à D12 acceptées, § 13 ; pas d'interrupteur d'activation
-  en V1). Développement par lots (§ 15), lot 1 en cours.
+- **Statut** : **validée le 2026-10-04** (D1 à D14 acceptées, § 13 ; pas d'interrupteur d'activation
+  en V1). Développement par lots (§ 15) : lots 1, 2 et 3 livrés, lot 4 à faire.
 - **Décision structurante** : [ADR 0019](adr/0019-precommande-vente-avec-acompte-et-reservation.md)
 - **Périmètre** : Ventes (`CommandeVente`), stock (réservations), encaissements, trésorerie,
   comptabilité, commissions, cashback, rapports.
@@ -69,8 +69,10 @@ d'une réservation, statut de préparation, date prévue de remise.
 | **C1** | **ADR 0004** : l'annulation exceptionnelle est réservée aux **ventes fictives saisies par erreur** — « Pas d'avoir ni de remboursement : aucune vente n'a existé », statut `annulee_erreur_saisie`, `super_admin` seul. | Annuler une précommande réelle (client qui renonce, ne vient pas) **avec remboursement** est exactement ce que l'ADR 0004 a écarté. La réutiliser fausserait ses statistiques (« saisie fictive ») et son sens. | Procédure distincte **« Annuler la précommande »** : statut `annulee` (vente jamais réalisée, aucune marchandise sortie), remboursement obligatoire des sommes versées, motif obligatoire. Avant préparation : permission `ventes.annuler_precommande`. Après préparation : même procédure + permission renforcée + **confirmation paramétrable réutilisant le mécanisme de l'ADR 0004** (code e-mail / simple, empreinte du récapitulatif) — mécanisme réutilisé, sémantique non. L'ADR 0004 reste intact. |
 | **C2** | Aucun encaissement avant validation du chargement (`CommandeVente::isEncaissable()`). | Un acompte est reçu avant toute remise. | Règle conservée pour toutes les ventes. Exception **unique** : une précommande non encore remise accepte un encaissement, qui est **par définition un acompte** (`est_acompte = true`), comptabilisé en 4191 et sans effet sur le statut de la facture (§ 8). |
 | **C3** | **ADR 0007 §3** : date d'une vente = création de sa facture (`factures_ventes.created_at`). | La facture d'une précommande naît à la création (comme pour `confirmer()`), donc des jours avant la remise : la vente serait datée du jour de la précommande. | Pour une précommande, **date de vente = date de remise** (`remise_at`) ; statuts avant remise exclus du CA (`STATUTS_COMMANDE_HORS_CA`). Amende l'ADR 0007. |
-| **C4** | **ADR 0003** : retour de livraison impossible dès qu'un encaissement existe. | Une précommande livrée avec acompte ne pourrait jamais faire l'objet d'un retour. | Pour une précommande, les **acomptes ne bloquent pas le retour** ; la valeur retournée devient un trop-perçu à rembourser (§ 8.4). Amende l'ADR 0003. |
-| **C5** | `validerReception()` refuse un écart si l'encaissé dépasse le nouveau total (« Régularisez l'encaissement »). | Cas normal d'une précommande avec acompte élevé et réception partielle. | Pour une précommande : écart accepté, l'excédent devient un **trop-perçu à rembourser**. |
+| **C4** | **ADR 0003** : retour de livraison impossible dès qu'un encaissement existe. | Une précommande livrée avec acompte ne pourrait jamais faire l'objet d'un retour. | Pour une précommande, les **acomptes ne bloquent pas le retour** ; la valeur retournée devient un trop-perçu à rembourser (§ 8.4). Un encaissement du **solde** (après remise) ferme la fenêtre de retour comme pour toute vente : c'est lui qui confirme la livraison. Amende l'ADR 0003. **Livré au lot 3.** |
+| **C5** | `validerReception()` refuse un écart si l'encaissé dépasse le nouveau total (« Régularisez l'encaissement »). | Cas normal d'une précommande avec acompte élevé et réception partielle. | Pour une précommande : écart accepté, l'excédent devient un **trop-perçu à rembourser**. Le refus est conservé pour les autres ventes. **Livré au lot 3.** |
+| **C10** | Lot 2 : une livraison **soldée par ses acomptes** passait « Livrée » dès la validation du chargement. | Le chargement ne prouve pas la remise : si la livraison échoue (panne, client absent, refus), aucun retour n'était plus possible — contradiction avec D7 / D9. | **Chargement ≠ livraison** (D13) : la précommande reste « En livraison » jusqu'à **« Confirmer la livraison »** (`ventes.valider_reception`), l'encaissement du solde ou la validation de réception. **Livré au lot 3.** |
+| **C11** | Cashback calculé sur `quantite_livree ?? quantite_demandee` : la quantité **chargée** (ou remise) était ignorée. | Une vente chargée ou remise en quantité inférieure à la commande donnait un cashback sur la quantité commandée. | Quantité **effective** (livrée, sinon chargée, sinon commandée) pour **toutes les ventes** ; pour une précommande en livraison, cashback seulement une fois la livraison définitive (D14). **Livré au lot 3.** |
 | **C6** | `Parametre::isVentesAutoriseesSansStock()` : une organisation peut autoriser la vente au-delà du disponible ; `reserver()` suit ce paramètre. | R9 interdit la réservation à découvert. | La précommande est **toujours stricte** (`allowNegative = false`), quel que soit le paramètre : une réservation payée doit correspondre à du stock réel. Exception explicite, documentée. |
 | **C7** | Mode Grossiste et nature dérivés du **véhicule**, figés à la création (prix, commission, préfixe). | « Livraison » sans véhicule connu à la création rendrait la nature et le prix indéterminés, alors que l'acompte est calculé sur ce prix. | **Livraison ⇒ véhicule obligatoire à la création** (comme aujourd'hui, le véhicule n'est modifiable qu'en brouillon). Retrait ⇒ aucun véhicule. Le mode de remise est **dérivé du véhicule** (même principe que Grossiste, aucun second champ qui pourrait diverger) ; l'interface pose quand même la question « Retrait / Livraison » en premier. |
 | **C8** | Plancher du stock physique = réservé : une sortie (ajustement de casse) ne peut pas entamer du stock réservé. | Marchandise réservée abîmée avant préparation : la casse ne peut pas être déclarée. | V1 : réduire d'abord la quantité à la **validation de préparation** (libère la réservation), puis déclarer la casse. Aucun contournement du plancher. |
@@ -111,11 +113,16 @@ RESERVEE ──(Lancer la préparation)──► A_PREPARER ──(Valider la pr
                                                                                             │
           ┌───────────────── Retrait (pas de véhicule) ─────────────────┐   Livraison (véhicule)
           ▼                                                              │         ▼
-       PREPAREE ──(Valider le retrait : qté remise)──► FACTURATION ──► CLOTUREE   A_CHARGER ──► workflow
-          (en attente du client)             (sortie stock, facture        (existant)   existant : chargement,
-                                              activée, acomptes imputés)                  livraison, réception,
-                                                                                          encaissement, clôture
+       PREPAREE ──(Valider le retrait : qté remise)──► FACTURATION ──► CLOTUREE   A_CHARGER ──► chargement
+          (en attente du client)             (sortie stock, facture        (existant)        (existant)
+                                              activée, acomptes imputés)                         │
+                                                                                                 ▼
+                                    LIVRAISON_EN_COURS (sortie stock, facture activée, acomptes imputés)
+                                       │  retour / écart de réception possibles malgré les acomptes
+                                       ▼
+            Confirmer la livraison | encaissement du solde | validation de réception ──► LIVREE ──► CLOTUREE
 RESERVEE / A_PREPARER / PREPAREE / A_CHARGER ──(Annuler la précommande + remboursement)──► ANNULEE
+LIVRAISON_EN_COURS ──(retour total)──► RETOURNEE (encaissé net à rembourser)
 ```
 
 | Transition | Action | Permission | Effets |
@@ -124,7 +131,9 @@ RESERVEE / A_PREPARER / PREPAREE / A_CHARGER ──(Annuler la précommande + re
 | `reservee` → `a_preparer` | Lancer la préparation | `ventes.preparer` | Horodatage (cf. D5) |
 | `a_preparer` → `preparee` (retrait) / `a_charger` (livraison) | Valider la préparation | `ventes.preparer` | `quantite_preparee` ≤ demandée ; réservation **réduite** à la quantité préparée (nouvelle primitive `StockReservationService::reduire()`) ; total et facture recalculés |
 | `preparee` → `facturation` | Valider le retrait | `ventes.valider_retrait` | `quantite_chargee` (remise) ≤ préparée ; réservation consommée + sortie de stock (`decrementerStock()` existant) ; total recalculé ; facture activée (§ 8.3) ; `remise_at` ; clôture si soldée |
-| `a_charger` → … | Workflow existant | permissions existantes | Chargement : `quantite_chargee` ≤ préparée ; `remise_at` = validation du chargement |
+| `a_charger` → … | Workflow existant | permissions existantes | Chargement : `quantite_chargee` ≤ préparée ; `remise_at` = validation du chargement ; facture activée, acomptes imputés ; la commande reste **`livraison_en_cours`**, même soldée (D13) |
+| `livraison_en_cours` → `livree` | **Confirmer la livraison** (lot 3, D13) — sans réception explicite | `ventes.valider_reception` | Cashback si la facture est payée, clôture si tout est réglé. Aussi atteint par l'encaissement du solde (règle des ventes) ou, pour une distribution / Grossiste livré, par la validation de réception |
+| `livraison_en_cours` → … | Retour de livraison / écart de réception (lot 3) | `ventes.enregistrer_retour` / `ventes.valider_reception` | Acomptes non bloquants ; excédent = trop-perçu (§ 8.4) ; retour total ⇒ `retournee`, encaissé net à rembourser |
 | `reservee` → `annulee` | Annuler la précommande | `ventes.annuler_precommande` | Motif (≥ 10 caractères) ; remboursement de l'encaissé net dans la même opération ; réservation libérée ; facture annulée (jamais comptabilisée) |
 | `a_preparer` / `preparee` / `a_charger` → `annulee` | Annuler la précommande — **procédure renforcée** (D1) | `ventes.annuler_precommande_preparee` | Idem + code e-mail si l'organisation l'exige (même réglage que l'annulation exceptionnelle). Jamais une fois le chargement démarré |
 
@@ -132,9 +141,13 @@ RESERVEE / A_PREPARER / PREPAREE / A_CHARGER ──(Annuler la précommande + re
 `remise_at` est renseigné et la commande en `facturation`/`cloturee`. Le statut de paiement reste
 porté par la facture (Payée / Partiel / Impayée), jamais mélangé au statut de commande.
 
-**Livraison déjà soldée par les acomptes** : à la validation du chargement, la commande passe
-directement « Livrée » (sauf réception explicite exigée) — aucun encaissement ne viendra plus la
-faire passer « Livrée », règle habituelle d'une vente standard.
+**Livraison déjà soldée par les acomptes** (révisé au lot 3, D13) : le chargement **ne vaut pas
+livraison**. La commande reste « En livraison » — un retour ou un écart reste possible si la
+livraison échoue — jusqu'à l'action **« Confirmer la livraison »** (`ventes.valider_reception`,
+affichée sur la fiche de toute précommande en livraison sans réception explicite). Avant le lot 3,
+elle passait « Livrée » dès le chargement validé : aucun retour n'était alors possible. Une
+précommande non soldée peut aussi être confirmée par l'encaissement de son solde, comme toute
+vente ; une distribution / Grossiste livré l'est par la validation de réception.
 
 **En retard** : indicateur dérivé (`date_remise_prevue` < aujourd'hui et commande pas encore remise),
 jamais un statut. Couleur **WARNING (ambre)**, pas DANGER : la précommande reste valide et
@@ -209,13 +222,24 @@ contrôles que l'encaissement. V1 : acompte encaissé uniquement par **l'agence 
    `CommandeVenteService::activerFacture()` au chargement validé d'une précommande en livraison.
 3. Imputation des acomptes : écriture 4191 → 411 (§ 9).
 4. Cascade « facture payée » si elle l'est : commission (déclencheur « facture encaissée »),
-   cashback, clôture — point unique partagé avec le contrôleur d'encaissement (C9).
+   cashback, clôture — point unique partagé avec le contrôleur d'encaissement (C9). Pour une
+   **livraison**, le cashback attend que la livraison soit **définitive** (confirmée, ou réception
+   validée — D14) : `FacturePayeeCascade` ne fait rien tant que la précommande est « En livraison ».
 5. Le reste dû s'encaisse ensuite par l'écran existant (`est_acompte = false`).
 
 ### 8.4 Trop-perçu
 Encaissé net > montant facturé (quantité remise inférieure, retour, écart de réception) : la fiche
 affiche **« Trop-perçu à rembourser »**, la précommande apparaît dans le filtre correspondant, et la
 **clôture est bloquée** tant qu'il n'est pas remboursé (cf. D10).
+
+**Retour total** (lot 3) : la commande passe « Retournée » et sa facture est annulée, mais l'argent
+du client est toujours détenu (compte 411000 créditeur après la pièce `vente_retour`). Pour une
+précommande, le trop-perçu d'une facture annulée vaut donc **tout l'encaissé net**
+(`FactureVente::tropPercu()`), remboursable par la même action « Rembourser ».
+
+**Retour ou écart sur une précommande** (lot 3) : après le recalcul du montant, le statut de la
+facture est recalculé depuis l'encaissé net (`recalculStatut()`) — une facture « Partiel » peut
+devenir « Payée » — et l'excédent apparaît comme trop-perçu.
 
 ### 8.5 Remboursement
 Action « Rembourser » (`ventes.rembourser`) : `PaymentCard` en mode `decaissement` (ADR 0009) —
@@ -263,10 +287,14 @@ tels quels.
 |---|---|---|
 | Acompte reçu | **Jamais** (facture reste `CREEE`) | **Jamais** |
 | Retrait (sans véhicule) | Comme une vente directe : `onVenteDirecteFacturee()` (consultant Grossiste Enlèvement), sinon rien | À la facture payée (remise ou encaissement du solde) |
-| Livraison, déclencheur « chargement validé » (défaut) | À la validation du chargement (inchangé) | À la facture payée |
+| Livraison, déclencheur « chargement validé » (défaut) | À la validation du chargement (inchangé) | À la facture payée **et** livraison définitive : confirmation de livraison ou encaissement du solde (D14) |
 | Livraison, déclencheur « facture encaissée » | Quand la facture devient réellement payée, **après** remise | idem |
-| Distribution / Grossiste livré | À la validation de réception (inchangé) | idem |
-| Retour / écart / annulation | Règles existantes (réajustement, annulation des commissions non soldées) | Gain en attente retiré si la facture n'est plus payée |
+| Distribution / Grossiste livré | À la validation de réception (inchangé) | À la facture payée **et** réception validée (D14) |
+| Retour / écart / annulation | Règles existantes (réajustement, annulation des commissions non soldées) | Aucun gain à reprendre : un retour ou un écart survient pendant la livraison, **avant** le cashback (D14) |
+
+**Quantité du cashback** (D14, toutes ventes) : quantité **effective** de chaque ligne fabricable —
+livrée, sinon chargée (ou remise), sinon commandée (`CommandeVenteLigne::quantite_effective`, cf.
+[cashback.md](cashback.md)).
 
 Garde-fou : `FactureVente::recalculStatut()` ne fait **jamais** sortir une facture de `CREEE`
 (un encaissement sur une facture `CREEE` n'est possible que pour un acompte de précommande).
@@ -288,7 +316,7 @@ Garde-fou : `FactureVente::recalculStatut()` ne fait **jamais** sortir une factu
 | Ventes → **Précommandes** (nouveau menu, permission `ventes.read`, comme la liste Ventes) | Liste : Référence, Client, Agence, Date de précommande, Date prévue, Mode, Total, Acompte, Reste à payer, Quantité réservée, Statut (`StatusDot`), indicateurs En retard / Trop-perçu. `DataFilters` : Agence (`site_ids[]`) → Statut → filtres inline (Mode, En retard, Trop-perçu) → drawer (dates). Sur le modèle de la page Distribution. |
 | Ventes (liste) | Boutons « Nouvelle vente » / « Nouvelle précommande » ; marqueur « Précommande » sur les lignes. |
 | Nouvelle précommande | § 7.1. |
-| Fiche commande | Badge « Précommande », date prévue, bloc Acomptes / Encaissé net / Reste / Trop-perçu, actions selon statut et permission : Lancer la préparation, Valider la préparation, Valider le retrait, Ajouter un acompte, Rembourser, Annuler la précommande. |
+| Fiche commande | Badge « Précommande », date prévue, bloc Acomptes / Encaissé net / Reste / Trop-perçu, actions selon statut et permission : Lancer la préparation, Valider la préparation, Valider le retrait, **Confirmer la livraison** (lot 3), Ajouter un acompte, Rembourser, Annuler la précommande. Le bouton **Retour** existant (ADR 0003) et l'écart de réception sont disponibles malgré les acomptes (lot 3). Étapes affichées en livraison : Réservée → À préparer → À charger → En livraison → Livrée. |
 | Stock | « Engagé » → « Réservé ». |
 | Paramètres → Ventes | Bloc « Précommandes » : « Acompte obligatoire » (Oui / Non) et « Taux d'acompte (%) », saisie libre ; tant que Oui / Non n'est pas choisi, un bandeau indique que les précommandes sont bloquées — refus serveur d'un taux de 0 % quand l'acompte est obligatoire — modifiables avec `parametres.update` (permission déjà contrôlée par cet écran). |
 | `StatusDot.vue` | `reservee`, `a_preparer`, `preparee` ajoutés **uniquement** dans `STATUS_COLOR_MAP`. |
@@ -321,6 +349,8 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
 | D10 | Trop-perçu : remboursement différé (bloque la clôture) ou obligatoire dans la même opération que la remise ? | Différé, bloque la clôture | ☑ Accepté |
 | D11 | Acomptes encaissés uniquement par l'agence de la précommande ? | Oui en V1 | ☑ Accepté |
 | D12 | Rôles et permissions | **Validée le 04/10/2026** : droits gérés dans **Rôles & Permissions → Ventes** (`PermissionCatalog`, domaine Ventes), jamais dans les paramètres. `admin_entreprise` et `manager` : toutes les permissions de précommande (§ 12) ; `commerciale` : **`ventes.precommander` uniquement** (création, acompte initial compris). Attribution aux rôles existants par migration de backfill (ADR 0011). | ☑ Accepté |
+| D13 | Livraison soldée par les acomptes : comment la livraison est-elle confirmée ? (C10) | **Chargement ≠ livraison** : la précommande reste « En livraison » après le chargement, même payée à 100 % ; action explicite **« Confirmer la livraison »** protégée par la permission existante `ventes.valider_reception` (aucune permission nouvelle). Révise la règle du lot 2 (passage « Livrée » au chargement). | ☑ Accepté (04/10/2026) |
+| D14 | Cashback : base et moment (C11) | Quantité **effective** (livrée, sinon chargée, sinon commandée) pour **toutes les ventes**, précommandes comprises ; pour une précommande en livraison, cashback déclenché **seulement** à la livraison définitive (confirmation ou réception validée), jamais au chargement — aucun mécanisme de reprise de cashback n'est nécessaire. | ☑ Accepté (04/10/2026) |
 
 ## 14. Scénarios
 
@@ -338,8 +368,9 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
 | 9 | Annulation avant préparation | `ventes.annuler_precommande` : réservation libérée, facture annulée, remboursement de l'encaissé net (D 419100) |
 | 10 | Annulation après préparation | Même procédure, permission renforcée + confirmation (D1) |
 | 11 | Client ne vient pas | « En retard » (ambre) ; aucune expiration ; annulation possible (9/10) |
-| 12 | Livraison impossible | Retour (ADR 0003 amendé) ; trop-perçu remboursé ; nouvelle tentative = nouvelle vente (D7) |
-| 13 | Livraison partielle | Retour partiel (vente standard) ou écart de réception (distribution / Grossiste) → trop-perçu |
+| 12 | Livraison impossible | Retour total pendant la livraison (ADR 0003 amendé), même soldée par les acomptes (D13) : stock réintégré, commande « Retournée », facture annulée, **encaissé net remboursé** ; nouvelle tentative = nouvelle vente (D7) |
+| 13 | Livraison partielle | Retour partiel (vente standard) ou écart de réception (distribution / Grossiste) → montant recalculé, statut de facture recalculé, trop-perçu à rembourser, clôture bloquée jusqu'au remboursement |
+| 13 bis | Livraison soldée, bien remise | « Confirmer la livraison » : Livrée, cashback sur la quantité effective, clôture si les commissions sont réglées |
 | 14 | Produit réservé abîmé avant préparation | Réduire la quantité à la validation de préparation, puis ajustement de casse (C8) |
 | 15 | Commissions | § 10 — jamais à l'acompte |
 | 16 | Cashback | § 10 — jamais à l'acompte, une seule fois (idempotence existante) |
@@ -363,12 +394,17 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
    bloquant la clôture, remboursement (`remboursements_ventes`), annulation simple et renforcée (code
    e-mail selon le réglage de l'organisation), cinq permissions + backfill `admin_entreprise` /
    `manager`. Écran : carte « Précommande » de la fiche (`PrecommandeActions.vue`).
-   **Limites connues, traitées au lot 3** : une précommande livrée avec acompte ne peut pas encore
-   faire l'objet d'un retour (ADR 0003 pas encore amendé dans le code) ni d'un écart de réception
-   inférieur aux acomptes (refus actuel) — le flux bloque, il ne fausse rien.
-3. **Lot 3 — Livraison** : retour et écart de réception avec acomptes (C4, C5). Déjà en place au
-   lot 2 : passage à charger à la validation de la préparation, chargement ≤ préparé, activation de
-   la facture et passage « Livrée » d'une livraison soldée par ses acomptes.
+   Limites du lot 2, levées par le lot 3 : pas de retour d'une précommande livrée avec acompte, pas
+   d'écart de réception inférieur aux acomptes, et livraison soldée passée « Livrée » dès le
+   chargement.
+3. **Lot 3 — Livraison** (**livré le 04/10/2026**) : retour malgré les acomptes (C4,
+   `CommandeVente::raisonRetourImpossible()` ne compte que les encaissements hors acompte), écart de
+   réception supérieur aux acomptes accepté pour une précommande (C5), statut de facture recalculé
+   après retour / écart, retour total ⇒ encaissé net remboursable, **« Confirmer la livraison »**
+   (D13, `PrecommandeService::confirmerLivraison()`, route `precommandes.livraison.confirmer`),
+   cashback différé jusqu'à la livraison définitive et calculé sur la quantité effective pour toutes
+   les ventes (D14). Déjà en place au lot 2 : passage à charger à la validation de la préparation,
+   chargement ≤ préparé, activation de la facture au chargement.
 4. **Lot 4 — Rapports** : date de vente = remise (C3), statuts hors CA, situation véhicule (une
    facture `CREEE` de précommande n'est pas un impayé), catégories de la fiche de caisse.
 

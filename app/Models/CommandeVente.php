@@ -341,10 +341,12 @@ class CommandeVente extends Model
     /**
      * Source de vérité unique de « un retour de livraison peut être enregistré maintenant » (cf.
      * CommandeVenteRetourService) : renvoie la raison du refus, ou null si le retour est possible.
-     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé — le premier
-     * encaissement d'une vente standard fait passer la commande en LIVREE (cf.
+     * Il l'est tant que la marchandise est en livraison ET que rien n'a été encaissé hors acompte —
+     * le premier encaissement d'une vente standard fait passer la commande en LIVREE (cf.
      * CommandeVenteService::passerEnLivree()), mais le montant encaissé est aussi contrôlé
-     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API).
+     * directement, un encaissement pouvant être créé sans passer par ce chemin (import, API). Les
+     * acomptes d'une précommande, versés avant la livraison, ne la confirment pas (ADR 0019, C4) :
+     * l'excédent éventuel devient un trop-perçu à rembourser.
      * Réservé aux ventes sans réception explicite : une commande à réception explicite (distribution,
      * Grossiste livré) constate déjà ce que le client a accepté via l'écart de réception (cf.
      * CommandeVenteService::validerReception()), avec ses propres règles de stock et de commission.
@@ -361,7 +363,7 @@ class CommandeVente extends Model
 
         $this->loadMissing('lignes', 'facture');
 
-        if ($this->facture && ($this->facture->isAnnulee() || (float) $this->facture->montant_encaisse > 0)) {
+        if ($this->facture && ($this->facture->isAnnulee() || $this->facture->montantEncaisseHorsAcomptes() > 0)) {
             return 'Un retour n\'est plus possible : la facture est annulée ou a déjà reçu un encaissement.';
         }
 

@@ -52,6 +52,7 @@ final class PrecommandeEcran
             'can_lancer_preparation' => $commande->statut === StatutCommandeVente::RESERVEE && $user->can('preparer', $commande),
             'can_valider_preparation' => $commande->statut === StatutCommandeVente::A_PREPARER && $user->can('preparer', $commande),
             'can_valider_retrait' => $commande->statut === StatutCommandeVente::PREPAREE && $commande->vehicule_id === null && $user->can('validerRetrait', $commande),
+            'can_confirmer_livraison' => $commande->isLivraisonEnCours() && ! $commande->requiertReceptionExplicite() && $user->can('confirmerLivraison', $commande),
             'can_rembourser' => $montants['trop_percu'] > 0 && $peutRembourser,
             'can_annuler' => $annulable && $user->can('annulerPrecommande', $commande),
             'annulation_renforcee' => $renforcee,
