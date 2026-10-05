@@ -84,6 +84,7 @@ final class PermissionCatalog
         'ventes.precommander' => 'Ventes — créer une précommande (acompte initial compris)',
         'ventes.preparer' => 'Ventes — lancer et valider la préparation d’une précommande',
         'ventes.valider_retrait' => 'Ventes — valider le retrait d’une précommande',
+        'ventes.changer_mode_remise' => 'Ventes — changer le mode de remise d’une précommande (retrait ↔ livraison) avant le chargement',
         'ventes.rembourser' => 'Ventes — rembourser un client (trop-perçu, acomptes d’une précommande annulée)',
         'ventes.annuler_precommande' => 'Ventes — annuler une précommande avant sa préparation',
         'ventes.annuler_precommande_preparee' => 'Ventes — annuler une précommande en préparation ou préparée (procédure renforcée)',
@@ -142,7 +143,7 @@ final class PermissionCatalog
                     'ventes.qte.update', 'ventes.prix.update',
                 ],
                 'Précommandes' => [
-                    'ventes.precommander', 'ventes.preparer', 'ventes.valider_retrait', 'ventes.rembourser',
+                    'ventes.precommander', 'ventes.preparer', 'ventes.valider_retrait', 'ventes.changer_mode_remise', 'ventes.rembourser',
                     'ventes.annuler_precommande', 'ventes.annuler_precommande_preparee',
                 ],
                 'Facturation' => ['factures.encaisser', 'factures.encaisser_autre_agence', 'factures.annuler'],

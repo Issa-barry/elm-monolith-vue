@@ -7,7 +7,9 @@ use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
+use App\Services\CommandeVenteActiviteService;
 use App\Services\ReferenceNumeroService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +25,15 @@ class CommandeVente extends Model
     use HasFactory, HasUlids, SoftDeletes;
 
     public const STATUT_AFFICHAGE_COMMISSIONS_A_VERSER = 'commissions_a_verser';
+
+    /** Statuts d'une précommande dont la marchandise n'est pas encore remise (ADR 0019). */
+    public const STATUTS_PRECOMMANDE_AVANT_REMISE = [
+        StatutCommandeVente::RESERVEE,
+        StatutCommandeVente::A_PREPARER,
+        StatutCommandeVente::PREPAREE,
+        StatutCommandeVente::A_CHARGER,
+        StatutCommandeVente::CHARGEMENT_EN_COURS,
+    ];
 
     protected $table = 'commandes_ventes';
 
@@ -163,7 +174,9 @@ class CommandeVente extends Model
 
     public function activites(): HasMany
     {
-        return $this->hasMany(CommandeVenteActivite::class)->latest();
+        // ULID en second critère : deux étapes de la même seconde (livraison puis clôture) restent
+        // dans leur ordre réel.
+        return $this->hasMany(CommandeVenteActivite::class)->latest()->orderByDesc('id');
     }
 
     public function createdBy(): BelongsTo
@@ -304,13 +317,17 @@ class CommandeVente extends Model
     {
         return $this->est_precommande
             && $this->remise_at === null
-            && in_array($this->statut, [
-                StatutCommandeVente::RESERVEE,
-                StatutCommandeVente::A_PREPARER,
-                StatutCommandeVente::PREPAREE,
-                StatutCommandeVente::A_CHARGER,
-                StatutCommandeVente::CHARGEMENT_EN_COURS,
-            ], true);
+            && in_array($this->statut, self::STATUTS_PRECOMMANDE_AVANT_REMISE, true);
+    }
+
+    /** Pendant SQL de isEnRetard(), pour filtrer une liste. */
+    public function scopeEnRetard(Builder $query): Builder
+    {
+        return $query->where('est_precommande', true)
+            ->whereNull('remise_at')
+            ->whereIn('statut', array_map(fn (StatutCommandeVente $s) => $s->value, self::STATUTS_PRECOMMANDE_AVANT_REMISE))
+            ->whereNotNull('date_remise_prevue')
+            ->whereDate('date_remise_prevue', '<', today());
     }
 
     public function isAnnulee(): bool
@@ -426,7 +443,15 @@ class CommandeVente extends Model
         $this->statut = StatutCommandeVente::CLOTUREE;
         $this->closed_at = now();
 
-        return $this->saveQuietly();
+        if (! $this->saveQuietly()) {
+            return false;
+        }
+
+        // Clôture automatique : attribuée à l'utilisateur dont l'action l'a déclenchée, « Système »
+        // hors requête authentifiée.
+        CommandeVenteActiviteService::log($this, 'cloturee');
+
+        return true;
     }
 
     private function commissionsPretesPourCloture(): bool

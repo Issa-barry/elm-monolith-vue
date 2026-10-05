@@ -42,6 +42,15 @@ class CommandeVentePolicy
     }
 
     /**
+     * Retrait ↔ livraison avant le chargement (décision D16). L'état est vérifié par
+     * PrecommandeModeRemiseService (Gate::before du super admin).
+     */
+    public function changerModeRemise(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.changer_mode_remise') && $this->sameOrganization($user, $commande);
+    }
+
+    /**
      * Confirmer la livraison d'une précommande (décision D13) — même permission que la validation de
      * réception : ceux qui constatent réellement la livraison. L'état est vérifié par
      * PrecommandeService::confirmerLivraison() (Gate::before du super admin).

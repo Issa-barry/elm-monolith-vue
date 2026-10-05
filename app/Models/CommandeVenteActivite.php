@@ -45,6 +45,7 @@ class CommandeVenteActivite extends Model
         'preparation_lancee' => 'a lancé la préparation de la précommande',
         'preparation_validee' => 'a validé la préparation de la précommande',
         'retrait_valide' => 'a remis la précommande au client (retrait)',
+        'mode_remise_change' => 'a changé le mode de remise de la précommande',
         'remboursement' => 'a remboursé le client',
         'precommande_annulee' => 'a annulé la précommande',
         'confirmee' => 'a confirmé la commande',

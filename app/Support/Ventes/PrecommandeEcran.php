@@ -3,6 +3,7 @@
 namespace App\Support\Ventes;
 
 use App\Enums\ModeConfirmationAnnulationExceptionnelle;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
 use App\Models\CompteTresorerie;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
+use App\Services\Ventes\PrecommandeModeRemiseService;
 use App\Services\Ventes\PrecommandeService;
 
 /**
@@ -25,6 +27,7 @@ final class PrecommandeEcran
         private readonly MoyensEncaissementResolver $moyens,
         private readonly CaisseAgentResolver $caisses,
         private readonly TresorerieDisponibiliteService $disponibilite,
+        private readonly CommandeVenteFormBuilder $formBuilder,
     ) {}
 
     /** @return array<string, mixed>|null */
@@ -39,6 +42,10 @@ final class PrecommandeEcran
         $renforcee = PrecommandeService::annulationRenforcee($commande);
         $codeRequis = Parametre::getModeConfirmationAnnulationExceptionnelle($commande->organization_id) === ModeConfirmationAnnulationExceptionnelle::EMAIL_CODE;
         $peutRembourser = $user->can('rembourser', $commande);
+        // Une distribution ne se retire jamais (véhicule obligatoire) : seul le mode d'une vente change.
+        $peutChangerMode = PrecommandeModeRemiseService::estModifiable($commande)
+            && $commande->nature_operation === NatureOperation::VENTE_STANDARD
+            && $user->can('changerModeRemise', $commande);
 
         return [
             'livraison' => $commande->vehicule_id !== null,
@@ -55,6 +62,14 @@ final class PrecommandeEcran
             'can_confirmer_livraison' => $commande->isLivraisonEnCours() && ! $commande->requiertReceptionExplicite() && $user->can('confirmerLivraison', $commande),
             'can_rembourser' => $montants['trop_percu'] > 0 && $peutRembourser,
             'can_annuler' => $annulable && $user->can('annulerPrecommande', $commande),
+            'can_changer_mode_remise' => $peutChangerMode,
+            'vehicules_livraison' => $peutChangerMode && $commande->vehicule_id === null
+                ? $this->formBuilder->vehiculesActifs($commande->organization_id)
+                    ->map(fn (array $v) => [
+                        'id' => $v['id'],
+                        'nom' => $v['immatriculation'] ? "{$v['nom_vehicule']} ({$v['immatriculation']})" : $v['nom_vehicule'],
+                    ])->values()
+                : [],
             'annulation_renforcee' => $renforcee,
             'annulation_code_requis' => $renforcee && $codeRequis,
             'decaissement' => ($peutRembourser || $annulable) ? $this->decaissement($commande, $user) : null,

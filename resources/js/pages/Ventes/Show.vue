@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { resumeActivite } from '@/lib/activiteVente';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
@@ -421,6 +422,7 @@ const AUDIT_HIDDEN_FIELDS = new Set([
 
 const AUDIT_FIELD_LABELS: Record<string, string> = {
     vehicule_nom: 'Véhicule',
+    mode_remise: 'Mode de remise',
     total_commande: 'Total',
     montant: 'Montant',
     mode_paiement: 'Mode paiement',
@@ -2156,6 +2158,13 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     >— {{ act.created_at }}</span
                                 >
                             </div>
+                            <p
+                                v-if="resumeActivite(act.details)"
+                                data-testid="activite-resume"
+                                class="mt-1 text-xs text-foreground tabular-nums"
+                            >
+                                {{ resumeActivite(act.details) }}
+                            </p>
                             <p
                                 v-if="act.details?.motif"
                                 class="mt-1 text-xs text-muted-foreground"

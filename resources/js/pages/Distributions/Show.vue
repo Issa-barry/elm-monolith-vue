@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { resumeActivite } from '@/lib/activiteVente';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import ChargementDialog from '@/pages/Ventes/partials/ChargementDialog.vue';
 import ReceptionDialog from '@/pages/Ventes/partials/ReceptionDialog.vue';
@@ -1692,6 +1693,13 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     >— {{ act.created_at }}</span
                                 >
                             </div>
+                            <p
+                                v-if="resumeActivite(act.details)"
+                                data-testid="activite-resume"
+                                class="mt-1 text-xs text-foreground tabular-nums"
+                            >
+                                {{ resumeActivite(act.details) }}
+                            </p>
                             <p
                                 v-if="act.details?.motif"
                                 class="mt-1 text-xs text-muted-foreground"

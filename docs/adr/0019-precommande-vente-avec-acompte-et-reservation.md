@@ -4,7 +4,8 @@
 - **Statut** : **accepté le 2026-10-04** — décisions D1 à D14 validées (cf. § 13 de la
   [spécification](../precommandes.md#13-décisions-validées-le-04102026)) ; aucun interrupteur
   d'activation en V1. Implémentation par lots. D13 et D14 (lot 3, même jour) révisent la
-  décision 8 sur la livraison soldée et le cashback.
+  décision 8 sur la livraison soldée et le cashback. D16 (05/10/2026) permet de changer le mode de
+  remise (retrait ↔ livraison) avant le chargement, sans changement de prix, et amende C7.
   **Toute référence D1 à D14 renvoie au § 13 de `docs/precommandes.md` ; en cas de divergence de
   numérotation ou de formulation, ce § 13 fait foi.**
 - **Périmètre** : Ventes (`CommandeVente`), stock (`StockReservation`), encaissements, trésorerie,

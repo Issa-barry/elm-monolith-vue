@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { formatGNF } from '@/lib/utils';
 import { router } from '@inertiajs/vue3';
 import {
+    ArrowLeftRight,
     CalendarClock,
     CheckCircle2,
     HandCoins,
@@ -18,6 +19,7 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -43,6 +45,10 @@ export interface PrecommandeData {
     can_confirmer_livraison: boolean;
     can_rembourser: boolean;
     can_annuler: boolean;
+    /** Retrait ↔ livraison avant le chargement (D16). */
+    can_changer_mode_remise: boolean;
+    /** Véhicules proposés pour passer en livraison (vide si déjà en livraison). */
+    vehicules_livraison: { id: string; nom: string }[];
     annulation_renforcee: boolean;
     annulation_code_requis: boolean;
     decaissement: {
@@ -132,6 +138,34 @@ function confirmerLivraison() {
         `${urlBase.value}/livraison/confirmer`,
         {},
         () => (dialogueLivraison.value = false),
+    );
+}
+
+// ── Changement du mode de remise (D16) ───────────────────────────────────────
+// Le prix ne change jamais : le serveur refuse si le nouveau mode le modifierait.
+const dialogueModeRemise = ref(false);
+const vehiculeChoisi = ref<string | null>(null);
+// Véhicule, capacité, impayés, partage de commission, prix ou nature : la première raison du refus.
+const erreurModeRemise = computed(
+    () => Object.values(erreurs.value)[0] ?? null,
+);
+
+function ouvrirModeRemise() {
+    vehiculeChoisi.value = null;
+    erreurs.value = {};
+    dialogueModeRemise.value = true;
+}
+
+function changerModeRemise() {
+    envoyer(
+        `${urlBase.value}/mode-remise`,
+        {
+            vehicule_id: props.precommande.livraison
+                ? null
+                : vehiculeChoisi.value,
+        },
+        () => (dialogueModeRemise.value = false),
+        () => undefined,
     );
 }
 
@@ -337,6 +371,21 @@ function annuler(paiement: EncaissementPayload | null) {
                     Confirmer la livraison
                 </Button>
                 <Button
+                    v-if="precommande.can_changer_mode_remise"
+                    size="sm"
+                    variant="outline"
+                    data-testid="precommande-changer-mode"
+                    :disabled="enCours"
+                    @click="ouvrirModeRemise"
+                >
+                    <ArrowLeftRight class="mr-2 h-4 w-4" />
+                    {{
+                        precommande.livraison
+                            ? 'Passer en retrait'
+                            : 'Passer en livraison'
+                    }}
+                </Button>
+                <Button
                     v-if="precommande.can_rembourser"
                     size="sm"
                     variant="outline"
@@ -539,6 +588,80 @@ function annuler(paiement: EncaissementPayload | null) {
                     class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                 />
                 Confirmer la livraison
+            </Button>
+        </template>
+    </Dialog>
+
+    <!-- Changement du mode de remise (D16) -->
+    <Dialog
+        :visible="dialogueModeRemise"
+        modal
+        :closable="!enCours"
+        :header="
+            precommande.livraison ? 'Passer en retrait' : 'Passer en livraison'
+        "
+        :style="{ width: '480px', maxWidth: 'calc(100vw - 2rem)' }"
+        @update:visible="
+            (v: boolean) => !v && !enCours && (dialogueModeRemise = false)
+        "
+    >
+        <div class="space-y-4 text-sm">
+            <p class="text-muted-foreground">
+                <template v-if="precommande.livraison">
+                    Le client viendra chercher la marchandise : le véhicule est
+                    retiré de la précommande.
+                </template>
+                <template v-else>
+                    La marchandise sera chargée dans le véhicule choisi puis
+                    livrée au client.
+                </template>
+                Le prix et les acomptes restent inchangés ; si le nouveau mode
+                modifiait le prix, le changement est refusé.
+            </p>
+            <div v-if="!precommande.livraison" class="space-y-1.5">
+                <Label for="precommande-vehicule">Véhicule de livraison</Label>
+                <Select
+                    v-model="vehiculeChoisi"
+                    input-id="precommande-vehicule"
+                    :options="precommande.vehicules_livraison"
+                    option-label="nom"
+                    option-value="id"
+                    filter
+                    placeholder="Choisir un véhicule"
+                    class="w-full"
+                    :invalid="!!erreurs.vehicule_id"
+                />
+            </div>
+            <p
+                v-if="erreurModeRemise"
+                data-testid="precommande-mode-erreur"
+                class="text-sm text-red-600 dark:text-red-400"
+            >
+                {{ erreurModeRemise }}
+            </p>
+        </div>
+        <template #footer>
+            <Button
+                variant="outline"
+                :disabled="enCours"
+                @click="dialogueModeRemise = false"
+                >Retour</Button
+            >
+            <Button
+                :disabled="
+                    enCours || (!precommande.livraison && !vehiculeChoisi)
+                "
+                @click="changerModeRemise"
+            >
+                <span
+                    v-if="enCours"
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                {{
+                    precommande.livraison
+                        ? 'Passer en retrait'
+                        : 'Passer en livraison'
+                }}
             </Button>
         </template>
     </Dialog>
