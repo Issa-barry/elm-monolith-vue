@@ -351,6 +351,9 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
 | D12 | Rôles et permissions | **Validée le 04/10/2026** : droits gérés dans **Rôles & Permissions → Ventes** (`PermissionCatalog`, domaine Ventes), jamais dans les paramètres. `admin_entreprise` et `manager` : toutes les permissions de précommande (§ 12) ; `commerciale` : **`ventes.precommander` uniquement** (création, acompte initial compris). Attribution aux rôles existants par migration de backfill (ADR 0011). | ☑ Accepté |
 | D13 | Livraison soldée par les acomptes : comment la livraison est-elle confirmée ? (C10) | **Chargement ≠ livraison** : la précommande reste « En livraison » après le chargement, même payée à 100 % ; action explicite **« Confirmer la livraison »** protégée par la permission existante `ventes.valider_reception` (aucune permission nouvelle). Révise la règle du lot 2 (passage « Livrée » au chargement). | ☑ Accepté (04/10/2026) |
 | D14 | Cashback : base et moment (C11) | Quantité **effective** (livrée, sinon chargée, sinon commandée) pour **toutes les ventes**, précommandes comprises ; pour une précommande en livraison, cashback déclenché **seulement** à la livraison définitive (confirmation ou réception validée), jamais au chargement — aucun mécanisme de reprise de cashback n'est nécessaire. | ☑ Accepté (04/10/2026) |
+| D15 | Date de réalisation de la vente (lot 4) | **Validée le 05/10/2026** : précommande en **livraison** ⇒ vente datée à la **confirmation de livraison** (ou à la validation de réception) ; en **retrait** ⇒ à la **remise effective** au client. Le chargement n'est que la date de sortie du stock. Tant que la vente n'est pas réalisée (créée, réservée, à préparer, préparée, à charger, chargée, en livraison), elle ne compte **jamais** dans le chiffre d'affaires — dashboard, rapports, indicateurs, agrégations et comptabilité. Les autres dates (création, chargement, remise) sont conservées telles quelles. Amende l'ADR 0007 §3 pour les précommandes. | ☑ Accepté |
+| D16 | Comptabilisation de la vente d'une précommande livrée (conséquence de D15) | **À valider** — proposition : la facture est activée et la vente comptabilisée (411/701, imputation des acomptes 419100 → 411000) à la **confirmation de livraison** au lieu du chargement. Conséquences : pendant « En livraison », la facture reste « Créée » et un paiement reçu est un acompte (419100) ; le retour et l'écart de réception s'appliquent avant toute écriture de vente. La commission (déclencheur « chargement validé ») et la sortie de stock restent au chargement. | ☐ À valider |
+| D17 | Ventes ordinaires (hors précommandes) | **À valider** — proposition : inchangées en V1, toujours datées à la création de leur facture (ADR 0007 §3), y compris une vente avec véhicule dont la facture naît à la confirmation, avant le chargement. Aligner aussi ces ventes sur la livraison serait un chantier distinct. | ☐ À valider |
 
 ## 14. Scénarios
 
@@ -405,8 +408,14 @@ qu'aucune règle ne soit interprétée différemment pendant le développement.
    cashback différé jusqu'à la livraison définitive et calculé sur la quantité effective pour toutes
    les ventes (D14). Déjà en place au lot 2 : passage à charger à la validation de la préparation,
    chargement ≤ préparé, activation de la facture au chargement.
-4. **Lot 4 — Rapports** : date de vente = remise (C3), statuts hors CA, situation véhicule (une
-   facture `CREEE` de précommande n'est pas un impayé), catégories de la fiche de caisse.
+4. **Lot 4 — Date de réalisation de la vente** (D15, D16 et D17 à valider avant tout code) :
+   une **date de vente** portée par la facture (`factures_ventes.date_vente`), renseignée à la
+   création pour une vente ordinaire (= date de création, historique repris tel quel) et seulement à
+   la réalisation pour une précommande (retrait : remise ; livraison : confirmation ou réception
+   validée) ; toutes les mesures de chiffre d'affaires lisent cette date et ignorent une vente non
+   réalisée — tableau de bord (indicateurs, courbes, CA par site, par type de véhicule, par produit),
+   API de statistiques, rapport d'activité, situation agent, situation véhicule ; comptabilisation de
+   la vente au moment de la réalisation (D16).
 
 Tests attendus (par lot) : atomicité (échec de réservation ⇒ aucun encaissement ni écriture),
 acompte minimum et plafond quand l'acompte est obligatoire, création sans acompte quand il ne

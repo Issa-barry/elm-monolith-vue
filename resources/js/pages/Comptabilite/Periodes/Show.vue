@@ -2,9 +2,18 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -12,21 +21,27 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Calculator,
+    CalendarDays,
     CheckCircle,
+    ChevronDown,
     Download,
     ExternalLink,
     FileText,
     Loader2,
     Lock,
+    MoreHorizontal,
+    Search,
     Trash2,
     Truck,
     Wrench,
+    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 interface Periode {
     id: string;
@@ -48,6 +63,8 @@ interface VehiculeCard {
     vehicule_id: string | null;
     vehicule_nom: string;
     vehicule_immat: string | null;
+    type_vehicule_id: string | null;
+    type_vehicule_nom: string | null;
     nb_membres: number;
     taille_equipe: number | null;
     nb_commandes: number;
@@ -74,6 +91,7 @@ interface BeneficiaireFiche {
 const props = defineProps<{
     periode: Periode;
     vehicules: VehiculeCard[];
+    typesVehicule: { value: string; label: string }[];
     beneficiaires: BeneficiaireFiche[];
     filters: Record<string, string>;
     recalcul: {
@@ -111,30 +129,9 @@ const filterFields = computed<FilterField[]>(() =>
     isVehiculeType.value
         ? [
               {
-                  key: 'vehicule',
-                  label: 'Véhicule',
-                  type: 'text',
-                  placeholder: 'Nom ou immatriculation…',
-                  inline: true,
-              },
-              {
-                  key: 'livreur',
-                  label: 'Livreur',
-                  type: 'text',
-                  placeholder: 'Nom du livreur…',
-                  inline: true,
-              },
-              {
-                  key: 'proprietaire',
-                  label: 'Propriétaire',
-                  type: 'text',
-                  placeholder: 'Nom du propriétaire…',
-              },
-              {
                   key: 'etat',
                   label: 'État',
                   type: 'select',
-                  inline: true,
                   options: [
                       { value: 'a_verifier', label: 'À vérifier' },
                       { value: 'validee', label: 'Validé' },
@@ -142,20 +139,24 @@ const filterFields = computed<FilterField[]>(() =>
                       { value: 'payee', label: 'Payé' },
                   ],
               },
+              {
+                  key: 'livreur',
+                  label: 'Livreur',
+                  type: 'text',
+                  placeholder: 'Nom du livreur…',
+              },
+              {
+                  key: 'proprietaire',
+                  label: 'Propriétaire',
+                  type: 'text',
+                  placeholder: 'Nom du propriétaire…',
+              },
           ]
         : [
-              {
-                  key: 'beneficiaire',
-                  label: 'Bénéficiaire',
-                  type: 'text',
-                  placeholder: 'Nom…',
-                  inline: true,
-              },
               {
                   key: 'etat',
                   label: 'État',
                   type: 'select',
-                  inline: true,
                   options: [
                       { value: 'a_payer', label: 'À payer' },
                       {
@@ -168,13 +169,8 @@ const filterFields = computed<FilterField[]>(() =>
           ],
 );
 
-// Colonnes du tableau véhicules : `w-px` + `whitespace-nowrap` réduit chaque colonne à la
-// largeur de son contenu (montants toujours sur une ligne), le Véhicule (`w-full max-w-0`)
-// absorbe le reste et tronque son nom. Seuils en requête de conteneur (largeur réelle du
-// tableau, sidebar comprise) : < 1150px l'immatriculation passe sous le nom, < 1000px les
-// en-têtes Commandes/Membres s'abrègent et la taille d'équipe passe sous le nom.
-// Le `!` est nécessaire : le padding des cellules
-// PrimeVue n'est pas dans un layer Tailwind.
+// Les montants restent sur une ligne. L'immatriculation et la taille d'équipe
+// sont regroupées avec le véhicule et les membres pour alléger le tableau.
 const CELLULE = 'w-px whitespace-nowrap !px-3';
 const COL_COMPACTE = {
     headerCell: { class: CELLULE },
@@ -187,17 +183,6 @@ const COL_SELECTION = {
 const COL_VEHICULE = {
     headerCell: { class: 'w-full max-w-0 min-w-[7rem] !px-3' },
     bodyCell: { class: 'w-full max-w-0 min-w-[7rem] !px-3' },
-};
-const COL_IMMAT = {
-    headerCell: { class: `${CELLULE} hidden @min-[1150px]:table-cell` },
-    bodyCell: { class: `${CELLULE} hidden @min-[1150px]:table-cell` },
-};
-const COL_EQUIPE = {
-    headerCell: { class: `${CELLULE} hidden @min-[1000px]:table-cell` },
-    columnHeaderContent: { class: 'justify-center' },
-    bodyCell: {
-        class: `${CELLULE} !text-center hidden @min-[1000px]:table-cell`,
-    },
 };
 const COL_NOMBRE = {
     headerCell: { class: CELLULE },
@@ -243,6 +228,66 @@ const controleVehicules = computed(() => {
 
     return { total, valides, aRevoir };
 });
+
+const rechercheKey = computed(() =>
+    isVehiculeType.value ? 'vehicule' : 'beneficiaire',
+);
+const recherche = ref(props.filters[rechercheKey.value] ?? '');
+watch(
+    () => props.filters[rechercheKey.value],
+    (value) => {
+        recherche.value = value ?? '';
+    },
+);
+const filtresVisiblesParams = computed(() => {
+    const params: Record<string, string> = {};
+    for (const key of [rechercheKey.value, 'type_vehicule_id']) {
+        if (props.filters[key]) params[key] = props.filters[key];
+    }
+    return params;
+});
+
+function appliquerTypeVehicule(value: string | null) {
+    const params = { ...props.filters };
+    if (value) params.type_vehicule_id = value;
+    else delete params.type_vehicule_id;
+    router.get(
+        `/backoffice/comptabilite/periodes/${props.periode.id}`,
+        params,
+        { preserveScroll: true, preserveState: true, replace: true },
+    );
+}
+
+function appliquerRecherche() {
+    const params = { ...props.filters };
+    const value = recherche.value.trim();
+    if (value) params[rechercheKey.value] = value;
+    else delete params[rechercheKey.value];
+    router.get(
+        `/backoffice/comptabilite/periodes/${props.periode.id}`,
+        params,
+        { preserveScroll: true, preserveState: true, replace: true },
+    );
+}
+
+function effacerRecherche() {
+    recherche.value = '';
+    appliquerRecherche();
+}
+
+const filtresActifs = computed(() =>
+    Object.values(props.filters).some(Boolean),
+);
+
+const progressionControle = computed(() =>
+    controleVehicules.value.total > 0
+        ? Math.round(
+              (controleVehicules.value.valides /
+                  controleVehicules.value.total) *
+                  100,
+          )
+        : 0,
+);
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<VehiculeCard>((v) =>
     props.can.ajuster ? ajustementUrl(v.vehicule_id) : null,
@@ -528,11 +573,13 @@ function exportPdf() {
 <template>
     <Head :title="`Période ${periode.reference}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
+        <div class="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
             <!-- Header -->
-            <div class="flex items-start justify-between">
-                <div>
-                    <div class="flex items-center gap-3">
+            <div
+                class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
+            >
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <h1 class="text-xl font-semibold">
                             {{ titreMetier }}
                         </h1>
@@ -541,13 +588,18 @@ function exportPdf() {
                             :label="periode.statut_label"
                         />
                     </div>
-                    <p class="mt-1 text-sm text-muted-foreground">
+                    <p
+                        class="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                    >
+                        <CalendarDays class="h-4 w-4 shrink-0" />
                         {{ periodeFormatee ?? '—' }}
                         <span v-if="periode.site">
                             — {{ periode.site.nom }}</span
                         >
                     </p>
-                    <p class="mt-0.5 font-mono text-xs text-muted-foreground">
+                    <p
+                        class="mt-1 font-mono text-xs break-all text-muted-foreground"
+                    >
                         Référence : {{ periode.reference }}
                     </p>
                     <p
@@ -558,7 +610,7 @@ function exportPdf() {
                     </p>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <!-- span porteur du title : un bouton désactivé ne reçoit pas le survol -->
                     <span
                         v-if="can.valider"
@@ -570,46 +622,75 @@ function exportPdf() {
                             @click="doValider"
                         >
                             <CheckCircle class="mr-1.5 h-4 w-4" />
-                            Valider la période de paiement
+                            Valider la période
                         </Button>
                     </span>
-                    <Button
-                        v-if="can.cloturer"
-                        variant="outline"
-                        size="sm"
-                        @click="doCloturer"
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="outline" size="sm">
+                                <Download class="h-4 w-4" />
+                                Exporter
+                                <ChevronDown
+                                    class="h-3.5 w-3.5 text-muted-foreground"
+                                />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem @select="exportPdf">
+                                <FileText /> Télécharger le PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem @select="exportExcel">
+                                <Download /> Télécharger Excel
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DropdownMenu
+                        v-if="can.cloturer || can.calculer || can.delete"
                     >
-                        <Lock class="mr-1.5 h-4 w-4" />
-                        Clôturer
-                    </Button>
-                    <Button variant="outline" size="sm" @click="exportPdf">
-                        <FileText class="mr-1.5 h-4 w-4" />
-                        PDF
-                    </Button>
-                    <Button variant="outline" size="sm" @click="exportExcel">
-                        <Download class="mr-1.5 h-4 w-4" />
-                        Excel
-                    </Button>
-                    <Button
-                        v-if="can.calculer"
-                        variant="ghost"
-                        size="icon"
-                        class="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        title="Recalcul manuel (technique) — la période se recalcule normalement toute seule dès qu'une commission ou un ajustement change"
-                        @click="doCalculer"
-                    >
-                        <Calculator class="h-4 w-4" />
-                    </Button>
-                    <Button
-                        v-if="can.delete"
-                        variant="ghost"
-                        size="icon"
-                        class="h-8 w-8 text-destructive hover:text-destructive"
-                        @click="doDelete"
-                    >
-                        <Trash2 class="h-4 w-4" />
-                    </Button>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="outline" size="sm">
+                                <MoreHorizontal class="h-4 w-4" />
+                                Actions
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                v-if="can.cloturer"
+                                @select="doCloturer"
+                            >
+                                <Lock /> Clôturer la période
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="can.calculer"
+                                @select="doCalculer"
+                            >
+                                <Calculator /> Recalculer les montants
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    can.delete && (can.cloturer || can.calculer)
+                                "
+                            />
+                            <DropdownMenuItem
+                                v-if="can.delete"
+                                class="text-destructive focus:text-destructive"
+                                @select="doDelete"
+                            >
+                                <Trash2 class="text-destructive" /> Supprimer la
+                                période
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
+            </div>
+
+            <div
+                v-if="can.valider && !validation.possible && validation.raison"
+                role="status"
+                class="flex items-start gap-2 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
+            >
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                <p>{{ validation.raison }}</p>
             </div>
 
             <!-- Alerte calcul vide -->
@@ -662,31 +743,18 @@ function exportPdf() {
             </div>
 
             <!-- KPI stats -->
-            <div class="grid gap-3 sm:grid-cols-4">
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">Total brut</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ fmt(stats.total_brut) }}
+            <div
+                class="grid grid-cols-2 gap-3 lg:grid-cols-3"
+                aria-label="Montants de la période"
+            >
+                <div
+                    class="col-span-2 rounded-xl border bg-muted/30 p-4 lg:col-span-1"
+                >
+                    <p class="text-sm font-medium text-muted-foreground">
+                        Reste à payer
                     </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">Net à payer</p>
                     <p
-                        class="mt-1 text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                    >
-                        {{ fmt(stats.total_net) }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">Déjà payé</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums">
-                        {{ fmt(stats.total_paye) }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">Reste</p>
-                    <p
-                        class="mt-1 text-lg font-bold tabular-nums"
+                        class="mt-2 text-2xl font-semibold tracking-tight tabular-nums"
                         :class="
                             stats.reste > 0
                                 ? 'text-amber-600 dark:text-amber-400'
@@ -695,450 +763,755 @@ function exportPdf() {
                     >
                         {{ fmt(stats.reste) }}
                     </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Sur l'ensemble de la période
+                    </p>
+                </div>
+                <div class="min-w-0 rounded-xl border bg-card p-4">
+                    <p class="text-xs text-muted-foreground">Net à payer</p>
+                    <p
+                        class="mt-2 text-base font-semibold break-words tabular-nums sm:text-xl"
+                    >
+                        {{ fmt(stats.total_net) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Total brut : {{ fmt(stats.total_brut) }}
+                    </p>
+                </div>
+                <div class="min-w-0 rounded-xl border bg-card p-4">
+                    <p class="text-xs text-muted-foreground">Déjà payé</p>
+                    <p
+                        class="mt-2 text-base font-semibold break-words tabular-nums sm:text-xl"
+                    >
+                        {{ fmt(stats.total_paye) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Paiements enregistrés
+                    </p>
                 </div>
             </div>
 
-            <!-- Contrôle des véhicules : dérivé de validated_at sur les commission_parts,
-                 pas d'un snapshot séparé (cf. CommissionAdjustmentService::vehiculesParPeriode) -->
-            <div
-                v-if="controleVehicules.total > 0"
-                class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border bg-card px-4 py-2.5 text-sm"
+            <section
+                class="min-w-0 overflow-hidden rounded-xl border bg-card"
+                aria-labelledby="periode-lignes-title"
             >
-                <span>
-                    Contrôle des véhicules :
-                    <span class="font-semibold">{{
-                        controleVehicules.valides
-                    }}</span>
-                    / {{ controleVehicules.total }} validés
-                </span>
-                <span
-                    v-if="controleVehicules.aRevoir > 0"
-                    class="font-medium text-amber-600 dark:text-amber-400"
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4"
                 >
-                    {{ controleVehicules.aRevoir }} à revérifier
-                </span>
-            </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                :url="`/backoffice/comptabilite/periodes/${periode.id}`"
-                :values="filters"
-                :fields="filterFields"
-                :result-count="
-                    isVehiculeType ? vehicules.length : beneficiaires.length
-                "
-                hide-agence-selector
-            />
-
-            <div
-                v-if="isVehiculeType && lignesSelectionnees.length > 0"
-                class="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5"
-            >
-                <span class="text-sm font-medium">
-                    {{ lignesSelectionnees.length }} véhicule{{
-                        lignesSelectionnees.length > 1 ? 's' : ''
-                    }}
-                    sélectionné{{ lignesSelectionnees.length > 1 ? 's' : '' }}
-                </span>
-                <div class="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        :disabled="validationEnCours"
-                        @click="selected = new Set()"
-                    >
-                        Annuler
-                    </Button>
-                    <Button
-                        size="sm"
-                        :disabled="validationEnCours"
-                        @click="validerSelection"
-                    >
-                        <Loader2
-                            v-if="validationEnCours"
-                            class="mr-1.5 h-4 w-4 animate-spin"
-                        />
-                        <CheckCircle v-else class="mr-1.5 h-4 w-4" />
-                        Valider les véhicules ({{ lignesSelectionnees.length }})
-                    </Button>
-                </div>
-            </div>
-
-            <!-- Commissions par véhicule (livreur/propriétaire uniquement) -->
-            <!-- data-key="vehicule_id" : point d'extension pour un futur détail par ligne
-                 (commandes/commissions composant le montant), via un DataTable expander. -->
-            <!-- Largeurs : chaque colonne secondaire s'ajuste à son contenu sans retour à la
-                 ligne (COL_*), le Véhicule absorbe l'espace restant. En conteneur étroit,
-                 l'immatriculation passe sous le nom du véhicule et Actions reste figée à droite. -->
-            <div
-                v-if="isVehiculeType"
-                class="@container overflow-x-auto rounded-xl border bg-card"
-            >
-                <DataTable
-                    :value="vehicules"
-                    :paginator="vehicules.length > 20"
-                    :rows="20"
-                    data-key="vehicule_id"
-                    striped-rows
-                    removable-sort
-                    class="text-sm"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        tbody: { class: 'divide-y' },
-                        bodyRow: bodyRowPt,
-                    }"
-                    @row-click="onRowClick"
-                >
-                    <Column v-if="peutValiderVehicules" :pt="COL_SELECTION">
-                        <template #header>
-                            <Checkbox
-                                :model-value="allSelected"
-                                :disabled="
-                                    selectableRows.length === 0 ||
-                                    validationEnCours
+                    <div class="min-w-0">
+                        <h2
+                            id="periode-lignes-title"
+                            class="text-base font-semibold"
+                        >
+                            {{
+                                isVehiculeType
+                                    ? 'Contrôle des véhicules'
+                                    : 'Bénéficiaires'
+                            }}
+                        </h2>
+                        <div
+                            class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                        >
+                            <template
+                                v-if="
+                                    isVehiculeType &&
+                                    controleVehicules.total > 0
                                 "
-                                aria-label="Sélectionner tous les véhicules à valider"
-                                @update:model-value="toggleAll"
-                            />
-                        </template>
-                        <template #body="{ data }">
-                            <Checkbox
-                                :model-value="
-                                    selected.has(routeSegment(data.vehicule_id))
-                                "
-                                :disabled="
-                                    !estValidable(data) || validationEnCours
-                                "
-                                :aria-label="`Sélectionner ${data.vehicule_nom}`"
-                                @update:model-value="toggleRow(data)"
-                            />
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="vehicule_nom"
-                        header="Véhicule"
-                        sortable
-                        :pt="COL_VEHICULE"
-                    >
-                        <template #body="{ data }">
-                            <div
-                                class="flex items-center gap-2"
-                                :title="data.vehicule_nom"
                             >
-                                <Truck
-                                    class="h-4 w-4 shrink-0 text-muted-foreground"
-                                />
-                                <div class="min-w-0">
-                                    <div class="truncate font-medium">
-                                        {{ data.vehicule_nom }}
-                                    </div>
-                                    <div
-                                        class="truncate text-xs text-muted-foreground"
+                                <span
+                                    ><span class="font-medium text-foreground"
+                                        >{{ controleVehicules.valides }} /
+                                        {{ controleVehicules.total }}</span
                                     >
-                                        <span class="@min-[1150px]:hidden">{{
-                                            data.vehicule_immat ?? '—'
-                                        }}</span>
-                                        <span
-                                            v-if="data.taille_equipe !== null"
-                                            class="@min-[1000px]:hidden"
-                                        >
-                                            · Équipe {{ data.taille_equipe }}
-                                        </span>
-                                    </div>
+                                    véhicules
+                                    {{
+                                        filtresActifs ? 'affichés ' : ''
+                                    }}validés</span
+                                >
+                                <div
+                                    role="progressbar"
+                                    aria-label="Contrôle des véhicules affichés"
+                                    :aria-valuenow="progressionControle"
+                                    :aria-valuemin="0"
+                                    :aria-valuemax="100"
+                                    class="h-1.5 w-20 overflow-hidden rounded-full bg-muted"
+                                >
+                                    <div
+                                        class="h-full bg-primary transition-[width]"
+                                        :style="{
+                                            width: `${progressionControle}%`,
+                                        }"
+                                    />
                                 </div>
+                                <span
+                                    v-if="controleVehicules.aRevoir > 0"
+                                    class="text-amber-600 dark:text-amber-400"
+                                    >{{ controleVehicules.aRevoir }} à
+                                    revérifier</span
+                                >
+                            </template>
+                            <span v-else
+                                >{{
+                                    isVehiculeType
+                                        ? vehicules.length
+                                        : beneficiaires.length
+                                }}
+                                résultat{{
+                                    (isVehiculeType
+                                        ? vehicules.length
+                                        : beneficiaires.length) > 1
+                                        ? 's'
+                                        : ''
+                                }}</span
+                            >
+                        </div>
+                    </div>
+                    <div
+                        class="flex w-full flex-wrap items-center gap-2 sm:w-auto"
+                    >
+                        <Select
+                            v-if="isVehiculeType"
+                            :model-value="filters.type_vehicule_id ?? null"
+                            :options="typesVehicule"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Tous les types de véhicule"
+                            aria-label="Type de véhicule"
+                            show-clear
+                            class="w-full sm:w-60"
+                            :pt="{ root: { class: 'h-9' } }"
+                            data-testid="periode-type-vehicule"
+                            @update:model-value="appliquerTypeVehicule"
+                        />
+                        <form
+                            class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none"
+                            role="search"
+                            @submit.prevent="appliquerRecherche"
+                        >
+                            <div class="relative min-w-0 flex-1 sm:w-64">
+                                <Input
+                                    v-model="recherche"
+                                    :aria-label="
+                                        isVehiculeType
+                                            ? 'Rechercher un véhicule'
+                                            : 'Rechercher un bénéficiaire'
+                                    "
+                                    :placeholder="
+                                        isVehiculeType
+                                            ? 'Nom ou immatriculation…'
+                                            : 'Nom du bénéficiaire…'
+                                    "
+                                    class="h-9 pr-8"
+                                    data-testid="periode-recherche"
+                                />
+                                <button
+                                    v-if="recherche"
+                                    type="button"
+                                    class="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la recherche"
+                                    @click="effacerRecherche"
+                                >
+                                    <X class="h-4 w-4" />
+                                </button>
                             </div>
-                        </template>
-                    </Column>
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                size="icon"
+                                class="h-9 w-9 shrink-0"
+                                aria-label="Lancer la recherche"
+                                title="Rechercher"
+                                ><Search class="h-4 w-4"
+                            /></Button>
+                        </form>
+                        <ListPageActions>
+                            <template #filters>
+                                <DataFilters
+                                    trigger-only
+                                    :url="`/backoffice/comptabilite/periodes/${periode.id}`"
+                                    :values="filters"
+                                    :base-params="filtresVisiblesParams"
+                                    :fields="filterFields"
+                                    :result-count="
+                                        isVehiculeType
+                                            ? vehicules.length
+                                            : beneficiaires.length
+                                    "
+                                    hide-agence-selector
+                                />
+                            </template>
+                        </ListPageActions>
+                    </div>
+                </div>
 
-                    <Column
-                        field="vehicule_immat"
-                        header="Immatriculation"
-                        :pt="COL_IMMAT"
+                <div
+                    v-if="isVehiculeType && lignesSelectionnees.length > 0"
+                    class="flex flex-wrap items-center justify-between gap-3 border-b bg-primary/5 px-4 py-3"
+                >
+                    <span class="text-sm font-medium">
+                        {{ lignesSelectionnees.length }} véhicule{{
+                            lignesSelectionnees.length > 1 ? 's' : ''
+                        }}
+                        sélectionné{{
+                            lignesSelectionnees.length > 1 ? 's' : ''
+                        }}
+                    </span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            :disabled="validationEnCours"
+                            @click="selected = new Set()"
+                        >
+                            Désélectionner
+                        </Button>
+                        <Button
+                            size="sm"
+                            :disabled="validationEnCours"
+                            @click="validerSelection"
+                        >
+                            <Loader2
+                                v-if="validationEnCours"
+                                class="mr-1.5 h-4 w-4 animate-spin"
+                            />
+                            <CheckCircle v-else class="mr-1.5 h-4 w-4" />
+                            Valider la sélection ({{
+                                lignesSelectionnees.length
+                            }})
+                        </Button>
+                    </div>
+                </div>
+
+                <div
+                    v-if="isVehiculeType"
+                    class="divide-y md:hidden"
+                    data-testid="vehicules-mobile"
+                >
+                    <article
+                        v-for="vehicule in vehicules"
+                        :key="routeSegment(vehicule.vehicule_id)"
+                        class="p-4"
                     >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.vehicule_immat ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column field="nb_commandes" :pt="COL_NOMBRE">
-                        <template #header>
-                            <span class="font-semibold" title="Commandes">
-                                <span class="@min-[1000px]:hidden">Cmd.</span>
-                                <span class="hidden @min-[1000px]:inline"
-                                    >Commandes</span
-                                >
-                            </span>
-                        </template>
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.nb_commandes
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column field="nb_membres" :pt="COL_NOMBRE">
-                        <template #header>
-                            <span
-                                class="font-semibold"
-                                title="Membres ayant une commission sur la période"
-                            >
-                                <span class="@min-[1000px]:hidden">Memb.</span>
-                                <span class="hidden @min-[1000px]:inline"
-                                    >Membres</span
-                                >
-                            </span>
-                        </template>
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.nb_membres
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column field="taille_equipe" :pt="COL_EQUIPE">
-                        <template #header>
-                            <span
-                                class="font-semibold"
-                                title="Membres actuels de l'équipe du véhicule"
-                                >Équipe</span
-                            >
-                        </template>
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.taille_equipe ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="theorique"
-                        header="Montant"
-                        sortable
-                        :pt="COL_MONTANT"
-                    >
-                        <template #body="{ data }">
-                            <span class="font-semibold tabular-nums">{{
-                                fmt(data.theorique)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="deja_paye"
-                        header="Déjà payé"
-                        sortable
-                        :pt="COL_MONTANT"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                fmt(data.deja_paye)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="reste"
-                        header="Reste à payer"
-                        sortable
-                        :pt="COL_MONTANT"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                class="tabular-nums"
-                                :class="
-                                    data.reste > 0
-                                        ? 'font-medium text-amber-600 dark:text-amber-400'
-                                        : 'text-muted-foreground'
-                                "
-                                >{{ fmt(data.reste) }}</span
-                            >
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="statut_validation"
-                        header="État"
-                        sortable
-                        :pt="COL_COMPACTE"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :status="data.statut_validation"
-                                :label="
-                                    statutValidationLabel(
-                                        data.statut_validation,
+                        <div class="flex items-start gap-3">
+                            <Checkbox
+                                v-if="peutValiderVehicules"
+                                class="mt-1"
+                                :model-value="
+                                    selected.has(
+                                        routeSegment(vehicule.vehicule_id),
                                     )
                                 "
+                                :disabled="
+                                    !estValidable(vehicule) || validationEnCours
+                                "
+                                :aria-label="`Sélectionner ${vehicule.vehicule_nom}`"
+                                @update:model-value="toggleRow(vehicule)"
                             />
-                        </template>
-                    </Column>
-
-                    <Column header="" :pt="COL_ACTIONS">
-                        <template #body="{ data }">
-                            <div
-                                v-if="can.ajuster"
-                                class="flex justify-end gap-2"
+                            <div class="min-w-0 flex-1">
+                                <Link
+                                    v-if="can.ajuster"
+                                    :href="ajustementUrl(vehicule.vehicule_id)"
+                                    class="block truncate font-medium hover:underline"
+                                    >{{ vehicule.vehicule_nom }}</Link
+                                >
+                                <p v-else class="truncate font-medium">
+                                    {{ vehicule.vehicule_nom }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    {{
+                                        vehicule.vehicule_immat ??
+                                        'Sans immatriculation'
+                                    }}
+                                    <span v-if="vehicule.type_vehicule_nom">
+                                        · {{ vehicule.type_vehicule_nom }}</span
+                                    >
+                                </p>
+                            </div>
+                            <StatusDot
+                                :status="vehicule.statut_validation"
+                                :label="
+                                    statutValidationLabel(
+                                        vehicule.statut_validation,
+                                    )
+                                "
+                                class="shrink-0"
+                            />
+                        </div>
+                        <p class="mt-3 text-xs text-muted-foreground">
+                            {{ vehicule.nb_commandes }} commande{{
+                                vehicule.nb_commandes > 1 ? 's' : ''
+                            }}
+                            · {{ vehicule.nb_membres }} membre{{
+                                vehicule.nb_membres > 1 ? 's' : ''
+                            }}
+                            <span v-if="vehicule.taille_equipe !== null">
+                                · Équipe : {{ vehicule.taille_equipe }}</span
                             >
-                                <Button
-                                    v-if="
-                                        peutValiderVehicules &&
-                                        estAValider(data)
-                                    "
-                                    size="sm"
-                                    :disabled="
-                                        !data.equilibre || validationEnCours
-                                    "
-                                    :title="
-                                        data.equilibre
-                                            ? 'Valider toutes les commissions de ce véhicule'
-                                            : 'Reste à répartir : passez par « Ajuster » avant de valider'
-                                    "
-                                    @click.stop="
-                                        validerVehicules([
-                                            routeSegment(data.vehicule_id),
-                                        ])
+                        </p>
+                        <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Montant
+                                </dt>
+                                <dd class="mt-1 font-medium tabular-nums">
+                                    {{ fmt(vehicule.theorique) }}
+                                </dd>
+                            </div>
+                            <div class="text-right">
+                                <dt class="text-xs text-muted-foreground">
+                                    Reste à payer
+                                </dt>
+                                <dd
+                                    class="mt-1 font-semibold tabular-nums"
+                                    :class="
+                                        vehicule.reste > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
                                     "
                                 >
-                                    <CheckCircle class="h-3.5 w-3.5" />
-                                    Valider
-                                </Button>
-                                <Link :href="ajustementUrl(data.vehicule_id)">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        @click.stop
+                                    {{ fmt(vehicule.reste) }}
+                                </dd>
+                            </div>
+                        </dl>
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            Déjà payé : {{ fmt(vehicule.deja_paye) }}
+                        </p>
+                        <div
+                            v-if="can.ajuster"
+                            class="mt-3 flex justify-end gap-2"
+                        >
+                            <Button
+                                v-if="
+                                    peutValiderVehicules &&
+                                    estAValider(vehicule)
+                                "
+                                size="sm"
+                                :disabled="
+                                    !vehicule.equilibre || validationEnCours
+                                "
+                                @click="
+                                    validerVehicules([
+                                        routeSegment(vehicule.vehicule_id),
+                                    ])
+                                "
+                                ><CheckCircle class="h-3.5 w-3.5" />
+                                Valider</Button
+                            >
+                            <Button as-child variant="outline" size="sm"
+                                ><Link
+                                    :href="ajustementUrl(vehicule.vehicule_id)"
+                                    ><Wrench class="h-3.5 w-3.5" />
+                                    Ajuster</Link
+                                ></Button
+                            >
+                        </div>
+                        <p
+                            v-if="
+                                peutValiderVehicules &&
+                                estAValider(vehicule) &&
+                                !vehicule.equilibre
+                            "
+                            class="mt-2 text-xs text-muted-foreground"
+                        >
+                            Reste à répartir : ajustez les commissions avant de
+                            valider.
+                        </p>
+                    </article>
+                    <p
+                        v-if="vehicules.length === 0"
+                        class="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                        {{
+                            filtresActifs
+                                ? 'Aucun véhicule ne correspond aux filtres.'
+                                : 'Aucune commission trouvée pour cette période.'
+                        }}
+                    </p>
+                </div>
+
+                <!-- Commissions par véhicule (livreur/propriétaire uniquement) -->
+                <!-- data-key="vehicule_id" : point d'extension pour un futur détail par ligne
+                 (commandes/commissions composant le montant), via un DataTable expander. -->
+                <!-- Le tableau est remplacé par des cartes sur mobile. -->
+                <div
+                    v-if="isVehiculeType"
+                    class="@container hidden overflow-x-auto md:block"
+                    data-testid="vehicules-table"
+                >
+                    <DataTable
+                        :value="vehicules"
+                        :paginator="vehicules.length > 20"
+                        :rows="20"
+                        data-key="vehicule_id"
+                        striped-rows
+                        removable-sort
+                        class="text-sm"
+                        :pt="{
+                            root: { class: 'w-full' },
+                            tbody: { class: 'divide-y' },
+                            bodyRow: bodyRowPt,
+                        }"
+                        @row-click="onRowClick"
+                    >
+                        <Column v-if="peutValiderVehicules" :pt="COL_SELECTION">
+                            <template #header>
+                                <Checkbox
+                                    :model-value="allSelected"
+                                    :disabled="
+                                        selectableRows.length === 0 ||
+                                        validationEnCours
+                                    "
+                                    aria-label="Sélectionner tous les véhicules à valider"
+                                    @update:model-value="toggleAll"
+                                />
+                            </template>
+                            <template #body="{ data }">
+                                <Checkbox
+                                    :model-value="
+                                        selected.has(
+                                            routeSegment(data.vehicule_id),
+                                        )
+                                    "
+                                    :disabled="
+                                        !estValidable(data) || validationEnCours
+                                    "
+                                    :aria-label="`Sélectionner ${data.vehicule_nom}`"
+                                    @update:model-value="toggleRow(data)"
+                                />
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="vehicule_nom"
+                            header="Véhicule"
+                            sortable
+                            :pt="COL_VEHICULE"
+                        >
+                            <template #body="{ data }">
+                                <div
+                                    class="flex items-center gap-2"
+                                    :title="data.vehicule_nom"
+                                >
+                                    <Truck
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
+                                    <div class="min-w-0">
+                                        <div class="truncate font-medium">
+                                            {{ data.vehicule_nom }}
+                                        </div>
+                                        <div
+                                            class="truncate text-xs text-muted-foreground"
+                                        >
+                                            <span>{{
+                                                data.vehicule_immat ?? '—'
+                                            }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="type_vehicule_nom"
+                            header="Type de véhicule"
+                            sortable
+                            :pt="COL_COMPACTE"
+                        >
+                            <template #body="{ data }"
+                                ><span class="text-muted-foreground">{{
+                                    data.type_vehicule_nom ?? '—'
+                                }}</span></template
+                            >
+                        </Column>
+
+                        <Column field="nb_commandes" :pt="COL_NOMBRE">
+                            <template #header>
+                                <span class="font-semibold" title="Commandes">
+                                    <span class="@min-[1000px]:hidden"
+                                        >Cmd.</span
                                     >
-                                        <Wrench class="h-3.5 w-3.5" />
-                                        Ajuster
+                                    <span class="hidden @min-[1000px]:inline"
+                                        >Commandes</span
+                                    >
+                                </span>
+                            </template>
+                            <template #body="{ data }">
+                                <span
+                                    class="text-muted-foreground tabular-nums"
+                                    >{{ data.nb_commandes }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column field="nb_membres" :pt="COL_NOMBRE">
+                            <template #header>
+                                <span
+                                    class="font-semibold"
+                                    title="Membres ayant une commission sur la période"
+                                >
+                                    <span class="@min-[1000px]:hidden"
+                                        >Memb.</span
+                                    >
+                                    <span class="hidden @min-[1000px]:inline"
+                                        >Membres</span
+                                    >
+                                </span>
+                            </template>
+                            <template #body="{ data }">
+                                <span
+                                    class="text-muted-foreground tabular-nums"
+                                    >{{ data.nb_membres }}</span
+                                >
+                                <p
+                                    v-if="data.taille_equipe !== null"
+                                    class="text-xs text-muted-foreground"
+                                    title="Membres actuels de l'équipe du véhicule"
+                                >
+                                    Équipe : {{ data.taille_equipe }}
+                                </p>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="theorique"
+                            header="Montant"
+                            sortable
+                            :pt="COL_MONTANT"
+                        >
+                            <template #body="{ data }">
+                                <span class="font-semibold tabular-nums">{{
+                                    fmt(data.theorique)
+                                }}</span>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="deja_paye"
+                            header="Déjà payé"
+                            sortable
+                            :pt="COL_MONTANT"
+                        >
+                            <template #body="{ data }">
+                                <span
+                                    class="text-muted-foreground tabular-nums"
+                                    >{{ fmt(data.deja_paye) }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="reste"
+                            header="Reste à payer"
+                            sortable
+                            :pt="COL_MONTANT"
+                        >
+                            <template #body="{ data }">
+                                <span
+                                    class="tabular-nums"
+                                    :class="
+                                        data.reste > 0
+                                            ? 'font-medium text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                    >{{ fmt(data.reste) }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="statut_validation"
+                            header="État"
+                            sortable
+                            :pt="COL_COMPACTE"
+                        >
+                            <template #body="{ data }">
+                                <StatusDot
+                                    :status="data.statut_validation"
+                                    :label="
+                                        statutValidationLabel(
+                                            data.statut_validation,
+                                        )
+                                    "
+                                />
+                            </template>
+                        </Column>
+
+                        <Column header="Actions" :pt="COL_ACTIONS">
+                            <template #body="{ data }">
+                                <div
+                                    v-if="can.ajuster"
+                                    class="flex justify-end gap-2"
+                                >
+                                    <Button
+                                        v-if="
+                                            peutValiderVehicules &&
+                                            estAValider(data)
+                                        "
+                                        size="sm"
+                                        variant="outline"
+                                        :disabled="
+                                            !data.equilibre || validationEnCours
+                                        "
+                                        :title="
+                                            data.equilibre
+                                                ? 'Valider toutes les commissions de ce véhicule'
+                                                : 'Reste à répartir : passez par « Ajuster » avant de valider'
+                                        "
+                                        @click.stop="
+                                            validerVehicules([
+                                                routeSegment(data.vehicule_id),
+                                            ])
+                                        "
+                                    >
+                                        <CheckCircle class="h-3.5 w-3.5" />
+                                        Valider
                                     </Button>
-                                </Link>
+                                    <Button as-child variant="ghost" size="sm">
+                                        <Link
+                                            :href="
+                                                ajustementUrl(data.vehicule_id)
+                                            "
+                                            @click.stop
+                                        >
+                                            <Wrench class="h-3.5 w-3.5" />
+                                            Ajuster
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <template #empty>
+                            <div
+                                class="py-16 text-center text-sm text-muted-foreground"
+                            >
+                                {{
+                                    filtresActifs
+                                        ? 'Aucun véhicule ne correspond aux filtres.'
+                                        : 'Aucune commission trouvée pour cette période.'
+                                }}
                             </div>
                         </template>
-                    </Column>
+                    </DataTable>
+                </div>
 
-                    <template #empty>
-                        <div
-                            class="py-16 text-center text-sm text-muted-foreground"
-                        >
-                            Aucune commission trouvée pour cette période.
-                        </div>
-                    </template>
-                </DataTable>
-            </div>
-
-            <!-- Commissions par bénéficiaire (salarié/site/consultant) : une ligne = une fiche,
+                <!-- Commissions par bénéficiaire (salarié/site/consultant) : une ligne = une fiche,
                  aucun regroupement par véhicule (concept absent pour ces types). -->
-            <div v-else class="overflow-x-auto rounded-xl border bg-card">
-                <DataTable
-                    :value="beneficiaires"
-                    :paginator="beneficiaires.length > 20"
-                    :rows="20"
-                    data-key="fiche_id"
-                    striped-rows
-                    removable-sort
-                    class="text-sm"
-                    :pt="{
-                        root: { class: 'w-full min-w-[900px]' },
-                        tbody: { class: 'divide-y' },
-                    }"
-                >
-                    <Column
-                        field="beneficiaire_nom"
-                        header="Bénéficiaire"
-                        sortable
-                        style="min-width: 220px"
+                <div v-if="!isVehiculeType" class="overflow-x-auto">
+                    <DataTable
+                        :value="beneficiaires"
+                        :paginator="beneficiaires.length > 20"
+                        :rows="20"
+                        data-key="fiche_id"
+                        striped-rows
+                        removable-sort
+                        class="text-sm"
+                        :pt="{
+                            root: { class: 'w-full min-w-[900px]' },
+                            tbody: { class: 'divide-y' },
+                        }"
                     >
-                        <template #body="{ data }">
-                            <span class="font-medium">{{
-                                data.beneficiaire_nom
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="montant_brut"
-                        header="Brut"
-                        sortable
-                        style="width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                fmt(data.montant_brut)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="montant_net"
-                        header="Net à payer"
-                        sortable
-                        style="width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span class="font-semibold tabular-nums">{{
-                                fmt(data.montant_net)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="montant_paye"
-                        header="Déjà payé"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                fmt(data.montant_paye)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="reste"
-                        header="Reste à payer"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                class="tabular-nums"
-                                :class="
-                                    data.reste > 0
-                                        ? 'font-medium text-amber-600 dark:text-amber-400'
-                                        : 'text-muted-foreground'
-                                "
-                                >{{ fmt(data.reste) }}</span
-                            >
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="statut"
-                        header="Statut"
-                        sortable
-                        style="width: 160px"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
-                            />
-                        </template>
-                    </Column>
-
-                    <template #empty>
-                        <div
-                            class="py-16 text-center text-sm text-muted-foreground"
+                        <Column
+                            field="beneficiaire_nom"
+                            header="Bénéficiaire"
+                            sortable
+                            style="min-width: 220px"
                         >
-                            Aucune commission trouvée pour cette période.
-                        </div>
-                    </template>
-                </DataTable>
-            </div>
+                            <template #body="{ data }">
+                                <span class="font-medium">{{
+                                    data.beneficiaire_nom
+                                }}</span>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="montant_brut"
+                            header="Brut"
+                            sortable
+                            style="width: 150px"
+                        >
+                            <template #body="{ data }">
+                                <span
+                                    class="text-muted-foreground tabular-nums"
+                                    >{{ fmt(data.montant_brut) }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="montant_net"
+                            header="Net à payer"
+                            sortable
+                            style="width: 150px"
+                        >
+                            <template #body="{ data }">
+                                <span class="font-semibold tabular-nums">{{
+                                    fmt(data.montant_net)
+                                }}</span>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="montant_paye"
+                            header="Déjà payé"
+                            sortable
+                            style="width: 140px"
+                        >
+                            <template #body="{ data }">
+                                <span
+                                    class="text-muted-foreground tabular-nums"
+                                    >{{ fmt(data.montant_paye) }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="reste"
+                            header="Reste à payer"
+                            sortable
+                            style="width: 140px"
+                        >
+                            <template #body="{ data }">
+                                <span
+                                    class="tabular-nums"
+                                    :class="
+                                        data.reste > 0
+                                            ? 'font-medium text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                    >{{ fmt(data.reste) }}</span
+                                >
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="statut"
+                            header="Statut"
+                            sortable
+                            style="width: 160px"
+                        >
+                            <template #body="{ data }">
+                                <StatusDot
+                                    :status="data.statut"
+                                    :label="data.statut_label"
+                                />
+                            </template>
+                        </Column>
+
+                        <template #empty>
+                            <div
+                                class="py-16 text-center text-sm text-muted-foreground"
+                            >
+                                {{
+                                    filtresActifs
+                                        ? 'Aucun bénéficiaire ne correspond aux filtres.'
+                                        : 'Aucune commission trouvée pour cette période.'
+                                }}
+                            </div>
+                        </template>
+                    </DataTable>
+                </div>
+            </section>
         </div>
     </AppLayout>
 </template>

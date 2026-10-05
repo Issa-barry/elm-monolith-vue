@@ -63,6 +63,11 @@ l'import de création.
   pour l'import produits, `imports-vehicules-maj.read` seul ne permet jamais de déclencher une
   confirmation — `vehicules.update` ne gouverne pas non plus ce droit, qui reste exclusivement
   `imports-vehicules-maj.create` (cf. `ImportVehiculesMajPolicy::confirm()`).
+- **VEHMAJ-009** (05/10/2026) — Une mise à jour ne change **jamais** l'état actif/inactif d'un
+  véhicule ni de son équipe de livraison, dans un sens comme dans l'autre : seul l'import de
+  **création** (import flotte) crée une équipe brouillon inactive (cf. COMM-003 dans
+  `docs/commissions.md`). Passer un véhicule en logistique par ce chemin ne réactive donc pas une
+  équipe brouillon : elle s'active quand son partage Livreur devient conforme.
 
 > À ne pas confondre avec **« Exporter les véhicules »** (`VehiculeController::export()` →
 > `VehiculeListExport`, à côté dans le même menu **Exporter**) : un instantané en lecture seule

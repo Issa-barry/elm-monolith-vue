@@ -125,9 +125,9 @@ class ImportFlotteExecutor
 
         // ── Véhicule ─────────────────────────────────────────────────────────
         // Inactif à la création, comme VehiculeController::store() — un véhicule
-        // ne devient actif que lorsqu'une équipe à la répartition valide lui est
+        // ne devient actif que lorsqu'une équipe au partage conforme lui est
         // attribuée (jamais le cas ici : l'équipe créée par l'import est toujours
-        // un brouillon à 0 %, cf. ImportFlotteParser).
+        // un brouillon, cf. ImportFlotteParser). Un véhicule existant garde son état.
         if ($vData['existe']) {
             $vehiculeId = $vData['id'];
 
@@ -167,11 +167,12 @@ class ImportFlotteExecutor
         }
 
         // ── Équipe ───────────────────────────────────────────────────────────
-        // Créée inactive : commission/montants à 0 (brouillon, cf.
-        // ImportFlotteParser), donc pas encore une équipe fonctionnelle. Elle
-        // (et le véhicule) ne deviennent actifs que lorsque l'admin finalise la
-        // répartition dans Équipes de livraison (EquipeLivraisonController::update()
-        // active alors les deux, comme pour toute équipe créée manuellement).
+        // Créée inactive : brouillon sans partage Livreur (cf. ImportFlotteParser),
+        // donc pas encore autorisée à distribuer. Elle s'active d'elle-même, avec son
+        // véhicule, dès que son partage est conforme (ActivationEquipesBrouillonService).
+        // Un véhicule déjà existant garde son état (révisé le 05/10/2026 : le désactiver
+        // était redondant, l'équipe brouillon bloquant déjà les distributions) ; une équipe
+        // déjà existante n'est jamais désactivée par un import.
         //
         // $groupe['equipe'] === null signifie "aucune équipe pour ce groupe" :
         // nouveau véhicule sans aucun livreur dans le fichier. On ne crée
@@ -201,11 +202,6 @@ class ImportFlotteExecutor
                 ]);
                 $equipeId = $equipe->id;
                 $compteurs['equipes_creees']++;
-
-                // Le véhicule reste (ou redevient) inactif tant que cette équipe
-                // brouillon n'est pas finalisée — y compris s'il existait déjà et
-                // était actif (il n'avait alors pas encore d'équipe).
-                Vehicule::whereKey($vehiculeId)->update(['is_active' => false]);
             }
         }
 

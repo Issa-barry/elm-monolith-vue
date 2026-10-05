@@ -44,6 +44,30 @@ même principe de barème dynamique au transfert logistique interne.
   la fiche véhicule (onglet Équipe : statut de chaque membre + bandeau). Un chauffeur inactif se
   réactive depuis la liste des livreurs (« Approuver » s'il a un compte, sinon « Réactiver »).
 
+  **Équipe brouillon** (05/10/2026, incident du 04/10 : les 76 équipes de l'import du 22/08 restées
+  inactives bloquaient toute distribution, sans aucun moyen de les activer depuis l'application) :
+  - seul l'import de **création** (import flotte, `ImportFlotteExecutor`) crée une équipe
+    inactive — le temps de configurer son partage Livreur. L'import de **mise à jour** ne change
+    jamais l'état d'une équipe (VEHMAJ-009) ;
+  - l'équipe **s'active d'elle-même** dès que son partage Livreur est conforme pour **chaque**
+    processus exercé par son véhicule (statut « Fait » ou « Non requis » partout dans la colonne
+    « Partages » de la liste des véhicules — même juge, `PartageConformiteVehiculesService`). Le
+    contrôle (`ActivationEquipesBrouillonService`) est fait après chaque écriture de partage :
+    enregistrement de l'équipe (« Gérer l'équipe »), changement de véhicule d'un livreur,
+    application directe d'un barème (équipes à un seul livreur alignées) et publication d'un
+    brouillon de barème ;
+  - **`is_active` n'est jamais lu depuis la requête** (création comme modification d'équipe) : une
+    création manuelle est active, un enregistrement conserve l'état existant, et seul ce contrôle
+    de conformité active un brouillon — une requête forgée ne peut ni activer un brouillon sans
+    partage, ni désactiver une équipe ;
+  - une équipe active n'est **jamais désactivée** par ce mécanisme : si son partage devient non
+    conforme, ses commandes sont refusées catégorie par catégorie (COMM-015), pas en bloc ;
+  - **véhicule** : un véhicule créé par l'import naît inactif et s'active **avec** son équipe
+    brouillon. Un véhicule **déjà existant** garde son état quand l'import lui crée une équipe
+    brouillon (révisé le 05/10/2026 : il était désactivé, ce qui ajoutait un second blocage resté en
+    place quand l'équipe s'activait par la publication d'un barème). Un véhicule désactivé à la main
+    dont l'équipe est déjà active n'est jamais réactivé par ce mécanisme.
+
   Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
   client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
   véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques

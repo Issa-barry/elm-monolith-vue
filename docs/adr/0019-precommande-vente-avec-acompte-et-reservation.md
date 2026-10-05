@@ -68,7 +68,11 @@ existe pour les fiches (ADR 0009).
     remboursement obligatoire ; après préparation, permission renforcée et confirmation paramétrable
     réutilisant le mécanisme de l'ADR 0004.
 11. **Pas d'expiration automatique** : indicateur dérivé « En retard », en ambre.
-12. **Amendements** : pour une précommande, la date de vente est la date de remise (ADR 0007 §3),
+12. **Amendements** : pour une précommande, la date de vente est la date de **réalisation** (décision
+    D15 du 05/10/2026, ADR 0007 §3) — confirmation de livraison (ou réception validée) en livraison,
+    remise effective en retrait ; le chargement n'est que la sortie du stock et une précommande non
+    réalisée ne compte jamais dans le chiffre d'affaires. Sa comptabilisation au même moment (D16) et
+    le sort des ventes ordinaires (D17) restent à valider.
     et un acompte n'empêche ni un retour (ADR 0003) ni un écart de réception : l'excédent devient un
     trop-perçu. Seul un encaissement du **solde** ferme la fenêtre de retour. Un retour total annule
     la facture mais laisse l'encaissé net **à rembourser** au client.

@@ -22,8 +22,10 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Organization;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
@@ -623,5 +625,51 @@ class CommissionAjustementVenteTest extends TestCase
             ->has('vehicules', 1)
             ->where('vehicules.0.vehicule_id', $vehiculeB->id)
         );
+    }
+
+    /** @test */
+    public function periode_show_affiche_et_filtre_le_type_en_conservant_recherche_et_totaux(): void
+    {
+        $camion = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Camion']);
+        $tricycle = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Tricycle']);
+        $typeAutreOrganisation = TypeVehicule::firstOrCreate(['organization_id' => Organization::factory()->create()->id, 'nom' => 'Camion']);
+
+        ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
+        $vehiculeA->update(['nom_vehicule' => 'ADAMA', 'immatriculation' => 'OU114', 'type_vehicule_id' => $camion->id]);
+        $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
+        ['vehicule' => $vehiculeB, 'categorie' => $categorieB] = $this->makeVehiculeTroisLivreurs(' B');
+        $vehiculeB->update(['nom_vehicule' => 'ABARRY', 'type_vehicule_id' => $tricycle->id]);
+        $this->creerCommandeEtGenererCommission($vehiculeB, $categorieB);
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        // Un type archivé reste lisible dans l'historique et dans les choix de la période.
+        $camion->delete();
+        $url = route('comptabilite.periodes.show', $periode);
+        $this->actingAs($this->user)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->has('vehicules', 2)
+            ->where('vehicules.0.type_vehicule_id', $tricycle->id)
+            ->where('vehicules.0.type_vehicule_nom', 'Tricycle')
+            ->where('vehicules.1.type_vehicule_id', $camion->id)
+            ->where('vehicules.1.type_vehicule_nom', 'Camion')
+            ->where('typesVehicule', [
+                ['value' => $camion->id, 'label' => 'Camion'],
+                ['value' => $tricycle->id, 'label' => 'Tricycle'],
+            ])
+        );
+        $this->get($url.'?'.http_build_query(['type_vehicule_id' => $camion->id, 'vehicule' => 'ou114']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 1)
+                ->where('vehicules.0.vehicule_id', $vehiculeA->id)
+                ->where('filters.type_vehicule_id', $camion->id)
+                ->where('filters.vehicule', 'ou114')
+                ->has('typesVehicule', 2)
+                ->where('stats.total_brut', 240000)
+                ->where('stats.total_net', 240000)
+            );
+        $this->get($url.'?'.http_build_query(['type_vehicule_id' => $tricycle->id, 'vehicule' => 'ADAMA']))
+            ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0)->has('typesVehicule', 2));
+        $this->get($url.'?type_vehicule_id='.$typeAutreOrganisation->id)
+            ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0)->has('typesVehicule', 2));
     }
 }

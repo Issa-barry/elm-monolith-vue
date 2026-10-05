@@ -11,6 +11,7 @@ use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
@@ -170,7 +171,7 @@ class PaiementPeriodeController extends Controller
 
         $allFiches = $periode->fiches()->get();
 
-        $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
+        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
 
         // Le détail de période est centré véhicule pour livreur/propriétaire : c'est ainsi que
         // le métier travaille pour ces deux types (une commission de vente/logistique s'ancre
@@ -179,14 +180,24 @@ class PaiementPeriodeController extends Controller
         // afficher, sans regroupement supplémentaire.
         $beneficiaires = [];
         $vehicules = [];
+        $typesVehicule = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
             // Toujours combiner vente + logistique (jamais un choix) : un même
             // véhicule/bénéficiaire peut porter les deux natures de commission sur la période.
-            $vehicules = $this->avecTailleEquipe($this->avecMontantsPayes(
+            $vehicules = $this->avecDetailsVehicule($this->avecMontantsPayes(
                 collect(CommissionAdjustmentService::vehiculesParPeriodeCombine($periode)),
                 $periode,
                 $allFiches,
             ), $periode);
+
+            // Options issues de toute la période, avant les filtres : la sélection
+            // d'un type ne fait pas disparaître les autres choix.
+            $typesVehicule = $vehicules
+                ->filter(fn (array $v) => $v['type_vehicule_id'] !== null)
+                ->unique('type_vehicule_id')
+                ->sortBy('type_vehicule_nom')
+                ->map(fn (array $v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_vehicule_nom']])
+                ->values()->all();
 
             if (array_filter($filters)) {
                 $beneficiairesParVehicule = collect([
@@ -201,6 +212,9 @@ class PaiementPeriodeController extends Controller
                         ->filter());
 
                 $vehicules = $vehicules->filter(function (array $v) use ($filters, $beneficiairesParVehicule) {
+                    if (! empty($filters['type_vehicule_id']) && $v['type_vehicule_id'] !== $filters['type_vehicule_id']) {
+                        return false;
+                    }
                     if (! empty($filters['vehicule'])) {
                         $needle = mb_strtolower(trim($filters['vehicule']));
                         if (! str_contains(mb_strtolower($v['vehicule_nom']), $needle) && ! str_contains(mb_strtolower($v['vehicule_immat'] ?? ''), $needle)) {
@@ -251,6 +265,7 @@ class PaiementPeriodeController extends Controller
         return Inertia::render('Comptabilite/Periodes/Show', [
             'periode' => $this->transform($periode),
             'vehicules' => $vehicules,
+            'typesVehicule' => $typesVehicule,
             'beneficiaires' => $beneficiaires,
             'filters' => $filters,
             'recalcul' => [
@@ -331,8 +346,15 @@ class PaiementPeriodeController extends Controller
      * @param  Collection<int, array>  $vehicules
      * @return Collection<int, array>
      */
-    private function avecTailleEquipe(Collection $vehicules, PaiementPeriode $periode): Collection
+    private function avecDetailsVehicule(Collection $vehicules, PaiementPeriode $periode): Collection
     {
+        $details = Vehicule::withTrashed()
+            ->where('organization_id', $periode->organization_id)
+            ->whereIn('id', $vehicules->pluck('vehicule_id')->filter()->all())
+            ->with(['typeVehicule' => fn ($query) => $query->withTrashed()->where('organization_id', $periode->organization_id)])
+            ->get(['id', 'type_vehicule_id'])
+            ->keyBy('id');
+
         $tailles = EquipeLivraison::where('organization_id', $periode->organization_id)
             ->whereIn('vehicule_id', $vehicules->pluck('vehicule_id')->filter()->all())
             ->where('is_active', true)
@@ -340,8 +362,11 @@ class PaiementPeriodeController extends Controller
             ->get(['id', 'vehicule_id'])
             ->pluck('membres_count', 'vehicule_id');
 
-        return $vehicules->map(function (array $v) use ($tailles) {
+        return $vehicules->map(function (array $v) use ($tailles, $details) {
             $v['taille_equipe'] = $v['vehicule_id'] !== null ? $tailles->get($v['vehicule_id']) : null;
+            $type = $details->get($v['vehicule_id'])?->typeVehicule;
+            $v['type_vehicule_id'] = $type?->id;
+            $v['type_vehicule_nom'] = $type?->nom;
 
             return $v;
         });

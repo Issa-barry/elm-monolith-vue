@@ -24,6 +24,10 @@ graphique, non filtrée par agence.
 3. **Date d'une vente = création de sa facture** (`factures_ventes.created_at`) : toute vente réelle a
    une facture, le brouillon n'en a pas, `validated_at` n'est pas renseigné partout, le PDV n'a pas de
    livraison, et le tableau de bord utilise déjà cette date.
+   **Amendement du 05/10/2026 (ADR 0019, décision D15)** : une **précommande** est datée à sa
+   **réalisation** — confirmation de livraison (ou réception validée) en livraison, remise effective
+   en retrait — et ne compte pas avant. Sa facture naît pourtant dès la précommande : la date de
+   création de la facture ne vaut donc plus date de vente pour elle.
 4. **Blocs indépendants** : ventes (agent = vendeur, date de facture), encaissements (agent = auteur,
    `date_encaissement`), créances (factures de la période encore dues, cf. point 5). Aucun « reste » calculé par différence
    entre blocs — l'agent qui encaisse n'est pas toujours celui qui a vendu, et un encaissement du jour

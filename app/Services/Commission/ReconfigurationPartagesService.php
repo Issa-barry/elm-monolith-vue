@@ -69,6 +69,7 @@ class ReconfigurationPartagesService
             if ($groupes->isEmpty()) {
                 CommissionBaremeConfigurationService::appliquer($orgId, $processusCode, $lignes, $userId);
                 self::appliquerAutomatiques($processus->id, $automatiques);
+                ActivationEquipesBrouillonService::activerSiPartageConforme($orgId, $automatiques->pluck('equipe_id'));
                 $brouillon?->update([
                     'lignes' => $lignes,
                     'statut' => CommissionBaremeBrouillon::STATUT_PUBLIE,
@@ -465,6 +466,11 @@ class ReconfigurationPartagesService
 
                 PartageLivraisonVersionService::versionner($groupe['equipe_id'], $processus->id, $groupe['categorie_id'], $montants, $dateEffet);
             }
+
+            ActivationEquipesBrouillonService::activerSiPartageConforme(
+                $orgId,
+                $groupes->pluck('equipe_id')->merge($automatiques->pluck('equipe_id')),
+            );
 
             $brouillon->update([
                 'statut' => CommissionBaremeBrouillon::STATUT_PUBLIE,
