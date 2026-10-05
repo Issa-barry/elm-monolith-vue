@@ -422,6 +422,7 @@ const AUDIT_HIDDEN_FIELDS = new Set([
 
 const AUDIT_FIELD_LABELS: Record<string, string> = {
     vehicule_nom: 'Véhicule',
+    mode_remise: 'Mode de remise',
     total_commande: 'Total',
     montant: 'Montant',
     mode_paiement: 'Mode paiement',

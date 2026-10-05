@@ -27,6 +27,15 @@ describe('resumeActivite', () => {
         ).toBe('Acompte 2 000 000 GNF · Remise prévue le 06/10/2026');
     });
 
+    it('indique le nouveau mode de remise et le véhicule', () => {
+        expect(
+            resumeActivite({ mode: 'livraison', vehicule: 'Abarry (AI3462)' }),
+        ).toBe('Livraison · Abarry (AI3462)');
+        expect(resumeActivite({ mode: 'retrait', vehicule: null })).toBe(
+            'Retrait',
+        );
+    });
+
     it('n’affiche rien sans détail utile', () => {
         expect(resumeActivite(null)).toBe('');
         expect(resumeActivite({ motif: 'Client absent', acompte: 0 })).toBe('');

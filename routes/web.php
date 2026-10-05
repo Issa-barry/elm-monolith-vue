@@ -230,6 +230,7 @@ use App\Http\Controllers\Ventes\IndexFactureVenteController;
 use App\Http\Controllers\Ventes\IndexPdvController;
 use App\Http\Controllers\Ventes\Precommandes\AnnulationPrecommandeController;
 use App\Http\Controllers\Ventes\Precommandes\LivraisonPrecommandeController;
+use App\Http\Controllers\Ventes\Precommandes\ModeRemisePrecommandeController;
 use App\Http\Controllers\Ventes\Precommandes\PreparationPrecommandeController;
 use App\Http\Controllers\Ventes\Precommandes\RemboursementPrecommandeController;
 use App\Http\Controllers\Ventes\Precommandes\RetraitPrecommandeController;
@@ -437,6 +438,7 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/precommande/preparation/lancer', [PreparationPrecommandeController::class, 'lancer'])->name('precommandes.preparation.lancer');
             Route::post('ventes/{commande_vente}/precommande/preparation/valider', [PreparationPrecommandeController::class, 'valider'])->name('precommandes.preparation.valider');
             Route::post('ventes/{commande_vente}/precommande/retrait', RetraitPrecommandeController::class)->name('precommandes.retrait');
+            Route::post('ventes/{commande_vente}/precommande/mode-remise', ModeRemisePrecommandeController::class)->name('precommandes.mode_remise');
             Route::post('ventes/{commande_vente}/precommande/livraison/confirmer', LivraisonPrecommandeController::class)->name('precommandes.livraison.confirmer');
             Route::post('ventes/{commande_vente}/precommande/remboursement', RemboursementPrecommandeController::class)->name('precommandes.remboursement');
             Route::post('ventes/{commande_vente}/precommande/annulation/code', [AnnulationPrecommandeController::class, 'demanderCode'])->middleware('throttle:10,1')->name('precommandes.annulation.code');

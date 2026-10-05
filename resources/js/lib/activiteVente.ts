@@ -1,5 +1,17 @@
 import { formatGNF, formatQuantite } from '@/lib/utils';
 
+/** Préparation / retrait : quantités par ligne ; chargement / retour : quantité totale. */
+function quantiteTotale(details: Record<string, unknown>): number | null {
+    if (typeof details.quantite === 'number') return details.quantite;
+    if (!details.quantites || typeof details.quantites !== 'object') {
+        return null;
+    }
+    return Object.values(details.quantites as Record<string, unknown>)
+        .map(Number)
+        .filter((q) => Number.isFinite(q))
+        .reduce((total, q) => total + q, 0);
+}
+
 /**
  * Résumé lisible des détails d'une entrée du journal d'activité d'une commande
  * (CommandeVenteActiviteService) : montant, acompte, quantité, date prévue. Le motif reste affiché
@@ -11,6 +23,14 @@ export function resumeActivite(
     if (!details) return '';
     const parties: string[] = [];
 
+    // Changement du mode de remise d'une précommande : nouveau mode, et véhicule en livraison.
+    if (details.mode === 'livraison' || details.mode === 'retrait') {
+        parties.push(details.mode === 'livraison' ? 'Livraison' : 'Retrait');
+        if (typeof details.vehicule === 'string' && details.vehicule) {
+            parties.push(details.vehicule);
+        }
+    }
+
     if (typeof details.montant === 'number' && details.montant > 0) {
         parties.push(formatGNF(details.montant));
     }
@@ -18,16 +38,7 @@ export function resumeActivite(
         parties.push(`Acompte ${formatGNF(details.acompte)}`);
     }
 
-    // Préparation / retrait : quantités par ligne ; chargement / retour : quantité totale.
-    const quantite =
-        typeof details.quantite === 'number'
-            ? details.quantite
-            : details.quantites && typeof details.quantites === 'object'
-              ? Object.values(details.quantites as Record<string, unknown>)
-                    .map(Number)
-                    .filter((q) => Number.isFinite(q))
-                    .reduce((total, q) => total + q, 0)
-              : null;
+    const quantite = quantiteTotale(details);
     if (quantite !== null) {
         parties.push(
             `${formatQuantite(quantite)} unité${quantite > 1 ? 's' : ''}`,
