@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -129,26 +130,31 @@ const filteredProduits = computed(() => {
                 </Link>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 px-4 pb-3">
-                <div class="relative flex flex-1 items-center">
+            <div class="space-y-2 px-4 pb-3">
+                <div class="relative flex w-full min-w-0 items-center">
                     <Search
                         class="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground"
                     />
                     <input
                         v-model="search"
                         type="search"
+                        aria-label="Rechercher un produit"
                         placeholder="Rechercher un produit..."
-                        class="w-full rounded-xl border-0 bg-muted py-2.5 pr-4 pl-9 text-sm placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                        class="h-11 w-full min-w-0 rounded-xl border-0 bg-muted pr-4 pl-9 text-base placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30 focus:outline-none"
                     />
                 </div>
-                <DataFilters
-                    trigger-only
-                    saved-filter-scope="produits"
-                    :url="filterUrl"
-                    :values="filterValues"
-                    :fields="filterFields"
-                    :result-count="resultCount"
-                />
+                <ListPageActions class="produits-mobile-actions w-full">
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            saved-filter-scope="produits"
+                            :url="filterUrl"
+                            :values="filterValues"
+                            :fields="filterFields"
+                            :result-count="resultCount"
+                        />
+                    </template>
+                </ListPageActions>
             </div>
         </div>
 
@@ -308,3 +314,24 @@ const filteredProduits = computed(() => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* La vue active garde sa propre ligne pour laisser les actions accessibles. */
+.produits-mobile-actions :deep(> .contents > div:first-of-type) {
+    display: contents;
+}
+
+.produits-mobile-actions :deep(button) {
+    min-height: 44px;
+}
+
+.produits-mobile-actions :deep(> .contents > div:first-of-type > span) {
+    order: 1;
+    width: 100%;
+    justify-content: space-between;
+}
+
+.produits-mobile-actions :deep(> .contents > div:first-of-type > span > span) {
+    max-width: calc(100% - 44px);
+}
+</style>

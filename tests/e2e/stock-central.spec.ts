@@ -56,9 +56,7 @@ test('Produits vers Stock, filtres, historique et ajustement', async ({
         .replace(/^SKU\s*/i, '')
         .trim();
 
-    await drawer
-        .locator('[data-testid="filter-field-search"] input')
-        .fill(sku);
+    await drawer.locator('[data-testid="filter-field-search"] input').fill(sku);
     await drawer.locator('[data-testid="filters-apply"]').click();
     await expect(drawer).toBeHidden();
     await expect(page).toHaveURL(/search=/);
@@ -74,10 +72,10 @@ test('Produits vers Stock, filtres, historique et ajustement', async ({
         .first();
     await filteredRow.locator('[data-testid="stock-history-button"]').click();
     // Le titre de la modale est « Produit · Variante · Agence » (jamais le mot "historique" lui-
-    // même) — on cible plutôt son onglet "Ajustements stock", toujours présent.
+    // même) — on cible plutôt son onglet « Mouvements », toujours présent.
     const historyDialog = page
         .locator('[role="dialog"]')
-        .filter({ hasText: /ajustements stock/i });
+        .filter({ has: page.getByRole('tab', { name: /^mouvements/i }) });
     await expect(historyDialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(historyDialog).toBeHidden();

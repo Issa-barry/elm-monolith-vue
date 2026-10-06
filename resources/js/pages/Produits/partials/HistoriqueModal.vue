@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { stripHtml } from '@/lib/stripHtml';
+import { useMediaQuery } from '@vueuse/core';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -9,6 +11,7 @@ import TabPanel from 'primevue/tabpanel';
 import TabPanels from 'primevue/tabpanels';
 import Tabs from 'primevue/tabs';
 import { computed, ref, watch } from 'vue';
+import './stock-dialog.css';
 
 interface StockMouvement {
     id: string;
@@ -60,6 +63,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
+    (e: 'after-hide'): void;
     /** Émis quand l'utilisateur change le filtre Motif — permet au parent de
      * recharger l'historique côté backend (cf. Produits/Stock/Index.vue) pour
      * rester correct au-delà de la fenêtre chargée (take(200)). */
@@ -72,6 +76,7 @@ const localVisible = computed({
 });
 
 const selectedMotif = ref<string | null>(null);
+const isMobile = useMediaQuery('(max-width: 639px)');
 
 // Réinitialise le filtre à chaque ouverture (le composant reste monté entre deux
 // produits/variantes consultés — cf. Produits/Stock/Index.vue qui ne fait pas de v-if).
@@ -169,14 +174,22 @@ function formatQte(val: number | null | undefined): string {
     <Dialog
         v-model:visible="localVisible"
         modal
-        :header="title ?? 'Historique'"
-        :style="{ width: 'min(1120px, 94vw)' }"
-        :breakpoints="{ '640px': '100vw' }"
-        :content-style="{ maxHeight: '76vh', overflow: 'auto' }"
+        :header="isMobile ? 'Historique du stock' : (title ?? 'Historique')"
+        class="stock-dialog"
+        :style="{ '--stock-dialog-width': 'min(1120px, 94vw)' }"
+        :pt="{ pcCloseButton: { root: { 'aria-label': 'Fermer' } } }"
         :draggable="false"
+        @after-hide="emit('after-hide')"
     >
+        <p
+            v-if="title"
+            class="mb-4 text-sm leading-6 break-words text-muted-foreground sm:hidden"
+        >
+            {{ title }}
+        </p>
         <div
             v-if="loading"
+            role="status"
             class="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
         >
             <Loader2 class="h-5 w-5 animate-spin" />
@@ -186,7 +199,7 @@ function formatQte(val: number | null | undefined): string {
         <Tabs v-else value="0">
             <TabList>
                 <Tab value="0">
-                    Ajustements stock
+                    Mouvements
                     <span
                         v-if="ajustements.length"
                         class="ml-1.5 rounded-full bg-teal-100 px-1.5 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
@@ -207,10 +220,10 @@ function formatQte(val: number | null | undefined): string {
                 <!-- ─── Onglet Ajustements ─── -->
                 <TabPanel value="0">
                     <div
-                        v-if="ajustements.length === 0"
+                        v-if="ajustements.length === 0 && !selectedMotif"
                         class="py-8 text-center text-sm text-muted-foreground"
                     >
-                        Aucun ajustement de stock enregistré.
+                        Aucun mouvement de stock enregistré.
                     </div>
                     <template v-else>
                         <div
@@ -220,7 +233,9 @@ function formatQte(val: number | null | undefined): string {
                                 {{ ajustementsFiltres.length }} mouvement(s)
                                 affiché(s)
                             </p>
-                            <div class="flex items-center gap-2">
+                            <div
+                                class="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2"
+                            >
                                 <label
                                     for="historique-motif-filter"
                                     class="text-xs font-medium text-muted-foreground"
@@ -230,6 +245,7 @@ function formatQte(val: number | null | undefined): string {
                                 <Dropdown
                                     v-model="selectedMotif"
                                     input-id="historique-motif-filter"
+                                    placeholder="Tous les motifs"
                                     :options="motifSelectOptions"
                                     option-label="label"
                                     option-value="value"
@@ -253,7 +269,7 @@ function formatQte(val: number | null | undefined): string {
                         </div>
                         <div
                             v-else
-                            class="mt-4 overflow-x-auto rounded-xl border border-border/70"
+                            class="mt-4 hidden overflow-x-auto rounded-xl border border-border/70 sm:block"
                         >
                             <table class="w-full min-w-[900px] text-sm">
                                 <thead class="bg-muted/30">
@@ -376,6 +392,104 @@ function formatQte(val: number | null | undefined): string {
                                 </tbody>
                             </table>
                         </div>
+                        <div
+                            v-if="ajustementsFiltres.length"
+                            class="mt-4 space-y-3 sm:hidden"
+                        >
+                            <article
+                                v-for="m in ajustementsFiltres"
+                                :key="m.id"
+                                data-testid="stock-movement-card"
+                                class="rounded-xl border border-border/70 p-3.5"
+                            >
+                                <div
+                                    class="flex items-start justify-between gap-3"
+                                >
+                                    <div class="min-w-0">
+                                        <p
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{ m.date }}
+                                        </p>
+                                        <p
+                                            class="mt-1 text-sm leading-5 font-semibold break-words"
+                                        >
+                                            {{
+                                                m.motif_label ||
+                                                'Motif non renseigné'
+                                            }}
+                                        </p>
+                                    </div>
+                                    <span
+                                        class="shrink-0 text-base font-semibold tabular-nums"
+                                        :class="
+                                            m.is_initial
+                                                ? 'text-foreground'
+                                                : m.type === 'entree'
+                                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                                  : 'text-red-700 dark:text-red-400'
+                                        "
+                                    >
+                                        {{
+                                            m.is_initial
+                                                ? ''
+                                                : m.type === 'entree'
+                                                  ? '+'
+                                                  : '−'
+                                        }}{{ formatQte(m.quantite) }}
+                                    </span>
+                                </div>
+                                <p
+                                    class="mt-2 text-xs leading-5 break-words text-muted-foreground"
+                                >
+                                    {{
+                                        m.site_nom ||
+                                        m.site_code ||
+                                        'Agence non renseignée'
+                                    }}
+                                    <span v-if="m.createur_nom">
+                                        · {{ m.createur_nom }}</span
+                                    >
+                                </p>
+                                <dl
+                                    class="mt-3 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-2.5"
+                                >
+                                    <div>
+                                        <dt
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Avant
+                                        </dt>
+                                        <dd class="mt-1 text-sm tabular-nums">
+                                            {{ formatQte(m.stock_avant) }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Après
+                                        </dt>
+                                        <dd
+                                            class="mt-1 text-sm font-semibold tabular-nums"
+                                        >
+                                            {{ formatQte(m.stock_apres) }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                                <p
+                                    v-if="m.notes"
+                                    class="mt-3 text-xs leading-5 break-words whitespace-pre-wrap"
+                                >
+                                    {{ m.notes }}
+                                </p>
+                                <p
+                                    class="mt-2 text-[11px] leading-4 text-muted-foreground"
+                                >
+                                    Saisi le {{ m.created_at }}
+                                </p>
+                            </article>
+                        </div>
                     </template>
                 </TabPanel>
 
@@ -436,7 +550,7 @@ function formatQte(val: number | null | undefined): string {
                                         Object.keys(entry.new_values).length >
                                             0)
                                 "
-                                class="mt-2 overflow-hidden rounded-lg border text-xs"
+                                class="mt-2 hidden overflow-hidden rounded-lg border text-xs sm:block"
                             >
                                 <table class="w-full">
                                     <thead>
@@ -487,10 +601,60 @@ function formatQte(val: number | null | undefined): string {
                                     </tbody>
                                 </table>
                             </div>
+                            <dl
+                                v-if="
+                                    (entry.old_values &&
+                                        Object.keys(entry.old_values).length) ||
+                                    (entry.new_values &&
+                                        Object.keys(entry.new_values).length)
+                                "
+                                data-testid="stock-audit-changes"
+                                class="mt-3 divide-y rounded-xl border px-3 sm:hidden"
+                            >
+                                <div
+                                    v-for="row in diffRows(entry)"
+                                    :key="row.field"
+                                    class="py-3"
+                                >
+                                    <dt class="text-xs font-semibold">
+                                        {{ row.label }}
+                                    </dt>
+                                    <dd
+                                        class="mt-2 space-y-2 text-sm leading-5"
+                                    >
+                                        <p
+                                            v-if="entry.old_values"
+                                            class="break-words whitespace-pre-wrap"
+                                        >
+                                            <span
+                                                class="text-xs text-muted-foreground"
+                                                >Avant : </span
+                                            >{{ row.old }}
+                                        </p>
+                                        <p
+                                            v-if="entry.new_values"
+                                            class="break-words whitespace-pre-wrap"
+                                        >
+                                            <span
+                                                class="text-xs text-muted-foreground"
+                                                >Après : </span
+                                            >{{ row.new }}
+                                        </p>
+                                    </dd>
+                                </div>
+                            </dl>
                         </li>
                     </ol>
                 </TabPanel>
             </TabPanels>
         </Tabs>
+        <template #footer>
+            <Button
+                variant="outline"
+                class="w-full sm:w-auto"
+                @click="localVisible = false"
+                >Fermer l’historique</Button
+            >
+        </template>
     </Dialog>
 </template>

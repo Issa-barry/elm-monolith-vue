@@ -200,7 +200,7 @@ class IndexStockController extends Controller
         $varianteIds = $rows->pluck('variante_id')->unique()->values();
         $siteIds = $rows->pluck('site_id')->unique()->values();
 
-        $variantes = ProduitVariante::with('valeurs.option')
+        $variantes = ProduitVariante::with(['valeurs.option', 'media', 'produit.medias'])
             ->where('organization_id', $orgId)
             ->whereIn('id', $varianteIds)
             ->get()
@@ -239,6 +239,7 @@ class IndexStockController extends Controller
             return [
                 'produit_id' => $row->produit_id,
                 'produit_nom' => $row->produit_nom,
+                'image_url' => $variante?->effective_image_url,
                 'categorie_id' => $row->categorie_id,
                 'categorie_nom' => $row->categorie_nom,
                 'variante_id' => $row->variante_id,
