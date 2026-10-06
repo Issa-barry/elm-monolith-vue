@@ -26,6 +26,13 @@ import { computed, ref } from 'vue';
 
 export interface PrecommandeData {
     livraison: boolean;
+    /** Frise unique (PrecommandeEcran::etapes), libellés identiques au statut de l'en-tête. */
+    etapes: { cle: string; libelle: string }[];
+    /** Valeur de statutAffichage() ; null pour une précommande annulée ou retournée. */
+    etape_courante: string | null;
+    /** Marchandise pas encore remise : le stock reste réservé. */
+    stock_reserve: boolean;
+    facture_statut_label: string | null;
     montants: {
         total: number;
         acomptes: number;
@@ -73,30 +80,25 @@ const urlBase = computed(
     () => `/backoffice/ventes/${props.commandeId}/precommande`,
 );
 
-// ── Étapes (jusqu'à la remise) ───────────────────────────────────────────────
-// Le chargement ne vaut pas livraison (D13) : « En livraison » jusqu'à la confirmation.
-const ETAPES = computed(() =>
-    props.precommande.livraison
-        ? [
-              { cle: 'reservee', libelle: 'Réservée' },
-              { cle: 'a_preparer', libelle: 'À préparer' },
-              { cle: 'a_charger', libelle: 'À charger' },
-              { cle: 'livraison_en_cours', libelle: 'En livraison' },
-              { cle: 'remise', libelle: 'Livrée' },
-          ]
-        : [
-              { cle: 'reservee', libelle: 'Réservée' },
-              { cle: 'a_preparer', libelle: 'À préparer' },
-              { cle: 'preparee', libelle: 'Préparée' },
-              { cle: 'remise', libelle: 'Retirée' },
-          ],
+// ── Frise ────────────────────────────────────────────────────────────────────
+// Étapes et étape active viennent du serveur (statutAffichage) : la frise montre toujours le même
+// état que le statut de l'en-tête. Clôturée = toutes les étapes faites.
+const etapeCourante = computed(() =>
+    props.precommande.etapes.findIndex(
+        (e) => e.cle === props.precommande.etape_courante,
+    ),
 );
-const etapeCourante = computed(() => {
-    const statut =
-        props.statut === 'chargement_en_cours' ? 'a_charger' : props.statut;
-    const index = ETAPES.value.findIndex((e) => e.cle === statut);
-    return index === -1 ? ETAPES.value.length - 1 : index;
-});
+const derniereEtape = computed(() => props.precommande.etapes.length - 1);
+
+function etatEtape(index: number): 'faite' | 'courante' | 'a_venir' {
+    if (
+        index < etapeCourante.value ||
+        etapeCourante.value === derniereEtape.value
+    ) {
+        return 'faite';
+    }
+    return index === etapeCourante.value ? 'courante' : 'a_venir';
+}
 
 // ── Actions simples ──────────────────────────────────────────────────────────
 const enCours = ref(false);
@@ -423,38 +425,48 @@ function annuler(paiement: EncaissementPayload | null) {
             </Teleport>
         </div>
 
-        <!-- Étapes jusqu'à la remise — sans objet pour une précommande annulée ou retournée. -->
+        <!-- Frise unique du parcours — sans objet pour une précommande annulée ou retournée,
+             signalée par le bandeau de la fiche. -->
         <ol
-            v-if="statut !== 'annulee' && statut !== 'retournee'"
+            v-if="etapeCourante !== -1"
             class="mt-4 flex flex-wrap items-center gap-2 text-xs"
+            aria-label="Avancement de la précommande"
+            data-testid="precommande-frise"
         >
             <li
-                v-for="(etape, index) in ETAPES"
+                v-for="(etape, index) in precommande.etapes"
                 :key="etape.cle"
                 class="flex items-center gap-2"
             >
                 <span
-                    class="rounded-md px-2 py-1 font-medium"
-                    :class="
-                        index < etapeCourante
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : index === etapeCourante
-                              ? 'bg-muted text-foreground'
-                              : 'text-muted-foreground'
+                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium"
+                    :class="{
+                        'text-emerald-700 dark:text-emerald-400':
+                            etatEtape(index) === 'faite',
+                        'bg-primary text-primary-foreground':
+                            etatEtape(index) === 'courante',
+                        'text-muted-foreground': etatEtape(index) === 'a_venir',
+                    }"
+                    :aria-current="
+                        etatEtape(index) === 'courante' ? 'step' : undefined
                     "
                 >
+                    <CheckCircle2
+                        v-if="etatEtape(index) === 'faite'"
+                        class="h-3.5 w-3.5"
+                    />
                     {{ etape.libelle }}
                 </span>
-                <span
-                    v-if="index < ETAPES.length - 1"
-                    class="text-muted-foreground"
+                <span v-if="index < derniereEtape" class="text-muted-foreground"
                     >→</span
                 >
             </li>
         </ol>
 
         <!-- Montants -->
-        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <dl
+            class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
+        >
             <div>
                 <dt class="text-xs text-muted-foreground">Total</dt>
                 <dd class="font-semibold tabular-nums">
@@ -477,6 +489,13 @@ function annuler(paiement: EncaissementPayload | null) {
                 <dt class="text-xs text-muted-foreground">Reste à payer</dt>
                 <dd class="font-semibold tabular-nums">
                     {{ formatGNF(precommande.montants.reste) }}
+                </dd>
+            </div>
+            <!-- Statut financier, séparé du statut opérationnel (en-tête et frise). -->
+            <div v-if="precommande.facture_statut_label">
+                <dt class="text-xs text-muted-foreground">Facture</dt>
+                <dd class="font-semibold" data-testid="precommande-facture">
+                    {{ precommande.facture_statut_label }}
                 </dd>
             </div>
             <!-- Trop-perçu : attention (ambre), l'opération reste possible — CLAUDE.md § 10. -->

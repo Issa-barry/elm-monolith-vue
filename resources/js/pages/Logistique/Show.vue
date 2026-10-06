@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -13,6 +19,7 @@ import {
     FileEdit,
     History,
     MapPin,
+    MoreHorizontal,
     Package,
     PackageCheck,
     Pencil,
@@ -33,6 +40,7 @@ import {
     ref,
     watch,
 } from 'vue';
+import '../../../css/logistique-mobile.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -283,12 +291,48 @@ const mainActionLabel = computed(() => {
     return labels[statut] ?? null;
 });
 
+const approvalAction = computed(
+    () =>
+        props.can_valider_reception_admin &&
+        props.transfert.statut === 'reception' &&
+        props.transfert.validation_reception !== 'accord',
+);
+const primaryActionLabel = computed(() =>
+    approvalAction.value ? 'Approuver la réception' : mainActionLabel.value,
+);
+const isMobile = ref(false);
+const stepScroller = ref<HTMLElement | null>(null);
+let mobileQuery: MediaQueryList | null = null;
+function updateMobile() {
+    isMobile.value = mobileQuery?.matches ?? false;
+}
+async function revealCurrentStep() {
+    await nextTick();
+    const scroller = stepScroller.value;
+    if (!scroller || !isMobile.value) return;
+    const step = scroller.querySelector<HTMLElement>(
+        `[data-step-index="${currentStepIdx.value}"]`,
+    );
+    if (step)
+        scroller.scrollLeft =
+            step.offsetLeft - (scroller.clientWidth - step.offsetWidth) / 2;
+}
+onMounted(() => {
+    mobileQuery = window.matchMedia('(max-width: 639px)');
+    updateMobile();
+    mobileQuery.addEventListener('change', updateMobile);
+    revealCurrentStep();
+});
+onBeforeUnmount(() => mobileQuery?.removeEventListener('change', updateMobile));
+watch([currentStepIdx, isMobile], revealCurrentStep);
+
 // ── Dialogs visibilité ────────────────────────────────────────────────────────
 
 const showChargementDialog = ref(false);
 const showReceptionDialog = ref(false);
 const processing = ref(false);
 const dialogErrors = ref<string[]>([]);
+const showAnnulationDialog = ref(false);
 
 // ── Données formulaires dialogs (réinitialisées à chaque ouverture) ───────────
 
@@ -383,6 +427,12 @@ function annulerTransfert() {
         `/backoffice/logistique/${props.transfert.id}/statut/annuler`,
         {},
         {
+            onSuccess: () => {
+                showAnnulationDialog.value = false;
+            },
+            onError: (errors) => {
+                dialogErrors.value = Object.values(errors).flat() as string[];
+            },
             onFinish: () => {
                 processing.value = false;
             },
@@ -563,6 +613,26 @@ function setActiveDetailTab(tab: DetailTabKey) {
     activeDetailTab.value = tab;
 }
 
+function onTabKeydown(event: KeyboardEvent, tab: DetailTabKey) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const tabs: DetailTabKey[] = showCommissionSection.value
+        ? ['informations', 'lignes', 'commission']
+        : ['informations', 'lignes'];
+    const index = tabs.indexOf(tab);
+    const next =
+        event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? tabs.length - 1
+              : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) %
+                tabs.length;
+    setActiveDetailTab(tabs[next]);
+    nextTick(() =>
+        document.getElementById(`logistique-tab-${tabs[next]}`)?.focus(),
+    );
+}
+
 watch(showCommissionSection, (visible) => {
     if (!visible && activeDetailTab.value === 'commission') {
         activeDetailTab.value = 'informations';
@@ -581,21 +651,91 @@ function activiteDotClass(action: string): string {
 <template>
     <Head :title="transfert.reference" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-5 px-4 py-6 sm:px-6">
-            <!-- ══ Header ══════════════════════════════════════════════════════ -->
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="flex items-center gap-3">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <header
+            data-testid="logistique-mobile-header"
+            class="fixed inset-x-0 top-0 z-20 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 border-b bg-background px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 sm:hidden"
+        >
+            <Link
+                :href="contexteHref"
+                :aria-label="`Retour aux ${contexteLabel.toLowerCase()}`"
+                class="flex size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                ><ArrowLeft class="size-5"
+            /></Link>
+            <div class="min-w-0 text-center">
+                <h1 class="text-base font-semibold">Transfert</h1>
+                <p
+                    class="truncate text-xs text-muted-foreground"
+                    :title="transfert.reference"
+                >
+                    {{ transfert.reference }}
+                </p>
+            </div>
+            <DropdownMenu>
+                <DropdownMenuTrigger as-child
+                    ><Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-11"
+                        aria-label="Actions du transfert"
+                        ><MoreHorizontal class="size-5" /></Button
+                ></DropdownMenuTrigger>
+                <DropdownMenuContent
+                    align="end"
+                    class="max-w-[calc(100vw-2rem)]"
+                >
+                    <DropdownMenuItem
+                        class="min-h-11 gap-2"
+                        @select="showActivitesDialog = true"
+                        ><History class="size-4" /> Historique ({{
+                            activites.length
+                        }})</DropdownMenuItem
+                    >
+                    <DropdownMenuItem
+                        v-if="can_update && transfert.is_editable"
+                        as-child
+                        class="min-h-11 gap-2"
+                        ><Link
+                            :href="`/backoffice/logistique/${transfert.id}/editer`"
+                            ><Pencil class="size-4" /> Modifier</Link
+                        ></DropdownMenuItem
+                    >
+                    <DropdownMenuItem
+                        v-if="can_annuler"
+                        class="min-h-11 gap-2 text-destructive focus:text-destructive"
+                        :disabled="processing"
+                        @select="
+                            dialogErrors = [];
+                            showAnnulationDialog = true;
+                        "
+                        ><XCircle class="size-4" /> Annuler le
+                        transfert</DropdownMenuItem
+                    >
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </header>
+        <div
+            class="logistique-detail min-w-0 space-y-4 px-4 pt-[calc(77px+env(safe-area-inset-top))] sm:space-y-5 sm:px-6 sm:py-6"
+            :class="
+                primaryActionLabel
+                    ? 'pb-[calc(6rem+env(safe-area-inset-bottom))]'
+                    : 'pb-[max(1rem,env(safe-area-inset-bottom))]'
+            "
+        >
+            <header
+                class="hidden flex-wrap items-start justify-between gap-3 sm:flex"
+            >
+                <div class="flex min-w-0 items-center gap-3">
                     <Link
                         :href="contexteHref"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
-                    >
-                        <ArrowLeft class="h-4 w-4" />
-                    </Link>
-                    <div>
-                        <div class="flex items-center gap-2">
+                        :aria-label="`Retour aux ${contexteLabel.toLowerCase()}`"
+                        class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
+                        ><ArrowLeft class="size-4"
+                    /></Link>
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
                             <h1 class="text-xl font-bold tracking-tight">
-                                Transferts
+                                {{ contexteLabel }}
                             </h1>
                             <StatusDot
                                 :status="transfert.statut"
@@ -607,72 +747,66 @@ function activiteDotClass(action: string): string {
                         </p>
                     </div>
                 </div>
-
-                <!-- Boutons d'action -->
                 <div class="flex flex-wrap items-center gap-2">
                     <Button
                         variant="outline"
                         size="sm"
                         @click="showActivitesDialog = true"
-                    >
-                        <History class="mr-1.5 h-3.5 w-3.5" />
-                        Historique
+                        ><History class="mr-1.5 size-3.5" /> Historique
                         <span
                             class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
-                        >
-                            {{ activites.length }}
-                        </span>
-                    </Button>
+                            >{{ activites.length }}</span
+                        ></Button
+                    >
                     <Button
-                        v-if="
-                            can_valider_reception_admin &&
-                            transfert.statut === 'reception' &&
-                            transfert.validation_reception !== 'accord'
-                        "
-                        size="sm"
-                        class="bg-emerald-600 text-white hover:bg-emerald-700"
-                        @click="showValidationCommissionDialog = true"
-                    >
-                        <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
-                        Approuver la réception
-                    </Button>
-
-                    <Link
                         v-if="can_update && transfert.is_editable"
-                        :href="`/backoffice/logistique/${transfert.id}/editer`"
+                        variant="outline"
+                        size="sm"
+                        as-child
+                        ><Link
+                            :href="`/backoffice/logistique/${transfert.id}/editer`"
+                            ><Pencil class="mr-1.5 size-3.5" /> Modifier</Link
+                        ></Button
                     >
-                        <Button variant="outline" size="sm">
-                            <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                            Modifier
-                        </Button>
-                    </Link>
-
                     <Button
                         v-if="can_annuler"
                         variant="outline"
                         size="sm"
-                        class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                        class="text-destructive"
                         :disabled="processing"
-                        @click="annulerTransfert"
+                        @click="
+                            dialogErrors = [];
+                            showAnnulationDialog = true;
+                        "
+                        ><XCircle class="mr-1.5 size-3.5" /> Annuler</Button
                     >
-                        <XCircle class="mr-1.5 h-3.5 w-3.5" />
-                        Annuler
-                    </Button>
-
-                    <Button
-                        v-if="mainActionLabel"
-                        size="sm"
-                        :disabled="processing"
-                        @click="onMainAction"
-                    >
-                        <ArrowRight class="mr-1.5 h-3.5 w-3.5" />
-                        {{ mainActionLabel }}
-                    </Button>
+                    <div id="logistique-desktop-action" />
                 </div>
+            </header>
+            <div
+                class="flex items-center justify-between gap-3 text-sm sm:hidden"
+            >
+                <span class="text-muted-foreground">État du transfert</span
+                ><StatusDot
+                    :status="transfert.statut"
+                    :label="transfert.statut_label"
+                />
             </div>
 
-            <!-- ══ Progression horizontale ════════════════════════════════════ -->
-            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+            <!-- Progression -->
+            <section
+                aria-label="Suivi du transfert"
+                class="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:px-6"
+            >
+                <div
+                    v-if="!transfert.is_annule"
+                    class="mb-3 flex items-center justify-between gap-2 sm:hidden"
+                >
+                    <h2 class="text-sm font-semibold">Suivi du transfert</h2>
+                    <span class="text-xs text-muted-foreground tabular-nums"
+                        >{{ currentStepIdx + 1 }} / {{ STEPS.length }}</span
+                    >
+                </div>
                 <!-- Annulé -->
                 <div
                     v-if="transfert.is_annule"
@@ -685,87 +819,126 @@ function activiteDotClass(action: string): string {
                 </div>
 
                 <!-- Progression normale -->
-                <div v-else class="flex items-center">
-                    <template v-for="(step, idx) in STEPS" :key="step.key">
-                        <!-- Étape -->
-                        <div
-                            class="flex flex-col items-center"
-                            style="min-width: 80px"
-                        >
-                            <div
-                                :data-testid="`stepper-step-${step.key}`"
-                                :class="[
-                                    'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    stepState(idx) === 'done'
-                                        ? 'bg-emerald-500 text-white shadow-sm'
-                                        : '',
-                                    stepState(idx) === 'current'
-                                        ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
-                                        : '',
-                                    stepState(idx) === 'future'
-                                        ? 'bg-muted text-muted-foreground'
-                                        : '',
-                                ]"
+                <div
+                    v-else
+                    ref="stepScroller"
+                    data-testid="logistique-jalons"
+                    tabindex="0"
+                    aria-label="Jalons du transfert, défilement horizontal"
+                    class="relative min-w-0 snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:overflow-visible"
+                >
+                    <ol class="flex min-w-max items-center py-1 sm:min-w-0">
+                        <template v-for="(step, idx) in STEPS" :key="step.key">
+                            <!-- Étape -->
+                            <li
+                                class="flex w-[88px] shrink-0 snap-center flex-col items-center sm:w-20"
+                                :data-step-index="idx"
+                                :aria-current="
+                                    idx === currentStepIdx ? 'step' : undefined
+                                "
                             >
-                                <component :is="step.icon" class="h-4 w-4" />
-                            </div>
-                            <span
+                                <div
+                                    :data-testid="`stepper-step-${step.key}`"
+                                    :class="[
+                                        'flex h-9 w-9 items-center justify-center rounded-full transition-all',
+                                        stepState(idx) === 'done'
+                                            ? 'bg-emerald-500 text-white shadow-sm'
+                                            : '',
+                                        stepState(idx) === 'current'
+                                            ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                            : '',
+                                        stepState(idx) === 'future'
+                                            ? 'bg-muted text-muted-foreground'
+                                            : '',
+                                    ]"
+                                >
+                                    <component
+                                        :is="step.icon"
+                                        class="h-4 w-4"
+                                    />
+                                </div>
+                                <span
+                                    :class="[
+                                        'mt-1.5 text-center text-[11px] leading-tight font-medium',
+                                        stepState(idx) === 'current'
+                                            ? 'text-blue-600 dark:text-blue-400'
+                                            : '',
+                                        stepState(idx) === 'done'
+                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                            : '',
+                                        stepState(idx) === 'future'
+                                            ? 'text-muted-foreground'
+                                            : '',
+                                    ]"
+                                >
+                                    {{ step.shortLabel }}
+                                </span>
+                            </li>
+                            <!-- Connecteur -->
+                            <li
+                                aria-hidden="true"
+                                v-if="idx < STEPS.length - 1"
                                 :class="[
-                                    'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    stepState(idx) === 'current'
-                                        ? 'text-blue-600 dark:text-blue-400'
-                                        : '',
-                                    stepState(idx) === 'done'
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : '',
-                                    stepState(idx) === 'future'
-                                        ? 'text-muted-foreground'
-                                        : '',
+                                    'mb-5 h-0.5 w-5 shrink-0 transition-all sm:w-auto sm:flex-1',
+                                    connectorIsActive(idx)
+                                        ? 'bg-emerald-400'
+                                        : 'bg-border',
                                 ]"
-                            >
-                                {{ step.shortLabel }}
-                            </span>
-                        </div>
-                        <!-- Connecteur -->
-                        <div
-                            v-if="idx < STEPS.length - 1"
-                            :class="[
-                                'mb-5 h-0.5 flex-1 transition-all',
-                                connectorIsActive(idx)
-                                    ? 'bg-emerald-400'
-                                    : 'bg-border',
-                            ]"
-                        />
-                    </template>
+                            />
+                        </template>
+                    </ol>
                 </div>
-            </div>
+                <p
+                    v-if="!transfert.is_annule"
+                    class="mt-2 text-xs text-muted-foreground sm:hidden"
+                >
+                    Balayez pour voir les étapes
+                </p>
+            </section>
 
             <!-- Navigation par onglets ──────────────────────────────────────── -->
-            <div class="flex border-b">
+            <div
+                role="tablist"
+                aria-label="Détails du transfert"
+                class="flex min-w-0 overflow-x-auto border-b"
+            >
                 <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    class="min-h-11 shrink-0 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     :class="
                         activeDetailTab === 'informations'
                             ? 'border-b-2 border-primary text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                     "
+                    id="logistique-tab-informations"
+                    role="tab"
+                    :aria-selected="activeDetailTab === 'informations'"
+                    aria-controls="logistique-detail-panel"
+                    :tabindex="activeDetailTab === 'informations' ? 0 : -1"
+                    @keydown="onTabKeydown($event, 'informations')"
                     @click="setActiveDetailTab('informations')"
                 >
                     Informations
                 </button>
                 <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    class="min-h-11 shrink-0 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     :class="
                         activeDetailTab === 'lignes'
                             ? 'border-b-2 border-primary text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                     "
+                    id="logistique-tab-lignes"
+                    role="tab"
+                    :aria-selected="activeDetailTab === 'lignes'"
+                    aria-controls="logistique-detail-panel"
+                    :tabindex="activeDetailTab === 'lignes' ? 0 : -1"
+                    @keydown="onTabKeydown($event, 'lignes')"
                     @click="setActiveDetailTab('lignes')"
                 >
-                    Lignes produits
+                    <span class="sm:hidden">Produits</span
+                    ><span class="hidden sm:inline">Lignes produits</span>
                 </button>
                 <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    class="min-h-11 shrink-0 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     :class="[
                         activeDetailTab === 'commission'
                             ? 'border-b-2 border-primary text-primary'
@@ -775,17 +948,29 @@ function activiteDotClass(action: string): string {
                             : '',
                     ]"
                     :disabled="!showCommissionSection"
+                    id="logistique-tab-commission"
+                    role="tab"
+                    :aria-selected="activeDetailTab === 'commission'"
+                    aria-controls="logistique-detail-panel"
+                    :tabindex="activeDetailTab === 'commission' ? 0 : -1"
+                    @keydown="onTabKeydown($event, 'commission')"
                     @click="setActiveDetailTab('commission')"
                 >
-                    Commission logistique
+                    <span class="sm:hidden">Commission</span
+                    ><span class="hidden sm:inline">Commission logistique</span>
                 </button>
             </div>
 
-            <div class="space-y-4">
+            <div
+                id="logistique-detail-panel"
+                role="tabpanel"
+                :aria-labelledby="`logistique-tab-${activeDetailTab}`"
+                class="min-w-0 space-y-4"
+            >
                 <!-- Colonne gauche : Informations ────────────────────────────── -->
                 <div
                     v-if="activeDetailTab === 'informations'"
-                    class="space-y-4 rounded-xl border bg-card p-5 shadow-sm"
+                    class="min-w-0 space-y-4 rounded-xl border bg-card p-4 [overflow-wrap:anywhere] shadow-sm sm:p-5"
                 >
                     <h2
                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
@@ -795,23 +980,25 @@ function activiteDotClass(action: string): string {
 
                     <!-- Trajet -->
                     <div
-                        class="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5"
+                        class="flex min-w-0 flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5"
                     >
                         <MapPin
                             class="h-4 w-4 shrink-0 text-muted-foreground"
                         />
-                        <span class="text-sm font-medium">{{
+                        <span class="min-w-0 text-sm font-medium break-words">{{
                             transfert.site_source_nom ?? '—'
                         }}</span>
                         <ChevronRight
                             class="h-4 w-4 shrink-0 text-muted-foreground"
                         />
-                        <span class="text-sm font-medium">{{
+                        <span class="min-w-0 text-sm font-medium break-words">{{
                             transfert.site_destination_nom ?? '—'
                         }}</span>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div
+                        class="grid min-w-0 grid-cols-2 gap-4 text-sm [&_p]:break-words [&>div]:min-w-0"
+                    >
                         <div>
                             <p class="text-xs text-muted-foreground">
                                 Véhicule
@@ -892,7 +1079,7 @@ function activiteDotClass(action: string): string {
                             >
                         </div>
 
-                        <table class="w-full text-sm">
+                        <table data-mobile-cards class="w-full text-sm">
                             <thead>
                                 <tr
                                     class="border-b bg-muted/30 text-xs text-muted-foreground"
@@ -947,10 +1134,15 @@ function activiteDotClass(action: string): string {
                                     :key="ligne.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3">
+                                    <td data-label="Produit" class="px-4 py-3">
                                         <div class="flex items-center gap-3">
-                                            <div
-                                                class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
+                                            <button
+                                                type="button"
+                                                :disabled="
+                                                    !ligne.produit_image_url
+                                                "
+                                                :aria-label="`Voir la photo de ${ligne.produit_nom}`"
+                                                class="h-11 w-11 shrink-0 overflow-hidden rounded-lg border bg-muted"
                                                 :class="
                                                     ligne.produit_image_url
                                                         ? 'cursor-zoom-in'
@@ -982,7 +1174,7 @@ function activiteDotClass(action: string): string {
                                                         class="h-5 w-5 text-muted-foreground/40"
                                                     />
                                                 </div>
-                                            </div>
+                                            </button>
                                             <div class="min-w-0">
                                                 <p class="font-medium">
                                                     {{ ligne.produit_nom }}
@@ -999,11 +1191,13 @@ function activiteDotClass(action: string): string {
                                         </div>
                                     </td>
                                     <td
+                                        data-label="Demandé"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_demandee }}
                                     </td>
                                     <td
+                                        data-label="Chargé"
                                         v-if="
                                             [
                                                 'transit',
@@ -1016,6 +1210,7 @@ function activiteDotClass(action: string): string {
                                         {{ ligne.quantite_chargee ?? '—' }}
                                     </td>
                                     <td
+                                        data-label="Reçu"
                                         v-if="
                                             ['reception', 'cloture'].includes(
                                                 transfert.statut,
@@ -1026,6 +1221,7 @@ function activiteDotClass(action: string): string {
                                         {{ ligne.quantite_recue ?? '—' }}
                                     </td>
                                     <td
+                                        data-label="Écart"
                                         v-if="
                                             ['reception', 'cloture'].includes(
                                                 transfert.statut,
@@ -1037,15 +1233,13 @@ function activiteDotClass(action: string): string {
                                             v-if="ligne.ecart_type"
                                             class="flex items-center gap-1.5"
                                         >
-                                            <span
-                                                :class="[
-                                                    'inline-block h-2 w-2 rounded-full',
-                                                    ligne.ecart_dot_class,
-                                                ]"
+                                            <StatusDot
+                                                :label="ligne.ecart_label"
+                                                :dot-class="
+                                                    ligne.ecart_dot_class
+                                                "
+                                                class="text-xs"
                                             />
-                                            <span class="text-xs">{{
-                                                ligne.ecart_label
-                                            }}</span>
                                             <span
                                                 v-if="
                                                     ligne.ecart &&
@@ -1128,7 +1322,7 @@ function activiteDotClass(action: string): string {
                                     class="mt-3 overflow-hidden rounded-xl border bg-card shadow-sm"
                                 >
                                     <div
-                                        class="flex items-center justify-between border-b px-4 py-2.5"
+                                        class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5"
                                     >
                                         <h3
                                             class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
@@ -1150,7 +1344,10 @@ function activiteDotClass(action: string): string {
                                         </p>
                                     </div>
                                     <div class="overflow-x-auto">
-                                        <table class="w-full text-sm">
+                                        <table
+                                            data-mobile-cards
+                                            class="w-full text-sm"
+                                        >
                                             <thead>
                                                 <tr
                                                     class="border-b bg-muted/40"
@@ -1184,11 +1381,13 @@ function activiteDotClass(action: string): string {
                                                     class="transition-colors hover:bg-muted/10"
                                                 >
                                                     <td
+                                                        data-label="Livreur"
                                                         class="px-4 py-2.5 font-medium"
                                                     >
                                                         {{ livreurPart.nom }}
                                                     </td>
                                                     <td
+                                                        data-label="Part unitaire"
                                                         class="px-4 py-2.5 text-right text-muted-foreground tabular-nums"
                                                     >
                                                         {{
@@ -1198,6 +1397,7 @@ function activiteDotClass(action: string): string {
                                                         }}
                                                     </td>
                                                     <td
+                                                        data-label="Montant total gagné"
                                                         class="px-4 py-2.5 text-right font-semibold tabular-nums"
                                                     >
                                                         {{
@@ -1206,7 +1406,10 @@ function activiteDotClass(action: string): string {
                                                             )
                                                         }}
                                                     </td>
-                                                    <td class="px-4 py-2.5">
+                                                    <td
+                                                        data-label="Statut"
+                                                        class="px-4 py-2.5"
+                                                    >
                                                         <StatusDot
                                                             :dot-class="
                                                                 livreurPart.statut_dot_class
@@ -1387,7 +1590,10 @@ function activiteDotClass(action: string): string {
                                 class="overflow-hidden rounded-xl border bg-card shadow-sm"
                             >
                                 <div class="overflow-x-auto">
-                                    <table class="w-full text-sm">
+                                    <table
+                                        data-mobile-cards
+                                        class="w-full text-sm"
+                                    >
                                         <thead>
                                             <tr class="border-b bg-muted/40">
                                                 <th
@@ -1419,16 +1625,19 @@ function activiteDotClass(action: string): string {
                                                 class="transition-colors hover:bg-muted/10"
                                             >
                                                 <td
+                                                    data-label="Livreur"
                                                     class="px-4 py-3 font-medium"
                                                 >
                                                     {{ part.beneficiaire_nom }}
                                                 </td>
                                                 <td
+                                                    data-label="Taux"
                                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                                 >
                                                     {{ part.taux_commission }}%
                                                 </td>
                                                 <td
+                                                    data-label="Montant"
                                                     class="px-4 py-3 text-right font-semibold tabular-nums"
                                                 >
                                                     {{
@@ -1437,7 +1646,10 @@ function activiteDotClass(action: string): string {
                                                         )
                                                     }}
                                                 </td>
-                                                <td class="px-4 py-3">
+                                                <td
+                                                    data-label="Statut"
+                                                    class="px-4 py-3"
+                                                >
                                                     <StatusDot
                                                         :label="
                                                             part.statut_label
@@ -1491,8 +1703,73 @@ function activiteDotClass(action: string): string {
             </div>
         </div>
 
+        <div
+            id="logistique-mobile-action"
+            v-show="!!primaryActionLabel"
+            data-testid="logistique-primary-bar"
+            class="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:hidden"
+        />
+        <Teleport
+            defer
+            :to="
+                isMobile
+                    ? '#logistique-mobile-action'
+                    : '#logistique-desktop-action'
+            "
+        >
+            <Button
+                v-if="primaryActionLabel"
+                data-testid="logistique-primary-action"
+                class="h-12 w-full sm:h-8 sm:w-auto"
+                :disabled="processing || validationProcessing"
+                @click="
+                    approvalAction
+                        ? (showValidationCommissionDialog = true)
+                        : onMainAction()
+                "
+                ><ArrowRight class="mr-2 size-4" />{{
+                    primaryActionLabel
+                }}</Button
+            >
+        </Teleport>
+        <Dialog
+            v-model:visible="showAnnulationDialog"
+            modal
+            header="Annuler le transfert ?"
+            class="logistique-dialog"
+            :style="{ width: 'min(440px, 94vw)' }"
+            :draggable="false"
+        >
+            <p class="text-sm text-muted-foreground">
+                Confirmez l'annulation du transfert {{ transfert.reference }}.
+            </p>
+            <p
+                v-for="error in dialogErrors"
+                :key="error"
+                class="mt-2 text-sm text-destructive"
+            >
+                {{ error }}
+            </p>
+            <template #footer
+                ><Button
+                    variant="outline"
+                    :disabled="processing"
+                    @click="showAnnulationDialog = false"
+                    >Conserver le transfert</Button
+                ><Button
+                    variant="destructive"
+                    :disabled="processing"
+                    @click="annulerTransfert"
+                    >{{
+                        processing ? 'Annulation…' : 'Confirmer l’annulation'
+                    }}</Button
+                ></template
+            >
+        </Dialog>
+
         <!-- ══ Dialog : Valider le chargement ═════════════════════════════════ -->
         <Dialog
+            class="logistique-dialog"
             v-model:visible="showHistoriqueDialog"
             modal
             :dismissable-mask="true"
@@ -1503,7 +1780,7 @@ function activiteDotClass(action: string): string {
                 v-if="historiquePart?.versements.length"
                 class="overflow-x-auto"
             >
-                <table class="w-full text-sm">
+                <table data-mobile-cards class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th
@@ -1533,20 +1810,30 @@ function activiteDotClass(action: string): string {
                             v-for="versement in historiquePart.versements"
                             :key="versement.id"
                         >
-                            <td class="px-3 py-2.5 tabular-nums">
+                            <td
+                                data-label="Date versement"
+                                class="px-3 py-2.5 tabular-nums"
+                            >
                                 {{ versement.date_versement }}
                             </td>
-                            <td class="px-3 py-2.5 text-muted-foreground">
+                            <td
+                                data-label="Mode"
+                                class="px-3 py-2.5 text-muted-foreground"
+                            >
                                 {{
                                     formatModePaiement(versement.mode_paiement)
                                 }}
                             </td>
                             <td
+                                data-label="Montant"
                                 class="px-3 py-2.5 text-right font-semibold tabular-nums"
                             >
                                 {{ formatGNF(versement.montant) }}
                             </td>
-                            <td class="px-3 py-2.5 text-muted-foreground">
+                            <td
+                                data-label="Note"
+                                class="px-3 py-2.5 text-muted-foreground"
+                            >
                                 {{ versement.note || '—' }}
                             </td>
                         </tr>
@@ -1559,11 +1846,12 @@ function activiteDotClass(action: string): string {
         </Dialog>
 
         <Dialog
+            class="logistique-dialog"
             v-model:visible="showChargementDialog"
             modal
             header="Valider le chargement"
             :style="{ width: 'min(820px, 92vw)' }"
-            :draggable="true"
+            :draggable="false"
             :resizable="false"
             @hide="dialogErrors = []"
         >
@@ -1582,7 +1870,7 @@ function activiteDotClass(action: string): string {
                     {{ err }}
                 </p>
             </div>
-            <table class="w-full text-sm">
+            <table data-mobile-cards class="w-full text-sm">
                 <thead>
                     <tr class="border-b text-xs text-muted-foreground">
                         <th class="pb-2 text-left font-medium">Produit</th>
@@ -1596,16 +1884,22 @@ function activiteDotClass(action: string): string {
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="(l, idx) in chargementLignes" :key="l.id">
-                        <td class="py-2.5 pr-4 font-medium">
+                        <td
+                            data-label="Produit"
+                            class="py-2.5 pr-4 font-medium"
+                        >
                             {{ l.produit_nom }}
                         </td>
                         <td
+                            data-label="Qté demandée"
                             class="py-2.5 text-center text-muted-foreground tabular-nums"
                         >
                             {{ l.quantite_demandee }}
                         </td>
-                        <td class="py-2.5">
+                        <td data-label="Qté chargée" class="py-2.5">
                             <InputNumber
+                                :input-id="`chargement-qte-${l.id}`"
+                                :aria-label="`Quantité chargée : ${l.produit_nom}`"
                                 v-model="chargementLignes[idx].quantite_chargee"
                                 :min="0"
                                 :use-grouping="false"
@@ -1649,6 +1943,7 @@ function activiteDotClass(action: string): string {
         <!-- ══ Dialog : Approuver la réception (validation admin, génère la
         commission automatiquement en cas d'accord) ══════════════ -->
         <Dialog
+            class="logistique-dialog"
             v-model:visible="showValidationCommissionDialog"
             modal
             header="Approuver la réception"
@@ -1670,7 +1965,7 @@ function activiteDotClass(action: string): string {
             </div>
 
             <!-- Tableau des lignes reçues (toujours visible) -->
-            <table class="w-full text-sm">
+            <table data-mobile-cards class="w-full text-sm">
                 <thead>
                     <tr class="border-b text-xs text-muted-foreground">
                         <th class="pb-2 text-left font-medium">Produit</th>
@@ -1685,20 +1980,22 @@ function activiteDotClass(action: string): string {
                         :key="l.id"
                         class="align-middle"
                     >
-                        <td class="py-2.5 font-medium">
+                        <td data-label="Produit" class="py-2.5 font-medium">
                             {{ l.produit_nom }}
                         </td>
                         <td
+                            data-label="Chargé"
                             class="py-2.5 text-center text-muted-foreground tabular-nums"
                         >
                             {{ l.quantite_chargee }}
                         </td>
                         <td
+                            data-label="Reçu"
                             class="py-2.5 text-center font-semibold tabular-nums"
                         >
                             {{ l.quantite_recue }}
                         </td>
-                        <td class="px-2 py-2.5">
+                        <td data-label="Écart" class="px-2 py-2.5">
                             <StatusDot
                                 :label="l.ecart_label"
                                 :dot-class="l.ecart_dot_class"
@@ -1741,6 +2038,7 @@ function activiteDotClass(action: string): string {
         </Dialog>
 
         <Dialog
+            class="logistique-dialog"
             v-model:visible="showActivitesDialog"
             modal
             :dismissable-mask="true"
@@ -1757,7 +2055,7 @@ function activiteDotClass(action: string): string {
                 </div>
             </template>
 
-            <div class="max-h-[70vh] overflow-y-auto pr-1">
+            <div class="min-w-0 pr-1 [overflow-wrap:anywhere]">
                 <div
                     v-if="activitesTriees.length === 0"
                     class="py-2 text-sm text-muted-foreground italic"
@@ -1846,7 +2144,8 @@ function activiteDotClass(action: string): string {
                 <div class="relative max-h-full max-w-3xl">
                     <button
                         type="button"
-                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        aria-label="Fermer la photo"
+                        class="absolute -top-3 -right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
                         @click="closeProductLightbox"
                     >
                         <X class="h-5 w-5" />

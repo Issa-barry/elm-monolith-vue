@@ -50,8 +50,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Précommande enregistrée, stock réservé, pas encore remise (StatutCommandeVente::RESERVEE,
     // ADR 0019). À ne pas confondre avec `reserve` (gris, règlement inter-agences).
     reservee: 'bg-blue-500',
-    // Précommande préparée, en attente du client (StatutCommandeVente::PREPAREE).
+    // Précommande prête au retrait, en attente du client (StatutCommandeVente::PREPAREE).
     preparee: 'bg-teal-500',
+    // Précommande remise au client par retrait (CommandeVente::statutAffichage(), affichage seul).
+    retiree: 'bg-emerald-500',
     // MessageLog.status (App\Enums\MessageLogStatus) — "sent" = Nimba a accepté
     // l'envoi, jamais une confirmation de livraison (pas de statut "delivered"
     // en P1, cf. docblock de l'enum) : même couleur "en cours" que "envoye".

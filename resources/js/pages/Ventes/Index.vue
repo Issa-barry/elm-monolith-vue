@@ -225,19 +225,31 @@ const filtresStatut = [
 ];
 
 // Une précommande n'est jamais en brouillon ; elle passe par ses propres statuts avant la remise.
-const filtresStatutPrecommande = [
-    { value: 'reservee', label: 'Réservée' },
-    { value: 'a_preparer', label: 'À préparer' },
-    { value: 'preparee', label: 'Préparée' },
-    { value: 'a_charger', label: 'À charger' },
-    { value: 'chargement_en_cours', label: 'Chargement en cours' },
-    { value: 'livraison_en_cours', label: 'En livraison' },
-    { value: 'livree', label: 'Livrée' },
-    { value: 'facturation', label: 'À encaisser' },
-    { value: 'cloturee', label: 'Clôturée' },
-    { value: 'retournee', label: 'Retournée' },
-    { value: 'annulee', label: 'Annulée' },
+// Libellés de l'enum (props.statuts), dans l'ordre du parcours : même vocabulaire que la fiche.
+const STATUTS_PRECOMMANDE = [
+    'reservee',
+    'a_preparer',
+    'preparee',
+    'a_charger',
+    'chargement_en_cours',
+    'livraison_en_cours',
+    'livree',
+    'facturation',
+    'cloturee',
+    'retournee',
+    'annulee',
 ];
+const filtresStatutPrecommande = computed(() =>
+    STATUTS_PRECOMMANDE.map((value) => ({
+        value,
+        // Une précommande en `facturation` est retirée ; le reste à payer relève de la facture.
+        label:
+            value === 'facturation'
+                ? 'Retirée'
+                : (props.statuts.find((s) => s.value === value)?.label ??
+                  value),
+    })),
+);
 
 const filtresStatutFacture = [
     { value: '', label: 'Tous' },
@@ -316,26 +328,34 @@ function carteActive(carte: CartePrecommande): boolean {
 // Filtre rapide : remplace Statut / En retard en conservant les autres filtres de l'URL courante ;
 // un second clic sur la carte active retire le filtre.
 function filtrerParCarte(carte: CartePrecommande) {
-    const params = new URLSearchParams(window.location.search);
-    for (const key of [...params.keys()]) {
-        if (key.startsWith('statuts') || key === 'en_retard') {
-            params.delete(key);
+    // Filtres effectifs renvoyés par le serveur (vue enregistrée comprise), pas l'URL : une vue par
+    // défaut s'applique sans paramètre dans l'adresse.
+    const params: Record<string, string | string[]> = {};
+    for (const [cle, valeur] of Object.entries(props.filters)) {
+        if (cle === 'en_retard') continue;
+        if (Array.isArray(valeur) ? valeur.length > 0 : valeur) {
+            params[cle] = valeur as string | string[];
         }
     }
     if (!carteActive(carte)) {
         if (carte.cle === 'en_retard') {
-            params.set('en_retard', '1');
+            params.en_retard = '1';
         } else {
-            carte.statuts.forEach((s) => params.append('statuts[]', s));
+            params.statuts = carte.statuts;
         }
     }
-    const query = params.toString();
+    // all=1 : choix explicite, la vue par défaut ne se réapplique pas (comme DataFilters).
     router.get(
-        query ? `${urlListe.value}?${query}` : urlListe.value,
-        {},
+        urlListe.value,
+        { ...params, all: '1' },
         { preserveScroll: true, replace: true },
     );
 }
+
+// « Mes vues » : un scope par liste (SavedFilterScopes) ; Distribution n'en a pas encore.
+const scopeVues = computed(() =>
+    props.liste === 'distributions' ? undefined : props.liste,
+);
 
 const kpiVentes = computed<KpiWidgetItem[]>(() => [
     {
@@ -380,7 +400,7 @@ const filterFields = computed<FilterField[]>(() => [
         label: 'Statut commande',
         type: 'multi-select',
         options: estListePrecommandes.value
-            ? filtresStatutPrecommande
+            ? filtresStatutPrecommande.value
             : filtresStatut,
         placeholder: 'Tous les statuts',
         inline: true,
@@ -964,9 +984,7 @@ function confirmDelete(c: Commande) {
                 <DataFilters
                     trigger-only
                     :url="urlListe"
-                    :saved-filter-scope="
-                        liste === 'ventes' ? 'ventes' : undefined
-                    "
+                    :saved-filter-scope="scopeVues"
                     :base-params="{ periode: 'all' }"
                     :values="filterValues"
                     :sites="sites"
@@ -1059,9 +1077,7 @@ function confirmDelete(c: Commande) {
                             <DataFilters
                                 trigger-only
                                 :url="urlListe"
-                                :saved-filter-scope="
-                                    liste === 'ventes' ? 'ventes' : undefined
-                                "
+                                :saved-filter-scope="scopeVues"
                                 :base-params="{ periode: 'all' }"
                                 :values="filterValues"
                                 :sites="sites"

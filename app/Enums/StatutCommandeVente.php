@@ -52,9 +52,11 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'Annulée',
             self::RETOURNEE => 'Retournée',
             self::ANNULEE_ERREUR_SAISIE => 'Annulée (erreur de saisie)',
-            self::RESERVEE => 'Réservée',
-            self::A_PREPARER => 'À préparer',
-            self::PREPAREE => 'Préparée',
+            // Vocabulaire du parcours de précommande (06/10/2026) : la réservation du stock est une
+            // conséquence de la création, pas une étape ; « À préparer » est posé au lancement.
+            self::RESERVEE => 'Créée',
+            self::A_PREPARER => 'Préparation en cours',
+            self::PREPAREE => 'Prête au retrait',
         };
     }
 
