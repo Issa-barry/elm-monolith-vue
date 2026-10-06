@@ -12,6 +12,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import type { CommissionIndexSummary } from '@/types/commission';
 import {
     ChevronDown,
@@ -19,6 +20,8 @@ import {
     FileSpreadsheet,
     FileText,
     HandCoins,
+    Search,
+    X,
 } from 'lucide-vue-next';
 
 interface SiteOption {
@@ -68,6 +71,12 @@ withDefaults(
         resultCount: number;
         emptyMessage?: string;
         showExport?: boolean;
+        /** Affiche dans l'en-tête du tableau une recherche par mot-clé (v-model:search-query),
+         * à la manière du globalFilter de la DataTable PrimeVue. La page filtre elle-même ses
+         * lignes et passe `resultCount` (lignes affichées) et `totalCount` (lignes chargées). */
+        searchable?: boolean;
+        searchPlaceholder?: string;
+        totalCount?: number;
     }>(),
     {
         entityLabelPlural: undefined,
@@ -77,8 +86,13 @@ withDefaults(
         summaryLabelOverrides: () => ({}),
         emptyMessage: 'Aucune commission trouvée.',
         showExport: true,
+        searchable: false,
+        searchPlaceholder: 'Rechercher dans le tableau',
+        totalCount: undefined,
     },
 );
+
+const searchQuery = defineModel<string>('searchQuery', { default: '' });
 
 defineEmits<{
     exportExcel: [];
@@ -173,12 +187,53 @@ defineEmits<{
 
         <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
             <div
-                class="flex items-center justify-between gap-4 border-b px-5 py-3"
+                class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3"
             >
                 <h2 class="text-base font-semibold">{{ tableTitle }}</h2>
-                <span class="text-xs text-muted-foreground">
-                    {{ resultCount }} résultat{{ resultCount !== 1 ? 's' : '' }}
-                </span>
+                <div
+                    class="flex w-full items-center gap-3 sm:w-auto sm:justify-end"
+                >
+                    <div v-if="searchable" class="relative flex-1 sm:w-72">
+                        <Search
+                            class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                            v-model="searchQuery"
+                            type="text"
+                            :placeholder="searchPlaceholder"
+                            :aria-label="searchPlaceholder"
+                            data-testid="commission-table-search"
+                            class="h-8 pr-8 pl-9"
+                            @keydown.esc="searchQuery = ''"
+                        />
+                        <button
+                            v-if="searchQuery"
+                            type="button"
+                            aria-label="Effacer la recherche"
+                            class="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                            @click="searchQuery = ''"
+                        >
+                            <X class="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                    <span
+                        class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                        data-testid="commission-result-count"
+                    >
+                        {{ resultCount }} résultat{{
+                            resultCount !== 1 ? 's' : ''
+                        }}
+                        <template
+                            v-if="
+                                searchQuery.trim() &&
+                                totalCount !== undefined &&
+                                totalCount !== resultCount
+                            "
+                        >
+                            sur {{ totalCount }}
+                        </template>
+                    </span>
+                </div>
             </div>
             <div
                 v-if="resultCount > 0"

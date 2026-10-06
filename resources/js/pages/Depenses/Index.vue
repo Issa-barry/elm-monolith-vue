@@ -19,6 +19,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
@@ -37,6 +38,7 @@ import {
     Download,
     ExternalLink,
     FileSpreadsheet,
+    MoreHorizontal,
     Plus,
     Printer,
     Receipt,
@@ -408,11 +410,17 @@ const categorieColors: Record<string, string> = {
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div
-            class="flex min-w-0 flex-col gap-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-6"
+            class="flex min-w-0 flex-col gap-4 pt-[77px] sm:gap-6 sm:p-6"
+            :class="
+                props.can_create
+                    ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]'
+                    : 'pb-[max(1rem,env(safe-area-inset-bottom))]'
+            "
         >
             <!-- En-tête -->
             <header
-                class="sticky top-0 z-10 flex flex-col gap-3 border-b bg-background px-4 py-2 sm:static sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:border-0 sm:p-0"
+                data-testid="depenses-header"
+                class="fixed inset-x-0 top-0 z-20 flex flex-col gap-3 border-b bg-background px-4 py-2 sm:static sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:border-0 sm:p-0"
             >
                 <div
                     class="relative flex min-h-11 items-center justify-center sm:justify-start"
@@ -423,14 +431,14 @@ const categorieColors: Record<string, string> = {
                         class="absolute left-0 flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:hidden"
                         ><ArrowLeft class="size-5"
                     /></Link>
-                    <div class="px-24 text-center sm:px-0 sm:text-left">
+                    <div class="px-12 text-center sm:px-0 sm:text-left">
                         <h1
                             class="text-base font-semibold tracking-tight sm:text-2xl"
                         >
                             Dépenses
                         </h1>
                         <p
-                            class="text-xs text-muted-foreground sm:mt-1 sm:text-sm"
+                            class="hidden text-xs text-muted-foreground sm:mt-1 sm:block sm:text-sm"
                         >
                             {{ depenses.total }} dépense{{
                                 depenses.total !== 1 ? 's' : ''
@@ -438,53 +446,88 @@ const categorieColors: Record<string, string> = {
                         </p>
                     </div>
                     <div
-                        id="depenses-mobile-primary"
+                        id="depenses-mobile-tools"
                         class="absolute right-0 sm:hidden"
                     />
                 </div>
-                <ListPageActions class="depenses-page-actions w-full sm:w-auto">
+                <ListPageActions
+                    class="depenses-page-actions hidden w-full sm:flex sm:w-auto"
+                >
                     <template #export>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger as-child>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    data-testid="depenses-export-trigger"
-                                >
-                                    <Download class="mr-1.5 h-3.5 w-3.5" />
-                                    Exporter
-                                    <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" class="w-48">
-                                <DropdownMenuItem
-                                    class="cursor-pointer"
-                                    data-testid="depenses-export-excel"
-                                    @click="exportExcel"
-                                >
-                                    <FileSpreadsheet class="h-4 w-4" />
-                                    Excel
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    class="cursor-pointer"
-                                    data-testid="depenses-export-imprimer"
-                                    @click="imprimer"
-                                >
-                                    <Printer class="h-4 w-4" />
-                                    Imprimer
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Teleport
+                            to="#depenses-mobile-tools"
+                            :disabled="!isMobile"
+                            defer
+                        >
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button
+                                        :variant="
+                                            isMobile ? 'ghost' : 'outline'
+                                        "
+                                        size="sm"
+                                        class="h-11 w-11 px-0 sm:h-8 sm:w-auto sm:px-3"
+                                        :aria-label="
+                                            isMobile
+                                                ? 'Actions de la liste'
+                                                : 'Exporter'
+                                        "
+                                        data-testid="depenses-export-trigger"
+                                    >
+                                        <MoreHorizontal
+                                            class="size-5 sm:hidden"
+                                        />
+                                        <Download
+                                            class="mr-1.5 hidden h-3.5 w-3.5 sm:block"
+                                        />
+                                        <span class="hidden sm:inline"
+                                            >Exporter</span
+                                        >
+                                        <ChevronDown
+                                            class="ml-1.5 hidden h-3.5 w-3.5 sm:block"
+                                        />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" class="w-48">
+                                    <DropdownMenuLabel class="sm:hidden"
+                                        >Exporter les
+                                        dépenses</DropdownMenuLabel
+                                    >
+                                    <DropdownMenuItem
+                                        class="min-h-11 cursor-pointer sm:min-h-0"
+                                        data-testid="depenses-export-excel"
+                                        @click="exportExcel"
+                                    >
+                                        <FileSpreadsheet class="h-4 w-4" />
+                                        Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        class="min-h-11 cursor-pointer sm:min-h-0"
+                                        data-testid="depenses-export-imprimer"
+                                        @click="imprimer"
+                                    >
+                                        <Printer class="h-4 w-4" />
+                                        Imprimer
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </Teleport>
                     </template>
                     <template #filters>
-                        <DataFilters
-                            trigger-only
-                            url="/backoffice/depenses"
-                            :values="filterValues"
-                            :sites="sites"
-                            :result-count="depenses.total"
-                            :fields="filterFields"
-                        />
+                        <Teleport
+                            to="#depenses-mobile-filters"
+                            :disabled="!isMobile"
+                            defer
+                        >
+                            <DataFilters
+                                trigger-only
+                                url="/backoffice/depenses"
+                                :values="filterValues"
+                                :sites="sites"
+                                :result-count="depenses.total"
+                                :fields="filterFields"
+                            />
+                        </Teleport>
                     </template>
                     <template v-if="props.can_create" #primary>
                         <Teleport
@@ -492,18 +535,18 @@ const categorieColors: Record<string, string> = {
                             :disabled="!isMobile"
                             defer
                         >
-                            <Link href="/backoffice/depenses/create">
-                                <Button
+                            <Button
+                                as-child
+                                class="h-12 rounded-full px-5 shadow-lg sm:h-9 sm:rounded-md sm:px-4 sm:shadow-xs"
+                            >
+                                <Link
+                                    href="/backoffice/depenses/create"
                                     aria-label="Nouvelle dépense"
-                                    class="h-11 sm:h-9"
                                 >
-                                    <Plus class="size-4" />
-                                    <span class="sm:hidden">Nouveau</span>
-                                    <span class="hidden sm:inline"
-                                        >Nouvelle dépense
-                                    </span>
-                                </Button>
-                            </Link>
+                                    <Plus class="size-5 sm:size-4" />
+                                    Nouvelle dépense
+                                </Link>
+                            </Button>
                         </Teleport>
                     </template>
                 </ListPageActions>
@@ -519,20 +562,22 @@ const categorieColors: Record<string, string> = {
                 <p class="mt-1 text-2xl font-semibold break-words tabular-nums">
                     {{ fmt(stats.montant_total) }}
                 </p>
-                <div class="mt-4 grid grid-cols-2 gap-3 border-t pt-3 text-sm">
-                    <div>
+                <div
+                    class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm"
+                >
+                    <div class="flex items-center gap-2">
                         <StatusDot
                             status="soumis"
                             label="En attente"
                             size="sm"
                         />
-                        <p class="mt-1 font-semibold tabular-nums">
+                        <p class="font-semibold tabular-nums">
                             {{ stats.en_attente }}
                         </p>
                     </div>
-                    <div>
+                    <div class="flex items-center gap-2">
                         <StatusDot status="valide" label="Validées" size="sm" />
-                        <p class="mt-1 font-semibold tabular-nums">
+                        <p class="font-semibold tabular-nums">
                             {{ stats.validees }}
                         </p>
                     </div>
@@ -564,6 +609,26 @@ const categorieColors: Record<string, string> = {
                     </p>
                 </div>
             </div>
+
+            <div
+                data-testid="depenses-mobile-toolbar"
+                class="mx-4 flex min-h-11 items-center justify-between gap-3 sm:hidden"
+            >
+                <p class="text-sm text-muted-foreground" aria-live="polite">
+                    {{ depenses.total }} dépense{{
+                        depenses.total !== 1 ? 's' : ''
+                    }}
+                </p>
+                <div
+                    id="depenses-mobile-filters"
+                    class="depenses-mobile-filters"
+                />
+            </div>
+            <div
+                v-if="props.can_create"
+                id="depenses-mobile-primary"
+                class="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 sm:hidden"
+            />
 
             <!-- Tableau -->
             <div
@@ -986,7 +1051,7 @@ const categorieColors: Record<string, string> = {
 
 <style scoped>
 @media (max-width: 639px) {
-    .depenses-page-actions :deep(button) {
+    .depenses-mobile-filters :deep(button) {
         min-height: 44px;
     }
 

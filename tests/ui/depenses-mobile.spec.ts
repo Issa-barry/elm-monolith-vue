@@ -233,11 +233,14 @@ for (const width of [360, 390, 413, 440]) {
             '/backoffice/depenses/depense-validee',
         );
         await expect(
-            page.getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+            page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
         ).toHaveCount(1);
+        await expect(
+            page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
+        ).toHaveAttribute('href', '/backoffice/depenses/create');
         for (const control of [
             page.getByRole('link', { name: 'Retour au tableau de bord' }),
-            page.getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+            page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
             page.getByTestId('depenses-export-trigger'),
             page.getByRole('button', { name: /^Filtres/ }),
             first.getByRole('button', { name: 'Actions', exact: true }),
@@ -247,19 +250,30 @@ for (const width of [360, 390, 413, 440]) {
             ).toBeGreaterThanOrEqual(44);
         }
         const newBox = (await page
-            .getByRole('button', { name: 'Nouvelle dépense', exact: true })
+            .getByRole('link', { name: 'Nouvelle dépense', exact: true })
             .boundingBox())!;
-        const headingBox = (await page
-            .getByRole('heading', { name: 'Dépenses', exact: true })
-            .boundingBox())!;
-        expect(
-            Math.abs(
-                newBox.y +
-                    newBox.height / 2 -
-                    headingBox.y -
-                    headingBox.height / 2,
-            ),
-        ).toBeLessThan(20);
+        expect(802 - newBox.y - newBox.height).toBeGreaterThanOrEqual(16);
+        expect(802 - newBox.y - newBox.height).toBeLessThanOrEqual(24);
+        const header = page.getByTestId('depenses-header');
+        expect((await header.boundingBox())!.height).toBeLessThanOrEqual(64);
+        await expect(header.getByRole('button')).toHaveCount(1);
+        await expect(
+            header.getByRole('link', { name: 'Nouvelle dépense' }),
+        ).toHaveCount(0);
+        await expect(
+            header.getByRole('button', { name: /^Filtres/ }),
+        ).toHaveCount(0);
+        await expect(
+            header.getByRole('button', { name: 'Actions de la liste' }),
+        ).toBeVisible();
+        const toolbar = page.getByTestId('depenses-mobile-toolbar');
+        await expect(
+            toolbar.getByRole('button', { name: /^Filtres/ }),
+        ).toBeVisible();
+        expect((await toolbar.boundingBox())!.y).toBeGreaterThan(
+            (await page.getByTestId('depenses-mobile-summary').boundingBox())!
+                .y,
+        );
         expect(
             await page.evaluate(
                 () => document.documentElement.scrollWidth <= innerWidth,
@@ -281,6 +295,27 @@ for (const width of [360, 390, 413, 440]) {
         await expect(
             page.getByRole('menuitem', { name: 'Supprimer', exact: true }),
         ).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(
+            first.getByRole('button', { name: 'Actions', exact: true }),
+        ).toBeFocused();
+        await expect(page.getByRole('menu')).toBeHidden();
+        await page.setViewportSize({ width, height: 500 });
+        await page.evaluate(() =>
+            window.scrollTo(0, document.body.scrollHeight),
+        );
+        expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+        expect((await header.boundingBox())!.y).toBe(0);
+        const floatingBox = (await page
+            .getByRole('link', { name: 'Nouvelle dépense', exact: true })
+            .boundingBox())!;
+        expect(500 - floatingBox.y - floatingBox.height).toBe(16);
+        const pagination = (await page
+            .getByRole('link', { name: '2', exact: true })
+            .boundingBox())!;
+        expect(pagination.y + pagination.height).toBeLessThanOrEqual(
+            floatingBox.y,
+        );
         expect(errors).toEqual([]);
     });
 }
@@ -397,7 +432,7 @@ test('consultation seule : pas de création ni modification ni validation', asyn
 }) => {
     await mountExpenses(page, { readonly: true });
     await expect(
-        page.getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+        page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
     ).toHaveCount(0);
     await page
         .getByTestId('depense-card')
@@ -436,6 +471,9 @@ test('filtres : agence, statut, recherche et période restent disponibles', asyn
 
 test('export mobile : conserve les filtres et le site', async ({ page }) => {
     await mountExpenses(page);
+    await expect(
+        page.getByRole('button', { name: 'Exporter', exact: true }),
+    ).toHaveCount(0);
     await page.getByTestId('depenses-export-trigger').click();
     await expect(page.getByTestId('depenses-export-imprimer')).toBeVisible();
     const request = page.waitForRequest((r) =>
@@ -458,7 +496,7 @@ test('thème sombre et liste vide sur mobile', async ({ page }, testInfo) => {
         page.getByText('Aucune dépense à afficher', { exact: true }),
     ).toBeVisible();
     await expect(
-        page.getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+        page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
     ).toHaveCount(1);
     await page.screenshot({
         path: testInfo.outputPath('depenses-vide-sombre.png'),
@@ -473,7 +511,7 @@ test('ordinateur et changement de largeur : une seule création et tableau conse
     await mountExpenses(page);
     await expect(page.getByTestId('depenses-table')).toBeVisible();
     await expect(
-        page.getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+        page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
     ).toHaveCount(1);
     await expect(page.getByTestId('depenses-mobile-summary')).toBeHidden();
     await page
@@ -491,12 +529,34 @@ test('ordinateur et changement de largeur : une seule création et tableau conse
     await expect(
         page
             .locator('#depenses-mobile-primary')
-            .getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+            .getByRole('link', { name: 'Nouvelle dépense', exact: true }),
     ).toBeVisible();
+    for (const width of [640, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(page.getByTestId('depenses-table')).toBeVisible();
+        await expect(page.getByTestId('depenses-mobile-toolbar')).toBeHidden();
+        await expect(page.locator('#depenses-mobile-primary')).toBeHidden();
+        const actions = page.getByTestId('list-page-actions');
+        await expect(
+            actions.getByRole('button', { name: 'Exporter', exact: true }),
+        ).toBeVisible();
+        await expect(
+            actions.getByRole('button', { name: /^Filtres/ }),
+        ).toBeVisible();
+        await expect(
+            actions.getByRole('link', {
+                name: 'Nouvelle dépense',
+                exact: true,
+            }),
+        ).toBeVisible();
+        await expect(
+            page.getByRole('link', { name: 'Nouvelle dépense', exact: true }),
+        ).toHaveCount(1);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(
         page
             .getByTestId('list-page-actions')
-            .getByRole('button', { name: 'Nouvelle dépense', exact: true }),
+            .getByRole('link', { name: 'Nouvelle dépense', exact: true }),
     ).toBeVisible();
 });

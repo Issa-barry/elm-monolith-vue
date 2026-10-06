@@ -36,6 +36,7 @@ import {
     Phone,
     Plus,
     Save,
+    Store,
     Trash2,
     Truck,
     UserRound,
@@ -234,11 +235,23 @@ const urlRetour = props.precommande
     ? '/backoffice/precommandes'
     : '/backoffice/ventes';
 const dateMinPrecommande = new Date().toLocaleDateString('en-CA');
-const OPTIONS_MODE_REMISE: { value: 'retrait' | 'livraison'; label: string }[] =
-    [
-        { value: 'retrait', label: 'Retrait sur site' },
-        { value: 'livraison', label: 'Livraison' },
-    ];
+const OPTIONS_MODE_REMISE = [
+    { value: 'retrait', label: 'Retrait sur site', icon: Store },
+    { value: 'livraison', label: 'Livraison', icon: Truck },
+] as const;
+
+// Raccourcis de date prévue (date locale, jamais avant aujourd'hui) — utiles au doigt sur mobile,
+// où le sélecteur natif demande plusieurs gestes.
+function dansJours(jours: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() + jours);
+    return date.toLocaleDateString('en-CA');
+}
+const RACCOURCIS_DATE_PREVUE = [
+    { label: "Aujourd'hui", jours: 0 },
+    { label: 'Demain', jours: 1 },
+    { label: 'Dans 7 jours', jours: 7 },
+];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
@@ -1290,69 +1303,58 @@ function confirmerEtCreer() {
                         }}</span>
                     </div>
 
-                    <!-- Précommande : mode de remise et date prévue, posés en premier (ADR 0019). -->
-                    <div
-                        v-if="estPrecommande"
-                        class="mb-4 grid gap-4 sm:grid-cols-2"
-                    >
-                        <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Mode de remise
-                                <span class="text-destructive">*</span>
-                            </Label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <Button
-                                    v-for="option in OPTIONS_MODE_REMISE"
-                                    :key="option.value"
-                                    type="button"
-                                    :variant="
-                                        form.mode_remise === option.value
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="form.mode_remise = option.value"
-                                >
-                                    {{ option.label }}
-                                </Button>
-                            </div>
-                            <p
-                                v-if="form.errors.mode_remise"
-                                class="mt-1 text-xs text-destructive"
+                    <!-- Précommande (ADR 0019) : le mode de remise d'abord, car il décide s'il faut un
+                         véhicule ; puis qui (Véhicule | Client), puis quand (date prévue, en bas). -->
+                    <div v-if="estPrecommande" class="mb-4">
+                        <Label class="mb-1.5 block text-sm">
+                            Mode de remise
+                            <span class="text-destructive">*</span>
+                        </Label>
+                        <div
+                            class="grid grid-cols-2 gap-2"
+                            role="radiogroup"
+                            aria-label="Mode de remise"
+                        >
+                            <Button
+                                v-for="option in OPTIONS_MODE_REMISE"
+                                :key="option.value"
+                                type="button"
+                                role="radio"
+                                :aria-checked="
+                                    form.mode_remise === option.value
+                                "
+                                :data-testid="`mode-remise-${option.value}`"
+                                class="h-11 sm:h-10"
+                                :variant="
+                                    form.mode_remise === option.value
+                                        ? 'default'
+                                        : 'outline'
+                                "
+                                @click="form.mode_remise = option.value"
                             >
-                                {{ form.errors.mode_remise }}
-                            </p>
+                                <component
+                                    :is="option.icon"
+                                    class="mr-2 h-4 w-4"
+                                />
+                                {{ option.label }}
+                            </Button>
                         </div>
-                        <div>
-                            <Label
-                                for="date_remise_prevue"
-                                class="mb-1.5 block text-sm"
-                            >
-                                Date prévue
-                                {{
-                                    form.mode_remise === 'livraison'
-                                        ? 'de livraison'
-                                        : 'de retrait'
-                                }}
-                                <span class="text-destructive">*</span>
-                            </Label>
-                            <input
-                                id="date_remise_prevue"
-                                v-model="form.date_remise_prevue"
-                                type="date"
-                                :min="dateMinPrecommande"
-                                class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.date_remise_prevue,
-                                }"
-                            />
-                            <p
-                                v-if="form.errors.date_remise_prevue"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ form.errors.date_remise_prevue }}
-                            </p>
-                        </div>
+                        <p
+                            v-if="form.errors.mode_remise"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.mode_remise }}
+                        </p>
+                        <p
+                            v-else-if="form.mode_remise"
+                            class="mt-1.5 text-xs text-muted-foreground"
+                        >
+                            {{
+                                form.mode_remise === 'livraison'
+                                    ? 'Chargée dans un véhicule de la flotte puis livrée au client.'
+                                    : `Le client vient chercher la marchandise à ${user_site.label}.`
+                            }}
+                        </p>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -1786,6 +1788,32 @@ function confirmerEtCreer() {
                             </template>
                         </div>
 
+                        <!-- Précommande sans livraison : la place du véhicule reste occupée sur bureau,
+                             pour que Véhicule et Client restent toujours sur la même ligne. Inutile
+                             sur mobile, où les champs s'empilent. -->
+                        <div
+                            v-else
+                            class="hidden sm:block"
+                            data-testid="vehicule-sans-objet"
+                        >
+                            <Label class="mb-1.5 block text-sm">
+                                Véhicule
+                            </Label>
+                            <div
+                                class="flex h-10 items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground"
+                            >
+                                <Store
+                                    v-if="form.mode_remise === 'retrait'"
+                                    class="h-4 w-4 shrink-0"
+                                />
+                                {{
+                                    form.mode_remise === 'retrait'
+                                        ? 'Aucun véhicule : retrait sur site'
+                                        : 'Choisissez d’abord le mode de remise'
+                                }}
+                            </div>
+                        </div>
+
                         <!-- Client -->
                         <div>
                             <Label class="mb-1.5 block text-sm"> Client </Label>
@@ -1835,6 +1863,13 @@ function confirmerEtCreer() {
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.client_id }}
+                            </p>
+                            <!-- Précommande : consigne sous le champ concerné, visible sans défiler sur mobile. -->
+                            <p
+                                v-else-if="estPrecommande && !form.client_id"
+                                class="mt-1 text-xs text-amber-600 dark:text-amber-400"
+                            >
+                                Sélectionnez le client de la précommande.
                             </p>
 
                             <!-- Véhicule externe : facultatif, jamais requis pour vendre -->
@@ -2040,15 +2075,13 @@ function confirmerEtCreer() {
                         </div>
                     </div>
 
-                    <!-- Hint véhicule ou client -->
+                    <!-- Hint véhicule ou client (vente ; la précommande l'affiche sous le champ Client) -->
                     <p
-                        v-if="estPrecommande && !form.client_id"
-                        class="mt-3 text-xs text-amber-600 dark:text-amber-400"
-                    >
-                        Sélectionnez le client de la précommande.
-                    </p>
-                    <p
-                        v-else-if="!form.vehicule_id && !form.client_id"
+                        v-if="
+                            !estPrecommande &&
+                            !form.vehicule_id &&
+                            !form.client_id
+                        "
                         class="mt-3 text-xs text-amber-600 dark:text-amber-400"
                     >
                         Sélectionnez au moins un véhicule ou un client.
@@ -2065,6 +2098,59 @@ function confirmerEtCreer() {
                     existantes (client + véhicule, cf. natureOperationParDefaut), jamais par une
                     action de l'utilisateur sur ce formulaire. -->
                     <div class="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+                        <!-- Précommande : quand remettre — après le mode et les personnes concernées. -->
+                        <div v-if="estPrecommande">
+                            <Label
+                                for="date_remise_prevue"
+                                class="mb-1.5 block text-sm"
+                            >
+                                Date prévue
+                                {{
+                                    form.mode_remise === 'livraison'
+                                        ? 'de livraison'
+                                        : 'de retrait'
+                                }}
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <input
+                                id="date_remise_prevue"
+                                v-model="form.date_remise_prevue"
+                                type="date"
+                                :min="dateMinPrecommande"
+                                class="h-11 w-full rounded-md border border-input bg-background px-3 text-base sm:h-10 sm:text-sm"
+                                :class="{
+                                    'border-destructive':
+                                        form.errors.date_remise_prevue,
+                                }"
+                            />
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                <button
+                                    v-for="raccourci in RACCOURCIS_DATE_PREVUE"
+                                    :key="raccourci.jours"
+                                    type="button"
+                                    class="h-8 rounded-full border px-3 text-xs font-medium transition-colors"
+                                    :class="
+                                        form.date_remise_prevue ===
+                                        dansJours(raccourci.jours)
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-input text-muted-foreground hover:bg-muted'
+                                    "
+                                    @click="
+                                        form.date_remise_prevue = dansJours(
+                                            raccourci.jours,
+                                        )
+                                    "
+                                >
+                                    {{ raccourci.label }}
+                                </button>
+                            </div>
+                            <p
+                                v-if="form.errors.date_remise_prevue"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.date_remise_prevue }}
+                            </p>
+                        </div>
                         <div>
                             <Label class="mb-1.5 block text-sm">
                                 Nature de l'opération

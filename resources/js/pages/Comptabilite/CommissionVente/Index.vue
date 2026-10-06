@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { filtrerParMotCle } from '@/lib/tableKeywordSearch';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import type {
@@ -38,7 +39,7 @@ import {
 import Dialog from 'primevue/dialog';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AjusterCommissionDialog from './partials/AjusterCommissionDialog.vue';
 
 interface CreeePart {
@@ -131,6 +132,33 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const search = ref(props.search ?? '');
+
+// Recherche dans le tableau (façon globalFilter PrimeVue) : filtre uniquement les lignes
+// affichées, sur les colonnes visibles — les KPI et l'export restent ceux de la période.
+const motCle = ref('');
+
+const lignesAffichees = computed(() =>
+    filtrerParMotCle(props.beneficiaires, motCle.value, (b) => [
+        b.beneficiaire_nom,
+        b.telephone,
+        ...b.vehicules.flatMap((v) => [v.nom, v.immatriculation]),
+        b.agence,
+        ...b.processus_labels,
+        b.display_label,
+        Math.round(b.total_genere ?? b.total_brut_cumule),
+        Math.round(b.total_brut_cumule),
+        Math.round(b.total_frais),
+        Math.round(b.total_net_cumule),
+        Math.round(b.total_verse),
+        Math.round(b.solde_restant),
+    ]),
+);
+
+const messageVide = computed(() =>
+    motCle.value.trim()
+        ? `Aucun livreur ne correspond à « ${motCle.value.trim()} ».`
+        : 'Aucune commission trouvée.',
+);
 
 const filterFields = computed((): FilterField[] => [
     {
@@ -266,8 +294,17 @@ const page = usePage();
 const selected = ref<Set<string>>(new Set());
 
 const selectableRows = computed(() =>
-    props.beneficiaires.filter((b) => b.creee_parts.length > 0),
+    lignesAffichees.value.filter((b) => b.creee_parts.length > 0),
 );
+
+// Une ligne masquée par la recherche ne reste jamais sélectionnée : « Valider la
+// sélection » ne porte que sur ce que l'utilisateur voit.
+watch(lignesAffichees, (lignes) => {
+    if (selected.value.size === 0) return;
+    const visibles = new Set(lignes.map((b) => b.beneficiaire_id));
+    const next = new Set([...selected.value].filter((id) => visibles.has(id)));
+    if (next.size !== selected.value.size) selected.value = next;
+});
 
 const allSelected = computed(
     () =>
@@ -455,7 +492,12 @@ function fmtTel(tel: string | null | undefined): string {
                 },
             }"
             table-title="Détail par livreur"
-            :result-count="beneficiaires.length"
+            v-model:search-query="motCle"
+            searchable
+            search-placeholder="Rechercher un livreur, véhicule, montant…"
+            :result-count="lignesAffichees.length"
+            :total-count="beneficiaires.length"
+            :empty-message="messageVide"
             @export-excel="exportExcel"
             @export-pdf="exportPdf"
         >
@@ -581,7 +623,7 @@ function fmtTel(tel: string | null | undefined): string {
                          situation TOUS PROCESSUS confondus du bénéficiaire (décision produit du
                          31/08/2026), même en arrivant depuis cet écran "Commission vente". -->
                     <ClickableTableRow
-                        v-for="b in beneficiaires"
+                        v-for="b in lignesAffichees"
                         :key="b.beneficiaire_id"
                         :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
