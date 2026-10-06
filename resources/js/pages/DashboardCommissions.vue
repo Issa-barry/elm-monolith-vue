@@ -7,7 +7,10 @@ import { HandCoins } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: dashboard().url },
-    { title: 'Commissions', href: '/backoffice/tableau-de-bord/commissions' },
+    {
+        title: 'Stat-Commissions',
+        href: '/backoffice/tableau-de-bord/commissions',
+    },
 ];
 </script>
 

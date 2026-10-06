@@ -127,7 +127,9 @@ const mainNavItems = computed((): NavItem[] => {
         {
             // Chemin relatif comme les autres entrées : l'URL Wayfinder est absolue et ne serait
             // jamais reconnue comme page active par NavMainItem.
-            title: 'Ventes',
+            // Convention : toute vue statistique du groupe « Tableau de bord » est préfixée
+            // « Stat- », pour ne jamais être confondue avec le module métier homonyme.
+            title: 'Stat-Ventes',
             href: '/backoffice/dashboard',
             icon: LayoutGrid,
             group: 'Tableau de bord',
@@ -139,7 +141,7 @@ const mainNavItems = computed((): NavItem[] => {
         (can('comptabilite.read') || can('commissions.read'))
     )
         items.push({
-            title: 'Commissions',
+            title: 'Stat-Commissions',
             href: '/backoffice/tableau-de-bord/commissions',
             icon: HandCoins,
             group: 'Tableau de bord',

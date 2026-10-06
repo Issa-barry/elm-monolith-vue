@@ -49,7 +49,7 @@ describe('AppSidebar — navigation Rapports', () => {
         });
 
         // Section « Tableau de bord » : le tableau de bord des ventes vient en premier.
-        expect(liste[0].title).toBe('Ventes');
+        expect(liste[0].title).toBe('Stat-Ventes');
         expect(liste[0].group).toBe('Tableau de bord');
         expect(liste.some((i) => i.title === 'Ma situation')).toBe(false);
         expect(rapports(liste)?.group).toBe('Pilotage');

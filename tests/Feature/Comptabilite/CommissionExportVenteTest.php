@@ -346,6 +346,8 @@ class CommissionExportVenteTest extends TestCase
                     '<th class="col-tel center">Téléphone</th>',
                     $html,
                 );
+                $this->assertStringNotContainsString('Généré (GNF)', $html);
+                $this->assertStringContainsString('Brut validé (GNF)', $html);
                 $this->assertStringContainsString('class="ben-phone"', $html);
                 $this->assertStringContainsString((string) $livreur->telephone, $html);
 

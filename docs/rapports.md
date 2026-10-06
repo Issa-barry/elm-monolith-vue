@@ -10,7 +10,12 @@ Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-pe
 | **Rapport d'activité** | `GET /backoffice/rapports/activite` (`rapports.activite`) | `rapports.read` | Responsables : agences accessibles, tous les agents ou un agent |
 | Exports | `…/export?format=xlsx\|pdf` (`ma-situation.export`, `rapports.activite.export`) | idem écran | Mêmes filtres, même périmètre que l'écran |
 
-Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Groupe
+Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Ses entrées
+sont des vues statistiques, toujours préfixées `Stat-` pour ne jamais être confondues avec le module
+métier homonyme : **Stat-Ventes** (`/backoffice/dashboard`) et **Stat-Commissions**
+(`/backoffice/tableau-de-bord/commissions`), alors que **Ventes** (Commercial) et **Comptabilité ›
+Commissions** (Finance) restent les modules de travail. Toute nouvelle vue statistique du tableau de
+bord suit cette convention (protégée par `AppSidebarTableauDeBord.spec.ts`). Groupe
 « Pilotage » : **Rapports › Ma situation** et **Rapports › Rapport d'activité** (chaque sous-entrée
 selon sa permission ; le menu Rapports n'apparaît que si l'une des deux est accordée). « Ma situation »
 reste en accès direct dans le menu mobile `MobileQuickMenu`. Ce n'est jamais un filtre du rapport
