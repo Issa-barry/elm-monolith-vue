@@ -335,7 +335,6 @@ defineExpose({ returnToDetails });
                 >
                 <Button
                     v-if="selected.can_ajuster"
-                    variant="outline"
                     class="h-11 flex-1 rounded-lg"
                     data-testid="stock-adjust-button"
                     @click="openAction('ajuster')"
