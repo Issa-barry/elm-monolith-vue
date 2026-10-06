@@ -9,16 +9,17 @@ import type { LucideIcon } from 'lucide-vue-next';
 import {
     Building2,
     Car,
-    HandCoins,
     House,
     Layers,
     Package,
     PackageCheck,
+    Receipt,
     ShoppingCart,
     Truck,
     UserRound,
     UserRoundCheck,
     UsersRound,
+    Warehouse,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -94,10 +95,10 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             visible: can('clients.read'),
         },
         {
-            title: 'Prestataires',
-            href: '/backoffice/prestataires',
-            icon: HandCoins,
-            visible: canSee('prestataires.read', 'prestataires'),
+            title: 'Dépenses',
+            href: '/backoffice/depenses',
+            icon: Receipt,
+            visible: canSee('depenses.read', 'depenses'),
         },
         {
             title: 'Vehicules',
@@ -109,6 +110,12 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             title: 'Produits',
             href: '/backoffice/produits',
             icon: Package,
+            visible: canSee('produits.read', 'produits'),
+        },
+        {
+            title: 'Stock',
+            href: '/backoffice/produits/stock',
+            icon: Warehouse,
             visible: canSee('produits.read', 'produits'),
         },
         {

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { formatGNF } from '@/lib/utils';
 import { router } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import {
     ArrowLeftRight,
     CalendarClock,
@@ -66,6 +67,8 @@ const props = defineProps<{
 }>();
 
 const toast = useToast();
+// Même seuil que l'en-tête bureau de la fiche (`hidden sm:flex`).
+const actionsEnTete = useMediaQuery('(min-width: 640px)');
 const urlBase = computed(
     () => `/backoffice/ventes/${props.commandeId}/precommande`,
 );
@@ -333,80 +336,91 @@ function annuler(paiement: EncaissementPayload | null) {
                 />
                 <h3 class="text-sm font-semibold">Précommande</h3>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-                <Button
-                    v-if="precommande.can_lancer_preparation"
-                    size="sm"
-                    :disabled="enCours"
-                    @click="lancerPreparation"
+            <!-- Bureau : actions dans l'en-tête de la fiche, à côté de « Ticket », comme une vente.
+                 Mobile : l'en-tête bureau est masqué, elles restent dans cette carte. -->
+            <Teleport
+                defer
+                to="#precommande-actions"
+                :disabled="!actionsEnTete"
+            >
+                <div
+                    class="flex flex-wrap items-center gap-2"
+                    data-testid="precommande-actions"
                 >
-                    <PackageOpen class="mr-2 h-4 w-4" />
-                    Lancer la préparation
-                </Button>
-                <Button
-                    v-if="precommande.can_valider_preparation"
-                    size="sm"
-                    :disabled="enCours"
-                    @click="ouvrirQuantites('preparation')"
-                >
-                    <CheckCircle2 class="mr-2 h-4 w-4" />
-                    Valider la préparation
-                </Button>
-                <Button
-                    v-if="precommande.can_valider_retrait"
-                    size="sm"
-                    :disabled="enCours"
-                    @click="ouvrirQuantites('retrait')"
-                >
-                    <PackageCheck class="mr-2 h-4 w-4" />
-                    Valider le retrait
-                </Button>
-                <Button
-                    v-if="precommande.can_confirmer_livraison"
-                    size="sm"
-                    :disabled="enCours"
-                    @click="dialogueLivraison = true"
-                >
-                    <Truck class="mr-2 h-4 w-4" />
-                    Confirmer la livraison
-                </Button>
-                <Button
-                    v-if="precommande.can_changer_mode_remise"
-                    size="sm"
-                    variant="outline"
-                    data-testid="precommande-changer-mode"
-                    :disabled="enCours"
-                    @click="ouvrirModeRemise"
-                >
-                    <ArrowLeftRight class="mr-2 h-4 w-4" />
-                    {{
-                        precommande.livraison
-                            ? 'Passer en retrait'
-                            : 'Passer en livraison'
-                    }}
-                </Button>
-                <Button
-                    v-if="precommande.can_rembourser"
-                    size="sm"
-                    variant="outline"
-                    :disabled="enCours"
-                    @click="dialogueRemboursement = true"
-                >
-                    <HandCoins class="mr-2 h-4 w-4" />
-                    Rembourser le trop-perçu
-                </Button>
-                <Button
-                    v-if="precommande.can_annuler"
-                    size="sm"
-                    variant="outline"
-                    class="border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950"
-                    :disabled="enCours"
-                    @click="ouvrirAnnulation"
-                >
-                    <XCircle class="mr-2 h-4 w-4" />
-                    Annuler la précommande
-                </Button>
-            </div>
+                    <Button
+                        v-if="precommande.can_lancer_preparation"
+                        size="sm"
+                        :disabled="enCours"
+                        @click="lancerPreparation"
+                    >
+                        <PackageOpen class="mr-2 h-4 w-4" />
+                        Lancer la préparation
+                    </Button>
+                    <Button
+                        v-if="precommande.can_valider_preparation"
+                        size="sm"
+                        :disabled="enCours"
+                        @click="ouvrirQuantites('preparation')"
+                    >
+                        <CheckCircle2 class="mr-2 h-4 w-4" />
+                        Valider la préparation
+                    </Button>
+                    <Button
+                        v-if="precommande.can_valider_retrait"
+                        size="sm"
+                        :disabled="enCours"
+                        @click="ouvrirQuantites('retrait')"
+                    >
+                        <PackageCheck class="mr-2 h-4 w-4" />
+                        Valider le retrait
+                    </Button>
+                    <Button
+                        v-if="precommande.can_confirmer_livraison"
+                        size="sm"
+                        :disabled="enCours"
+                        @click="dialogueLivraison = true"
+                    >
+                        <Truck class="mr-2 h-4 w-4" />
+                        Confirmer la livraison
+                    </Button>
+                    <Button
+                        v-if="precommande.can_changer_mode_remise"
+                        size="sm"
+                        variant="outline"
+                        data-testid="precommande-changer-mode"
+                        :disabled="enCours"
+                        @click="ouvrirModeRemise"
+                    >
+                        <ArrowLeftRight class="mr-2 h-4 w-4" />
+                        {{
+                            precommande.livraison
+                                ? 'Passer en retrait'
+                                : 'Passer en livraison'
+                        }}
+                    </Button>
+                    <Button
+                        v-if="precommande.can_rembourser"
+                        size="sm"
+                        variant="outline"
+                        :disabled="enCours"
+                        @click="dialogueRemboursement = true"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        Rembourser le trop-perçu
+                    </Button>
+                    <Button
+                        v-if="precommande.can_annuler"
+                        size="sm"
+                        variant="outline"
+                        class="border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950"
+                        :disabled="enCours"
+                        @click="ouvrirAnnulation"
+                    >
+                        <XCircle class="mr-2 h-4 w-4" />
+                        Annuler la précommande
+                    </Button>
+                </div>
+            </Teleport>
         </div>
 
         <!-- Étapes jusqu'à la remise — sans objet pour une précommande annulée ou retournée. -->

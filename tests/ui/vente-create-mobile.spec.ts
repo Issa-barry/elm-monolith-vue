@@ -281,7 +281,7 @@ test('précommande : action unique et confirmation avant de quitter vers les pr�
         }),
     ).toHaveCount(1);
     await page
-        .getByRole('button', { name: 'Retrait sur site', exact: true })
+        .getByRole('radio', { name: 'Retrait sur site', exact: true })
         .click();
     await page.getByRole('button', { name: 'Annuler', exact: true }).click();
     await page
@@ -290,6 +290,70 @@ test('précommande : action unique et confirmation avant de quitter vers les pr�
     await expect(page).toHaveURL(
         'http://ui-preview.test/backoffice/precommandes',
     );
+});
+
+test('précommande bureau : mode, puis Véhicule | Client sur une ligne, puis la date', async ({
+    page,
+}, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await ouvrirFormulaire(page, true);
+    const client = page.getByPlaceholder('Nom, prénom, téléphone…');
+    const date = page.locator('#date_remise_prevue');
+
+    for (const mode of ['Retrait sur site', 'Livraison']) {
+        await page.getByRole('radio', { name: mode, exact: true }).click();
+        const vehicule =
+            mode === 'Livraison'
+                ? page.getByPlaceholder('Nom, immatriculation, livreur…')
+                : page.getByTestId('vehicule-sans-objet').locator('div');
+        const [boiteVehicule, boiteClient, boiteDate] = await Promise.all([
+            vehicule.boundingBox(),
+            client.boundingBox(),
+            date.boundingBox(),
+        ]);
+        expect(Math.abs(boiteVehicule!.y - boiteClient!.y)).toBeLessThan(4);
+        expect(boiteVehicule!.x).toBeLessThan(boiteClient!.x);
+        expect(boiteDate!.y).toBeGreaterThan(boiteClient!.y);
+    }
+    await expect(page.getByLabel('Date prévue de livraison')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Demain', exact: true }).click();
+    const demain = new Date();
+    demain.setDate(demain.getDate() + 1);
+    await expect(date).toHaveValue(demain.toLocaleDateString('en-CA'));
+
+    await page.screenshot({
+        path: testInfo.outputPath('precommande-desktop.png'),
+        fullPage: true,
+    });
+});
+
+test('précommande mobile : champs empilés, cibles tactiles et consigne sous le client', async ({
+    page,
+}, testInfo) => {
+    await page.setViewportSize({ width: 413, height: 802 });
+    await ouvrirFormulaire(page, true);
+    const retrait = page.getByRole('radio', {
+        name: 'Retrait sur site',
+        exact: true,
+    });
+    await retrait.click();
+    expect((await retrait.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByTestId('vehicule-sans-objet')).toBeHidden();
+    await expect(
+        page.getByText('Sélectionnez le client de la précommande.'),
+    ).toBeVisible();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+        )
+        .toBe(true);
+    await page.screenshot({
+        path: testInfo.outputPath('precommande-mobile.png'),
+        fullPage: true,
+    });
 });
 
 test('desktop : une seule paire Annuler / Créer dans le formulaire', async ({

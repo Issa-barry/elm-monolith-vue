@@ -6,6 +6,7 @@ import DataFilters, {
 import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { shallowMount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
@@ -24,7 +25,10 @@ const filterFields: FilterField[] = [
     },
 ];
 
-function mountLayout(resultCount = 2) {
+function mountLayout(
+    resultCount = 2,
+    extraProps: Record<string, unknown> = {},
+) {
     return shallowMount(CommissionIndexLayout, {
         props: {
             title: 'Commissions des sites',
@@ -49,6 +53,7 @@ function mountLayout(resultCount = 2) {
             },
             tableTitle: 'Détail par site',
             resultCount,
+            ...extraProps,
         },
         slots: {
             default: '<table data-testid="domain-table"><tbody /></table>',
@@ -146,5 +151,36 @@ describe('CommissionIndexLayout', () => {
             wrapper.find('[data-testid="commission-table-scroll"]').exists(),
         ).toBe(false);
         expect(wrapper.text()).toContain('Aucune commission trouvée');
+    });
+
+    it('n’affiche la recherche du tableau que sur demande', () => {
+        expect(
+            mountLayout()
+                .find('[data-testid="commission-table-search"]')
+                .exists(),
+        ).toBe(false);
+    });
+
+    it('relaie la recherche du tableau et indique le nombre de lignes affichées sur le total', async () => {
+        const wrapper = mountLayout(1, {
+            searchable: true,
+            searchQuery: 'kaloum',
+            totalCount: 5,
+            'onUpdate:searchQuery': (v: string) =>
+                wrapper.setProps({ searchQuery: v }),
+        });
+
+        expect(wrapper.getComponent(Input).props('modelValue')).toBe('kaloum');
+        expect(
+            wrapper.get('[data-testid="commission-result-count"]').text(),
+        ).toMatch(/^1 résultat\s+sur 5$/);
+
+        await wrapper
+            .get('button[aria-label="Effacer la recherche"]')
+            .trigger('click');
+        expect(wrapper.emitted('update:searchQuery')?.at(-1)).toEqual(['']);
+        expect(
+            wrapper.get('[data-testid="commission-result-count"]').text(),
+        ).toBe('1 résultat');
     });
 });

@@ -1100,6 +1100,9 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         Ticket
                     </Button>
 
+                    <!-- Actions d'une précommande (PrecommandeActions, téléportées sur bureau) -->
+                    <div v-if="precommande" id="precommande-actions" />
+
                     <!-- Modifier (brouillon) -->
                     <Link
                         v-if="commande.can_modifier"

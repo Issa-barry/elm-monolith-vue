@@ -108,6 +108,7 @@ export interface NavItem {
 export type ModuleFlagKey =
     | 'ventes'
     | 'achats'
+    | 'depenses'
     | 'packings'
     | 'prestataires'
     | 'vehicules'
