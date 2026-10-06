@@ -164,6 +164,24 @@ class CashbackTest extends TestCase
         $this->assertSame((int) $vente->total_commande, $solde->cumul_achats);
     }
 
+    /** Décision D14 (04/10/2026) : quantité effective — la quantité chargée prime sur la commandée. */
+    public function test_gain_calcule_sur_la_quantite_chargee_quand_elle_est_inferieure_a_la_commande(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
+
+        $vente = $this->makeVenteAvecLignes($org, $client, [[...$this->ligne($variante, 10), 'quantite_chargee' => 8]]);
+        (new CashbackService)->processVente($vente);
+
+        $this->assertDatabaseHas('cashback_transactions', [
+            'vente_id' => $vente->id,
+            'type' => CashbackTransaction::TYPE_GAIN,
+            'quantite_eligible_snapshot' => 8,
+            'montant' => 2400,
+        ]);
+    }
+
     public function test_gain_genere_selon_le_montant_par_pack_propre_au_client(): void
     {
         $org = $this->createOrgAvecCashbackActif();

@@ -18,6 +18,14 @@ use App\Models\User;
  * contester dépend uniquement de la permission du rôle (`tresorerie.recevoir`,
  * `tresorerie.rejeter`), y compris pour l'envoyeur ; une auto-confirmation reste tracée
  * (MouvementFonds::confirmeParExpediteur()).
+ *
+ * Approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018) : seul l'agent
+ * titulaire de la caisse destinataire confirme ou conteste, sans permission requise et sans
+ * dérogation administrateur ; il ne confirme jamais le retour. S'il a remis l'argent lui-même
+ * (responsable qui gère aussi la caisse de l'agence), il lui faut `tresorerie.recevoir` /
+ * `tresorerie.rejeter`, comme pour un versement.
+ * Le Gate::before du super admin court-circuite cette policy : les écrans calculent leurs
+ * indicateurs avec MouvementFonds::receptionReserveeA() et le service revérifie la règle.
  */
 class MouvementFondsPolicy
 {
@@ -62,6 +70,9 @@ class MouvementFondsPolicy
 
     public function recevoir(User $user, MouvementFonds $mouvement): bool
     {
+        if ($mouvement->isApprovisionnement()) {
+            return ($mouvement->isEnvoye() || $mouvement->isConteste()) && $mouvement->receptionReserveeA($user);
+        }
         if (! $user->can('tresorerie.recevoir') || ! $this->sameOrganization($user, $mouvement)) {
             return false;
         }
@@ -84,6 +95,9 @@ class MouvementFondsPolicy
     /** Contestation — côté destinataire : "je n'ai rien reçu". */
     public function contester(User $user, MouvementFonds $mouvement): bool
     {
+        if ($mouvement->isApprovisionnement()) {
+            return $mouvement->isEnvoye() && $mouvement->receptionReserveeA($user, 'tresorerie.rejeter');
+        }
         if (! $user->can('tresorerie.rejeter') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
             return false;
         }
@@ -95,6 +109,9 @@ class MouvementFondsPolicy
     public function confirmerRetour(User $user, MouvementFonds $mouvement): bool
     {
         if (! $user->can('tresorerie.confirmer_retour') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isConteste()) {
+            return false;
+        }
+        if ($mouvement->isApprovisionnement() && $user->id === $mouvement->beneficiaireId()) {
             return false;
         }
 

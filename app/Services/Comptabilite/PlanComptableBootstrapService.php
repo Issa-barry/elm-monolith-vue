@@ -72,6 +72,9 @@ class PlanComptableBootstrapService
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
             '658100' => 'Cashback clients accordés',
             '411000' => 'Clients',
+            // Acomptes de précommande (ADR 0019) : argent reçu avant la remise de la marchandise,
+            // imputé sur le compte client seulement quand la vente est réalisée.
+            '419100' => 'Clients — avances et acomptes reçus',
             '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
             '521000' => 'Banque',
@@ -221,6 +224,26 @@ class PlanComptableBootstrapService
             // App\Enums\ModePaiement (especes/mobile_money/virement/cheque), même
             // chaîne de repli CompteMappingResolver.
             ['encaissement_vente_recu', 'client', null, '411000', null],
+            // Acompte de précommande (ADR 0019) : même pièce qu'un encaissement, mais le crédit va
+            // sur les avances clients tant que la vente n'est pas réalisée.
+            ['encaissement_vente_recu', 'avance_client', null, '419100', null],
+
+            // Précommande remise (ADR 0019) : imputation des acomptes, sans trésorerie.
+            ['acompte_precommande_impute', 'avance_client', null, '419100', 'OD'],
+            ['acompte_precommande_impute', 'client', null, '411000', 'OD'],
+
+            // Remboursement d'un client (ADR 0019) : débit avance client ou client, crédit trésorerie
+            // (compte du support débité, journal résolu par le moyen de paiement).
+            ['remboursement_client', 'avance_client', null, '419100', null],
+            ['remboursement_client', 'client', null, '411000', null],
+            ['remboursement_client', 'tresorerie', null, '571000', 'CA'],
+            ['remboursement_client', 'tresorerie', 'especes', '571000', 'CA'],
+            ['remboursement_client', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['remboursement_client', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['remboursement_client', 'tresorerie', 'cheque', '521000', 'BQ'],
             ['encaissement_vente_recu', 'tresorerie', null, '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'especes', '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'mobile_money', '561000', 'MM'],

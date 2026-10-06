@@ -10,10 +10,13 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
+    ArrowRight,
     CircleAlert,
     CircleCheck,
     Coins,
     CornerDownRight,
+    History,
+    Minus,
     Pencil,
     Plus,
     Save,
@@ -74,6 +77,27 @@ interface ApercuImpact {
     par_categorie: Array<{ categorie: string; nb: number }>;
 }
 
+interface ChangementBareme {
+    type: 'ajout' | 'modification' | 'retrait';
+    categorie: string;
+    type_vehicule: string | null;
+    cible_code: string;
+    cible: string;
+    ancien_montant: number | null;
+    nouveau_montant: number | null;
+    ancien_consultant: string | null;
+    nouveau_consultant: string | null;
+    en_vigueur_le: string | null;
+}
+
+interface EnregistrementBareme {
+    id: string;
+    date: string;
+    auteur: string | null;
+    publication_brouillon: boolean;
+    changements: ChangementBareme[];
+}
+
 const props = defineProps<{
     processus_actif: string;
     processus_options: Option[];
@@ -83,6 +107,7 @@ const props = defineProps<{
     typesVehicules: Option[];
     consultantsEligibles: Option[];
     brouillon: ResumeBrouillon | null;
+    historique: EnregistrementBareme[];
 }>();
 
 const { can } = usePermissions();
@@ -301,6 +326,45 @@ function baremeSummary(ligne: DraftLigne): string {
 
 function formatMontant(value: string | number): string {
     return `${new Intl.NumberFormat('fr-FR').format(Number(value))} GNF`;
+}
+
+// ── Historique des modifications (COMM-021) ─────────────────────────────
+
+const HISTORIQUE_APERCU = 10;
+const historiqueComplet = ref(false);
+const historiqueAffiche = computed(() =>
+    historiqueComplet.value
+        ? props.historique
+        : props.historique.slice(0, HISTORIQUE_APERCU),
+);
+
+function formatDateHeure(iso: string): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(new Date(iso));
+}
+
+function formatJour(date: string | null): string {
+    if (!date) return '—';
+    const [annee, mois, jour] = date.split('-');
+
+    return `${jour}/${mois}/${annee}`;
+}
+
+function libelleChangement(changement: ChangementBareme): string {
+    const vehicule = changement.type_vehicule
+        ? ` (${changement.type_vehicule})`
+        : '';
+
+    return `${changement.cible} — ${changement.categorie}${vehicule}`;
+}
+
+function consultantModifie(changement: ChangementBareme): boolean {
+    return (
+        changement.type === 'modification' &&
+        changement.ancien_consultant !== changement.nouveau_consultant
+    );
 }
 
 function effectiveVehicleAmount(
@@ -928,6 +992,182 @@ function submitConfiguration(): void {
                     >
                         <CircleAlert class="h-4 w-4 shrink-0" />
                         {{ globalError }}
+                    </div>
+                </section>
+
+                <section
+                    class="overflow-hidden rounded-xl border bg-card"
+                    data-testid="commission-historique"
+                >
+                    <div class="border-b px-5 py-4 sm:px-6">
+                        <h2
+                            class="flex items-center gap-2 text-sm font-semibold"
+                        >
+                            <History class="h-4 w-4 text-muted-foreground" />
+                            Historique des modifications
+                        </h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Chaque enregistrement du barème : qui, quand, et à
+                            partir de quelle date le changement s’applique.
+                        </p>
+                    </div>
+
+                    <ul v-if="historiqueAffiche.length" class="divide-y">
+                        <li
+                            v-for="enregistrement in historiqueAffiche"
+                            :key="enregistrement.id"
+                            class="px-5 py-4 sm:px-6"
+                            data-testid="commission-historique-enregistrement"
+                        >
+                            <div
+                                class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm"
+                            >
+                                <span class="font-medium tabular-nums">
+                                    {{ formatDateHeure(enregistrement.date) }}
+                                </span>
+                                <span class="text-muted-foreground">·</span>
+                                <span>
+                                    {{
+                                        enregistrement.auteur ??
+                                        'Auteur non enregistré'
+                                    }}
+                                </span>
+                                <span
+                                    v-if="enregistrement.publication_brouillon"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    — publication d’un nouveau barème préparé
+                                </span>
+                            </div>
+
+                            <ul class="mt-2 space-y-1.5">
+                                <li
+                                    v-for="(
+                                        changement, i
+                                    ) in enregistrement.changements"
+                                    :key="i"
+                                    class="grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto_11rem] sm:items-center"
+                                >
+                                    <span
+                                        class="flex min-w-0 items-center gap-2"
+                                    >
+                                        <Plus
+                                            v-if="changement.type === 'ajout'"
+                                            class="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                                            aria-label="Ajout"
+                                        />
+                                        <Pencil
+                                            v-else-if="
+                                                changement.type ===
+                                                'modification'
+                                            "
+                                            class="h-3.5 w-3.5 shrink-0 text-blue-600"
+                                            aria-label="Modification"
+                                        />
+                                        <Minus
+                                            v-else
+                                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                            aria-label="Retrait"
+                                        />
+                                        <span class="truncate">
+                                            {{ libelleChangement(changement) }}
+                                        </span>
+                                    </span>
+
+                                    <span
+                                        class="flex items-center gap-1.5 pl-5 tabular-nums sm:pl-0"
+                                    >
+                                        <span
+                                            v-if="changement.type !== 'ajout'"
+                                            class="text-muted-foreground line-through"
+                                        >
+                                            {{
+                                                formatMontant(
+                                                    changement.ancien_montant ??
+                                                        0,
+                                                )
+                                            }}
+                                        </span>
+                                        <ArrowRight
+                                            v-if="
+                                                changement.type ===
+                                                'modification'
+                                            "
+                                            class="h-3.5 w-3.5 text-muted-foreground"
+                                        />
+                                        <span
+                                            v-if="changement.type !== 'retrait'"
+                                            class="font-medium"
+                                        >
+                                            {{
+                                                formatMontant(
+                                                    changement.nouveau_montant ??
+                                                        0,
+                                                )
+                                            }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                        >
+                                            retiré
+                                        </span>
+                                    </span>
+
+                                    <span
+                                        class="pl-5 text-xs text-muted-foreground sm:pl-0 sm:text-right"
+                                    >
+                                        {{
+                                            changement.type === 'retrait'
+                                                ? 'Plus appliqué dès le'
+                                                : 'Appliqué dès le'
+                                        }}
+                                        {{
+                                            formatJour(changement.en_vigueur_le)
+                                        }}
+                                    </span>
+
+                                    <span
+                                        v-if="consultantModifie(changement)"
+                                        class="pl-5 text-xs text-muted-foreground sm:col-span-3"
+                                    >
+                                        Consultant :
+                                        {{
+                                            changement.ancien_consultant ?? '—'
+                                        }}
+                                        →
+                                        {{
+                                            changement.nouveau_consultant ?? '—'
+                                        }}
+                                    </span>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+
+                    <p
+                        v-else
+                        class="px-5 py-8 text-center text-sm text-muted-foreground sm:px-6"
+                    >
+                        Aucune modification enregistrée pour ce processus.
+                    </p>
+
+                    <div
+                        v-if="props.historique.length > HISTORIQUE_APERCU"
+                        class="border-t px-5 py-3 text-center sm:px-6"
+                    >
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            @click="historiqueComplet = !historiqueComplet"
+                        >
+                            {{
+                                historiqueComplet
+                                    ? 'Afficher seulement les plus récentes'
+                                    : `Afficher tout l’historique (${props.historique.length})`
+                            }}
+                        </Button>
                     </div>
                 </section>
 

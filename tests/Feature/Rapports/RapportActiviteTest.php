@@ -28,8 +28,8 @@ use Tests\TestCase;
 /**
  * Rapport d'activité et « Ma situation » (docs/rapports.md) : périmètre imposé côté serveur
  * (permissions, agences, agent), règles de date (vente = création de la facture, encaissement =
- * date_encaissement), blocs indépendants (jamais un « reste » par différence), créances à l'état
- * actuel toutes dates, contrôle des références Mobile Money et tableau de caisse tiré du grand livre.
+ * date_encaissement), blocs indépendants (jamais un « reste » par différence), créances = factures
+ * de la période encore dues (état actuel), contrôle des références Mobile Money et tableau de caisse tiré du grand livre.
  */
 class RapportActiviteTest extends TestCase
 {
@@ -320,9 +320,13 @@ class RapportActiviteTest extends TestCase
         $encaisseur = $this->props($this->agentB, 'ma-situation')['rapport'];
         $this->assertSame(1, $encaisseur['encaissements']['resume']['nombre']);
         $this->assertEquals(120_000, $encaisseur['encaissements']['resume']['montant']);
-        $this->assertSame(0, $encaisseur['creances']['resume']['nombre'], 'La créance reste celle du vendeur.');
-        $this->assertSame(1, $vendeur['creances']['resume']['nombre']);
-        $this->assertEquals(180_000, $vendeur['creances']['resume']['reste']);
+
+        $aout = ['periode' => 'personnalisee', 'date_from' => '2026-08-01', 'date_to' => '2026-08-31'];
+        $encaisseurAout = $this->props($this->agentB, 'ma-situation', $aout)['rapport'];
+        $vendeurAout = $this->props($this->agentA, 'ma-situation', $aout)['rapport'];
+        $this->assertSame(0, $encaisseurAout['creances']['resume']['nombre'], 'La créance reste celle du vendeur.');
+        $this->assertSame(1, $vendeurAout['creances']['resume']['nombre']);
+        $this->assertEquals(180_000, $vendeurAout['creances']['resume']['reste']);
     }
 
     public function test_les_encaissements_sont_totalises_par_moyen_reellement_utilise(): void
@@ -356,23 +360,50 @@ class RapportActiviteTest extends TestCase
 
     // ── Créances ─────────────────────────────────────────────────────────────
 
-    public function test_les_creances_sont_l_etat_actuel_toutes_dates_confondues(): void
+    public function test_les_creances_suivent_la_periode_du_filtre(): void
     {
         $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
         $vieille = $this->vente($this->siteA, $this->agentA, 500_000, '2026-06-01 09:00:00');
         $partielle = $this->vente($this->siteA, $this->agentA, 200_000, '2026-09-20 09:00:00');
         $this->encaisser($partielle, $this->agentA, 50_000, 'especes', '2026-09-20');
+        $duJour = $this->vente($this->siteA, $this->agentA, 300_000, '2026-09-26 08:00:00');
         $payee = $this->vente($this->siteA, $this->agentA, 80_000, '2026-09-26 09:00:00');
         $this->encaisser($payee, $this->agentA, 80_000, 'especes');
 
-        $creances = $this->props($this->agentA, 'ma-situation')['rapport']['creances'];
+        $aujourdhui = $this->props($this->agentA, 'ma-situation')['rapport']['creances'];
 
-        $this->assertSame(2, $creances['resume']['nombre']);
-        $this->assertSame(1, $creances['resume']['impayees']);
-        $this->assertSame(1, $creances['resume']['partielles']);
-        $this->assertEquals(650_000, $creances['resume']['reste']);
-        $this->assertSame($vieille->reference, $creances['lignes'][0]['reference'], 'La plus ancienne en premier.');
-        $this->assertSame(117, $creances['lignes'][0]['anciennete_jours']);
+        $this->assertSame(1, $aujourdhui['resume']['nombre'], 'Seules les factures du jour encore dues.');
+        $this->assertSame(1, $aujourdhui['resume']['impayees']);
+        $this->assertSame(0, $aujourdhui['resume']['partielles']);
+        $this->assertEquals(300_000, $aujourdhui['resume']['reste']);
+        $this->assertSame('2026-09-26', $aujourdhui['resume']['plus_ancienne']);
+        $this->assertSame([$duJour->reference], collect($aujourdhui['lignes'])->pluck('reference')->all());
+
+        $mois = $this->props($this->agentA, 'ma-situation', ['periode' => 'ce_mois'])['rapport']['creances'];
+
+        $this->assertSame(2, $mois['resume']['nombre']);
+        $this->assertSame(1, $mois['resume']['partielles']);
+        $this->assertEquals(450_000, $mois['resume']['reste']);
+        $this->assertSame('2026-09-20', $mois['resume']['plus_ancienne']);
+
+        $annee = $this->props($this->agentA, 'ma-situation', ['periode' => 'cette_annee'])['rapport']['creances'];
+
+        $this->assertSame(3, $annee['resume']['nombre']);
+        $this->assertEquals(950_000, $annee['resume']['reste']);
+        $this->assertSame($vieille->reference, $annee['lignes'][0]['reference'], 'La plus ancienne en premier.');
+        $this->assertSame(117, $annee['lignes'][0]['anciennete_jours']);
+    }
+
+    public function test_le_reste_d_une_dette_de_la_periode_compte_les_paiements_posterieurs(): void
+    {
+        $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $facture = $this->vente($this->siteA, $this->agentA, 100_000, '2026-09-25 09:00:00', StatutFactureVente::PARTIEL);
+        $this->encaisser($facture, $this->agentA, 40_000, 'especes', '2026-09-26');
+
+        $hier = $this->props($this->agentA, 'ma-situation', ['periode' => 'hier'])['rapport']['creances'];
+
+        $this->assertSame(1, $hier['resume']['partielles']);
+        $this->assertEquals(60_000, $hier['resume']['reste']);
     }
 
     // ── Mobile Money ─────────────────────────────────────────────────────────

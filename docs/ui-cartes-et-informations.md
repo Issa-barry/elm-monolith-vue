@@ -57,5 +57,5 @@ Utiliser `resources/js/components/InfoTooltip.vue` à côté du titre :
 Le composant fournit le ⓘ bleu et l'infobulle au survol ou au focus clavier.
 Le libellé accessible est obligatoire. Le slot accepte aussi un contenu structuré.
 Conserver les informations indispensables à l'interprétation des montants visibles
-dans la page, par exemple « Situation actuelle · Toutes dates » pour les dettes.
+dans la page, par exemple la période filtrée en en-tête du détail des dettes clients.
 Ne pas imbriquer ce bouton dans une carte rendue elle-même comme un bouton.

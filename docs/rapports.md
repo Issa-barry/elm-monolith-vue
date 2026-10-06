@@ -62,6 +62,12 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
   déduit : `CommandeVenteService::recalculerTotaux()` réduit le montant net de la facture. Conséquence :
   une annulation ou un retour postérieur modifie le chiffre de la période d'origine.
 - Une facture « Créée » (commande confirmée, pas encore livrée) est une vente.
+- **Exception : précommande pas encore remise** (statuts `reservee`, `a_preparer`, `preparee`, ADR 0019) — **hors chiffre
+  d'affaires** : rien n'est vendu tant que la marchandise n'est pas remise (même règle dans la
+  situation agent et la situation véhicule). Son acompte, lui, est bien un encaissement de la
+  période (argent reçu). La date de remise est enregistrée (`remise_at`) ; dater la vente à la
+  remise dans ce rapport (ADR 0007 amendé) est l'objet du lot 4 — d'ici là, une précommande remise
+  compte à la date de création de sa facture.
 - Encaissé / reste de ces ventes = **état actuel** (paiements reçus après la période compris).
 - **Agence = agence de la commande** (filtre Agence et colonne **« Créée à »**). La colonne
   **« Encaissée à »** indique où les paiements de la facture ont été reçus (plusieurs agences
@@ -93,9 +99,17 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
 - Libellé affiché à l'écran et dans les exports : **« Dettes clients »** (ce que les clients doivent
   encore à l'entreprise), terme compris sur le terrain ; « créance » reste le terme du code et de la
   comptabilité (décision du 26/09/2026, simple changement de libellé, aucune règle modifiée).
-- Factures **impayées** ou **partielles**, **état actuel, toutes dates confondues** : la période ne
-  s'y applique pas, pour que les vieilles dettes restent visibles. Agent = créateur de la vente.
-  Agence = agence de la commande (« Créée à »), avec « Encaissée à » pour les paiements partiels.
+- **Dettes clients sur la période** (depuis le 03/10/2026) : factures **créées dans la période
+  filtrée** (même date que les ventes, `factures_ventes.created_at`) et encore **impayées** ou
+  **partielles** à l'état actuel. Le filtre de période pilote toute la page, cartes et détail
+  (total, nombre, impayées, partielles, plus ancienne, liste) ; l'en-tête du détail affiche la période.
+  Remplace la règle du 26/09/2026 « état actuel, toutes dates confondues » : avec « Aujourd'hui », les
+  dettes des jours précédents restaient affichées, ce qui rendait la page incohérente avec son filtre.
+- Le **reste** d'une facture est inchangé : état actuel, paiements reçus après la période compris.
+- L'**encours client à date** (toutes les factures encore dues à la fin de la période, quelle que
+  soit leur date de création) n'est pas affiché ici : évolution à part si le besoin se confirme.
+- Agent = créateur de la vente. Agence = agence de la commande (« Créée à »), avec « Encaissée à »
+  pour les paiements partiels.
 - Une facture « Créée » n'est pas encore une créance (elle devient impayée à la livraison).
 - Historique « créances au 15/09 » (reconstitution à une date passée) : hors lot 1.
 
@@ -122,10 +136,16 @@ Fiche de chaque **caisse dédiée** du périmètre, calculée par `App\Services\
 - **Tableau de caisse tiré du grand livre** : solde au début (`soldePourSupport(veille du début)`)
   + mouvements de la période = solde à la fin (`soldePourSupport(fin)`). Jamais « encaissements −
   versements de la période ».
-- Mouvements regroupés selon l'**événement réel** de leur pièce : Encaissements espèces, Versements
-  envoyés, Versements renvoyés à l'agent (contrepassation d'un versement retourné), Encaissements
-  annulés (contrepassation, ex. annulation exceptionnelle), autres contrepassations ; tout autre
-  événement garde son libellé comptable.
+- Mouvements regroupés selon l'**événement réel** de leur pièce : Encaissements espèces,
+  Approvisionnements reçus de l'agence (ADR 0018), Versements envoyés, Versements renvoyés à l'agent
+  (contrepassation d'un versement retourné), Encaissements annulés (contrepassation, ex. annulation
+  exceptionnelle), autres contrepassations ; tout autre événement garde son libellé comptable.
+- **Ma situation — Espèces à confirmer** (ADR 0018) : au-dessus des cartes, les approvisionnements de
+  la caisse de l'agent en attente de **sa** confirmation (Envoyés ou Contestés), avec « Confirmer la
+  réception » et « Contester » ; seul l'agent bénéficiaire les voit et agit, sans permission de
+  trésorerie. Un responsable qui a approvisionné sa propre caisse y voit aussi cette remise s'il a
+  `tresorerie.recevoir` (révision du 04/10/2026). Badge sur le menu « Ma situation »
+  (approvisionnements Envoyés).
 - **Solde actuel = « à remettre (théorique) »** : aucun comptage physique n'existe encore.
 - Versements : en cours (envoyés, hors solde), contestés, versements de la période, dernier versement
   et son ancienneté.

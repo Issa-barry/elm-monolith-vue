@@ -44,6 +44,30 @@ même principe de barème dynamique au transfert logistique interne.
   la fiche véhicule (onglet Équipe : statut de chaque membre + bandeau). Un chauffeur inactif se
   réactive depuis la liste des livreurs (« Approuver » s'il a un compte, sinon « Réactiver »).
 
+  **Équipe brouillon** (05/10/2026, incident du 04/10 : les 76 équipes de l'import du 22/08 restées
+  inactives bloquaient toute distribution, sans aucun moyen de les activer depuis l'application) :
+  - seul l'import de **création** (import flotte, `ImportFlotteExecutor`) crée une équipe
+    inactive — le temps de configurer son partage Livreur. L'import de **mise à jour** ne change
+    jamais l'état d'une équipe (VEHMAJ-009) ;
+  - l'équipe **s'active d'elle-même** dès que son partage Livreur est conforme pour **chaque**
+    processus exercé par son véhicule (statut « Fait » ou « Non requis » partout dans la colonne
+    « Partages » de la liste des véhicules — même juge, `PartageConformiteVehiculesService`). Le
+    contrôle (`ActivationEquipesBrouillonService`) est fait après chaque écriture de partage :
+    enregistrement de l'équipe (« Gérer l'équipe »), changement de véhicule d'un livreur,
+    application directe d'un barème (équipes à un seul livreur alignées) et publication d'un
+    brouillon de barème ;
+  - **`is_active` n'est jamais lu depuis la requête** (création comme modification d'équipe) : une
+    création manuelle est active, un enregistrement conserve l'état existant, et seul ce contrôle
+    de conformité active un brouillon — une requête forgée ne peut ni activer un brouillon sans
+    partage, ni désactiver une équipe ;
+  - une équipe active n'est **jamais désactivée** par ce mécanisme : si son partage devient non
+    conforme, ses commandes sont refusées catégorie par catégorie (COMM-015), pas en bloc ;
+  - **véhicule** : un véhicule créé par l'import naît inactif et s'active **avec** son équipe
+    brouillon. Un véhicule **déjà existant** garde son état quand l'import lui crée une équipe
+    brouillon (révisé le 05/10/2026 : il était désactivé, ce qui ajoutait un second blocage resté en
+    place quand l'équipe s'activait par la publication d'un barème). Un véhicule désactivé à la main
+    dont l'équipe est déjà active n'est jamais réactivé par ce mécanisme.
+
   Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
   client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
   véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques
@@ -1162,7 +1186,7 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
     (`validated_at`), exactement comme « Valider le véhicule » de l'écran d'ajustement. Quand la
     dernière commission de la période est validée, la période passe elle-même à « Validée »
     (validation automatique, ADR 0008).
-  - **Valider la période de paiement** (en-tête, anciennement « Valider ») : fait passer la
+  - **Valider la période** (en-tête, anciennement « Valider la période de paiement ») : fait passer la
     période `CALCULEE → VALIDEE`, fige les montants et rend les commissions payables. Toujours
     refusée tant qu'une part n'est pas validée ou qu'un véhicule n'est pas équilibré. Depuis
     l'ADR 0008, rarement nécessaire : la période se valide seule dès que tout est validé.
@@ -1357,6 +1381,13 @@ générée » en était la seule trace.
   clic, anomalie déjà régularisée ou relances concurrentes ne créent jamais de seconde enveloppe.
   Une vente relancée tente aussi sa clôture (`cloturerSiComplete()`), comme la relance depuis la
   fiche commande.
+- **Relance multiple par lots** (03/10/2026, incident 504 sur une relance de 50 anomalies) :
+  l'écran envoie la sélection par lots de 10, l'un après l'autre (« Relance 20/50… »), puis affiche
+  un seul bilan cumulé. Le serveur refuse un lot de plus de 25 anomalies
+  (`RelancerCommissionMonitoringController::LOT_MAX`). Ainsi aucune requête ne dépasse le délai
+  nginx, quelle que soit la taille de la sélection. Une relance ne corrige pas la configuration :
+  tant que le partage Livreur dépasse le barème du jour, elle échoue de nouveau et ajoute une
+  tentative (3 tentatives = « Échec récurrent »). Il faut corriger le partage avant de relancer.
 - **Motif « période figée »** : depuis le 30/09/2026, seule une période **clôturée** bloque encore
   la relance. Une anomalie historique dont le message cite une période « validée » se régularise
   en relançant : la période est rouverte et la part va sur une fiche complémentaire.
@@ -1367,8 +1398,51 @@ générée » en était la seule trace.
 - **Fiche commande.** L'alerte « Commission à régulariser / partiellement générée » propose aussi
   « Voir dans le monitoring ».
 - **Email.** L'email « Commission non générée » est conservé. En cas d'échec, il renvoie vers
-  l'anomalie dans le monitoring.
+  l'anomalie dans le monitoring. Depuis le 03/10/2026 :
+  - il part **au premier échec** (génération automatique : chargement, réception, encaissement) ;
+  - une **relance manuelle** (Monitoring ou fiche commande) qui échoue encore ne renvoie **aucun
+    email** : la notification reste dans l'application, et l'auteur voit déjà le résultat à
+    l'écran ;
+  - les notifications (alerte et « commission générée ») partent **après la validation en base**
+    de la génération, jamais pendant le verrou de l'opération. Si l'opération appelante est
+    annulée, rien n'est envoyé ;
+  - le délai SMTP est limité à 10 s (`MAIL_TIMEOUT`) : un serveur mail saturé ne bloque plus la
+    requête.
 - **Console.** `php artisan commissions:diagnostiquer-manquantes [--organization=…] [--tous]` :
   même liste, en lecture seule. Elle ne crée jamais de commission.
 - Tests : `tests/Feature/Comptabilite/CommissionMonitoringTest.php` ;
   E2E `tests/e2e/commissions/monitoring-commissions.spec.ts`.
+
+## Historique des modifications de barème (03/10/2026)
+
+Contexte : le barème Livreur « Vente – Bouteille d'eau » est passé de 950 à 800 GNF le 23/09/2026,
+mais rien dans l'application ne permettait de voir quand, ni par qui. Il a fallu interroger la
+base pour comprendre les commissions non générées qui ont suivi.
+
+- **COMM-021 — Historique affiché sous les règles, dans Paramètres → Commissions.** Il porte
+  sur l'onglet (processus) affiché et classe les enregistrements du plus récent au plus ancien.
+  Pour chacun, il donne la date et l'heure de saisie, l'auteur et le détail des changements :
+  - **Ajout** : un bénéficiaire reçoit un barème pour une catégorie, ou pour une exception par
+    type de véhicule.
+  - **Modification** : ancien montant → nouveau montant, et changement de consultant le cas
+    échéant.
+  - **Retrait** : le barème n'est plus appliqué.
+
+  Chaque ligne indique aussi la date à partir de laquelle le changement s'applique aux
+  opérations : « Appliqué dès le », ou « Plus appliqué dès le » pour un retrait.
+- **Dérivé, jamais stocké.** Un enregistrement de barème crée toujours une nouvelle version de
+  `commission_regles` (`remplace_regle_id`) et clôt l'ancienne. L'historique est reconstitué à
+  partir de ces versions par `CommissionBaremeHistoriqueService`. Il couvre donc tout le passé
+  sans reprise de données.
+  - Les changements d'un même enregistrement (même auteur, moins d'une minute d'écart) sont
+    regroupés.
+  - Un montant inchangé ne crée pas de version, donc n'apparaît pas.
+  - Un enregistrement issu de la publication d'un brouillon (COMM-019) est signalé comme tel.
+- **Auteur d'un retrait.** Il est enregistré depuis le 03/10/2026 dans `commission_regles.closed_by`.
+  Un retrait antérieur s'affiche avec l'auteur de l'enregistrement dont il fait partie, ou
+  « Auteur non enregistré » s'il était seul. L'auteur n'est jamais deviné autrement.
+- **Accès.** L'historique est visible par toute personne qui peut ouvrir l'écran. Il est en
+  lecture seule et isolé par organisation et par processus.
+- **Hors périmètre.** Les changements de partage des équipes (fiche véhicule) ne figurent pas
+  dans cet historique : ils sont versionnés séparément dans `equipe_livraison_partages_categorie`.
+- Tests : `tests/Feature/Settings/CommissionBaremeHistoriqueTest.php`.

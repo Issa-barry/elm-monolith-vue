@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CompteTresorerie;
 use App\Models\MouvementFonds;
 use App\Models\Site;
+use App\Models\User;
+use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\MouvementFondsService;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,11 +23,15 @@ class MouvementFondsController extends Controller
     public function __construct(
         private readonly MouvementFondsService $service,
         private readonly SiteScopeService $siteScope,
+        private readonly SavedFilterService $savedFilterService,
     ) {}
 
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', MouvementFonds::class);
+
+        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $savedView = $this->savedFilterService->applyToRequest($request, 'mouvements-fonds');
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -34,7 +40,7 @@ class MouvementFondsController extends Controller
         $query = $this->mouvementsVisibles($orgId, $user, $isAdmin)
             ->with([
                 'siteOrigine:id,nom', 'siteDestination:id,nom',
-                'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle',
+                'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle,agent_id', 'compteTresorerieDestination.agent.personne',
                 'expediteur.personne', 'receptionnaire.personne',
                 'lignesReglement.encaissement.facture.commande.client',
             ]);
@@ -136,18 +142,15 @@ class MouvementFondsController extends Controller
             'detail_reglement_url' => $m->isReglementAgences()
                 ? route('comptabilite.tresorerie.inter-agences.show', [$m->site_origine_id, $m->site_destination_id], false)
                 : null,
-            // L'état du mouvement est vérifié EXPLICITEMENT en plus de la policy : le Gate::before du
-            // super admin passe avant elle et afficherait sinon toutes les actions sur chaque ligne,
-            // y compris terminée. Le service reste la garantie réelle de chacune de ces règles.
-            'peut_envoyer' => $m->isBrouillon() && $user->can('envoyer', $m),
-            'peut_recevoir' => ($m->isEnvoye() || $m->isConteste()) && $user->can('recevoir', $m),
-            'peut_annuler' => $m->isBrouillon() && $user->can('annuler', $m),
-            'peut_contester' => $m->isEnvoye() && $user->can('contester', $m),
-            'peut_confirmer_retour' => $m->isConteste() && $user->can('confirmerRetour', $m),
+            ...$this->actions($m, $user),
+            'beneficiaire' => $m->isApprovisionnement() ? $m->compteTresorerieDestination?->agent?->name : null,
+            'envoye_le' => $m->sent_at?->toIso8601String(),
+            'recu_le' => $m->received_at?->toIso8601String(),
         ]);
 
         return Inertia::render('Comptabilite/MouvementsFonds/Index', [
             'mouvements' => $mouvements,
+            'saved_view' => $savedView,
             'filters' => [
                 'statut' => $request->input('statut', ''),
                 'nature' => $request->input('nature', ''),
@@ -240,9 +243,9 @@ class MouvementFondsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        // Un versement de caisse a sa destination fixée à l'envoi : la confirmation ne demande
-        // aucun choix (le service refuse de toute façon un autre support).
-        $destinationId = $mouvement->isInterne()
+        // Un versement ou un approvisionnement de caisse a sa destination fixée à l'envoi : la
+        // confirmation ne demande aucun choix (le service refuse de toute façon un autre support).
+        $destinationId = $mouvement->isInterne() || $mouvement->isApprovisionnement()
             ? $mouvement->compte_tresorerie_destination_id
             : $request->validate([
                 'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
@@ -284,6 +287,32 @@ class MouvementFondsController extends Controller
         $mouvement = $this->service->confirmerRetour($mouvement, auth()->id(), $data['motif']);
 
         return back()->with('success', "Retour des fonds confirmé pour le mouvement {$mouvement->reference}.");
+    }
+
+    /**
+     * Actions proposées sur une ligne. L'état du mouvement est vérifié EXPLICITEMENT en plus de la
+     * policy : le Gate::before du super admin passe avant elle et afficherait sinon toutes les
+     * actions sur chaque ligne, y compris terminée. Approvisionnement (ADR 0018) : réception et
+     * contestation réservées à l'agent bénéficiaire, calculées sans le Gate. Le service reste la
+     * garantie réelle de chacune de ces règles.
+     *
+     * @return array<string, bool>
+     */
+    private function actions(MouvementFonds $m, User $user): array
+    {
+        $approvisionnement = $m->isApprovisionnement();
+
+        return [
+            'peut_envoyer' => $m->isBrouillon() && $user->can('envoyer', $m),
+            'peut_recevoir' => ($m->isEnvoye() || $m->isConteste())
+                && ($approvisionnement ? $m->receptionReserveeA($user) : $user->can('recevoir', $m)),
+            'peut_annuler' => $m->isBrouillon() && $user->can('annuler', $m),
+            'peut_contester' => $m->isEnvoye()
+                && ($approvisionnement ? $m->receptionReserveeA($user, 'tresorerie.rejeter') : $user->can('contester', $m)),
+            'peut_confirmer_retour' => $m->isConteste()
+                && ! ($approvisionnement && $user->id === $m->beneficiaireId())
+                && $user->can('confirmerRetour', $m),
+        ];
     }
 
     /** @return list<array{value:string,label:string}> */

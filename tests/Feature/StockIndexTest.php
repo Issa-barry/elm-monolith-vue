@@ -16,6 +16,7 @@ use App\Models\VarianteStock;
 use App\Services\ProduitSeuilAlerteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -384,6 +385,46 @@ class StockIndexTest extends TestCase
         $this->actingAs($manager)
             ->getJson(route('produits.historique', $produit).'?variante_id='.$variante->id.'&site_id='.$this->siteB->id)
             ->assertNotFound();
+    }
+
+    public function test_la_photo_de_variante_est_prioritaire_avec_repli_sur_le_produit(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, ['nom' => 'Bouteilles']);
+        $variante = $produit->variantePrincipale()->first();
+        $this->makeVariante($produit, ['sku' => 'PHOTO-002', 'is_default' => false, 'combo_hash' => 'photo-deux', 'position' => 2]);
+
+        $this->actingAs($this->admin)->get(route('produits.stock.index'))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('stocks.data.0.image_url', null)
+            ->where('stocks.data.2.image_url', null));
+
+        $produit->medias()->create([
+            'organization_id' => $this->organization->id,
+            'path' => 'produits/secondaire.jpg',
+            'is_primary' => false,
+            'position' => 0,
+        ]);
+        $produit->medias()->create([
+            'organization_id' => $this->organization->id,
+            'path' => 'produits/principale.jpg',
+            'is_primary' => true,
+            'position' => 1,
+        ]);
+        $photoVariante = $produit->medias()->create([
+            'organization_id' => $this->organization->id,
+            'path' => 'produits/variante.jpg',
+            'is_primary' => false,
+            'position' => 2,
+        ]);
+        $variante->update(['media_id' => $photoVariante->id]);
+
+        $this->actingAs($this->admin)->get(route('produits.stock.index'))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->has('stocks.data', 4)
+            ->where('stocks.data.0.image_url', Storage::disk('public')->url('produits/variante.jpg'))
+            ->where('stocks.data.1.image_url', Storage::disk('public')->url('produits/variante.jpg'))
+            ->where('stocks.data.2.image_url', Storage::disk('public')->url('produits/principale.jpg'))
+            ->where('stocks.data.3.image_url', Storage::disk('public')->url('produits/principale.jpg')));
     }
 
     private function stock(ProduitVariante $variante, Site $site, int $quantite): void

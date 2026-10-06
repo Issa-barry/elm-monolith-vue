@@ -58,7 +58,6 @@ interface PartageCategorieExistant {
 
 interface EquipeExistante {
     id: string;
-    is_active: boolean;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreExistant[];
@@ -575,8 +574,8 @@ function buildPayload() {
         vehicule_id: props.vehicule.id,
         // proprietaire_id n'est jamais envoyé : toujours dérivé côté serveur depuis
         // Vehicule::proprietaire_id (cf. EquipeLivraisonController), pour ne jamais désynchroniser
-        // l'équipe du propriétaire réel du véhicule.
-        is_active: props.equipe?.is_active ?? true,
+        // l'équipe du propriétaire réel du véhicule. is_active non plus : l'état de l'équipe est
+        // décidé par le serveur (activation d'un brouillon quand son partage devient conforme).
         // Le partage saisi ne remplace que CE processus — jamais un fallback implicite vers
         // vente (cf. EquipeLivraisonController::syncPartagesCategorie()).
         processus_code: props.processusActif,

@@ -33,8 +33,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Ventes et créances restent sur l'axe COMMERCIAL : agence de la commande (`factures_ventes.site_id`),
  * avec en information l'agence (ou les agences) où leurs encaissements ont été reçus.
- * - Créances : factures impayées ou partielles à l'état actuel, TOUTES dates confondues (les vieilles
- *   dettes restent visibles), agent = créateur de la vente.
+ * - Créances : factures créées dans la période (même date que les ventes) encore impayées ou
+ *   partielles à l'état actuel, agent = créateur de la vente. Ce n'est pas l'encours à date (dettes
+ *   plus anciennes toujours dues), qui reste une évolution.
  * - Mobile Money : sous-ensemble Mobile Money des encaissements, avec contrôle des références.
  * - Caisse : fiche de chaque caisse dédiée du périmètre (FicheCaisseService, grand livre).
  */
@@ -54,6 +55,10 @@ class RapportActiviteService
         StatutCommandeVente::ANNULEE,
         StatutCommandeVente::ANNULEE_ERREUR_SAISIE,
         StatutCommandeVente::RETOURNEE,
+        // Précommande pas encore remise (ADR 0019) : rien n'est vendu, sa facture n'est que « Créée ».
+        StatutCommandeVente::RESERVEE,
+        StatutCommandeVente::A_PREPARER,
+        StatutCommandeVente::PREPAREE,
     ];
 
     public function __construct(private readonly FicheCaisseService $ficheCaisse) {}
@@ -178,6 +183,7 @@ class RapportActiviteService
     public function creances(RapportPerimetre $p, ?int $limite = self::LIMITE_LIGNES): array
     {
         $base = fn () => $this->ventesBase($p)
+            ->whereBetween('fv.created_at', [$p->debut(), $p->fin()])
             ->whereIn('fv.statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value]);
 
         $resume = DB::query()

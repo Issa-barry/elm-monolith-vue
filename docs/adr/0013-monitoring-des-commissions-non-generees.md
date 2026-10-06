@@ -56,3 +56,23 @@ commande est calculé depuis cette table (décision existante : jamais un champ 
   une matérialisation pourrait être envisagée plus tard, sans changer les règles.
 - Une opération dont la génération n'a jamais été déclenchée reste hors de l'écran : elle est
   couverte par `commissions:auditer-ventes`.
+
+## Révision du 03/10/2026 — relance multiple et emails
+
+Constat en production : une relance de 50 anomalies a fini en 504 nginx. Les 50 opérations
+échouaient de nouveau (partage Livreur toujours supérieur au barème). Chaque échec envoyait un
+email à chaque administrateur et à l'auteur, via SMTP, pendant la requête et sous le verrou de
+l'opération.
+
+Décisions :
+
+1. **Pas d'email sur relance manuelle.** L'alerte email part au premier échec. Une relance par un
+   utilisateur (`declenchee_par = utilisateur`) qui échoue encore crée seulement la notification
+   dans l'application. Décision utilisateur du 03/10/2026.
+2. **Notifications après le commit** (`DB::afterCommit`), jamais sous le verrou de l'opération.
+3. **Relance par lots** : l'écran envoie des lots de 10 et cumule les bilans. Le serveur refuse
+   plus de 25 anomalies par requête.
+4. **Délai SMTP de 10 s** (`MAIL_TIMEOUT`).
+
+Reporté : passer les emails par une file d'attente. Il n'y a aujourd'hui aucun worker en
+production.

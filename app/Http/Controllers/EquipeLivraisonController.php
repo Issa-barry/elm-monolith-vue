@@ -13,6 +13,7 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
+use App\Services\Commission\ActivationEquipesBrouillonService;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
@@ -84,7 +85,7 @@ class EquipeLivraisonController extends Controller
                 'organization_id' => $orgId,
                 'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $proprietaireId,
-                'is_active' => $data['is_active'] ?? true,
+                'is_active' => true,
             ]);
 
             Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
@@ -145,10 +146,12 @@ class EquipeLivraisonController extends Controller
 
         $typeVehiculeId = $vehiculeSelectionne?->type_vehicule_id;
         DB::transaction(function () use ($data, $orgId, $proprietaireId, $equipes_livraison, $oldVehiculeId, $nomVehicule, $typeVehiculeId) {
+            // is_active n'est jamais lu depuis la requête (05/10/2026) : une équipe brouillon ne
+            // s'active que par ActivationEquipesBrouillonService ci-dessous, une équipe active n'est
+            // jamais désactivée par un enregistrement.
             $equipes_livraison->update([
                 'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $proprietaireId,
-                'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
             ]);
 
             if ($oldVehiculeId && $oldVehiculeId !== $data['vehicule_id']) {
@@ -174,6 +177,8 @@ class EquipeLivraisonController extends Controller
             }
 
             $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code'], $typeVehiculeId);
+
+            ActivationEquipesBrouillonService::activerSiPartageConforme($orgId, [$equipes_livraison->id]);
         });
 
         return redirect()->route('vehicules.show', $equipes_livraison->vehicule_id)
@@ -462,6 +467,8 @@ class EquipeLivraisonController extends Controller
             }
 
             Vehicule::whereKey($vehiculeCible->id)->update(['is_active' => true]);
+
+            ActivationEquipesBrouillonService::activerSiPartageConforme($orgId, [$equipeDepart->id, $equipeArrivee->id]);
         });
 
         return redirect()->route('vehicules.show', $vehiculeCible->id)
@@ -592,7 +599,6 @@ class EquipeLivraisonController extends Controller
             : CommissionRegleController::processusCodesDisponibles();
 
         return [
-            'is_active' => 'boolean',
             // Détermine quel partage (vente / logistique_transfert / transfert_grossiste, cf.
             // CommissionRegleController::processusCodesDisponibles() — distribution_client n'est
             // plus un processus configurable depuis le 01/09/2026) cette soumission remplace —

@@ -1,7 +1,10 @@
 # ADR 0003 — Retour de livraison avant encaissement : stock réintégré, commission réajustée
 
 - **Date** : 2026-09-23
-- **Statut** : accepté et livré le 2026-09-23
+- **Statut** : accepté et livré le 2026-09-23 — **amendé le 2026-10-04 par l'ADR 0019** (précommandes,
+  lot 3) : pour une précommande, les **acomptes** ne bloquent pas le retour (seul un encaissement du
+  solde le fait) ; la valeur retournée devient un trop-perçu remboursable, y compris l'encaissé net
+  entier en cas de retour total.
 - **Périmètre** : Ventes standard (`CommandeVente` en livraison, avant tout encaissement) — cf.
   [retour-commande.md](../retour-commande.md)
 

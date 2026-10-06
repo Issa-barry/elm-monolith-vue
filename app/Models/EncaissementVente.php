@@ -34,6 +34,7 @@ class EncaissementVente extends Model
         'compte_tresorerie_id',
         'reference_paiement',
         'note',
+        'est_acompte',
         'created_by',
     ];
 
@@ -44,6 +45,7 @@ class EncaissementVente extends Model
             'date_encaissement' => 'date:Y-m-d',
             'mode_paiement' => ModePaiement::class,
             'operateur_mobile_money' => OperateurMobileMoney::class,
+            'est_acompte' => 'boolean',
         ];
     }
 

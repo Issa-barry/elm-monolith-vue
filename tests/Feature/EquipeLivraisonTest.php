@@ -1208,6 +1208,140 @@ class EquipeLivraisonTest extends TestCase
         );
     }
 
+    // ── Équipe brouillon (import de flotte) : activation au partage conforme ───
+
+    /** Équipe telle que la crée l'import de flotte : inactive, un chauffeur, aucun partage. */
+    private function equipeBrouillon(Vehicule $vehicule): array
+    {
+        $vehicule->update(['is_active' => false]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'is_active' => false,
+        ]);
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id, 'is_active' => true, 'nom_complet' => 'Mamadou Diallo']);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+
+        $membres = [[
+            'livreur_id' => $livreur->id, 'nom_complet' => 'Mamadou Diallo',
+            'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+        ]];
+
+        return [$equipe, $membres];
+    }
+
+    /** Requête forgée : is_active n'est jamais lu depuis la requête, seul le partage décide. */
+    public function test_une_equipe_brouillon_sans_partage_reste_inactive_meme_si_la_requete_force_is_active(): void
+    {
+        $vehicule = $this->makeVehicule();
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => true,
+                'partages_categorie' => [],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($equipe->fresh()->is_active, 'Barème Livreur à 100 GNF sans partage : l\'équipe reste un brouillon.');
+    }
+
+    public function test_une_equipe_brouillon_sactive_quand_son_partage_devient_conforme(): void
+    {
+        $vehicule = $this->makeVehicule();
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => false,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+    }
+
+    /**
+     * Toutes les activités du véhicule comptent, comme dans la colonne « Partages » de la liste
+     * des véhicules : un véhicule aussi logistique reste un brouillon tant que le partage du
+     * transfert logistique n'est pas fait, même si celui de la vente l'est.
+     */
+    public function test_une_equipe_brouillon_attend_le_partage_de_chaque_processus_exerce(): void
+    {
+        $logistique = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            'libelle' => 'Transfert logistique',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $logistique->id,
+            'libelle' => 'Livreur — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        $vehicule = $this->makeVehicule();
+        $vehicule->update(['livraison_logistique' => true]);
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage(['vehicule_id' => $vehicule->id, 'membres' => $membres, 'is_active' => true]))
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($equipe->fresh()->is_active, 'Partage vente fait, transfert logistique encore à faire.');
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => false,
+                'processus_code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            ]))
+            ->assertSessionHasNoErrors();
+        $this->assertTrue($equipe->fresh()->is_active);
+    }
+
+    /** Seul l'import de flotte crée une équipe brouillon ; une création manuelle est toujours active. */
+    public function test_store_cree_une_equipe_active_meme_si_la_requete_envoie_is_active_false(): void
+    {
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadAvecPartage(['vehicule_id' => $vehicule->id, 'is_active' => false]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertTrue(EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail()->is_active);
+    }
+
+    public function test_une_equipe_active_nest_jamais_desactivee_par_un_enregistrement(): void
+    {
+        $vehicule = $this->makeVehicule();
+        $equipe = $this->makeEquipe(Proprietaire::factory()->create(['organization_id' => $this->org->id])->id);
+        $equipe->update(['vehicule_id' => $vehicule->id]);
+
+        // Sans partage, et avec is_active=false forgé dans la requête.
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'is_active' => false,
+                'partages_categorie' => [],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     /**

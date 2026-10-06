@@ -20,6 +20,10 @@ use Illuminate\Notifications\Notification;
  * Les paramètres de libellé (libelleOperation/verbeEvenement/urlPath/actionLabel) ont des
  * défauts reproduisant le texte historique "vente" — seuls les appels transfert logistique les
  * surchargent.
+ *
+ * `parEmail` à false (relance manuelle, 03/10/2026) : la notification reste dans l'application,
+ * sans email — l'auteur de la relance voit déjà le résultat à l'écran, et l'alerte initiale a
+ * été envoyée au premier échec.
  */
 class CommissionManquanteNotification extends Notification
 {
@@ -32,11 +36,12 @@ class CommissionManquanteNotification extends Notification
         private readonly string $verbeEvenement = 'encaissée',
         private readonly string $urlPath = '/backoffice/ventes/',
         private readonly string $actionLabel = 'Voir la commande',
+        private readonly bool $parEmail = true,
     ) {}
 
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return $this->parEmail ? ['database', 'mail'] : ['database'];
     }
 
     private function raison(): string

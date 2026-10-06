@@ -677,6 +677,10 @@ en §9). Résolution exclusivement via `ClientIdentityResolver` → `identity->c
 }
 ```
 
+Depuis le 04/10/2026, une **précommande** (ADR 0019) figure dans cette liste comme toute commande,
+avec le statut `reservee` (« Réservée ») tant qu'elle n'est pas remise. Aucune création depuis
+l'application en V1.
+
 Query params optionnels : `statut` (`StatutCommandeVente`), `date_debut`/
 `date_fin` (sur `validated_at`), `per_page` (1-100, défaut 20). Un compte sans
 profil Client (proprietaire/livreur purs) reçoit une liste **vide** — cohérent

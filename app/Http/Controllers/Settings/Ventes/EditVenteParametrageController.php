@@ -57,6 +57,11 @@ class EditVenteParametrageController extends Controller
             // n'est pas soi-même autorisé à effectuer.
             'peut_modifier_confirmation_annulation' => $user->can('parametres.update')
                 && $user->can('ventes.annuler_exceptionnel'),
+            // null tant que l'organisation n'a pas choisi : la création de précommandes reste bloquée.
+            'precommande_acompte_obligatoire' => Parametre::isPrecommandeConfiguree($orgId)
+                ? Parametre::isPrecommandeAcompteObligatoire($orgId)
+                : null,
+            'precommande_acompte_min_pct' => Parametre::getPrecommandeAcompteMinPct($orgId),
         ]);
     }
 }

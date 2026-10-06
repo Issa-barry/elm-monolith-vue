@@ -23,12 +23,20 @@ enum NatureMouvementFonds: string
      */
     case REGLEMENT_AGENCES = 'reglement_agences';
 
+    /**
+     * Approvisionnement (ADR 0018) : sens inverse du versement — une caisse de l'agence remet des
+     * espèces à la caisse dédiée d'un agent (même site). Seul l'agent titulaire de la caisse
+     * destinataire confirme la réception, jamais l'envoyeur ni un administrateur à sa place.
+     */
+    case APPROVISIONNEMENT_CAISSE = 'approvisionnement_caisse';
+
     public function label(): string
     {
         return match ($this) {
             self::INTER_SITES => 'Transfert entre agences',
             self::INTERNE_CAISSES => 'Versement de caisse',
             self::REGLEMENT_AGENCES => 'Règlement inter-agences',
+            self::APPROVISIONNEMENT_CAISSE => 'Approvisionnement de caisse',
         };
     }
 

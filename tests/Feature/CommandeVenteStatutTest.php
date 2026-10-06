@@ -518,6 +518,8 @@ class CommandeVenteStatutTest extends TestCase
         // 1 × prix_vente_snapshot (2000) = 2000, pas 4000 (basé sur la quantité demandée)
         $this->assertEquals(2000, (float) $freshLigne->total_ligne);
         $this->assertEquals(2000, (float) $freshCommande->total_commande);
+        // Journal : la quantité réellement chargée, pas la demandée.
+        $this->assertSame(['quantite' => 1], $commande->activites()->where('action', 'chargement_valide')->firstOrFail()->details);
 
         $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,

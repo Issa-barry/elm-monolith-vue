@@ -26,6 +26,18 @@ enum StatutCommandeVente: string
      * (encaissements contrepassés, stock réintégré, cashback retiré) n'existent que sur ce chemin.
      */
     case ANNULEE_ERREUR_SAISIE = 'annulee_erreur_saisie';
+    /**
+     * Précommande enregistrée (ADR 0019) : stock réservé, facture encore « Créée », acompte éventuel
+     * reçu en avance client. Rien n'est encore sorti du stock ni vendu — hors chiffre d'affaires.
+     */
+    case RESERVEE = 'reservee';
+    /** Précommande dont la préparation est lancée (ADR 0019) : marchandise en cours de préparation. */
+    case A_PREPARER = 'a_preparer';
+    /**
+     * Précommande en retrait préparée, en attente du client (ADR 0019). Une précommande en livraison
+     * passe directement « À charger » à la validation de sa préparation.
+     */
+    case PREPAREE = 'preparee';
 
     public function label(): string
     {
@@ -40,6 +52,9 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'Annulée',
             self::RETOURNEE => 'Retournée',
             self::ANNULEE_ERREUR_SAISIE => 'Annulée (erreur de saisie)',
+            self::RESERVEE => 'Réservée',
+            self::A_PREPARER => 'À préparer',
+            self::PREPAREE => 'Préparée',
         };
     }
 
@@ -56,6 +71,9 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'danger',
             self::RETOURNEE => 'warn',
             self::ANNULEE_ERREUR_SAISIE => 'danger',
+            self::RESERVEE => 'info',
+            self::A_PREPARER => 'warn',
+            self::PREPAREE => 'success',
         };
     }
 
@@ -72,6 +90,9 @@ enum StatutCommandeVente: string
             self::ANNULEE => 'bg-red-400',
             self::RETOURNEE => 'bg-orange-500',
             self::ANNULEE_ERREUR_SAISIE => 'bg-red-500',
+            self::RESERVEE => 'bg-blue-500',
+            self::A_PREPARER => 'bg-amber-400',
+            self::PREPAREE => 'bg-teal-500',
         };
     }
 

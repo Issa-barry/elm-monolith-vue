@@ -11,6 +11,7 @@ use App\Support\Permissions\VenteParametragePermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -33,7 +34,20 @@ class UpdateVenteParametrageController extends Controller
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
             'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
             'annulation_exceptionnelle_confirmation' => ['sometimes', Rule::enum(ModeConfirmationAnnulationExceptionnelle::class)],
+            // Acompte des précommandes (ADR 0019, D6) : taux saisi librement par l'organisation.
+            'precommande_acompte_obligatoire' => ['sometimes', 'boolean'],
+            'precommande_acompte_min_pct' => ['required_with:precommande_acompte_obligatoire', 'integer', 'min:0', 'max:100'],
+        ], [
+            'precommande_acompte_min_pct.max' => "Le taux d'acompte ne peut pas dépasser 100 %.",
         ]);
+
+        // Acompte obligatoire ⇒ taux strictement positif : un acompte « obligatoire » de 0 % n'exigerait
+        // rien. Vérifié avant toute écriture.
+        if (($validated['precommande_acompte_obligatoire'] ?? false) && (int) $validated['precommande_acompte_min_pct'] < 1) {
+            throw ValidationException::withMessages([
+                'precommande_acompte_min_pct' => "Quand l'acompte est obligatoire, son taux doit être supérieur à 0 %.",
+            ]);
+        }
 
         $orgId = $user->organization_id;
 
@@ -98,6 +112,14 @@ class UpdateVenteParametrageController extends Controller
 
         if ($modeConfirmation !== null) {
             Parametre::setModeConfirmationAnnulationExceptionnelle($orgId, $modeConfirmation);
+        }
+
+        if (array_key_exists('precommande_acompte_obligatoire', $validated)) {
+            Parametre::setPrecommandeAcompte(
+                $orgId,
+                (bool) $validated['precommande_acompte_obligatoire'],
+                (int) $validated['precommande_acompte_min_pct'],
+            );
         }
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();

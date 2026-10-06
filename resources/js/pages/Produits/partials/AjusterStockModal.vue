@@ -11,6 +11,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { computed, watch } from 'vue';
+import './stock-dialog.css';
 
 interface SiteStock {
     site_id: string;
@@ -67,6 +68,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
+    (e: 'after-hide'): void;
 }>();
 
 const localVisible = computed({
@@ -298,8 +300,11 @@ function submit() {
         v-model:visible="localVisible"
         modal
         :header="'Ajuster le stock'"
-        :style="{ width: '32rem' }"
+        class="stock-dialog"
+        :style="{ '--stock-dialog-width': '32rem' }"
+        :pt="{ pcCloseButton: { root: { 'aria-label': 'Fermer' } } }"
         :draggable="false"
+        @after-hide="emit('after-hide')"
         @hide="
             form.reset();
             form.clearErrors();
@@ -307,11 +312,15 @@ function submit() {
     >
         <!-- Produit info -->
         <div
-            class="mb-5 flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3"
+            class="mb-5 grid grid-cols-[1.25rem_1fr] items-start gap-3 rounded-xl bg-muted/50 px-4 py-3 sm:flex sm:items-center"
         >
             <Package class="h-5 w-5 shrink-0 text-muted-foreground" />
-            <div class="min-w-0">
-                <p class="truncate text-sm font-semibold">{{ produit.nom }}</p>
+            <div class="min-w-0 flex-1">
+                <p
+                    class="text-sm leading-5 font-semibold break-words sm:truncate"
+                >
+                    {{ produit.nom }}
+                </p>
                 <p
                     v-if="produit.sku"
                     class="font-mono text-xs text-muted-foreground"
@@ -319,14 +328,16 @@ function submit() {
                     {{ produit.sku }}
                 </p>
             </div>
-            <div class="ml-auto shrink-0 text-right">
+            <div
+                class="col-span-2 flex items-center justify-between gap-3 border-t pt-3 sm:ml-auto sm:block sm:shrink-0 sm:border-0 sm:pt-0 sm:text-right"
+            >
                 <p class="text-xs text-muted-foreground">
                     {{
                         form.site_id && form.variante_id
-                            ? 'Stock de cette variante sur ce site'
+                            ? 'Stock physique de cette variante'
                             : form.site_id
-                              ? 'Stock sur ce site'
-                              : 'Stock total'
+                              ? 'Stock physique sur ce site'
+                              : 'Stock physique total'
                     }}
                 </p>
                 <p class="text-2xl font-bold tabular-nums">
@@ -359,10 +370,12 @@ function submit() {
                 <!-- Site verrouillé (un seul site autorisé) -->
                 <div
                     v-else
-                    class="flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
+                    class="flex min-h-11 flex-wrap items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
                 >
                     <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span class="font-medium">{{ siteLabel }}</span>
+                    <span class="min-w-0 flex-1 font-medium break-words">{{
+                        siteLabel
+                    }}</span>
                     <span class="ml-auto text-xs text-muted-foreground"
                         >Votre agence</span
                     >
@@ -420,6 +433,13 @@ function submit() {
             </div>
 
             <!-- Augmenter + Diminuer (affichés selon les droits) -->
+            <p
+                v-if="canAugmenter && canDiminuer"
+                class="text-xs leading-5 text-muted-foreground"
+            >
+                Renseignez une seule quantité : une entrée ou une sortie de
+                stock.
+            </p>
             <div
                 class="gap-3"
                 :class="
@@ -443,6 +463,7 @@ function submit() {
                     <input
                         id="ajuster-augmenter"
                         type="number"
+                        inputmode="numeric"
                         min="1"
                         step="1"
                         :value="form.augmenter ?? ''"
@@ -477,6 +498,7 @@ function submit() {
                     <input
                         id="ajuster-diminuer"
                         type="number"
+                        inputmode="numeric"
                         min="1"
                         step="1"
                         :value="form.diminuer ?? ''"
@@ -504,6 +526,7 @@ function submit() {
                 </label>
                 <Dropdown
                     v-model="form.motif_type"
+                    input-id="ajuster-motif"
                     :options="motifOptions"
                     option-label="label"
                     option-value="value"
@@ -566,14 +589,20 @@ function submit() {
         </div>
 
         <template #footer>
-            <div class="flex justify-end gap-2">
-                <Button variant="outline" @click="close">Annuler</Button>
+            <div class="flex w-full justify-end gap-2">
+                <Button
+                    variant="outline"
+                    class="flex-1 sm:flex-none"
+                    @click="close"
+                    >Annuler</Button
+                >
                 <Button
                     data-testid="stock-submit-button"
+                    class="flex-[2] sm:flex-none"
                     :disabled="form.processing || !formValide"
                     @click="submit"
                 >
-                    Valider
+                    Valider l’ajustement
                 </Button>
             </div>
         </template>

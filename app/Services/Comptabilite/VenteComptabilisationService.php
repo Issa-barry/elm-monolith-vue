@@ -8,6 +8,7 @@ use App\Models\CommandeVenteRetour;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\PieceComptable;
+use App\Models\RemboursementVente;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -197,8 +198,10 @@ class VenteComptabilisationService
         $siteEncaissementId = $encaissement->site_encaissement_id ?? $facture->site_id;
         $pourAutreAgence = $encaissement->estPourAutreAgence();
 
+        // Acompte de précommande (ADR 0019) : la vente n'est pas encore réalisée, l'argent reçu est
+        // une avance (419100) — imputée sur le compte client seulement à la remise.
         $ligneClient = [
-            'role' => 'client',
+            'role' => $encaissement->est_acompte ? 'avance_client' : 'client',
             'sens' => 'credit',
             'montant' => $montant,
         ];
@@ -227,7 +230,7 @@ class VenteComptabilisationService
                 // de la facture parente.
                 organizationId: $facture->organization_id,
                 dateComptable: Carbon::parse($encaissement->date_encaissement ?? now()),
-                libelle: 'Encaissement facture '.$facture->reference,
+                libelle: ($encaissement->est_acompte ? 'Acompte précommande ' : 'Encaissement facture ').$facture->reference,
                 lignes: [
                     $this->ligneTresorerieEncaissement($encaissement, $facture, $montant),
                     $ligneCredit,
@@ -339,6 +342,83 @@ class VenteComptabilisationService
      * vise le wallet dédié (ex: Orange Money → 561100) avant de retomber sur le Mobile Money
      * générique — même pattern que FicheComptabilisationService (moyen_paiement_detail).
      */
+    /**
+     * Précommande remise (ADR 0019) : les acomptes encore détenus en avance client (419100) passent
+     * sur le compte client (411000), au même moment que la vente est constatée. Aucune trésorerie ne
+     * bouge. Bloquant (appelé dans la transaction de la remise) ; idempotent par facture.
+     */
+    public function comptabiliserImputationAcomptes(FactureVente $facture, float $montant): ?PieceComptable
+    {
+        $montant = round($montant, 2);
+        if ($montant <= 0) {
+            return null;
+        }
+
+        $facture->loadMissing('commande.client');
+        $client = $facture->commande?->client;
+        $tiers = $client ? ['tiers_type' => 'client', 'tiers_model' => $client] : [];
+
+        return $this->ecritures->comptabiliser(
+            evenement: EvenementComptable::ACOMPTE_PRECOMMANDE_IMPUTE,
+            source: $facture,
+            organizationId: $facture->organization_id,
+            dateComptable: Carbon::now(),
+            libelle: 'Imputation des acomptes — facture '.$facture->reference,
+            lignes: [
+                ['role' => 'avance_client', 'sens' => 'debit', 'montant' => $montant, ...$tiers],
+                ['role' => 'client', 'sens' => 'credit', 'montant' => $montant, ...$tiers],
+            ],
+            siteId: $facture->site_id,
+            createdBy: auth()->id(),
+        );
+    }
+
+    /**
+     * Remboursement d'un client (ADR 0019) : sortie de trésorerie réelle depuis le support choisi
+     * (caisse dédiée du payeur pour les espèces). Débit sur l'avance client tant que la vente n'est pas
+     * réalisée (facture encore « Créée » ou annulée avant toute remise), sur le compte client après la
+     * remise (trop-perçu). Bloquant.
+     */
+    public function comptabiliserRemboursement(RemboursementVente $remboursement, bool $venteRealisee): ?PieceComptable
+    {
+        $montant = round((float) $remboursement->montant, 2);
+        if ($montant <= 0) {
+            return null;
+        }
+
+        $remboursement->loadMissing('facture.commande.client', 'compteTresorerie');
+        $facture = $remboursement->facture;
+        $client = $facture?->commande?->client;
+        $support = $remboursement->compteTresorerie;
+        $tiers = $client ? ['tiers_type' => 'client', 'tiers_model' => $client] : [];
+
+        $mode = $remboursement->mode_paiement?->value;
+        $detail = $remboursement->mode_paiement === ModePaiement::MOBILE_MONEY
+            ? $remboursement->operateur_mobile_money?->detailComptable()
+            : null;
+
+        return $this->ecritures->comptabiliser(
+            evenement: EvenementComptable::REMBOURSEMENT_CLIENT,
+            source: $remboursement,
+            organizationId: $remboursement->organization_id,
+            dateComptable: Carbon::parse($remboursement->date_remboursement ?? now()),
+            libelle: 'Remboursement client — facture '.$facture?->reference,
+            lignes: [
+                ['role' => $venteRealisee ? 'client' : 'avance_client', 'sens' => 'debit', 'montant' => $montant, ...$tiers],
+                [
+                    'compte_comptable_id' => $support->compte_comptable_id,
+                    'journal_role' => 'tresorerie',
+                    'moyen_paiement' => $detail ? $mode.':'.$detail : $mode,
+                    'sens' => 'credit',
+                    'montant' => $montant,
+                    'libelle' => 'Remboursement client — '.$support->libelle,
+                ],
+            ],
+            siteId: $remboursement->site_id,
+            createdBy: $remboursement->created_by,
+        );
+    }
+
     private function moyenPaiementComptable(EncaissementVente $encaissement): ?string
     {
         $mode = $encaissement->mode_paiement?->value;

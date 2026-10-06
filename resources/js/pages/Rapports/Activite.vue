@@ -22,6 +22,9 @@ import {
 } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
+import ApprovisionnementsAConfirmer, {
+    type ApprovisionnementAConfirmer,
+} from './partials/ApprovisionnementsAConfirmer.vue';
 import CarteSection from './partials/CarteSection.vue';
 import EnTeteSection from './partials/EnTeteSection.vue';
 import { dateFr, pluriel } from './partials/format';
@@ -56,6 +59,8 @@ const props = defineProps<{
     agent: { id: string; nom: string } | null;
     limite_lignes: number;
     rapport: RapportActivite;
+    /** « Ma situation » seulement : espèces remises à l'agent, en attente de SA confirmation (ADR 0018). */
+    approvisionnements_en_attente?: ApprovisionnementAConfirmer[];
 }>();
 
 const page = usePage();
@@ -175,7 +180,7 @@ const cartes = computed((): Carte[] => {
             cle: 'creances',
             libelle: 'Dettes clients',
             valeur: formatGNF(r.creances.resume.reste),
-            detail: `${pluriel(r.creances.resume.nombre, 'facture')} · toutes dates`,
+            detail: pluriel(r.creances.resume.nombre, 'facture'),
             avertissement: null,
         },
         {
@@ -423,9 +428,9 @@ const chiffresMobileMoney = computed(() =>
                             Consultez les ventes, les encaissements, les dettes
                             clients et les caisses du périmètre sélectionné.
                             Cliquez sur une carte pour afficher son détail. Les
-                            dettes clients et les soldes actuels des caisses
-                            portent sur toutes les dates ; les ventes et les
-                            encaissements suivent la période choisie.
+                            ventes, les encaissements et les dettes clients
+                            suivent la période choisie ; le solde actuel des
+                            caisses porte sur toutes les dates.
                         </InfoTooltip>
                     </h1>
                     <p
@@ -531,6 +536,11 @@ const chiffresMobileMoney = computed(() =>
                     </template>
                 </ListPageActions>
             </div>
+
+            <ApprovisionnementsAConfirmer
+                v-if="maSituation && approvisionnements_en_attente?.length"
+                :approvisionnements="approvisionnements_en_attente"
+            />
 
             <!-- Cartes-onglets : chaque carte résume un bloc et en ouvre le détail -->
             <div
@@ -665,15 +675,15 @@ const chiffresMobileMoney = computed(() =>
             >
                 <EnTeteSection
                     titre="Dettes clients"
-                    contexte="Situation actuelle · Toutes dates"
-                    aide="Ce que les clients doivent encore : état actuel, toutes dates confondues — la période choisie ne s'applique pas ici."
+                    :contexte="periode.libelle"
+                    aide="Factures créées sur la période que les clients doivent encore. Reste : état actuel de ces factures, paiements reçus après la période compris."
                     :chiffres="chiffresDettes"
                 />
                 <ListeFactures
                     :lignes="rapport.creances.lignes"
                     :afficher-agent="!maSituation"
                     afficher-anciennete
-                    vide="Aucune dette client en cours."
+                    vide="Aucune dette client sur la période."
                 />
                 <p
                     v-if="tronque(rapport.creances)"

@@ -12,6 +12,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Support\Ventes\PrecommandeSuivi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -55,7 +56,7 @@ class IndexCommandeVenteController extends Controller
 
         $query = CommandeVente::with([
             'vehicule.proprietaire',
-            'vehicule.equipe.livreurs',
+            'vehicule.equipe.livreurs.personne',
             'client',
             'site',
             'facture.encaissements.creator',
@@ -89,10 +90,6 @@ class IndexCommandeVenteController extends Controller
                 'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
                 default => null,
             };
-        }
-
-        if (! empty($statuts)) {
-            $query->whereIn('statut', $statuts);
         }
 
         if ($statutFacture) {
@@ -188,12 +185,39 @@ class IndexCommandeVenteController extends Controller
             $query->whereHas('client', fn ($q) => $q->where('telephone', 'like', "%{$clientTel}%"));
         }
 
-        // Distribution : même liste, même contrôleur, filtrée par nom de route (fait serveur,
-        // jamais un paramètre modifiable côté client) — cf. routes/web.php.
-        $natureFiltree = $request->route()?->getName() === 'distributions.index'
+        // Distribution / Précommandes : même liste, même contrôleur, filtrée par nom de route (fait
+        // serveur, jamais un paramètre modifiable côté client) — cf. routes/web.php. Les précommandes
+        // (ADR 0019) restent des ventes : elles figurent aussi dans Ventes/Distribution selon leur
+        // nature ; leur page dédiée les réunit, toutes natures confondues.
+        $routeName = $request->route()?->getName();
+        $liste = match ($routeName) {
+            'distributions.index' => 'distributions',
+            'precommandes.index' => 'precommandes',
+            default => 'ventes',
+        };
+        $natureFiltree = $liste === 'distributions'
             ? NatureOperation::DISTRIBUTION_CLIENT
             : NatureOperation::VENTE_STANDARD;
-        $query->where('nature_operation', $natureFiltree->value);
+        if ($liste === 'precommandes') {
+            $query->where('est_precommande', true);
+        } else {
+            $query->where('nature_operation', $natureFiltree->value);
+        }
+
+        // Indicateurs calculés avant les filtres Statut / En retard : ils servent eux-mêmes de filtre
+        // rapide, leurs compteurs ne doivent pas tomber à zéro dès qu'on en sélectionne un.
+        $indicateursPrecommandes = $liste === 'precommandes'
+            ? PrecommandeSuivi::indicateurs((clone $query)->setEagerLoads([])->get(['id', 'statut', 'est_precommande', 'date_remise_prevue', 'remise_at']))
+            : null;
+
+        if (! empty($statuts)) {
+            $query->whereIn('statut', $statuts);
+        }
+
+        $enRetard = $liste === 'precommandes' && $request->boolean('en_retard');
+        if ($enRetard) {
+            $query->enRetard();
+        }
 
         $commandes = $query->get();
         $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee() && ! $c->isAnnuleeErreurSaisie());
@@ -250,12 +274,28 @@ class IndexCommandeVenteController extends Controller
             }
         }
 
+        // Nouvelle précommande : paramétrage d'acompte choisi (D6) et stock disponible en strict (D3).
+        $raisonBlocagePrecommande = $userSiteId !== null
+            ? CommandeVenteService::raisonPrecommandeImpossible($orgId, $userSiteId)
+            : null;
+
         return Inertia::render('Ventes/Index', [
             'saved_view' => $savedView,
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
+            'indicateurs_precommandes' => $indicateursPrecommandes,
             'nature_filtree' => $natureFiltree->value,
-            'page_title' => $natureFiltree === NatureOperation::DISTRIBUTION_CLIENT ? 'Distribution' : 'Ventes',
+            'liste' => $liste,
+            'page_title' => match ($liste) {
+                'distributions' => 'Distribution',
+                'precommandes' => 'Précommandes',
+                default => 'Ventes',
+            },
+            // Bouton « Nouvelle précommande » : permission dédiée (CLAUDE.md règle 3) et disponible
+            // strict, la politique de vente sans stock ne s'appliquant jamais à une réservation.
+            'can_precommander' => $user->can('precommander', CommandeVente::class),
+            'raison_blocage_precommande' => $raisonBlocagePrecommande,
+            'can_creer_precommande' => $userSiteId !== null && $raisonBlocagePrecommande === null,
             'periode' => $periode,
             'statuts_actifs' => $statuts,
             'statuts' => StatutCommandeVente::options(),
@@ -275,6 +315,7 @@ class IndexCommandeVenteController extends Controller
                 'livreur' => $livreur,
                 'numero_commande' => $numeroCommande,
                 'client' => $client,
+                'en_retard' => $enRetard ? '1' : null,
             ],
         ]);
     }
@@ -295,6 +336,9 @@ class IndexCommandeVenteController extends Controller
             $c->mode_remise_grossiste,
         );
 
+        $chauffeur = $c->vehicule?->equipe?->livreurs
+            ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur');
+
         return [
             'id' => $c->id,
             'reference' => $c->reference,
@@ -303,6 +347,12 @@ class IndexCommandeVenteController extends Controller
             'statut_affichage' => $c->statutAffichage(),
             'statut_color' => $c->statut?->color(),
             'nature_operation' => $c->nature_operation?->value,
+            'est_precommande' => (bool) $c->est_precommande,
+            'date_remise_prevue' => $c->date_remise_prevue?->format('d/m/Y'),
+            'date_remise_prevue_iso' => $c->date_remise_prevue?->format('Y-m-d'),
+            'precommande_livraison' => $c->est_precommande && $c->vehicule_id !== null,
+            'en_retard' => $c->isEnRetard(),
+            'trop_percu' => $c->est_precommande ? (float) ($c->facture?->tropPercu() ?? 0) : 0.0,
             'processus_code' => $processusCode,
             'processus_label' => CommissionProcessusDefaults::libelle($processusCode),
             'total_commande' => (float) $c->total_commande,
@@ -310,9 +360,8 @@ class IndexCommandeVenteController extends Controller
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
             'vehicule_photo_url' => $c->vehicule?->photo_url,
-            'chauffeur_nom' => $c->vehicule?->equipe?->livreurs
-                ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur')
-                ?->nom_complet,
+            'chauffeur_nom' => $chauffeur?->nom_complet,
+            'chauffeur_telephone' => $chauffeur?->telephone,
             'client_nom' => $c->client?->nom_complet,
             'client_telephone' => $c->client?->telephone,
             'site_nom' => $c->site?->nom,
@@ -335,6 +384,7 @@ class IndexCommandeVenteController extends Controller
                 'mode_paiement_label' => $e->mode_paiement?->label(),
                 'operateur_mobile_money_label' => $e->operateur_mobile_money?->label(),
                 'reference_paiement' => $e->reference_paiement,
+                'est_acompte' => (bool) $e->est_acompte,
                 'created_by' => $e->creator?->name,
             ])->values() : [],
             'created_at' => $c->created_at?->format('d/m/Y'),

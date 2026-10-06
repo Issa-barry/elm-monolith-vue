@@ -283,6 +283,28 @@ création unique (`$facture->encaissements()->create()`), quel que soit l'écran
 frontend reproduit ces règles pour l'UX (champs conditionnels, bouton désactivé) mais n'est jamais
 la seule protection.
 
+## Acompte de précommande (ADR 0019)
+
+Cf. [precommandes.md](precommandes.md). L'acompte versé à la création d'une précommande est un
+`EncaissementVente` marqué `est_acompte = true`, saisi dans la même `PaymentCard` et soumis aux mêmes
+contrôles que tout encaissement — un seul circuit, factorisé dans
+`App\Services\Ventes\SaisieEncaissementVente` (agence, support actif, référence obligatoire et unique,
+caisse dédiée pour les espèces). Différences :
+
+- il est reçu **avant** la remise : c'est la seule exception à « aucun encaissement avant chargement
+  validé » ; il est toujours reçu par l'agence de la précommande (décision D11) ;
+- il est crédité en **avance client (419100)**, pas sur le compte client (411) ;
+- il ne fait **jamais** passer la facture (encore « Créée ») à « Partiel » ou « Payée » : ni
+  commission, ni cashback, ni clôture ;
+- obligatoire ou non, et à quel taux minimum : **Paramètres → Ventes → Précommandes** (D6) ;
+- des **acomptes complémentaires** sont possibles tant que la précommande n'est pas remise (même
+  route `encaissements.store`, bouton « Ajouter un acompte » de la fiche), toujours reçus par l'agence
+  de la précommande ;
+- à la remise, les acomptes sont imputés sur la facture (419100 → 411000) et le reste dû s'encaisse
+  normalement. Un trop-perçu se rembourse (décaissement ADR 0009, `remboursements_ventes`) et bloque
+  la clôture tant qu'il n'est pas rendu ; le statut et le reste à payer sont calculés **net des
+  remboursements** (`factures_ventes.montant_rembourse`).
+
 ## Retour de livraison avant encaissement
 
 Cf. [retour-commande.md](retour-commande.md). Tant qu'aucun encaissement n'a eu lieu, un utilisateur

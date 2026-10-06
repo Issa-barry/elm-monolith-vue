@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\StatutImportVehiculesMaj;
 use App\Models\Categorie;
+use App\Models\EquipeLivraison;
 use App\Models\ImportVehiculesMaj;
 use App\Models\Organization;
 use App\Models\Proprietaire;
@@ -226,6 +227,31 @@ class ImportVehiculesMajTest extends TestCase
         $this->confirmer($import);
 
         $this->assertTrue($vehicule->refresh()->livraison_logistique);
+    }
+
+    /**
+     * Seul l'import de création (ImportFlotteTest) crée une équipe brouillon inactive : une mise à
+     * jour ne change jamais l'état d'une équipe ni du véhicule, dans un sens comme dans l'autre.
+     */
+    public function test_la_mise_a_jour_ne_change_jamais_letat_des_equipes_ni_des_vehicules(): void
+    {
+        $actif = $this->makeVehicule(['immatriculation' => 'RC-0001-A', 'is_active' => true]);
+        $brouillon = $this->makeVehicule(['immatriculation' => 'RC-0002-A', 'is_active' => false]);
+        $equipeActive = EquipeLivraison::create(['organization_id' => $this->org->id, 'vehicule_id' => $actif->id, 'is_active' => true]);
+        $equipeBrouillon = EquipeLivraison::create(['organization_id' => $this->org->id, 'vehicule_id' => $brouillon->id, 'is_active' => false]);
+
+        $import = $this->importer([
+            ['vehicule_immatriculation' => 'RC-0001-A', 'vehicule_site' => $this->siteB->nom, 'vehicule_livraison_logistique' => 'oui'],
+            ['vehicule_immatriculation' => 'RC-0002-A', 'vehicule_site' => $this->siteB->nom, 'vehicule_livraison_logistique' => 'oui'],
+        ]);
+        $this->assertSame(2, $import->nb_lignes_maj);
+        $this->confirmer($import);
+
+        $this->assertTrue($equipeActive->fresh()->is_active);
+        $this->assertTrue($actif->fresh()->is_active);
+        $this->assertFalse($equipeBrouillon->fresh()->is_active);
+        $this->assertFalse($brouillon->fresh()->is_active);
+        $this->assertTrue($actif->fresh()->livraison_logistique);
     }
 
     public function test_plusieurs_modifications_sur_une_meme_ligne(): void

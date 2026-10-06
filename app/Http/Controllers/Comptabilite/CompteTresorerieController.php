@@ -29,7 +29,9 @@ use Inertia\Response;
  * pour créer un mouvement de fonds ou un solde d'ouverture.
  * Lecture ouverte à `tresorerie.read`, limitée aux agences de l'utilisateur (admins : toutes) —
  * un responsable d'agence y suit les caisses et verse celle d'un agent (permission
- * `tresorerie.verser`, cf. VerserCaisseAgentController). Création, modification et soldes
+ * `tresorerie.verser`, cf. VerserCaisseAgentController) ou, dans l'autre sens, approvisionne la
+ * caisse d'un agent depuis la caisse de l'agence (`tresorerie.envoyer`, cf.
+ * ApprovisionnerCaisseAgentController, ADR 0018). Création, modification et soldes
  * d'ouverture restent réservés à `tresorerie.gerer_soldes_ouverture`.
  *
  * `nature` (agence | dediee) est dérivée d'`agent_id` : un support sans agent
@@ -109,17 +111,30 @@ class CompteTresorerieController extends Controller
             ->get(['id', 'site_id', 'libelle']);
         $agencesAvecDestination = $destinationsVersement->pluck('site_id')->flip();
 
+        // Caisses d'agents actives pouvant être approvisionnées par une caisse de l'agence (ADR 0018),
+        // Sa propre caisse seulement si son rôle lui permet d'en confirmer lui-même la réception.
+        $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->dediees()->actifs()
+            ->with('agent.personne')
+            ->when(! $user->can('tresorerie.recevoir'), fn ($q) => $q->where('agent_id', '!=', $user->id))
+            ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
+            ->orderBy('libelle')
+            ->get(['id', 'site_id', 'libelle', 'agent_id']);
+        $agencesAvecAgentAApprovisionner = $destinationsApprovisionnement->pluck('site_id')->flip();
+
         $supportsListes = $query->get();
 
         // Argent déjà sorti d'une caisse dédiée (versement Envoyé) mais pas encore reçu : information
         // de suivi, jamais ajoutée au solde (le grand livre reste la source de vérité des soldes).
         $enCours = $this->disponibilite->versementsEnCours($orgId, now(), $supportsListes->pluck('id')->all())
             ->keyBy('compte_tresorerie_id');
+        // Même principe dans l'autre sens : approvisionnement envoyé, pas encore confirmé par l'agent.
+        $approvisionnementsEnCours = $this->disponibilite->approvisionnementsEnCours($orgId, $supportsListes->pluck('id')->all())
+            ->keyBy('compte_tresorerie_id');
 
         $comptes = $supportsListes
             ->sortBy(fn (CompteTresorerie $c) => mb_strtolower(($c->site?->nom ?? '').'|'.($c->isDediee() ? '1' : '0').'|'.$c->libelle))
             ->values()
-            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $user, $agencesAvecDestination) {
+            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $approvisionnementsEnCours, $user, $agencesAvecDestination, $agencesAvecAgentAApprovisionner) {
                 $solde = (float) ($soldes->get($c->id)['solde'] ?? 0);
 
                 return [
@@ -156,6 +171,16 @@ class CompteTresorerieController extends Controller
                         && $solde > 0
                         && $agencesAvecDestination->has($c->site_id)
                         && $user->can('verser', $c),
+                    'en_cours_approvisionnement' => (float) ($approvisionnementsEnCours->get($c->id)['montant'] ?? 0),
+                    'approvisionnements_en_cours' => (int) ($approvisionnementsEnCours->get($c->id)['nombre'] ?? 0),
+                    // Mêmes vérifications explicites (Gate::before) ; revérifiées par
+                    // MouvementFondsService::approvisionnerCaisseAgent().
+                    'peut_approvisionner' => ! $c->isDediee()
+                        && $c->type === TypeSupportTresorerie::CAISSE
+                        && $c->actif
+                        && $solde > 0
+                        && $agencesAvecAgentAApprovisionner->has($c->site_id)
+                        && $user->can('approvisionner', $c),
                     'solde_ouverture' => $c->soldeOuverture ? [
                         'id' => $c->soldeOuverture->id,
                         'montant' => (float) $c->soldeOuverture->montant,
@@ -178,6 +203,13 @@ class CompteTresorerieController extends Controller
                 'id' => $c->id,
                 'site_id' => $c->site_id,
                 'libelle' => $c->libelle,
+            ])->values(),
+            'destinations_approvisionnement' => $destinationsApprovisionnement->map(fn (CompteTresorerie $c) => [
+                'id' => $c->id,
+                'site_id' => $c->site_id,
+                'libelle' => $c->libelle,
+                'agent' => $c->agent?->name,
+                'est_ma_caisse' => $c->agent_id === $user->id,
             ])->values(),
             // Données de création : réservées à celui qui peut réellement créer une caisse — un
             // simple lecteur n'a pas à recevoir la liste des utilisateurs de l'organisation.

@@ -306,8 +306,11 @@ class CommissionEnveloppeGenerator
                 // ne doit jamais retarder la notification des cibles correctement résolues. Une
                 // complétion ne notifie que les enveloppes qu'elle vient de créer, jamais une
                 // seconde fois les parts déjà annoncées.
+                // Envois après le commit (03/10/2026) : jamais pendant le verrou de la source — un
+                // SMTP lent bloquait l'opération et faisait dépasser le délai nginx d'une relance
+                // multiple (504). Une génération annulée par l'appelant n'envoie donc plus rien.
                 if (! empty($enveloppesCreees)) {
-                    self::notifierCommissionGeneree($ctx, $enveloppesCreees);
+                    DB::afterCommit(fn () => self::notifierCommissionGeneree($ctx, $enveloppesCreees));
                 }
 
                 // Toute nouvelle enveloppe est répercutée tout de suite sur la période qui la
@@ -332,11 +335,8 @@ class CommissionEnveloppeGenerator
                 // Alerte régularisation : succès total mais 0 enveloppe (aucun barème nulle
                 // part, cas silencieux légitime), ou au moins une cible en erreur (PARTIEL/ERREUR).
                 if (! $auMoinsUneEnveloppe || ! empty($erreursCibles)) {
-                    self::alerterCommissionManquante(
-                        $ctx,
-                        $declencheurUserId,
-                        empty($erreursCibles) ? null : implode(' | ', $erreursCibles),
-                    );
+                    $motif = empty($erreursCibles) ? null : implode(' | ', $erreursCibles);
+                    DB::afterCommit(fn () => self::alerterCommissionManquante($ctx, $declencheurUserId, $motif, $declenchePar));
                 }
             } catch (InvalidArgumentException $e) {
                 // Filet de sécurité pour une erreur métier vraiment imprévue : depuis le
@@ -367,7 +367,8 @@ class CommissionEnveloppeGenerator
                     'created_by' => $declencheurUserId,
                 ]);
 
-                self::alerterCommissionManquante($ctx, $declencheurUserId, $e->getMessage());
+                $motif = $e->getMessage();
+                DB::afterCommit(fn () => self::alerterCommissionManquante($ctx, $declencheurUserId, $motif, $declenchePar));
 
                 // Volontairement pas de rethrow : un échec de génération n'est jamais
                 // une erreur de l'opération métier qui l'a déclenchée. L'opération
@@ -435,11 +436,15 @@ class CommissionEnveloppeGenerator
      * cf. ci-dessus). Ne doit JAMAIS interrompre la génération ni l'opération métier
      * appelante : toute erreur d'envoi (mail indisponible, etc.) est avalée et
      * journalisée, jamais relancée — même garantie que le reste de cette classe.
+     *
+     * Relance manuelle (Monitoring ou fiche commande) : notification dans l'application
+     * seulement, jamais d'email — l'alerte email a déjà été envoyée au premier échec.
      */
     private static function alerterCommissionManquante(
         CommissionOperationContext $ctx,
         ?string $declencheurUserId,
         ?string $motifErreur,
+        CommissionGenerationDeclenchePar $declenchePar,
     ): void {
         try {
             $notification = new CommissionManquanteNotification(
@@ -451,6 +456,7 @@ class CommissionEnveloppeGenerator
                 $ctx->notifVerbeEvenement,
                 $ctx->notifUrlPath,
                 $ctx->notifActionLabel,
+                parEmail: $declenchePar !== CommissionGenerationDeclenchePar::UTILISATEUR,
             );
 
             // whereHas(...) plutôt que le scope role() de Spatie : ce dernier lève

@@ -29,8 +29,8 @@ final class SituationVentesAgregats
 
     /**
      * Agrégé par variante (grain transactionnel réel), trié par quantité vendue décroissante.
-     * « Quantité vendue » = quantite_livree si renseignée, sinon quantite_demandee — même repli que
-     * CashbackService::quantiteEligible().
+     * « Quantité vendue » = quantite_livree si renseignée, sinon quantite_demandee (le cashback lit,
+     * lui, la quantité effective depuis le 04/10/2026, cf. CashbackService::quantiteEligible()).
      *
      * @param  Collection<int, CommandeVenteLigne>  $lignes  de la vente la plus récente à la plus ancienne
      */

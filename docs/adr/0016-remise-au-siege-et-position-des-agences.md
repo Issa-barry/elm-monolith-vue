@@ -1,8 +1,9 @@
 # ADR 0016 — Remise à la trésorerie principale et position de trésorerie des agences
 
 - **Date** : 2026-10-02
-- **Statut** : accepté le 2026-10-02 (règles métier) — compte commun retiré et lot 1 (calcul, écran
-  Financement) livrés le 2026-10-03, **à valider avant le lot 2** ; lots 2 et 3 non développés
+- **Statut** : accepté le 2026-10-02 (règles métier) — compte commun retiré, lot 1 (calcul, écran
+  Financement) et lot 3 (vue « Remises des agences ») livrés le 2026-10-03 ; lot 2 (bouton de
+  remise, frais, écritures) non développé, **après validation du lot 1**
 - **Périmètre** : trésorerie (financement des agences, mouvements de fonds, inter-agences),
   comptabilité générale — complète et amende [ADR 0012](0012-encaissement-inter-agences-et-reglement.md)
 - **Liens** : [ADR 0017](0017-type-de-site-et-site-central-de-tresorerie.md) (trésorerie principale
@@ -159,9 +160,87 @@ délai.
   la seule prochaine échéance) ; pour une période passée, le statut des dettes est celui
   d'aujourd'hui ; la part « espèces chez les agents » est une estimation (cf. point 4).
 - **Lot 2 — remise** : action « Remettre à la trésorerie principale » (point 7), destination
-  automatique (point 5), écritures tierces, frais de transfert (point 6).
-- **Lot 3 — vue trésorerie principale** : remises à recevoir par agence, en cours, reçues, détail
-  jusqu'aux commandes ; Situation de trésorerie ; E2E.
+  automatique (point 5), écritures tierces, frais de transfert (point 6). Une remise envoyée est
+  « En transit » jusqu'à sa confirmation par la trésorerie principale. Les remises doivent être
+  identifiables comme telles (et non comme un « Transfert entre agences » ordinaire) : c'est ce qui
+  permet le suivi du lot 3.
+- **Lot 3 — vue « Remises des agences »** (Comptabilité → Trésorerie), règles validées le
+  2026-10-03 — voir ci-dessous ; **livrée le 2026-10-03**, avant le lot 2, à la demande du métier
+  (vue dédiée au Trésor principal, distincte de Financement). Restent : Situation de trésorerie, E2E.
+
+Ordre initial : lot 1 → validation métier → lot 2 → lot 3. Le lot 3 a été livré avant le lot 2 :
+d'ici là, toute sortie d'une agence vers la trésorerie principale y compte comme une remise (cf.
+« Livré »), et le lot 2 n'aura qu'à créer ces mouvements proprement.
+
+### Lot 3 — vue « Remises à recevoir » (validée le 2026-10-03)
+
+Vue de pilotage de la trésorerie principale : ce qu'elle attend, ce qui est arrivé, ce qui reste.
+Une ligne par agence autre que la trésorerie principale.
+
+**Montants mesurés, jamais un attendu figé.** Aucun « montant attendu » n'est enregistré :
+
+| Montant | Source |
+|---|---|
+| À remettre | calcul du lot 1 **à l'instant présent** (`total_a_remettre`), quelle que soit la période choisie |
+| En transit | remises envoyées, pas encore confirmées par la trésorerie principale |
+| Reçu sur la période | remises confirmées pendant la période choisie |
+| **Attendu** | À remettre + En transit + Reçu sur la période (déduit, jamais stocké) |
+
+On ne calcule jamais « attendu − remis » : le calcul du lot 1 baisse déjà dès qu'une remise quitte
+l'agence, la soustraire une deuxième fois compterait le même argent deux fois. Exemple : Kankan doit
+1 500 000 et en envoie 1 000 000 → À remettre 500 000, En transit 1 000 000, Attendu 1 500 000. Si
+l'agence encaisse encore pendant la période, l'attendu augmente, ce qui est juste.
+
+**Période** : mois en cours par défaut, modifiable comme dans Financement. Elle ne concerne que
+« Reçu sur la période » et l'historique ; « À remettre » reste toujours le calcul du moment.
+
+**Cycle d'une remise** : À remettre → En transit → Reçu ; En transit → Contesté (puis retour, workflow
+existant des mouvements de fonds). La **confirmation reste du côté de la trésorerie principale** :
+action « Confirmer la réception » directement sur la page, avec le choix du support qui a réellement
+reçu les fonds, comme aujourd'hui (`MouvementFondsService::recevoir()`, policy
+`MouvementFondsPolicy::recevoir`, permission `tresorerie.recevoir`) ; « Contester » sous
+`tresorerie.rejeter`. Aucune règle de réception nouvelle.
+
+**Statut de l'agence**, dans cet ordre de priorité :
+
+| Statut | Condition |
+|---|---|
+| Données incomplètes | position non fiable (lot 1) |
+| Remise en cours | au moins une remise en transit |
+| Partiellement remis | reçu sur la période > 0 et à remettre > 0 |
+| Remis | reçu sur la période > 0 et à remettre = 0 |
+| À remettre | à remettre > 0, rien reçu ni en transit |
+| Rien à remettre | tout à 0 |
+
+Pas de « En retard » tant que le métier n'a pas fixé d'échéance de remise. Filtre par statut (pour
+voir d'un coup les agences qui n'ont encore rien remis) et filtre Agence (`site_ids[]`).
+
+**Indicateurs** : total attendu, en transit, reçu sur la période, reste à recevoir (= à remettre),
+nombre d'agences par statut.
+
+**Détail d'une agence** : attendu, en transit, reçu, reste ; chaque remise (référence, date, support
+d'origine et de réception, montant, frais, part « argent d'autres agences » / « excédent ») avec le
+lien vers le mouvement.
+
+**Livré le 2026-10-03** — page `/backoffice/comptabilite/tresorerie/remises` (« Remises des agences au
+Trésor principal »), menu Comptabilité → Trésorerie → « Remises des agences » ; détail
+`/remises/{agence}`. `RemisesAgencesService` (calculs), `RemisesAgencesController` (interface) :
+
+- **Une remise** = un mouvement de fonds d'une agence vers la trésorerie principale, de nature
+  « Transfert entre agences » ou « Règlement inter-agences », hors brouillon et annulé. Un
+  financement (trésorerie principale → agence) va dans l'autre sens et n'est jamais compté.
+- **Reste à recevoir** = `total_a_remettre` de `FinancementAgenceService` pour le mois en cours,
+  vue « Mois complet » — le même montant que l'écran Financement par défaut.
+- **Visibilité** (`tresorerie.read`) : toutes les agences pour un administrateur ou une personne
+  affectée à la trésorerie principale (sa vue de pilotage) ; sinon ses seules agences. Le détail
+  d'une agence non visible est refusé (403), celui de la trésorerie principale ou d'une autre
+  organisation introuvable (404).
+- **Confirmer la réception** : bouton par remise en transit, affiché selon l'indicateur serveur
+  `peut_recevoir` (policy `recevoir` : `tresorerie.recevoir`, état, affectation au site qui reçoit) ;
+  appelle la route existante `mouvements.recevoir` avec le support choisi parmi les supports actifs
+  de la trésorerie principale. « Contester » reste dans l'écran Mouvements.
+- **Pas encore** : frais et part « autres agences / excédent » par remise (lot 2 : une remise
+  d'aujourd'hui ne les porte pas) ; le détail en montre la répartition au niveau de l'agence.
 
 ## Abandonné : le compte commun (2026-10-02)
 

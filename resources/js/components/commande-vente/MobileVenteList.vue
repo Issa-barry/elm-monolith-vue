@@ -42,7 +42,7 @@ const detailRows = computed(() => {
         { label: 'Agence', value: commande.site_nom || '—' },
         { label: 'Client', value: commande.client_nom || 'Non renseigné' },
         {
-            label: 'Téléphone',
+            label: 'Tél. client',
             value: commande.client_telephone
                 ? formatPhoneDisplay(commande.client_telephone)
                 : '—',
@@ -50,6 +50,12 @@ const detailRows = computed(() => {
         {
             label: 'Chauffeur',
             value: commande.chauffeur_nom || 'Non renseigné',
+        },
+        {
+            label: 'Tél. chauffeur',
+            value: commande.chauffeur_telephone
+                ? formatPhoneDisplay(commande.chauffeur_telephone)
+                : '—',
         },
     ];
 });

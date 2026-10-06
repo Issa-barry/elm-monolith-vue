@@ -65,6 +65,9 @@ const mouvement = (surcharge: Record<string, unknown> = {}) => ({
     peut_contester: false,
     peut_confirmer_retour: false,
     confirme_par_expediteur: false,
+    beneficiaire: null,
+    envoye_le: null,
+    recu_le: null,
     ...surcharge,
 });
 
@@ -272,7 +275,7 @@ describe('Mouvements de fonds — colonnes indépendantes du tableau', () => {
     });
 });
 
-describe('Mouvements de fonds — filtres de la barre', () => {
+describe('Mouvements de fonds — vues et tiroir de filtres', () => {
     const sites = [
         { value: 's1', label: 'Matoto' },
         { value: 's2', label: 'Siège' },
@@ -283,7 +286,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         { value: 'c2', label: 'Caisse Agence' },
     ];
 
-    it('garde Caisse, Référence et Nature directement dans la barre', () => {
+    it('garde Caisse, Référence et Nature dans le tiroir, avec le statut en premier', () => {
         const champs = monter([], { caisses_filtre: caisses })
             .findComponent(DataFilters)
             .props('fields');
@@ -292,21 +295,21 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         expect(parCle.caisse_id).toMatchObject({
             label: 'Caisse',
             type: 'select',
-            inline: true,
         });
         expect(parCle.search).toMatchObject({
             label: 'Référence',
             type: 'text',
-            inline: true,
         });
         expect(parCle.nature).toMatchObject({
             label: 'Nature',
             type: 'select',
-            inline: true,
         });
+        expect(champs[0].key).toBe('statut');
+        expect(champs[1].key).toBe('search');
+        expect(champs.every((champ) => !champ.inline)).toBe(true);
     });
 
-    it('cherche une caisse par son NOM : liste avec recherche, assez large, alimentée par les caisses des mouvements', () => {
+    it('cherche une caisse par son nom dans les caisses des mouvements', () => {
         const caisse = monter([], { caisses_filtre: caisses })
             .findComponent(DataFilters)
             .props('fields')
@@ -314,7 +317,6 @@ describe('Mouvements de fonds — filtres de la barre', () => {
 
         expect(caisse).toMatchObject({
             searchable: true,
-            wide: true,
             placeholder: 'Rechercher une caisse…',
             options: caisses,
         });
@@ -330,12 +332,7 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         ]);
         // Sans choix : origine OU destination (placeholder), c'est le comportement par défaut du backend.
         expect(position?.placeholder).toBe('Les deux');
-        // Origine / Destination est un filtre avancé (tiroir « Filtres »), plus dans la barre principale.
-        expect(champs.filter((c) => c.inline).map((c) => c.key)).toEqual([
-            'caisse_id',
-            'search',
-            'nature',
-        ]);
+        expect(champs.filter((c) => c.inline)).toEqual([]);
     });
 
     it('range Origine / Destination, Statut, agences d’origine/destination et Montant min/max dans le tiroir du bouton « Filtres »', () => {
@@ -369,24 +366,23 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             type: 'number',
         });
         expect(parCle.montant_max.inline).toBeFalsy();
-        // Pas la variante « trigger-only » : les champs `inline` restent dans la barre, seul le bouton part en en-tête.
-        expect(filtres.props('triggerOnly')).toBeFalsy();
+        expect(filtres.props('triggerOnly')).toBe(true);
+        expect(filtres.props('savedFilterScope')).toBe('mouvements-fonds');
     });
 
     it('place le bouton « Filtres » dans l’en-tête, juste avant « Nouveau mouvement »', async () => {
         const wrapper = monter([], { peut_creer: true });
         await nextTick();
 
-        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const cible = wrapper.findComponent(DataFilters).element;
         const actions = wrapper.get('[data-testid="list-page-actions"]');
         const nouveau = actions.get('[href$="/mouvements/create"]');
 
-        expect(cible).toBeInstanceOf(HTMLElement);
-        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(actions.element.contains(cible)).toBe(true);
         expect(nouveau.text()).toBe('Nouveau mouvement');
         // Ordre standard des actions d'en-tête : Filtres puis Nouveau.
         expect(
-            (cible as HTMLElement).compareDocumentPosition(nouveau.element) &
+            cible.compareDocumentPosition(nouveau.element) &
                 Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
@@ -395,10 +391,10 @@ describe('Mouvements de fonds — filtres de la barre', () => {
         const wrapper = monter([], { peut_creer: false });
         await nextTick();
 
-        const cible = wrapper.findComponent(DataFilters).props('triggerTarget');
+        const cible = wrapper.findComponent(DataFilters).element;
         const actions = wrapper.get('[data-testid="list-page-actions"]');
 
-        expect(actions.element.contains(cible as HTMLElement)).toBe(true);
+        expect(actions.element.contains(cible)).toBe(true);
         expect(actions.find('[href$="/mouvements/create"]').exists()).toBe(
             false,
         );
@@ -411,11 +407,11 @@ describe('Mouvements de fonds — filtres de la barre', () => {
             .map((c) => c.key);
 
         expect(cles).toEqual([
-            'caisse_id',
+            'statut',
             'search',
+            'caisse_id',
             'nature',
             'caisse_role',
-            'statut',
             'site_origine_id',
             'site_destination_id',
             'montant_min',

@@ -26,13 +26,14 @@ import { Label } from '@/components/ui/label';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatGNF, formatQuantite } from '@/lib/utils';
+import { formatGNF, formatPhoneDisplay, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { KpiWidgetItem } from '@/types/kpi-widgets';
 import type { VenteMobile } from '@/types/vente-mobile';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CalendarClock,
     CheckCircle,
     CircleAlert,
     Download,
@@ -62,6 +63,16 @@ const vTooltip = Tooltip;
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande extends VenteMobile {
     nature_operation: 'vente_standard' | 'distribution_client';
+    /** Précommande (ADR 0019) : marqueur, date prévue de remise, retard dérivé. */
+    est_precommande: boolean;
+    date_remise_prevue: string | null;
+    en_retard: boolean;
+    /** Date prévue au format ISO, pour le tri de la colonne (l'affichage reste en d/m/Y). */
+    date_remise_prevue_iso: string | null;
+    /** Précommande : livrée par un véhicule (sinon retrait au dépôt). */
+    precommande_livraison: boolean;
+    /** Trop-perçu d'une précommande encore à rembourser (ADR 0019). */
+    trop_percu: number;
     quantite_totale: number;
     processus_code: string;
     facture_id: number | null;
@@ -124,14 +135,34 @@ interface Filters {
     livreur: string | null;
     numero_commande: string | null;
     client: string | null;
+    en_retard: string | null;
+}
+
+interface IndicateurPrecommande {
+    nombre: number;
+    statuts: string[];
+}
+
+/** Compteurs du cycle de précommande (PrecommandeSuivi), calculés hors filtres Statut / En retard. */
+interface IndicateursPrecommandes {
+    en_cours: IndicateurPrecommande;
+    a_preparer: IndicateurPrecommande;
+    en_livraison: IndicateurPrecommande;
+    en_retard: IndicateurPrecommande;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
+    indicateurs_precommandes: IndicateursPrecommandes | null;
     nature_filtree: 'vente_standard' | 'distribution_client';
+    liste: 'ventes' | 'distributions' | 'precommandes';
     page_title: string;
+    can_precommander: boolean;
+    can_creer_precommande: boolean;
+    /** Paramétrage d'acompte jamais choisi, ou aucun stock disponible (ADR 0019). */
+    raison_blocage_precommande: string | null;
     periode: string;
     statuts_actifs: string[];
     statuts: StatutOption[];
@@ -162,15 +193,24 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,
 );
 
+const urlListe = computed(
+    () =>
+        ({
+            ventes: '/backoffice/ventes',
+            distributions: '/backoffice/distributions',
+            precommandes: '/backoffice/precommandes',
+        })[props.liste],
+);
+const estListePrecommandes = computed(() => props.liste === 'precommandes');
+// Nouvelle vente : jamais proposée depuis la liste des précommandes, pour ne pas créer une vente
+// en croyant précommander (deux points d'entrée distincts, ADR 0019).
+const peutProposerVente = computed(
+    () => !estListePrecommandes.value && can('ventes.create'),
+);
+
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    {
-        title: props.page_title,
-        href:
-            props.nature_filtree === 'distribution_client'
-                ? '/backoffice/distributions'
-                : '/backoffice/ventes',
-    },
+    { title: props.page_title, href: urlListe.value },
 ]);
 
 // ── Options statique ──────────────────────────────────────────────────────────
@@ -181,6 +221,21 @@ const filtresStatut = [
     { value: 'livraison_en_cours', label: 'En livraison' },
     { value: 'livree', label: 'Livrée' },
     { value: 'cloturee', label: 'Clôturée' },
+    { value: 'annulee', label: 'Annulée' },
+];
+
+// Une précommande n'est jamais en brouillon ; elle passe par ses propres statuts avant la remise.
+const filtresStatutPrecommande = [
+    { value: 'reservee', label: 'Réservée' },
+    { value: 'a_preparer', label: 'À préparer' },
+    { value: 'preparee', label: 'Préparée' },
+    { value: 'a_charger', label: 'À charger' },
+    { value: 'chargement_en_cours', label: 'Chargement en cours' },
+    { value: 'livraison_en_cours', label: 'En livraison' },
+    { value: 'livree', label: 'Livrée' },
+    { value: 'facturation', label: 'À encaisser' },
+    { value: 'cloturee', label: 'Clôturée' },
+    { value: 'retournee', label: 'Retournée' },
     { value: 'annulee', label: 'Annulée' },
 ];
 
@@ -205,7 +260,84 @@ const filtresStatutCommission = [
 
 const mobileSearch = ref('');
 
-const mobileKpiItems = computed<KpiWidgetItem[]>(() => [
+type CleIndicateur = keyof IndicateursPrecommandes;
+
+interface CartePrecommande extends IndicateurPrecommande {
+    cle: CleIndicateur;
+    titre: string;
+    aide: string;
+}
+
+// Pilotage du cycle de précommande : combien, où en sont-elles, lesquelles demandent une action.
+// Les montants restent sur les factures et la liste des ventes.
+const cartesPrecommandes = computed<CartePrecommande[]>(() => {
+    const ind = props.indicateurs_precommandes;
+    if (!ind) return [];
+    return [
+        {
+            cle: 'en_cours',
+            titre: 'En cours',
+            aide: 'Ni remises, ni annulées',
+            ...ind.en_cours,
+        },
+        {
+            cle: 'a_preparer',
+            titre: 'À préparer',
+            aide: 'Préparation à lancer ou à valider',
+            ...ind.a_preparer,
+        },
+        {
+            cle: 'en_livraison',
+            titre: 'En livraison',
+            aide: 'Chargées, livraison à confirmer',
+            ...ind.en_livraison,
+        },
+        {
+            cle: 'en_retard',
+            titre: 'En retard',
+            aide: 'Date prévue dépassée, non remises',
+            ...ind.en_retard,
+        },
+    ];
+});
+
+function carteActive(carte: CartePrecommande): boolean {
+    const retardActif = props.filters.en_retard === '1';
+    if (carte.cle === 'en_retard') return retardActif;
+    if (retardActif) return false;
+    const actifs = [...(props.statuts_actifs ?? [])].sort();
+    const cibles = [...carte.statuts].sort();
+    return (
+        actifs.length === cibles.length &&
+        actifs.every((s, i) => s === cibles[i])
+    );
+}
+
+// Filtre rapide : remplace Statut / En retard en conservant les autres filtres de l'URL courante ;
+// un second clic sur la carte active retire le filtre.
+function filtrerParCarte(carte: CartePrecommande) {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of [...params.keys()]) {
+        if (key.startsWith('statuts') || key === 'en_retard') {
+            params.delete(key);
+        }
+    }
+    if (!carteActive(carte)) {
+        if (carte.cle === 'en_retard') {
+            params.set('en_retard', '1');
+        } else {
+            carte.statuts.forEach((s) => params.append('statuts[]', s));
+        }
+    }
+    const query = params.toString();
+    router.get(
+        query ? `${urlListe.value}?${query}` : urlListe.value,
+        {},
+        { preserveScroll: true, replace: true },
+    );
+}
+
+const kpiVentes = computed<KpiWidgetItem[]>(() => [
     {
         id: 'ventes-total',
         title: 'Total',
@@ -227,15 +359,44 @@ const mobileKpiItems = computed<KpiWidgetItem[]>(() => [
     },
 ]);
 
-const filterFields: FilterField[] = [
+const mobileKpiItems = computed<KpiWidgetItem[]>(() =>
+    estListePrecommandes.value
+        ? cartesPrecommandes.value.map((carte) => ({
+              id: `precommandes-${carte.cle}`,
+              title: carte.titre,
+              value: String(carte.nombre),
+              subtitle: carte.aide,
+              valueClass:
+                  carte.cle === 'en_retard' && carte.nombre > 0
+                      ? 'text-amber-700 dark:text-amber-400 tabular-nums'
+                      : 'text-foreground tabular-nums',
+          }))
+        : kpiVentes.value,
+);
+
+const filterFields = computed<FilterField[]>(() => [
     {
         key: 'statuts',
         label: 'Statut commande',
         type: 'multi-select',
-        options: filtresStatut,
+        options: estListePrecommandes.value
+            ? filtresStatutPrecommande
+            : filtresStatut,
         placeholder: 'Tous les statuts',
         inline: true,
     },
+    ...(estListePrecommandes.value
+        ? [
+              {
+                  key: 'en_retard',
+                  label: 'Retard',
+                  type: 'select',
+                  options: [{ value: '1', label: 'En retard' }],
+                  placeholder: 'Retard : toutes',
+                  inline: true,
+              } satisfies FilterField,
+          ]
+        : []),
     {
         key: 'statut_facture',
         label: 'Statut facture',
@@ -288,7 +449,7 @@ const filterFields: FilterField[] = [
         placeholder: 'VTE-…, DST-…',
         inline: true,
     },
-];
+]);
 
 const filterValues = computed(() => ({
     statuts: props.statuts_actifs ?? [],
@@ -717,9 +878,22 @@ function confirmDelete(c: Commande) {
                 >
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
-                <span class="text-base font-semibold">Ventes</span>
+                <span class="text-base font-semibold">{{ page_title }}</span>
                 <Link
-                    v-if="can('ventes.create') && can_creer_commande"
+                    v-if="
+                        estListePrecommandes &&
+                        can_precommander &&
+                        can_creer_precommande
+                    "
+                    href="/backoffice/precommandes/create"
+                >
+                    <Button size="sm" class="h-8 px-3 text-xs">
+                        <CalendarClock class="mr-1 h-3.5 w-3.5" />
+                        Précommande
+                    </Button>
+                </Link>
+                <Link
+                    v-else-if="peutProposerVente && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
@@ -728,7 +902,7 @@ function confirmDelete(c: Commande) {
                     </Button>
                 </Link>
                 <Button
-                    v-else-if="can('ventes.create')"
+                    v-else-if="peutProposerVente"
                     size="sm"
                     class="h-8 px-3 text-xs"
                     disabled
@@ -789,15 +963,9 @@ function confirmDelete(c: Commande) {
                 </div>
                 <DataFilters
                     trigger-only
-                    :url="
-                        nature_filtree === 'distribution_client'
-                            ? '/backoffice/distributions'
-                            : '/backoffice/ventes'
-                    "
+                    :url="urlListe"
                     :saved-filter-scope="
-                        nature_filtree === 'distribution_client'
-                            ? undefined
-                            : 'ventes'
+                        liste === 'ventes' ? 'ventes' : undefined
                     "
                     :base-params="{ periode: 'all' }"
                     :values="filterValues"
@@ -862,15 +1030,26 @@ function confirmDelete(c: Commande) {
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Ventes
+                        {{ page_title }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Suivi et encaissement des commandes.
+                        {{
+                            estListePrecommandes
+                                ? 'Commandes réservées à préparer et remettre aux clients.'
+                                : 'Suivi et encaissement des commandes.'
+                        }}
                     </p>
                 </div>
                 <div class="flex flex-col items-end gap-2">
                     <ListPageActions>
-                        <template v-if="can('ventes.exporter')" #export>
+                        <!-- Pas d'export dédié aux précommandes en V1 : l'export des ventes ne
+                             les filtrerait pas. -->
+                        <template
+                            v-if="
+                                can('ventes.exporter') && !estListePrecommandes
+                            "
+                            #export
+                        >
                             <Button variant="outline" @click="openExportDialog">
                                 <Download class="mr-2 h-4 w-4" />
                                 Exporter
@@ -879,15 +1058,9 @@ function confirmDelete(c: Commande) {
                         <template #filters>
                             <DataFilters
                                 trigger-only
-                                :url="
-                                    nature_filtree === 'distribution_client'
-                                        ? '/backoffice/distributions'
-                                        : '/backoffice/ventes'
-                                "
+                                :url="urlListe"
                                 :saved-filter-scope="
-                                    nature_filtree === 'distribution_client'
-                                        ? undefined
-                                        : 'ventes'
+                                    liste === 'ventes' ? 'ventes' : undefined
                                 "
                                 :base-params="{ periode: 'all' }"
                                 :values="filterValues"
@@ -897,29 +1070,79 @@ function confirmDelete(c: Commande) {
                             />
                         </template>
                         <template #primary>
-                            <Link
-                                v-if="
-                                    can('ventes.create') && can_creer_commande
-                                "
-                                href="/backoffice/ventes/create"
-                            >
-                                <Button>
-                                    <Plus class="mr-2 h-4 w-4" />
-                                    Nouvelle commande
-                                </Button>
-                            </Link>
-                            <Button
-                                v-else-if="can('ventes.create')"
-                                disabled
-                                v-tooltip.left="raison_blocage_commande"
-                            >
-                                <Plus class="mr-2 h-4 w-4" />
-                                Nouvelle commande
-                            </Button>
+                            <!-- Deux points d'entrée distincts (ADR 0019) : chacun n'apparaît
+                                 qu'avec sa propre permission. -->
+                            <div class="flex items-center gap-2">
+                                <template v-if="can_precommander">
+                                    <Link
+                                        v-if="can_creer_precommande"
+                                        href="/backoffice/precommandes/create"
+                                    >
+                                        <Button
+                                            :variant="
+                                                estListePrecommandes
+                                                    ? 'default'
+                                                    : 'outline'
+                                            "
+                                        >
+                                            <CalendarClock
+                                                class="mr-2 h-4 w-4"
+                                            />
+                                            Nouvelle précommande
+                                        </Button>
+                                    </Link>
+                                    <Button
+                                        v-else
+                                        variant="outline"
+                                        disabled
+                                        v-tooltip.left="
+                                            raison_blocage_precommande
+                                        "
+                                    >
+                                        <CalendarClock class="mr-2 h-4 w-4" />
+                                        Nouvelle précommande
+                                    </Button>
+                                </template>
+                                <template v-if="peutProposerVente">
+                                    <Link
+                                        v-if="can_creer_commande"
+                                        href="/backoffice/ventes/create"
+                                    >
+                                        <Button>
+                                            <Plus class="mr-2 h-4 w-4" />
+                                            Nouvelle vente
+                                        </Button>
+                                    </Link>
+                                    <Button
+                                        v-else
+                                        disabled
+                                        v-tooltip.left="raison_blocage_commande"
+                                    >
+                                        <Plus class="mr-2 h-4 w-4" />
+                                        Nouvelle vente
+                                    </Button>
+                                </template>
+                            </div>
                         </template>
                     </ListPageActions>
                     <div
-                        v-if="can('ventes.create') && !can_creer_commande"
+                        v-if="
+                            estListePrecommandes &&
+                            can_precommander &&
+                            raison_blocage_precommande
+                        "
+                        role="status"
+                        class="flex max-w-md items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                    >
+                        <CircleAlert
+                            class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                        />
+                        <p class="text-xs leading-5">
+                            {{ raison_blocage_precommande }}
+                        </p>
+                    </div>
+                    <div
+                        v-else-if="peutProposerVente && !can_creer_commande"
                         role="status"
                         class="flex max-w-md items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
                     >
@@ -944,8 +1167,56 @@ function confirmDelete(c: Commande) {
                 </div>
             </div>
 
+            <!-- Précommandes : compteurs du cycle, cliquables (filtre rapide). En retard = ambre,
+                 la précommande reste valide et réalisable (D8, CLAUDE.md § 10). -->
+            <div
+                v-if="estListePrecommandes"
+                class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+            >
+                <button
+                    v-for="carte in cartesPrecommandes"
+                    :key="carte.cle"
+                    type="button"
+                    :data-testid="`indicateur-${carte.cle}`"
+                    :aria-pressed="carteActive(carte)"
+                    class="rounded-xl border bg-card p-5 text-left shadow-sm transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring"
+                    :class="[
+                        carteActive(carte) &&
+                            'border-primary ring-1 ring-primary',
+                        carte.cle === 'en_retard' &&
+                            carte.nombre > 0 &&
+                            !carteActive(carte) &&
+                            'border-amber-300 dark:border-amber-800',
+                    ]"
+                    @click="filtrerParCarte(carte)"
+                >
+                    <p
+                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                    >
+                        <CircleAlert
+                            v-if="carte.cle === 'en_retard' && carte.nombre > 0"
+                            class="h-4 w-4 text-amber-600 dark:text-amber-400"
+                        />
+                        {{ carte.titre }}
+                    </p>
+                    <p
+                        class="mt-2 text-2xl font-bold tabular-nums"
+                        :class="
+                            carte.cle === 'en_retard' && carte.nombre > 0
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : ''
+                        "
+                    >
+                        {{ carte.nombre }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ carte.aide }}
+                    </p>
+                </button>
+            </div>
+
             <!-- KPI cards -->
-            <div class="grid gap-4 sm:grid-cols-3">
+            <div v-else class="grid gap-4 sm:grid-cols-3">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
@@ -1019,17 +1290,110 @@ function confirmDelete(c: Commande) {
                                     {{ data.reference }}
                                 </span>
                             </Link>
+                            <!-- Marqueur de TYPE (pas un statut) : précommande, date prévue et
+                                 retard dérivé — ambre = attention, jamais rouge (CLAUDE.md § 10). -->
+                            <div
+                                v-if="
+                                    data.est_precommande &&
+                                    (!estListePrecommandes ||
+                                        data.trop_percu > 0)
+                                "
+                                class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]"
+                            >
+                                <span
+                                    v-if="!estListePrecommandes"
+                                    class="inline-flex items-center gap-1 rounded border border-blue-300 px-1.5 py-0.5 font-medium text-blue-700 dark:border-blue-800 dark:text-blue-300"
+                                >
+                                    <CalendarClock class="h-3 w-3" />
+                                    Précommande
+                                </span>
+                                <span
+                                    v-if="
+                                        !estListePrecommandes &&
+                                        data.date_remise_prevue
+                                    "
+                                    :class="
+                                        data.en_retard
+                                            ? 'font-medium text-amber-700 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{
+                                        data.en_retard
+                                            ? 'En retard —'
+                                            : 'Prévue le'
+                                    }}
+                                    {{ data.date_remise_prevue }}
+                                </span>
+                                <span
+                                    v-if="data.trop_percu > 0"
+                                    class="font-medium text-amber-700 dark:text-amber-400"
+                                >
+                                    Trop-perçu {{ formatGNF(data.trop_percu) }}
+                                </span>
+                            </div>
                         </template>
                     </Column>
 
-                    <!-- Véhicule -->
-                    <Column header="Véhicule" style="min-width: 180px">
+                    <!-- Précommandes : date prévue et mode, tôt dans la ligne (repérer les retards). -->
+                    <Column
+                        v-if="estListePrecommandes"
+                        field="date_remise_prevue_iso"
+                        header="Date prévue"
+                        sortable
+                        style="min-width: 150px"
+                    >
                         <template #body="{ data }">
                             <span
-                                v-if="data.vehicule_nom"
-                                class="font-medium"
-                                >{{ data.vehicule_nom }}</span
+                                v-if="data.date_remise_prevue"
+                                data-testid="row-date-prevue"
+                                :class="
+                                    data.en_retard
+                                        ? 'font-medium text-amber-700 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
                             >
+                                {{ data.date_remise_prevue }}
+                                <span v-if="data.en_retard" class="text-xs"
+                                    >· En retard</span
+                                >
+                            </span>
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        v-if="estListePrecommandes"
+                        header="Mode"
+                        style="min-width: 110px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{
+                                data.precommande_livraison
+                                    ? 'Livraison'
+                                    : 'Retrait'
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Véhicule, Livreur, Client : sur la page Précommandes, l'immatriculation ou le
+                         téléphone sous le nom, pour joindre chacun sans ouvrir la fiche. -->
+                    <Column header="Véhicule" style="min-width: 180px">
+                        <template #body="{ data }">
+                            <template v-if="data.vehicule_nom">
+                                <span class="font-medium">{{
+                                    data.vehicule_nom
+                                }}</span>
+                                <span
+                                    v-if="
+                                        estListePrecommandes &&
+                                        data.vehicule_immatriculation
+                                    "
+                                    data-testid="row-vehicule-immatriculation"
+                                    class="block font-mono text-xs text-muted-foreground"
+                                    >{{ data.vehicule_immatriculation }}</span
+                                >
+                            </template>
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
@@ -1037,11 +1401,24 @@ function confirmDelete(c: Commande) {
                     <!-- Livreur -->
                     <Column header="Livreur" style="min-width: 200px">
                         <template #body="{ data }">
-                            <span
-                                v-if="data.chauffeur_nom"
-                                class="text-muted-foreground"
-                                >{{ data.chauffeur_nom }}</span
-                            >
+                            <template v-if="data.chauffeur_nom">
+                                <span class="text-muted-foreground">{{
+                                    data.chauffeur_nom
+                                }}</span>
+                                <span
+                                    v-if="
+                                        estListePrecommandes &&
+                                        data.chauffeur_telephone
+                                    "
+                                    data-testid="row-livreur-telephone"
+                                    class="block text-xs text-muted-foreground tabular-nums"
+                                    >{{
+                                        formatPhoneDisplay(
+                                            data.chauffeur_telephone,
+                                        )
+                                    }}</span
+                                >
+                            </template>
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
@@ -1049,11 +1426,24 @@ function confirmDelete(c: Commande) {
                     <!-- Client -->
                     <Column header="Client" style="min-width: 200px">
                         <template #body="{ data }">
-                            <span
-                                v-if="data.client_nom"
-                                class="text-muted-foreground"
-                                >{{ data.client_nom }}</span
-                            >
+                            <template v-if="data.client_nom">
+                                <span class="text-muted-foreground">{{
+                                    data.client_nom
+                                }}</span>
+                                <span
+                                    v-if="
+                                        estListePrecommandes &&
+                                        data.client_telephone
+                                    "
+                                    data-testid="row-client-telephone"
+                                    class="block text-xs text-muted-foreground tabular-nums"
+                                    >{{
+                                        formatPhoneDisplay(
+                                            data.client_telephone,
+                                        )
+                                    }}</span
+                                >
+                            </template>
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>

@@ -76,6 +76,9 @@ const compte = (surcharge: Partial<CompteTresorerie>): CompteTresorerie => ({
     en_cours_versement: 0,
     versements_en_cours: 0,
     peut_verser: false,
+    en_cours_approvisionnement: 0,
+    approvisionnements_en_cours: 0,
+    peut_approvisionner: false,
     solde_ouverture: null,
     ...surcharge,
 });
@@ -131,6 +134,7 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             type_options: [],
             operateur_options: [],
             destinations_versement: [],
+            destinations_approvisionnement: [],
             agents: [],
             caisses_dediees_actives: [],
             agents_filtre: [],
@@ -496,6 +500,45 @@ describe('Supports de trésorerie — actions selon les permissions', () => {
         expect(agence.find('[data-testid="support-verser"]').exists()).toBe(
             false,
         );
+    });
+
+    it('lie « Approvisionner un agent » au seul indicateur serveur peut_approvisionner', () => {
+        const [agentSans, agenceSans] = lignes(monter());
+        expect(
+            agenceSans.find('[data-testid="support-approvisionner"]').exists(),
+        ).toBe(false);
+        expect(
+            agentSans.find('[data-testid="support-approvisionner"]').exists(),
+        ).toBe(false);
+
+        const comptes = COMPTES.map((c) =>
+            c.nature === 'agence' && c.type === 'caisse'
+                ? { ...c, peut_approvisionner: true }
+                : c,
+        );
+        const [, agence] = lignes(monter(comptes));
+        expect(
+            agence.find('[data-testid="support-approvisionner"]').exists(),
+        ).toBe(true);
+    });
+
+    it("signale sous la caisse de l'agent un approvisionnement à confirmer, hors solde", () => {
+        const comptes = COMPTES.map((c) =>
+            c.nature === 'dediee'
+                ? {
+                      ...c,
+                      en_cours_approvisionnement: 2_000_000,
+                      approvisionnements_en_cours: 1,
+                  }
+                : c,
+        );
+        const [agent] = lignes(monter(comptes));
+        const attente = agent.get(
+            '[data-testid="support-en-cours-approvisionnement"]',
+        );
+
+        expect(attente.text()).toContain("À confirmer par l'agent");
+        expect(attente.text()).toContain('2');
     });
 
     it('propose les actions de gestion à ceux qui gèrent les supports, selon la ligne', () => {

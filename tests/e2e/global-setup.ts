@@ -257,7 +257,8 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 
     await page.goto(periodeUrl);
     const validerPeriodeBtn = page.getByRole('button', {
-        name: 'Valider la période de paiement',
+        name: 'Valider la période',
+        exact: true,
     });
     await validerPeriodeBtn.waitFor({ state: 'visible', timeout: 15_000 });
     // La période passe à « Validée » automatiquement dès la dernière commission validée :

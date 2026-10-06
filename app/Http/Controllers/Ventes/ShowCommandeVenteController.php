@@ -11,9 +11,12 @@ use App\Models\CommandeVente;
 use App\Models\Site;
 use App\Services\AnnulationExceptionnelleService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\Tresorerie\DetteInterAgencesService;
+use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
+use App\Support\Ventes\PrecommandeEcran;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,6 +42,17 @@ class ShowCommandeVenteController extends Controller
         $reversements = $facture ? app(DetteInterAgencesService::class)->reversements($facture->encaissements) : [];
         $encaissementAgences = $facture ? (app(AgenceEncaissementResolver::class)->pourEcran($user, [$facture])[$facture->id] ?? null) : null;
         $agenceDefaut = collect($encaissementAgences['agences'] ?? [])->firstWhere('site_id', $encaissementAgences['agence_defaut'] ?? null);
+
+        // Acompte d'une précommande pas encore remise (ADR 0019) : toujours reçu par l'agence de la
+        // précommande (décision D11) — aucun choix d'agence, moyens et caisse de CETTE agence.
+        $estAcompte = $commande->estPrecommandeAvantRemise();
+        if ($estAcompte) {
+            $encaissementAgences = null;
+            $agenceDefaut = [
+                'moyens' => app(MoyensEncaissementResolver::class)->pourSite($commande->organization_id, $commande->site_id),
+                'peut_encaisser_especes' => app(CaisseAgentResolver::class)->caisseActive($commande->organization_id, (string) $user->id, $commande->site_id) !== null,
+            ];
+        }
 
         $vehicule = $commande->vehicule;
         $equipe = $vehicule?->equipe;
@@ -144,6 +158,10 @@ class ShowCommandeVenteController extends Controller
                 'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
                 'nature_operation' => $commande->nature_operation?->value,
                 'nature_operation_label' => $commande->nature_operation?->label(),
+                // Précommande (ADR 0019) : marqueur, date prévue de remise, retard dérivé.
+                'est_precommande' => (bool) $commande->est_precommande,
+                'date_remise_prevue' => $commande->date_remise_prevue?->format(self::DATE_DISPLAY_FORMAT),
+                'en_retard' => $commande->isEnRetard(),
                 'mode_remise_grossiste' => $commande->mode_remise_grossiste?->value,
                 'mode_remise_grossiste_label' => $commande->mode_remise_grossiste?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
@@ -245,8 +263,10 @@ class ShowCommandeVenteController extends Controller
                 // déjà garantie par le authorize('view', $vente) plus haut dans ce contrôleur.
                 'can_encaisser' => $facture && ! $facture->isAnnulee()
                     && (float) $facture->montant_restant > 0
-                    && $commande->isEncaissable()
+                    && ($commande->isEncaissable() || $estAcompte)
                     && $user->can('factures.encaisser'),
+                // Le prochain encaissement sera un acompte (avance client), pas un encaissement de facture.
+                'encaissement_est_acompte' => $estAcompte,
                 // Agence d'encaissement = agence de l'utilisateur (ADR 0012, AgenceEncaissementResolver) :
                 // agences proposées, leurs moyens et leurs espèces (caisse dédiée de l'agent DANS
                 // l'agence) — indicateurs d'affichage, la garantie réelle reste le contrôle serveur à
@@ -282,10 +302,12 @@ class ShowCommandeVenteController extends Controller
                     'mode_paiement_label' => $e->mode_paiement?->label(),
                     'operateur_mobile_money_label' => $e->operateur_mobile_money?->label(),
                     'reference_paiement' => $e->reference_paiement,
+                    'est_acompte' => (bool) $e->est_acompte,
                     'note' => $e->note,
                     'created_by' => $e->creator?->name,
                 ])->values(),
             ] : null,
+            'precommande' => app(PrecommandeEcran::class)->pour($commande, $user),
             'commission_statut' => $this->getCommissionStatutGlobal($commande),
             'commission_generation_statut' => CommandeVenteCommissionStatus::getCommissionGenerationStatut($commande),
         ]);
