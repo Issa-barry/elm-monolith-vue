@@ -5,7 +5,7 @@ import {
     resolvePwaInstallState,
     type PwaInstallState,
 } from '@/config/pwaInstall';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 // Pas de typage DOM standard pour cet événement (absent de WindowEventMap) :
 // TypeScript retombe sur la surcharge générique addEventListener(type:
@@ -27,30 +27,18 @@ interface BeforeInstallPromptEvent extends Event {
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let listenerRegistered = false;
 
-// Contournement du garde-fou : réservé au seul cas où AUCUN chemin
-// d'installation n'est détecté (state === 'hidden' alors qu'on est sur
-// téléphone, non standalone — navigateur qui ne supporte ni
-// beforeinstallprompt ni les instructions iOS, ex. Firefox Android, webview
-// in-app WhatsApp/Facebook). Bloquer sans issue dans ce cas serait un
-// verrouillage total sans solution pour l'utilisateur — jamais acceptable.
-// Jamais utilisable pour 'native_prompt'/'ios_instructions' : ces deux
-// chemins sont réellement actionnables, aucun contournement n'y est permis.
-const UNSUPPORTED_BYPASS_KEY = 'elm-pwa-gate-unsupported-bypass';
-
-// Délai avant de proposer le contournement "navigateur non supporté" :
-// `beforeinstallprompt` peut se déclencher avec un léger retard après le
-// montage (Chrome évalue l'installabilité de façon asynchrone) — laisser
-// cette fenêtre avant d'offrir l'échappatoire évite de la proposer à tort à
-// un téléphone Android qui aurait pu installer normalement.
-const UNSUPPORTED_FALLBACK_DELAY_MS = 1200;
+// « Plus tard » : persisté en sessionStorage pour ne pas reproposer la carte
+// à chaque navigation Inertia (le composable est remonté sur chaque layout
+// traversé), mais limité à cette session navigateur.
+const DISMISS_KEY = 'elm-pwa-install-dismissed';
 
 const isReady = ref(false);
 const isStandalone = ref(false);
 const isIos = ref(false);
 const isPhone = ref(false);
 const hasDeferredPrompt = ref(false);
-const unsupportedBypassed = ref(false);
-const fallbackReady = ref(false);
+const dismissed = ref(false);
+const showIosSheet = ref(false);
 
 const state = computed<PwaInstallState>(() => {
     if (!isReady.value) return 'hidden';
@@ -61,18 +49,16 @@ const state = computed<PwaInstallState>(() => {
     });
 });
 
-// Garde-fou d'accès (docs/pwa.md § Garde-fou mobile) : sur téléphone non
-// standalone, l'interface ELM normale ne doit jamais s'afficher — seule
-// cette page d'installation est visible, remplaçant entièrement le
-// back-office/l'espace client/la page de connexion, jamais un simple
-// bandeau superposé. Unique échappatoire : navigateur sans aucun chemin
-// d'installation détecté (cf. UNSUPPORTED_BYPASS_KEY ci-dessus).
-const showGate = computed(
+// Proposition d'installation (docs/pwa.md § Proposition d'installation
+// mobile) : jamais bloquante, seulement sur téléphone non standalone, et
+// seulement quand un chemin d'installation réel existe — aucun bouton qui
+// échouerait silencieusement sur un navigateur sans support.
+const showPrompt = computed(
     () =>
         isReady.value &&
         isPhone.value &&
-        !isStandalone.value &&
-        !(state.value === 'hidden' && unsupportedBypassed.value),
+        state.value !== 'hidden' &&
+        !dismissed.value,
 );
 
 function registerListeners(): void {
@@ -80,16 +66,15 @@ function registerListeners(): void {
     listenerRegistered = true;
 
     // preventDefault() : on garde la main pour déclencher l'invite au clic
-    // sur NOTRE écran plutôt que la mini-infobar par défaut de Chrome.
+    // sur NOTRE bouton plutôt que la mini-infobar par défaut de Chrome.
     window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
         deferredPrompt = event as BeforeInstallPromptEvent;
         hasDeferredPrompt.value = true;
     });
 
-    // L'installation peut aussi survenir sans passer par notre écran (icône
-    // native de la barre d'adresse Chrome/Edge) : le garde-fou doit se lever
-    // dans ce cas aussi, pas seulement après un clic sur notre bouton.
+    // L'installation peut aussi survenir sans passer par notre bouton (menu
+    // du navigateur) : la proposition doit disparaître dans ce cas aussi.
     window.addEventListener('appinstalled', () => {
         deferredPrompt = null;
         hasDeferredPrompt.value = false;
@@ -97,12 +82,10 @@ function registerListeners(): void {
     });
 }
 
-// Garde-fou d'installation PWA (téléphone uniquement, cf. docs/pwa.md) —
+// Proposition d'installation PWA (téléphone uniquement, cf. docs/pwa.md) —
 // logique pure dans config/pwaInstall.ts, ce composable ne fait que la
 // relier aux vraies API navigateur/PWA.
 export function usePwaInstall() {
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-
     onMounted(() => {
         if (typeof window === 'undefined' || typeof navigator === 'undefined')
             return;
@@ -129,61 +112,49 @@ export function usePwaInstall() {
         isReady.value = true;
 
         try {
-            unsupportedBypassed.value =
-                window.sessionStorage.getItem(UNSUPPORTED_BYPASS_KEY) === '1';
+            dismissed.value =
+                window.sessionStorage.getItem(DISMISS_KEY) === '1';
         } catch {
-            // Stockage indisponible (navigation privée stricte...) : le
-            // contournement reste simplement indisponible, jamais bloquant
-            // en plus (voir continueInBrowser ci-dessous).
+            // Stockage indisponible (navigation privée stricte...) : la
+            // carte reste simplement proposée, rien de bloquant.
         }
-
-        fallbackTimer = setTimeout(() => {
-            fallbackReady.value = true;
-        }, UNSUPPORTED_FALLBACK_DELAY_MS);
 
         registerListeners();
     });
 
-    onUnmounted(() => {
-        if (fallbackTimer) clearTimeout(fallbackTimer);
-    });
-
     // Seule fonction qui déclenche réellement une action d'installation —
     // jamais automatique, uniquement depuis le clic explicite du bouton.
-    // Sur iOS, aucune invite native n'existe : les instructions manuelles
-    // sont déjà affichées directement dans l'écran du garde-fou.
+    // iOS n'a aucune invite native : le bouton ouvre les instructions Safari.
     async function promptInstall(): Promise<void> {
+        if (state.value === 'ios_instructions') {
+            showIosSheet.value = true;
+            return;
+        }
         if (!deferredPrompt) return;
         const prompt = deferredPrompt;
         // Une invite native ne peut être déclenchée qu'une fois : on la
         // "consomme" immédiatement pour ne pas retenter prompt() sur un
-        // événement déjà utilisé si l'écran reste affiché un instant.
+        // événement déjà utilisé.
         deferredPrompt = null;
         hasDeferredPrompt.value = false;
         await prompt.prompt();
         await prompt.userChoice;
     }
 
-    // Réservé au cas "navigateur non supporté" (voir UNSUPPORTED_BYPASS_KEY) :
-    // jamais appelable/affiché quand un chemin d'installation réel existe.
-    // Persisté en sessionStorage comme l'ancien "Plus tard", pour ne pas le
-    // reproposer à chaque navigation Inertia (le composable est remonté sur
-    // chaque layout traversé) mais rester limité à cette session navigateur.
-    function continueInBrowser(): void {
-        unsupportedBypassed.value = true;
+    function dismiss(): void {
+        dismissed.value = true;
         try {
-            window.sessionStorage.setItem(UNSUPPORTED_BYPASS_KEY, '1');
+            window.sessionStorage.setItem(DISMISS_KEY, '1');
         } catch {
-            // Stockage indisponible : le contournement reste actif pour
-            // cette instance du composant, rien de plus grave.
+            // Stockage indisponible : masquée pour cette instance seulement.
         }
     }
 
     return {
-        showGate,
+        showPrompt,
+        showIosSheet,
         state,
-        fallbackReady,
         promptInstall,
-        continueInBrowser,
+        dismiss,
     };
 }

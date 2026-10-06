@@ -1,7 +1,7 @@
-// Garde-fou d'accès mobile PWA (cf. docs/pwa.md § Garde-fou mobile) — même
-// principe que elm-vitrine-nuxt/config/pwaInstall.ts : logique pure ici
-// (testable sans DOM), accès navigateur réels dans
-// composables/usePwaInstall.ts.
+// Proposition d'installation PWA mobile (cf. docs/pwa.md § Proposition
+// d'installation mobile) — même principe que
+// elm-vitrine-nuxt/config/pwaInstall.ts : logique pure ici (testable sans
+// DOM), accès navigateur réels dans composables/usePwaInstall.ts.
 //
 // iOS (Safari/WebKit) ne déclenche jamais `beforeinstallprompt` : aucune
 // tentative de reproduire artificiellement le comportement Android — un
@@ -48,12 +48,9 @@ export function isStandaloneDisplay(
     return matchesStandaloneMedia || iosNavigatorStandalone === true;
 }
 
-// Garde-fou d'accès (docs/pwa.md § Garde-fou mobile) : SEUL le téléphone est
-// concerné — la tablette garde le comportement web normal, comme le desktop.
-// Distinction volontairement plus stricte que l'ancien isMobileOrTabletDevice
-// (mobile+tablette confondus, qui ne servait qu'à un bandeau suggestif non
-// bloquant) : bloquer une tablette par erreur casserait un usage légitime,
-// jamais acceptable pour un vrai garde-fou.
+// Proposition d'installation (docs/pwa.md § Proposition d'installation
+// mobile) : SEUL le téléphone est concerné — la tablette garde le
+// comportement web normal, comme le desktop, sans carte d'installation.
 //
 // iPad : toujours exclu, y compris le déguisement UA "Macintosh" d'iPadOS
 // 13+ (seul le tactile le distingue d'un vrai Mac, même heuristique que

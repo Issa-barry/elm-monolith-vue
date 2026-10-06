@@ -1,9 +1,8 @@
 /**
- * Garde-fou d'accès mobile — cf. docs/pwa.md § Garde-fou mobile. Sur
- * téléphone, l'interface ELM normale (connexion, back-office, espace client)
- * ne doit jamais être atteignable tant que la PWA n'est pas installée
- * (`display: standalone`). Tablette et desktop : comportement web normal
- * inchangé.
+ * Proposition d'installation mobile — cf. docs/pwa.md § Proposition
+ * d'installation mobile. Sur téléphone non installé, l'interface ELM reste
+ * utilisable dans le navigateur ; une carte non bloquante propose seulement
+ * d'installer la PWA. Tablette et desktop : jamais de carte.
  *
  * `beforeinstallprompt` réel non automatisable ici (nécessite les critères
  * d'installabilité complets — HTTPS/manifest/service worker — cf. docs/pwa.md) :
@@ -11,17 +10,7 @@
  * (native_prompt) de façon déterministe.
  *
  * Repère de contenu back-office : le bouton "Toggle Sidebar" (AppSidebarHeader),
- * identique quel que soit le viewport — contrairement aux items de nav (la
- * sidebar rend des `<button>` de groupe sur desktop/tablette mais des `<a>` à
- * plat en dessous d'un certain viewport) ou aux cartes KPI du dashboard
- * (`StatsBankingWidget` clone ses slides pour un carrousel : plusieurs copies
- * simultanées dans le DOM, dont une hors champ — un repère peu fiable ici).
- *
- * `toBeVisible()`/`toBeHidden()` ne teste que la visibilité CSS propre d'un
- * élément, jamais s'il est recouvert par un autre — un `fixed inset-0`
- * par-dessus ne le fait donc jamais échouer. Prouver que le garde-fou
- * bloque réellement l'accès nécessite un vrai test d'occlusion via
- * `elementFromPoint` (voir expectDashboardBlockedByGate ci-dessous).
+ * identique quel que soit le viewport.
  */
 import { devices, expect, test, type Page } from '@playwright/test';
 
@@ -32,41 +21,36 @@ const ANDROID_PHONE_UA =
 const UNSUPPORTED_PHONE_UA =
     'Mozilla/5.0 (Android 14; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0';
 
-const dashboardLandmark = (page: Page) =>
-    page.getByRole('button', { name: 'Toggle Sidebar' });
+const installCard = (page: Page) => page.getByTestId('pwa-install-prompt');
 
-async function expectDashboardVisible(page: Page): Promise<void> {
+async function expectDashboardUsable(page: Page): Promise<void> {
     await expect(
-        page.getByRole('heading', { name: 'Installer ELM' }),
-    ).toHaveCount(0);
-    await expect(dashboardLandmark(page)).toBeVisible();
-}
-
-// Le contenu back-office est bien monté dans le DOM derrière le garde-fou
-// (Vue ne conditionne pas son montage), mais entièrement recouvert et
-// inatteignable : le point central de son repère doit résoudre sur l'overlay
-// du garde-fou (`data-testid="pwa-gate"`), jamais sur le repère lui-même.
-async function expectDashboardBlockedByGate(page: Page): Promise<void> {
-    await expect(
-        page.getByRole('heading', { name: 'Installer ELM' }),
+        page.getByRole('button', { name: 'Toggle Sidebar' }),
     ).toBeVisible();
-
-    const landmark = dashboardLandmark(page);
-    await expect(landmark).toHaveCount(1);
-    const box = await landmark.boundingBox();
-    expect(box).not.toBeNull();
-
-    const topmostIsGate = await page.evaluate(
-        ({ x, y }) => {
-            const el = document.elementFromPoint(x, y);
-            return el?.closest('[data-testid="pwa-gate"]') != null;
-        },
-        { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
-    );
-    expect(topmostIsGate).toBe(true);
 }
 
-test.describe('Garde-fou PWA — téléphone (iPhone)', () => {
+async function dispatchBeforeInstallPrompt(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const evt = new Event('beforeinstallprompt', {
+            cancelable: true,
+        }) as Event & {
+            prompt?: () => Promise<void>;
+            userChoice?: Promise<{ outcome: string; platform: string }>;
+        };
+        evt.prompt = () => {
+            (window as unknown as { __promptCalled: boolean }).__promptCalled =
+                true;
+            return Promise.resolve();
+        };
+        evt.userChoice = Promise.resolve({
+            outcome: 'accepted',
+            platform: 'android',
+        });
+        window.dispatchEvent(evt);
+    });
+}
+
+test.describe("Proposition d'installation — iPhone", () => {
     test.use({
         viewport: { width: 390, height: 844 },
         hasTouch: true,
@@ -74,27 +58,37 @@ test.describe('Garde-fou PWA — téléphone (iPhone)', () => {
         userAgent: IPHONE_UA,
     });
 
-    test('iPhone non installé : garde-fou plein écran, back-office recouvert, instructions manuelles', async ({
+    test('non installé : interface utilisable + carte, le bouton ouvre les instructions Safari', async ({
         page,
     }) => {
         await page.goto('/backoffice/dashboard');
 
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toBeVisible();
+
+        await installCard(page)
+            .getByRole('button', { name: 'Installer' })
+            .click();
         await expect(
             page.getByText('Appuyez sur le bouton Partager de Safari.', {
                 exact: false,
             }),
         ).toBeVisible();
-        // Aucun bouton d'installation automatique sur iOS.
-        await expect(
-            page.getByRole('button', { name: /^Installer ELM$/ }),
-        ).toHaveCount(0);
-
-        await expectDashboardBlockedByGate(page);
     });
 
-    test('iPhone déjà en mode standalone : interface normale, pas de garde-fou', async ({
-        page,
-    }) => {
+    test('« Plus tard » masque la carte pour la session', async ({ page }) => {
+        await page.goto('/backoffice/dashboard');
+        await installCard(page)
+            .getByRole('button', { name: 'Plus tard' })
+            .click();
+        await expect(installCard(page)).toHaveCount(0);
+
+        await page.goto('/backoffice/dashboard');
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
+    });
+
+    test('déjà en mode standalone : pas de carte', async ({ page }) => {
         await page.addInitScript(() => {
             Object.defineProperty(window.navigator, 'standalone', {
                 value: true,
@@ -103,11 +97,12 @@ test.describe('Garde-fou PWA — téléphone (iPhone)', () => {
         });
         await page.goto('/backoffice/dashboard');
 
-        await expectDashboardVisible(page);
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
     });
 });
 
-test.describe('Garde-fou PWA — Android', () => {
+test.describe("Proposition d'installation — Android", () => {
     test.use({
         viewport: { width: 412, height: 915 },
         hasTouch: true,
@@ -115,37 +110,19 @@ test.describe('Garde-fou PWA — Android', () => {
         userAgent: ANDROID_PHONE_UA,
     });
 
-    test("invite native captée : le clic sur « Installer ELM » déclenche prompt()", async ({
+    test('invite native captée : le bouton « Installer » déclenche prompt()', async ({
         page,
     }) => {
         await page.goto('/backoffice/dashboard');
-        await expectDashboardBlockedByGate(page);
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
 
-        await page.evaluate(() => {
-            const evt = new Event('beforeinstallprompt', {
-                cancelable: true,
-            }) as Event & {
-                prompt?: () => Promise<void>;
-                userChoice?: Promise<{ outcome: string; platform: string }>;
-            };
-            evt.prompt = () => {
-                (
-                    window as unknown as { __promptCalled: boolean }
-                ).__promptCalled = true;
-                return Promise.resolve();
-            };
-            evt.userChoice = Promise.resolve({
-                outcome: 'accepted',
-                platform: 'android',
-            });
-            window.dispatchEvent(evt);
-        });
+        await dispatchBeforeInstallPrompt(page);
 
-        const installButton = page.getByRole('button', {
-            name: /Installer ELM/,
-        });
-        await expect(installButton).toBeVisible();
-        await installButton.click();
+        await expect(installCard(page)).toBeVisible();
+        await installCard(page)
+            .getByRole('button', { name: 'Installer' })
+            .click();
 
         await expect
             .poll(() =>
@@ -158,21 +135,21 @@ test.describe('Garde-fou PWA — Android', () => {
             .toBe(true);
     });
 
-    test('appinstalled déclenché : le garde-fou se lève sans rechargement', async ({
-        page,
-    }) => {
+    test('appinstalled déclenché : la carte disparaît', async ({ page }) => {
         await page.goto('/backoffice/dashboard');
-        await expectDashboardBlockedByGate(page);
+        await dispatchBeforeInstallPrompt(page);
+        await expect(installCard(page)).toBeVisible();
 
         await page.evaluate(() => {
             window.dispatchEvent(new Event('appinstalled'));
         });
 
-        await expectDashboardVisible(page);
+        await expect(installCard(page)).toHaveCount(0);
+        await expectDashboardUsable(page);
     });
 });
 
-test.describe("Garde-fou PWA — navigateur sans chemin d'installation", () => {
+test.describe("Proposition d'installation — navigateur sans chemin d'installation", () => {
     test.use({
         viewport: { width: 393, height: 851 },
         hasTouch: true,
@@ -180,36 +157,18 @@ test.describe("Garde-fou PWA — navigateur sans chemin d'installation", () => {
         userAgent: UNSUPPORTED_PHONE_UA,
     });
 
-    test('affiche le message de repli, propose "Continuer dans le navigateur" seulement après le délai', async ({
+    test('interface utilisable, aucune carte (pas de bouton qui échouerait)', async ({
         page,
     }) => {
         await page.goto('/backoffice/dashboard');
-        await expectDashboardBlockedByGate(page);
-        await expect(
-            page.getByText("Votre navigateur ne permet pas l'installation", {
-                exact: false,
-            }),
-        ).toBeVisible();
 
-        const continueButton = page.getByRole('button', {
-            name: 'Continuer dans le navigateur',
-        });
-        await expect(continueButton).toHaveCount(0);
-        await expect(continueButton).toBeVisible({ timeout: 3_000 });
-
-        await continueButton.click();
-        await expectDashboardVisible(page);
-
-        // Persisté pour la session : une nouvelle navigation ne reproduit pas le garde-fou.
-        await page.goto('/backoffice/dashboard');
-        await expectDashboardVisible(page);
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
     });
 });
 
-test.describe('Garde-fou PWA — tablette et desktop (non concernés)', () => {
-    test('iPad : comportement web normal, jamais de garde-fou', async ({
-        browser,
-    }) => {
+test.describe("Proposition d'installation — tablette et desktop (non concernés)", () => {
+    test('iPad : jamais de carte', async ({ browser }) => {
         const context = await browser.newContext({
             ...devices['iPad (gen 7)'],
             storageState: '.auth/user.json',
@@ -217,15 +176,15 @@ test.describe('Garde-fou PWA — tablette et desktop (non concernés)', () => {
         const page = await context.newPage();
         await page.goto('/backoffice/dashboard');
 
-        await expectDashboardVisible(page);
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
         await context.close();
     });
 
-    test('desktop : comportement inchangé, jamais de garde-fou', async ({
-        page,
-    }) => {
+    test('desktop : jamais de carte', async ({ page }) => {
         await page.goto('/backoffice/dashboard');
 
-        await expectDashboardVisible(page);
+        await expectDashboardUsable(page);
+        await expect(installCard(page)).toHaveCount(0);
     });
 });

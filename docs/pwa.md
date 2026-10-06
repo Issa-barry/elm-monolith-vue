@@ -22,9 +22,9 @@ cache uniquement une liste blanche explicite de fichiers statiques publics.
 | [public/.htaccess](../public/.htaccess) | Force `Cache-Control: no-cache` sur `sw.js` (le CDN de production applique sinon un cache de 7 jours par défaut) |
 | [tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts) | Tests dédiés — dans un dossier séparé de `tests/e2e/`, jamais ramassés par la suite E2E par défaut (voir plus bas) |
 | [playwright.pwa.config.ts](../playwright.pwa.config.ts) | Config Playwright dédiée à ce fichier (`testDir` séparé), réutilise `playwright.config.ts` |
-| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, téléphone vs tablette) et résolution d'état du garde-fou |
+| [resources/js/config/pwaInstall.ts](../resources/js/config/pwaInstall.ts) | Logique pure de détection (iOS, standalone, téléphone vs tablette) et résolution d'état de la proposition d'installation |
 | [resources/js/composables/usePwaInstall.ts](../resources/js/composables/usePwaInstall.ts) | Pont vers les API navigateur réelles (`beforeinstallprompt`, `appinstalled`, sessionStorage) |
-| [resources/js/components/PwaGate.vue](../resources/js/components/PwaGate.vue) | Garde-fou plein écran "Installer ELM" (téléphone uniquement) + instructions iOS — cf. §3bis |
+| [resources/js/components/PwaInstallPrompt.vue](../resources/js/components/PwaInstallPrompt.vue) | Carte non bloquante "Installer ELM" (téléphone uniquement) + instructions iOS — cf. §3bis |
 
 ---
 
@@ -80,78 +80,59 @@ logique que `buildDirectory` déjà utilisée pour Wayfinder) et `__PWA_ENABLED_
 fichier statique `sw.js` via la query string d'enregistrement
 (`/sw.js?build=build-e2e`) puisque `sw.js` lui-même n'est pas compilé par Vite.
 
-## 3bis. Garde-fou mobile (écran "Installer ELM" plein écran)
+## 3bis. Proposition d'installation mobile (carte "Installer ELM")
 
-**Changement du 08/09/2026** — remplace l'ancien bandeau dismissible : sur
-téléphone, le navigateur (Safari/Chrome mobile) ne doit plus jamais afficher
-l'interface ELM normale (connexion, back-office, espace client). Il devient un
-simple point d'entrée vers l'installation ; l'interface métier n'est
-accessible qu'une fois ELM ouvert en PWA installée (`display: standalone`).
-**Tablette et desktop : comportement web normal inchangé**, jamais concernés
-par ce garde-fou.
+**Changement du 06/10/2026** — remplace le garde-fou plein écran bloquant du
+08/09/2026 (décision produit inverse : on n'oblige plus à installer). Sur
+téléphone, l'interface ELM normale (connexion, back-office, espace client)
+reste **entièrement utilisable dans le navigateur**. Tant qu'ELM n'est pas
+installée (`display: standalone`), une carte flottante non bloquante en bas
+d'écran propose un bouton **Installer**. **Tablette et desktop : jamais de
+carte**, comportement web normal.
 
 Composants : `resources/js/config/pwaInstall.ts` (logique pure, testable sans
 DOM — `resources/js/config/__tests__/pwaInstall.spec.ts`),
 `resources/js/composables/usePwaInstall.ts` (pont vers les API navigateur
-réelles), `resources/js/components/PwaGate.vue` (écran plein écran), monté à
-l'identique sur les 3 layouts partagés :
+réelles), `resources/js/components/PwaInstallPrompt.vue` (carte + dialogue
+d'instructions iOS), monté à l'identique sur les 3 layouts partagés :
 [AuthSimpleLayout.vue](../resources/js/layouts/auth/AuthSimpleLayout.vue)
 (connexion et pages invité),
 [AppSidebarLayout.vue](../resources/js/layouts/app/AppSidebarLayout.vue)
 (backoffice) et [ClientLayout.vue](../resources/js/layouts/ClientLayout.vue)
-(espace client) — jamais dupliqué page par page. Monté en overlay plein écran
-(`z-index` maximal, au-dessus des dialogues PrimeVue) plutôt qu'en
-restructurant le `slot` de chaque layout : le contenu de la page continue de
-se monter derrière, mais reste entièrement masqué et inatteignable tant que
-le garde-fou est actif.
+(espace client) — jamais dupliqué page par page.
 
-- **Téléphone uniquement** (`isPhoneDevice` dans `config/pwaInstall.ts`,
-  distinct de l'ancien `isMobileOrTabletDevice` qui mélangeait tablette et
-  téléphone) : iPad toujours exclu (y compris le déguisement UA "Macintosh"
-  d'iPadOS 13+), Android distingué via le token UA `Mobile` (absent sur
-  tablette), repli sur un seuil de largeur d'écran pour un UA inconnu.
+- **Téléphone uniquement** (`isPhoneDevice` dans `config/pwaInstall.ts`) :
+  iPad toujours exclu (y compris le déguisement UA "Macintosh" d'iPadOS 13+),
+  Android distingué via le token UA `Mobile` (absent sur tablette), repli sur
+  un seuil de largeur d'écran pour un UA inconnu.
 - **Déjà installée** (`display: standalone`, y compris `navigator.standalone`
-  sur iOS) → garde-fou masqué, interface normale.
+  sur iOS) → aucune carte.
 - **Android/Chrome** : `beforeinstallprompt` est intercepté
-  (`preventDefault()`) pour piloter l'invite depuis cet écran ; le clic
-  déclenche `prompt()` sur l'événement capturé. Après installation
-  (`appinstalled`), le garde-fou se lève automatiquement dans le même onglet.
-- **iOS/iPadOS (Safari)** : `beforeinstallprompt` ne se déclenche jamais
-  (WebKit) — les 3 étapes manuelles (Partager → Sur l'écran d'accueil →
-  Ajouter) sont affichées directement dans l'écran, jamais de tentative de
-  déclenchement automatique. Aucun moyen de détecter la fin de l'ajout depuis
-  cet onglet Safari (limite de la plateforme, pas de l'implémentation) :
-  l'utilisateur doit rouvrir ELM depuis l'icône ajoutée à son écran d'accueil.
-- **Navigateur téléphone sans aucun chemin détecté** (ni
-  `beforeinstallprompt`, ni iOS — ex. Firefox Android, webview in-app
-  WhatsApp/Facebook) : seul cas où un contournement existe
-  (`continueInBrowser()`, persisté en `sessionStorage` sous
-  `elm-pwa-gate-unsupported-bypass`), pour éviter un verrouillage total sans
-  issue. Volontairement retardé de 1,2 s après le montage
-  (`UNSUPPORTED_FALLBACK_DELAY_MS`) : `beforeinstallprompt` peut se
-  déclencher avec un léger retard sur un téléphone qui supporte réellement
-  l'installation, et ce contournement ne doit jamais être proposé à tort dans
-  ce cas. **Jamais disponible** pour les deux chemins réellement actionnables
-  (Android avec invite native, iOS) — ces deux cas bloquent sans échappatoire.
+  (`preventDefault()`) ; la carte apparaît dès que l'événement est capté, et
+  le clic sur **Installer** déclenche `prompt()`. Après installation
+  (`appinstalled`, y compris via le menu du navigateur), la carte disparaît.
+- **iOS (Safari)** : `beforeinstallprompt` ne se déclenche jamais (WebKit) —
+  le bouton **Installer** ouvre un dialogue avec les 3 étapes manuelles
+  (Partager → Sur l'écran d'accueil → Ajouter).
+- **Navigateur sans aucun chemin d'installation** (ni `beforeinstallprompt`,
+  ni iOS — ex. Firefox Android, webview in-app WhatsApp/Facebook, ou
+  l'émulation mobile des DevTools Chrome) : **aucune carte**, plutôt qu'un
+  bouton qui échouerait silencieusement. L'interface reste utilisable.
+- **« Plus tard » / croix** : masque la carte pour la session navigateur
+  (`sessionStorage`, clé `elm-pwa-install-dismissed`) ; elle est reproposée
+  à la session suivante.
 
-Ce garde-fou remplace la garantie précédente ("n'empêche jamais l'utilisation
-d'ELM") **uniquement sur téléphone** — décision explicite, cf. discussion
-produit du 08/09/2026 : l'objectif devient justement d'empêcher l'usage du
-site web normal sur téléphone pour pousser vers l'app installée. Limite de
-plateforme à connaître : un lien scanné (QR d'un ticket, lien partagé) ouvre
-toujours d'abord le navigateur, jamais directement la PWA déjà installée —
-iOS n'offre aucun mécanisme pour qu'un lien externe ouvre une PWA installée
-comme le ferait une vraie app native. Le garde-fou s'affiche donc à chaque
-fois dans ce cas, jusqu'à ce que l'utilisateur relance ELM depuis son écran
-d'accueil.
+Limite de plateforme à connaître : un lien scanné (QR d'un ticket, lien
+partagé) ouvre toujours le navigateur, jamais directement la PWA déjà
+installée (iOS n'offre aucun mécanisme équivalent à une app native). Ce
+n'est plus bloquant : l'utilisateur continue simplement dans le navigateur.
 
-Vérifié manuellement (Playwright, UA iPhone + viewport mobile, contre
-`npm run dev`) : écran visible sur téléphone (interface normale invisible
-derrière), absent sur tablette (UA iPad) et desktop, clic Android → invite
-native, iOS → instructions inline. Le chemin `beforeinstallprompt` réel
-(Android/Chrome) n'est pas automatisable de la même façon (nécessite les
-critères d'installabilité réels — HTTPS/manifest/service worker — absents en
-`npm run dev`) : à vérifier manuellement contre un build réel.
+Tests : [tests/e2e/pwa-install-prompt.spec.ts](../tests/e2e/pwa-install-prompt.spec.ts)
+(iPhone, Android avec `beforeinstallprompt` simulé, navigateur sans support,
+tablette, desktop). Le chemin `beforeinstallprompt` réel (Android/Chrome)
+n'est pas automatisable (critères d'installabilité réels — HTTPS/manifest/
+service worker — absents en `npm run dev`) : à vérifier manuellement contre
+un build réel.
 
 ## 4. Stratégie de mise à jour
 
