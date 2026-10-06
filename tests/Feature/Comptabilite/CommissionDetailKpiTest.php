@@ -25,6 +25,7 @@ use App\Models\Vehicule;
 use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -385,6 +386,50 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.vehicule.nom', $vehicule->nom_vehicule)
                 ->has('expenses')
             );
+    }
+
+    public function test_vente_commission_annulee_reste_listee_mais_hors_montants(): void
+    {
+        $livreur = $this->makeLivreur();
+        $this->makePartVente($this->makeEnveloppeVente(), 'livreur', $livreur->id, brut: 13300);
+        $this->makePartVente($this->makeEnveloppeVente(), 'livreur', $livreur->id, brut: 190000, statut: 'annulee');
+
+        $this->actingAs($this->user)
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commission_details', 2)
+                ->where('commission_details', fn ($rows) => $this->ligneAnnuleeSansReste(collect($rows), 190000))
+                ->where('commission_summary.net_a_payer', 13300)
+                ->where('commission_summary.reste_a_payer', 13300)
+            );
+    }
+
+    public function test_proprietaire_commission_annulee_reste_listee_mais_hors_montants(): void
+    {
+        $proprio = $this->makeProprietaire();
+        $this->makePartVente($this->makeEnveloppeVente(), 'proprietaire', $proprio->id, brut: 50000);
+        $this->makePartVente($this->makeEnveloppeVente(), 'proprietaire', $proprio->id, brut: 20000, statut: 'annulee');
+
+        $this->actingAs($this->user)
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commission_details', 2)
+                ->where('commission_details', fn ($rows) => $this->ligneAnnuleeSansReste(collect($rows), 20000))
+                ->where('commission_summary.net_a_payer', 50000)
+                ->where('commission_summary.reste_a_payer', 50000)
+            );
+    }
+
+    private function ligneAnnuleeSansReste(Collection $rows, float $montant): bool
+    {
+        $annulee = $rows->firstWhere('annulee', true);
+
+        return $annulee !== null
+            && (float) $annulee['montant'] === $montant
+            && (float) $annulee['reste'] === 0.0
+            && $rows->where('annulee', false)->count() === 1;
     }
 
     public function test_proprietaire_commission_details_expose_montant_paye_reste_statut(): void

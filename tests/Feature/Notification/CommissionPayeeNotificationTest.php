@@ -28,16 +28,19 @@ use App\Models\Vehicule;
 use App\Notifications\CommissionPayeeNotification;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionLogistiqueService;
 use App\Services\CommissionPaymentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use App\Services\Tresorerie\DecaissementFicheResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\Feature\Concerns\MakesClientProfiles;
 use Tests\TestCase;
@@ -51,7 +54,7 @@ use Tests\TestCase;
  */
 class CommissionPayeeNotificationTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, MakesClientProfiles, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasProduitVariante, MakesClientProfiles, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -212,6 +215,7 @@ class CommissionPayeeNotificationTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreurUser->livreur->id,
             'part_pourcentage' => 0,
@@ -270,15 +274,14 @@ class CommissionPayeeNotificationTest extends TestCase
         app(PeriodeCalculatorService::class)->calculer($periode);
 
         $parts = CommissionAdjustmentService::partsPourPeriode($periode);
+        // La dernière validation fait passer la période à « Validée » automatiquement (ADR 0008).
         CommissionAdjustmentService::validerLot($parts, $this->user);
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertSessionHas('success');
+        $this->assertTrue($periode->fresh()->isValidee());
 
         $fiche = PaiementFiche::where('periode_id', $periode->id)
             ->where('beneficiaire_id', $livreurUser->livreur->id)
             ->firstOrFail();
+        $this->equiperPayeurEspeces($this->user, app(DecaissementFicheResolver::class)->siteTresorerie($fiche));
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.fiches.paiements.store', $fiche), [

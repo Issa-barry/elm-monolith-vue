@@ -87,7 +87,7 @@ class AccountValidationService
 
     /**
      * Rôles visibles : système ∪ organisation du compte (même règle que
-     * RoleController::visibleRoles()) — jamais celui d'une autre organisation. `super_admin`
+     * Role\IndexRoleController::visibleRoles()) — jamais celui d'une autre organisation. `super_admin`
      * n'est attribuable que par un acteur déjà `super_admin` (jamais un mapping automatique
      * fonction → compte technique, jamais une élévation de privilège via cet écran).
      *
@@ -115,7 +115,7 @@ class AccountValidationService
 
         // Cherche PAR ID SEUL d'abord (jamais scopé par organisation dans la requête elle-même) :
         // sinon un rôle d'une autre organisation ressort comme "introuvable" (422) au lieu du
-        // 403 explicite attendu — même principe que RoleController::authorizeSameOrganization(),
+        // 403 explicite attendu — même principe que RoleAccess::authorizeSameOrganization(),
         // qui résout d'abord via la route-model-binding, puis vérifie la frontière ensuite.
         $role = Role::find($roleId);
 

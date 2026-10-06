@@ -76,8 +76,10 @@ export default async function globalSetup(config: FullConfig) {
 
 /**
  * Crée un transfert logistique via l'UI, l'amène jusqu'au statut RECEPTION
- * et génère la commission (montant_par_pack = 200 GNF, pré-rempli par défaut).
- * Retourne la référence du transfert (ex: "TR-00001-AMR").
+ * et génère la commission (montant résolu par CommissionRegle — 200 GNF/pack
+ * pour les équipes de livraison, cf. EquipesLivraisonSeeder — plus aucune
+ * saisie manuelle depuis le 03/09/2026).
+ * Retourne la référence du transfert (ex: "TRF-310826-001").
  */
 async function createTransfertAndGenerateCommission(
     page: Page,
@@ -117,11 +119,13 @@ async function createTransfertAndGenerateCommission(
 
     await page.waitForURL(/\/logistique\/[a-z0-9]+$/, { timeout: 30_000 });
 
-    // Extract reference displayed as "N° transfert : TR-XXXXX-YYY"
+    // Extract reference displayed as "N° transfert : TRF-JJMMAA-NNN" (format
+    // PREFIXE-JJMMAA-NNN généralisé le 31/08/2026, cf. ReferenceNumeroService —
+    // remplace l'ancien "TR-XXXXX-YYY").
     const refElement = page.locator(':text("N° transfert")').first();
     await refElement.waitFor({ state: 'visible', timeout: 10_000 });
     const refText = (await refElement.textContent()) ?? '';
-    const refMatch = refText.match(/TR-[A-Z0-9-]+/i);
+    const refMatch = refText.match(/TRF-\d{6}-\d{3}/i);
     if (!refMatch) {
         throw new Error(
             `Cannot extract transfert reference from page text: "${refText}"`,
@@ -167,26 +171,21 @@ async function createTransfertAndGenerateCommission(
     await btnValiderReception.waitFor({ state: 'visible', timeout: 10_000 });
     await btnValiderReception.click();
 
-    // ── Réception → Commission générée ────────────────────────────────────────
+    // ── Réception → Commission générée (approbation admin) ─────────────────────
     const btnGenerer = page.getByRole('button', {
-        name: /générer commission/i,
+        name: /approuver la réception/i,
     });
     await btnGenerer.waitFor({ state: 'visible', timeout: 20_000 });
     await btnGenerer.click();
 
-    // Étape 1 (review) : confirmer la réception
+    // Confirmer la réception : montant toujours résolu par CommissionRegle
+    // (Paramètres > Commissions > Transferts logistiques) depuis le 03/09/2026,
+    // plus de saisie manuelle ni d'étape "montant" intermédiaire.
     const btnOuiGenerer = page.getByRole('button', {
-        name: /oui, générer la commission/i,
+        name: /oui, approuver/i,
     });
     await btnOuiGenerer.waitFor({ state: 'visible', timeout: 10_000 });
     await btnOuiGenerer.click();
-
-    // Étape 2 (montant) : montant_par_pack pré-rempli à 200 GNF — confirmer directement
-    const btnConfirmer = page.getByRole('button', {
-        name: /confirmer et générer/i,
-    });
-    await btnConfirmer.waitFor({ state: 'visible', timeout: 10_000 });
-    await btnConfirmer.click();
 
     // Attendre que la commission soit générée (le bouton disparaît)
     await btnGenerer.waitFor({ state: 'hidden', timeout: 20_000 });
@@ -258,22 +257,33 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 
     await page.goto(periodeUrl);
     const validerPeriodeBtn = page.getByRole('button', {
-        name: 'Valider',
+        name: 'Valider la période',
         exact: true,
     });
     await validerPeriodeBtn.waitFor({ state: 'visible', timeout: 15_000 });
-    await validerPeriodeBtn.click();
-    await confirmDialog(page, 'Valider');
+    // La période passe à « Validée » automatiquement dès la dernière commission validée :
+    // le bouton n'est plus actif que s'il reste une validation manuelle à faire.
+    if (await validerPeriodeBtn.isEnabled()) {
+        await validerPeriodeBtn.click();
+        await confirmDialog(page, 'Valider');
+    }
+    await page
+        .getByText('Validée', { exact: true })
+        .first()
+        .waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 /**
  * Paie intégralement la commission du livreur correspondant au regex, via sa fiche
- * de paiement (Comptabilité > Fiches). Le paiement DIRECT (page /logistique/commissions)
- * est désormais bloqué par PeriodePayabilityChecker::assertPartsNotClaimedByFiche dès
- * qu'une fiche existe pour la période du bénéficiaire — et valerPeriodeLivreurCourante
- * ci-dessus a déjà déclenché la génération automatique des fiches de tous les livreurs
- * de la période (PeriodeCalculatorService::creerFiche, appelé par le show() de la page
- * période). La fiche est donc le seul canal de paiement encore ouvert ici.
+ * de paiement (Comptabilité > Fiches). L'écran de paiement DIRECT dédié à la logistique
+ * (/backoffice/logistique/commissions) a été retiré le 04/09/2026 (moteur legacy
+ * CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026, cf.
+ * docs/commissions.md) ; même quand un canal direct existe encore ailleurs (Comptabilité >
+ * Commissions > Logistique), il reste bloqué par PeriodePayabilityChecker::
+ * assertPartsNotClaimedByFiche dès qu'une fiche existe pour la période du bénéficiaire — et
+ * validerPeriodeLivreurCourante ci-dessus a déjà déclenché la génération automatique des
+ * fiches de tous les livreurs de la période (PeriodeCalculatorService::creerFiche, appelé par
+ * le show() de la page période). La fiche est donc le seul canal de paiement ouvert ici.
  */
 async function payFullCommission(
     page: Page,
@@ -289,30 +299,34 @@ async function payFullCommission(
         timeout: 20_000,
     });
 
-    // waitForURL ne garantit que le changement d'URL, pas le remplacement du DOM
-    // (transition Inertia) : sans cette attente, un combobox non scopé peut encore
-    // matcher le filtre Agence de la page liste précédente (Fiches/Index.vue,
-    // DataFilters) au lieu du "Mode de paiement" de cette page.
-    await page
-        .getByRole('heading', { name: /enregistrer un paiement/i })
-        .waitFor({ state: 'visible', timeout: 15_000 });
-
-    // Montant pré-rempli au solde restant de la fiche — seul le mode de paiement
-    // (obligatoire, sans valeur par défaut) doit être renseigné avant de soumettre.
-    // Scopé au <form> (comme les autres combobox de ce fichier de tests) : DataFilters,
-    // utilisé sur la page liste précédente, ne rend jamais de <form>, donc ce scope
-    // exclut aussi son filtre Agence par construction, indépendamment du timing.
-    const modeCombobox = page.locator('form').getByRole('combobox').first();
-    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
-    await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
-
-    const submitBtn = page.getByRole('button', {
-        name: /enregistrer le paiement/i,
+    // Le bloc « Enregistrer un paiement » n'ouvre plus un formulaire inline mais le
+    // dialogue PaymentCard (décaissement, ADR 0009), via son bouton « Payer ».
+    const paiementHeading = page.getByRole('heading', {
+        name: /enregistrer un paiement/i,
     });
-    await submitBtn.waitFor({ state: 'visible', timeout: 10_000 });
-    await submitBtn.click();
+    await paiementHeading.waitFor({ state: 'visible', timeout: 15_000 });
+    await page.getByRole('button', { name: /^payer$/i }).click();
 
-    // La fiche est intégralement soldée : le formulaire de paiement disparaît
-    // (can_pay redevient false côté backend une fois montant_restant à 0).
-    await submitBtn.waitFor({ state: 'hidden', timeout: 20_000 });
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+
+    // Montant pré-rempli au reste à payer. La fiche est rattachée à CBA (site source du
+    // transfert), où l'admin E2E n'a pas de caisse dédiée : le paiement sort du support
+    // « Banque E2E » approvisionné par SupportBanqueE2eSeeder — chèque, sans référence requise.
+    const modeCombobox = dialog.getByRole('combobox').first();
+    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
+    await selectOptionFromCombobox(
+        page,
+        modeCombobox,
+        /ch[eè]que.*banque e2e/i,
+    );
+
+    const confirmerBtn = dialog.getByRole('button', { name: /^confirmer$/i });
+    await confirmerBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await confirmerBtn.click();
+
+    // La fiche est intégralement soldée : le dialogue se ferme puis le bloc de paiement
+    // disparaît (can_pay redevient false côté backend une fois montant_restant à 0).
+    await dialog.waitFor({ state: 'hidden', timeout: 20_000 });
+    await paiementHeading.waitFor({ state: 'hidden', timeout: 20_000 });
 }

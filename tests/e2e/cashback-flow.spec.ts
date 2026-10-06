@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
     await ensureModuleEnabled(page, 'module.cashback');
 });
 
-test('cashback index renders and supports search/filter controls', async ({
+test('cashback index renders and exposes its filters drawer', async ({
     page,
 }) => {
     await page.goto('/backoffice/cashback');
@@ -20,12 +20,13 @@ test('cashback index renders and supports search/filter controls', async ({
         timeout: 20_000,
     });
 
-    const search = page
-        .locator('input[placeholder*="Rechercher" i]:visible')
-        .first();
-    await expect(search).toBeVisible({ timeout: 10_000 });
-    await search.fill('zzzz-no-result-e2e');
-    await expect(search).toHaveValue('zzzz-no-result-e2e');
+    // Pas de recherche globale (standard DataFilters) : Statut, Client et
+    // Période vivent dans le drawer Filtres.
+    await page.getByRole('button', { name: /^filtres/i }).click();
+    const drawer = page.getByTestId('filters-drawer');
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText('Statut', { exact: true })).toBeVisible();
+    await expect(drawer.getByText('Client', { exact: true })).toBeVisible();
 });
 
 test('cashback row actions menu is available when transactions exist', async ({

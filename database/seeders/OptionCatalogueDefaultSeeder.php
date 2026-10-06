@@ -10,7 +10,7 @@ use Illuminate\Database\Seeder;
  * Bibliothèque d'options système proposées par défaut à toute organisation — un socle assez
  * large pour couvrir la plupart des profils de commerce (habillement, chaussures, boissons,
  * alimentaire, électronique, construction, cosmétique...) sans forcer personne à tout créer à
- * la main. Marquées `is_system` (non supprimables, cf. OptionCatalogueController::destroy()),
+ * la main. Marquées `is_system` (non supprimables, cf. DestroyOptionCatalogueController),
  * mais leurs valeurs restent librement ajoutables/supprimables : ce sont des suggestions de
  * départ, pas une liste fermée.
  *

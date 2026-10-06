@@ -27,7 +27,7 @@ class ImageServiceTest extends TestCase
      * Régression : un fichier que Laravel valide comme `image` (getimagesize() le
      * reconnaît) mais que le décodeur GD/Intervention Image refuse de lire pixel par
      * pixel plantait storeResized() en 500 (DecoderException non interceptée) — cf.
-     * ClientDashboardController::storeVehicleProposal(). Doit désormais remonter une
+     * StoreVehicleProposalClientDashboardController. Doit désormais remonter une
      * erreur de validation exploitable côté formulaire, jamais un crash serveur.
      */
     public function test_store_as_webp_converts_undecodable_image_into_validation_error(): void

@@ -31,6 +31,19 @@ interface PeriodStatus {
     label: string;
 }
 
+interface SummaryCardLabelOverride {
+    label?: string;
+    ariaLabel?: string;
+    tooltip?: string;
+}
+
+type SummaryLabelOverrides = Partial<
+    Record<
+        'generated' | 'expenses' | 'netValidated' | 'remaining',
+        SummaryCardLabelOverride
+    >
+>;
+
 withDefaults(
     defineProps<{
         title: string;
@@ -40,6 +53,7 @@ withDefaults(
         periodLabel: string;
         periodStatus?: PeriodStatus | null;
         filterUrl: string;
+        savedFilterScope?: string;
         filterValues: Record<string, unknown>;
         filterFields: FilterField[];
         sites?: SiteOption[];
@@ -48,16 +62,21 @@ withDefaults(
          * masquer artificiellement un filtre par ailleurs pertinent. */
         hideAgenceSelector?: boolean;
         summary: CommissionIndexSummary;
+        /** Transmis tel quel à CommissionIndexSummaryCards — voir sa doc pour le contrat. */
+        summaryLabelOverrides?: SummaryLabelOverrides;
         tableTitle: string;
         resultCount: number;
         emptyMessage?: string;
+        showExport?: boolean;
     }>(),
     {
         entityLabelPlural: undefined,
         periodStatus: null,
         sites: () => [],
         hideAgenceSelector: false,
+        summaryLabelOverrides: () => ({}),
         emptyMessage: 'Aucune commission trouvée.',
+        showExport: true,
     },
 );
 
@@ -98,7 +117,7 @@ defineEmits<{
             </div>
 
             <ListPageActions>
-                <template #export>
+                <template v-if="showExport" #export>
                     <DropdownMenu>
                         <DropdownMenuTrigger as-child>
                             <Button
@@ -134,6 +153,7 @@ defineEmits<{
                     <DataFilters
                         trigger-only
                         :url="filterUrl"
+                        :saved-filter-scope="savedFilterScope"
                         :values="filterValues"
                         :fields="filterFields"
                         :sites="sites"
@@ -146,7 +166,10 @@ defineEmits<{
 
         <slot name="after-header" />
 
-        <CommissionIndexSummaryCards :summary="summary" />
+        <CommissionIndexSummaryCards
+            :summary="summary"
+            :label-overrides="summaryLabelOverrides"
+        />
 
         <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
             <div

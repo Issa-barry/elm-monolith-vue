@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Settings;
 
 use App\Enums\PrestataireType;
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\CommissionCibleType;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Foundation\Http\FormRequest;
@@ -30,6 +31,7 @@ class StoreCommissionConfigurationRequest extends FormRequest
         $organizationId = $this->user()->organization_id;
 
         return [
+            'processus_code' => ['required', Rule::in(CommissionRegleController::processusCodesDisponibles())],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.categorie_id' => [
                 'required',

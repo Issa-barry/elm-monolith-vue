@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\OtpDeliveryChannel;
 use App\Enums\OtpPurpose;
+use App\Services\Otp\OtpFallbackTarget;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -108,7 +109,7 @@ class OtpService
         $code = config('otp.fixed_code')
             ?? str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-        Cache::put($this->key($identifier, $purpose, $context), $code, now()->addMinutes(self::TTL_MINUTES));
+        Cache::put($this->key($identifier, $purpose, $context), self::empreinteCode($code), now()->addMinutes(self::TTL_MINUTES));
         Cache::forget($this->verifiedKey($identifier, $purpose, $context));
         Cache::forget($this->attemptsKey($identifier, $purpose, $context));
 
@@ -136,17 +137,26 @@ class OtpService
      * ex: un email de secours) peuvent différer — c'est exactement le cas
      * "canal temporaire" (purpose=phone_verification ou login, transporté par
      * email en attendant un fournisseur SMS/WhatsApp).
+     *
+     * `$fallback` (ajouté le 31/08/2026, audit intégration Nimba SMS) : canal
+     * de repli EXPLICITE — cf. `OtpChannelResolver::fallbackFor()` — que
+     * `$channel` peut utiliser si son envoi échoue réellement APRÈS avoir été
+     * choisi (ex: SMS jugé disponible mais Nimba en panne au moment de
+     * l'envoi). Simplement transmis à `OtpDeliveryChannel::send()` ; seul
+     * `SmsOtpChannel` s'en sert aujourd'hui (email est synchrone, ses échecs
+     * remontent déjà en erreur sans avoir besoin d'un repli différé).
      */
     public function generateAndSend(
         string $identifier,
         OtpPurpose $purpose,
         OtpDeliveryChannel $channel,
         string $destination,
-        ?string $context = null
+        ?string $context = null,
+        ?OtpFallbackTarget $fallback = null,
     ): string {
         $code = $this->generate($identifier, $purpose, $context);
 
-        $channel->send($destination, $code, $purpose);
+        $channel->send($destination, $code, $purpose, $fallback);
 
         return $code;
     }
@@ -155,6 +165,16 @@ class OtpService
     public function resendCooldownSeconds(): int
     {
         return self::RESEND_COOLDOWN_SECONDS;
+    }
+
+    /**
+     * Durée de vie (en minutes) d'un code généré — exposé pour que les canaux
+     * de transport (ex: SmsOtpChannel) puissent l'annoncer dans le message
+     * envoyé sans dupliquer cette valeur (single source of truth).
+     */
+    public function ttlMinutes(): int
+    {
+        return self::TTL_MINUTES;
     }
 
     /**
@@ -208,7 +228,7 @@ class OtpService
         }
 
         $stored = Cache::get($this->key($identifier, $purpose, $context));
-        $matches = is_string($stored) && hash_equals($stored, $code);
+        $matches = is_string($stored) && hash_equals($stored, self::empreinteCode($code));
 
         if ($matches) {
             Cache::forget($this->key($identifier, $purpose, $context));
@@ -323,7 +343,18 @@ class OtpService
     }
 
     /** Masque un identifiant (téléphone ou email) pour les journaux d'audit. */
-    private static function mask(string $identifier): string
+    /**
+     * Seule forme sous laquelle un code est conservé en cache (24/09/2026) : jamais le code en
+     * clair, qui serait lisible par quiconque accède au store de cache. HMAC avec la clé de
+     * l'application plutôt qu'un simple sha256 : un code à 6 chiffres se retrouverait sinon par
+     * force brute instantanée à partir de sa seule empreinte.
+     */
+    private static function empreinteCode(string $code): string
+    {
+        return hash_hmac('sha256', $code, (string) config('app.key'));
+    }
+
+    public static function mask(string $identifier): string
     {
         $len = strlen($identifier);
 

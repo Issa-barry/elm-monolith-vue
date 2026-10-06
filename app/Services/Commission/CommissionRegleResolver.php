@@ -17,6 +17,12 @@ use Carbon\CarbonInterface;
  * (jamais un niveau de portée à part) — à chaque niveau, une exception pour le
  * type de véhicule exact prévaut sur le barème standard (type_vehicule_id NULL)
  * du même niveau, avant de retomber sur le niveau de portée suivant.
+ *
+ * Résolution par DATE (R1, 24/09/2026) : une règle depuis remplacée (statut `remplacee`) reste
+ * applicable sur sa propre fenêtre [effective_from, effective_to] — sans quoi toute régénération
+ * à une date passée (retour partiel, relance d'une génération partielle, réception logistique
+ * validée après coup) ne retrouvait plus le barème réellement en vigueur ce jour-là et générait
+ * silencieusement 0. Seul un brouillon (jamais publié) n'est jamais applicable.
  */
 class CommissionRegleResolver
 {
@@ -74,9 +80,16 @@ class CommissionRegleResolver
             ->where('processus_id', $processusId)
             ->where('cible_type', $cibleType)
             ->where('scope_type', $scopeType->value)
-            ->where('statut', CommissionRegleStatut::ACTIVE->value)
-            ->where('effective_from', '<=', $date->toDateString())
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', $date->toDateString()));
+            ->whereIn('statut', [CommissionRegleStatut::ACTIVE->value, CommissionRegleStatut::REMPLACEE->value])
+            // whereDate (comme EquipeLivraisonPartageCategorie::scopeActifA()) : comparaison par
+            // JOUR quel que soit le moteur — une comparaison de chaînes excluait sous SQLite une
+            // règle entrant en vigueur le jour même (valeur stockée « AAAA-MM-JJ 00:00:00 »).
+            ->whereDate('effective_from', '<=', $date->toDateString())
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>=', $date->toDateString()))
+            // Déterminisme si deux versions se chevauchaient (donnée historique incohérente) : la
+            // plus récemment entrée en vigueur l'emporte, jamais un ordre SQL arbitraire.
+            ->orderByDesc('effective_from')
+            ->orderByDesc('created_at');
 
         if ($scopeId === null) {
             $query->whereNull('scope_id');

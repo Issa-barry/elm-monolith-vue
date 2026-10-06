@@ -159,7 +159,7 @@ class CommandeVenteCreationStockInsuffisantTest extends TestCase
 
     /**
      * Construit directement une commande en statut BROUILLON. Impossible de passer par
-     * store() pour ça : CommandeVenteController::store() fait toujours avancer une commande
+     * store() pour ça : Ventes\StoreCommandeVenteController fait toujours avancer une commande
      * fraîchement créée hors BROUILLON dans la même requête (confirmer() si vehicule_id,
      * sinon creerFactureDirecte()) — jamais de commande qui reste en BROUILLON à l'issue d'un
      * POST réel. Une commande n'est modifiable via update() (abort_if(!isBrouillon())) que si

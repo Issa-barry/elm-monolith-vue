@@ -114,9 +114,49 @@ class StockReservationService
     }
 
     /**
+     * Ramène une réservation active à une quantité inférieure (précommande préparée pour moins que
+     * demandé, ADR 0019) : le surplus redevient disponible. Une seule réservation par source (index
+     * unique source × site) : la quantité est réduite sur place — la quantité d'origine reste lisible
+     * sur la ligne de commande (`quantite_demandee`) et dans son journal d'activité. Sans effet si la
+     * quantité ne baisse pas ; libère tout si elle tombe à 0. L'appelant s'exécute dans une transaction.
+     */
+    public static function reduire(string $sourceType, string $sourceId, string $siteId, string $orgId, int $nouvelleQuantite): void
+    {
+        if ($nouvelleQuantite <= 0) {
+            self::liberer($sourceType, $sourceId, $siteId, $orgId);
+
+            return;
+        }
+
+        $reservation = StockReservation::where('organization_id', $orgId)
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('site_id', $siteId)
+            ->where('statut', StatutReservationStock::ACTIVE)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $reservation || $nouvelleQuantite >= $reservation->quantite) {
+            return;
+        }
+
+        $varianteStock = VarianteStock::where('organization_id', $orgId)
+            ->where('produit_variante_id', $reservation->produit_variante_id)
+            ->where('site_id', $siteId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($varianteStock) {
+            $varianteStock->update(['qte_reservee' => max(0, $varianteStock->qte_reservee - ($reservation->quantite - $nouvelleQuantite))]);
+        }
+
+        $reservation->update(['quantite' => $nouvelleQuantite]);
+    }
+
+    /**
      * $orgId explicite dans CHAQUE recherche (25/08/2026) — jusqu'ici, seule l'unicité globale
      * des ULID source_id empêchait une fuite entre organisations ; ce filtre est désormais une
-     * défense explicite, cohérente avec le reste du module (MouvementStockService, StockController),
+     * défense explicite, cohérente avec le reste du module (MouvementStockService, IndexStockController),
      * plutôt qu'une dépendance implicite à l'unicité des identifiants.
      */
     private static function terminer(string $sourceType, string $sourceId, string $siteId, string $orgId, StatutReservationStock $statutFinal): void

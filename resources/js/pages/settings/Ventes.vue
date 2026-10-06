@@ -7,9 +7,11 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    CalendarClock,
     HandCoins,
     Lock,
     PackageCheck,
+    ShieldAlert,
     ShieldCheck,
 } from 'lucide-vue-next';
 import RadioButton from 'primevue/radiobutton';
@@ -29,15 +31,27 @@ interface DeclencheurOption {
     label: string;
 }
 
+interface ModeConfirmationOption {
+    value: string;
+    label: string;
+    description: string;
+}
+
 const props = defineProps<{
     roles: RoleQuantite[];
     autoriser_saisie_dessous_qte_max: boolean;
     controle_impayes_actif: boolean;
     seuil_impayes_max: number;
     declencheur_commission_vente: string;
-    declencheur_commission_logistique: string;
     declencheurs_commission_vente_options: DeclencheurOption[];
-    declencheurs_commission_logistique_options: DeclencheurOption[];
+    annulation_exceptionnelle_confirmation: string;
+    annulation_exceptionnelle_confirmation_options: ModeConfirmationOption[];
+    /** `parametres.update` ET `ventes.annuler_exceptionnel` — cf. UpdateVenteParametrageController. */
+    peut_modifier_confirmation_annulation: boolean;
+    /** Acompte des précommandes (ADR 0019, D6) : règle configurable, taux saisi librement. */
+    /** null tant que l'organisation n'a pas choisi : création de précommandes bloquée. */
+    precommande_acompte_obligatoire: boolean | null;
+    precommande_acompte_min_pct: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,13 +76,39 @@ const form = useForm({
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
     declencheur_commission_vente: props.declencheur_commission_vente,
-    declencheur_commission_logistique: props.declencheur_commission_logistique,
+    annulation_exceptionnelle_confirmation:
+        props.annulation_exceptionnelle_confirmation,
+    precommande_acompte_obligatoire: props.precommande_acompte_obligatoire,
+    precommande_acompte_min_pct: props.precommande_acompte_min_pct,
 });
+
+// Acompte obligatoire ⇒ taux strictement positif (refusé aussi côté serveur).
+const tauxAcompteInvalide = computed(
+    () =>
+        form.precommande_acompte_obligatoire &&
+        !(form.precommande_acompte_min_pct >= 1),
+);
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
 
 function roleEnabled(roleName: string, field: EditableRoleField): boolean {
     return form[field].includes(roleName);
+}
+
+/**
+ * `role.locked` ne veut plus seulement dire "super_admin, toujours vrai" : un rôle système
+ * (manager/commerciale/comptable/admin_entreprise) verrouillé pour cet acteur peut très bien
+ * valoir false — afficher son état réel (`can_update_quantite`/`can_update_prix_unitaire`)
+ * plutôt que de forcer "activé" comme le faisait l'ancien `role.locked || roleEnabled(...)`.
+ */
+function isRoleFieldOn(role: RoleQuantite, field: EditableRoleField): boolean {
+    if (role.locked) {
+        return field === 'quantity_edit_role_names'
+            ? role.can_update_quantite
+            : role.can_update_prix_unitaire;
+    }
+
+    return roleEnabled(role.name, field);
 }
 
 function toggleRole(role: RoleQuantite, field: EditableRoleField) {
@@ -86,7 +126,17 @@ function toggleRole(role: RoleQuantite, field: EditableRoleField) {
 }
 
 function submit() {
-    form.put('/settings/ventes', {
+    // Tant que l'acompte n'a pas été choisi, rien n'est envoyé pour les précommandes : enregistrer un
+    // autre paramètre ne doit jamais les configurer à la place de l'organisation.
+    form.transform((data) =>
+        data.precommande_acompte_obligatoire === null
+            ? {
+                  ...data,
+                  precommande_acompte_obligatoire: undefined,
+                  precommande_acompte_min_pct: undefined,
+              }
+            : data,
+    ).put('/settings/ventes', {
         preserveScroll: true,
         onSuccess: () => {
             toast.add({
@@ -169,18 +219,16 @@ function onSeuilBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
+                                    isRoleFieldOn(
+                                        role,
                                         'quantity_edit_role_names',
                                     )
                                         ? 'bg-primary'
@@ -193,9 +241,8 @@ function onSeuilBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'quantity_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -236,20 +283,12 @@ function onSeuilBlur() {
                                 type="button"
                                 role="switch"
                                 :aria-checked="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                 "
                                 :disabled="role.locked || form.processing"
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 :class="
-                                    role.locked ||
-                                    roleEnabled(
-                                        role.name,
-                                        'price_edit_role_names',
-                                    )
+                                    isRoleFieldOn(role, 'price_edit_role_names')
                                         ? 'bg-primary'
                                         : 'bg-input'
                                 "
@@ -260,9 +299,8 @@ function onSeuilBlur() {
                                 <span
                                     class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                                     :class="
-                                        role.locked ||
-                                        roleEnabled(
-                                            role.name,
+                                        isRoleFieldOn(
+                                            role,
                                             'price_edit_role_names',
                                         )
                                             ? 'translate-x-5'
@@ -371,38 +409,6 @@ function onSeuilBlur() {
                             </label>
                         </div>
                     </div>
-
-                    <div class="space-y-2 border-t px-5 py-4">
-                        <p class="text-sm font-medium text-foreground">
-                            Commission logistique — générer la commission
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            Ce paramètre détermine à quel moment la commission
-                            logistique devient générable.
-                        </p>
-                        <div
-                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
-                        >
-                            <label
-                                v-for="option in declencheurs_commission_logistique_options"
-                                :key="`logistique-${option.value}`"
-                                class="flex cursor-pointer items-center gap-2"
-                            >
-                                <RadioButton
-                                    :model-value="
-                                        form.declencheur_commission_logistique
-                                    "
-                                    :value="option.value"
-                                    :disabled="form.processing"
-                                    @update:model-value="
-                                        form.declencheur_commission_logistique =
-                                            option.value
-                                    "
-                                />
-                                <span class="text-sm">{{ option.label }}</span>
-                            </label>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="overflow-hidden rounded-xl border bg-card">
@@ -503,6 +509,200 @@ function onSeuilBlur() {
                     </div>
                 </div>
 
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <ShieldAlert class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Confirmation des annulations exceptionnelles
+                        </h3>
+                    </div>
+
+                    <div class="space-y-3 px-5 py-4">
+                        <p class="text-xs text-muted-foreground">
+                            Choisissez le niveau de confirmation requis pour les
+                            annulations exceptionnelles.
+                        </p>
+
+                        <label
+                            v-for="option in annulation_exceptionnelle_confirmation_options"
+                            :key="`annulation-${option.value}`"
+                            class="flex items-start gap-3"
+                            :class="
+                                peut_modifier_confirmation_annulation
+                                    ? 'cursor-pointer'
+                                    : 'cursor-not-allowed opacity-70'
+                            "
+                        >
+                            <RadioButton
+                                :model-value="
+                                    form.annulation_exceptionnelle_confirmation
+                                "
+                                :value="option.value"
+                                :input-id="`annulation-confirmation-${option.value}`"
+                                :disabled="
+                                    form.processing ||
+                                    !peut_modifier_confirmation_annulation
+                                "
+                                class="mt-0.5"
+                                @update:model-value="
+                                    form.annulation_exceptionnelle_confirmation =
+                                        option.value
+                                "
+                            />
+                            <span>
+                                <span
+                                    class="block text-sm font-medium text-foreground"
+                                    >{{ option.label }}</span
+                                >
+                                <span
+                                    class="block text-xs text-muted-foreground"
+                                    >{{ option.description }}</span
+                                >
+                            </span>
+                        </label>
+
+                        <p
+                            v-if="
+                                form.annulation_exceptionnelle_confirmation ===
+                                'email_code'
+                            "
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            Attention : cette option nécessite un service
+                            d'envoi d'e-mails fonctionnel.
+                        </p>
+                        <p
+                            v-else
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            La confirmation simple réduit le niveau de contrôle
+                            de cette opération sensible.
+                        </p>
+
+                        <p
+                            v-if="!peut_modifier_confirmation_annulation"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Seul un utilisateur autorisé à effectuer les
+                            annulations exceptionnelles peut modifier ce
+                            réglage.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <CalendarClock class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Précommandes
+                        </h3>
+                    </div>
+
+                    <div
+                        v-if="form.precommande_acompte_obligatoire === null"
+                        role="status"
+                        class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                    >
+                        Non configuré : la création de précommandes reste
+                        bloquée tant que vous n'avez pas choisi si l'acompte est
+                        obligatoire.
+                    </div>
+
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-foreground">
+                                Acompte obligatoire
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Oui : une précommande n'est enregistrée qu'avec
+                                un acompte au moins égal au taux ci-dessous. Non
+                                : elle peut être enregistrée sans acompte.
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <Button
+                                v-for="choix in [
+                                    { valeur: true, libelle: 'Oui' },
+                                    { valeur: false, libelle: 'Non' },
+                                ]"
+                                :key="choix.libelle"
+                                type="button"
+                                size="sm"
+                                :variant="
+                                    form.precommande_acompte_obligatoire ===
+                                    choix.valeur
+                                        ? 'default'
+                                        : 'outline'
+                                "
+                                :disabled="form.processing"
+                                @click="
+                                    form.precommande_acompte_obligatoire =
+                                        choix.valeur
+                                "
+                            >
+                                {{ choix.libelle }}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div class="border-t px-5 py-4">
+                        <label
+                            for="precommande_acompte_min_pct"
+                            class="block text-sm font-medium text-foreground"
+                        >
+                            Taux d'acompte (%)
+                        </label>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Pourcentage du total de la précommande, saisi
+                            librement (1 à 100 % quand l'acompte est
+                            obligatoire).
+                        </p>
+                        <div class="relative mt-2 w-40">
+                            <input
+                                id="precommande_acompte_min_pct"
+                                v-model.number="
+                                    form.precommande_acompte_min_pct
+                                "
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                :disabled="form.processing"
+                                class="h-10 w-full rounded-md border border-input bg-background pr-9 pl-3 text-sm tabular-nums"
+                                :class="{
+                                    'border-destructive':
+                                        tauxAcompteInvalide ||
+                                        form.errors.precommande_acompte_min_pct,
+                                }"
+                            />
+                            <span
+                                class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-muted-foreground"
+                                >%</span
+                            >
+                        </div>
+                        <p
+                            v-if="form.errors.precommande_acompte_min_pct"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.precommande_acompte_min_pct }}
+                        </p>
+                        <p
+                            v-else-if="tauxAcompteInvalide"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            Quand l'acompte est obligatoire, son taux doit être
+                            supérieur à 0 %.
+                        </p>
+                    </div>
+                </div>
+
                 <div
                     v-if="flashSuccess"
                     class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
@@ -512,7 +712,11 @@ function onSeuilBlur() {
 
                 <div class="flex justify-end">
                     <Button
-                        :disabled="form.processing || !form.isDirty"
+                        :disabled="
+                            form.processing ||
+                            !form.isDirty ||
+                            tauxAcompteInvalide
+                        "
                         @click="submit"
                     >
                         Enregistrer

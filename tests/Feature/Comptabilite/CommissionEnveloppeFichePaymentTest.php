@@ -12,6 +12,7 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
+use App\Enums\StatutTransfert;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -29,15 +30,19 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -54,7 +59,7 @@ use Tests\TestCase;
  */
 class CommissionEnveloppeFichePaymentTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -72,6 +77,11 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        // Payer une fiche en espèces débite la caisse dédiée du payeur sur l'agence de la fiche
+        // (ADR 0009) : une caisse approvisionnée sur chacune de ses agences.
+        foreach ($this->user->sites()->pluck('sites.id') as $siteId) {
+            $this->equiperPayeurEspeces($this->user, $siteId);
+        }
 
         $this->processus = CommissionProcessus::create([
             'organization_id' => $this->org->id,
@@ -133,6 +143,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
             'part_pourcentage' => 0,
@@ -194,17 +205,18 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
     /**
      * Reproduit le workflow réel avant qu'une période ne devienne payable :
      * valider chaque part de vente encore non validée (bloquant sinon la
-     * validation de la période, cf. CommissionAdjustmentService::partsNonValidees()),
-     * puis valider la période via la vraie route (déclenche activerCommissionsCreees()).
+     * validation de la période, cf. CommissionAdjustmentService::partsNonValidees()) : la
+     * dernière validation fait passer la période à « Validée » automatiquement (déclenche
+     * activerCommissionsCreees()), sans clic sur la route de validation de période.
      */
     private function validerPeriodeReellement(PaiementPeriode $periode): void
     {
         $parts = CommissionAdjustmentService::partsPourPeriode($periode);
         CommissionAdjustmentService::validerLot($parts, $this->user);
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertSessionHas('success');
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
+        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut);
     }
 
     // ── Génération → parts ───────────────────────────────────────────────────
@@ -246,6 +258,58 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $this->assertSame('CommissionEnveloppePart', class_basename($fiche->lignes()->first()->source_type));
     }
 
+    /** @test */
+    public function la_fiche_dune_commission_de_transfert_est_rattachee_a_lagence_source_du_transfert(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $siteDestination = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site Destination',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $transfert = TransfertLogistique::create([
+            'organization_id' => $this->org->id,
+            'reference' => 'TRF-TEST-001',
+            'site_source_id' => $this->defaultSite->id,
+            'site_destination_id' => $siteDestination->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutTransfert::CLOTURE->value,
+            'created_by' => $this->user->id,
+        ]);
+
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => TransfertLogistique::class,
+            'source_id' => $transfert->id,
+            'processus_id' => $this->processus->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 5000,
+            'earned_at' => today(),
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $enveloppe->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $fiche = PaiementFiche::where('periode_id', $periode->id)
+            ->where('beneficiaire_id', $livreur->id)
+            ->firstOrFail();
+
+        $this->assertSame($this->defaultSite->id, $fiche->site_id);
+    }
+
     // ── Paiement via Fiches de paiement → répercuté sur commission_enveloppe_parts ──
 
     /** @test */
@@ -282,7 +346,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 6000,
-                'mode_paiement' => 'virement',
+                'mode_paiement' => 'especes',
                 'date_paiement' => now()->toDateString(),
             ]);
 
@@ -322,10 +386,10 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $this->assertSame(StatutCommission::IMPAYE, $part->fresh()->statut);
     }
 
-    // ── Écrans Commission vente : lecture seule, jamais de paiement direct ────
+    // ── Écran Commission vente : bouton Payer → paiement enregistré sur la fiche ────
 
     /** @test */
-    public function lecran_commission_vente_affiche_la_commission_sans_bouton_payer(): void
+    public function lecran_commission_vente_expose_le_paiement_via_la_fiche_de_la_periode(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -339,16 +403,40 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         app(PeriodeCalculatorService::class)->calculer($periode);
         $this->validerPeriodeReellement($periode);
 
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $livreur->id)->firstOrFail();
+
         $response = $this->actingAs($this->user)->get(route('comptabilite.commissions.vente.index'));
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
             ->component('Comptabilite/CommissionVente/Index')
-            ->where('can_payer', false)
+            ->where('can_payer', true)
             ->where('beneficiaires.0.beneficiaire_id', $livreur->id)
-            ->where('beneficiaires.0.can_pay', false)
+            ->where('beneficiaires.0.can_pay', true)
+            ->where('beneficiaires.0.fiche_a_payer.id', $fiche->id)
+            ->where('beneficiaires.0.fiche_a_payer.montant_restant', 10_000)
         );
 
+        // Le bouton Payer de la ligne poste sur la fiche : même chaîne que l'écran fiche,
+        // la part est allouée et la ligne n'est plus payable une fois soldée.
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+                'montant' => 10_000,
+                'mode_paiement' => 'especes',
+                'date_paiement' => now()->toDateString(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('beneficiaires.0.solde_restant', 0)
+                ->where('beneficiaires.0.display_status', 'paye')
+                ->where('beneficiaires.0.can_pay', false)
+                ->where('beneficiaires.0.fiche_a_payer', null)
+            );
+
+        // Détail livreur : inchangé, toujours sans paiement direct.
         $detail = $this->actingAs($this->user)->get(route('comptabilite.commissions.vente.livreur', $livreur->id));
         $detail->assertOk();
         $detail->assertInertia(fn ($page) => $page
@@ -356,6 +444,58 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
             ->where('can_payer', false)
             ->where('payable', false)
         );
+    }
+
+    /** @test */
+    public function lecran_commission_proprietaire_expose_le_paiement_via_la_fiche_de_la_periode(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $this->org->id,
+            TypePeriodePaiement::PROPRIETAIRE,
+            now(),
+            $this->user->id,
+        );
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $this->validerPeriodeReellement($periode);
+
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $proprietaire->id)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Comptabilite/CommissionProprietaire/Index')
+                ->where('can_payer', true)
+                ->where('beneficiaires.0.beneficiaire_id', $proprietaire->id)
+                ->where('beneficiaires.0.can_pay', true)
+                ->where('beneficiaires.0.fiche_a_payer.id', $fiche->id)
+            );
+    }
+
+    /** @test */
+    public function sans_permission_payer_lecran_commission_vente_ne_propose_pas_payer(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $this->validerPeriodeReellement($periode);
+
+        $lecteur = $this->makeUserWithPermissions($this->org, ['comptabilite.read']);
+        $lecteur->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($lecteur)
+            ->get(route('comptabilite.commissions.vente.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('can_payer', false)
+                ->where('beneficiaires.0.can_pay', false)
+                ->where('beneficiaires.0.fiche_a_payer', null)
+            );
     }
 
     // ── Validation de période : bascule CREEE→IMPAYE sur les enveloppes ──
@@ -378,9 +518,9 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $parts = CommissionAdjustmentService::partsPourPeriode($periode);
         CommissionAdjustmentService::validerLot($parts, $this->user);
 
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertSessionHas('success');
+        // Aucun clic sur « Valider la période » : elle passe à « Validée » dès la dernière
+        // commission validée (PeriodeValidationService::validerSiComplete).
+        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut);
 
         $this->assertSame(StatutCommission::IMPAYE, $enveloppeLiv->fresh()->statut);
         $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut);
@@ -437,7 +577,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est CREEE doit rester visible.');
         $this->assertSame('creee', $beneficiaire['commission_status']);
-        $this->assertSame('creee', $beneficiaire['display_status']);
+        $this->assertSame('en_attente', $beneficiaire['display_status']);
         $this->assertFalse($beneficiaire['can_pay']);
         $this->assertSame(10_000.0, $beneficiaire['total_genere']);
         $this->assertSame(10_000.0, $beneficiaire['en_attente_periode']);
@@ -483,7 +623,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
                 ->where('commission_summary.total_genere', 10_000)
                 ->where('commission_summary.en_attente_periode', 10_000)
                 ->where('commission_summary.payable', 0)
-                ->where('commission_summary.net_a_payer', 0)
+                ->where('commission_summary.net_a_payer', 10_000)
                 ->where('payable', false)
             );
     }
@@ -565,7 +705,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
     /**
      * Page Commande (Ventes/Show) : le badge de statut commission doit refléter une commission
      * encore CREEE, jamais rester vide comme s'il n'existait aucune commission — cf.
-     * CommandeVenteController::getCommissionStatutGlobal(), qui lit la relation commissions().
+     * Ventes\ShowCommandeVenteController::getCommissionStatutGlobal(), qui lit la relation commissions().
      */
     /** @test */
     public function la_page_commande_affiche_le_statut_creee_dune_commission(): void

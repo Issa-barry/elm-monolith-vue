@@ -15,18 +15,21 @@ use App\Models\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class PaiementFicheTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->initOrgAndUser(['comptabilite.read', 'comptabilite.payer']);
         Feature::for($this->org)->activate(ModuleFeature::COMPTABILITE);
+        // Payer une fiche en espèces débite la caisse dédiée du payeur (ADR 0009).
+        $this->equiperPayeurEspeces($this->user, $this->defaultSite()->id);
     }
 
     private function defaultSite(): Site
@@ -138,13 +141,18 @@ class PaiementFicheTest extends TestCase
     public function test_paiement_complet_change_statut_en_paye(): void
     {
         $fiche = $this->makeFiche();
+        $banque = $this->creerSupportAgence($fiche->site_id, 'banque', '521000');
+        $this->alimenterCaisse($banque, 1_000_000);
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 300000,
                 'mode_paiement' => 'virement',
+                'compte_tresorerie_id' => $banque->id,
+                'reference_paiement' => 'VIR-TEST-001',
                 'date_paiement' => '2026-06-15',
-            ]);
+            ])
+            ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('paiement_fiches', [
             'id' => $fiche->id,

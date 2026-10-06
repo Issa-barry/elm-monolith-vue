@@ -20,9 +20,11 @@ import {
     Building2,
     Calculator,
     Car,
+    ChartColumn,
     Contact,
     Layers,
     LayoutGrid,
+    MessageSquare,
     Package,
     PackageCheck,
     Receipt,
@@ -48,12 +50,19 @@ const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
 const transfertsAReceptionner = computed(
     () => ((page.props as any).transferts_a_receptionner as number) ?? 0,
 );
+const mouvementsFondsAConfirmer = computed(
+    () => ((page.props as any).mouvements_fonds_a_confirmer as number) ?? 0,
+);
+// Espèces remises à l'agent, en attente de SA confirmation (ADR 0018) : badge sur « Ma situation ».
+const approvisionnementsAConfirmer = computed(
+    () => ((page.props as any).approvisionnements_a_confirmer as number) ?? 0,
+);
 
 /** Guard combiné permission + module actif */
 const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
-/** Sous-items Contacts : Clients, Fournisseurs, Prestataires — regroupés sous un seul menu. */
+/** Tiers regroupés sous Contacts : Clients, Fournisseurs, Prestataires et Propriétaires. */
 const contactsItems = computed((): NavItem[] => {
     const sub: NavItem[] = [];
     if (can('clients.read'))
@@ -62,6 +71,8 @@ const contactsItems = computed((): NavItem[] => {
         sub.push({ title: 'Fournisseurs', href: '/backoffice/fournisseurs' });
     if (canSee('prestataires.read', 'prestataires'))
         sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
+    if (canSee('proprietaires.read', 'vehicules'))
+        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     return sub;
 });
 
@@ -83,8 +94,6 @@ const propositionsATraiter = computed(
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
-    if (can('proprietaires.read'))
-        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('vehicules.read'))
         sub.push({
             title: 'Liste de véhicules',
@@ -120,20 +129,20 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
+            // Suivi des précommandes (ADR 0019) : même permission de lecture que les commandes.
+            { title: 'Précommandes', href: '/backoffice/precommandes' },
+            {
+                title: 'Distribution',
+                href: '/backoffice/distributions',
+            },
         ];
-        if (moduleActive('pdv')) {
+        if (canSee('pdv.read', 'pdv')) {
             ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
         }
         ventesSubItems.push({
             title: 'Factures',
             href: '/backoffice/factures',
         });
-        if (moduleActive('cashback')) {
-            ventesSubItems.push({
-                title: 'Cashback',
-                href: '/backoffice/cashback',
-            });
-        }
         items.push({
             title: 'Ventes',
             href: '/backoffice/ventes',
@@ -269,6 +278,36 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('comptabilite.read', 'comptabilite')) {
+        const commissionsSousItems: NavItem[] = [
+            {
+                title: 'Livreurs',
+                href: '/backoffice/comptabilite/commissions/vente',
+            },
+            {
+                title: 'Propriétaires',
+                href: '/backoffice/comptabilite/commissions/proprietaires',
+            },
+            {
+                title: 'Sites',
+                href: '/backoffice/comptabilite/commissions/sites',
+            },
+            {
+                title: 'Consultants',
+                href: '/backoffice/comptabilite/commissions/consultants',
+            },
+            {
+                title: 'Monitoring',
+                href: '/backoffice/comptabilite/commissions/monitoring',
+            },
+        ];
+
+        if (moduleActive('cashback')) {
+            commissionsSousItems.push({
+                title: 'Cashback clients',
+                href: '/backoffice/comptabilite/commissions/cashback',
+            });
+        }
+
         items.push({
             title: 'Comptabilité',
             href: '/backoffice/comptabilite/tresorerie/financement',
@@ -278,46 +317,48 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Trésorerie',
                     href: '/backoffice/comptabilite/tresorerie/financement',
+                    // Libellés courts : le parent porte déjà « Trésorerie » et les
+                    // libellés longs sont tronqués au 3e niveau de la sidebar. Les
+                    // titres de page gardent leur libellé complet.
                     items: [
                         {
-                            title: 'Financement des agences',
+                            title: 'Situation',
+                            href: '/backoffice/comptabilite/tresorerie/situation',
+                        },
+                        {
+                            title: 'Financement',
                             href: '/backoffice/comptabilite/tresorerie/financement',
                         },
                         {
-                            title: 'Mouvements de fonds',
+                            title: 'Mouvements',
                             href: '/backoffice/comptabilite/tresorerie/mouvements',
+                            badge:
+                                mouvementsFondsAConfirmer.value > 0
+                                    ? mouvementsFondsAConfirmer.value
+                                    : undefined,
                         },
                         {
-                            title: 'Supports de trésorerie',
+                            title: 'Supports',
                             href: '/backoffice/comptabilite/tresorerie/supports',
                         },
+                        ...(can('tresorerie.read')
+                            ? [
+                                  {
+                                      title: 'Inter-agences',
+                                      href: '/backoffice/comptabilite/tresorerie/inter-agences',
+                                  },
+                                  {
+                                      title: 'Remises des agences',
+                                      href: '/backoffice/comptabilite/tresorerie/remises',
+                                  },
+                              ]
+                            : []),
                     ],
                 },
                 {
                     title: 'Commissions',
                     href: '/backoffice/comptabilite/commissions/vente',
-                    items: [
-                        {
-                            title: 'Ventes',
-                            href: '/backoffice/comptabilite/commissions/vente',
-                        },
-                        {
-                            title: 'Logistique',
-                            href: '/backoffice/comptabilite/commissions/logistique',
-                        },
-                        {
-                            title: 'Propriétaires',
-                            href: '/backoffice/comptabilite/commissions/proprietaires',
-                        },
-                        {
-                            title: 'Sites',
-                            href: '/backoffice/comptabilite/commissions/sites',
-                        },
-                        {
-                            title: 'Consultants',
-                            href: '/backoffice/comptabilite/commissions/consultants',
-                        },
-                    ],
+                    items: commissionsSousItems,
                 },
                 {
                     title: 'Périodes',
@@ -361,6 +402,40 @@ const mainNavItems = computed((): NavItem[] => {
             group: 'Organisation',
         });
 
+    if (can('communications.read'))
+        items.push({
+            title: 'Communications',
+            href: '/backoffice/communications',
+            icon: MessageSquare,
+            group: 'Organisation',
+        });
+
+    // Rapports (docs/rapports.md) : « Ma situation » (agent imposé) et le rapport d'activité ;
+    // Stock, Achats et Dépenses viendront s'ajouter ici (lot 2).
+    const rapportsSousItems: NavItem[] = [];
+    if (can('rapports.read_own'))
+        rapportsSousItems.push({
+            title: 'Ma situation',
+            href: '/backoffice/ma-situation',
+            badge:
+                approvisionnementsAConfirmer.value > 0
+                    ? approvisionnementsAConfirmer.value
+                    : undefined,
+        });
+    if (can('rapports.read'))
+        rapportsSousItems.push({
+            title: "Rapport d'activité",
+            href: '/backoffice/rapports/activite',
+        });
+    if (rapportsSousItems.length > 0)
+        items.push({
+            title: 'Rapports',
+            href: rapportsSousItems[0].href,
+            icon: ChartColumn,
+            group: 'Pilotage',
+            items: rapportsSousItems,
+        });
+
     return items;
 });
 
@@ -381,7 +456,7 @@ const footerNavItems: NavItem[] = [];
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent class="mb-4">
             <NavMain :items="mainNavItems" />
         </SidebarContent>
 

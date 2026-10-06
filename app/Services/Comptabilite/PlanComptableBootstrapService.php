@@ -72,6 +72,9 @@ class PlanComptableBootstrapService
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
             '658100' => 'Cashback clients accordés',
             '411000' => 'Clients',
+            // Acomptes de précommande (ADR 0019) : argent reçu avant la remise de la marchandise,
+            // imputé sur le compte client seulement quand la vente est réalisée.
+            '419100' => 'Clients — avances et acomptes reçus',
             '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
             '521000' => 'Banque',
@@ -83,10 +86,20 @@ class PlanComptableBootstrapService
             '561100' => 'Mobile Money — Orange Money',
             '561200' => 'Mobile Money — MTN MoMo',
             '561300' => 'Mobile Money — Djomy',
+            // Un compte par opérateur saisissable (App\Enums\OperateurMobileMoney::avecWallet()) :
+            // chaque Mobile Money est un compte à part, jamais regroupé sur 561000 (décision du
+            // 24/09/2026, cf. docs/encaissements.md).
+            '561400' => 'Mobile Money — Kulu',
+            '561500' => 'Mobile Money — PayCard',
+            '561600' => 'Mobile Money — Soutra Money',
             '628800' => 'Charges diverses de gestion courante',
             // Chantier Financement des agences (2026-08) — cf. docblock de
             // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
             '588000' => 'Virements de fonds internes (en transit)',
+            // Dette/créance entre agences d'une même organisation (ADR 0012) : une agence qui
+            // encaisse une commande d'une autre agence la crédite ici (tiers = agence de la
+            // commande) jusqu'au règlement inter-agences. Soldé à 0 au niveau de l'organisation.
+            '181000' => 'Comptes de liaison des agences',
             '661000' => 'Rémunérations du personnel',
             '109000' => 'Solde d\'ouverture trésorerie (contrepartie technique)',
         ];
@@ -199,12 +212,38 @@ class PlanComptableBootstrapService
             ['vente_facturee', 'client', null, '411000', 'VE'],
             ['vente_facturee', 'produit_vente', null, '701000', 'VE'],
 
+            // Retour de livraison avant encaissement (régularisation d'une facture déjà
+            // comptabilisée, cf. VenteComptabilisationService::comptabiliserRetourVente()) —
+            // mêmes comptes que vente_facturee, sens inverse.
+            ['vente_retour', 'client', null, '411000', 'VE'],
+            ['vente_retour', 'produit_vente', null, '701000', 'VE'],
+
             // Encaissement client (règlement — solde tout ou partie de la créance).
             // Journal résolu via la ligne trésorerie (moyen_paiement réel), comme pour
             // paiement_proprietaire/paiement_livreur ci-dessus — mêmes 4 valeurs
             // App\Enums\ModePaiement (especes/mobile_money/virement/cheque), même
             // chaîne de repli CompteMappingResolver.
             ['encaissement_vente_recu', 'client', null, '411000', null],
+            // Acompte de précommande (ADR 0019) : même pièce qu'un encaissement, mais le crédit va
+            // sur les avances clients tant que la vente n'est pas réalisée.
+            ['encaissement_vente_recu', 'avance_client', null, '419100', null],
+
+            // Précommande remise (ADR 0019) : imputation des acomptes, sans trésorerie.
+            ['acompte_precommande_impute', 'avance_client', null, '419100', 'OD'],
+            ['acompte_precommande_impute', 'client', null, '411000', 'OD'],
+
+            // Remboursement d'un client (ADR 0019) : débit avance client ou client, crédit trésorerie
+            // (compte du support débité, journal résolu par le moyen de paiement).
+            ['remboursement_client', 'avance_client', null, '419100', null],
+            ['remboursement_client', 'client', null, '411000', null],
+            ['remboursement_client', 'tresorerie', null, '571000', 'CA'],
+            ['remboursement_client', 'tresorerie', 'especes', '571000', 'CA'],
+            ['remboursement_client', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['remboursement_client', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['remboursement_client', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['remboursement_client', 'tresorerie', 'cheque', '521000', 'BQ'],
             ['encaissement_vente_recu', 'tresorerie', null, '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'especes', '571000', 'CA'],
             ['encaissement_vente_recu', 'tresorerie', 'mobile_money', '561000', 'MM'],
@@ -213,6 +252,14 @@ class PlanComptableBootstrapService
             ['encaissement_vente_recu', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['encaissement_vente_recu', 'tresorerie', 'virement', '521000', 'BQ'],
             ['encaissement_vente_recu', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Encaissement d'une commande d'une AUTRE agence (ADR 0012) : sur le site qui encaisse,
+            // la trésorerie est débitée contre la liaison (tiers = agence de la commande) au lieu du
+            // client ; sur le site de la commande, la liaison (tiers = agence qui a encaissé) est
+            // débitée contre le client. Le compte client reste ainsi entièrement à l'agence qui a vendu.
+            ['encaissement_vente_recu', 'liaison', null, '181000', null],
+            ['encaissement_vente_pour_compte', 'liaison', null, '181000', 'OD'],
+            ['encaissement_vente_pour_compte', 'client', null, '411000', null],
 
             // Dépense interne (vraie charge ELM)
             ['depense_interne_validee', 'charge_defaut', null, '628800', 'OD'],
@@ -243,6 +290,10 @@ class PlanComptableBootstrapService
             // (58) a besoin d'être configurable ici.
             ['mouvement_fonds_envoye', 'fonds_transit', null, '588000', 'OD'],
             ['mouvement_fonds_recu', 'fonds_transit', null, '588000', 'OD'],
+            // Règlement inter-agences (nature `reglement_agences`) : la contrepartie de la trésorerie
+            // est la liaison, pas le transit — c'est elle qui solde la dette née des encaissements.
+            ['mouvement_fonds_envoye', 'liaison', null, '181000', 'OD'],
+            ['mouvement_fonds_recu', 'liaison', null, '181000', 'OD'],
 
             // Solde d'ouverture d'un support de trésorerie — contrepartie technique, jamais
             // un vrai résultat/charge (cf. SoldeOuvertureTresorerieService).
@@ -271,6 +322,19 @@ class PlanComptableBootstrapService
             ['regularisation_cloture_fiche', 'dette_tiers_provisoire_livreur', null, '467160', 'OD'],
             ['regularisation_cloture_fiche', 'avance_tiers_livreur', null, '467140', 'OD'],
         ];
+
+        // Chaque événement qui connaît le wallet Orange Money connaît aussi ceux des autres
+        // opérateurs : sans ces lignes, le compte d'un opérateur ne serait proposé nulle part à la
+        // création d'un support (cf. CompteTresorerieController::comptesDeTresorerieDisponibles()).
+        $walletsSupplementaires = ['kulu' => '561400', 'paycard' => '561500', 'soutra_money' => '561600'];
+        foreach ($lignes as [$evenement, $role, $moyenPaiement, , $journalCode]) {
+            if ($moyenPaiement !== 'mobile_money:orange') {
+                continue;
+            }
+            foreach ($walletsSupplementaires as $detail => $numero) {
+                $lignes[] = [$evenement, $role, 'mobile_money:'.$detail, $numero, $journalCode];
+            }
+        }
 
         foreach ($lignes as [$evenement, $role, $moyenPaiement, $numeroCompte, $journalCode]) {
             CompteMapping::query()->firstOrCreate(

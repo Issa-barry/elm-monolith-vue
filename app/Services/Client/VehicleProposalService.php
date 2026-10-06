@@ -15,8 +15,8 @@ use Illuminate\Support\Collection;
 
 /**
  * Moteur unique de "proposer un véhicule" — SOURCE DE VÉRITÉ PARTAGÉE entre
- * l'espace client Inertia (`ClientDashboardController::storeVehicleProposal()`)
- * et l'API (`Api\Client\PropositionsVehiculeController`). Extrait le
+ * l'espace client Inertia (`StoreVehicleProposalClientDashboardController`)
+ * et l'API (`Api\Client\PropositionsVehicule\StorePropositionVehiculeController`). Extrait le
  * 26/08/2026, comportement préservé à l'identique (même règle anti-doublon,
  * même normalisation d'immatriculation, même stockage image WebP) — seule la
  * mise en forme de la réponse (redirect Inertia vs JSON) reste propre à

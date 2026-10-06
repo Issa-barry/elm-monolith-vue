@@ -9,7 +9,7 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit, update } from '@/routes/organisation';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Check, Copy, Upload, X } from 'lucide-vue-next';
+import { Check, Upload, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 interface Props {
@@ -159,10 +159,15 @@ function submit() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                title="Cliquez pour copier le lien de connexion"
                                 @click="copyLoginUrl"
                             >
                                 <Check v-if="linkCopied" class="h-4 w-4" />
-                                <Copy v-else class="h-4 w-4" />
+                                <i
+                                    v-else
+                                    class="pi pi-clipboard"
+                                    style="font-size: 1rem"
+                                />
                             </Button>
                         </div>
                         <p class="text-xs text-muted-foreground">

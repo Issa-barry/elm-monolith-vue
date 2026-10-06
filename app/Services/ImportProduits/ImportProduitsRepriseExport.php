@@ -12,7 +12,7 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 /**
  * Fichier de reprise téléchargeable après un import TERMINE — régénéré à la demande depuis le
  * rapport JSON persisté (jamais stocké comme fichier séparé, cf.
- * ImportProduitsController::reprise()). Ferme la boucle d'idempotence : réimporter ce fichier
+ * RepriseImportProduitsController). Ferme la boucle d'idempotence : réimporter ce fichier
  * sans modification classe toutes les lignes "inchange", le modifier produit des "mise_a_jour"
  * ciblées.
  */

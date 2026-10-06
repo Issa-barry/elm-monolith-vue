@@ -7,9 +7,11 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { StockRow } from '@/types/stock';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowDown,
+    ArrowLeft,
     ArrowUp,
     ChevronLeft,
     ChevronRight,
@@ -21,42 +23,12 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import AjusterStockModal from '../partials/AjusterStockModal.vue';
 import HistoriqueModal from '../partials/HistoriqueModal.vue';
+import MobileStockList from './MobileStockList.vue';
 
 interface Site {
     id: string;
     nom: string;
     code: string;
-}
-
-interface StockRow {
-    produit_id: string;
-    produit_nom: string;
-    categorie_id: string | null;
-    categorie_nom: string | null;
-    variante_id: string;
-    variante_libelle: string;
-    is_default: boolean;
-    sku: string;
-    site_id: string;
-    site_nom: string;
-    site_code: string | null;
-    /** Disponible = physique − engagé − bloqué (bloqué pas encore implémenté). */
-    qte_disponible: number;
-    qte_physique: number;
-    qte_engagee: number;
-    /** null = non implémenté côté backend — jamais une fausse valeur à 0. */
-    qte_bloquee: number | null;
-    qte_entrante: number | null;
-    seuil_effectif: number;
-    statut: 'disponible' | 'stock_faible' | 'rupture';
-    statut_label: string;
-    dernier_mouvement: {
-        type: 'entree' | 'sortie';
-        quantite: number;
-        motif_label: string | null;
-        created_at: string;
-    } | null;
-    can_ajuster: boolean;
 }
 
 interface Paginator {
@@ -88,6 +60,7 @@ interface StockMouvement {
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
+    date: string;
     created_at: string;
 }
 
@@ -117,6 +90,11 @@ const props = defineProps<{
 }>();
 
 const toast = useToast();
+const mobileStockList = ref<InstanceType<typeof MobileStockList> | null>(null);
+
+function returnToStockDetails(): void {
+    mobileStockList.value?.returnToDetails();
+}
 
 const STOCK_URL = '/backoffice/produits/stock';
 
@@ -164,7 +142,12 @@ const hasActiveFilters = computed(() =>
 );
 
 function clearFilters(): void {
-    router.get(STOCK_URL, {}, { preserveScroll: true, replace: true });
+    // all=1 : réinitialisation explicite, la vue par défaut ne doit pas se réappliquer.
+    router.get(
+        STOCK_URL,
+        { all: '1' },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 function formatNombre(value: number | null): string {
@@ -296,10 +279,33 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
 <template>
     <Head title="Stock" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-5 p-4 md:p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <header
+            data-testid="stock-mobile-header"
+            class="sticky top-0 z-10 grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-2 border-b bg-background px-4 py-2 sm:hidden"
+        >
+            <Link
+                href="/backoffice/produits"
+                aria-label="Retour aux produits"
+                class="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+                <ArrowLeft class="h-5 w-5" />
+            </Link>
+            <div class="min-w-0 text-center">
+                <h1 class="text-base font-semibold">Stock</h1>
+                <p class="text-xs text-muted-foreground">
+                    {{ formatNombre(stocks.total) }} résultat{{
+                        stocks.total !== 1 ? 's' : ''
+                    }}
+                </p>
+            </div>
+        </header>
+
+        <div
+            class="flex min-w-0 flex-1 flex-col gap-4 bg-muted/20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:bg-transparent md:gap-5 md:p-6"
+        >
             <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div class="hidden sm:block">
                     <h1 class="text-2xl font-semibold tracking-tight">Stock</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
                         {{ formatNombre(stocks.total) }} référence{{
@@ -309,10 +315,11 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                         et par agence
                     </p>
                 </div>
-                <ListPageActions>
+                <ListPageActions class="stock-actions w-full sm:w-auto">
                     <template #filters>
                         <DataFilters
                             trigger-only
+                            saved-filter-scope="stock"
                             :url="STOCK_URL"
                             :values="filters"
                             :sites="sites"
@@ -323,7 +330,10 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                 </ListPageActions>
             </div>
 
-            <div v-if="hasActiveFilters" class="flex items-center gap-2">
+            <div
+                v-if="hasActiveFilters"
+                class="hidden items-center gap-2 sm:flex"
+            >
                 <button
                     type="button"
                     class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
@@ -340,43 +350,67 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                 <div class="overflow-x-auto" data-testid="stock-table-scroll">
                     <table
                         data-testid="stock-table"
-                        class="w-full min-w-[1180px] text-sm"
+                        class="text-sm whitespace-nowrap"
+                        style="width: max-content; min-width: 100%"
                     >
                         <thead
                             class="border-b bg-muted/40 text-xs text-muted-foreground"
                         >
                             <tr>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[240px] px-4 py-3 text-left font-medium"
+                                >
                                     Produit
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[150px] px-4 py-3 text-left font-medium"
+                                >
                                     Agence
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Physique
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
-                                    Engagé
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                    title="Commandes confirmées et précommandes, pas encore sorties du stock"
+                                >
+                                    Réservé
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Bloqué
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[110px] px-4 py-3 text-right font-medium"
+                                >
                                     Disponible
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Entrant
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[96px] px-4 py-3 text-right font-medium"
+                                >
                                     Alerte à
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[170px] px-4 py-3 text-left font-medium"
+                                >
                                     État
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
+                                <th
+                                    class="min-w-[220px] px-4 py-3 text-left font-medium"
+                                >
                                     Dernier mouvement
                                 </th>
-                                <th class="px-4 py-3 text-right font-medium">
+                                <th
+                                    class="min-w-[130px] px-4 py-3 text-right font-medium"
+                                >
                                     Actions
                                 </th>
                             </tr>
@@ -387,13 +421,16 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 :key="row.variante_id + '-' + row.site_id"
                                 class="transition-colors hover:bg-muted/25"
                             >
-                                <td class="px-4 py-3">
+                                <td
+                                    class="max-w-[280px] px-4 py-3 whitespace-normal"
+                                >
                                     <Link
                                         :href="
                                             '/backoffice/produits/' +
                                             row.produit_id
                                         "
-                                        class="hover:text-primary hover:underline"
+                                        class="line-clamp-2 hover:text-primary hover:underline"
+                                        :title="row.produit_nom"
                                     >
                                         {{ row.produit_nom }}
                                     </Link>
@@ -460,12 +497,22 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ formatNombre(row.seuil_effectif) }}
+                                    {{
+                                        row.disponible_sur_site
+                                            ? formatNombre(row.seuil_effectif)
+                                            : '—'
+                                    }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <StatusDot
+                                        v-if="row.disponible_sur_site"
                                         :status="row.statut"
                                         :label="row.statut_label"
+                                    />
+                                    <StatusDot
+                                        v-else
+                                        label="Non disponible"
+                                        dot-class="bg-zinc-400 dark:bg-zinc-500"
                                     />
                                 </td>
                                 <td class="px-4 py-3">
@@ -504,7 +551,11 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                                 row.dernier_mouvement
                                                     .motif_label
                                             "
-                                            class="text-xs whitespace-nowrap text-muted-foreground"
+                                            class="max-w-[220px] truncate text-xs text-muted-foreground"
+                                            :title="
+                                                row.dernier_mouvement
+                                                    .motif_label
+                                            "
                                         >
                                             {{
                                                 row.dernier_mouvement
@@ -514,9 +565,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         <div
                                             class="text-xs whitespace-nowrap text-muted-foreground"
                                         >
-                                            {{
-                                                row.dernier_mouvement.created_at
-                                            }}
+                                            {{ row.dernier_mouvement.date }}
                                         </div>
                                     </div>
                                     <span v-else class="text-muted-foreground"
@@ -577,159 +626,12 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
             </section>
 
             <!-- ── Mobile : cartes empilées, jamais de débordement horizontal ──── -->
-            <section class="flex flex-col gap-3 md:hidden">
-                <div
-                    v-if="stocks.data.length === 0"
-                    class="rounded-xl border bg-card px-6 py-16 text-center shadow-sm"
-                >
-                    <PackageOpen
-                        class="mx-auto h-10 w-10 text-muted-foreground/40"
-                    />
-                    <p class="mt-3 font-medium">Aucun stock à afficher</p>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Aucun produit gérant le stock ne correspond aux filtres
-                        actuels.
-                    </p>
-                </div>
-
-                <div
-                    v-for="row in stocks.data"
-                    :key="row.variante_id + '-' + row.site_id"
-                    data-testid="stock-card"
-                    class="rounded-xl border bg-card p-4 shadow-sm"
-                >
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0">
-                            <Link
-                                :href="'/backoffice/produits/' + row.produit_id"
-                                class="font-medium hover:text-primary hover:underline"
-                            >
-                                {{ row.produit_nom }}
-                            </Link>
-                            <div class="mt-0.5 text-xs text-muted-foreground">
-                                <span v-if="row.variante_libelle">{{
-                                    row.variante_libelle
-                                }}</span>
-                                <span v-if="row.variante_libelle && row.sku">
-                                    ·
-                                </span>
-                                <span v-if="row.sku" class="font-mono"
-                                    >SKU {{ row.sku }}</span
-                                >
-                            </div>
-                            <div class="mt-0.5 text-xs text-muted-foreground">
-                                {{ row.site_nom
-                                }}<span v-if="row.site_code">
-                                    ({{ row.site_code }})</span
-                                >
-                            </div>
-                        </div>
-                        <StatusDot
-                            :status="row.statut"
-                            :label="row.statut_label"
-                        />
-                    </div>
-
-                    <div
-                        class="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-center"
-                    >
-                        <p class="text-xs text-muted-foreground">Disponible</p>
-                        <p class="text-2xl font-bold tabular-nums">
-                            {{ formatNombre(row.qte_disponible) }}
-                        </p>
-                    </div>
-
-                    <div class="mt-3 grid grid-cols-4 gap-2 text-center">
-                        <div>
-                            <p class="text-[11px] text-muted-foreground">
-                                Physique
-                            </p>
-                            <p class="text-sm font-medium tabular-nums">
-                                {{ formatNombre(row.qte_physique) }}
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] text-muted-foreground">
-                                Engagé
-                            </p>
-                            <p
-                                class="text-sm font-medium tabular-nums"
-                                :class="
-                                    row.qte_engagee > 0
-                                        ? 'text-amber-700 dark:text-amber-400'
-                                        : ''
-                                "
-                            >
-                                {{ formatNombre(row.qte_engagee) }}
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] text-muted-foreground">
-                                Bloqué
-                            </p>
-                            <p class="text-sm font-medium tabular-nums">
-                                {{ formatNombre(row.qte_bloquee) }}
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] text-muted-foreground">
-                                Entrant
-                            </p>
-                            <p class="text-sm font-medium tabular-nums">
-                                {{ formatNombre(row.qte_entrante) }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        class="mt-3 flex items-center justify-between text-xs text-muted-foreground"
-                    >
-                        <span
-                            >Alerte à
-                            {{ formatNombre(row.seuil_effectif) }}</span
-                        >
-                        <span v-if="row.dernier_mouvement" class="text-right">
-                            <span
-                                class="font-medium"
-                                :class="
-                                    row.dernier_mouvement.type === 'entree'
-                                        ? 'text-emerald-700 dark:text-emerald-400'
-                                        : 'text-red-700 dark:text-red-400'
-                                "
-                                >{{
-                                    mouvementSigneLabel(row.dernier_mouvement)
-                                }}</span
-                            >
-                            · {{ row.dernier_mouvement.created_at }}
-                        </span>
-                        <span v-else>Aucun mouvement</span>
-                    </div>
-
-                    <div class="mt-3 flex gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            class="flex-1"
-                            data-testid="stock-history-button"
-                            @click="ouvrirHistorique(row)"
-                        >
-                            <History class="mr-1.5 h-4 w-4" />
-                            Historique
-                        </Button>
-                        <Button
-                            v-if="row.can_ajuster"
-                            variant="outline"
-                            size="sm"
-                            class="flex-1"
-                            data-testid="stock-adjust-button"
-                            @click="ouvrirAjustement(row)"
-                        >
-                            <SlidersHorizontal class="mr-1.5 h-4 w-4" />
-                            Ajuster
-                        </Button>
-                    </div>
-                </div>
-            </section>
+            <MobileStockList
+                ref="mobileStockList"
+                :stocks="stocks.data"
+                @historique="ouvrirHistorique"
+                @ajuster="ouvrirAjustement"
+            />
 
             <div
                 v-if="stocks.last_page > 1"
@@ -748,7 +650,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                             v-if="link.url"
                             :href="link.url"
                             preserve-scroll
-                            class="inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-sm hover:bg-muted"
+                            class="inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-2 text-sm hover:bg-muted sm:h-8 sm:min-w-8"
                             :class="{
                                 'border-primary bg-primary text-primary-foreground':
                                     link.active,
@@ -768,7 +670,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                         </Link>
                         <span
                             v-else
-                            class="inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-sm opacity-40"
+                            class="inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-2 text-sm opacity-40 sm:h-8 sm:min-w-8"
                         >
                             <ChevronLeft
                                 v-if="link.label.includes('Previous')"
@@ -792,6 +694,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
             v-model:visible="showStockModal"
             :produit="produitAjustement"
             :sites-autorises="siteAjustement"
+            @after-hide="returnToStockDetails"
             :can-augmenter="can_augmenter_stock"
             :can-diminuer="can_diminuer_stock"
             :variante-stocks="[
@@ -811,6 +714,31 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
             :loading="historiqueLoading"
             :title="historiqueTitre"
             @filter-motif="onFilterMotif"
+            @after-hide="returnToStockDetails"
         />
     </AppLayout>
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    /* Vues et filtres sur une ligne, puis la vue active : une seule instance
+       de DataFilters conserve la synchronisation avec l'URL et le serveur. */
+    .stock-actions :deep(> .contents > div:first-of-type) {
+        display: contents;
+    }
+
+    .stock-actions :deep(button) {
+        min-height: 44px;
+    }
+
+    .stock-actions :deep(> .contents > div:first-of-type > span) {
+        order: 1;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .stock-actions :deep(> .contents > div:first-of-type > span > span) {
+        max-width: calc(100% - 44px);
+    }
+}
+</style>

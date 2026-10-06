@@ -55,6 +55,7 @@ interface Site {
     parent_nom: string | null;
     enfants_count: number;
     telephone: string | null;
+    is_central_tresorerie: boolean;
 }
 
 const props = defineProps<{ sites: Site[] }>();
@@ -366,6 +367,14 @@ function confirmDelete(s: Site) {
                             >
                                 {{ s.type_label }}
                             </span>
+                            <span
+                                v-if="s.is_central_tresorerie"
+                                class="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                                title="Site qui centralise les flux de trésorerie de l'organisation"
+                            >
+                                <i class="pi pi-wallet text-[10px]" />
+                                Trésorerie principale
+                            </span>
                         </div>
                     </div>
 
@@ -574,6 +583,14 @@ function confirmDelete(s: Site) {
                                 class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
                             >
                                 {{ data.type_label }}
+                            </span>
+                            <span
+                                v-if="data.is_central_tresorerie"
+                                class="mt-1 flex w-fit items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                                title="Site qui centralise les flux de trésorerie de l'organisation"
+                            >
+                                <i class="pi pi-wallet text-[10px]" />
+                                Trésorerie principale
                             </span>
                         </template>
                     </Column>

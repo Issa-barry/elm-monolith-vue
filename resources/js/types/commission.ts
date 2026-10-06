@@ -1,3 +1,5 @@
+import type { MoyenEncaissement } from '@/components/payment/moyensEncaissement';
+
 export interface CommissionSummary {
     brut_cumule: number;
     frais: number;
@@ -46,8 +48,21 @@ export interface CommissionDetailRow {
     montant: number;
     paye: number;
     reste: number;
+    /** Commission annulée : ligne conservée pour la traçabilité, exclue des totaux. */
+    annulee?: boolean;
     statut: string | null;
     statut_dot_class?: string | null;
+    /** Origine (Vente/Distribution client/Transfert logistique) — absent sur les écrans qui ne
+     * ventilent pas encore par processus (Logistique/Propriétaire/Consultant/Site/Cashback/
+     * Salaire) ; CommissionDetailTable n'affiche la colonne Origine que si au moins une ligne la
+     * fournit. */
+    processus?: string | null;
+    processus_label?: string | null;
+}
+
+export interface CommissionProcessusOption {
+    value: string;
+    label: string;
 }
 
 export interface CommissionExpenseRow {
@@ -80,6 +95,32 @@ export interface ModePaiementOption {
     label: string;
 }
 
+/** Contexte de trésorerie du paiement d'une fiche (cf. DecaissementFicheResolver). */
+export interface TresorerieFiche {
+    site_id: string | null;
+    moyens: MoyenEncaissement[];
+    especes_disponibles: boolean;
+    solde_especes: number | null;
+    /** Paiement impossible (ex : fiche sans agence et aucun site central de trésorerie). */
+    message: string | null;
+}
+
+/** Fiche de paiement due, telle que la présente FichePayableResolver::presenter(). */
+export interface FicheAPayer {
+    id: string;
+    reference: string;
+    beneficiaire_type: string;
+    beneficiaire_nom: string;
+    periode_reference: string | null;
+    /** Dates ISO (AAAA-MM-JJ) de la période de la fiche. */
+    periode_debut: string | null;
+    periode_fin: string | null;
+    montant_net: number;
+    montant_paye: number;
+    montant_restant: number;
+    tresorerie: TresorerieFiche;
+}
+
 export type CommissionDetailTab =
     | 'informations'
     | 'depenses'
@@ -96,4 +137,7 @@ export interface CommissionGlobalFiltersValue {
     vehicule_ids: (string | number)[];
     site_ids: (string | number)[];
     periode_range?: { debut: string | null; fin: string | null };
+    /** Optionnel : seules les pages qui fournissent processusOptions à CommissionGlobalFilters
+     * en font usage (fiche détail bénéficiaire). '' = tous les processus. */
+    processus?: string;
 }

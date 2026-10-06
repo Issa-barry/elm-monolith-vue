@@ -28,6 +28,7 @@ class Vehicule extends Model
         'derogation_impayes_autorisee',
         'seuil_derogation_impayes',
         'proprietaire_id',
+        'parrain_id',
         'categorie',
         'livraison_vente',
         'livraison_logistique',
@@ -148,6 +149,16 @@ class Vehicule extends Model
         return $this->belongsTo(Proprietaire::class);
     }
 
+    /**
+     * Parrain (phase 1, sans commission ni historique — cf. docs/parrainage-vehicule.md) :
+     * pointeur simple, remplacé sans trace du précédent en cas de changement, sur le même
+     * modèle que proprietaire().
+     */
+    public function parrain(): BelongsTo
+    {
+        return $this->belongsTo(Parrain::class);
+    }
+
     public function equipe(): HasOne
     {
         return $this->hasOne(EquipeLivraison::class, 'vehicule_id');
@@ -173,11 +184,20 @@ class Vehicule extends Model
         return $this->hasMany(VehiculeCapacite::class);
     }
 
+    /**
+     * Ventes rattachées à ce véhicule (colonne directe commandes_ventes.vehicule_id, pas de
+     * relation inverse jusqu'ici) — cf. onglet Situation, VehiculeSituationVentesService.
+     */
+    public function commandesVentes(): HasMany
+    {
+        return $this->hasMany(CommandeVente::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     /**
      * Véhicules sélectionnables pour une vente/PDV — remplace l'ancien filtre
-     * `categorie = 'externe'` (cf. CommandeVenteController, PdvController).
+     * `categorie = 'externe'` (cf. CommandeVenteFormBuilder, Ventes\IndexPdvController).
      */
     public function scopeLivraisonVente($query)
     {

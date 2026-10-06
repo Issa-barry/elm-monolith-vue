@@ -2,7 +2,13 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
+import type {
+    EncaissementAgences,
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,10 +20,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Building2,
     CreditCard,
     History,
     MoreVertical,
@@ -30,6 +38,7 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import EncaisserAutreAgenceDialog from './partials/EncaisserAutreAgenceDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface EncaissementItem {
@@ -38,6 +47,8 @@ interface EncaissementItem {
     date_encaissement: string | null;
     enregistre_le: string | null;
     mode_paiement: string;
+    operateur_mobile_money_label: string | null;
+    reference_paiement: string | null;
     note: string | null;
     created_by: string | null;
 }
@@ -50,6 +61,7 @@ interface FactureItem {
     vehicule_nom: string | null;
     client_nom: string | null;
     site_nom: string | null;
+    quantite_totale: number;
     montant_net: number;
     montant_encaisse: number;
     montant_restant: number;
@@ -58,11 +70,20 @@ interface FactureItem {
     is_annulee: boolean;
     is_payee: boolean;
     is_encaissable: boolean;
+    /** Caisse dédiée active de l'utilisateur sur le site de la facture — sans elle, « Espèces »
+     * est désactivé dans PaymentCard (cf. CaisseAgentResolver::garantirCaissePourEspeces()). */
+    peut_encaisser_especes: boolean;
+    /** Moyens hors espèces de l'agence de la facture (un par support actif). */
+    moyens_encaissement: MoyenEncaissement[];
+    /** Agences d'encaissement de l'utilisateur (ADR 0012). */
+    encaissement_agences: EncaissementAgences | null;
     created_at: string;
     encaissements: EncaissementItem[];
 }
 
 interface Totaux {
+    total: number;
+    nb_total: number;
     total_a_encaisser: number;
     nb_impayees: number;
     montant_impayees: number;
@@ -70,11 +91,6 @@ interface Totaux {
     montant_partielles: number;
     nb_payees: number;
     montant_payees: number;
-}
-
-interface ModePaiementOption {
-    value: string;
-    label: string;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -92,7 +108,6 @@ interface LivreurInfo {
 const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
-    modes_paiement: ModePaiementOption[];
     periode: string;
     statut: string;
     site_ids?: string[];
@@ -115,11 +130,16 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Factures', href: '/backoffice/factures' },
 ];
 
+// "Tout" ne doit JAMAIS valoir 'all' (ni 'tous'/'') : DataFilters.vue traite ces valeurs comme
+// des sentinelles génériques "aucune sélection" et les retire silencieusement de la requête
+// (cf. DataFilters::SENTINELS) — un choix qui, pour ce champ, ferait retomber le backend sur son
+// défaut 'month' au lieu de lever le filtre de date (régression corrigée le 01/09/2026 : "Tout"
+// n'affichait jamais rien au-delà du mois courant).
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
     { value: 'month', label: 'Ce mois' },
-    { value: 'all', label: 'Tout' },
+    { value: 'tout', label: 'Tout' },
 ];
 
 const filtres = [
@@ -130,7 +150,6 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-const search = ref('');
 const mobileSearch = ref('');
 
 const filterBaseParams = computed(() => {
@@ -152,14 +171,28 @@ const filterValues = computed(() => ({
 }));
 
 const filterFields = computed<FilterField[]>(() => [
-    { key: 'periode', label: 'Période', type: 'select', options: periodes },
-    { key: 'statut', label: 'Statut', type: 'select', options: filtres },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: filtres,
+        inline: true,
+    },
     {
         key: 'vehicule',
         label: 'Véhicule',
         type: 'text',
         placeholder: 'Nom ou immatriculation…',
+        inline: true,
     },
+    {
+        key: 'reference',
+        label: 'Référence',
+        type: 'text',
+        placeholder: 'FAC-…',
+        inline: true,
+    },
+    { key: 'periode', label: 'Période', type: 'select', options: periodes },
     {
         key: 'chauffeur',
         label: 'Chauffeur',
@@ -184,47 +217,12 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'text',
         placeholder: 'Nom ou téléphone…',
     },
-    {
-        key: 'reference',
-        label: 'Référence',
-        type: 'text',
-        placeholder: 'FAC-…',
-    },
 ]);
 
-// ── Recherche locale (client-side, immédiate) ─────────────────────────────────
-
-const facturesFiltrees = computed(() => {
-    const q = search.value.toLowerCase().trim();
-    if (!q) return props.factures;
-    return props.factures.filter(
-        (f) =>
-            f.reference.toLowerCase().includes(q) ||
-            (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
-            (f.client_nom && f.client_nom.toLowerCase().includes(q)) ||
-            (f.site_nom && f.site_nom.toLowerCase().includes(q)),
-    );
-});
-
-// Totaux recalculés depuis le dataset filtré (inclut la recherche locale)
-const totauxFiltres = computed(() => {
-    const list = facturesFiltrees.value;
-    const impayees = list.filter((f) => f.statut_facture === 'impayee');
-    const payees = list.filter((f) => f.statut_facture === 'payee');
-    return {
-        total: list
-            .filter((f) => f.statut_facture !== 'annulee')
-            .reduce((s, f) => s + f.montant_net, 0),
-        nb_total: list.filter((f) => f.statut_facture !== 'annulee').length,
-        total_a_encaisser: list
-            .filter((f) => !['payee', 'annulee'].includes(f.statut_facture))
-            .reduce((sum, f) => sum + f.montant_restant, 0),
-        nb_impayees: impayees.length,
-        montant_impayees: impayees.reduce((s, f) => s + f.montant_restant, 0),
-        nb_payees: payees.length,
-        montant_payees: payees.reduce((s, f) => s + f.montant_net, 0),
-    };
-});
+// Les totaux affichés dans les cartes de synthèse viennent exclusivement de
+// props.totaux (calculés côté serveur sur le dataset déjà filtré par
+// DataFilters) — plus aucune recherche locale ne les recalcule, cf.
+// suppression du champ de recherche desktop fait maison ci-dessous.
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutColor: Record<string, string> = {
@@ -233,11 +231,6 @@ const statutColor: Record<string, string> = {
     payee: 'bg-emerald-500',
     annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
-
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
@@ -259,6 +252,14 @@ const factureActive = ref<FactureItem | null>(null);
 const encaissProcessing = ref(false);
 const encaissErrors = ref<Record<string, string>>({});
 
+// ── Commande d'une autre agence (ADR 0012) ────────────────────────────────────
+// Visible seulement avec les deux permissions vérifiées par le serveur
+// (RechercherFactureAutreAgenceController / StoreEncaissementVenteController).
+const autreAgenceVisible = ref(false);
+const peutEncaisserAutreAgence = computed(
+    () => can('factures.encaisser') && can('factures.encaisser_autre_agence'),
+);
+
 // ── Dialog historique ─────────────────────────────────────────────────────────
 const historyVisible = ref(false);
 const factureHistory = ref<FactureItem | null>(null);
@@ -275,10 +276,7 @@ function openDialog(facture: FactureItem) {
     dialogVisible.value = true;
 }
 
-function handleEncaissSubmit(payload: {
-    montant: number;
-    mode_paiement: string;
-}) {
+function handleEncaissSubmit(payload: EncaissementPayload) {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
     encaissErrors.value = {};
@@ -333,7 +331,16 @@ function _progressPercent(f: FactureItem): number {
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Factures</span>
-                <div class="w-8" />
+                <button
+                    v-if="peutEncaisserAutreAgence"
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                    title="Encaisser une commande d'une autre agence"
+                    @click="autreAgenceVisible = true"
+                >
+                    <Building2 class="h-5 w-5" />
+                </button>
+                <div v-else class="w-8" />
             </div>
 
             <!-- Bandeau filtre livreur (mobile) -->
@@ -360,11 +367,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total) }}
+                        {{ formatGNF(totaux.total) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{
-                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        {{ totaux.nb_total }} facture{{
+                            totaux.nb_total > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -375,7 +382,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total_a_encaisser) }}
+                        {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -383,11 +390,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_impayees) }}
+                        {{ formatGNF(totaux.montant_impayees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{
-                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        {{ totaux.nb_impayees }} facture{{
+                            totaux.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -396,18 +403,31 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_payees) }}
+                        {{ formatGNF(totaux.montant_payees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{
-                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        {{ totaux.nb_payees }} facture{{
+                            totaux.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
             </div>
 
             <!-- Search -->
-            <div class="border-t border-b px-4 py-2">
+            <div class="space-y-2 border-t border-b px-4 py-2">
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            saved-filter-scope="factures"
+                            url="/backoffice/factures"
+                            :base-params="filterBaseParams"
+                            :values="filterValues"
+                            :result-count="factures.length"
+                            :fields="filterFields"
+                        />
+                    </template>
+                </ListPageActions>
                 <div class="relative">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -499,7 +519,7 @@ function _progressPercent(f: FactureItem): number {
         <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
         <div class="hidden flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Factures de vente
@@ -507,6 +527,30 @@ function _progressPercent(f: FactureItem): number {
                     <p class="mt-1 text-sm text-muted-foreground">
                         Suivi et encaissement des factures.
                     </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <ListPageActions>
+                        <template #filters>
+                            <DataFilters
+                                trigger-only
+                                saved-filter-scope="factures"
+                                url="/backoffice/factures"
+                                :base-params="filterBaseParams"
+                                :values="filterValues"
+                                :result-count="factures.length"
+                                :fields="filterFields"
+                            />
+                        </template>
+                    </ListPageActions>
+                    <Button
+                        v-if="peutEncaisserAutreAgence"
+                        variant="outline"
+                        data-testid="ouvrir-encaissement-autre-agence"
+                        @click="autreAgenceVisible = true"
+                    >
+                        <Building2 class="mr-1.5 h-4 w-4" />
+                        Encaisser une commande d'une autre agence
+                    </Button>
                 </div>
             </div>
 
@@ -542,11 +586,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total) }}
+                        {{ formatGNF(totaux.total) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{
-                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        {{ totaux.nb_total }} facture{{
+                            totaux.nb_total > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -558,7 +602,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total_a_encaisser) }}
+                        {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
                 </div>
 
@@ -567,11 +611,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_impayees) }}
+                        {{ formatGNF(totaux.montant_impayees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{
-                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        {{ totaux.nb_impayees }} facture{{
+                            totaux.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -581,44 +625,21 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_payees) }}
+                        {{ formatGNF(totaux.montant_payees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{
-                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        {{ totaux.nb_payees }} facture{{
+                            totaux.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
             </div>
 
-            <!-- Recherche locale (client-side, immédiate) -->
-            <div class="relative">
-                <Search
-                    class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                    v-model="search"
-                    type="text"
-                    data-testid="search-input"
-                    placeholder="Rechercher (référence, véhicule, client…)"
-                    class="h-9 w-full max-w-sm rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-                />
-            </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                url="/backoffice/factures"
-                :base-params="filterBaseParams"
-                :values="filterValues"
-                :result-count="facturesFiltrees.length"
-                :fields="filterFields"
-            />
-
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="facturesFiltrees"
-                    :paginator="facturesFiltrees.length > 20"
+                    :value="factures"
+                    :paginator="factures.length > 20"
                     :rows="20"
                     data-key="id"
                     striped-rows
@@ -675,6 +696,20 @@ function _progressPercent(f: FactureItem): number {
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
                                 data.site_nom ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Quantité -->
+                    <Column
+                        field="quantite_totale"
+                        header="Qté"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">{{
+                                formatQuantite(data.quantite_totale)
                             }}</span>
                         </template>
                     </Column>
@@ -835,7 +870,7 @@ function _progressPercent(f: FactureItem): number {
                     ? `Historique — ${factureHistory.reference}`
                     : 'Historique'
             "
-            :style="{ width: '560px' }"
+            :style="{ width: '880px', maxWidth: '95vw' }"
         >
             <div v-if="factureHistory">
                 <div
@@ -861,6 +896,11 @@ function _progressPercent(f: FactureItem): number {
                                 class="px-3 py-2 text-left font-medium text-muted-foreground"
                             >
                                 Mode
+                            </th>
+                            <th
+                                class="hidden px-3 py-2 text-left font-medium text-muted-foreground sm:table-cell"
+                            >
+                                Référence
                             </th>
                             <th
                                 class="px-3 py-2 text-right font-medium text-muted-foreground"
@@ -895,7 +935,15 @@ function _progressPercent(f: FactureItem): number {
                                 }}
                             </td>
                             <td class="px-3 py-2 text-muted-foreground">
-                                {{ e.mode_paiement }}
+                                {{
+                                    e.operateur_mobile_money_label ??
+                                    e.mode_paiement
+                                }}
+                            </td>
+                            <td
+                                class="hidden px-3 py-2 text-muted-foreground sm:table-cell"
+                            >
+                                {{ e.reference_paiement ?? '—' }}
                             </td>
                             <td
                                 class="px-3 py-2 text-right font-medium tabular-nums"
@@ -910,7 +958,7 @@ function _progressPercent(f: FactureItem): number {
                     <tfoot>
                         <tr class="border-t">
                             <td
-                                colspan="3"
+                                colspan="4"
                                 class="px-3 py-2 text-sm font-semibold"
                             >
                                 Total encaissé
@@ -935,7 +983,7 @@ function _progressPercent(f: FactureItem): number {
         </Dialog>
 
         <!-- Dialog encaissement ─────────────────────────────────────────────── -->
-        <PaymentDialogCompact
+        <PaymentCard
             v-model:visible="dialogVisible"
             :title="
                 factureActive
@@ -943,10 +991,17 @@ function _progressPercent(f: FactureItem): number {
                     : 'Encaisser'
             "
             :solde="factureActive?.montant_restant ?? 0"
+            :moyens="factureActive?.moyens_encaissement ?? []"
+            :especes-disponibles="factureActive?.peut_encaisser_especes ?? true"
             :processing="encaissProcessing"
             :errors="encaissErrors"
-            :modes-paiement="modes_paiement"
+            :encaissement-agences="factureActive?.encaissement_agences ?? null"
             @submit="handleEncaissSubmit"
+        />
+
+        <EncaisserAutreAgenceDialog
+            v-if="peutEncaisserAutreAgence"
+            v-model:visible="autreAgenceVisible"
         />
     </AppLayout>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import PwaInstallPrompt from '@/components/PwaInstallPrompt.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -393,4 +394,5 @@ watch(currentUrl, () => {
             <slot />
         </main>
     </div>
+    <PwaInstallPrompt />
 </template>

@@ -216,6 +216,52 @@ class GlobalSearchTest extends TestCase
         }
     }
 
+    // ── livreurs provider (nom_complet = vraie colonne, telephone = proxy Personne) ───────
+
+    public function test_livreurs_provider_finds_by_nom_complet_et_telephone(): void
+    {
+        $user = $this->makeStaffUser(['livreurs.read']);
+        Sanctum::actingAs($user, ['*']);
+
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Camara Ya Moussa',
+        ]);
+        $livreur->personne->update([
+            'telephone' => '+224622603462',
+            'telephone_normalise' => '224622603462',
+        ]);
+
+        foreach (['Ya Moussa', 'Camara', '3462'] as $q) {
+            $items = $this->getJson(route('api.search.global', ['q' => $q, 'categories' => ['livreurs']]))
+                ->assertOk()
+                ->json('results.livreurs.items');
+
+            $this->assertCount(1, $items, "recherche « {$q} » devrait trouver le livreur");
+            $this->assertSame($livreur->id, $items[0]['id']);
+            $this->assertSame('Camara Ya Moussa', $items[0]['title']);
+            $this->assertSame('+224622603462', $items[0]['subtitle']);
+        }
+    }
+
+    public function test_livreurs_provider_est_scope_a_lorganisation(): void
+    {
+        $user = $this->makeStaffUser(['livreurs.read']);
+        Sanctum::actingAs($user, ['*']);
+
+        Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Diallo Org']);
+
+        $otherOrg = Organization::factory()->create();
+        Livreur::factory()->create(['organization_id' => $otherOrg->id, 'nom_complet' => 'Diallo Autre']);
+
+        $items = $this->getJson(route('api.search.global', ['q' => 'Diallo', 'categories' => ['livreurs']]))
+            ->assertOk()
+            ->json('results.livreurs.items');
+
+        $this->assertCount(1, $items);
+        $this->assertSame('Diallo Org', $items[0]['title']);
+    }
+
     // ── categories filter ─────────────────────────────────────────────────────
 
     public function test_categories_filter_restricts_to_requested_providers(): void
@@ -272,6 +318,48 @@ class GlobalSearchTest extends TestCase
         $this->assertArrayHasKey('factures', $results);
         $factureRefs = array_column($results['factures']['items'], 'title');
         $this->assertContains('FAC-CISSE-001', $factureRefs);
+    }
+
+    // ── vehicules provider — périmètre aligné sur l'écran Véhicules ───────────
+
+    public function test_vehicules_provider_trouve_un_vehicule_dun_autre_site_de_lorganisation(): void
+    {
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'vehicules.read', 'guard_name' => 'web']);
+        $manager = User::factory()->create(['organization_id' => $this->org->id]);
+        $manager->assignRole('manager');
+        $manager->givePermissionTo('vehicules.read');
+        $manager->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Sonfonia',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $this->makeVehicule(['nom_vehicule' => 'Abarry', 'immatriculation' => 'AI3462', 'site_id' => $autreSite->id]);
+
+        $otherOrg = Organization::factory()->create();
+        $otherSite = Site::create([
+            'organization_id' => $otherOrg->id,
+            'nom' => 'Autre org',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        Vehicule::create([
+            'organization_id' => $otherOrg->id,
+            'site_id' => $otherSite->id,
+            'nom_vehicule' => 'Abarry Autre Org',
+            'immatriculation' => 'GN-999-ZZ',
+            'categorie' => 'interne',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($manager)
+            ->getJson(route('search.global', ['q' => 'Abarry']))
+            ->assertOk()
+            ->assertJsonPath('results.vehicules.total', 1)
+            ->assertJsonPath('results.vehicules.items.0.title', 'Abarry');
     }
 
     // ── proprietaire role ─────────────────────────────────────────────────────

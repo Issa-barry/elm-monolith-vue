@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -1482,6 +1483,51 @@ class VehiculeTest extends TestCase
             );
     }
 
+    /**
+     * Cas de prod du 30/09/2026 : chauffeur inactif affiché comme membre normal de l'équipe, alors
+     * que toute distribution avec ce véhicule était refusée — la fiche doit montrer son statut et
+     * le blocage, avec le même motif que le refus serveur.
+     */
+    public function test_show_signale_un_chauffeur_inactif_qui_bloque_la_distribution(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, livraisonLogistique: true);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vehicule->proprietaire_id,
+            'is_active' => true,
+        ]);
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Kaba Test',
+            'is_active' => false,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicule.equipe_membres.0.livreur_actif', false)
+                ->where('vehicule.equipe_membres.0.livreur_a_un_compte', false)
+                ->where('distribution_chauffeur_motif', "Le chauffeur de ce véhicule (Kaba Test) est inactif ou en attente d'approbation — activez-le depuis la liste des livreurs.")
+            );
+
+        $livreur->update(['is_active' => true]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicule.equipe_membres.0.livreur_actif', true)
+                ->where('distribution_chauffeur_motif', null)
+            );
+    }
+
     public function test_show_retourne_403_pour_autre_organisation(): void
     {
         $otherOrg = Organization::factory()->create();
@@ -1632,7 +1678,7 @@ class VehiculeTest extends TestCase
 
     /**
      * Les scopes ci-dessous sont le mécanisme réel utilisé par tous les sélecteurs
-     * opérationnels (CommandeVenteController::vehiculesActifs(), PdvController,
+     * opérationnels (CommandeVenteFormBuilder::vehiculesActifs(), Ventes\IndexPdvController,
      * TransfertLogistiqueController, RessourcesController) — les tester directement
      * couvre donc l'exclusion effective d'un véhicule sans usage (ou avec un usage
      * différent de celui demandé) de ces sélecteurs.
@@ -1671,5 +1717,54 @@ class VehiculeTest extends TestCase
 
         $this->assertTrue(Vehicule::livraisonVente()->whereKey($vehicule->id)->exists());
         $this->assertTrue(Vehicule::livraisonLogistique()->whereKey($vehicule->id)->exists());
+    }
+
+    // ── export() — "Exporter les véhicules" (listing en lecture seule, cf. VehiculeListExport) ──
+
+    public function test_export_retourne_un_xlsx_avec_le_vehicule_de_lorganisation(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, true, false);
+
+        $response = $this->actingAs($this->user)->get(route('vehicules.export'));
+        $response->assertStatus(200);
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'export_vehicules_test').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+        $spreadsheet = IOFactory::load($tmpPath);
+        $sheet = $spreadsheet->getSheetByName('vehicules');
+        $this->assertNotNull($sheet);
+
+        $tableau = $sheet->toArray(null, true, true, false);
+        $entetes = $tableau[0];
+        $this->assertContains('Véhicule', $entetes);
+        $this->assertContains('Immatriculation', $entetes);
+        $this->assertContains('Statut', $entetes);
+
+        $indexImmat = array_search('Immatriculation', $entetes, true);
+        $immatriculations = array_column(array_slice($tableau, 1), $indexImmat);
+        $this->assertContains($vehicule->immatriculation, $immatriculations);
+
+        @unlink($tmpPath);
+    }
+
+    public function test_export_exclut_les_vehicules_dune_autre_organisation(): void
+    {
+        $this->makeVehicule($this->org, true, false);
+        $otherOrg = Organization::factory()->create();
+        $vehiculeAutreOrg = $this->makeVehicule($otherOrg, true, false);
+
+        $response = $this->actingAs($this->user)->get(route('vehicules.export'));
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'export_vehicules_test').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+        $spreadsheet = IOFactory::load($tmpPath);
+        $tableau = $spreadsheet->getSheetByName('vehicules')->toArray(null, true, true, false);
+        $entetes = $tableau[0];
+        $indexImmat = array_search('Immatriculation', $entetes, true);
+        $immatriculations = array_column(array_slice($tableau, 1), $indexImmat);
+
+        $this->assertNotContains($vehiculeAutreOrg->immatriculation, $immatriculations);
+
+        @unlink($tmpPath);
     }
 }

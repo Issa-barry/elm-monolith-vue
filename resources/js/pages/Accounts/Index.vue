@@ -8,16 +8,21 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     CheckCircle,
     CircleOff,
+    Eye,
     MoreVertical,
+    Pencil,
     ShieldCheck,
     Users,
 } from 'lucide-vue-next';
@@ -46,6 +51,14 @@ const props = defineProps<{
 
 const confirm = useConfirm();
 const toast = useToast();
+const { can, hasRole } = usePermissions();
+
+// Seuls les comptes agent ont une fiche (users.show) ; les lignes client/inscrit restent inertes.
+const { onRowClick, bodyRowPt } = useClickableTableRow<Account>((a) =>
+    a.type === 'agent' && can('users.read')
+        ? `/backoffice/users/${a.id}`
+        : null,
+);
 
 const TYPE_LABELS: Record<string, string> = {
     agent: 'Agent',
@@ -255,6 +268,8 @@ function confirmToggle(a: Account) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Utilisateur -->
                     <Column
@@ -273,7 +288,20 @@ function confirmToggle(a: Account) {
                                 </div>
                                 <div>
                                     <div class="font-medium">
-                                        {{ data.nom_complet }}
+                                        <Link
+                                            v-if="
+                                                data.type === 'agent' &&
+                                                can('users.read')
+                                            "
+                                            :href="`/backoffice/users/${data.id}`"
+                                            class="hover:underline"
+                                            data-testid="account-fiche-link"
+                                        >
+                                            {{ data.nom_complet }}
+                                        </Link>
+                                        <template v-else>
+                                            {{ data.nom_complet }}
+                                        </template>
                                     </div>
                                     <div class="text-xs text-muted-foreground">
                                         {{ data.email ?? data.telephone }}
@@ -392,7 +420,14 @@ function confirmToggle(a: Account) {
                     <!-- Actions -->
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
-                            <div class="flex justify-end">
+                            <div
+                                v-if="
+                                    (data.type === 'agent' &&
+                                        can('users.update')) ||
+                                    hasRole('super_admin')
+                                "
+                                class="flex justify-end"
+                            >
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
                                         <Button
@@ -408,6 +443,41 @@ function confirmToggle(a: Account) {
                                         class="w-44"
                                     >
                                         <DropdownMenuItem
+                                            v-if="
+                                                data.type === 'agent' &&
+                                                can('users.read')
+                                            "
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/backoffice/users/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir la fiche
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <template
+                                            v-if="
+                                                data.type === 'agent' &&
+                                                can('users.update')
+                                            "
+                                        >
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/backoffice/users/${data.id}/edit`"
+                                                    class="flex w-full items-center gap-2"
+                                                >
+                                                    <Pencil class="h-4 w-4" />
+                                                    Modifier
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator
+                                                v-if="hasRole('super_admin')"
+                                            />
+                                        </template>
+                                        <DropdownMenuItem
+                                            v-if="hasRole('super_admin')"
                                             class="cursor-pointer"
                                             :class="
                                                 data.is_active

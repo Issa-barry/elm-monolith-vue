@@ -34,7 +34,7 @@ class EcritureComptableService
     ) {}
 
     /**
-     * @param  list<array{role:string,sens:string,montant:float,moyen_paiement?:?string,tiers_type?:?string,tiers_model?:?Model,libelle?:?string}>  $lignes
+     * @param  list<array{role?:string,compte_comptable_id?:string,journal_role?:string,sens:string,montant:float,moyen_paiement?:?string,tiers_type?:?string,tiers_model?:?Model,libelle?:?string}>  $lignes
      */
     public function comptabiliser(
         EvenementComptable $evenement,
@@ -68,6 +68,19 @@ class EcritureComptableService
             if (! empty($ligne['compte_comptable_id'])) {
                 $compteId = $ligne['compte_comptable_id'];
                 $tiersComptable = null;
+
+                // Option `journal_role` : le compte est imposé par l'appelant mais le journal
+                // reste celui du mapping de ce rôle (avec le moyen_paiement de la ligne) — sans en
+                // utiliser le compte. Nécessaire quand aucune autre ligne ne porte de journal :
+                // pour un encaissement de vente, la ligne client n'en a volontairement pas, le
+                // journal vient de la ligne trésorerie (cf. PlanComptableBootstrapService). Utilisé
+                // par la caisse dédiée d'un agent (compte propre, journal « Caisse »). Sans effet
+                // pour les appelants qui ne la passent pas.
+                if (! empty($ligne['journal_role'])) {
+                    $journal ??= $this->mappings
+                        ->resolve($organizationId, $evenement, $ligne['journal_role'], $ligne['moyen_paiement'] ?? null)
+                        ->journal;
+                }
             } else {
                 $mapping = $this->mappings->resolve($organizationId, $evenement, $ligne['role'], $ligne['moyen_paiement'] ?? null);
                 $journal ??= $mapping->journal;

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { usePermissions } from '@/composables/usePermissions';
 import { Save } from 'lucide-vue-next';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
@@ -17,6 +19,8 @@ interface FormData {
     ville: string | null;
     quartier: string | null;
     telephone: string | null;
+    commissions_active: boolean;
+    is_central_tresorerie: boolean;
 }
 
 defineProps<{
@@ -25,9 +29,13 @@ defineProps<{
     processing: boolean;
     types: Option[];
     isCreate?: boolean;
+    /** Le site est déjà la trésorerie principale : on la transfère depuis un autre site, jamais en la décochant. */
+    estTresoreriePrincipale?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
+
+const { can } = usePermissions();
 </script>
 
 <template>
@@ -54,7 +62,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         "
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
-                        placeholder="Siège principal"
+                        placeholder="Ex : Matoto"
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
@@ -152,6 +160,76 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         {{ errors.telephone }}
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Commissions -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <div class="flex items-center justify-between gap-4 sm:gap-6">
+                <div>
+                    <Label class="mb-1 block"
+                        >Activer les commissions pour ce site</Label
+                    >
+                    <p class="text-xs text-muted-foreground">
+                        Si désactivé, ce site ne reçoit plus sa propre part de
+                        commission sur les ventes. Les livreurs, propriétaires
+                        de véhicule et consultants continuent d'être
+                        commissionnés normalement — ce réglage n'affecte qu'eux,
+                        jamais les autres bénéficiaires.
+                    </p>
+                </div>
+                <Switch
+                    aria-label="Activer les commissions pour ce site"
+                    :model-value="form.commissions_active"
+                    @update:model-value="
+                        emit('update:form', {
+                            ...form,
+                            commissions_active: $event as boolean,
+                        })
+                    "
+                />
+            </div>
+        </div>
+
+        <!-- Trésorerie principale (ADR 0017) -->
+        <div
+            v-if="can('tresorerie.designer_principale')"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+        >
+            <div class="flex items-center justify-between gap-4 sm:gap-6">
+                <div>
+                    <Label class="mb-1 block">Trésorerie principale</Label>
+                    <p class="text-xs text-muted-foreground">
+                        Ce site centralise les opérations de trésorerie
+                        inter-agences : remises, règlements entre agences et
+                        paiement des fiches sans agence. Une seule par
+                        organisation.
+                    </p>
+                    <p
+                        v-if="estTresoreriePrincipale"
+                        class="mt-1 text-xs text-muted-foreground"
+                    >
+                        Pour la transférer, activez-la sur un autre site.
+                    </p>
+                    <p
+                        v-if="errors.is_central_tresorerie"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.is_central_tresorerie }}
+                    </p>
+                </div>
+                <Switch
+                    aria-label="Trésorerie principale"
+                    data-testid="site-tresorerie-principale"
+                    :disabled="estTresoreriePrincipale"
+                    :model-value="form.is_central_tresorerie"
+                    @update:model-value="
+                        emit('update:form', {
+                            ...form,
+                            is_central_tresorerie: $event as boolean,
+                        })
+                    "
+                />
             </div>
         </div>
 

@@ -7,20 +7,21 @@ use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
+use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
-use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use App\Services\PeriodeValidationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,7 +31,6 @@ class PaiementPeriodeController extends Controller
     public function __construct(
         private PeriodeCalculatorService $calculator,
         private PeriodePaiementService $periodes,
-        private FicheComptabilisationService $ficheComptabilisation,
     ) {}
 
     public function index(Request $request): Response
@@ -161,14 +161,17 @@ class PaiementPeriodeController extends Controller
         // PeriodeCalculatorService::calculer()). Ne s'applique jamais à une période
         // validée/clôturée : needsRecalcul() renvoie alors toujours false, ses montants
         // restent figés tant qu'elle n'a pas été repassée en brouillon.
-        $recalcul = $this->calculator->calculerSiNecessaire($periode);
+        // Période validée ayant reçu des commissions depuis : réouverte avant recalcul, même
+        // déjà payée (fiche complémentaire, ADR 0010), cf. PeriodeValidationService.
+        app(PeriodeValidationService::class)->rouvrirSiDesynchronisee($periode);
+        $recalcul = $this->calculator->calculerSiNecessaire($periode->refresh());
         if ($recalcul['recalcule']) {
             $periode->refresh();
         }
 
         $allFiches = $periode->fiches()->get();
 
-        $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
+        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
 
         // Le détail de période est centré véhicule pour livreur/propriétaire : c'est ainsi que
         // le métier travaille pour ces deux types (une commission de vente/logistique s'ancre
@@ -177,14 +180,24 @@ class PaiementPeriodeController extends Controller
         // afficher, sans regroupement supplémentaire.
         $beneficiaires = [];
         $vehicules = [];
+        $typesVehicule = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
             // Toujours combiner vente + logistique (jamais un choix) : un même
             // véhicule/bénéficiaire peut porter les deux natures de commission sur la période.
-            $vehicules = $this->avecMontantsPayes(
+            $vehicules = $this->avecDetailsVehicule($this->avecMontantsPayes(
                 collect(CommissionAdjustmentService::vehiculesParPeriodeCombine($periode)),
                 $periode,
                 $allFiches,
-            );
+            ), $periode);
+
+            // Options issues de toute la période, avant les filtres : la sélection
+            // d'un type ne fait pas disparaître les autres choix.
+            $typesVehicule = $vehicules
+                ->filter(fn (array $v) => $v['type_vehicule_id'] !== null)
+                ->unique('type_vehicule_id')
+                ->sortBy('type_vehicule_nom')
+                ->map(fn (array $v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_vehicule_nom']])
+                ->values()->all();
 
             if (array_filter($filters)) {
                 $beneficiairesParVehicule = collect([
@@ -199,6 +212,9 @@ class PaiementPeriodeController extends Controller
                         ->filter());
 
                 $vehicules = $vehicules->filter(function (array $v) use ($filters, $beneficiairesParVehicule) {
+                    if (! empty($filters['type_vehicule_id']) && $v['type_vehicule_id'] !== $filters['type_vehicule_id']) {
+                        return false;
+                    }
                     if (! empty($filters['vehicule'])) {
                         $needle = mb_strtolower(trim($filters['vehicule']));
                         if (! str_contains(mb_strtolower($v['vehicule_nom']), $needle) && ! str_contains(mb_strtolower($v['vehicule_immat'] ?? ''), $needle)) {
@@ -249,6 +265,7 @@ class PaiementPeriodeController extends Controller
         return Inertia::render('Comptabilite/Periodes/Show', [
             'periode' => $this->transform($periode),
             'vehicules' => $vehicules,
+            'typesVehicule' => $typesVehicule,
             'beneficiaires' => $beneficiaires,
             'filters' => $filters,
             'recalcul' => [
@@ -261,9 +278,10 @@ class PaiementPeriodeController extends Controller
                 'total_paye' => (float) $allFiches->sum('montant_paye'),
                 'reste' => max(0.0, (float) $allFiches->sum('montant_net') - (float) $allFiches->sum('montant_paye')),
             ],
+            'validation' => $this->etatValidation($periode),
             'can' => [
                 'calculer' => auth()->user()->can('calculer', $periode),
-                'valider' => auth()->user()->can('valider', $periode),
+                'valider' => auth()->user()->can('gererValidation', $periode),
                 'cloturer' => auth()->user()->can('cloturer', $periode),
                 'delete' => auth()->user()->can('delete', $periode),
                 'ajuster' => auth()->user()->can('ajuster', $periode),
@@ -320,6 +338,40 @@ class PaiementPeriodeController extends Controller
         });
     }
 
+    /**
+     * Ajoute `taille_equipe` : nombre de membres de l'équipe active du véhicule (composition
+     * actuelle — l'équipe n'est pas historisée), à distinguer de `nb_membres` qui ne compte que
+     * les bénéficiaires ayant une commission sur la période. Null sans véhicule ou sans équipe.
+     *
+     * @param  Collection<int, array>  $vehicules
+     * @return Collection<int, array>
+     */
+    private function avecDetailsVehicule(Collection $vehicules, PaiementPeriode $periode): Collection
+    {
+        $details = Vehicule::withTrashed()
+            ->where('organization_id', $periode->organization_id)
+            ->whereIn('id', $vehicules->pluck('vehicule_id')->filter()->all())
+            ->with(['typeVehicule' => fn ($query) => $query->withTrashed()->where('organization_id', $periode->organization_id)])
+            ->get(['id', 'type_vehicule_id'])
+            ->keyBy('id');
+
+        $tailles = EquipeLivraison::where('organization_id', $periode->organization_id)
+            ->whereIn('vehicule_id', $vehicules->pluck('vehicule_id')->filter()->all())
+            ->where('is_active', true)
+            ->withCount('membres')
+            ->get(['id', 'vehicule_id'])
+            ->pluck('membres_count', 'vehicule_id');
+
+        return $vehicules->map(function (array $v) use ($tailles, $details) {
+            $v['taille_equipe'] = $v['vehicule_id'] !== null ? $tailles->get($v['vehicule_id']) : null;
+            $type = $details->get($v['vehicule_id'])?->typeVehicule;
+            $v['type_vehicule_id'] = $type?->id;
+            $v['type_vehicule_nom'] = $type?->nom;
+
+            return $v;
+        });
+    }
+
     public function calculer(PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('calculer', $periode);
@@ -352,65 +404,42 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('valider', $periode);
 
-        // Combine toujours vente + logistique (jamais un choix) : une période
-        // LIVREUR/PROPRIETAIRE peut porter les deux natures de commission, et aucune des
-        // deux ne doit jamais être ignorée. Sans effet sur une période SALARIE
-        // (partsPourPeriode y est structurellement toujours vide, aucune fiche salarié
-        // ne référence CommissionEnveloppePart).
-        $nonValidees = CommissionAdjustmentService::partsLogistiqueNonValidees($periode)
-            ->merge(CommissionAdjustmentService::partsNonValidees($periode));
-        if ($nonValidees->isNotEmpty()) {
-            $n = $nonValidees->count();
+        // L'état est revérifié par le service (le super administrateur court-circuite la
+        // policy via Gate::before) : revalider une période déjà validée réactiverait/
+        // recomptabiliserait sans jamais intégrer de nouvelles commissions.
+        $erreur = app(PeriodeValidationService::class)->valider($periode, auth()->user());
 
-            return back()->with('error', "{$n} commission".($n > 1 ? 's' : '').' non validée'.($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
-        }
+        return $erreur !== null
+            ? back()->with('error', $erreur)
+            : back()->with('success', 'Période validée.');
+    }
 
-        $resumeLogistique = CommissionAdjustmentService::resumeEcartsLogistique($periode);
-        $resumeVente = CommissionAdjustmentService::resumeEcarts($periode);
-        $parVehicule = [...$resumeLogistique['par_vehicule'], ...$resumeVente['par_vehicule']];
-        if (! empty($parVehicule)) {
-            $ecart = round($resumeLogistique['ecart'] + $resumeVente['ecart'], 2);
-            $abs = number_format(abs($ecart), 0, ',', ' ');
-            $n = count($parVehicule);
-            $sens = $ecart < 0 ? "il reste {$abs} GNF à redistribuer" : "le montant ajusté dépasse de {$abs} GNF le montant théorique";
+    /**
+     * État du bouton « Valider la période de paiement ». Seule une période calculée est
+     * validable. Une commission arrivée après la validation rouvre la période (même déjà
+     * payée) ; commissions_hors_fiches ne reste donc non nul que sur une période clôturée ou
+     * dont la réouverture automatique a échoué : elles y sont seulement signalées.
+     *
+     * @return array{possible: bool, raison: ?string, commissions_hors_fiches: array{nombre: int, montant: float}}
+     */
+    private function etatValidation(PaiementPeriode $periode): array
+    {
+        $horsFiches = $periode->isValidee() || $periode->isCloturee()
+            ? $this->calculator->commissionsHorsFiches($periode)
+            : ['nombre' => 0, 'montant' => 0.0];
 
-            return back()->with('error', "Impossible de valider : {$sens} sur {$n} véhicule(s). La somme des montants ajustés doit toujours égaler la somme des montants théoriques, véhicule par véhicule sur l'ensemble de la période. Passez par l'écran d'ajustement.");
-        }
+        $raison = match (true) {
+            $periode->peutEtreValidee() => null,
+            $periode->isBrouillon() => "La période doit d'abord être calculée.",
+            $horsFiches['nombre'] > 0 => 'Des commissions arrivées après la validation ne sont sur aucune fiche (voir l\'alerte).',
+            default => 'Période déjà validée — aucune nouvelle commission à valider.',
+        };
 
-        $periode->update([
-            'statut' => StatutPeriodePaiement::VALIDEE->value,
-            'validated_by' => auth()->id(),
-            'validated_at' => now(),
-        ]);
-
-        // Seul moment où les commissions encore CREEE de cette période deviennent
-        // payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
-        $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode)
-            + CommissionAdjustmentService::activerCommissionsLogistiqueCreees($periode);
-
-        app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
-            'module' => 'periodes_paiement',
-            'site_id' => $periode->site_id,
-            'description' => "Période {$periode->reference} validée ({$nbCommissionsActivees} commission(s) de vente activée(s))",
-        ]);
-
-        // Comptabilité générale : engagement de la dette envers chaque bénéficiaire,
-        // en aval — ne doit jamais faire échouer la validation métier (mode shadow,
-        // cf. règle #26 de la spec). Une pièce déjà comptabilisée (idempotence) ou un
-        // mapping non configuré ne bloque pas la validation de la période.
-        foreach ($periode->fiches as $fiche) {
-            try {
-                $this->ficheComptabilisation->comptabiliserFicheValidee($fiche);
-            } catch (\Throwable $e) {
-                Log::error('Comptabilisation fiche validée échouée', [
-                    'fiche_id' => $fiche->id,
-                    'periode_id' => $periode->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return back()->with('success', 'Période validée.');
+        return [
+            'possible' => $periode->peutEtreValidee(),
+            'raison' => $raison,
+            'commissions_hors_fiches' => $horsFiches,
+        ];
     }
 
     public function cloturer(PaiementPeriode $periode): RedirectResponse

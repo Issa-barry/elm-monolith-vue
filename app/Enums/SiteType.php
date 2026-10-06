@@ -2,9 +2,13 @@
 
 namespace App\Enums;
 
+/**
+ * Ce qu'EST le site — jamais son rôle. L'ancien type `siege` a été retiré (ADR 0017) : le rôle de
+ * centralisation des flux de trésorerie est porté par Site::is_central_tresorerie, indépendant du
+ * type (ex : une agence peut être le site central de trésorerie).
+ */
 enum SiteType: string
 {
-    case SIEGE = 'siege';
     case USINE = 'usine';
     case DEPOT = 'depot';
     case AGENCE = 'agence';
@@ -15,7 +19,6 @@ enum SiteType: string
     public function label(): string
     {
         return match ($this) {
-            self::SIEGE => 'Siège',
             // Couvre aussi "Atelier" à l'échelle artisanale — un seul type technique, pas de
             // doublon pour la même signification métier (cf. DomaineActivite::siteTypes()).
             // Libellé volontairement inchangé ("Usine", pas "Usine / Atelier") : SiteImportParser

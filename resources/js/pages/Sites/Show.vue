@@ -65,6 +65,8 @@ interface Site {
     type_label: string;
     statut: string | null;
     statut_label: string;
+    commissions_active: boolean;
+    is_central_tresorerie: boolean;
     localisation: string | null;
     pays: string | null;
     ville: string | null;
@@ -130,7 +132,7 @@ const props = defineProps<{
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-const { can } = usePermissions();
+const { can, roleLabel: labelForRole } = usePermissions();
 const toast = useToast();
 const confirm = useConfirm();
 const page = usePage();
@@ -189,14 +191,6 @@ const FLAG_CODES: Record<string, string> = {
     Inde: 'in',
 };
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-};
-
 const ROLE_COLORS: Record<string, string> = {
     super_admin:
         'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
@@ -220,7 +214,7 @@ function mapsUrl(lat: number, lng: number) {
 }
 
 function roleLabel(role: string | null) {
-    return role ? (ROLE_LABELS[role] ?? role) : '—';
+    return role ? labelForRole(role) : '—';
 }
 
 function roleColor(role: string | null) {
@@ -451,8 +445,20 @@ function confirmRejectMember(m: Membre) {
                 "
             >
                 <template #subtitle>
-                    <p class="mt-1 font-mono text-sm text-muted-foreground">
-                        {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                    <p
+                        class="mt-1 flex flex-wrap items-center gap-2 font-mono text-sm text-muted-foreground"
+                    >
+                        <span>
+                            {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                        </span>
+                        <span
+                            v-if="site.is_central_tresorerie"
+                            class="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-xs font-medium text-primary"
+                            title="Site qui centralise les flux de trésorerie de l'organisation"
+                        >
+                            <i class="pi pi-wallet text-[10px]" />
+                            Trésorerie principale
+                        </span>
                     </p>
                 </template>
                 <template #actions>
@@ -608,6 +614,26 @@ function confirmRejectMember(m: Membre) {
                                         :label="site.statut_label"
                                         :dot-class="
                                             site.statut === 'active'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-zinc-400'
+                                        "
+                                    />
+                                </div>
+
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Commissions</span
+                                    >
+                                    <StatusDot
+                                        :label="
+                                            site.commissions_active
+                                                ? 'Activées'
+                                                : 'Désactivées'
+                                        "
+                                        :dot-class="
+                                            site.commissions_active
                                                 ? 'bg-emerald-500'
                                                 : 'bg-zinc-400'
                                         "

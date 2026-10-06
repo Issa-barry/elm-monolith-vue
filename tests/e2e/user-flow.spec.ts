@@ -58,9 +58,9 @@ test('edit user info → data persists', async ({ page }) => {
     await expect(row).toContainText(/comptable/i);
 });
 
-// ─── Modification du mot de passe ─────────────────────────────────────────────
+// ─── Mot de passe : jamais modifiable par un tiers (ADR 0015) ──────────────────
 
-test('edit user password → login with new password', async ({ page }) => {
+test('edit user → aucun champ ni onglet mot de passe', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Pwd${uid}`;
@@ -69,20 +69,11 @@ test('edit user password → login with new password', async ({ page }) => {
     await login(page);
     await createUser(page, { prenom, nom, tel });
 
-    // Aller sur l'onglet Mot de passe
-    await page
-        .getByRole('button', { name: /mot de passe/i })
-        .first()
-        .click();
-
-    await page.locator('#password').fill('NewPass456');
-    await page.locator('#password_confirmation').fill('NewPass456');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-
-    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
+    await expect(page.locator('#prenom')).toBeVisible();
+    await expect(
+        page.getByRole('button', { name: /mot de passe/i }),
+    ).toHaveCount(0);
+    await expect(page.locator('#password')).toHaveCount(0);
 });
 
 // ─── Toggle statut ────────────────────────────────────────────────────────────
@@ -165,7 +156,9 @@ test('status filter → shows only active users', async ({ page }) => {
 
     await applyDrawerFilterOption(page, 'statut', /^actif$/i);
 
-    const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
+    const rows = page.locator(
+        '[data-testid="staff-users-table"] tbody tr:visible',
+    );
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
         await expect(rows.nth(i)).toContainText(/actif/i);
@@ -173,7 +166,11 @@ test('status filter → shows only active users', async ({ page }) => {
     }
 
     await applyDrawerFilterOption(page, 'statut', /^tous$/i);
-    await expect(page.locator('[data-testid="staff-users-table"] tbody tr:visible').first()).toBeVisible();
+    await expect(
+        page
+            .locator('[data-testid="staff-users-table"] tbody tr:visible')
+            .first(),
+    ).toBeVisible();
 });
 
 // ─── Suppression ──────────────────────────────────────────────────────────────
@@ -202,7 +199,11 @@ test('delete user → removed from list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
     // L'utilisateur ne doit plus apparaître
-    const search2 = page.locator('input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible').first();
+    const search2 = page
+        .locator(
+            'input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible',
+        )
+        .first();
     await search2.fill(prenom);
     await search2.press('Enter');
     await page.waitForLoadState('networkidle');

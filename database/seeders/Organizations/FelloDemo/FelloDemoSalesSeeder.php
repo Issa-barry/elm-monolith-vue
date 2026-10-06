@@ -27,7 +27,7 @@ use Illuminate\Validation\ValidationException;
  * facture et cohérence métier soient garantis comme en production.
  *
  * Les dates sont rétro-datées après coup (created_at) car c'est ce champ
- * qu'utilisent les graphiques du tableau de bord (DashboardController :
+ * qu'utilisent les graphiques du tableau de bord (IndexDashboardController :
  * commandes_ventes.created_at / factures_ventes.created_at).
  *
  * Idempotence : contrairement aux autres sous-seeders (firstOrCreate /
@@ -242,7 +242,7 @@ class FelloDemoSalesSeeder extends Seeder
             $stats['modes_paiement'][$mode] = ($stats['modes_paiement'][$mode] ?? 0) + 1;
         }
 
-        // Même logique que EncaissementVenteController::store() : premier
+        // Même logique que Ventes\StoreEncaissementVenteController : premier
         // encaissement fait passer la commande en LIVREE, puis clôture
         // automatique si la facture est intégralement payée.
         $fresh = $commande->fresh();

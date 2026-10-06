@@ -14,6 +14,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { onClickOutside } from '@vueuse/core';
 import {
     AlertTriangle,
+    ArrowRightLeft,
     Bell,
     Loader2,
     MessageSquare,
@@ -95,6 +96,9 @@ const categoryRoutes: Record<string, (id: string) => string> = {
     factures: (_id) => `/backoffice/factures`,
     vehicules: (id) => `/backoffice/vehicules/${id}`,
     proprietaires: (id) => `/backoffice/proprietaires/${id}`,
+    // Fiche livreur : route self-view (livreurs.show) hors préfixe /backoffice,
+    // aussi accessible au staff avec la permission livreurs.read (cf. LivreurPolicy::view()).
+    livreurs: (id) => `/livreurs/${id}`,
 };
 
 function navigateTo(category: string, id: string) {
@@ -121,6 +125,9 @@ const stockAlertes = computed(
 const _produits = computed(() => (page.props as any).produits_alertes ?? []);
 const contactMessagesNonLus = computed(
     () => (page.props as any).contact_messages_non_lus ?? 0,
+);
+const mouvementsFondsAConfirmer = computed(
+    () => (page.props as any).mouvements_fonds_a_confirmer ?? 0,
 );
 
 function syncThemeState() {
@@ -264,11 +271,16 @@ onMounted(() => {
                         <Bell class="h-5 w-5" />
                         <span
                             v-if="
-                                stockAlertes.total + contactMessagesNonLus > 0
+                                stockAlertes.total +
+                                    contactMessagesNonLus +
+                                    mouvementsFondsAConfirmer >
+                                0
                             "
                             class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-0.5 text-[10px] font-bold text-destructive-foreground"
                             >{{
-                                stockAlertes.total + contactMessagesNonLus
+                                stockAlertes.total +
+                                contactMessagesNonLus +
+                                mouvementsFondsAConfirmer
                             }}</span
                         >
                         <span class="sr-only">Notifications</span>
@@ -283,17 +295,29 @@ onMounted(() => {
                         <span class="text-sm font-semibold">Notifications</span>
                         <span
                             v-if="
-                                stockAlertes.total + contactMessagesNonLus > 0
+                                stockAlertes.total +
+                                    contactMessagesNonLus +
+                                    mouvementsFondsAConfirmer >
+                                0
                             "
                             class="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground"
                         >
-                            {{ stockAlertes.total + contactMessagesNonLus }}
+                            {{
+                                stockAlertes.total +
+                                contactMessagesNonLus +
+                                mouvementsFondsAConfirmer
+                            }}
                         </span>
                     </div>
 
                     <!-- Aucune notif -->
                     <div
-                        v-if="stockAlertes.total + contactMessagesNonLus === 0"
+                        v-if="
+                            stockAlertes.total +
+                                contactMessagesNonLus +
+                                mouvementsFondsAConfirmer ===
+                            0
+                        "
                         class="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground"
                     >
                         <Bell class="h-8 w-8 opacity-20" />
@@ -362,9 +386,35 @@ onMounted(() => {
                         </Link>
                     </div>
 
+                    <!-- Mouvements de fonds à recevoir -->
+                    <div v-if="mouvementsFondsAConfirmer > 0" class="border-b">
+                        <div
+                            class="flex items-center gap-2 bg-blue-50 px-4 py-2 dark:bg-blue-950/20"
+                        >
+                            <ArrowRightLeft class="h-3.5 w-3.5 text-blue-500" />
+                            <span
+                                class="text-xs font-semibold text-blue-700 dark:text-blue-400"
+                                >Mouvement de fonds à recevoir ({{
+                                    mouvementsFondsAConfirmer
+                                }})</span
+                            >
+                        </div>
+                        <Link
+                            href="/backoffice/comptabilite/tresorerie/mouvements?statut=envoye"
+                            class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                        >
+                            Voir les mouvements à confirmer →
+                        </Link>
+                    </div>
+
                     <!-- Footer -->
                     <div
-                        v-if="stockAlertes.total + contactMessagesNonLus > 0"
+                        v-if="
+                            stockAlertes.total +
+                                contactMessagesNonLus +
+                                mouvementsFondsAConfirmer >
+                            0
+                        "
                         class="border-t px-4 py-2"
                     >
                         <Link

@@ -47,21 +47,22 @@ enum DomaineActivite: string
     }
 
     /**
-     * Types de site suggérés à l'onboarding du premier site (cf. OnboardingSiteController) —
+     * Types de site suggérés à l'onboarding du premier site (cf. ShowOnboardingSiteController) —
      * une proposition adaptée au domaine, jamais une restriction : le CRUD Sites classique
-     * (SiteController) reste libre de proposer tous les types, une organisation pouvant très
-     * bien diversifier son activité après coup (ex: une boutique qui se met à fabriquer).
+     * (CreateSiteController/StoreSiteController) reste libre de proposer tous les types, une
+     * organisation pouvant très bien diversifier son activité après coup (ex: une boutique qui
+     * se met à fabriquer).
      *
      * @return array<int, SiteType>
      */
     public function siteTypes(): array
     {
         return match ($this) {
-            self::COMMERCE_DISTRIBUTION => [SiteType::SIEGE, SiteType::BOUTIQUE, SiteType::DEPOT],
-            self::INDUSTRIE_FABRICATION => [SiteType::SIEGE, SiteType::USINE, SiteType::DEPOT, SiteType::BOUTIQUE],
-            self::RESTAURATION => [SiteType::SIEGE, SiteType::RESTAURANT, SiteType::DEPOT],
-            self::LOGISTIQUE_TRANSPORT => [SiteType::SIEGE, SiteType::AGENCE, SiteType::DEPOT],
-            self::AUTRE => [SiteType::SIEGE, SiteType::AGENCE, SiteType::AUTRE],
+            self::COMMERCE_DISTRIBUTION => [SiteType::BOUTIQUE, SiteType::DEPOT],
+            self::INDUSTRIE_FABRICATION => [SiteType::USINE, SiteType::DEPOT, SiteType::BOUTIQUE],
+            self::RESTAURATION => [SiteType::RESTAURANT, SiteType::DEPOT],
+            self::LOGISTIQUE_TRANSPORT => [SiteType::AGENCE, SiteType::DEPOT],
+            self::AUTRE => [SiteType::AGENCE, SiteType::AUTRE],
         };
     }
 

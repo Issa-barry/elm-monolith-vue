@@ -15,7 +15,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 /**
  * Feuille "REFERENCES" — lecture seule, jamais importée. Restitue exclusivement les données de
  * l'organisation connectée (types actifs, catégories, fournisseurs actifs) : ne fuite jamais
- * vers une autre organisation, cf. ImportProduitsController::template()/reprise().
+ * vers une autre organisation, cf. TemplateImportProduitsController/RepriseImportProduitsController.
  */
 class ImportProduitsReferencesSheetExport implements FromArray, WithEvents, WithTitle
 {

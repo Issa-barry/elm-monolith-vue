@@ -32,11 +32,13 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SolvabiliteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\TestCase;
 
 /**
@@ -51,7 +53,7 @@ use Tests\TestCase;
  */
 class VenteRevendeurDerogationIntegrationTest extends TestCase
 {
-    use HasAdminSetup, HasProduitVariante, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasProduitVariante, RefreshDatabase;
 
     private Organization $org;
 
@@ -64,7 +66,7 @@ class VenteRevendeurDerogationIntegrationTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'factures.encaisser']);
         $this->site = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Site Principal',
@@ -168,7 +170,9 @@ class VenteRevendeurDerogationIntegrationTest extends TestCase
         ]);
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivraisonPartageCategorie::create([
-            'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+            'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
+            'categorie_id' => $categorie->id,
             'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => 300,
             'effective_from' => now()->subDay(),
@@ -386,6 +390,9 @@ class VenteRevendeurDerogationIntegrationTest extends TestCase
         $facture = $commande->fresh('facture')->facture;
         // Aucun cashback avant le paiement complet de la facture.
         $this->assertDatabaseCount('cashback_transactions', 0);
+
+        // Espèces = caisse dédiée active de l'auteur sur le site de la facture (règle du 23/09/2026).
+        $this->creerCaisseActive($facture->site_id, $this->user->id);
 
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Search\Providers\ClientSearchProvider;
 use App\Services\Search\Providers\CommandeVenteSearchProvider;
 use App\Services\Search\Providers\FactureVenteSearchProvider;
+use App\Services\Search\Providers\LivreurSearchProvider;
 use App\Services\Search\Providers\ProprietaireSearchProvider;
 use App\Services\Search\Providers\VehiculeSearchProvider;
 
@@ -23,6 +24,7 @@ class GlobalSearchService
             new FactureVenteSearchProvider,
             new VehiculeSearchProvider,
             new ProprietaireSearchProvider,
+            new LivreurSearchProvider,
         ];
     }
 

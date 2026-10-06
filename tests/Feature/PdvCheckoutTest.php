@@ -42,7 +42,7 @@ class PdvCheckoutTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'pdv.read', 'pdv.create']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,
@@ -86,6 +86,21 @@ class PdvCheckoutTest extends TestCase
     public function test_pdv_index_redirects_unauthenticated(): void
     {
         $this->get('/backoffice/pdv')->assertRedirect(route('login'));
+    }
+
+    /**
+     * pdv.read est une ressource à part entière de la matrice de rôles (ex: le comptable a
+     * ventes.read sans jamais avoir pdv.*) — l'accès à la grille de caisse ne doit pas se
+     * contenter d'un accès Ventes plus large.
+     */
+    public function test_pdv_index_returns_403_without_pdv_read_permission(): void
+    {
+        $userSansPdv = $this->makeUserWithPermissions($this->org, ['ventes.read']);
+        $userSansPdv->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($userSansPdv)
+            ->get('/backoffice/pdv')
+            ->assertStatus(403);
     }
 
     /**
@@ -366,6 +381,24 @@ class PdvCheckoutTest extends TestCase
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ])->assertRedirect(route('login'));
+    }
+
+    /**
+     * pdv.create est distinct de ventes.create : un utilisateur qui peut créer une commande de
+     * vente classique (formulaire back-office, avec ses propres contrôles) ne doit pas pouvoir
+     * encaisser directement au comptoir sans que ce droit lui ait été accordé explicitement.
+     */
+    public function test_checkout_returns_403_without_pdv_create_permission(): void
+    {
+        $userSansPdv = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'pdv.read']);
+        $userSansPdv->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($userSansPdv)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Vente rapide',
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertStatus(403);
     }
 
     // ── Contrôle des impayés — même règle qu'au back-office, sur SolvabiliteService ─

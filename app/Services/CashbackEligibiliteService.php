@@ -10,8 +10,8 @@ use Illuminate\Validation\ValidationException;
  * Revendeur est obligatoirement éligible au cashback, avec un montant par pack strictement
  * positif ; les autres natures (Externe/Distributeur) restent facultatives mais doivent, si
  * activées, porter elles aussi un montant positif — jamais un cashback "actif" sans tarif
- * applicable. Seul point d'entrée pour créer/modifier un client (ClientController::store()/
- * update()), jamais une règle dupliquée côté frontend uniquement (cf. section 14 du chantier :
+ * applicable. Seul point d'entrée pour créer/modifier un client (StoreClientController/
+ * UpdateClientController), jamais une règle dupliquée côté frontend uniquement (cf. section 14 du chantier :
  * aucun canal — Web, API, import — ne doit pouvoir la contourner).
  */
 class CashbackEligibiliteService

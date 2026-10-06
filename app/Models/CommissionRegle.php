@@ -40,6 +40,7 @@ class CommissionRegle extends Model
         'remplace_regle_id',
         'statut',
         'created_by',
+        'closed_by',
     ];
 
     protected function casts(): array
@@ -102,5 +103,10 @@ class CommissionRegle extends Model
     public function createur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function cloturePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
     }
 }

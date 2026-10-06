@@ -108,7 +108,7 @@ rattaché au compte.
 organisation à revalider), `raison_sociale`/`type` (identité légale), `actif`
 (jamais en self-service) — tout champ envoyé en plus de `pays`/`code_pays`/
 `ville`/`adresse` est silencieusement ignoré par la validation. Ces champs
-restent réservés au backoffice (`ProprietaireController`, `ClientController`).
+restent réservés au backoffice (`ProprietaireController`, `UpdateClientController`).
 
 ### `PATCH /v1/mobile/profile/notification-preferences` (auth:sanctum + rôle `client|proprietaire|livreur`)
 

@@ -14,6 +14,24 @@ test.setTimeout(180_000);
 
 registerCleanup('/backoffice/clients', PREFIX);
 
+// Fiche détail d'un client créé : exclut /clients/create (même forme d'URL).
+const CLIENT_SHOW_URL = /\/clients\/(?!create$)[a-z0-9]+$/;
+
+/**
+ * Un Revendeur (nature par défaut) est obligatoirement éligible au cashback, avec un
+ * montant par pack > 0 (CashbackEligibiliteService::validerCoherence) : sans lui, la
+ * création est refusée. InputNumber ne committe son v-model qu'au blur.
+ */
+async function fillCashbackMontant(
+    page: Parameters<typeof login>[0],
+    montant = '100',
+): Promise<void> {
+    const input = page.locator('#cashback_montant_par_pack');
+    await input.click();
+    await input.pressSequentially(montant);
+    await input.blur();
+}
+
 async function createClientInApp(
     page: Parameters<typeof login>[0],
     params: {
@@ -40,16 +58,27 @@ async function createClientInApp(
     }
 
     await page.locator('#telephone').fill(params.tel);
+    await fillCashbackMontant(page);
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
+    // La création redirige désormais vers la fiche détail (Clients/Show.vue), jamais vers
+    // l'édition — même pattern que Vehicules (store() -> show(), update() -> edit()).
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
     await page.waitForLoadState('networkidle');
 }
 
-test('create client -> redirected to edit page with nom_complet title-cased', async ({
+/** Depuis la fiche détail (onglet Informations), rejoint la page d'édition via le bouton Modifier. */
+async function goToEditFromShow(
+    page: Parameters<typeof login>[0],
+): Promise<void> {
+    await page.getByTestId('client-edit-button').click();
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
+}
+
+test('create client -> redirected to show page with nom_complet title-cased', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -74,7 +103,9 @@ test('create client -> redirected to edit page with nom_complet title-cased', as
             /(^|[^a-z])([a-z])/g,
             (_, sep, char) => sep + char.toUpperCase(),
         );
-    await expect(page.locator('#nom_complet')).toHaveValue(expectedNomComplet);
+    await expect(page.getByTestId('client-name')).toHaveText(
+        expectedNomComplet,
+    );
 });
 
 test('create client with Guinea and empty ville -> defaults to Conakry', async ({
@@ -96,14 +127,15 @@ test('create client with Guinea and empty ville -> defaults to Conakry', async (
 
     await page.locator('#nom_complet').fill(nomComplet);
     await page.locator('#telephone').fill(tel);
+    await fillCashbackMontant(page);
 
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
-    await expect(page.locator('#ville')).toHaveValue('Conakry');
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
+    await expect(page.getByTestId('client-location')).toHaveText('Conakry');
 });
 
 test('edit client -> update ville and adresse -> persists', async ({
@@ -120,6 +152,7 @@ test('edit client -> update ville and adresse -> persists', async ({
         ville: 'Conakry',
         adresse: 'Adresse initiale',
     });
+    await goToEditFromShow(page);
 
     await page.locator('#ville').clear();
     await page.locator('#ville').fill('Kindia');
@@ -136,7 +169,7 @@ test('edit client -> update ville and adresse -> persists', async ({
     await expect(page.locator('#adresse')).toHaveValue('Rue Principale');
 });
 
-test('view client from list -> readonly form -> modifier redirects to edit', async ({
+test('view client from list -> detail page -> modifier redirects to edit', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -161,18 +194,12 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
-    await expect(page.locator('#nom_complet')).toBeDisabled();
+    // "Voir" ouvre la fiche détail (lecture seule, sans formulaire) ; l'édition
+    // passe par le bouton Modifier de l'onglet Informations.
+    await expect(page).toHaveURL(CLIENT_SHOW_URL);
+    await expect(page.getByTestId('client-name')).toBeVisible();
 
-    const editTrigger = page
-        .locator(
-            'a:has-text("Modifier"):visible,button:has-text("Modifier"):visible',
-        )
-        .first();
-    await expect(editTrigger).toBeVisible();
-    await editTrigger.click();
-
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
+    await goToEditFromShow(page);
     await expect(page.locator('#nom_complet')).toBeEnabled();
 });
 
@@ -183,6 +210,7 @@ test('create client + toggle status -> inactif in list', async ({ page }) => {
 
     await login(page);
     await createClientInApp(page, { nomComplet, tel, ville: 'Conakry' });
+    await goToEditFromShow(page);
 
     await page.locator('label[for="is_active"]').first().click();
     await page
@@ -219,14 +247,18 @@ test('create client with duplicate telephone -> stays on create with field error
         .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#telephone').fill(tel);
+    await fillCashbackMontant(page);
 
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
 
+    // Doublon signalé sous le champ (détection à la saisie ou refus serveur), jamais créé.
     await expect(page).toHaveURL(/\/clients\/create$/);
-    await expect(page.locator('#telephone')).toHaveClass(/p-invalid/);
+    await expect(
+        page.getByText(/déjà utilisé par un autre client/i),
+    ).toBeVisible();
 });
 
 test('delete client -> no longer visible in list', async ({ page }) => {
@@ -272,6 +304,51 @@ test('create client without required fields -> stays on create page', async ({
         .click();
 
     await expect(page).toHaveURL(/\/clients\/create$/);
+});
+
+test('create client -> switching nature from Revendeur to Distributeur resets cashback to Non by default', async ({
+    page,
+}) => {
+    const uid = `${Date.now()}`.slice(-6);
+    const nomComplet = `${PREFIX}${uid} CashbackDefault${uid}`;
+    const tel = `6${randomDigits(8)}`;
+
+    await login(page);
+    await page.goto('/backoffice/clients/create');
+    await page.locator('#nom_complet').fill(nomComplet);
+
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
+    await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
+    await page.locator('#telephone').fill(tel);
+
+    // Nature par défaut = Revendeur -> cashback verrouillé sur "Cashback actif", pas de choix
+    // Oui/Non affiché.
+    await expect(page.getByText(/cashback actif/i)).toBeVisible();
+
+    // Changement de nature vers Distributeur : le cashback hérité (true, forcé pour Revendeur)
+    // ne doit jamais se propager silencieusement -> "Non" doit être le choix actif par défaut.
+    const typeCombo = page.locator('#client-form').getByRole('combobox').nth(1);
+    await selectOptionFromCombobox(page, typeCombo, /^distributeur$/i);
+
+    const nonButton = page.getByRole('button', { name: /^Non$/i });
+    const ouiButton = page.getByRole('button', { name: /^Oui$/i });
+    await expect(nonButton).toBeVisible();
+    await expect(nonButton).toHaveClass(/bg-destructive/);
+    await expect(ouiButton).not.toHaveClass(/bg-primary/);
+
+    await page
+        .locator('#client-form button[type="submit"]:visible')
+        .first()
+        .click();
+
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
+    await goToEditFromShow(page);
+    await expect(page.getByRole('button', { name: /^Non$/i })).toHaveClass(
+        /bg-destructive/,
+    );
 });
 
 test('stat cards reflect active search filter', async ({ page }) => {

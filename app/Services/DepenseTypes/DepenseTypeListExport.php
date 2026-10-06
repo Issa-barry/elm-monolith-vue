@@ -12,7 +12,7 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 /**
  * Export .xlsx de la liste des types de dépense — reprend exactement les
  * colonnes affichées dans Depenses/Types/Index.vue et respecte les filtres
- * actifs (la collection est déjà filtrée par DepenseTypeController).
+ * actifs (la collection est déjà filtrée par `App\Support\Depenses\DepenseTypeFilterQuery`).
  */
 class DepenseTypeListExport implements FromCollection, WithHeadings, WithMapping, WithTitle
 {

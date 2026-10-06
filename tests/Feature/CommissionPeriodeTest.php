@@ -20,7 +20,6 @@ use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -244,86 +243,9 @@ class CommissionPeriodeTest extends TestCase
         $this->assertSame(StatutCommission::PAYE, $part->statut);
     }
 
-    // ── Tests : filtre période dans le contrôleur ─────────────────────────────
-
-    /** @test */
-    public function show_livreur_filters_parts_by_periode(): void
-    {
-        $org = $this->makeOrg();
-        $user = $this->makeUser($org);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-
-        $this->makePart($org, $livreur, '2026-04-12'); // P1
-        $this->makePart($org, $livreur, '2026-04-26'); // P2
-
-        $this->actingAs($user)
-            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}?periode=2026-04-P1")
-            ->assertInertia(
-                fn (Assert $page) => $page
-                    ->component('Logistique/Commissions/Livreur/Show')
-                    ->where('selected_periode', '2026-04-P1')
-                    ->has('parts', 1)
-                    ->where('parts.0.periode', '2026-04-P1')
-            );
-    }
-
-    /** @test */
-    public function show_livreur_returns_all_parts_without_filter(): void
-    {
-        $org = $this->makeOrg();
-        $user = $this->makeUser($org);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-
-        $this->makePart($org, $livreur, '2026-04-12');
-        $this->makePart($org, $livreur, '2026-04-26');
-
-        $this->actingAs($user)
-            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
-            ->assertInertia(
-                fn (Assert $page) => $page
-                    ->component('Logistique/Commissions/Livreur/Show')
-                    ->where('selected_periode', '')
-                    ->has('parts', 2)
-            );
-    }
-
-    /** @test */
-    public function show_livreur_passes_periode_courante_and_disponibles(): void
-    {
-        $org = $this->makeOrg();
-        $user = $this->makeUser($org);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-
-        $this->makePart($org, $livreur, '2026-04-12');
-
-        $this->actingAs($user)
-            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
-            ->assertInertia(
-                fn (Assert $page) => $page
-                    ->component('Logistique/Commissions/Livreur/Show')
-                    ->has('periode_courante')
-                    ->has('periode_courante_label')
-                    ->has('periodes_disponibles')
-            );
-    }
-
-    /** @test */
-    public function parts_include_periode_and_periode_label(): void
-    {
-        $org = $this->makeOrg();
-        $user = $this->makeUser($org);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-
-        $this->makePart($org, $livreur, '2026-04-12');
-
-        $this->actingAs($user)
-            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
-            ->assertInertia(
-                fn (Assert $page) => $page
-                    ->component('Logistique/Commissions/Livreur/Show')
-                    ->has('parts', 1)
-                    ->where('parts.0.periode', '2026-04-P1')
-                    ->where('parts.0.periode_label', fn ($v) => str_contains($v, 'P1'))
-            );
-    }
+    // Section « Tests : filtre période dans le contrôleur » retirée le 04/09/2026 avec l'écran
+    // /backoffice/logistique/commissions (CommissionVehiculeController) — moteur legacy gelé
+    // depuis le 03/09/2026, cf. docs/commissions.md. La classification par période elle-même
+    // (couverte ci-dessus) reste inchangée ; le filtrage période côté écran vit désormais dans
+    // Comptabilite\CommissionLogistiqueController::showLivreur().
 }

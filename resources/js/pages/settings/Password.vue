@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
+import UpdatePasswordController from '@/actions/App/Http/Controllers/Settings/Password/UpdatePasswordController';
 import InputError from '@/components/InputError.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -35,7 +35,7 @@ const breadcrumbItems: BreadcrumbItem[] = [
                 />
 
                 <Form
-                    v-bind="PasswordController.update.form()"
+                    v-bind="UpdatePasswordController.form()"
                     :options="{
                         preserveScroll: true,
                     }"

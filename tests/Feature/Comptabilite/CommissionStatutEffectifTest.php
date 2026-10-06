@@ -110,7 +110,7 @@ class CommissionStatutEffectifTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('livreurs.0.commission_status', 'en_attente_validation')
                 ->where('livreurs.0.display_status', 'en_attente')
-                ->where('livreurs.0.display_label', 'En attente de validation')
+                ->where('livreurs.0.display_label', 'À valider')
                 ->where('livreurs.0.can_pay', false)
             );
     }
@@ -132,18 +132,22 @@ class CommissionStatutEffectifTest extends TestCase
     public function test_logistique_index_montre_repartition_validee_si_equipe_prete_mais_periode_pas_encore(): void
     {
         $part = $this->makeLogistiquePart(now()->subDays(5)->toDateString());
+        // Une autre commission de la même période reste à valider : sans elle, valider la
+        // seule commission ferait passer la période à « Validée » automatiquement.
+        $this->makeLogistiquePart(now()->subDays(5)->toDateString());
         $periode = $this->validerPeriode(TypePeriodePaiement::LIVREUR, $part->earned_at, StatutPeriodePaiement::BROUILLON);
 
         app(PeriodeCalculatorService::class)->calculer($periode);
         CommissionAdjustmentService::validerPartLogistique($part->fresh(), $this->user);
+        $this->assertSame(StatutPeriodePaiement::CALCULEE, $periode->fresh()->statut);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/logistique')
             ->assertInertia(fn ($page) => $page
-                ->where('livreurs.0.commission_status', 'en_attente_validation')
-                ->where('livreurs.0.team_validation_status', 'validee')
-                ->where('livreurs.0.display_status', 'repartition_validee')
-                ->where('livreurs.0.can_pay', false)
+                ->where('livreurs', fn ($livreurs) => collect($livreurs)->contains(fn ($l) => $l['commission_status'] === 'en_attente_validation'
+                    && $l['team_validation_status'] === 'validee'
+                    && $l['display_status'] === 'repartition_validee'
+                    && $l['can_pay'] === false))
             );
     }
 
@@ -212,10 +216,10 @@ class CommissionStatutEffectifTest extends TestCase
             ->get('/backoffice/comptabilite/commissions/vente')
             ->assertInertia(fn ($page) => $page
                 ->where('beneficiaires.0.display_status', 'impaye')
-                // V2/unifié : jamais de paiement direct depuis cet écran, cf.
-                // CommissionVenteController::index() — la seule chaîne de paiement
-                // valide passe par Comptabilité > Fiches de paiement.
+                // Période validée mais aucune fiche générée : rien sur quoi enregistrer le
+                // paiement (cf. FichePayableResolver) — le bouton Payer reste masqué.
                 ->where('beneficiaires.0.can_pay', false)
+                ->where('beneficiaires.0.fiche_a_payer', null)
             );
     }
 
@@ -296,7 +300,7 @@ class CommissionStatutEffectifTest extends TestCase
             ->get('/backoffice/comptabilite/fiches/livreurs')
             ->assertInertia(fn ($page) => $page
                 ->where('fiches.data.0.display_status', 'en_attente')
-                ->where('fiches.data.0.display_label', 'En attente de validation')
+                ->where('fiches.data.0.display_label', 'À valider')
                 ->where('fiches.data.0.can_pay', false)
             );
     }

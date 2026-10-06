@@ -7,12 +7,13 @@ use Spatie\Permission\Models\Role;
 
 /**
  * Dérive le nom technique Spatie et le trinôme d'un rôle depuis son libellé saisi par
- * l'utilisateur — seule source de vérité pour cette génération (RoleController ne fait
+ * l'utilisateur — seule source de vérité pour cette génération (les contrôleurs Role\* ne font
  * qu'appeler ces méthodes, jamais de logique de normalisation dupliquée ailleurs).
  *
- * Le nom technique n'est généré qu'une fois, à la création (cf. RoleController::store()) — il
+ * Le nom technique n'est généré qu'une fois, à la création (cf. Role\StoreRoleController) — il
  * n'est jamais régénéré à l'édition, même si le libellé change ensuite (voir docblock de
- * RoleController pour la justification : plusieurs Policies testent des noms de rôle en dur).
+ * App\Support\Permissions\RoleAccess pour la justification : plusieurs Policies testent des noms
+ * de rôle en dur).
  */
 class RoleNamingService
 {
@@ -42,8 +43,8 @@ class RoleNamingService
      * JAMAIS résolue automatiquement (pas de suffixe "_2") — deux libellés qui normalisent vers
      * le même nom technique ("Chef d'agence" et "CHEF D'AGENCE") désignent fonctionnellement le
      * même rôle, donc la création doit être refusée avec un message clair plutôt que de créer un
-     * doublon silencieux (cf. RoleController::store()/update(), qui appelle cette méthode avant
-     * toute écriture).
+     * doublon silencieux (cf. Role\{Store,Update}RoleController, qui appellent cette méthode
+     * avant toute écriture).
      *
      * @param  string|null  $organizationId  null = rôle système (partagé), sinon périmètre de
      *                                       l'unicité — deux organisations peuvent avoir le même
@@ -100,7 +101,7 @@ class RoleNamingService
 
     /**
      * Normalise un trinôme saisi manuellement (majuscules, sans espace) — ne garantit pas
-     * l'unicité, à valider séparément (cf. RoleController, qui doit distinguer "déjà pris par un
+     * l'unicité, à valider séparément (cf. les contrôleurs Role\*, qui doivent distinguer "déjà pris par un
      * autre rôle" — erreur bloquante sur une saisie manuelle — de la génération automatique
      * ci-dessus, qui elle ne doit jamais échouer).
      */

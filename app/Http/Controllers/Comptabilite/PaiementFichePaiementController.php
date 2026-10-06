@@ -14,18 +14,31 @@ use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodePayabilityChecker;
+use App\Services\Tresorerie\DecaissementFicheResolver;
+use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Throwable;
 
 class PaiementFichePaiementController extends Controller
 {
+    public const MESSAGE_SALARIE = 'Les salaires se paient depuis Comptabilité > Paiement salaire.';
+
     public function store(Request $request, PaiementFiche $fiche): RedirectResponse
     {
         $this->authorize('payer', $fiche);
+
+        // Un salaire a un seul circuit de paiement : la Paie (PaieLigne/PaiePaiement, comptabilisée
+        // par PaieComptabilisationService). La fiche salarié est construite sur la même PaieLigne
+        // sans qu'aucun des deux circuits ne voie l'autre : la payer ici permettrait de payer deux
+        // fois le même salaire, sans écriture comptable (ADR 0009).
+        if ($fiche->beneficiaire_type === 'salarie') {
+            throw ValidationException::withMessages(['fiche' => self::MESSAGE_SALARIE]);
+        }
 
         try {
             PeriodePayabilityChecker::assertPeriodePayable($fiche->periode);
@@ -38,25 +51,57 @@ class PaiementFichePaiementController extends Controller
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:1', 'max:'.$restant],
             'mode_paiement' => ['required', 'in:'.implode(',', array_column(ModePaiement::cases(), 'value'))],
-            // Étiquette libre du wallet Mobile Money (ex: "orange", "mtn", "djomy") —
-            // jamais un enum fermé : chaque organisation nomme ses propres wallets.
-            // Ignoré si mode_paiement != mobile_money.
-            'moyen_paiement_detail' => ['nullable', 'string', 'max:30'],
+            // Support d'où sort l'argent (ADR 0009) — inutile en espèces : la caisse dédiée du payeur
+            // est résolue côté serveur, jamais choisie par l'écran.
+            'compte_tresorerie_id' => ['nullable', 'string', 'required_unless:mode_paiement,'.ModePaiement::ESPECES->value],
+            'reference_paiement' => ['nullable', 'string', 'max:190'],
             'date_paiement' => ['required', 'date'],
             'note' => ['nullable', 'string'],
+        ], [
+            'compte_tresorerie_id.required_unless' => "Choisissez le compte d'où sort ce paiement.",
         ]);
 
+        $decaissement = app(DecaissementFicheResolver::class);
+        $user = $request->user();
+        $support = $decaissement->supportPour($fiche, $user, $data['mode_paiement'], $data['compte_tresorerie_id'] ?? null);
+
+        if ($decaissement->referenceRequise($fiche, $data['mode_paiement'], $support->id) && blank($data['reference_paiement'] ?? null)) {
+            throw ValidationException::withMessages([
+                'reference_paiement' => 'La référence du paiement est obligatoire pour ce mode de paiement.',
+            ]);
+        }
+
         try {
-            $paiement = DB::transaction(function () use ($fiche, $data) {
+            $paiement = DB::transaction(function () use ($fiche, $data, $support) {
+                // Sous verrou : deux paiements concurrents de la même fiche relisent le reste dû
+                // déjà diminué, et le solde du support est relu depuis le grand livre juste avant
+                // la sortie (TresorerieDisponibiliteService::garantirSoldeSuffisant()). Un refus
+                // ici annule tout : aucun paiement, aucune allocation, aucune écriture.
+                $restantVerrouille = PaiementFiche::whereKey($fiche->id)->lockForUpdate()->firstOrFail()->montant_restant;
+                if ((float) $data['montant'] > $restantVerrouille + 0.004) {
+                    throw ValidationException::withMessages([
+                        'montant' => 'Le montant dépasse le reste à payer de la fiche ('.number_format($restantVerrouille, 0, ',', ' ').' GNF).',
+                    ]);
+                }
+
+                app(TresorerieDisponibiliteService::class)->garantirSoldeSuffisant(
+                    $support->id,
+                    (float) $data['montant'],
+                    now(),
+                    'un paiement',
+                );
+
                 $paiement = PaiementFichePaiement::create([
                     'fiche_id' => $fiche->id,
                     'organization_id' => $fiche->organization_id,
-                    'site_id' => $fiche->site_id,
+                    // Agence d'où sort l'argent (site central de trésorerie pour une fiche sans agence) : la
+                    // pièce comptable et le solde du support sont rattachés à ce site.
+                    'site_id' => $support->site_id,
                     'montant' => $data['montant'],
                     'mode_paiement' => $data['mode_paiement'],
-                    'moyen_paiement_detail' => $data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
-                        ? ($data['moyen_paiement_detail'] ?? null)
-                        : null,
+                    'moyen_paiement_detail' => $support->operateur_mobile_money?->value,
+                    'reference_paiement' => $data['reference_paiement'] ?? null,
+                    'compte_tresorerie_id' => $support->id,
                     'date_paiement' => $data['date_paiement'],
                     'note' => $data['note'] ?? null,
                 ]);

@@ -28,10 +28,10 @@ const props = defineProps<{
     // Liste complète des types de site (App\Enums\SiteType) — repli quand les types suggérés par
     // le domaine choisi (domaines[].site_types) ne conviennent pas.
     types_tous: SiteTypeOption[];
-    // Dérivé de InstallationService::isSaas() (InstallWizardController::show()) — jamais une
-    // deuxième interprétation du mode côté frontend. En on_premise, l'email devient obligatoire ;
-    // en saas il reste facultatif. Purement UX ici : la règle réelle est appliquée côté serveur
-    // (InstallWizardController::store() + InstallationService::install()).
+    // Dérivé de InstallationService::isSaas() (InstallWizard\ShowInstallWizardController) —
+    // jamais une deuxième interprétation du mode côté frontend. En on_premise, l'email devient
+    // obligatoire ; en saas il reste facultatif. Purement UX ici : la règle réelle est appliquée
+    // côté serveur (InstallWizard\StoreInstallWizardController + InstallationService::install()).
     isSaas: boolean;
 }>();
 
@@ -132,11 +132,11 @@ function onTelephoneChange(telephone: string) {
 // ── Étape 2 : vérification de l'email (facultatif) ────────────────────────────
 // L'email reste facultatif : sans email, rien de tout ceci ne s'affiche ni ne bloque
 // l'installation. Renseigné, il doit être réellement vérifié par code avant de continuer
-// (« email saisi ≠ email vérifié ») — cf. InstallWizardController::sendEmailCode()/verifyEmailCode().
+// (« email saisi ≠ email vérifié ») — cf. InstallWizard\{Send,Verify}EmailCodeInstallWizardController.
 //
 // Présenté comme un état DÉDIÉ de l'étape 2 (step2Phase), pas comme des champs ajoutés sous
 // l'email dans le formulaire principal — repris du parcours d'invitation existant
-// (AcceptInvitationController + Invitations/Accept.vue) : même service métier (OtpService), même
+// (Auth\AcceptInvitation\* + Invitations/Accept.vue) : même service métier (OtpService), même
 // composant de saisie (OtpCodeInput). Le formulaire principal (identité, téléphone, mot de passe)
 // se complète donc entièrement AVANT toute vérification, jamais pendant.
 type Step2Phase = 'form' | 'verify';

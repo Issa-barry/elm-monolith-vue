@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\MouvementFonds;
+use App\Models\Site;
 use App\Models\User;
 
 /**
@@ -11,6 +12,20 @@ use App\Models\User;
  * réception ou conteste — jamais la même personne des deux côtés d'affilée
  * sauf si admin (autorité globale sur l'organisation, comme
  * TransfertLogistiquePolicy).
+ *
+ * Pour un versement de caisse (`interne_caisses`), origine et destination sont le même site :
+ * depuis le 27/09/2026 (ADR 0001), il n'y a plus de séparation par personne — confirmer ou
+ * contester dépend uniquement de la permission du rôle (`tresorerie.recevoir`,
+ * `tresorerie.rejeter`), y compris pour l'envoyeur ; une auto-confirmation reste tracée
+ * (MouvementFonds::confirmeParExpediteur()).
+ *
+ * Approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018) : seul l'agent
+ * titulaire de la caisse destinataire confirme ou conteste, sans permission requise et sans
+ * dérogation administrateur ; il ne confirme jamais le retour. S'il a remis l'argent lui-même
+ * (responsable qui gère aussi la caisse de l'agence), il lui faut `tresorerie.recevoir` /
+ * `tresorerie.rejeter`, comme pour un versement.
+ * Le Gate::before du super admin court-circuite cette policy : les écrans calculent leurs
+ * indicateurs avec MouvementFonds::receptionReserveeA() et le service revérifie la règle.
  */
 class MouvementFondsPolicy
 {
@@ -29,6 +44,21 @@ class MouvementFondsPolicy
         return $user->can('tresorerie.create');
     }
 
+    /**
+     * Régler une dette inter-agences (ADR 0012) : « Régler » crée ET envoie le règlement en une seule
+     * opération — il faut donc les deux droits (création, envoi) et, comme pour tout envoi, être
+     * affecté à l'agence débitrice (admin : toute l'organisation). Seule garantie d'autorisation :
+     * le `peut_regler` des écrans n'en est que le reflet.
+     */
+    public function regler(User $user, Site $debiteur): bool
+    {
+        if (! $user->can('tresorerie.create') || ! $user->can('tresorerie.envoyer') || $user->organization_id !== $debiteur->organization_id) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($debiteur->id);
+    }
+
     public function envoyer(User $user, MouvementFonds $mouvement): bool
     {
         if (! $user->can('tresorerie.envoyer') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isBrouillon()) {
@@ -40,6 +70,9 @@ class MouvementFondsPolicy
 
     public function recevoir(User $user, MouvementFonds $mouvement): bool
     {
+        if ($mouvement->isApprovisionnement()) {
+            return ($mouvement->isEnvoye() || $mouvement->isConteste()) && $mouvement->receptionReserveeA($user);
+        }
         if (! $user->can('tresorerie.recevoir') || ! $this->sameOrganization($user, $mouvement)) {
             return false;
         }
@@ -62,6 +95,9 @@ class MouvementFondsPolicy
     /** Contestation — côté destinataire : "je n'ai rien reçu". */
     public function contester(User $user, MouvementFonds $mouvement): bool
     {
+        if ($mouvement->isApprovisionnement()) {
+            return $mouvement->isEnvoye() && $mouvement->receptionReserveeA($user, 'tresorerie.rejeter');
+        }
         if (! $user->can('tresorerie.rejeter') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
             return false;
         }
@@ -73,6 +109,9 @@ class MouvementFondsPolicy
     public function confirmerRetour(User $user, MouvementFonds $mouvement): bool
     {
         if (! $user->can('tresorerie.confirmer_retour') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isConteste()) {
+            return false;
+        }
+        if ($mouvement->isApprovisionnement() && $user->id === $mouvement->beneficiaireId()) {
             return false;
         }
 

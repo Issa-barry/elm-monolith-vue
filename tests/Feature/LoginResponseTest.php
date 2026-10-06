@@ -23,7 +23,7 @@ class LoginResponseTest extends TestCase
      */
     private function attacherSite(User $user): void
     {
-        $site = Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'siege']);
+        $site = Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'agence', 'is_central_tresorerie' => true]);
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
     }
 

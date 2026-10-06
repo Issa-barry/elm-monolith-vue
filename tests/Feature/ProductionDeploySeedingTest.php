@@ -62,7 +62,7 @@ class ProductionDeploySeedingTest extends TestCase
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
             'site' => [
-                'type' => SiteType::SIEGE->value,
+                'type' => SiteType::BOUTIQUE->value,
                 'ville' => 'Conakry',
                 'quartier' => 'Matoto',
             ],
@@ -135,5 +135,52 @@ class ProductionDeploySeedingTest extends TestCase
 
         $this->assertSame(1, Organization::count());
         $this->assertSame($orgAvant, Organization::sole()->toArray());
+    }
+
+    /**
+     * Régression 2026-09-28 : le seeder rejoué à chaque déploiement faisait syncPermissions() sur
+     * les rôles système configurables, effaçant les permissions cochées dans /backoffice/roles.
+     */
+    public function test_redeploiement_ne_retire_pas_les_permissions_configurees_sur_un_role_systeme(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $commerciale = Role::whereNull('organization_id')->where('name', 'commerciale')->sole();
+        $this->assertFalse($commerciale->hasPermissionTo('ventes.valider_chargement'));
+        $commerciale->givePermissionTo('ventes.valider_chargement');
+        $commerciale->revokePermissionTo('pdv.update');
+
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $commerciale = $commerciale->fresh();
+        $this->assertTrue($commerciale->hasPermissionTo('ventes.valider_chargement'));
+        $this->assertFalse($commerciale->hasPermissionTo('pdv.update'));
+    }
+
+    public function test_installation_neuve_applique_la_matrice_par_defaut(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $commerciale = Role::whereNull('organization_id')->where('name', 'commerciale')->sole();
+        $this->assertTrue($commerciale->hasPermissionTo('ventes.confirmer'));
+        $this->assertTrue($commerciale->hasPermissionTo('pdv.read'));
+        $this->assertFalse($commerciale->hasPermissionTo('ventes.valider_chargement'));
+
+        foreach (['admin_entreprise', 'manager', 'comptable'] as $name) {
+            $role = Role::whereNull('organization_id')->where('name', $name)->sole();
+            $this->assertGreaterThan(0, $role->permissions()->count(), "Matrice par défaut absente pour {$name}");
+        }
+    }
+
+    public function test_super_admin_recoit_les_nouvelles_permissions_a_chaque_deploiement(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        Permission::create(['name' => 'test.nouvelle_permission']);
+
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $superAdmin = Role::whereNull('organization_id')->where('name', 'super_admin')->sole();
+        $this->assertTrue($superAdmin->hasPermissionTo('test.nouvelle_permission'));
+        $this->assertSame(Permission::count(), $superAdmin->permissions()->count());
     }
 }

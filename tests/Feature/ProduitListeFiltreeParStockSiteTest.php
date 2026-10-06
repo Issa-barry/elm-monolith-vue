@@ -19,8 +19,8 @@ use Tests\TestCase;
  * isVentesAutoriseesSansStock() = false, décision produit du 24/08/2026), la liste de
  * produits proposée à la vente (page Ventes > Nouvelle commande, et grille PDV) ne doit
  * afficher que les produits/variantes dont le stock est STRICTEMENT positif sur le site
- * courant — jamais sur l'agrégat global du produit (cf. CommandeVenteController::
- * produitsActifs(), PdvController::produitsPdv()). Quand la politique autorise la vente sans
+ * courant — jamais sur l'agrégat global du produit (cf. CommandeVenteFormBuilder::
+ * produitsActifs(), Ventes\IndexPdvController::produitsPdv()). Quand la politique autorise la vente sans
  * stock, la liste reste complète, y compris les produits à 0.
  */
 class ProduitListeFiltreeParStockSiteTest extends TestCase
@@ -40,7 +40,7 @@ class ProduitListeFiltreeParStockSiteTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
+        $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update', 'pdv.read']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,

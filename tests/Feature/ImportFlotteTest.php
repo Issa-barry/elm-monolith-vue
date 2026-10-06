@@ -2,7 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
@@ -13,6 +21,7 @@ use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -61,7 +70,7 @@ class ImportFlotteTest extends TestCase
         $this->org = Organization::factory()->create();
 
         // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
-        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // Ventes\StoreCommandeVenteController (23/08/2026, cf. CommandeVenteService::
         // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
 
@@ -426,10 +435,11 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit par
-     * l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son
-     * id) — une colonne d'usage vide sur une ligne "vehicules" qui sert d'ancrage à des
-     * livreurs supplémentaires ne doit donc jamais désactiver un usage déjà configuré.
+     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit sur ses usages
+     * par l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son id
+     * — seuls la capacité et le site font exception, voir tests dédiés) — une colonne d'usage
+     * vide sur une ligne "vehicules" qui sert d'ancrage à des livreurs supplémentaires ne doit
+     * donc jamais désactiver un usage déjà configuré.
      */
     public function test_confirm_ne_modifie_pas_les_usages_dun_vehicule_deja_existant(): void
     {
@@ -451,6 +461,33 @@ class ImportFlotteTest extends TestCase
         $vehiculeExistant->refresh();
         $this->assertTrue($vehiculeExistant->livraison_vente);
         $this->assertTrue($vehiculeExistant->livraison_logistique);
+    }
+
+    /**
+     * Contrairement au reste d'une ligne "véhicule déjà existant" (simple ancrage, jamais
+     * modifié — cf. test ci-dessus), le site EST mis à jour — un véhicule peut changer de site
+     * d'affectation entre deux imports, et une ré-importation doit pouvoir le refléter (cf.
+     * ImportFlotteExecutor::executerGroupe()).
+     */
+    public function test_confirm_met_a_jour_le_site_dun_vehicule_deja_existant(): void
+    {
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kaloum', 'type' => 'depot']);
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $autreSite->id,
+        ]);
+
+        // ligneVehicule() envoie 'vehicule_site' => 'Matoto' ($this->site), différent du site
+        // actuel du véhicule (Kaloum).
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame($this->site->id, $vehiculeExistant->fresh()->site_id);
     }
 
     /** L'aperçu (avant confirmation) reste cohérent avec ce qui sera réellement appliqué. */
@@ -614,6 +651,95 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(0, Livreur::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Même nom qu'un livreur déjà en base (casse/espaces différents), mais un tout autre
+     * numéro de téléphone — le rapprochement reste strictement par téléphone (jamais de fusion
+     * automatique par nom), mais l'utilisateur doit être bloqué avant de créer un second
+     * `Livreur`/`Personne` désignant probablement la même personne.
+     */
+    public function test_analyse_bloque_un_livreur_dont_le_nom_correspond_exactement_a_un_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'camara',
+            'livreur_prenom' => '  Ibrahima ',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString('existe déjà', $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Nom proche (faute de frappe) d'un livreur déjà en base, téléphone différent — signalé
+     * pour confirmation/correction, jamais fusionné ni créé silencieusement (même mécanique que
+     * l'immatriculation proche d'un véhicule existant, cf. test ci-dessus).
+     */
+    public function test_analyse_signale_un_nom_de_livreur_proche_dun_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camaraa',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("nom proche d'un livreur existant", $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Le même livreur déjà en base, réimporté avec exactement le même téléphone : le
+     * rapprochement se fait par téléphone (chemin normal, jamais par le contrôle de nom
+     * ci-dessus) — aucune erreur, pas de doublon.
+     */
+    public function test_analyse_naffiche_aucune_erreur_quand_le_meme_livreur_est_retrouve_par_telephone(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000001',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camara',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
     // ── confirmation / création ──────────────────────────────────────────────
 
     public function test_confirm_creates_proprietaire_vehicule_equipe_and_livreur_as_draft(): void
@@ -655,6 +781,71 @@ class ImportFlotteTest extends TestCase
 
         $livreur = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000001'))->firstOrFail();
         $this->assertSame($livreur->id, $membre->livreur_id);
+    }
+
+    /**
+     * Incident du 04/10/2026 : les 76 équipes de l'import du 22/08 sont restées inactives après
+     * configuration de leur partage — aucune distribution possible, et rien dans l'application ne
+     * permettait de les activer. Parcours complet : import → partage configuré → distribution.
+     */
+    public function test_equipe_importee_sactive_des_que_son_partage_livreur_est_configure(): void
+    {
+        $processus = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Livreur — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 800,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteille', 'statut' => 'actif']);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_logistique' => 'oui']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
+        $livreur = $equipe->membres()->firstOrFail()->livreur;
+        $this->assertFalse($equipe->is_active, 'Brouillon tant que le partage n\'est pas configuré.');
+
+        $formBuilder = app(CommandeVenteFormBuilder::class);
+        $motif = fn () => $formBuilder->motifChauffeurIndisponible($formBuilder->resolveVehiculeAvecEquipe($vehicule->id, $this->org->id));
+        $this->assertStringContainsString('désactivée', $motif());
+
+        $gestionnaire = $this->makeUser(['equipes-livraison.read', 'equipes-livraison.update']);
+        $this->actingAs($gestionnaire)
+            ->patch(route('equipes-livraison.update', $equipe), [
+                'vehicule_id' => $vehicule->id,
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'membres' => [[
+                    'livreur_id' => $livreur->id,
+                    'nom_complet' => $livreur->nom_complet,
+                    'telephone' => '+224623000001',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [['membre_ordre' => 0, 'montant_unitaire' => 800]],
+                ]],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+        $this->assertNull($motif(), 'La distribution n\'est plus refusée pour équipe désactivée.');
     }
 
     /**
@@ -1097,7 +1288,12 @@ class ImportFlotteTest extends TestCase
         $this->assertSame('Convoyeur-2 Camion 1', $second->nom_complet);
     }
 
-    public function test_confirm_deactivates_already_active_vehicule_when_creating_draft_equipe(): void
+    /**
+     * Règle révisée le 05/10/2026 (le véhicule était auparavant désactivé) : l'équipe brouillon
+     * bloque déjà les distributions à elle seule ; désactiver aussi le véhicule ajoutait un second
+     * blocage, qui restait en place quand l'équipe s'activait par la publication d'un barème.
+     */
+    public function test_confirm_conserve_letat_dun_vehicule_existant_en_creant_une_equipe_brouillon(): void
     {
         // Véhicule déjà existant, actif, sans équipe (cas réel : créé manuellement
         // avant d'avoir une équipe assignée).
@@ -1111,7 +1307,8 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur();
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertFalse($vehicule->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+        $this->assertFalse(EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail()->is_active, 'L\'équipe reste un brouillon.');
     }
 
     public function test_confirm_creates_vehicule_without_equipe_when_no_livreur(): void

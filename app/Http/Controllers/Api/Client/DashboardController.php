@@ -15,7 +15,7 @@ use Illuminate\Http\JsonResponse;
 /**
  * Dashboard financier de l'espace client — même moteur (`ClientEarningsService`)
  * et mêmes filtres (`ClientEarningsService::resolveFilters()`) que le dashboard
- * Inertia (`ClientDashboardController::index()`), pour garantir que backoffice
+ * Inertia (`IndexClientDashboardController`), pour garantir que backoffice
  * web et Nuxt/mobile affichent exactement les mêmes montants. Cf.
  * tests/Feature/Api/Client/DashboardControllerTest.php pour les tests de parité.
  *

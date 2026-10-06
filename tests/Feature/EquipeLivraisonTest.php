@@ -76,6 +76,7 @@ class EquipeLivraisonTest extends TestCase
         return array_merge([
             'nom' => 'Équipe Test',
             'is_active' => true,
+            'processus_code' => CommissionProcessus::CODE_VENTE,
             'proprietaire_id' => $proprietaireId,
             'membres' => [
                 [
@@ -339,6 +340,191 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres.0.telephone');
     }
 
+    public function test_store_echoue_si_chauffeur_sans_telephone(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => null,
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
+    public function test_store_autorise_convoyeur_sans_telephone(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Fofana',
+                    'telephone' => null,
+                    'role' => 'convoyeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', ['organization_id' => $this->org->id, 'nom_complet' => 'Fofana']);
+        $this->assertDatabaseHas('personnes', ['organization_id' => $this->org->id, 'telephone_normalise' => null]);
+    }
+
+    public function test_store_autorise_plusieurs_convoyeurs_sans_telephone(): void
+    {
+        // Le téléphone facultatif d'un convoyeur ne doit jamais déclencher le
+        // contrôle "numéro déjà utilisé" entre deux membres qui n'en ont
+        // simplement aucun (NULL n'est jamais un doublon).
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Chauffeur Principal',
+                        'telephone' => '+224620000001',
+                        'role' => 'chauffeur',
+                        'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Convoyeur Un',
+                        'telephone' => null,
+                        'role' => 'convoyeur',
+                        'ordre' => 1,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Convoyeur Deux',
+                        'telephone' => null,
+                        'role' => 'convoyeur',
+                        'ordre' => 2,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreurs = Livreur::where('organization_id', $this->org->id)->with('personne')->get();
+        $this->assertCount(3, $livreurs);
+        $this->assertSame(3, $livreurs->pluck('personne_id')->unique()->count());
+
+        $convoyeurs = $livreurs->filter(fn (Livreur $l) => str_starts_with((string) $l->nom_complet, 'Convoyeur'));
+        $this->assertCount(2, $convoyeurs);
+        $convoyeurs->each(fn (Livreur $l) => $this->assertNull($l->personne->telephone_normalise));
+    }
+
+    public function test_update_echoue_proprement_si_telephone_deja_detenu_par_autre_membre_de_la_meme_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Doumbouya Ibrahima',
+                        'telephone' => '+224613200558',
+                        'role' => 'chauffeur',
+                        'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Sidibé Mamadou',
+                        'telephone' => '+224620000009',
+                        'role' => 'chauffeur',
+                        'ordre' => 1,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+        $sidibe = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000009'))->firstOrFail();
+
+        // Reproduction de l'incident Sentry PHP-LARAVEL-66 : Doumbouya n'est plus
+        // soumis dans cette édition (retiré de l'équipe) mais son livreur/personne
+        // existe toujours en base, rattaché à cette même équipe. Donner son
+        // téléphone à Sidibé — un AUTRE membre — doit échouer en 422 propre,
+        // jamais planter en 500 sur la contrainte unique personnes.telephone_normalise.
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $sidibe->id,
+                    'nom_complet' => 'Sidibé Mamadou',
+                    'telephone' => '+224613200558',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+
+        // Transaction annulée : le téléphone d'origine de Sidibé est intact.
+        $this->assertDatabaseHas('personnes', [
+            'id' => $sidibe->personne_id,
+            'telephone_normalise' => '224620000009',
+        ]);
+    }
+
+    /**
+     * Reproduction de l'incident Sentry PHP-LARAVEL-66 réapparu en prod le 2026-09-02 : le
+     * téléphone donné à un membre déjà identifié (livreur_id) appartenait cette fois à un
+     * PROPRIÉTAIRE, pas à un autre livreur — la vérification (limitée à Livreur::where(...))
+     * laissait passer ce cas jusqu'à la mise à jour SQL de la Personne du livreur, qui plantait
+     * en 500 sur personnes_organization_id_telephone_normalise_unique (contrainte partagée par
+     * tous les rôles de Personne, pas seulement Livreur). Doit échouer en 422 propre.
+     */
+    public function test_update_echoue_proprement_si_telephone_deja_detenu_par_un_proprietaire(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $autreProprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224699999999',
+        ]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000001'))->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $livreur->id,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224699999999',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+
+        // Transaction annulée : le téléphone d'origine du livreur est intact, celui du
+        // propriétaire aussi.
+        $this->assertDatabaseHas('personnes', ['id' => $livreur->personne_id, 'telephone_normalise' => '224620000001']);
+        $this->assertDatabaseHas('personnes', ['id' => $autreProprietaire->personne_id, 'telephone_normalise' => '224699999999']);
+    }
+
     public function test_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
     {
         // Le propriétaire de l'équipe n'est jamais celui envoyé par le client : il est
@@ -511,7 +697,10 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        // Même livreur (+224620000001) dans une autre équipe
+        // Même livreur (+224620000001) dans une autre équipe — le message doit identifier ce
+        // livreur (nom complet) et son véhicule actuel, pour que l'utilisateur sache de qui il
+        // s'agit et où le retirer avant de le réaffecter ici (cf.
+        // EquipeLivraisonController::validateMembresExclusivite()).
         $vehicule2 = $this->makeVehicule();
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
@@ -525,7 +714,75 @@ class EquipeLivraisonTest extends TestCase
                     'ordre' => 0,
                 ]],
             ]))
-            ->assertSessionHasErrors('membres.0.telephone');
+            ->assertSessionHasErrors([
+                'membres.0.telephone' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule} ({$vehicule->immatriculation})\").",
+            ]);
+    }
+
+    /**
+     * Contrôle live appelé par EquipeStepperModal.vue au blur du champ téléphone — même
+     * règle que test_store_fails_si_livreur_deja_dans_autre_equipe ci-dessus, mais sans
+     * passer par la soumission complète du formulaire (steps 2/3), pour signaler le conflit
+     * "en amont" pendant la saisie plutôt qu'après un aller-retour complet.
+     */
+    public function test_verifier_telephone_signale_conflit_avec_livreur_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224620000001']))
+            ->assertOk();
+
+        $response->assertJson([
+            'conflict' => true,
+            'message' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule} ({$vehicule->immatriculation})\").",
+        ]);
+    }
+
+    public function test_verifier_telephone_sans_conflit(): void
+    {
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224699999999']))
+            ->assertOk()
+            ->assertJson(['conflict' => false, 'message' => null]);
+    }
+
+    /**
+     * Un membre déjà identifié (livreur_id) qui reconfirme son propre numéro ne doit jamais
+     * être signalé en conflit avec lui-même (cf. detecterConflitTelephone()).
+     */
+    public function test_verifier_telephone_ignore_le_conflit_avec_soi_meme(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000001'))->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', [
+                'telephone' => '+224620000001',
+                'livreur_id' => $livreur->id,
+            ]))
+            ->assertOk()
+            ->assertJson(['conflict' => false, 'message' => null]);
+    }
+
+    public function test_verifier_telephone_refuse_sans_permission(): void
+    {
+        $this->initOrgAndUser([]);
+
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224699999999']))
+            ->assertForbidden();
     }
 
     public function test_update_autorise_membres_deja_dans_meme_equipe(): void
@@ -670,6 +927,7 @@ class EquipeLivraisonTest extends TestCase
 
         return array_merge([
             'is_active' => true,
+            'processus_code' => CommissionProcessus::CODE_VENTE,
             'membres' => [
                 [
                     'livreur_id' => null,
@@ -948,6 +1206,140 @@ class EquipeLivraisonTest extends TestCase
                 ->count(),
             'L\'ancienne version reste en base (fermée), jamais supprimée.',
         );
+    }
+
+    // ── Équipe brouillon (import de flotte) : activation au partage conforme ───
+
+    /** Équipe telle que la crée l'import de flotte : inactive, un chauffeur, aucun partage. */
+    private function equipeBrouillon(Vehicule $vehicule): array
+    {
+        $vehicule->update(['is_active' => false]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'is_active' => false,
+        ]);
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id, 'is_active' => true, 'nom_complet' => 'Mamadou Diallo']);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+
+        $membres = [[
+            'livreur_id' => $livreur->id, 'nom_complet' => 'Mamadou Diallo',
+            'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+        ]];
+
+        return [$equipe, $membres];
+    }
+
+    /** Requête forgée : is_active n'est jamais lu depuis la requête, seul le partage décide. */
+    public function test_une_equipe_brouillon_sans_partage_reste_inactive_meme_si_la_requete_force_is_active(): void
+    {
+        $vehicule = $this->makeVehicule();
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => true,
+                'partages_categorie' => [],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($equipe->fresh()->is_active, 'Barème Livreur à 100 GNF sans partage : l\'équipe reste un brouillon.');
+    }
+
+    public function test_une_equipe_brouillon_sactive_quand_son_partage_devient_conforme(): void
+    {
+        $vehicule = $this->makeVehicule();
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => false,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
+        $this->assertTrue($vehicule->fresh()->is_active);
+    }
+
+    /**
+     * Toutes les activités du véhicule comptent, comme dans la colonne « Partages » de la liste
+     * des véhicules : un véhicule aussi logistique reste un brouillon tant que le partage du
+     * transfert logistique n'est pas fait, même si celui de la vente l'est.
+     */
+    public function test_une_equipe_brouillon_attend_le_partage_de_chaque_processus_exerce(): void
+    {
+        $logistique = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            'libelle' => 'Transfert logistique',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $logistique->id,
+            'libelle' => 'Livreur — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        $vehicule = $this->makeVehicule();
+        $vehicule->update(['livraison_logistique' => true]);
+        [$equipe, $membres] = $this->equipeBrouillon($vehicule);
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage(['vehicule_id' => $vehicule->id, 'membres' => $membres, 'is_active' => true]))
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($equipe->fresh()->is_active, 'Partage vente fait, transfert logistique encore à faire.');
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'membres' => $membres,
+                'is_active' => false,
+                'processus_code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            ]))
+            ->assertSessionHasNoErrors();
+        $this->assertTrue($equipe->fresh()->is_active);
+    }
+
+    /** Seul l'import de flotte crée une équipe brouillon ; une création manuelle est toujours active. */
+    public function test_store_cree_une_equipe_active_meme_si_la_requete_envoie_is_active_false(): void
+    {
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadAvecPartage(['vehicule_id' => $vehicule->id, 'is_active' => false]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertTrue(EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail()->is_active);
+    }
+
+    public function test_une_equipe_active_nest_jamais_desactivee_par_un_enregistrement(): void
+    {
+        $vehicule = $this->makeVehicule();
+        $equipe = $this->makeEquipe(Proprietaire::factory()->create(['organization_id' => $this->org->id])->id);
+        $equipe->update(['vehicule_id' => $vehicule->id]);
+
+        // Sans partage, et avec is_active=false forgé dans la requête.
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
+                'vehicule_id' => $vehicule->id,
+                'is_active' => false,
+                'partages_categorie' => [],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($equipe->fresh()->is_active);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

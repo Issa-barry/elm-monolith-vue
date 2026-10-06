@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { login, selectOptionFromCombobox } from './helpers';
 
 test.beforeEach(async ({ page }) => {
     await login(page);
@@ -9,83 +9,122 @@ test.beforeEach(async ({ page }) => {
     ).toBeVisible();
 });
 
-test('impose la catégorie avant les montants et explique une ligne incomplète', async ({
+/**
+ * Réécrit (04/09/2026) contre le VRAI markup actuel de CommissionRegles/Index.vue : la page a
+ * été refondue en un dialog unique "Ajouter une catégorie"/"Modifier" avec une checkbox par
+ * bénéficiaire, remplaçant l'ancien pattern d'une ligne inline avec un select "catégorie de la
+ * ligne" directement dans le tableau (ce select, et le bouton "configurer le consultant" séparé,
+ * n'existent plus). tests/e2e/commissions/helpers.ts avait déjà été réécrit pour ce même
+ * refactor (cf. son docblock) mais ce fichier-ci était resté sur l'ancien pattern, donc cassé en
+ * silence (les deux tests timeoutaient sur un sélecteur inexistant) sans lien avec le sujet du
+ * chantier en cours au moment où la casse a été découverte (investigation d'un timeout E2E CI).
+ */
+test('impose la catégorie avant les bénéficiaires, puis les montants avant "Appliquer"', async ({
     page,
 }) => {
     await page.getByTestId('commission-add-row').click();
-    const row = page.locator('[data-testid^="commission-row-"]').last();
-
-    const category = row.getByLabel(/catégorie de la ligne/i);
-    const proprietaire = row.getByLabel(/propriétaire/i);
-    const livreur = row.getByLabel(/livreur/i);
-    const site = row.getByLabel(/^site/i);
-    const consultant = row.getByRole('button', {
-        name: /configurer le consultant/i,
-    });
-
-    await expect(category).toBeEnabled();
-    await expect(proprietaire).toBeDisabled();
-    await expect(livreur).toBeDisabled();
-    await expect(site).toBeDisabled();
-    await expect(consultant).toBeDisabled();
-
-    // Le bouton reste actionnable lorsqu'il existe des modifications : son clic
-    // doit montrer précisément quoi compléter au lieu de rester silencieux.
-    await page.getByTestId('commission-save').click();
-    await expect(row.getByText('Choisissez une catégorie.')).toBeVisible();
-    await expect(
-        page.getByRole('dialog', { name: /vérifier avant d’enregistrer/i }),
-    ).toBeHidden();
-
-    await category.click();
-    await page.getByRole('option').first().click();
-
-    await expect(proprietaire).toBeEnabled();
-    await expect(livreur).toBeEnabled();
-    await expect(site).toBeEnabled();
-    await expect(consultant).toBeEnabled();
-});
-
-test('réinitialise les tarifs et le consultant quand la catégorie change', async ({
-    page,
-}) => {
-    await page.getByTestId('commission-add-row').click();
-    const row = page.locator('[data-testid^="commission-row-"]').last();
-    const category = row.getByLabel(/catégorie de la ligne/i);
-
-    await category.click();
-    await page.getByRole('option').first().click();
-
-    const proprietaire = row.getByLabel(/propriétaire/i);
-    const livreur = row.getByLabel(/livreur/i);
-    const site = row.getByLabel(/^site/i);
-    await proprietaire.fill('800');
-    await livreur.fill('950');
-    await site.fill('200');
-
-    const consultantAction = row.getByRole('button', {
-        name: /configurer le consultant/i,
-    });
-    await consultantAction.click();
 
     const dialog = page.getByRole('dialog', {
-        name: /commission consultant/i,
+        name: /ajouter une catégorie/i,
     });
-    await dialog.getByLabel(/consultant bénéficiaire/i).click();
-    await page.getByRole('option').first().click();
-    await dialog.getByLabel(/montant par unité vendue/i).fill('50');
-    await dialog.getByTestId('commission-consultant-apply').click();
+    await expect(dialog).toBeVisible();
+
+    const category = dialog.locator('[aria-label="Catégorie"]');
+    const proprietaire = dialog.getByRole('checkbox', {
+        name: 'Propriétaire',
+        exact: true,
+    });
+    const applyButton = page.getByTestId('commission-dialog-save');
+
+    // Tant qu'aucune catégorie n'est choisie, la section bénéficiaires n'est même pas
+    // rendue (v-if="dialogDraft.categorie_id") et "Appliquer" reste désactivé.
+    await expect(proprietaire).toBeHidden();
+    await expect(applyButton).toBeDisabled();
+
+    await selectOptionFromCombobox(page, category);
+
+    // Catégorie choisie : les bénéficiaires apparaissent, mais "Appliquer" reste
+    // désactivé tant qu'aucun n'est coché (canApplyDialog exige au moins un bénéficiaire).
+    await expect(proprietaire).toBeVisible();
+    await expect(applyButton).toBeDisabled();
+
+    await proprietaire.click();
+    // canApplyDialog n'exige que catégorie + ≥1 bénéficiaire coché — le montant n'est
+    // validé qu'au clic (validateDialog()), pas via l'état disabled du bouton.
+    await expect(applyButton).toBeEnabled();
+
+    // Bénéficiaire coché sans montant renseigné : le clic échoue et explique quoi
+    // compléter, sans fermer le dialog.
+    await applyButton.click();
+    await expect(
+        dialog.getByText('Montant entier requis (0 ou plus).'),
+    ).toBeVisible();
+    await expect(dialog).toBeVisible();
+
+    await dialog
+        .locator('[aria-label="Montant général — Propriétaire"]')
+        .fill('500');
+    await applyButton.click();
     await expect(dialog).toBeHidden();
-    await expect(consultantAction).toContainText('50 GNF');
 
-    await category.click();
-    const categoryOptions = page.getByRole('option');
-    expect(await categoryOptions.count()).toBeGreaterThan(1);
-    await categoryOptions.nth(1).click();
+    const row = page.locator('[data-testid^="commission-row-"]').last();
+    await expect(row).toBeVisible();
+});
 
-    await expect(proprietaire).toHaveValue('');
-    await expect(livreur).toHaveValue('');
-    await expect(site).toHaveValue('');
-    await expect(consultantAction).toContainText('Ajouter');
-    await expect(consultantAction).not.toContainText('50 GNF');
+/**
+ * L'ancien test vérifiait qu'on pouvait changer la catégorie d'une ligne EXISTANTE, ce qui
+ * réinitialisait tarifs et consultant — cette capacité n'existe plus : le select catégorie n'est
+ * rendu qu'en mode "add" (dialogMode === 'add'), remplacé par un texte figé en mode "edit" (cf.
+ * Index.vue ~L892-911). Changer de catégorie passe désormais par retirer la ligne puis en
+ * recréer une — comportement stable depuis plusieurs chantiers commission (jamais exercé
+ * autrement par tests/e2e/commissions/helpers.ts non plus). Réécrit pour couvrir le
+ * comportement réel de "Modifier" : catégorie figée, bénéficiaires/montants toujours modifiables.
+ */
+test('modifier une ligne existante : catégorie figée, bénéficiaires modifiables', async ({
+    page,
+}) => {
+    await page.getByTestId('commission-add-row').click();
+    const addDialog = page.getByRole('dialog', {
+        name: /ajouter une catégorie/i,
+    });
+    await selectOptionFromCombobox(
+        page,
+        addDialog.locator('[aria-label="Catégorie"]'),
+    );
+    await addDialog
+        .getByRole('checkbox', { name: 'Propriétaire', exact: true })
+        .click();
+    await addDialog
+        .locator('[aria-label="Montant général — Propriétaire"]')
+        .fill('500');
+    await page.getByTestId('commission-dialog-save').click();
+    await expect(addDialog).toBeHidden();
+
+    const row = page.locator('[data-testid^="commission-row-"]').last();
+    const categorieLabel = await row
+        .locator('p.truncate.font-medium')
+        .first()
+        .innerText();
+
+    await row.getByRole('button', { name: /modifier/i }).click();
+    const editDialog = page.getByRole('dialog', { name: /^modifier/i });
+    await expect(editDialog).toBeVisible();
+
+    // Pas de <Select> catégorie en édition — seulement son libellé, en lecture seule.
+    await expect(editDialog.locator('[aria-label="Catégorie"]')).toHaveCount(
+        0,
+    );
+    await expect(editDialog.getByText(categorieLabel, { exact: true })).toBeVisible();
+
+    // Les bénéficiaires, eux, restent modifiables : ajouter Livreur en plus de Propriétaire.
+    await editDialog
+        .getByRole('checkbox', { name: 'Livreur', exact: true })
+        .click();
+    await editDialog
+        .locator('[aria-label="Montant général — Livreur"]')
+        .fill('300');
+
+    await page.getByTestId('commission-dialog-save').click();
+    await expect(editDialog).toBeHidden();
+    await expect(row.getByText(/300/)).toBeVisible();
 });

@@ -22,4 +22,8 @@ enum OtpPurpose: string
     case EMAIL_VERIFICATION = 'email_verification';
     case PASSWORD_RESET = 'password_reset';
     case INVITATION = 'invitation';
+    /** Confirmation d'une annulation exceptionnelle de commande par l'utilisateur qui la demande (cf. AnnulationExceptionnelleService). */
+    case ANNULATION_EXCEPTIONNELLE = 'annulation_exceptionnelle';
+    /** Confirmation renforcée de l'annulation d'une précommande en préparation ou préparée (ADR 0019, D1). */
+    case ANNULATION_PRECOMMANDE = 'annulation_precommande';
 }

@@ -16,11 +16,11 @@ use Illuminate\Validation\ValidationException;
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
  * compte super_admin, le catalogue de départ (types de produit, catégories adaptées au domaine,
  * options, types de véhicule — systématique, plus un choix) et le premier site — l'installation
- * laisse l'entreprise réellement prête à l'emploi, même parcours qu'en web (InstallWizardController).
+ * laisse l'entreprise réellement prête à l'emploi, même parcours qu'en web (InstallWizard\*).
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
  * super_admin, domaine, catalogue, premier site, installed_at, verrou on-premise) vit dans ce
- * service, partagée avec l'assistant web `/install` (InstallWizardController) : les deux chemins
+ * service, partagée avec l'assistant web `/install` (InstallWizard\*) : les deux chemins
  * produisent exactement le même résultat pour les mêmes réponses.
  *
  * Le mot de passe est choisi directement par la personne qui répond aux prompts (saisie
@@ -219,11 +219,11 @@ class InstallApp extends Command
 
     /**
      * En on_premise, l'email devient obligatoire (boucle tant qu'il est vide) ; en saas il reste
-     * facultatif — même règle que l'assistant web (cf. InstallWizardController::store()), dérivée
-     * de InstallationService::isSaas(), jamais une interprétation propre à la CLI. Dans les deux
-     * cas, s'il est renseigné, un code est envoyé et doit être saisi correctement avant de
-     * poursuivre (cf. InstallWizardController::verifyEmailCode(), EMAIL_OTP_CONTEXT), pour que CLI
-     * et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
+     * facultatif — même règle que l'assistant web (cf. InstallWizard\StoreInstallWizardController),
+     * dérivée de InstallationService::isSaas(), jamais une interprétation propre à la CLI. Dans les
+     * deux cas, s'il est renseigné, un code est envoyé et doit être saisi correctement avant de
+     * poursuivre (cf. InstallWizard\VerifyEmailCodeInstallWizardController, EMAIL_OTP_CONTEXT),
+     * pour que CLI et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
      */
     private function askEmail(OtpService $otp, bool $required): ?string
     {

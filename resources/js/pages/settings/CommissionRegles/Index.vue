@@ -4,15 +4,19 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
+    ArrowRight,
     CircleAlert,
     CircleCheck,
     Coins,
     CornerDownRight,
+    History,
+    Minus,
     Pencil,
     Plus,
     Save,
@@ -20,6 +24,7 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
+import SelectButton from 'primevue/selectbutton';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -56,13 +61,71 @@ interface Ligne {
     exceptions: ExceptionLigne[];
 }
 
+interface ResumeBrouillon {
+    id: string;
+    total: number;
+    conformes: number;
+    updated_at: string | null;
+}
+
+interface ApercuImpact {
+    nb_groupes: number;
+    nb_equipes: number;
+    nb_automatiques: number;
+    nb_sans_livreur: number;
+    nb_vehicules_inactifs: number;
+    par_categorie: Array<{ categorie: string; nb: number }>;
+}
+
+interface ChangementBareme {
+    type: 'ajout' | 'modification' | 'retrait';
+    categorie: string;
+    type_vehicule: string | null;
+    cible_code: string;
+    cible: string;
+    ancien_montant: number | null;
+    nouveau_montant: number | null;
+    ancien_consultant: string | null;
+    nouveau_consultant: string | null;
+    en_vigueur_le: string | null;
+}
+
+interface EnregistrementBareme {
+    id: string;
+    date: string;
+    auteur: string | null;
+    publication_brouillon: boolean;
+    changements: ChangementBareme[];
+}
+
 const props = defineProps<{
+    processus_actif: string;
+    processus_options: Option[];
     lignes: Ligne[];
     categories: Option[];
     cibles: Cible[];
     typesVehicules: Option[];
     consultantsEligibles: Option[];
+    brouillon: ResumeBrouillon | null;
+    historique: EnregistrementBareme[];
 }>();
+
+const { can } = usePermissions();
+const canModifier = computed(() => can('parametres.update'));
+
+// Changer d'onglet recharge intégralement la page (nouveau processus = nouvelles lignes/
+// catégories configurées côté serveur) — cohérent avec le fait que la sauvegarde recharge déjà
+// toute la page après un POST. Un brouillon non enregistré est perdu au changement d'onglet.
+function onProcessusChange(code: string | null): void {
+    if (!code || code === props.processus_actif) {
+        return;
+    }
+    router.get(
+        '/settings/commissions',
+        { processus: code },
+        { preserveScroll: true },
+    );
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
@@ -263,6 +326,45 @@ function baremeSummary(ligne: DraftLigne): string {
 
 function formatMontant(value: string | number): string {
     return `${new Intl.NumberFormat('fr-FR').format(Number(value))} GNF`;
+}
+
+// ── Historique des modifications (COMM-021) ─────────────────────────────
+
+const HISTORIQUE_APERCU = 10;
+const historiqueComplet = ref(false);
+const historiqueAffiche = computed(() =>
+    historiqueComplet.value
+        ? props.historique
+        : props.historique.slice(0, HISTORIQUE_APERCU),
+);
+
+function formatDateHeure(iso: string): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(new Date(iso));
+}
+
+function formatJour(date: string | null): string {
+    if (!date) return '—';
+    const [annee, mois, jour] = date.split('-');
+
+    return `${jour}/${mois}/${annee}`;
+}
+
+function libelleChangement(changement: ChangementBareme): string {
+    const vehicule = changement.type_vehicule
+        ? ` (${changement.type_vehicule})`
+        : '';
+
+    return `${changement.cible} — ${changement.categorie}${vehicule}`;
+}
+
+function consultantModifie(changement: ChangementBareme): boolean {
+    return (
+        changement.type === 'modification' &&
+        changement.ancien_consultant !== changement.nouveau_consultant
+    );
 }
 
 function effectiveVehicleAmount(
@@ -479,8 +581,50 @@ const confirmationVisible = ref(false);
 const globalError = ref('');
 
 const configurationForm = useForm({
+    processus_code: props.processus_actif,
     lignes: [] as PayloadLigne[],
 });
+
+// Aperçu des partages d'équipe que ce barème rendrait non conformes (ADR 0006) : s'il y en a,
+// l'enregistrement prépare un brouillon au lieu d'appliquer le barème tout de suite.
+const impact = ref<ApercuImpact | null>(null);
+const impactChargement = ref(false);
+
+function getCsrfToken(): string {
+    return decodeURIComponent(
+        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+    );
+}
+
+async function chargerImpact(): Promise<void> {
+    impact.value = null;
+    impactChargement.value = true;
+    try {
+        const response = await fetch('/settings/commissions/impact', {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                processus_code: props.processus_actif,
+                lignes: draftLignes.value.map(toPayloadLigne),
+            }),
+        });
+        if (response.ok) {
+            impact.value = (await response.json()) as ApercuImpact;
+        }
+    } catch {
+        // Aperçu indisponible : le serveur refait de toute façon le calcul à l'enregistrement.
+    } finally {
+        impactChargement.value = false;
+    }
+}
+
+const prepareBrouillon = computed(
+    () => props.brouillon !== null || (impact.value?.nb_groupes ?? 0) > 0,
+);
 
 function openConfirmation(): void {
     if (draftLignes.value.length === 0) {
@@ -489,6 +633,7 @@ function openConfirmation(): void {
     }
     globalError.value = '';
     confirmationVisible.value = true;
+    void chargerImpact();
 }
 
 function submitConfiguration(): void {
@@ -501,6 +646,8 @@ function submitConfiguration(): void {
         onSuccess: () => {
             confirmationVisible.value = false;
             globalError.value = '';
+            // Brouillon préparé : la redirection vers la reconfiguration affiche son propre message.
+            if (prepareBrouillon.value) return;
             toast.add({
                 severity: 'success',
                 summary: 'Commissions enregistrées',
@@ -532,6 +679,45 @@ function submitConfiguration(): void {
             <div class="max-w-full min-w-0 space-y-6 pb-24">
                 <HeadingSmall title="Commissions" />
 
+                <SelectButton
+                    :model-value="processus_actif"
+                    :options="processus_options"
+                    option-label="label"
+                    option-value="value"
+                    @update:model-value="onProcessusChange"
+                />
+
+                <!-- Brouillon en cours (ADR 0006) : attention, rien n'est encore appliqué. -->
+                <div
+                    v-if="brouillon"
+                    class="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                    data-testid="commission-brouillon-bandeau"
+                >
+                    <div class="flex items-start gap-2">
+                        <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p class="font-medium">
+                                Nouveau barème en préparation — pas encore
+                                appliqué
+                            </p>
+                            <p class="mt-0.5 text-xs">
+                                {{ brouillon.conformes }} /
+                                {{ brouillon.total }} partage(s) d’équipe
+                                reconfiguré(s). Le barème ci-dessous est celui
+                                du brouillon ; les commandes utilisent toujours
+                                le barème en vigueur jusqu’à la publication.
+                            </p>
+                        </div>
+                    </div>
+                    <Link
+                        :href="`/settings/commissions/brouillons/${brouillon.id}`"
+                    >
+                        <Button type="button" variant="outline" size="sm">
+                            Reprendre la reconfiguration
+                        </Button>
+                    </Link>
+                </div>
+
                 <section class="overflow-hidden rounded-xl border bg-card">
                     <div
                         class="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
@@ -546,6 +732,7 @@ function submitConfiguration(): void {
                             </p>
                         </div>
                         <Button
+                            v-if="canModifier"
                             type="button"
                             variant="outline"
                             :disabled="!canAddCategory"
@@ -664,6 +851,7 @@ function submitConfiguration(): void {
                                     </div>
 
                                     <div
+                                        v-if="canModifier"
                                         class="flex items-center justify-end gap-1"
                                     >
                                         <Button
@@ -687,6 +875,7 @@ function submitConfiguration(): void {
                                             <Trash2 class="h-4 w-4" />
                                         </Button>
                                     </div>
+                                    <span v-else aria-hidden="true"></span>
                                 </div>
 
                                 <div
@@ -786,6 +975,7 @@ function submitConfiguration(): void {
                             droit à une commission.
                         </p>
                         <Button
+                            v-if="canModifier"
                             type="button"
                             variant="outline"
                             class="mt-4"
@@ -802,6 +992,182 @@ function submitConfiguration(): void {
                     >
                         <CircleAlert class="h-4 w-4 shrink-0" />
                         {{ globalError }}
+                    </div>
+                </section>
+
+                <section
+                    class="overflow-hidden rounded-xl border bg-card"
+                    data-testid="commission-historique"
+                >
+                    <div class="border-b px-5 py-4 sm:px-6">
+                        <h2
+                            class="flex items-center gap-2 text-sm font-semibold"
+                        >
+                            <History class="h-4 w-4 text-muted-foreground" />
+                            Historique des modifications
+                        </h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Chaque enregistrement du barème : qui, quand, et à
+                            partir de quelle date le changement s’applique.
+                        </p>
+                    </div>
+
+                    <ul v-if="historiqueAffiche.length" class="divide-y">
+                        <li
+                            v-for="enregistrement in historiqueAffiche"
+                            :key="enregistrement.id"
+                            class="px-5 py-4 sm:px-6"
+                            data-testid="commission-historique-enregistrement"
+                        >
+                            <div
+                                class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm"
+                            >
+                                <span class="font-medium tabular-nums">
+                                    {{ formatDateHeure(enregistrement.date) }}
+                                </span>
+                                <span class="text-muted-foreground">·</span>
+                                <span>
+                                    {{
+                                        enregistrement.auteur ??
+                                        'Auteur non enregistré'
+                                    }}
+                                </span>
+                                <span
+                                    v-if="enregistrement.publication_brouillon"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    — publication d’un nouveau barème préparé
+                                </span>
+                            </div>
+
+                            <ul class="mt-2 space-y-1.5">
+                                <li
+                                    v-for="(
+                                        changement, i
+                                    ) in enregistrement.changements"
+                                    :key="i"
+                                    class="grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto_11rem] sm:items-center"
+                                >
+                                    <span
+                                        class="flex min-w-0 items-center gap-2"
+                                    >
+                                        <Plus
+                                            v-if="changement.type === 'ajout'"
+                                            class="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                                            aria-label="Ajout"
+                                        />
+                                        <Pencil
+                                            v-else-if="
+                                                changement.type ===
+                                                'modification'
+                                            "
+                                            class="h-3.5 w-3.5 shrink-0 text-blue-600"
+                                            aria-label="Modification"
+                                        />
+                                        <Minus
+                                            v-else
+                                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                            aria-label="Retrait"
+                                        />
+                                        <span class="truncate">
+                                            {{ libelleChangement(changement) }}
+                                        </span>
+                                    </span>
+
+                                    <span
+                                        class="flex items-center gap-1.5 pl-5 tabular-nums sm:pl-0"
+                                    >
+                                        <span
+                                            v-if="changement.type !== 'ajout'"
+                                            class="text-muted-foreground line-through"
+                                        >
+                                            {{
+                                                formatMontant(
+                                                    changement.ancien_montant ??
+                                                        0,
+                                                )
+                                            }}
+                                        </span>
+                                        <ArrowRight
+                                            v-if="
+                                                changement.type ===
+                                                'modification'
+                                            "
+                                            class="h-3.5 w-3.5 text-muted-foreground"
+                                        />
+                                        <span
+                                            v-if="changement.type !== 'retrait'"
+                                            class="font-medium"
+                                        >
+                                            {{
+                                                formatMontant(
+                                                    changement.nouveau_montant ??
+                                                        0,
+                                                )
+                                            }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                        >
+                                            retiré
+                                        </span>
+                                    </span>
+
+                                    <span
+                                        class="pl-5 text-xs text-muted-foreground sm:pl-0 sm:text-right"
+                                    >
+                                        {{
+                                            changement.type === 'retrait'
+                                                ? 'Plus appliqué dès le'
+                                                : 'Appliqué dès le'
+                                        }}
+                                        {{
+                                            formatJour(changement.en_vigueur_le)
+                                        }}
+                                    </span>
+
+                                    <span
+                                        v-if="consultantModifie(changement)"
+                                        class="pl-5 text-xs text-muted-foreground sm:col-span-3"
+                                    >
+                                        Consultant :
+                                        {{
+                                            changement.ancien_consultant ?? '—'
+                                        }}
+                                        →
+                                        {{
+                                            changement.nouveau_consultant ?? '—'
+                                        }}
+                                    </span>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+
+                    <p
+                        v-else
+                        class="px-5 py-8 text-center text-sm text-muted-foreground sm:px-6"
+                    >
+                        Aucune modification enregistrée pour ce processus.
+                    </p>
+
+                    <div
+                        v-if="props.historique.length > HISTORIQUE_APERCU"
+                        class="border-t px-5 py-3 text-center sm:px-6"
+                    >
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            @click="historiqueComplet = !historiqueComplet"
+                        >
+                            {{
+                                historiqueComplet
+                                    ? 'Afficher seulement les plus récentes'
+                                    : `Afficher tout l’historique (${props.historique.length})`
+                            }}
+                        </Button>
                     </div>
                 </section>
 
@@ -832,6 +1198,7 @@ function submitConfiguration(): void {
                         Configuration à jour
                     </div>
                     <Button
+                        v-if="canModifier"
                         type="button"
                         :disabled="configurationForm.processing || !hasChanges"
                         data-testid="commission-save"
@@ -1324,6 +1691,78 @@ function submitConfiguration(): void {
                 </p>
             </div>
 
+            <p
+                v-if="impactChargement"
+                class="text-xs text-muted-foreground"
+                data-testid="commission-impact-chargement"
+            >
+                Vérification des partages d’équipe…
+            </p>
+            <div
+                v-else-if="prepareBrouillon"
+                class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                data-testid="commission-impact"
+            >
+                <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                    <p class="font-medium">
+                        <template v-if="impact && impact.nb_groupes > 0">
+                            Ce changement rend non conformes
+                            {{ impact.nb_groupes }} partage(s) Livreur sur
+                            {{ impact.nb_equipes }} équipe(s)
+                            <span v-if="impact.par_categorie.length">
+                                ({{
+                                    impact.par_categorie
+                                        .map((c) => `${c.categorie} : ${c.nb}`)
+                                        .join(', ')
+                                }})</span
+                            >.
+                        </template>
+                        <template v-else>
+                            Un brouillon de barème est déjà en cours pour ce
+                            processus.
+                        </template>
+                    </p>
+                    <p class="mt-1">
+                        Le nouveau barème sera préparé dans un brouillon, sans
+                        rien changer au barème en vigueur. Vous reconfigurerez
+                        ensuite les partages concernés, puis publierez le tout
+                        en une seule fois.
+                    </p>
+                </div>
+            </div>
+            <!-- Information (bleu, rule 10) : rien à décider pour ces équipes. -->
+            <p
+                v-if="!impactChargement && (impact?.nb_automatiques ?? 0) > 0"
+                class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100"
+                data-testid="commission-impact-automatiques"
+            >
+                {{ impact?.nb_automatiques }} équipe(s) n’ont qu’un seul livreur
+                actif : sa part sera alignée automatiquement sur le nouveau
+                barème, à la même date.
+            </p>
+            <!-- Attention (orange) : non conformes, ni ajustées ni bloquantes pour l'enregistrement. -->
+            <div
+                v-if="
+                    !impactChargement &&
+                    ((impact?.nb_sans_livreur ?? 0) > 0 ||
+                        (impact?.nb_vehicules_inactifs ?? 0) > 0)
+                "
+                class="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+                data-testid="commission-impact-signales"
+            >
+                <p v-if="(impact?.nb_sans_livreur ?? 0) > 0">
+                    {{ impact?.nb_sans_livreur }} équipe(s) sans livreur actif :
+                    non conformes, leurs commandes resteront refusées tant qu’un
+                    livreur n’est pas ajouté.
+                </p>
+                <p v-if="(impact?.nb_vehicules_inactifs ?? 0) > 0">
+                    {{ impact?.nb_vehicules_inactifs }} véhicule(s) inactif(s) à
+                    plusieurs livreurs : leur partage sera à revoir avant leur
+                    remise en service.
+                </p>
+            </div>
+
             <div class="flex justify-end gap-2">
                 <Button
                     type="button"
@@ -1335,7 +1774,7 @@ function submitConfiguration(): void {
                 </Button>
                 <Button
                     type="button"
-                    :disabled="configurationForm.processing"
+                    :disabled="configurationForm.processing || impactChargement"
                     data-testid="commission-confirm-save"
                     @click="submitConfiguration"
                 >
@@ -1343,7 +1782,9 @@ function submitConfiguration(): void {
                     {{
                         configurationForm.processing
                             ? 'Enregistrement…'
-                            : 'Confirmer et enregistrer'
+                            : prepareBrouillon
+                              ? 'Préparer la reconfiguration'
+                              : 'Confirmer et enregistrer'
                     }}
                 </Button>
             </div>

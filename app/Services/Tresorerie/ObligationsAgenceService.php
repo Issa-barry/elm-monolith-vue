@@ -8,6 +8,7 @@ use App\Services\Tresorerie\Obligations\ObligationAccumulator;
 use App\Services\Tresorerie\Obligations\ObligationContributor;
 use App\Services\Tresorerie\Obligations\ProprietaireObligationContributor;
 use App\Services\Tresorerie\Obligations\SalaireObligationContributor;
+use Carbon\CarbonInterface;
 
 /**
  * Calcule, pour un mois donné, les obligations RESTANTES (montant déjà payé
@@ -70,6 +71,23 @@ class ObligationsAgenceService
         return collect($champs)
             ->mapWithKeys(fn (string $champ) => [$champ => round((float) array_sum(array_column($rows, $champ)), 2)])
             ->all();
+    }
+
+    /**
+     * Obligations encore impayées des mois antérieurs à $debutMois, par agence (sentinel
+     * ObligationAccumulator::SANS_AGENCE pour « sans agence ») — ADR 0016 : l'agence les conserve
+     * avant de remettre quoi que ce soit. Lecture seule, aucune période créée.
+     *
+     * @return array<string, float>
+     */
+    public function arrieresParSite(string $organizationId, CarbonInterface $debutMois): array
+    {
+        $arrieres = [];
+        foreach ($this->contributors as $contributor) {
+            $contributor->arrieres($organizationId, $debutMois, $arrieres);
+        }
+
+        return array_map(fn (float $montant) => round($montant, 2), $arrieres);
     }
 
     /**

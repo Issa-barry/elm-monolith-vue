@@ -18,7 +18,7 @@ return new class extends Migration
             // sur les produits qui le référençaient, juste les détacher.
             $table->foreignUlid('fournisseur_id')->nullable()->constrained('fournisseurs')->nullOnDelete();
             // restrict (pas nullOnDelete) : un type ne peut être supprimé tant qu'il est utilisé
-            // par au moins un produit (cf. ProduitTypeController::destroy()) — la contrainte DB
+            // par au moins un produit (cf. DestroyProduitTypeController) — la contrainte DB
             // est le dernier filet de sécurité derrière ce contrôle applicatif.
             $table->foreignUlid('produit_type_id')->constrained('produit_types')->restrictOnDelete();
             $table->string('nom');

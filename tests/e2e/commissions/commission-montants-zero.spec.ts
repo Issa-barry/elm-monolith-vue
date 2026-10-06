@@ -91,9 +91,9 @@ test('Scénario E — Site à 0 explicitement, les 3 autres positifs : exactemen
     page,
 }) => {
     // Barème à 0 : "configuré, rien à distribuer" — distinct d'une cible décochée. Dans les
-    // deux cas, aucun montant positif ne doit apparaître pour Site (cf. décision AMOA vérifiée
-    // par l'audit backend : CommissionEnveloppeGenerator ne crée pas d'enveloppe pour un
-    // montant total nul).
+    // deux cas, aucun montant positif ne doit apparaître pour Site. Site est en mode DIRECT
+    // (comme Propriétaire) : une enveloppe à 0 GNF peut exister, jamais un montant positif
+    // (cf. CommissionEnveloppeGeneratorSiteTest::bareme_site_a_zero_ne_genere_aucune_enveloppe_sans_erreur).
     await configurerBareme(page, {
         categorieNom: CATEGORIE_NOM,
         montants: { proprietaire: 600, livreur: 300, site: 0, consultant: 50 },
@@ -102,11 +102,19 @@ test('Scénario E — Site à 0 explicitement, les 3 autres positifs : exactemen
     await configurerPartageEquipe(page, VEHICULE_MATCH, CATEGORIE_NOM, 300);
 
     const diag = await genererEtLireDiagnostic(page);
-    const cibleTypes = diag.enveloppes.map((e) => e.cible_type).sort();
-    expect(cibleTypes, 'jamais de Site quand son barème est à 0').toEqual(
-        ['consultant', 'equipe_livraison', 'proprietaire'].sort(),
-    );
-    expect(diag.enveloppes.some((e) => e.cible_type === 'site')).toBe(false);
+    const cibleTypesPositives = diag.enveloppes
+        .filter((e) => e.montant_total > 0)
+        .map((e) => e.cible_type)
+        .sort();
+    expect(
+        cibleTypesPositives,
+        'jamais de montant Site quand son barème est à 0',
+    ).toEqual(['consultant', 'equipe_livraison', 'proprietaire'].sort());
+    expect(
+        diag.enveloppes
+            .filter((e) => e.cible_type === 'site')
+            .every((e) => e.montant_total === 0),
+    ).toBe(true);
 });
 
 test('Scénario F — les 4 bénéficiaires actifs simultanément : exactement 4 enveloppes, une par cible', async ({

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import RoleBadges from '@/components/users/RoleBadges.vue';
 import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -23,6 +24,7 @@ import {
     Building2,
     CheckCircle,
     Clock,
+    Eye,
     MoreVertical,
     Pencil,
     Plus,
@@ -77,10 +79,13 @@ const props = defineProps<{
     validation_fonction_options: FonctionRhOption[];
     type_employe_options: Option[];
     statut_employe_options: Option[];
-    role_labels: Record<string, string>;
 }>();
 
 const { can } = usePermissions();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<StaffUser>(
+    (u) => `/backoffice/users/${u.id}`,
+);
 const confirm = useConfirm();
 const toast = useToast();
 const page = usePage();
@@ -331,6 +336,8 @@ function confirmReject(u: StaffUser) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Avatar + nom -->
                     <Column
@@ -350,7 +357,13 @@ function confirmReject(u: StaffUser) {
                                     <div
                                         class="flex items-center gap-1.5 font-medium"
                                     >
-                                        {{ data.nom_complet }}
+                                        <Link
+                                            :href="`/backoffice/users/${data.id}`"
+                                            class="hover:underline"
+                                            data-testid="user-fiche-link"
+                                        >
+                                            {{ data.nom_complet }}
+                                        </Link>
                                         <span
                                             v-if="data.is_me"
                                             class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -408,10 +421,7 @@ function confirmReject(u: StaffUser) {
                         style="width: 180px"
                     >
                         <template #body="{ data }">
-                            <RoleBadges
-                                :roles="data.roles"
-                                :role-labels="props.role_labels"
-                            />
+                            <RoleBadges :roles="data.roles" />
                         </template>
                     </Column>
 
@@ -481,6 +491,18 @@ function confirmReject(u: StaffUser) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem
+                                            v-if="can('users.read')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/backoffice/users/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir la fiche
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="
                                                 data.is_pending_validation &&

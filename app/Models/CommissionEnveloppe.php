@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutCommission;
+use App\Services\CommissionLogistiqueService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -70,6 +71,22 @@ class CommissionEnveloppe extends Model
     public function parts(): HasMany
     {
         return $this->hasMany(CommissionEnveloppePart::class, 'enveloppe_id');
+    }
+
+    /**
+     * Agence à laquelle rattacher la commission. Un transfert logistique n'a pas
+     * de colonne site_id : son agence est l'agence source (même règle que
+     * CommissionLogistiqueService::resolveSiteResponsable()).
+     */
+    public function siteResponsableId(): ?string
+    {
+        $source = $this->source;
+
+        if ($source instanceof TransfertLogistique) {
+            return CommissionLogistiqueService::resolveSiteResponsable($source);
+        }
+
+        return $source?->site_id;
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────────

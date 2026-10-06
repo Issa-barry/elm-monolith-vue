@@ -15,16 +15,24 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiementFiche;
+use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class PeriodeCalculatorService
 {
+    /** @var Collection<string, true> sources ("type:id") déjà portées par une fiche figée */
+    private Collection $lignesFigees;
+
+    /** @var Collection<string, Collection<int, PaiementFiche>> fiches figées par "type:bénéficiaire" */
+    private Collection $figeesParBeneficiaire;
+
     public function calculer(PaiementPeriode $periode): array
     {
         if ($periode->isValidee() || $periode->isCloturee()) {
@@ -35,15 +43,19 @@ class PeriodeCalculatorService
         $hash = $this->signatureSource($periode);
 
         DB::transaction(function () use ($periode, $hash, &$nbFiches) {
-            // forceDelete() : PaiementFiche utilise SoftDeletes, mais un delete() classique
-            // laisse la ligne physique en place et provoque une violation de la contrainte
-            // d'unicité (periode_id, beneficiaire_type, beneficiaire_id) au réinsert suivant.
-            $periode->fiches()
-                ->where('statut', '!=', StatutFichePaiement::PAYE->value)
-                ->get()
-                ->each(fn (PaiementFiche $f) => $f->forceDelete());
+            // ADR 0010 : une fiche figée (paiement reçu, même partiel, ou déduction reportée)
+            // n'est jamais supprimée ni recréée — seules les fiches encore ouvertes sont
+            // reconstruites. forceDelete() : la contrainte d'unicité inclut les lignes
+            // supprimées en douceur.
+            $fiches = $periode->fiches()->with('lignes')->get();
+            $figees = $fiches->filter(fn (PaiementFiche $f) => $f->estFigee());
+            $fiches->reject(fn (PaiementFiche $f) => $f->estFigee())->each(fn (PaiementFiche $f) => $f->forceDelete());
 
-            $nbFiches = match ($periode->type) {
+            $this->lignesFigees = $figees->flatMap(fn (PaiementFiche $f) => $f->lignes)
+                ->mapWithKeys(fn (PaiementFicheLigne $l) => ["{$l->source_type}:{$l->source_id}" => true]);
+            $this->figeesParBeneficiaire = $figees->groupBy(fn (PaiementFiche $f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
+
+            $nbFiches = $figees->count() + match ($periode->type) {
                 TypePeriodePaiement::LIVREUR => $this->calculerLivreurs($periode),
                 TypePeriodePaiement::PROPRIETAIRE => $this->calculerProprietaires($periode),
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
@@ -59,6 +71,10 @@ class PeriodeCalculatorService
                 'calculated_at' => now(),
             ]);
         });
+
+        // Des commissions déjà validées (ex. propriétaire/site/consultant, validées à la
+        // génération) peuvent rendre la période complète dès son calcul.
+        app(PeriodeValidationService::class)->validerSiComplete($periode->refresh());
 
         return ['nb_fiches' => $nbFiches];
     }
@@ -90,13 +106,100 @@ class PeriodeCalculatorService
      * ne relance `calculer()` que si le hash source a réellement changé, et jamais sur une
      * période validée/clôturée (cf. needsRecalcul).
      */
-    public function recalculerPeriodesConcernees(string $organizationId, Carbon $date): void
+    /**
+     * Commissions (vente + logistique) qui entreraient dans cette période au calcul mais ne
+     * figurent sur aucune de ses fiches — typiquement générées après la validation (une
+     * commande encaissée tard mais datée dans la période) : les fiches d'une période validée
+     * sont figées (cf. needsRecalcul), ces commissions n'y sont donc jamais payées. Même
+     * périmètre que calculerLivreurs()/calculerProprietaires() ; sans objet pour les autres types.
+     *
+     * @return array{nombre: int, montant: float}
+     */
+    public function commissionsHorsFiches(PaiementPeriode $periode): array
     {
-        PaiementPeriode::where('organization_id', $organizationId)
-            ->whereDate('date_debut', '<=', $date)
-            ->whereDate('date_fin', '>=', $date)
+        // [type de part vente, cible d'enveloppe imposée, type logistique, colonne logistique] —
+        // sites et consultants filtrent aussi sur la cible de l'enveloppe (comme calculerSites()/
+        // calculerConsultants()) et n'ont pas de commission logistique.
+        [$typeVente, $cible, $typeLogistique, $colonneLogistique] = match ($periode->type) {
+            TypePeriodePaiement::LIVREUR => [CommissionEnveloppePart::TYPE_LIVREUR, null, 'livreur', 'livreur_id'],
+            TypePeriodePaiement::PROPRIETAIRE => [CommissionEnveloppePart::TYPE_PROPRIETAIRE, null, 'proprietaire', 'proprietaire_id'],
+            TypePeriodePaiement::SITE => [CommissionEnveloppePart::TYPE_SITE, CommissionCibleType::CODE_SITE, null, null],
+            TypePeriodePaiement::CONSULTANT => [CommissionEnveloppePart::TYPE_PRESTATAIRE, CommissionCibleType::CODE_CONSULTANT, null, null],
+            default => [null, null, null, null],
+        };
+
+        if ($typeVente === null) {
+            return ['nombre' => 0, 'montant' => 0.0];
+        }
+
+        $orgId = $periode->organization_id;
+        $exclus = [StatutCommission::ANNULEE->value, StatutCommission::PAYE->value];
+
+        $surFiches = PaiementFicheLigne::whereIn('fiche_id', $periode->fiches()->select('id'))
+            ->get(['source_type', 'source_id'])
+            ->map(fn (PaiementFicheLigne $l) => "{$l->source_type}:{$l->source_id}")
+            ->flip();
+
+        $vente = CommissionEnveloppePart::where('beneficiaire_type', $typeVente)
+            ->whereNotIn('statut', $exclus)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->when($cible, fn ($q) => $q->where('cible_type', $cible))
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
             ->get()
-            ->each(fn (PaiementPeriode $periode) => $this->calculerSiNecessaire($periode));
+            ->reject(fn (CommissionEnveloppePart $p) => $surFiches->has(CommissionEnveloppePart::class.":{$p->id}"));
+
+        $logistique = $typeLogistique === null ? collect() : CommissionLogistiquePart::where('type_beneficiaire', $typeLogistique)
+            ->whereNotNull($colonneLogistique)
+            ->whereNotIn('statut', $exclus)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
+            ->get()
+            ->reject(fn (CommissionLogistiquePart $p) => $surFiches->has(CommissionLogistiquePart::class.":{$p->id}"));
+
+        $parts = $vente->concat($logistique);
+
+        return [
+            'nombre' => $parts->count(),
+            'montant' => round((float) $parts->sum(fn ($p) => $p->montant_a_payer), 2),
+        ];
+    }
+
+    // DateTimeInterface : les appelants passent indifféremment Carbon\Carbon ou
+    // Illuminate\Support\Carbon (un typage strict faisait échouer l'appel du générateur).
+    public function recalculerPeriodesConcernees(string $organizationId, \DateTimeInterface $date): void
+    {
+        $this->traiterPeriodesPourDates($organizationId, collect([$date]));
+    }
+
+    /**
+     * Pour chaque période couvrant l'une de ces dates : réouverture si des commissions sont
+     * arrivées après sa validation, recalcul si nécessaire, puis validation automatique si
+     * toutes ses commissions sont validées (cf. PeriodeValidationService::validerSiComplete).
+     *
+     * @param  Collection<int, mixed>  $dates
+     */
+    public function traiterPeriodesPourDates(string $organizationId, Collection $dates): void
+    {
+        $jours = $dates->map(fn ($d) => Carbon::parse($d)->toDateString())->unique()->values();
+        if ($jours->isEmpty()) {
+            return;
+        }
+
+        $periodes = PaiementPeriode::where('organization_id', $organizationId)
+            ->where(function ($q) use ($jours) {
+                foreach ($jours as $jour) {
+                    $q->orWhere(fn ($w) => $w->whereDate('date_debut', '<=', $jour)->whereDate('date_fin', '>=', $jour));
+                }
+            })
+            ->get();
+
+        $validation = app(PeriodeValidationService::class);
+
+        foreach ($periodes as $periode) {
+            $validation->rouvrirSiDesynchronisee($periode);
+            $this->calculerSiNecessaire($periode->refresh());
+            $validation->validerSiComplete($periode->refresh());
+        }
     }
 
     /**
@@ -257,7 +360,7 @@ class PeriodeCalculatorService
                     'montant' => $montant,
                     'ordre' => $ordre++,
                 ]);
-                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
+                $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
             }
 
             foreach ($logParts->get($livreurId, collect()) as $part) {
@@ -293,8 +396,9 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            $this->creerFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), $this->resolveSitePrincipal($montantParSite), $lignes);
-            $count++;
+            if ($this->creerFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), $this->resolveSitePrincipal($montantParSite), $lignes)) {
+                $count++;
+            }
         }
 
         return $count;
@@ -367,7 +471,7 @@ class PeriodeCalculatorService
                     'montant' => $montant,
                     'ordre' => $ordre++,
                 ]);
-                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
+                $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
             }
 
             foreach ($logParts->get($proprietaireId, collect()) as $part) {
@@ -414,8 +518,9 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            $this->creerFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, $this->resolveSitePrincipal($montantParSite), $lignes);
-            $count++;
+            if ($this->creerFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, $this->resolveSitePrincipal($montantParSite), $lignes)) {
+                $count++;
+            }
         }
 
         return $count;
@@ -494,8 +599,9 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            $this->creerFiche($periode, CommissionEnveloppePart::TYPE_SITE, $siteId, $site->nom, $siteId, $lignes);
-            $count++;
+            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_SITE, $siteId, $site->nom, $siteId, $lignes)) {
+                $count++;
+            }
         }
 
         return $count;
@@ -575,8 +681,9 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            $this->creerFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes);
-            $count++;
+            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes)) {
+                $count++;
+            }
         }
 
         return $count;
@@ -632,8 +739,9 @@ class PeriodeCalculatorService
                 ]);
             }
 
-            $this->creerFiche($periode, 'salarie', $ligne->employe_id, $ligne->employe->nom_complet, $ligne->employe->site_id, $lignesData);
-            $count++;
+            if ($this->creerFiche($periode, 'salarie', $ligne->employe_id, $ligne->employe->nom_complet, $ligne->employe->site_id, $lignesData)) {
+                $count++;
+            }
         }
 
         return $count;
@@ -672,11 +780,45 @@ class PeriodeCalculatorService
         return array_key_first($montantParSite);
     }
 
-    private function creerFiche(PaiementPeriode $periode, string $type, string $beneficiaireId, string $nom, ?string $siteId, $lignes): void
+    /**
+     * Crée la fiche ouverte d'un bénéficiaire (ADR 0010). Les lignes déjà portées par une de
+     * ses fiches figées sont écartées ; s'il en reste, elles vont sur une fiche de rang
+     * suivant (fiche complémentaire), rattachée à la fiche d'origine. Les déductions reportées
+     * encore en attente pour ce bénéficiaire y sont imputées. Un solde négatif sur une fiche
+     * complémentaire (ou portant un report) est à son tour reporté, jamais perdu.
+     *
+     * @return bool true si une fiche a été créée
+     */
+    private function creerFiche(PaiementPeriode $periode, string $type, string $beneficiaireId, string $nom, ?string $siteId, $lignes): bool
     {
+        $lignes = collect($lignes)
+            ->reject(fn (array $l) => $this->lignesFigees->has("{$l['source_type']}:{$l['source_id']}"))
+            ->values();
+
+        if ($lignes->isEmpty()) {
+            return false;
+        }
+
+        $reports = $this->reportsEnAttente($periode->organization_id, $type, $beneficiaireId);
+        $ordre = (int) $lignes->max('ordre') + 1;
+        foreach ($reports as $ficheReport) {
+            $lignes->push([
+                'source_type' => PaiementFiche::class,
+                'source_id' => $ficheReport->id,
+                'type_ligne' => TypeLignePaiement::REPORT->value,
+                'libelle' => "Report de la fiche {$ficheReport->reference}",
+                'montant' => -(float) $ficheReport->report_a_deduire,
+                'ordre' => $ordre++,
+            ]);
+        }
+
+        $figees = $this->figeesParBeneficiaire->get("{$type}:{$beneficiaireId}", collect());
+        $estComplement = $figees->isNotEmpty();
+
         $brut = (float) $lignes->where('montant', '>', 0)->sum('montant');
         $deductions = abs((float) $lignes->where('montant', '<', 0)->sum('montant'));
         $net = $brut - $deductions;
+        $aReporter = $net < 0 && ($estComplement || $reports->isNotEmpty()) ? round(-$net, 2) : 0.0;
 
         $fiche = PaiementFiche::create([
             'organization_id' => $periode->organization_id,
@@ -685,21 +827,57 @@ class PeriodeCalculatorService
             'beneficiaire_type' => $type,
             'beneficiaire_id' => $beneficiaireId,
             'beneficiaire_nom' => $nom,
+            'rang' => $estComplement ? (int) $figees->max('rang') + 1 : 1,
+            'fiche_origine_id' => $estComplement ? $figees->sortBy('rang')->first()->id : null,
             'site_id' => $siteId,
             'montant_brut' => $brut,
             'total_deductions' => $deductions,
             'montant_net' => max(0, $net),
             'montant_paye' => 0,
-            'statut' => StatutFichePaiement::A_PAYER->value,
+            // Rien à payer quand tout le solde est reporté sur la fiche suivante.
+            'statut' => $aReporter > 0 ? StatutFichePaiement::PAYE->value : StatutFichePaiement::A_PAYER->value,
         ]);
 
         $fiche->lignes()->createMany($lignes->toArray());
+
+        // Posé après les lignes : une fiche portant un report est figée, ses lignes aussi.
+        if ($aReporter > 0) {
+            $fiche->update(['report_a_deduire' => $aReporter]);
+        }
+
+        return true;
     }
 
+    /**
+     * Déductions reportées par des fiches du bénéficiaire et pas encore imputées : une
+     * imputation est une ligne REPORT pointant la fiche d'origine ; si la fiche qui l'imputait
+     * est reconstruite, la ligne disparaît avec elle et le report redevient en attente.
+     *
+     * @return Collection<int, PaiementFiche>
+     */
+    private function reportsEnAttente(string $organizationId, string $type, string $beneficiaireId): Collection
+    {
+        return PaiementFiche::where('organization_id', $organizationId)
+            ->where('beneficiaire_type', $type)
+            ->where('beneficiaire_id', $beneficiaireId)
+            ->where('report_a_deduire', '>', 0)
+            ->whereNotExists(fn ($q) => $q->from('paiement_fiche_lignes')
+                ->where('paiement_fiche_lignes.source_type', PaiementFiche::class)
+                ->whereColumn('paiement_fiche_lignes.source_id', 'paiement_fiches.id'))
+            ->orderBy('created_at')
+            ->get();
+    }
+
+    /** Numéro suivant le plus grand déjà utilisé : les fiches figées conservent le leur. */
     private function genererReferenceFiche(PaiementPeriode $periode): string
     {
-        $count = PaiementFiche::where('periode_id', $periode->id)->count();
+        $prefixe = 'FICHE-'.$periode->reference.'-';
+        $max = PaiementFiche::withTrashed()
+            ->where('periode_id', $periode->id)
+            ->pluck('reference')
+            ->map(fn (string $ref) => str_starts_with($ref, $prefixe) ? (int) substr($ref, strlen($prefixe)) : 0)
+            ->max() ?? 0;
 
-        return 'FICHE-'.$periode->reference.'-'.str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+        return $prefixe.str_pad($max + 1, 4, '0', STR_PAD_LEFT);
     }
 }

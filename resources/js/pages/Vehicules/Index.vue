@@ -24,9 +24,9 @@ import {
     ChevronDown,
     Download,
     Eye,
+    History,
     MoreVertical,
     Pencil,
-    Search,
     Trash2,
     TriangleAlert,
     Upload,
@@ -72,9 +72,23 @@ interface Vehicule {
     livraison_vente: boolean;
     livraison_logistique: boolean;
     usage_label: string;
+    /** processus_code → fait | a_faire | non_requis | sans_equipe | non_applicable */
+    partages_commission: Record<string, string>;
 }
 
-const props = defineProps<{ vehicules: Vehicule[] }>();
+const props = defineProps<{
+    vehicules: Vehicule[];
+    filters: Record<string, unknown>;
+    types_options: { value: string; label: string }[];
+    agences_proprietaires_options: { value: string; label: string }[];
+    vehicule_stats: {
+        total: number;
+        actifs: number;
+        inactifs: number;
+        sansEquipe: number;
+        parType: { label: string; count: number }[];
+    };
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
@@ -84,35 +98,27 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
     (vehicule) => `/backoffice/vehicules/${vehicule.id}`,
 );
 
-// Filtres — état unique partagé entre le bouton Filtres desktop et mobile
-// (même DataFilters trigger-only des deux côtés, cf. template).
-const search = ref('');
-const filterType = ref<string | null>(null);
-const filterStatut = ref<string | null>(null);
-const filterUsage = ref<string | null>(null);
-const filterAgence = ref<string | null>(null);
+// Partage Livreur par processus (cf. PartageConformiteVehiculesService) — un partage « à faire »
+// bloque les commandes/transferts du véhicule sur la catégorie concernée (ADR 0006).
+const PARTAGE_PROCESSUS: Array<{ code: string; label: string }> = [
+    { code: 'vente', label: 'Vente' },
+    { code: 'logistique_transfert', label: 'Logistique' },
+    { code: 'transfert_grossiste', label: 'Grossiste' },
+];
 
-function resetFilters() {
-    search.value = '';
-    filterType.value = null;
-    filterStatut.value = null;
-    filterUsage.value = null;
-    filterAgence.value = null;
+const PARTAGE_LABEL: Record<string, string> = {
+    fait: 'Fait',
+    a_faire: 'À faire',
+    sans_equipe: 'Sans équipe',
+    non_requis: 'Non requis',
+};
+
+function partagesAffiches(v: Vehicule) {
+    return PARTAGE_PROCESSUS.map((p) => ({
+        ...p,
+        statut: v.partages_commission?.[p.code] ?? 'non_applicable',
+    })).filter((p) => p.statut !== 'non_applicable');
 }
-
-const typeOptions = computed(() =>
-    [...new Set(props.vehicules.map((v) => v.type_label))].sort(),
-);
-
-const agenceOptions = computed(() =>
-    [
-        ...new Set(
-            props.vehicules
-                .map((v) => v.agence_nom)
-                .filter((a): a is string => Boolean(a)),
-        ),
-    ].sort((a, b) => a.localeCompare(b)),
-);
 
 const filterFields = computed<FilterField[]>(() => [
     {
@@ -133,10 +139,10 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Rechercher...',
     },
     {
-        key: 'type',
+        key: 'type_vehicule_id',
         label: 'Type',
         type: 'select',
-        options: typeOptions.value.map((t) => ({ value: t, label: t })),
+        options: props.types_options,
     },
     {
         key: 'usage',
@@ -149,79 +155,27 @@ const filterFields = computed<FilterField[]>(() => [
         ],
     },
     {
-        key: 'agence',
-        label: 'Agence',
+        key: 'agence_proprietaire_id',
+        label: 'Agence du propriétaire',
         type: 'select',
         options: [
-            ...agenceOptions.value.map((a) => ({ value: a, label: a })),
+            ...props.agences_proprietaires_options,
             { value: '__none__', label: 'Non rattachée' },
+        ],
+    },
+    {
+        key: 'partage',
+        label: 'Partages commission',
+        type: 'select',
+        options: [
+            { value: 'a_faire', label: 'Au moins un partage à faire' },
+            { value: 'fait', label: 'Tous les partages faits' },
         ],
     },
 ]);
 
-function matchesUsageFilter(v: Vehicule, value: string): boolean {
-    if (value === 'aucun') return !v.livraison_vente && !v.livraison_logistique;
-    return value === 'vente' ? v.livraison_vente : v.livraison_logistique;
-}
-
-const filteredVehicules = computed(() =>
-    props.vehicules.filter((v) => {
-        const q = search.value.trim().toLowerCase();
-        const matchSearch =
-            !q ||
-            v.nom_vehicule.toLowerCase().includes(q) ||
-            v.immatriculation.toLowerCase().includes(q) ||
-            v.type_label.toLowerCase().includes(q) ||
-            (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.proprietaire_telephone ?? '')
-                .replace(/\D/g, '')
-                .includes(q.replace(/\D/g, '')) ||
-            (v.agence_nom ?? '').toLowerCase().includes(q) ||
-            (v.equipe_nom ?? '').toLowerCase().includes(q) ||
-            v.capacites.some((c) => String(c.capacite_max).includes(q));
-        const matchType =
-            !filterType.value || v.type_label === filterType.value;
-        const matchStatut = !filterStatut.value
-            ? true
-            : filterStatut.value === 'actif'
-              ? v.is_active
-              : !v.is_active;
-        const matchUsage =
-            !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
-        const matchAgence =
-            !filterAgence.value ||
-            (filterAgence.value === '__none__'
-                ? !v.agence_nom
-                : v.agence_nom === filterAgence.value);
-        return (
-            matchSearch && matchType && matchStatut && matchUsage && matchAgence
-        );
-    }),
-);
-
-// Mini stats — calculées sur l'ensemble des véhicules (indépendantes des filtres actifs),
-// pour donner une vue d'ensemble constante pendant qu'on filtre la liste en dessous.
-const vehiculeStats = computed(() => {
-    const total = props.vehicules.length;
-    const actifs = props.vehicules.filter((v) => v.is_active).length;
-    const sansEquipe = props.vehicules.filter((v) => !v.equipe_nom).length;
-
-    const parTypeMap = new Map<string, number>();
-    for (const v of props.vehicules) {
-        parTypeMap.set(v.type_label, (parTypeMap.get(v.type_label) ?? 0) + 1);
-    }
-    const parType = [...parTypeMap.entries()]
-        .map(([label, count]) => ({ label, count }))
-        .sort((a, b) => b.count - a.count);
-
-    return {
-        total,
-        actifs,
-        inactifs: total - actifs,
-        sansEquipe,
-        parType,
-    };
-});
+const filteredVehicules = computed(() => props.vehicules);
+const vehiculeStats = computed(() => props.vehicule_stats);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -293,40 +247,15 @@ function confirmDelete(v: Vehicule) {
                 <div class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search + Filtres (même état que le desktop, cf. filterFields) -->
-            <div class="flex items-center gap-2 px-3 py-2">
-                <div class="relative flex-1">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="search"
-                        type="search"
-                        placeholder="Rechercher..."
-                        class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                </div>
+            <!-- Vues et filtres : même état serveur que sur desktop. -->
+            <div class="flex flex-wrap items-center gap-2 px-3 py-2">
                 <DataFilters
                     trigger-only
-                    :values="{
-                        nom: search,
-                        type: filterType ?? '',
-                        usage: filterUsage ?? '',
-                        statut: filterStatut ?? '',
-                        agence: filterAgence ?? '',
-                    }"
+                    saved-filter-scope="vehicules"
+                    url="/backoffice/vehicules"
+                    :values="filters"
                     :fields="filterFields"
                     :result-count="filteredVehicules.length"
-                    @apply="
-                        (vals) => {
-                            search = (vals.nom as string) || '';
-                            filterType = (vals.type as string) || null;
-                            filterUsage = (vals.usage as string) || null;
-                            filterStatut = (vals.statut as string) || null;
-                            filterAgence = (vals.agence as string) || null;
-                        }
-                    "
-                    @reset="resetFilters"
                 />
             </div>
 
@@ -462,7 +391,57 @@ function confirmDelete(v: Vehicule) {
                     </p>
                 </div>
                 <ListPageActions>
-                    <template v-if="can('imports-flotte.create')" #import>
+                    <template
+                        v-if="
+                            can('imports-flotte.create') ||
+                            can('imports-vehicules-maj.create')
+                        "
+                        #export
+                    >
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="outline">
+                                    <Download class="mr-2 h-4 w-4" />
+                                    Exporter
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-64">
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/vehicules/export"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Exporter les véhicules
+                                    </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/vehicules/export-maj"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Exporter pour mise à jour
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template
+                        v-if="
+                            can('imports-flotte.create') ||
+                            can('imports-vehicules-maj.create') ||
+                            can('imports-vehicules-maj.read')
+                        "
+                        #import
+                    >
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
                                 <Button variant="outline">
@@ -471,17 +450,35 @@ function confirmDelete(v: Vehicule) {
                                     <ChevronDown class="ml-2 h-3.5 w-3.5" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" class="w-56">
-                                <DropdownMenuItem as-child>
+                            <DropdownMenuContent align="end" class="w-64">
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
                                     <Link
                                         href="/settings/imports-flotte/nouveau"
                                         class="flex w-full items-center gap-2"
                                     >
                                         <Upload class="h-4 w-4" />
-                                        Importer
+                                        Créer des véhicules
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem as-child>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/vehicules/imports-maj/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Mettre à jour des véhicules
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
                                     <a
                                         href="/settings/imports-flotte/modele"
                                         class="flex w-full items-center gap-2"
@@ -490,34 +487,32 @@ function confirmDelete(v: Vehicule) {
                                         Télécharger le modèle
                                     </a>
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator
+                                    v-if="can('imports-vehicules-maj.read')"
+                                />
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.read')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/vehicules/imports-maj"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <History class="h-4 w-4" />
+                                        Historique des mises à jour
+                                    </Link>
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </template>
                     <template #filters>
                         <DataFilters
                             trigger-only
-                            :values="{
-                                nom: search,
-                                type: filterType ?? '',
-                                usage: filterUsage ?? '',
-                                statut: filterStatut ?? '',
-                                agence: filterAgence ?? '',
-                            }"
+                            saved-filter-scope="vehicules"
+                            url="/backoffice/vehicules"
+                            :values="filters"
                             :fields="filterFields"
                             :result-count="filteredVehicules.length"
-                            @apply="
-                                (vals) => {
-                                    search = (vals.nom as string) || '';
-                                    filterType = (vals.type as string) || null;
-                                    filterUsage =
-                                        (vals.usage as string) || null;
-                                    filterStatut =
-                                        (vals.statut as string) || null;
-                                    filterAgence =
-                                        (vals.agence as string) || null;
-                                }
-                            "
-                            @reset="resetFilters"
                         />
                     </template>
                 </ListPageActions>
@@ -796,6 +791,35 @@ function confirmDelete(v: Vehicule) {
                                 <TriangleAlert class="h-3.5 w-3.5" />
                                 {{ data.usage_label }}
                             </span>
+                        </template>
+                    </Column>
+
+                    <!-- Partages commission (Livreur) par processus exercé -->
+                    <Column header="Partages" style="width: 170px">
+                        <template #body="{ data }">
+                            <div
+                                v-if="partagesAffiches(data).length"
+                                class="flex flex-col gap-1"
+                                :data-testid="`partages-${data.id}`"
+                            >
+                                <div
+                                    v-for="p in partagesAffiches(data)"
+                                    :key="p.code"
+                                    class="flex items-center justify-between gap-2 text-xs"
+                                >
+                                    <span class="text-muted-foreground">{{
+                                        p.label
+                                    }}</span>
+                                    <StatusDot
+                                        :status="p.statut"
+                                        :label="PARTAGE_LABEL[p.statut]"
+                                        size="sm"
+                                    />
+                                </div>
+                            </div>
+                            <span v-else class="text-sm text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 

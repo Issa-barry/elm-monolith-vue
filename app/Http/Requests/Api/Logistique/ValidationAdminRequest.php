@@ -17,7 +17,6 @@ class ValidationAdminRequest extends FormRequest
         return [
             'decision' => ['required', Rule::in(['accord', 'refus', 'invalider'])],
             'motif' => ['nullable', 'required_if:decision,refus', 'string', 'max:1000'],
-            'montant_par_pack' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 

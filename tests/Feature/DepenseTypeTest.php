@@ -256,6 +256,24 @@ class DepenseTypeTest extends TestCase
         $this->assertDatabaseHas('depense_types', ['id' => $type->id, 'is_active' => false]);
     }
 
+    public function test_toggle_forbidden_sans_permission(): void
+    {
+        $readOnly = $this->makeUserWithPermissions($this->org, ['parametres.read']);
+        $type = DepenseType::factory()->interne()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($readOnly)
+            ->patch("/backoffice/depenses/types/{$type->id}/toggle")
+            ->assertForbidden();
+    }
+
+    public function test_toggle_cannot_touch_other_org_type(): void
+    {
+        $otherType = DepenseType::factory()->interne()->create();
+
+        $this->patch("/backoffice/depenses/types/{$otherType->id}/toggle")
+            ->assertForbidden();
+    }
+
     // ── Destroy ──────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_unused_type(): void
@@ -281,6 +299,24 @@ class DepenseTypeTest extends TestCase
             ->assertSessionHasErrors(['delete']);
 
         $this->assertDatabaseHas('depense_types', ['id' => $type->id, 'deleted_at' => null]);
+    }
+
+    public function test_destroy_forbidden_sans_permission(): void
+    {
+        $readOnly = $this->makeUserWithPermissions($this->org, ['parametres.read']);
+        $type = DepenseType::factory()->interne()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($readOnly)
+            ->delete("/backoffice/depenses/types/{$type->id}")
+            ->assertForbidden();
+    }
+
+    public function test_destroy_cannot_touch_other_org_type(): void
+    {
+        $otherType = DepenseType::factory()->interne()->create();
+
+        $this->delete("/backoffice/depenses/types/{$otherType->id}")
+            ->assertForbidden();
     }
 
     // ── Filtrage par concerné ────────────────────────────────────────────────

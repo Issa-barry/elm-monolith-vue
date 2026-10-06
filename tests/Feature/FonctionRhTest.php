@@ -15,13 +15,13 @@ use Tests\TestCase;
 
 /**
  * CRUD de fonctions RH, strictement isolé par organisation — aucune fonction système/partagée
- * (décision finale du 2026-08-21), mirroring du gating de RoleController.
+ * (décision finale du 2026-08-21), mirroring du gating des contrôleurs Role\*.
  */
 class FonctionRhTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. RoleController. */
+    /** Le cache de permissions Spatie persiste pour tout le processus PHPUnit — cf. les contrôleurs Role\*. */
     protected function setUp(): void
     {
         parent::setUp();

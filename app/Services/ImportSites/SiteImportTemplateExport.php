@@ -55,7 +55,7 @@ class SiteImportTemplateExport implements FromArray, WithEvents, WithHeadings, W
         // un code y ressemblerait à un identifiant déjà attribué en base,
         // ce qui n'est pas le cas pour ces lignes d'exemple.
         return [
-            ['Matoto', '', 'Siège', 'Conakry', 'Matoto', '+224664039160', '', '', '', ''],
+            ['Matoto', '', 'Agence', 'Conakry', 'Matoto', '+224664039160', '', '', '', ''],
             ['Cba', '', 'Usine', 'Conakry', 'Kountia', '+224626078393', '', 'Matoto', '', ''],
             ['Lambanyi', '', 'Dépôt', 'Conakry', 'Lambanyi', '+224622671016', '', 'Matoto', '', ''],
         ];

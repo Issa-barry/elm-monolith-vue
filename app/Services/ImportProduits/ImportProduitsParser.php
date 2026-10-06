@@ -101,14 +101,14 @@ class ImportProduitsParser
         );
 
         // code_barres => variante_id, pour détecter un conflit d'unicité sans le laisser à la
-        // contrainte DB brute (cf. ProduitController::validerFormulaire()).
+        // contrainte DB brute (cf. App\Support\Produits\ProduitFormValidator::valider()).
         $codesBarresExistants = ProduitVariante::where('organization_id', $orgId)
             ->whereNotNull('code_barres')
             ->pluck('id', 'code_barres');
 
         $typesActifs = ProduitType::where('organization_id', $orgId)->where('statut', 'actif')->get();
         // Pas de filtre "actif" sur les catégories : Categorie::validerFormulaire() côté
-        // ProduitController n'impose pas non plus cette contrainte (cf. étude préalable).
+        // App\Support\Produits\ProduitFormValidator n'impose pas non plus cette contrainte (cf. étude préalable).
         $categories = Categorie::where('organization_id', $orgId)->get();
         // Fournisseurs actifs uniquement : cohérent avec l'onglet REFERENCES du modèle et
         // Fournisseur::scopeActifs(), déjà utilisé pour peupler le sélecteur du formulaire Web.

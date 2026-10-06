@@ -12,6 +12,32 @@ enum StatutCommandeVente: string
     case FACTURATION = 'facturation';
     case CLOTUREE = 'cloturee';
     case ANNULEE = 'annulee';
+    /**
+     * Retour TOTAL de la marchandise par le livreur, avant tout encaissement (cf.
+     * CommandeVenteRetourService) : tout ce qui avait été chargé est revenu, la facture est annulée
+     * et le stock réintégré. Distinct d'ANNULEE, qui ne survient jamais après le départ du véhicule.
+     */
+    case RETOURNEE = 'retournee';
+    /**
+     * Annulation exceptionnelle d'une commande saisie par erreur (ex : formation faite en
+     * production), possible après le chargement, la facturation et l'encaissement — cf.
+     * AnnulationExceptionnelleService et docs/adr/0004. Distinct d'ANNULEE (annulation normale,
+     * jamais après le départ du véhicule ni après un encaissement) : les régularisations
+     * (encaissements contrepassés, stock réintégré, cashback retiré) n'existent que sur ce chemin.
+     */
+    case ANNULEE_ERREUR_SAISIE = 'annulee_erreur_saisie';
+    /**
+     * Précommande enregistrée (ADR 0019) : stock réservé, facture encore « Créée », acompte éventuel
+     * reçu en avance client. Rien n'est encore sorti du stock ni vendu — hors chiffre d'affaires.
+     */
+    case RESERVEE = 'reservee';
+    /** Précommande dont la préparation est lancée (ADR 0019) : marchandise en cours de préparation. */
+    case A_PREPARER = 'a_preparer';
+    /**
+     * Précommande en retrait préparée, en attente du client (ADR 0019). Une précommande en livraison
+     * passe directement « À charger » à la validation de sa préparation.
+     */
+    case PREPAREE = 'preparee';
 
     public function label(): string
     {
@@ -24,6 +50,11 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'À encaisser',
             self::CLOTUREE => 'Clôturée',
             self::ANNULEE => 'Annulée',
+            self::RETOURNEE => 'Retournée',
+            self::ANNULEE_ERREUR_SAISIE => 'Annulée (erreur de saisie)',
+            self::RESERVEE => 'Réservée',
+            self::A_PREPARER => 'À préparer',
+            self::PREPAREE => 'Préparée',
         };
     }
 
@@ -38,6 +69,11 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'primary',
             self::CLOTUREE => 'success',
             self::ANNULEE => 'danger',
+            self::RETOURNEE => 'warn',
+            self::ANNULEE_ERREUR_SAISIE => 'danger',
+            self::RESERVEE => 'info',
+            self::A_PREPARER => 'warn',
+            self::PREPAREE => 'success',
         };
     }
 
@@ -52,6 +88,11 @@ enum StatutCommandeVente: string
             self::FACTURATION => 'bg-violet-500',
             self::CLOTUREE => 'bg-emerald-500',
             self::ANNULEE => 'bg-red-400',
+            self::RETOURNEE => 'bg-orange-500',
+            self::ANNULEE_ERREUR_SAISIE => 'bg-red-500',
+            self::RESERVEE => 'bg-blue-500',
+            self::A_PREPARER => 'bg-amber-400',
+            self::PREPAREE => 'bg-teal-500',
         };
     }
 
@@ -64,7 +105,7 @@ enum StatutCommandeVente: string
     /** Statuts terminaux — aucune transition possible */
     public function isTerminal(): bool
     {
-        return in_array($this, [self::CLOTUREE, self::ANNULEE]);
+        return in_array($this, [self::CLOTUREE, self::ANNULEE, self::RETOURNEE, self::ANNULEE_ERREUR_SAISIE]);
     }
 
     /** Annulable depuis BROUILLON, A_CHARGER ou FACTURATION (commande directe non encaissée) */

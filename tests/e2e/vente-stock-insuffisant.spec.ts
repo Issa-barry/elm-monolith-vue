@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { login, randomDigits, registerCleanup } from './helpers';
+import {
+    login,
+    randomDigits,
+    registerCleanup,
+    selectOptionFromCombobox,
+} from './helpers';
 
 const PREFIX = 'E2ESTOCKCMD';
 
@@ -43,7 +48,7 @@ async function readUserSiteName(page: Page): Promise<string> {
         .first()
         .innerText();
 
-    // Backend : "{type_label} de {site_nom}" (cf. CommandeVenteController::getUserSite()).
+    // Backend : "{type_label} de {site_nom}" (cf. CommandeVenteFormBuilder::getUserSite()).
     const match = label.match(/\bde\s+(.+)$/i);
     return (match ? match[1] : label).trim();
 }
@@ -75,10 +80,24 @@ async function creerProduitAvecStock(
     await typeCombobox.click();
     await page.getByRole('option', { name: /fabricable/i }).click();
 
+    // Chaque champ InputNumber doit être "blurré" individuellement : PrimeVue InputNumber ne
+    // committe la valeur dans le v-model qu'au blur, jamais sur le simple événement "input" de
+    // .fill() (cf. produit-flow.spec.ts et stock-ajustement.spec.ts, même piège documenté).
     await page.locator('#prix_usine').fill('15000');
+    await page.locator('#prix_usine').blur();
     await page.locator('#prix_usine_tricycle').fill('15000');
+    await page.locator('#prix_usine_tricycle').blur();
     await page.locator('#prix_vente').fill('20000');
     await page.locator('#prix_vente').blur();
+
+    // Tarification par nature de client — obligatoire pour un produit fabricable (cf.
+    // ProduitService::raisonIncoherencePrix() côté serveur, seule source de vérité).
+    await page.locator('#prix_externe').fill('20000');
+    await page.locator('#prix_externe').blur();
+    await page.locator('#prix_revendeur').fill('18000');
+    await page.locator('#prix_revendeur').blur();
+    await page.locator('#prix_distributeur').fill('17000');
+    await page.locator('#prix_distributeur').blur();
 
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
     await expect(page).toHaveURL(/\/produits\/[^/]+$/, { timeout: 20_000 });
@@ -123,12 +142,23 @@ async function creerClientInApp(page: Page, nomComplet: string): Promise<void> {
     await paysCombo.click();
     await page.getByRole('option', { name: /guin(?!.*bissau)/i }).click();
 
+    // Nature du client — défaut "Revendeur" depuis la migration
+    // migrate_client_type_standard_to_revendeur (28/08/2026) : ce type rend le cashback actif
+    // ET son montant par pack obligatoires (cf. ClientForm.vue::isRevendeur), ce dont ce test
+    // n'a rien à faire. "Externe" reste facultatif sur les deux, donc plus simple ici.
+    const natureCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .nth(1);
+    await selectOptionFromCombobox(page, natureCombo, /^externe$/i);
+
     await page.locator('#telephone').fill(randomDigits(9));
     await page
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, {
+    // La création redirige vers la fiche détail (Clients/Show.vue), pas vers l'édition.
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/, {
         timeout: 15_000,
     });
 }
@@ -166,9 +196,15 @@ async function remplirPremiereLigne(
     // affichage de sa valeur sélectionnée (p-dropdown-label), ce qui décale silencieusement
     // tout index plat et faisait passer la quantité voulue dans le mauvais champ (24/08/2026).
     const row = page.locator('#vente-form table tbody tr').first();
-    const produitDropdown = row.locator('td').nth(0).locator('.p-dropdown, .p-select').first();
+    const produitDropdown = row
+        .locator('td')
+        .nth(0)
+        .locator('.p-dropdown, .p-select')
+        .first();
     await produitDropdown.click();
-    const filterInput = page.locator('.p-dropdown-filter, .p-select-filter').first();
+    const filterInput = page
+        .locator('.p-dropdown-filter, .p-select-filter')
+        .first();
     if (await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await filterInput.fill(produitNom);
     }
@@ -177,10 +213,25 @@ async function remplirPremiereLigne(
         .first()
         .click();
 
+    // La liste doit être refermée AVANT de toucher à la quantité : PrimeVue Select rend le focus
+    // à son champ dans un setTimeout(0) après le clic sur une option. Sur un runner chargé, ce
+    // focus arrive après celui de la quantité et la fait blur à vide → l'InputNumber committe
+    // null, Create.vue::onQteChange le ramène à 1 (min) et la frappe s'insère avant ce « 1 »
+    // ("4601" au lieu de "460", CI du 20/09/2026 ; la 1re saisie y échappe car la quantité vaut
+    // déjà 1, donc aucun re-rendu).
+    await page
+        .locator('[role="listbox"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 5_000 });
+
+    // Saisie par remplacement de la sélection, jamais fill('') puis frappe : le champ ne passe
+    // ainsi jamais par l'état vide (null → 1). La valeur affichée est revérifiée pour qu'une
+    // saisie erronée échoue ici, avec un message clair, et non 20 s plus tard sur l'URL.
     const qteInput = row.locator('td').nth(1).locator('input');
-    await qteInput.fill('');
+    await qteInput.selectText();
     await qteInput.pressSequentially(String(qte));
     await qteInput.blur();
+    await expect(qteInput).toHaveValue(String(qte));
 }
 
 /**
@@ -212,8 +263,11 @@ async function soumettreEtConfirmer(page: Page): Promise<void> {
         .first()
         .click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution", cf.
+    // Create.vue::confirmationActionLabel), scopé au dialog (régression E2E corrigée le
+    // 31/08/2026 — "Confirmer et créer" n'existe plus depuis son introduction).
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
@@ -292,10 +346,23 @@ test.describe('Création de commande — contrôle du stock disponible', () => {
             .first();
         await typeCombobox.click();
         await page.getByRole('option', { name: /fabricable/i }).click();
+        // Chaque champ InputNumber doit être "blurré" individuellement : PrimeVue InputNumber
+        // ne committe la valeur dans le v-model qu'au blur, jamais sur le simple événement
+        // "input" de .fill() (cf. produit-flow.spec.ts, même piège documenté).
         await page.locator('#prix_usine').fill('15000');
+        await page.locator('#prix_usine').blur();
         await page.locator('#prix_usine_tricycle').fill('15000');
+        await page.locator('#prix_usine_tricycle').blur();
         await page.locator('#prix_vente').fill('20000');
         await page.locator('#prix_vente').blur();
+        // Tarification par nature de client — obligatoire pour un produit fabricable (cf.
+        // ProduitService::raisonIncoherencePrix() côté serveur, seule source de vérité).
+        await page.locator('#prix_externe').fill('20000');
+        await page.locator('#prix_externe').blur();
+        await page.locator('#prix_revendeur').fill('18000');
+        await page.locator('#prix_revendeur').blur();
+        await page.locator('#prix_distributeur').fill('17000');
+        await page.locator('#prix_distributeur').blur();
         await page.getByRole('button', { name: /^enregistrer$/i }).click();
         await expect(page).toHaveURL(/\/produits\/[^/]+$/, { timeout: 20_000 });
 
@@ -311,15 +378,21 @@ test.describe('Création de commande — contrôle du stock disponible', () => {
         const filterInput = page
             .locator('.p-dropdown-filter, .p-select-filter')
             .first();
-        if (await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        if (
+            await filterInput.isVisible({ timeout: 2_000 }).catch(() => false)
+        ) {
             await filterInput.fill(PREFIX);
         }
 
         await expect(
-            page.locator('[role="option"]:visible', { hasText: produitAvecStock }),
+            page.locator('[role="option"]:visible', {
+                hasText: produitAvecStock,
+            }),
         ).toBeVisible({ timeout: 10_000 });
         await expect(
-            page.locator('[role="option"]:visible', { hasText: produitSansStock }),
+            page.locator('[role="option"]:visible', {
+                hasText: produitSansStock,
+            }),
         ).toHaveCount(0);
     });
 });

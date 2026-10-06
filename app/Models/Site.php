@@ -23,7 +23,9 @@ class Site extends Model
         'code',
         'type',
         'statut',
-        'is_siege_principal',
+        'is_central_tresorerie',
+        'approbation_reception_logistique_obligatoire',
+        'commissions_active',
         'localisation',
         'pays',
         'ville',
@@ -41,7 +43,9 @@ class Site extends Model
         return [
             'type' => SiteType::class,
             'statut' => SiteStatut::class,
-            'is_siege_principal' => 'boolean',
+            'is_central_tresorerie' => 'boolean',
+            'approbation_reception_logistique_obligatoire' => 'boolean',
+            'commissions_active' => 'boolean',
         ];
     }
 
@@ -66,20 +70,17 @@ class Site extends Model
                 } while (static::withTrashed()->where('organization_id', $orgId)->where('code', $code)->exists());
                 $site->code = $code;
             }
+        });
 
-            // Auto-désignation du siège principal (cf. SiegeResolverService) : seulement
-            // quand c'est le TOUT PREMIER site de type siège de l'organisation — jamais un
-            // ->first() arbitraire sur une liste déjà ambiguë. Un deuxième site "siège" créé
-            // ensuite reste explicitement non-principal tant qu'un admin ne le désigne pas
-            // via SiegeResolverService::assignerPrincipal().
-            if ($site->type === SiteType::SIEGE && empty($site->is_siege_principal)) {
-                $aDejaUnPrincipal = static::where('organization_id', $site->organization_id)
-                    ->where('type', SiteType::SIEGE->value)
-                    ->where('is_siege_principal', true)
-                    ->exists();
-                if (! $aDejaUnPrincipal) {
-                    $site->is_siege_principal = true;
-                }
+        // Un seul site central de trésorerie par organisation (ADR 0017) : en désigner un retire
+        // le rôle à l'ancien, dans la même écriture — jamais deux centraux simultanés, quel que
+        // soit le chemin (SiteCentralTresorerieResolver::designer(), installation, seeders).
+        static::saving(function (Site $site) {
+            if ($site->is_central_tresorerie && $site->isDirty('is_central_tresorerie')) {
+                static::where('organization_id', $site->organization_id)
+                    ->when($site->exists, fn ($q) => $q->whereKeyNot($site->getKey()))
+                    ->where('is_central_tresorerie', true)
+                    ->update(['is_central_tresorerie' => false]);
             }
         });
     }
@@ -111,10 +112,18 @@ class Site extends Model
      * de Usine de Matoto". On détecte ce cas (nom commençant déjà par "{préfixe} de ") pour
      * afficher `nom` tel quel ; les sites nommés manuellement (nom = simple libellé court, ex:
      * "Matoto", cf. SitesSeeder) restent préfixés comme avant.
+     *
+     * Type « Autre » : `nom` seul — « Autre de Matoto » ne décrit rien (c'est notamment le type
+     * des anciens sièges reclassés par la migration de l'ADR 0017 en attendant leur vrai type).
      */
     public function getLabelAttribute(): string
     {
         $nom = trim((string) $this->nom);
+
+        if ($this->type === SiteType::AUTRE) {
+            return $nom;
+        }
+
         $prefixe = explode(' / ', $this->type_label)[0];
 
         if (Str::startsWith(mb_strtolower($nom), mb_strtolower($prefixe).' de ')) {
@@ -177,13 +186,39 @@ class Site extends Model
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    public function isSiege(): bool
+    public function isCentralTresorerie(): bool
     {
-        return $this->type === SiteType::SIEGE;
+        return (bool) $this->is_central_tresorerie;
     }
 
     public function isActive(): bool
     {
         return $this->statut === SiteStatut::ACTIVE;
+    }
+
+    /**
+     * Garde-fou métier indépendant du statut opérationnel : quand `false`, la cible de commission
+     * `CommissionCibleType::CODE_SITE` n'est plus générée pour ce site (cf.
+     * CommissionEnveloppeGenerator::genererDepuisContexte(), docs/commissions.md COMM-013).
+     * N'affecte JAMAIS les autres bénéficiaires (équipe de livraison, propriétaire, consultant) —
+     * décision produit du 13/09/2026, scope volontairement limité à la seule part du site.
+     */
+    public function commissionsActives(): bool
+    {
+        return (bool) $this->commissions_active;
+    }
+
+    /**
+     * Réglage effectif d'approbation admin de la réception logistique pour CE site — dérogation
+     * du site si explicitement configurée (true/false), sinon repli sur le réglage organisation
+     * (cf. Parametre::isApprobationReceptionLogistiqueObligatoire()). Même principe que
+     * SolvabiliteService::resoudrePlafondVehicule()/resoudrePlafondClient(), sans second flag
+     * "dérogation activée" : `null` sur la colonne suffit à distinguer "pas configuré" de
+     * true/false, contrairement à un seuil entier (0 y serait ambigu).
+     */
+    public function approbationReceptionObligatoireEffective(): bool
+    {
+        return $this->approbation_reception_logistique_obligatoire
+            ?? Parametre::isApprobationReceptionLogistiqueObligatoire($this->organization_id);
     }
 }

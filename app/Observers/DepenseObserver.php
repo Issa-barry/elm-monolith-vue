@@ -57,7 +57,7 @@ class DepenseObserver
     public function deleted(Depense $depense): void
     {
         // Même règle qu'à la dévalidation : on contrepasse, on ne supprime jamais
-        // l'écriture. DepenseController::destroy() englobe déjà la suppression dans
+        // l'écriture. DestroyDepenseController englobe déjà la suppression dans
         // une transaction.
         $this->decomptabiliser($depense);
     }
@@ -66,7 +66,7 @@ class DepenseObserver
     {
         // Comptabilité générale : une dépense validée décaisse de la trésorerie réelle
         // — bloquant depuis la revue Codex du 2026-08-22 (même raison que
-        // PaiementFichePaiement/PaiePaiement). DepenseController::valider() englobe
+        // PaiementFichePaiement/PaiePaiement). ValiderDepenseController englobe
         // déjà ce changement de statut dans une transaction.
         $this->depenseComptabilisation->comptabiliserDepenseValidee($depense);
     }

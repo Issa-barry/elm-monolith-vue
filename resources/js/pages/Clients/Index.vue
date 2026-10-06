@@ -12,7 +12,7 @@ import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { showEntityStatsCards } from '@/composables/useEntityConfig';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatPhoneDisplay } from '@/lib/utils';
+import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -21,7 +21,6 @@ import {
     MoreVertical,
     Pencil,
     Plus,
-    Search,
     Trash2,
     Users,
 } from 'lucide-vue-next';
@@ -33,7 +32,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 function initials(name: string | null | undefined): string {
     if (!name) return '?';
@@ -47,7 +46,7 @@ function initials(name: string | null | undefined): string {
 }
 
 interface Client {
-    id: number;
+    id: string;
     nom: string;
     prenom: string;
     nom_complet: string;
@@ -59,10 +58,22 @@ interface Client {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
+    type: string;
+    type_label: string;
     cashback_eligible: boolean;
+    cashback_montant_par_pack: number | null;
 }
 
-const props = defineProps<{ clients: Client[] }>();
+const props = defineProps<{
+    clients: Client[];
+    types: { value: string; label: string }[];
+    filters: {
+        type: string;
+        cashback: string;
+        statut: string;
+        recherche: string;
+    };
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
@@ -72,13 +83,28 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Client>(
     (client) => `/backoffice/clients/${client.id}`,
 );
 
-const statut = ref<string>('tous');
-const search = ref('');
-const mobileSearch = ref('');
-
-const filterFields: FilterField[] = [
+const filterFields = computed<FilterField[]>(() => [
     {
-        key: 'search',
+        key: 'type',
+        label: 'Nature',
+        type: 'select',
+        inline: true,
+        placeholder: 'Toutes les natures',
+        options: props.types,
+    },
+    {
+        key: 'cashback',
+        label: 'Cashback',
+        type: 'select',
+        inline: true,
+        placeholder: 'Tous',
+        options: [
+            { value: 'eligible', label: 'Éligible' },
+            { value: 'non_eligible', label: 'Non éligible' },
+        ],
+    },
+    {
+        key: 'recherche',
         label: 'Rechercher',
         type: 'text',
         inline: true,
@@ -89,54 +115,19 @@ const filterFields: FilterField[] = [
         label: 'Statut',
         type: 'select',
         options: [
-            { value: 'tous', label: 'Tous' },
             { value: 'actif', label: 'Actifs' },
             { value: 'inactif', label: 'Inactifs' },
         ],
     },
-];
+]);
 
-const totalClients = computed(() => filteredClients.value.length);
+const totalClients = computed(() => props.clients.length);
 const activeClients = computed(
-    () => filteredClients.value.filter((c) => c.is_active).length,
+    () => props.clients.filter((c) => c.is_active).length,
 );
 const inactiveClients = computed(
-    () => filteredClients.value.filter((c) => !c.is_active).length,
+    () => props.clients.filter((c) => !c.is_active).length,
 );
-
-function resetFilters() {
-    search.value = '';
-    statut.value = 'tous';
-}
-
-const filteredClients = computed(() => {
-    let list = props.clients;
-    if (statut.value !== 'tous') {
-        list = list.filter((c) => c.is_active === (statut.value === 'actif'));
-    }
-    const q = search.value.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-        (c) =>
-            c.nom_complet.toLowerCase().includes(q) ||
-            (c.email ?? '').toLowerCase().includes(q) ||
-            (c.adresse ?? '').toLowerCase().includes(q) ||
-            (c.ville ?? '').toLowerCase().includes(q) ||
-            (c.pays ?? '').toLowerCase().includes(q),
-    );
-});
-
-const mobileFiltered = computed(() => {
-    const q = mobileSearch.value.trim().toLowerCase();
-    if (!q) return props.clients;
-    return props.clients.filter(
-        (c) =>
-            c.nom_complet.toLowerCase().includes(q) ||
-            (c.email ?? '').toLowerCase().includes(q) ||
-            (c.adresse ?? '').toLowerCase().includes(q) ||
-            (c.ville ?? '').toLowerCase().includes(q),
-    );
-});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -219,25 +210,20 @@ function confirmDelete(c: Client) {
                 <div v-else class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search -->
             <div class="px-3 py-2">
-                <div class="relative">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="mobileSearch"
-                        type="search"
-                        placeholder="Rechercher..."
-                        class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                </div>
+                <DataFilters
+                    trigger-only
+                    url="/backoffice/clients"
+                    :values="filters"
+                    :fields="filterFields"
+                    :result-count="clients.length"
+                />
             </div>
 
             <!-- Card list -->
             <div class="divide-y">
                 <div
-                    v-for="c in mobileFiltered"
+                    v-for="c in clients"
                     :key="c.id"
                     class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
                 >
@@ -343,7 +329,7 @@ function confirmDelete(c: Client) {
 
             <!-- Empty state -->
             <div
-                v-if="mobileFiltered.length === 0"
+                v-if="clients.length === 0"
                 class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
             >
                 <Users class="h-12 w-12 opacity-30" />
@@ -361,7 +347,7 @@ function confirmDelete(c: Client) {
         </div>
 
         <!-- ── Desktop (≥ sm) ─────────────────────────────────────────────── -->
-        <div class="hidden flex-col gap-6 p-6 sm:flex">
+        <div class="hidden min-w-0 flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
             <div class="flex items-center justify-between">
                 <div>
@@ -369,8 +355,8 @@ function confirmDelete(c: Client) {
                         Clients
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ filteredClients.length }} client{{
-                            filteredClients.length !== 1 ? 's' : ''
+                        {{ clients.length }} client{{
+                            clients.length !== 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -409,29 +395,35 @@ function confirmDelete(c: Client) {
 
             <!-- Tableau -->
             <DataFilters
-                :values="{ statut: statut, search: search }"
+                url="/backoffice/clients"
+                :values="filters"
                 :fields="filterFields"
-                :result-count="filteredClients.length"
-                @apply="
-                    (vals) => {
-                        statut = (vals.statut as string) || 'tous';
-                        search = (vals.search as string) || '';
-                    }
-                "
-                @reset="resetFilters"
+                :result-count="clients.length"
             />
 
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
+            >
                 <DataTable
-                    :value="filteredClients"
+                    :value="clients"
                     :paginator="totalClients > 20"
                     :rows="20"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    table-class="w-full"
-                    :pt="{ bodyRow: bodyRowPt }"
+                    table-style="width: max-content; min-width: 100%"
+                    :pt="{
+                        root: { class: 'w-full min-w-0' },
+                        table: { class: 'whitespace-nowrap' },
+                        tableContainer: {
+                            class: 'overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                            tabindex: 0,
+                            role: 'region',
+                            'aria-label': 'Liste des clients',
+                        },
+                        bodyRow: bodyRowPt,
+                    }"
                     @row-click="onRowClick"
                 >
                     <!-- Nom -->
@@ -467,7 +459,7 @@ function confirmDelete(c: Client) {
                     <Column
                         field="telephone"
                         header="Téléphone"
-                        style="width: 190px"
+                        style="min-width: 200px"
                     >
                         <template #body="{ data }">
                             <span
@@ -504,11 +496,26 @@ function confirmDelete(c: Client) {
                         </template>
                     </Column>
 
+                    <!-- Nature -->
+                    <Column
+                        field="type_label"
+                        header="Nature"
+                        style="min-width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ data.type_label }}
+                            </span>
+                        </template>
+                    </Column>
+
                     <!-- Cashback -->
                     <Column
                         field="cashback_eligible"
                         header="Cashback"
-                        style="width: 150px"
+                        style="min-width: 170px"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -527,12 +534,35 @@ function confirmDelete(c: Client) {
                         </template>
                     </Column>
 
+                    <!-- Montant cashback -->
+                    <Column
+                        field="cashback_montant_par_pack"
+                        header="Montant cashback"
+                        style="min-width: 200px"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="
+                                    data.cashback_eligible &&
+                                    data.cashback_montant_par_pack
+                                "
+                                class="text-muted-foreground tabular-nums"
+                            >
+                                {{ formatGNF(data.cashback_montant_par_pack) }}
+                                / pack
+                            </span>
+                            <span v-else class="text-muted-foreground">-</span>
+                        </template>
+                    </Column>
+
                     <!-- Statut -->
                     <Column
                         field="is_active"
                         header="Statut"
                         sortable
-                        style="width: 110px"
+                        style="min-width: 140px"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -548,7 +578,7 @@ function confirmDelete(c: Client) {
                     </Column>
 
                     <!-- Actions -->
-                    <Column header="" style="width: 56px">
+                    <Column header="" style="min-width: 64px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <DropdownMenu>

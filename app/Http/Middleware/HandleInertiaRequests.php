@@ -2,15 +2,20 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\NatureMouvementFonds;
+use App\Enums\StatutMouvementFonds;
 use App\Enums\StatutTransfert;
 use App\Models\ContactMessage;
+use App\Models\MouvementFonds;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
 use App\Services\ThemePolicyService;
+use App\Services\Tresorerie\ApprovisionnementsAgentService;
 use App\Support\AppVersion;
+use App\Support\Permissions\RoleVisibility;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -110,6 +115,68 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $query->whereIn('site_destination_id', $siteIds)->count();
+    }
+
+    /**
+     * Mouvements de fonds ENVOYÉS entre agences (nature `inter_sites` — un versement de caisse
+     * dédiée `interne_caisses` suit son propre workflow, déjà traité par sa page dédiée) destinés
+     * à un site de l'utilisateur et qu'il est habilité à confirmer. Affiché comme badge sur le
+     * menu Mouvements (Comptabilité > Trésorerie). Le badge disparaît de lui-même dès la
+     * confirmation (ENVOYE -> RECU) : ce compteur relit l'état réel du mouvement, il ne mémorise
+     * aucun état de lecture séparé.
+     *
+     * Un admin (`isAdmin()`) voit le compteur org-wide, sans restriction de site — pas seulement
+     * pour ses propres sites rattachés. C'est nécessaire pour rester cohérent avec le reste de la
+     * fonctionnalité : `MouvementFondsPolicy::recevoir()` laisse déjà un admin confirmer un
+     * mouvement même sans y être personnellement affecté, et `MouvementFondsController::
+     * mouvementsVisibles()` lui montre déjà tous les mouvements de l'organisation. Un admin
+     * pourrait donc déjà AGIR sur un mouvement sans jamais être PRÉVENU qu'une action l'attend —
+     * incident constaté le 22/09/2026 (super admin rattaché uniquement au siège, mouvement envoyé
+     * vers une autre agence, badge resté à 0). Volontairement différent de
+     * transfertsAReceptionner() ci-dessus, qui n'a pas cette dérogation (non corrigé, hors
+     * périmètre de ce chantier).
+     */
+    private function mouvementsFondsAConfirmer(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+        if (! $user->can('tresorerie.recevoir')) {
+            return 0;
+        }
+
+        // Mouvements entre agences ET règlements inter-agences (ADR 0012) : l'agence destinataire doit
+        // confirmer la réception des deux. Les versements de caisse (même agence) restent à part, de
+        // même que les approvisionnements, réservés à l'agent (approvisionnementsAConfirmer()).
+        $query = MouvementFonds::where('organization_id', $user->organization_id)
+            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value])
+            ->where('statut', StatutMouvementFonds::ENVOYE->value);
+
+        if (! $user->isAdmin()) {
+            $siteIds = $user->sites()->pluck('sites.id');
+            if ($siteIds->isEmpty()) {
+                return 0;
+            }
+            $query->whereIn('site_destination_id', $siteIds);
+        }
+
+        return $query->count();
+    }
+
+    /**
+     * Approvisionnements de SA caisse (ADR 0018) envoyés et pas encore confirmés : seul l'agent
+     * bénéficiaire peut les confirmer, aucune permission n'est requise — il doit donc être prévenu
+     * même sans accès à la trésorerie (badge « Ma situation »).
+     */
+    private function approvisionnementsAConfirmer(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+
+        return app(ApprovisionnementsAgentService::class)->nombreAConfirmer($user);
     }
 
     private function propositionsATraiter(Request $request): int
@@ -225,6 +292,25 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 
+    /**
+     * Libellé humain de chaque rôle visible par l'organisation courante (système ∪ propres à
+     * l'organisation), par nom technique. Remplace les dictionnaires ROLE_LABELS figés
+     * individuellement dans RoleBadges.vue/UserInfo.vue/HeaderWidget.vue/UserForm.vue/
+     * Profile.vue/ProduitParametrage.vue/DepenseParametrage.vue/Sites/Show.vue/
+     * client/Dashboard.vue (2026-09-06) — un rôle personnalisé d'organisation ou un libellé
+     * modifié depuis /backoffice/roles est désormais reflété partout via cette seule source,
+     * jamais recopié localement.
+     */
+    private function roleLabels(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        return RoleVisibility::query($user->organization_id)->pluck('label', 'name')->all();
+    }
+
     private function defaultSite(Request $request): ?array
     {
         $user = $request->user();
@@ -276,6 +362,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $this->authUserPayload($request),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
+                'role_labels' => $this->roleLabels($request),
                 'default_site' => $this->defaultSite($request),
                 'user_sites' => $this->userSites($request),
             ],
@@ -283,6 +370,8 @@ class HandleInertiaRequests extends Middleware
             'stock_alertes' => $this->stockAlertes($request),
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
+            'mouvements_fonds_a_confirmer' => $this->mouvementsFondsAConfirmer($request),
+            'approvisionnements_a_confirmer' => $this->approvisionnementsAConfirmer($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),

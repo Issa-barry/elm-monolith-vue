@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
+use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -69,15 +70,41 @@ class UserTest extends TestCase
 
     // ── permissionsMap ────────────────────────────────────────────────────────
 
-    public function test_permissions_map_returns_179_keys(): void
+    /**
+     * 179 était le compte de l'ANCIENNE liste locale de permissionsMap() (37 ressources — sans
+     * `tresorerie`, oublié — × 4 actions + 31 standalone sur les 40 réellement seedées). Depuis
+     * la refonte du 2026-09-06, permissionsMap() consomme PermissionCatalog — la même source de
+     * vérité que les contrôleurs Role\* et le seeder — et couvre donc les 38 ressources × 4 actions + 42
+     * permissions standalone réellement définies (192 + `communications.read` puis
+     * `communications.manage`, ajoutées le 07/09/2026 pour le monitoring et le paramétrage
+     * Communications) = 194, puis `ventes.valider_reception` (13/09/2026, séparation des
+     * permissions de workflow vente — cf. CommandeVentePolicy) = 195, puis `ventes.exporter`
+     * (15/09/2026, bouton "Exporter" de Ventes/Index.vue — cf. ExportCommandeVenteController) = 196,
+     * puis `tresorerie.verser` (19/09/2026, versement d'une caisse dédiée à un agent vers la caisse
+     * de l'agence — cf. CompteTresoreriePolicy) = 197, puis `tresorerie.valider_supports`
+     * (19/09/2026, validation d'un support de trésorerie avant usage — cf. CompteTresoreriePolicy) = 198,
+     * puis `ventes.enregistrer_retour` (23/09/2026, retour de livraison avant encaissement — cf.
+     * CommandeVentePolicy::enregistrerRetour()) = 199, puis `ventes.annuler_exceptionnel` (24/09/2026,
+     * annulation exceptionnelle d'une commande saisie par erreur — cf. AnnulationExceptionnelleService) = 200,
+     * puis `rapports.read_own` et `rapports.read` (26/09/2026, rapport d'activité et « Ma situation » —
+     * cf. RapportPerimetreResolver) = 202, puis `factures.encaisser_autre_agence` (29/09/2026, encaisser
+     * dans son agence une commande d'une autre agence — cf. AgenceEncaissementResolver, ADR 0012) = 203,
+     * puis `tresorerie.designer_principale` (02/10/2026, transfert de la trésorerie principale depuis le
+     * formulaire Site — cf. SiteFormSupport::resoudreTresoreriePrincipale(), ADR 0017) = 204, puis
+     * `ventes.precommander` (04/10/2026, création d'une précommande — cf. ADR 0019) = 205, puis les cinq
+     * permissions du cycle de vie des précommandes (préparer, valider le retrait, rembourser, annuler
+     * avant et après préparation — ADR 0019 lot 2) = 210, puis `ventes.changer_mode_remise`
+     * (05/10/2026, retrait ↔ livraison avant le chargement — ADR 0019, D16) = 211.
+     */
+    public function test_permissions_map_returns_211_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $map = $user->permissionsMap();
 
-        // 37 resources × 4 actions + 31 standalone = 179
-        $this->assertCount(179, $map);
+        $this->assertCount(PermissionCatalog::totalCount(), $map);
+        $this->assertCount(211, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void
