@@ -342,7 +342,7 @@ function confirmDelete(equipe: Equipe) {
                 striped-rows
                 :rows="25"
                 :paginator="equipes.length > 25"
-                class="rounded-xl border bg-card shadow-sm"
+                class="rounded-xl border bg-card text-sm shadow-sm"
                 :table-style="{ tableLayout: 'fixed', width: '100%' }"
                 :pt="{ bodyRow: bodyRowPt }"
                 @row-click="onRowClick"

@@ -188,10 +188,24 @@ séparé du lot 1 : le tableau de bord applique le même périmètre que les rap
 
 - **Administrateur** (super admin, administrateur entreprise) : toute l'organisation, inchangé.
 - **Autre utilisateur** : uniquement ses agences (`user_sites`) — statistiques de factures, encaissé,
-  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par type de véhicule et par
-  produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
+  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par processus, par type de
+  véhicule et par produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
 - Une facture sans agence n'apparaît que dans la vue organisation.
 - Pas de filtre Agence sur le tableau de bord : le périmètre découle des droits.
 
 **Changement visible** dès la mise en production : un responsable qui voyait l'organisation entière
 ne voit plus que ses agences.
+
+## Tableau de bord — ventes par processus (2026-10-06)
+
+Carte « Ventes par processus » : CA facturé (`montant_net`) de la période choisie, factures annulées
+exclues, même périmètre d'agence que ci-dessus. Les trois processus d'une vente sont toujours listés,
+même à 0 : **Vente**, **Distribution client**, **Transfert grossiste**. Le transfert logistique n'est
+pas une vente et n'y figure pas.
+
+- Le processus n'est pas stocké : il est dérivé de la commande par
+  `CommissionProcessusDefaults::identiteCodePourVente()` (nature d'opération, type de client, mode de
+  remise grossiste), la même source que la colonne « Processus » de la liste des ventes. Un grossiste
+  en enlèvement compte donc en **Vente**, un grossiste livré en **Transfert grossiste**.
+- Affichage en barres horizontales classées du plus gros au plus petit : longueur relative au premier
+  processus, part (%) relative au total, nombre de factures et montant GNF complet.

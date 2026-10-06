@@ -12,16 +12,26 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         $this->withoutMiddleware(ValidateCsrfToken::class);
+    }
+
+    /**
+     * Le garde-fou s'exécute ici, juste après la création de l'application et AVANT
+     * setUpTraits() : c'est setUpTraits() qui lance RefreshDatabase (migrate:fresh). Placé
+     * après parent::setUp(), il ne levait son exception qu'une fois la base déjà vidée
+     * (incident du 06/10/2026 : config mise en cache sur MySQL → `elm-monolithe` effacée).
+     */
+    protected function refreshApplication(): void
+    {
+        parent::refreshApplication();
         $this->guardAgainstRealDatabase();
     }
 
     /**
      * Garde-fou dur : un test ne doit jamais pouvoir toucher la vraie base MySQL de dev
      * (RefreshDatabase y ferait un DROP/CREATE en conditions réelles). phpunit.xml force
-     * déjà DB_CONNECTION=sqlite / DB_DATABASE=:memory: via l'attribut force="true", mais on
-     * revérifie aussi ici à l'exécution : toute dérive de config (APP_ENV mal chargé,
-     * .env.testing modifié, override local) fait échouer le test immédiatement au lieu de
-     * risquer de vider une base réelle.
+     * déjà DB_CONNECTION=sqlite / DB_DATABASE=:memory: via l'attribut force="true", mais
+     * bootstrap/cache/config.php (config:cache / optimize) l'emporte sur ces variables :
+     * toute dérive de config fait échouer le test avant la moindre requête.
      */
     private function guardAgainstRealDatabase(): void
     {

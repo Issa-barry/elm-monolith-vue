@@ -12,7 +12,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/composables/usePermissions';
-import { dashboard, home } from '@/routes';
+import { home } from '@/routes';
 import { type NavItem, type PermissionKey } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
@@ -22,6 +22,7 @@ import {
     Car,
     ChartColumn,
     Contact,
+    HandCoins,
     Layers,
     LayoutGrid,
     MessageSquare,
@@ -123,8 +124,26 @@ const vehiculesItems = computed((): NavItem[] => {
 
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
-        { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
+        {
+            // Chemin relatif comme les autres entrées : l'URL Wayfinder est absolue et ne serait
+            // jamais reconnue comme page active par NavMainItem.
+            title: 'Ventes',
+            href: '/backoffice/dashboard',
+            icon: LayoutGrid,
+            group: 'Tableau de bord',
+        },
     ];
+
+    if (
+        moduleActive('comptabilite') &&
+        (can('comptabilite.read') || can('commissions.read'))
+    )
+        items.push({
+            title: 'Commissions',
+            href: '/backoffice/tableau-de-bord/commissions',
+            icon: HandCoins,
+            group: 'Tableau de bord',
+        });
 
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
