@@ -19,67 +19,36 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
+import type { DepenseRow } from '@/types/depense';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import {
     AlertTriangle,
-    Check,
+    ArrowLeft,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
     Download,
     ExternalLink,
-    Eye,
     FileSpreadsheet,
-    History,
-    MoreHorizontal,
-    Pencil,
     Plus,
     Printer,
     Receipt,
-    Send,
-    Trash2,
-    X,
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import DepenseActions from './partials/DepenseActions.vue';
+import MobileDepenseList from './partials/MobileDepenseList.vue';
 
 interface Option {
     value: string;
     label: string;
-}
-
-interface DepenseRow {
-    id: string;
-    montant: number;
-    date_depense: string;
-    statut: string;
-    statut_label: string;
-    commentaire: string | null;
-    type: {
-        id: string;
-        libelle: string;
-        categorie: string;
-        categorie_label: string;
-    } | null;
-    beneficiaire_type: string | null;
-    beneficiaire_id: string | null;
-    beneficiaire_label: string | null;
-    beneficiaire_telephone: string | null;
-    vehicule_id: string | null;
-    vehicule_nom: string | null;
-    vehicule_immatriculation: string | null;
-    site: { id: string; nom: string } | null;
-    user: { id: string; name: string };
-    validateur: { id: string; name: string } | null;
-    can_valider: boolean;
 }
 
 interface Paginator {
@@ -124,8 +93,8 @@ const props = defineProps<{
     can_create: boolean;
 }>();
 
-const { can } = usePermissions();
 const toast = useToast();
+const isMobile = useMediaQuery('(max-width: 639px)');
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -163,12 +132,6 @@ const filterValues = computed(() => ({
 
 const filterFields = computed<FilterField[]>(() => [
     {
-        key: 'search',
-        label: 'Rechercher',
-        type: 'text',
-        placeholder: 'Rechercher...',
-    },
-    {
         key: 'statut',
         label: 'Statut',
         type: 'select',
@@ -176,6 +139,19 @@ const filterFields = computed<FilterField[]>(() => [
             { value: '', label: 'Tous les statuts' },
             ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
         ],
+    },
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        placeholder: 'Rechercher...',
+    },
+    {
+        key: 'date',
+        label: 'Période',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
     },
     {
         key: 'concerne',
@@ -221,13 +197,6 @@ const filterFields = computed<FilterField[]>(() => [
                 label: c.label,
             })),
         ],
-    },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
     },
     {
         key: 'montant',
@@ -425,20 +394,6 @@ function formatPaginationLabel(label: string) {
     return el.textContent?.trim() ?? label.trim();
 }
 
-function statutDotClass(s: string) {
-    return (
-        (
-            {
-                brouillon: 'bg-zinc-400 dark:bg-zinc-500',
-                soumis: 'bg-blue-500',
-                valide: 'bg-emerald-500',
-                rejete: 'bg-red-500',
-                annule: 'bg-red-400',
-            } as Record<string, string>
-        )[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
-    );
-}
-
 const categorieColors: Record<string, string> = {
     interne: 'bg-muted text-muted-foreground',
     employe: 'bg-muted text-muted-foreground',
@@ -452,20 +407,42 @@ const categorieColors: Record<string, string> = {
     <Head title="Dépenses" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <div class="flex flex-col gap-6 p-4 sm:p-6">
+        <div
+            class="flex min-w-0 flex-col gap-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-6"
+        >
             <!-- En-tête -->
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Dépenses
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {{ depenses.total }} dépense{{
-                            depenses.total !== 1 ? 's' : ''
-                        }}
-                    </p>
+            <header
+                class="sticky top-0 z-10 flex flex-col gap-3 border-b bg-background px-4 py-2 sm:static sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:border-0 sm:p-0"
+            >
+                <div
+                    class="relative flex min-h-11 items-center justify-center sm:justify-start"
+                >
+                    <Link
+                        href="/backoffice/dashboard"
+                        aria-label="Retour au tableau de bord"
+                        class="absolute left-0 flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:hidden"
+                        ><ArrowLeft class="size-5"
+                    /></Link>
+                    <div class="px-24 text-center sm:px-0 sm:text-left">
+                        <h1
+                            class="text-base font-semibold tracking-tight sm:text-2xl"
+                        >
+                            Dépenses
+                        </h1>
+                        <p
+                            class="text-xs text-muted-foreground sm:mt-1 sm:text-sm"
+                        >
+                            {{ depenses.total }} dépense{{
+                                depenses.total !== 1 ? 's' : ''
+                            }}
+                        </p>
+                    </div>
+                    <div
+                        id="depenses-mobile-primary"
+                        class="absolute right-0 sm:hidden"
+                    />
                 </div>
-                <ListPageActions>
+                <ListPageActions class="depenses-page-actions w-full sm:w-auto">
                     <template #export>
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
@@ -510,18 +487,58 @@ const categorieColors: Record<string, string> = {
                         />
                     </template>
                     <template v-if="props.can_create" #primary>
-                        <Link href="/backoffice/depenses/create">
-                            <Button>
-                                <Plus class="mr-2 h-4 w-4" />
-                                Nouvelle dépense
-                            </Button>
-                        </Link>
+                        <Teleport
+                            to="#depenses-mobile-primary"
+                            :disabled="!isMobile"
+                            defer
+                        >
+                            <Link href="/backoffice/depenses/create">
+                                <Button
+                                    aria-label="Nouvelle dépense"
+                                    class="h-11 sm:h-9"
+                                >
+                                    <Plus class="size-4" />
+                                    <span class="sm:hidden">Nouveau</span>
+                                    <span class="hidden sm:inline"
+                                        >Nouvelle dépense
+                                    </span>
+                                </Button>
+                            </Link>
+                        </Teleport>
                     </template>
                 </ListPageActions>
-            </div>
+            </header>
 
             <!-- Stats -->
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <section
+                data-testid="depenses-mobile-summary"
+                class="mx-4 rounded-2xl border bg-card p-4 sm:hidden"
+                aria-label="Résumé des dépenses"
+            >
+                <p class="text-xs text-muted-foreground">Montant total</p>
+                <p class="mt-1 text-2xl font-semibold break-words tabular-nums">
+                    {{ fmt(stats.montant_total) }}
+                </p>
+                <div class="mt-4 grid grid-cols-2 gap-3 border-t pt-3 text-sm">
+                    <div>
+                        <StatusDot
+                            status="soumis"
+                            label="En attente"
+                            size="sm"
+                        />
+                        <p class="mt-1 font-semibold tabular-nums">
+                            {{ stats.en_attente }}
+                        </p>
+                    </div>
+                    <div>
+                        <StatusDot status="valide" label="Validées" size="sm" />
+                        <p class="mt-1 font-semibold tabular-nums">
+                            {{ stats.validees }}
+                        </p>
+                    </div>
+                </div>
+            </section>
+            <div class="hidden grid-cols-4 gap-4 sm:grid">
                 <div class="rounded-xl border bg-card p-5">
                     <p class="text-sm text-muted-foreground">Total dépenses</p>
                     <p class="mt-1 text-3xl font-bold">{{ stats.total }}</p>
@@ -549,7 +566,10 @@ const categorieColors: Record<string, string> = {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                data-testid="depenses-table"
+                class="hidden overflow-x-auto rounded-xl border bg-card sm:block"
+            >
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
@@ -739,124 +759,21 @@ const categorieColors: Record<string, string> = {
                             <td class="px-4 py-3">
                                 <StatusDot
                                     :label="d.statut_label"
-                                    :dot-class="statutDotClass(d.statut)"
+                                    :status="d.statut"
                                 />
                             </td>
 
                             <!-- Actions -->
                             <td class="px-4 py-3">
                                 <div class="flex justify-end">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-8 w-8"
-                                                aria-label="Actions"
-                                            >
-                                                <MoreHorizontal
-                                                    class="h-4 w-4"
-                                                />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                            align="end"
-                                            class="w-48"
-                                        >
-                                            <!-- Voir -->
-                                            <DropdownMenuItem as-child>
-                                                <Link
-                                                    :href="`/backoffice/depenses/${d.id}`"
-                                                    class="flex w-full items-center gap-2"
-                                                >
-                                                    <Eye class="h-4 w-4" />
-                                                    Voir le détail
-                                                </Link>
-                                            </DropdownMenuItem>
-
-                                            <!-- Historique -->
-                                            <DropdownMenuItem
-                                                class="cursor-pointer"
-                                                @click="openAudit(d.id)"
-                                            >
-                                                <History class="h-4 w-4" />
-                                                Historique
-                                            </DropdownMenuItem>
-
-                                            <!-- Modifier (brouillon, rejeté ou annulé) -->
-                                            <DropdownMenuItem
-                                                v-if="
-                                                    [
-                                                        'brouillon',
-                                                        'rejete',
-                                                        'annule',
-                                                    ].includes(d.statut) &&
-                                                    can('depenses.update')
-                                                "
-                                                as-child
-                                            >
-                                                <Link
-                                                    :href="`/backoffice/depenses/${d.id}/edit`"
-                                                    class="flex w-full items-center gap-2"
-                                                >
-                                                    <Pencil class="h-4 w-4" />
-                                                    Modifier
-                                                </Link>
-                                            </DropdownMenuItem>
-
-                                            <DropdownMenuSeparator />
-
-                                            <!-- Soumettre (brouillon) -->
-                                            <DropdownMenuItem
-                                                v-if="d.statut === 'brouillon'"
-                                                class="cursor-pointer"
-                                                @click="soumettre(d.id)"
-                                            >
-                                                <Send class="h-4 w-4" />
-                                                Soumettre
-                                            </DropdownMenuItem>
-
-                                            <!-- Valider -->
-                                            <DropdownMenuItem
-                                                v-if="d.can_valider"
-                                                class="cursor-pointer text-emerald-700 focus:text-emerald-700"
-                                                @click="valider(d.id)"
-                                            >
-                                                <Check class="h-4 w-4" />
-                                                Valider
-                                            </DropdownMenuItem>
-
-                                            <!-- Rejeter -->
-                                            <DropdownMenuItem
-                                                v-if="d.can_valider"
-                                                class="cursor-pointer text-destructive focus:text-destructive"
-                                                @click="rejeter(d.id)"
-                                            >
-                                                <X class="h-4 w-4" />
-                                                Rejeter
-                                            </DropdownMenuItem>
-
-                                            <DropdownMenuSeparator
-                                                v-if="
-                                                    d.statut === 'brouillon' &&
-                                                    can('depenses.delete')
-                                                "
-                                            />
-
-                                            <!-- Supprimer (brouillon seulement) -->
-                                            <DropdownMenuItem
-                                                v-if="
-                                                    d.statut === 'brouillon' &&
-                                                    can('depenses.delete')
-                                                "
-                                                class="cursor-pointer text-destructive focus:text-destructive"
-                                                @click="destroy(d.id)"
-                                            >
-                                                <Trash2 class="h-4 w-4" />
-                                                Supprimer
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <DepenseActions
+                                        :d="d"
+                                        @audit="openAudit"
+                                        @soumettre="soumettre"
+                                        @valider="valider"
+                                        @rejeter="rejeter"
+                                        @supprimer="destroy"
+                                    />
                                 </div>
                             </td>
                         </tr>
@@ -885,16 +802,25 @@ const categorieColors: Record<string, string> = {
                 </table>
             </div>
 
+            <MobileDepenseList
+                :depenses="depenses.data"
+                @audit="openAudit"
+                @soumettre="soumettre"
+                @valider="valider"
+                @rejeter="rejeter"
+                @supprimer="destroy"
+            />
+
             <!-- Pagination -->
             <div
                 v-if="depenses.last_page > 1"
-                class="flex items-center justify-center gap-1"
+                class="flex flex-wrap items-center justify-center gap-1 px-4 sm:px-0"
             >
                 <template v-for="link in depenses.links" :key="link.label">
                     <Link
                         v-if="link.url"
                         :href="link.url"
-                        class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors hover:bg-muted"
+                        class="inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-2 text-sm transition-colors hover:bg-muted sm:h-8 sm:min-w-8"
                         :class="{
                             'border-primary bg-primary text-primary-foreground hover:bg-primary/90':
                                 link.active,
@@ -920,7 +846,7 @@ const categorieColors: Record<string, string> = {
                     </Link>
                     <span
                         v-else
-                        class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm opacity-40"
+                        class="inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-2 text-sm opacity-40 sm:h-8 sm:min-w-8"
                     >
                         <ChevronLeft
                             v-if="
@@ -953,8 +879,10 @@ const categorieColors: Record<string, string> = {
                 }
             "
         >
-            <DialogContent class="sm:max-w-md">
-                <DialogHeader>
+            <DialogContent
+                class="depense-reject-dialog flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-md max-sm:[&>button]:size-11"
+            >
+                <DialogHeader class="shrink-0 pr-8 text-left">
                     <DialogTitle
                         class="flex items-center gap-2 text-destructive"
                     >
@@ -963,7 +891,7 @@ const categorieColors: Record<string, string> = {
                     </DialogTitle>
                 </DialogHeader>
 
-                <div class="space-y-4 py-2">
+                <div class="min-h-0 space-y-4 overflow-y-auto py-2">
                     <!-- Motif -->
                     <div class="space-y-1.5">
                         <Label for="idx-reject-motif">
@@ -973,7 +901,7 @@ const categorieColors: Record<string, string> = {
                         <select
                             id="idx-reject-motif"
                             v-model="rejectMotif"
-                            class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            class="h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
                         >
                             <option value="" disabled>
                                 Sélectionner un motif…
@@ -999,7 +927,7 @@ const categorieColors: Record<string, string> = {
                             v-model="rejectCommentaire"
                             rows="3"
                             placeholder="Veuillez préciser le motif du rejet…"
-                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
                         />
                         <p
                             v-if="rejectErrors.commentaire"
@@ -1010,7 +938,9 @@ const categorieColors: Record<string, string> = {
                     </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter
+                    class="shrink-0 [&_button]:min-h-11 sm:[&_button]:min-h-9"
+                >
                     <Button
                         variant="outline"
                         :disabled="rejectProcessing"
@@ -1044,6 +974,7 @@ const categorieColors: Record<string, string> = {
         />
 
         <AuditDrawer
+            class="depenses-audit"
             v-model:visible="showAudit"
             title="Historique de la dépense"
             auditable-type="App\Models\Depense"
@@ -1052,3 +983,28 @@ const categorieColors: Record<string, string> = {
         />
     </AppLayout>
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    .depenses-page-actions :deep(button) {
+        min-height: 44px;
+    }
+
+    :global(.depenses-audit.p-drawer) {
+        max-width: 100vw;
+        height: 100dvh;
+    }
+
+    :global(.depenses-audit .p-drawer-content) {
+        min-height: 0;
+        height: auto;
+        overflow-wrap: anywhere;
+        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+
+    :global(.depenses-audit .p-drawer-close-button) {
+        width: 44px;
+        height: 44px;
+    }
+}
+</style>
