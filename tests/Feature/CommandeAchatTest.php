@@ -5,60 +5,130 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeAchat;
 use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
+use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Organization;
+use App\Models\Produit;
+use App\Models\RegleValidationRole;
+use App\Models\Site;
+use App\Models\User;
+use App\Notifications\CommandeAchatNotification;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Laravel\Pennant\Feature;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
+/**
+ * Bon de commande fournisseur (ADR 0021) : création directe « à valider », validation par
+ * permission + plafond du rôle, séparation créateur/modificateur ≠ validateur (super administrateur
+ * compris), snapshot à la validation, périmètre de lecture, notifications après commit.
+ */
 class CommandeAchatTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
+    private Site $site;
+
+    private Produit $produit;
+
+    private Fournisseur $fournisseur;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
-        // Le module achats est désactivé par défaut — l'activer pour les tests
+        $this->initOrgAndUser(['achats.read', 'achats.create', 'achats.update', 'achats.delete', 'achats.annuler']);
         Feature::for($this->org)->activate(ModuleFeature::ACHATS);
+
+        $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
+        $this->produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 500 ml', 'type' => 'materiel'], ['prix_achat' => 1000, 'sku' => 'BT-500']);
+        $this->fournisseur = $this->makeFournisseur($this->org);
     }
 
-    private function makeContext(Organization $org): array
-    {
-        $produit = $this->makeProduitAvecVariante(
-            $org,
-            ['nom' => 'Produit achat test', 'qte_stock' => 0],
-            ['prix_achat' => 1000],
-        );
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
-        $fournisseur = Fournisseur::create([
-            'organization_id' => $org->id,
-            'nom' => 'FOURNISSEUR TEST',
-            'is_active' => true,
+    private function makeFournisseur(Organization $org): Fournisseur
+    {
+        $entreprise = EntrepriseTierce::create(['organization_id' => $org->id, 'raison_sociale' => 'FOURNISSEUR TEST']);
+
+        return Fournisseur::create(['organization_id' => $org->id, 'entreprise_tierce_id' => $entreprise->id, 'is_active' => true]);
+    }
+
+    private function varianteId(?Produit $produit = null): string
+    {
+        return ($produit ?? $this->produit)->variantes()->firstOrFail()->id;
+    }
+
+    /** Utilisateur avec un rôle dédié portant les permissions données, rattaché à des agences. */
+    private function makeUtilisateur(string $role, array $permissions, array $sites = [], ?Organization $org = null): User
+    {
+        $org ??= $this->org;
+        foreach ($permissions as $p) {
+            Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
+        }
+        $r = Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
+        $r->givePermissionTo($permissions);
+
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole($r);
+        foreach ($sites ?: [$this->site] as $i => $site) {
+            $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => $i === 0]);
+        }
+
+        return $user;
+    }
+
+    private function makeValidateur(string $role = 'responsable_achat', ?float $plafond = 5_000_000, bool $illimite = false, string $perimetre = 'toutes_agences', array $sites = []): User
+    {
+        $user = $this->makeUtilisateur($role, ['achats.read', 'achats.valider']);
+        $this->regle($role, $plafond, $illimite, $perimetre, $sites);
+
+        return $user;
+    }
+
+    private function regle(string $role, ?float $plafond, bool $illimite = false, string $perimetre = 'toutes_agences', array $sites = []): RegleValidationRole
+    {
+        return RegleValidationRole::create([
+            'organization_id' => $this->org->id,
+            'domaine' => RegleValidationRole::DOMAINE_ACHATS,
+            'role_name' => $role,
+            'plafond' => $illimite ? null : $plafond,
+            'plafond_illimite' => $illimite,
+            'perimetre' => $perimetre,
+            'sites' => $sites ?: null,
         ]);
-
-        return compact('produit', 'fournisseur');
     }
 
-    private function makeCommande(Organization $org, array $overrides = []): CommandeAchat
+    private function payload(array $overrides = []): array
     {
-        return CommandeAchat::create(array_merge([
-            'organization_id' => $org->id,
-            'total_commande' => 5000,
-            'statut' => StatutCommandeAchat::EN_COURS,
-        ], $overrides));
+        return array_merge([
+            'site_id' => $this->site->id,
+            'fournisseur_id' => $this->fournisseur->id,
+            'note' => 'Réassort',
+            'lignes' => [['variante_id' => $this->varianteId(), 'qte' => 10, 'prix_achat' => 1000]],
+        ], $overrides);
     }
 
-    // ── index ─────────────────────────────────────────────────────────────────
+    /** Bon créé via l'application par $this->user (créateur), montant = qte × 1000. */
+    private function creerCommande(int $qte = 10): CommandeAchat
+    {
+        $this->actingAs($this->user)
+            ->post(route('achats.store'), $this->payload(['lignes' => [['variante_id' => $this->varianteId(), 'qte' => $qte, 'prix_achat' => 1000]]]))
+            ->assertSessionHasNoErrors();
+
+        return CommandeAchat::latest('created_at')->firstOrFail();
+    }
+
+    // ── Accès ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $this->actingAs($this->user)
-            ->get(route('achats.index'))
-            ->assertStatus(200);
+        $this->actingAs($this->user)->get(route('achats.index'))->assertOk();
     }
 
     public function test_index_redirects_unauthenticated_user(): void
@@ -68,202 +138,393 @@ class CommandeAchatTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->makeAdminUser();
-
-        $this->actingAs($user)
-            ->get(route('achats.index'))
-            ->assertStatus(403);
+        $this->actingAs($this->makeAdminUser())->get(route('achats.index'))->assertForbidden();
     }
 
-    // ── create ────────────────────────────────────────────────────────────────
+    public function test_create_returns_200(): void
+    {
+        $this->actingAs($this->user)->get(route('achats.create'))->assertOk();
+    }
 
-    public function test_create_returns_200_for_authorized_user(): void
+    // ── Création directe ──────────────────────────────────────────────────────
+
+    public function test_store_cree_un_bon_a_valider_avec_agence_reference_et_snapshot_de_ligne(): void
+    {
+        $commande = $this->creerCommande(10);
+
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->statut);
+        $this->assertSame($this->site->id, $commande->site_id);
+        $this->assertStringStartsWith('BC-', $commande->reference);
+        $this->assertSame(10000.0, (float) $commande->total_commande);
+        $this->assertSame($this->user->id, $commande->created_by);
+        $this->assertSame($this->user->id, $commande->contenu_modifie_par);
+
+        $ligne = $commande->lignes()->firstOrFail();
+        $this->assertSame('Bouteille 500 ml', $ligne->libelle_snapshot);
+        $this->assertSame('BT-500', $ligne->reference_snapshot);
+    }
+
+    public function test_store_exige_agence_et_fournisseur(): void
     {
         $this->actingAs($this->user)
-            ->get(route('achats.create'))
-            ->assertStatus(200);
-    }
-
-    // ── store ─────────────────────────────────────────────────────────────────
-
-    public function test_store_creates_commande_achat_and_redirects(): void
-    {
-        ['produit' => $produit, 'fournisseur' => $fournisseur] = $this->makeContext($this->org);
-
-        $response = $this->actingAs($this->user)
-            ->post(route('achats.store'), [
-                'fournisseur_id' => $fournisseur->id,
-                'lignes' => [
-                    [
-                        'produit_id' => $produit->id,
-                        'qte' => 5,
-                        'prix_achat' => 1000,
-                    ],
-                ],
-            ]);
-
-        $response->assertRedirect();
-
-        $this->assertDatabaseHas('commandes_achats', [
-            'organization_id' => $this->org->id,
-            'fournisseur_id' => $fournisseur->id,
-        ]);
-    }
-
-    public function test_store_fails_with_empty_lignes(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('achats.store'), ['lignes' => []])
-            ->assertSessionHasErrors('lignes');
+            ->post(route('achats.store'), $this->payload(['site_id' => null, 'fournisseur_id' => null]))
+            ->assertSessionHasErrors(['site_id', 'fournisseur_id']);
     }
 
     public function test_store_fails_without_lignes(): void
     {
         $this->actingAs($this->user)
-            ->post(route('achats.store'), [])
+            ->post(route('achats.store'), $this->payload(['lignes' => []]))
             ->assertSessionHasErrors('lignes');
     }
 
-    // ── show ──────────────────────────────────────────────────────────────────
-
-    public function test_show_returns_200_for_authorized_user(): void
+    public function test_store_refuse_variante_fournisseur_et_agence_d_une_autre_organisation(): void
     {
-        $commande = $this->makeCommande($this->org);
+        $autre = Organization::factory()->create();
+        $produitAutre = $this->makeProduitAvecVariante($autre, ['type' => 'materiel']);
+        $siteAutre = Site::factory()->for($autre)->create();
 
         $this->actingAs($this->user)
-            ->get(route('achats.show', $commande))
-            ->assertStatus(200);
+            ->post(route('achats.store'), $this->payload([
+                'site_id' => $siteAutre->id,
+                'fournisseur_id' => $this->makeFournisseur($autre)->id,
+                'lignes' => [['variante_id' => $this->varianteId($produitAutre), 'qte' => 1, 'prix_achat' => 10]],
+            ]))
+            ->assertSessionHasErrors(['site_id', 'fournisseur_id', 'lignes.0.variante_id']);
+
+        $this->assertSame(0, CommandeAchat::count());
     }
 
-    public function test_show_returns_403_for_other_organization(): void
+    public function test_store_refuse_une_agence_hors_du_perimetre_de_l_utilisateur(): void
     {
-        $otherOrg = Organization::factory()->create();
-        $commande = $this->makeCommande($otherOrg);
+        $autreSite = Site::factory()->for($this->org)->create();
+        $acheteur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.create']);
 
-        $this->actingAs($this->user)
-            ->get(route('achats.show', $commande))
-            ->assertStatus(403);
+        $this->actingAs($acheteur)
+            ->post(route('achats.store'), $this->payload(['site_id' => $autreSite->id]))
+            ->assertSessionHasErrors('site_id');
     }
 
-    // ── receptionner ──────────────────────────────────────────────────────────
-
-    public function test_receptionner_updates_statut_to_receptionnee(): void
+    public function test_modification_possible_avant_validation_puis_bloquee(): void
     {
-        ['produit' => $produit] = $this->makeContext($this->org);
-        $commande = $this->makeCommande($this->org);
-        $ligne = $commande->lignes()->create([
-            'variante_id' => $produit->variantePrincipale()->first()->id,
-            'qte' => 3,
-            'prix_achat_snapshot' => 1000,
-            'total_ligne' => 3000,
-        ]);
+        $commande = $this->creerCommande(10);
+        $modificateur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.update']);
 
-        $this->actingAs($this->user)
-            ->patch(route('achats.receptionner', $commande), [
-                'lignes' => [
-                    ['id' => $ligne->id, 'qte_recue' => 3],
-                ],
-            ])
-            ->assertRedirect();
+        $this->actingAs($modificateur)
+            ->put(route('achats.update', $commande), $this->payload(['lignes' => [['variante_id' => $this->varianteId(), 'qte' => 4, 'prix_achat' => 1000]]]))
+            ->assertSessionHasNoErrors();
 
-        $this->assertEquals(StatutCommandeAchat::RECEPTIONNEE, $commande->fresh()->statut);
+        $commande->refresh();
+        $this->assertSame(4000.0, (float) $commande->total_commande);
+        $this->assertSame($modificateur->id, $commande->contenu_modifie_par);
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+
+        $this->actingAs($modificateur->fresh())
+            ->put(route('achats.update', $commande), $this->payload())
+            ->assertSessionHasErrors('commande');
     }
 
-    public function test_receptionner_returns_422_if_annulee(): void
-    {
-        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
+    // ── Validation : permission + plafond ─────────────────────────────────────
 
-        $this->actingAs($this->user)
-            ->patch(route('achats.receptionner', $commande), ['lignes' => []])
-            ->assertStatus(422);
+    public function test_validation_avec_plafond_suffisant_fige_le_montant_et_le_snapshot(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur('responsable_achat', 5_000_000);
+
+        $this->actingAs($validateur)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+
+        $commande->refresh();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->statut);
+        $this->assertSame($validateur->id, $commande->validee_par);
+        $this->assertNotNull($commande->validee_at);
+        $this->assertSame(10000.0, (float) $commande->montant_valide);
+        $this->assertSame('FOURNISSEUR TEST', $commande->fournisseur_nom_snapshot);
+        $this->assertSame($this->site->nom, $commande->site_nom_snapshot);
+        $this->assertSame('responsable_achat', $commande->validation_regle_snapshot['role']);
+        $this->assertSame(5_000_000.0, (float) $commande->validation_regle_snapshot['plafond']);
+        $this->assertFalse($commande->validation_regle_snapshot['plafond_illimite']);
     }
 
-    public function test_receptionner_returns_422_if_already_receptionnee(): void
+    public function test_le_snapshot_ne_bouge_plus_quand_le_referentiel_change(): void
     {
-        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::RECEPTIONNEE]);
+        $commande = $this->creerCommande(10);
+        $this->actingAs($this->makeValidateur())->patch(route('achats.valider', $commande));
 
-        $this->actingAs($this->user)
-            ->patch(route('achats.receptionner', $commande), ['lignes' => []])
-            ->assertStatus(422);
+        $this->fournisseur->entrepriseTierce->update(['raison_sociale' => 'NOUVEAU NOM']);
+        $this->site->update(['nom' => 'Agence renommée']);
+        $this->produit->update(['nom' => 'Produit renommé']);
+
+        $commande->refresh();
+        $this->assertSame('FOURNISSEUR TEST', $commande->fournisseurNom());
+        $this->assertNotSame('Agence renommée', $commande->siteNom());
+        $this->assertSame('Bouteille 500 ml', $commande->lignes()->first()->libelle_snapshot);
     }
 
-    // ── annuler ───────────────────────────────────────────────────────────────
-
-    public function test_annuler_sets_statut_annulee(): void
+    public function test_validation_refusee_si_le_montant_depasse_le_plafond_egalite_autorisee(): void
     {
-        $commande = $this->makeCommande($this->org);
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur('agent_achat', 9_999);
 
-        $this->actingAs($this->user)
-            ->patch(route('achats.annuler', $commande), [
-                'motif_annulation' => 'Annulation test achat',
-            ])
-            ->assertRedirect();
+        $this->actingAs($validateur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => 'Montant supérieur à votre plafond de validation (9 999 GNF).']);
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
 
-        $this->assertEquals(StatutCommandeAchat::ANNULEE, $commande->fresh()->statut);
+        RegleValidationRole::where('role_name', 'agent_achat')->update(['plafond' => 10_000]);
+        $this->actingAs($validateur)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
+    }
+
+    public function test_validation_refusee_sans_permission_meme_avec_un_plafond(): void
+    {
+        $commande = $this->creerCommande(10);
+        $sansPermission = $this->makeUtilisateur('magasinier', ['achats.read']);
+        $this->regle('magasinier', null, true);
+
+        $this->actingAs($sansPermission)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+    }
+
+    public function test_validation_refusee_sans_regle_de_plafond(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeUtilisateur('responsable_achat', ['achats.read', 'achats.valider']);
+
+        $this->actingAs($validateur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => "Aucun plafond de validation n'est configuré pour votre rôle."]);
+    }
+
+    public function test_plusieurs_roles_le_plafond_le_plus_favorable_s_applique(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur('agent_achat', 1_000);
+        $this->regle('directeur_achat', 50_000);
+        Role::firstOrCreate(['name' => 'directeur_achat', 'guard_name' => 'web']);
+        $validateur->assignRole('directeur_achat');
+
+        $this->actingAs($validateur->fresh())->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+        $this->assertSame('directeur_achat', $commande->fresh()->validation_regle_snapshot['role']);
+    }
+
+    public function test_validation_refusee_si_la_regle_ne_couvre_pas_l_agence(): void
+    {
+        $commande = $this->creerCommande(10);
+        $autreSite = Site::factory()->for($this->org)->create();
+        $validateur = $this->makeValidateur('responsable_achat', 5_000_000, false, 'agences_selectionnees', [$autreSite->id]);
+
+        $this->actingAs($validateur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => 'Votre plafond de validation ne couvre pas cette agence.']);
+    }
+
+    // ── Séparation des tâches ─────────────────────────────────────────────────
+
+    public function test_le_createur_ne_peut_pas_valider_son_propre_bon(): void
+    {
+        $createur = $this->makeValidateur('responsable_achat', null, true);
+        $createur->givePermissionTo(['achats.create']);
+
+        $this->actingAs($createur)->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
+        $commande = CommandeAchat::firstOrFail();
+
+        $this->actingAs($createur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.']);
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+    }
+
+    public function test_le_dernier_modificateur_ne_peut_pas_valider(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur('responsable_achat', null, true);
+        $validateur->givePermissionTo('achats.update');
+
+        $this->actingAs($validateur)->put(route('achats.update', $commande), $this->payload())->assertSessionHasNoErrors();
+
+        $this->actingAs($validateur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => 'Vous avez modifié ce bon de commande en dernier : il doit être validé par une autre personne.']);
+    }
+
+    public function test_le_super_administrateur_est_soumis_au_plafond_et_a_la_separation_des_taches(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $commande = $this->creerCommande(10);
+
+        // Sans règle de plafond : refus, malgré le Gate::before.
+        $this->actingAs($superAdmin)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => "Aucun plafond de validation n'est configuré pour votre rôle."]);
+
+        // Avec une règle « sans limite » : un bon qu'il a lui-même créé reste refusé.
+        $this->regle('super_admin', null, true);
+        $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
+        $sonBon = CommandeAchat::where('created_by', $superAdmin->id)->firstOrFail();
+        $this->actingAs($superAdmin)
+            ->patch(route('achats.valider', $sonBon))
+            ->assertSessionHasErrors('validation');
+
+        // Le bon d'un autre, avec la règle : accepté.
+        $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
+    }
+
+    // ── Isolation et périmètre de lecture ─────────────────────────────────────
+
+    public function test_isolation_organisationnelle(): void
+    {
+        $autre = Organization::factory()->create();
+        $commande = CommandeAchat::create(['organization_id' => $autre->id, 'total_commande' => 5000]);
+
+        $this->actingAs($this->user)->get(route('achats.show', $commande))->assertForbidden();
+        $this->actingAs($this->user)->get(route('achats.pdf', $commande))->assertForbidden();
+        $this->actingAs($this->makeValidateur())->patch(route('achats.valider', $commande))->assertForbidden();
+    }
+
+    public function test_perimetre_de_lecture_agences_createur_et_validateur(): void
+    {
+        $autreSite = Site::factory()->for($this->org)->create();
+        $commande = $this->creerCommande(10);
+        $commande->update(['site_id' => $autreSite->id]);
+
+        $lecteur = $this->makeUtilisateur('lecteur_achats', ['achats.read']);
+        $this->actingAs($lecteur)->get(route('achats.show', $commande))->assertForbidden();
+        $this->actingAs($lecteur)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 0));
+
+        $createur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.create']);
+        $commande->update(['created_by' => $createur->id]);
+        $this->actingAs($createur)->get(route('achats.show', $commande))->assertOk();
+
+        $validateur = $this->makeUtilisateur('valideur_hors_agence', ['achats.read']);
+        $commande->update(['validee_par' => $validateur->id]);
+        $this->actingAs($validateur)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1));
+    }
+
+    public function test_filtre_a_valider_par_moi(): void
+    {
+        $this->creerCommande(10);
+        $this->creerCommande(100);
+        $validateur = $this->makeValidateur('responsable_achat', 20_000);
+
+        $this->actingAs($validateur)
+            ->get(route('achats.index', ['a_valider_par_moi' => '1']))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1));
+    }
+
+    // ── Annulation / suppression ──────────────────────────────────────────────
+
+    public function test_annulation_possible_au_dessus_du_plafond(): void
+    {
+        $commande = $this->creerCommande(10);
+        $annuleur = $this->makeValidateur('agent_achat', 1);
+        $annuleur->givePermissionTo('achats.annuler');
+
+        $this->actingAs($annuleur)
+            ->patch(route('achats.annuler', $commande), ['motif_annulation' => 'Doublon'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::ANNULEE, $commande->fresh()->statut);
     }
 
     public function test_annuler_fails_without_motif(): void
     {
-        $commande = $this->makeCommande($this->org);
+        $commande = $this->creerCommande(10);
 
         $this->actingAs($this->user)
             ->patch(route('achats.annuler', $commande), [])
             ->assertSessionHasErrors('motif_annulation');
     }
 
-    public function test_annuler_returns_422_if_already_annulee(): void
+    public function test_destroy_seulement_une_commande_annulee(): void
     {
-        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
+        $commande = $this->creerCommande(10);
+        $this->actingAs($this->user)->delete(route('achats.destroy', $commande))->assertForbidden();
 
-        $this->actingAs($this->user)
-            ->patch(route('achats.annuler', $commande), [
-                'motif_annulation' => 'Tentative double',
-            ])
-            ->assertStatus(422);
-    }
-
-    // ── destroy ───────────────────────────────────────────────────────────────
-
-    public function test_destroy_deletes_annulee_commande_and_redirects(): void
-    {
-        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
-
-        $this->actingAs($this->user)
-            ->delete(route('achats.destroy', $commande))
-            ->assertRedirect(route('achats.index'));
-
+        $commande->update(['statut' => StatutCommandeAchat::ANNULEE]);
+        $this->actingAs($this->user)->delete(route('achats.destroy', $commande))->assertRedirect(route('achats.index'));
         $this->assertSoftDeleted('commandes_achats', ['id' => $commande->id]);
     }
 
-    public function test_destroy_returns_403_for_non_annulee_commande(): void
-    {
-        $commande = $this->makeCommande($this->org);
+    // ── Notifications (après commit) ──────────────────────────────────────────
 
-        $this->actingAs($this->user)
-            ->delete(route('achats.destroy', $commande))
-            ->assertStatus(403);
+    public function test_notifications_creation_validation_et_annulation(): void
+    {
+        Notification::fake();
+
+        $validateur = $this->makeValidateur('responsable_achat', 50_000);
+        $petitPlafond = $this->makeValidateur('agent_achat', 1_000);
+        $magasinier = $this->makeUtilisateur('magasinier', ['receptions.create', 'receptions.read']);
+
+        $commande = $this->creerCommande(10);
+
+        Notification::assertSentTo($validateur, CommandeAchatNotification::class, fn ($n) => $n->toArray($validateur)['type'] === 'commande_achat_creee');
+        Notification::assertNotSentTo($petitPlafond, CommandeAchatNotification::class);
+        Notification::assertNotSentTo($this->user, CommandeAchatNotification::class);
+
+        $this->actingAs($validateur)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($this->user, CommandeAchatNotification::class, fn ($n) => $n->toArray($this->user)['type'] === 'commande_achat_validee');
+        Notification::assertSentTo($magasinier, CommandeAchatNotification::class, fn ($n) => $n->toArray($magasinier)['type'] === 'commande_achat_validee');
     }
 
-    // ── pdf ───────────────────────────────────────────────────────────────────
-
-    public function test_pdf_returns_200_with_pdf_content_type(): void
+    public function test_aucune_notification_quand_la_validation_est_refusee(): void
     {
-        $commande = $this->makeCommande($this->org);
+        $commande = $this->creerCommande(10);
+        Notification::fake();
 
-        $response = $this->actingAs($this->user)
-            ->get(route('achats.pdf', $commande));
+        $this->actingAs($this->makeValidateur('agent_achat', 1))->patch(route('achats.valider', $commande));
 
-        $response->assertStatus(200);
+        Notification::assertNothingSent();
+    }
+
+    // ── PDF ───────────────────────────────────────────────────────────────────
+
+    public function test_pdf_porte_le_filigrane_non_valide_tant_que_le_bon_n_est_pas_valide(): void
+    {
+        $commande = $this->creerCommande(10);
+
+        $response = $this->actingAs($this->user)->get(route('achats.pdf', $commande));
+        $response->assertOk();
         $this->assertStringContainsString('application/pdf', $response->headers->get('Content-Type'));
+
+        $commande->load(['fournisseur', 'lignes', 'createdBy', 'valideePar', 'organization', 'site']);
+        $html = view('pdf.bon_commande_achat', ['commande' => $commande, 'organisation' => $commande->organization, 'createdBy' => '—'])->render();
+        $this->assertStringContainsString('NON VALIDÉ', $html);
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.valider', $commande));
+        $commande = $commande->fresh(['fournisseur', 'lignes', 'createdBy', 'valideePar', 'organization', 'site']);
+        $html = view('pdf.bon_commande_achat', ['commande' => $commande, 'organisation' => $commande->organization, 'createdBy' => '—'])->render();
+        $this->assertStringNotContainsString('NON VALIDÉ', $html);
+        $this->assertStringContainsString('Bon de commande validé', $html);
     }
 
-    public function test_pdf_returns_403_for_other_organization(): void
-    {
-        $otherOrg = Organization::factory()->create();
-        $commande = $this->makeCommande($otherOrg);
+    // ── Paramètres → Achats ───────────────────────────────────────────────────
 
-        $this->actingAs($this->user)
-            ->get(route('achats.pdf', $commande))
-            ->assertStatus(403);
+    public function test_parametres_achats_enregistre_les_plafonds_par_role_super_admin_compris(): void
+    {
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'parametres.update', 'guard_name' => 'web']));
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+
+        $this->actingAs($this->user)->get(route('settings.achats'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('config', fn ($config) => collect($config)->contains('role_name', 'super_admin')));
+
+        $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [
+            ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => 5_000_000, 'plafond_illimite' => false, 'perimetre' => 'toutes_agences', 'sites' => []],
+            ['role_name' => 'super_admin', 'actif' => true, 'plafond' => null, 'plafond_illimite' => true, 'perimetre' => 'toutes_agences', 'sites' => []],
+        ]])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'admin_entreprise', 'plafond' => 5_000_000]);
+        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'super_admin', 'plafond_illimite' => true]);
+
+        $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [
+            ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => null, 'plafond_illimite' => false, 'perimetre' => 'toutes_agences', 'sites' => []],
+        ]])->assertSessionHasErrors('config.0.plafond');
     }
 }

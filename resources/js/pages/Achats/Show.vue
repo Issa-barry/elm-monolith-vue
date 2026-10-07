@@ -2,121 +2,213 @@
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Download, PackageCheck, XCircle } from 'lucide-vue-next';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import {
+    AlertTriangle,
+    ArrowLeft,
+    CheckCircle2,
+    Download,
+    Info,
+    PackageCheck,
+    Pencil,
+    Trash2,
+    XCircle,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface LigneCommande {
-    id: number;
-    produit_id: number;
-    produit_nom: string | null;
+    id: string;
+    produit_nom: string;
+    reference: string | null;
     qte: number;
     qte_recue: number;
+    reliquat: number;
     prix_achat_snapshot: number;
     total_ligne: number;
 }
 
+interface Reception {
+    id: string;
+    reference: string;
+    date_reception: string;
+    note: string | null;
+    created_by: string | null;
+    lignes: { produit_nom: string; qte_recue: number; cout_unitaire: number }[];
+}
+
 interface CommandeData {
-    id: number;
+    id: string;
     reference: string;
     statut: string;
     statut_label: string;
     total_commande: number;
+    montant_valide: number | null;
     fournisseur_nom: string | null;
+    site_nom: string | null;
     note: string | null;
-    motif_annulation: string | null;
-    annulee_at: string | null;
-    is_annulee: boolean;
-    is_receptionnee: boolean;
     created_at: string;
     created_by: string | null;
+    validee_at: string | null;
+    validee_par: string | null;
+    validation_regle: {
+        role_label: string;
+        plafond: number | null;
+        plafond_illimite: boolean;
+    } | null;
+    motif_annulation: string | null;
+    annulee_at: string | null;
+    annulee_par: string | null;
+    motif_cloture: string | null;
+    cloturee_at: string | null;
+    cloturee_par: string | null;
+    is_a_valider: boolean;
     lignes: LigneCommande[];
+    receptions: Reception[];
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
-const props = defineProps<{ commande: CommandeData }>();
+interface Actions {
+    peut_modifier: boolean;
+    peut_valider: boolean;
+    motif_non_validable: string | null;
+    peut_annuler: boolean;
+    peut_cloturer: boolean;
+    lien_reception: string | null;
+    peut_supprimer: boolean;
+}
 
-const { can } = usePermissions();
+const props = defineProps<{
+    commande: CommandeData;
+    actions: Actions;
+    validable_par: { role: string; label: string; plafond: number | null }[];
+}>();
+
 const toast = useToast();
+const confirm = useConfirm();
 
-// ── Breadcrumbs ───────────────────────────────────────────────────────────────
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Achats', href: '/backoffice/achats' },
     { title: props.commande.reference, href: '#' },
 ];
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-function formatDateTime(val: string | null): string {
-    if (!val) return '—';
-    return new Date(val).toLocaleString('fr-FR');
+const qteCommandee = computed(() =>
+    props.commande.lignes.reduce((s, l) => s + l.qte, 0),
+);
+const qteRecue = computed(() =>
+    props.commande.lignes.reduce((s, l) => s + l.qte_recue, 0),
+);
+
+const validateursTexte = computed(() =>
+    props.validable_par
+        .map(
+            (v) =>
+                `${v.label} (${v.plafond === null ? 'sans limite' : '≤ ' + formatGNF(v.plafond)})`,
+        )
+        .join(', '),
+);
+
+// ── Validation ────────────────────────────────────────────────────────────────
+const validerOuvert = ref(false);
+const validationEnCours = ref(false);
+
+function fermerValider(valeur: boolean) {
+    if (!valeur && validationEnCours.value) return;
+    validerOuvert.value = valeur;
 }
 
-// ── Réception ────────────────────────────────────────────────────────────────
-const receptionDialogVisible = ref(false);
-
-const receptionForm = useForm({
-    lignes: props.commande.lignes.map((l) => ({
-        id: l.id,
-        qte_recue: l.qte,
-    })),
-});
-
-function openReceptionDialog() {
-    // Réinitialise les qtés reçues à la qté commandée
-    receptionForm.lignes = props.commande.lignes.map((l) => ({
-        id: l.id,
-        qte_recue: l.qte,
-    }));
-    receptionDialogVisible.value = true;
-}
-
-function submitReception() {
-    receptionForm.patch(
-        `/backoffice/achats/${props.commande.id}/receptionner`,
+function valider() {
+    validationEnCours.value = true;
+    router.patch(
+        `/backoffice/achats/${props.commande.id}/valider`,
+        {},
         {
+            preserveScroll: true,
             onSuccess: () => {
-                receptionDialogVisible.value = false;
+                validerOuvert.value = false;
                 toast.add({
                     severity: 'success',
-                    summary: 'Réceptionné',
-                    detail: 'Commande réceptionnée. Le stock a été mis à jour.',
-                    life: 4000,
+                    summary: 'Bon de commande validé',
+                    life: 3000,
                 });
             },
+            onError: (errors) => {
+                validerOuvert.value = false;
+                toast.add({
+                    severity: 'error',
+                    summary: 'Validation refusée',
+                    detail: errors.validation ?? Object.values(errors)[0],
+                    life: 7000,
+                });
+            },
+            onFinish: () => (validationEnCours.value = false),
         },
     );
 }
 
-// ── Annulation ────────────────────────────────────────────────────────────────
-const annulerDialogVisible = ref(false);
-const annulerForm = useForm({
-    motif_annulation: '',
-});
+// ── Annulation / clôture ──────────────────────────────────────────────────────
+const annulerOuvert = ref(false);
+const annulerForm = useForm({ motif_annulation: '' });
+
+function fermerAnnuler(valeur: boolean) {
+    if (!valeur && annulerForm.processing) return;
+    annulerOuvert.value = valeur;
+}
 
 function submitAnnuler() {
     annulerForm.patch(`/backoffice/achats/${props.commande.id}/annuler`, {
+        preserveScroll: true,
         onSuccess: () => {
-            annulerDialogVisible.value = false;
+            annulerOuvert.value = false;
             toast.add({
                 severity: 'success',
-                summary: 'Annulée',
-                detail: 'Commande annulée.',
+                summary: 'Commande annulée',
                 life: 3000,
             });
         },
+    });
+}
+
+const cloturerOuvert = ref(false);
+const cloturerForm = useForm({ motif_cloture: '' });
+
+function fermerCloturer(valeur: boolean) {
+    if (!valeur && cloturerForm.processing) return;
+    cloturerOuvert.value = valeur;
+}
+
+function submitCloturer() {
+    cloturerForm.patch(`/backoffice/achats/${props.commande.id}/cloturer`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            cloturerOuvert.value = false;
+            toast.add({
+                severity: 'success',
+                summary: 'Commande clôturée',
+                life: 3000,
+            });
+        },
+    });
+}
+
+function supprimer() {
+    confirm.require({
+        message: `Supprimer la commande « ${props.commande.reference} » ? Cette action est irréversible.`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => router.delete(`/backoffice/achats/${props.commande.id}`),
     });
 }
 </script>
@@ -125,30 +217,29 @@ function submitAnnuler() {
     <Head :title="commande.reference" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- Mobile sticky header -->
         <div
             class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/backoffice/achats"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
-                <div class="text-center">
-                    <h1 class="text-[17px] leading-tight font-semibold">
-                        {{ commande.reference }}
-                    </h1>
-                </div>
+                <h1 class="font-mono text-[17px] leading-tight font-semibold">
+                    {{ commande.reference }}
+                </h1>
             </div>
         </div>
 
         <div class="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-            <!-- En-tête ──────────────────────────────────────────────────────── -->
-            <div class="hidden items-start justify-between gap-4 sm:flex">
-                <div class="flex items-start gap-4">
-                    <Link href="/backoffice/achats">
+            <!-- En-tête -->
+            <div
+                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+                <div class="flex items-start gap-3">
+                    <Link href="/backoffice/achats" class="hidden sm:block">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -158,28 +249,28 @@ function submitAnnuler() {
                         </Button>
                     </Link>
                     <div>
-                        <h1 class="font-mono text-2xl font-bold tracking-wide">
+                        <h1
+                            class="hidden font-mono text-2xl font-bold tracking-wide sm:block"
+                        >
                             {{ commande.reference }}
                         </h1>
-                        <div class="mt-1 flex items-center gap-2">
+                        <div
+                            class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+                        >
                             <StatusDot
                                 :status="commande.statut"
                                 :label="commande.statut_label"
+                                class="text-foreground"
                             />
-                            <span class="text-sm text-muted-foreground">{{
-                                commande.created_at
-                            }}</span>
-                            <span
-                                v-if="commande.created_by"
-                                class="text-sm text-muted-foreground"
-                                >— {{ commande.created_by }}</span
+                            <span>· créé le {{ commande.created_at }}</span>
+                            <span v-if="commande.created_by"
+                                >par {{ commande.created_by }}</span
                             >
                         </div>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <!-- PDF -->
+                <div class="flex flex-wrap items-center gap-2">
                     <a
                         :href="`/backoffice/achats/${commande.id}/pdf`"
                         target="_blank"
@@ -189,56 +280,101 @@ function submitAnnuler() {
                             PDF
                         </Button>
                     </a>
-
-                    <Button
-                        v-if="
-                            !commande.is_annulee &&
-                            !commande.is_receptionnee &&
-                            can('achats.update')
-                        "
-                        @click="openReceptionDialog"
-                        class="bg-emerald-600 text-white hover:bg-emerald-700"
+                    <Link
+                        v-if="actions.peut_modifier"
+                        :href="`/backoffice/achats/${commande.id}/edit`"
                     >
-                        <PackageCheck class="mr-2 h-4 w-4" />
-                        Réceptionner
-                    </Button>
-
+                        <Button variant="outline" size="sm">
+                            <Pencil class="mr-2 h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
                     <Button
-                        v-if="
-                            !commande.is_annulee &&
-                            !commande.is_receptionnee &&
-                            can('achats.update')
-                        "
+                        v-if="actions.peut_valider"
+                        size="sm"
+                        @click="validerOuvert = true"
+                    >
+                        <CheckCircle2 class="mr-2 h-4 w-4" />
+                        Valider
+                    </Button>
+                    <Link
+                        v-if="actions.lien_reception"
+                        :href="actions.lien_reception"
+                    >
+                        <Button
+                            size="sm"
+                            class="bg-emerald-600 text-white hover:bg-emerald-700"
+                        >
+                            <PackageCheck class="mr-2 h-4 w-4" />
+                            Réceptionner dans Logistique
+                        </Button>
+                    </Link>
+                    <Button
+                        v-if="actions.peut_cloturer"
+                        variant="outline"
+                        size="sm"
+                        @click="cloturerOuvert = true"
+                    >
+                        Clôturer le reliquat
+                    </Button>
+                    <Button
+                        v-if="actions.peut_annuler"
                         variant="outline"
                         size="sm"
                         class="border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
-                        @click="annulerDialogVisible = true"
+                        @click="annulerOuvert = true"
                     >
                         <XCircle class="mr-2 h-4 w-4" />
                         Annuler
                     </Button>
+                    <Button
+                        v-if="actions.peut_supprimer"
+                        variant="outline"
+                        size="sm"
+                        class="text-destructive"
+                        @click="supprimer"
+                    >
+                        <Trash2 class="mr-2 h-4 w-4" />
+                        Supprimer
+                    </Button>
                 </div>
             </div>
 
-            <!-- Badge statut mobile -->
-            <div class="flex items-center gap-2 px-1 sm:hidden">
-                <StatusDot
-                    :status="commande.statut"
-                    :label="commande.statut_label"
-                />
-                <span class="text-sm text-muted-foreground">{{
-                    commande.created_at
-                }}</span>
+            <!-- Validation en attente -->
+            <div
+                v-if="commande.is_a_valider"
+                class="space-y-2 rounded-xl border p-4 text-sm"
+                :class="
+                    actions.motif_non_validable
+                        ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                        : 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200'
+                "
+            >
+                <p class="flex items-start gap-2 font-medium">
+                    <AlertTriangle
+                        v-if="actions.motif_non_validable"
+                        class="mt-0.5 h-4 w-4 shrink-0"
+                    />
+                    <Info v-else class="mt-0.5 h-4 w-4 shrink-0" />
+                    En attente de validation —
+                    {{ formatGNF(commande.total_commande) }}
+                </p>
+                <p v-if="actions.motif_non_validable" class="pl-6">
+                    {{ actions.motif_non_validable }}
+                </p>
+                <p v-if="validable_par.length > 0" class="pl-6">
+                    Validable par : {{ validateursTexte }}.
+                </p>
+                <p v-else-if="commande.site_nom" class="pl-6">
+                    Aucun rôle n'a de plafond suffisant pour ce montant
+                    (Paramètres → Achats) : seul le super administrateur peut la
+                    valider.
+                </p>
             </div>
 
-            <!-- Infos générales ──────────────────────────────────────────────── -->
+            <!-- Informations -->
             <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-                <h3
-                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                >
-                    Informations
-                </h3>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                         <p class="text-xs text-muted-foreground">Fournisseur</p>
                         <p class="mt-0.5 font-medium">
@@ -246,9 +382,41 @@ function submitAnnuler() {
                         </p>
                     </div>
                     <div>
-                        <p class="text-xs text-muted-foreground">Note</p>
+                        <p class="text-xs text-muted-foreground">
+                            Agence de livraison
+                        </p>
                         <p class="mt-0.5 font-medium">
-                            {{ commande.note ?? '—' }}
+                            {{ commande.site_nom ?? '—' }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-muted-foreground">Validation</p>
+                        <p class="mt-0.5 font-medium">
+                            <template v-if="commande.validee_at">
+                                {{ commande.validee_at }}
+                                <span class="text-muted-foreground"
+                                    >par {{ commande.validee_par ?? '—' }}</span
+                                >
+                                <span
+                                    v-if="commande.validation_regle"
+                                    class="block text-xs font-normal text-muted-foreground"
+                                >
+                                    Rôle
+                                    {{ commande.validation_regle.role_label }}
+                                    —
+                                    {{
+                                        commande.validation_regle
+                                            .plafond_illimite
+                                            ? 'sans limite'
+                                            : 'plafond ' +
+                                              formatGNF(
+                                                  commande.validation_regle
+                                                      .plafond ?? 0,
+                                              )
+                                    }}
+                                </span>
+                            </template>
+                            <template v-else>—</template>
                         </p>
                     </div>
                     <div>
@@ -259,89 +427,75 @@ function submitAnnuler() {
                             {{ formatGNF(commande.total_commande) }}
                         </p>
                     </div>
-                </div>
-
-                <!-- Motif annulation -->
-                <div
-                    v-if="commande.is_annulee && commande.motif_annulation"
-                    class="mt-4 rounded-lg bg-zinc-100 p-4 dark:bg-zinc-800"
-                >
-                    <p
-                        class="mb-1 text-xs font-medium tracking-wider text-zinc-600 uppercase dark:text-zinc-400"
+                    <div
+                        v-if="commande.note"
+                        class="sm:col-span-2 lg:col-span-4"
                     >
-                        Motif d'annulation
-                    </p>
-                    <p class="text-sm">{{ commande.motif_annulation }}</p>
-                    <p
-                        v-if="commande.annulee_at"
-                        class="mt-1 text-xs text-zinc-500"
-                    >
-                        {{ formatDateTime(commande.annulee_at) }}
-                    </p>
-                </div>
-
-                <!-- Badge réceptionné -->
-                <div
-                    v-if="commande.is_receptionnee"
-                    class="mt-4 flex items-center gap-3 rounded-lg bg-emerald-50 p-4 dark:bg-emerald-950/30"
-                >
-                    <PackageCheck
-                        class="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
-                    />
-                    <div>
-                        <p
-                            class="text-sm font-semibold text-emerald-700 dark:text-emerald-300"
-                        >
-                            Commande réceptionnée
-                        </p>
-                        <p
-                            class="text-xs text-emerald-600 dark:text-emerald-400"
-                        >
-                            Le stock des produits a été mis à jour lors de la
-                            réception.
-                        </p>
+                        <p class="text-xs text-muted-foreground">Note</p>
+                        <p class="mt-0.5">{{ commande.note }}</p>
                     </div>
+                </div>
+
+                <div
+                    v-if="commande.motif_annulation"
+                    class="mt-4 rounded-lg bg-muted p-4 text-sm"
+                >
+                    <p class="font-medium">
+                        Annulée le {{ commande.annulee_at }}
+                        <span v-if="commande.annulee_par" class="font-normal"
+                            >par {{ commande.annulee_par }}</span
+                        >
+                    </p>
+                    <p class="mt-1 text-muted-foreground">
+                        {{ commande.motif_annulation }}
+                    </p>
+                </div>
+                <div
+                    v-if="commande.motif_cloture"
+                    class="mt-4 rounded-lg bg-muted p-4 text-sm"
+                >
+                    <p class="font-medium">
+                        Reliquat abandonné le {{ commande.cloturee_at }}
+                        <span v-if="commande.cloturee_par" class="font-normal"
+                            >par {{ commande.cloturee_par }}</span
+                        >
+                    </p>
+                    <p class="mt-1 text-muted-foreground">
+                        {{ commande.motif_cloture }}
+                    </p>
                 </div>
             </div>
 
-            <!-- Lignes de commande ───────────────────────────────────────────── -->
+            <!-- Lignes -->
             <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
                 <h3
-                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                 >
-                    Produits commandés
+                    Produits commandés · reçu {{ qteRecue }} /
+                    {{ qteCommandee }}
                 </h3>
-                <div class="overflow-hidden overflow-x-auto rounded-lg border">
+                <div class="overflow-x-auto rounded-lg border">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
+                            <tr
+                                class="border-b bg-muted/40 text-muted-foreground"
+                            >
+                                <th class="px-4 py-2.5 text-left font-medium">
                                     Produit
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 90px"
-                                >
+                                <th class="px-4 py-2.5 text-center font-medium">
                                     Commandé
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 90px"
-                                >
+                                <th class="px-4 py-2.5 text-center font-medium">
                                     Reçu
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                    style="width: 150px"
-                                >
-                                    Prix achat unit.
+                                <th class="px-4 py-2.5 text-center font-medium">
+                                    Reste
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                    style="width: 150px"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Prix unit.
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Total
                                 </th>
                             </tr>
@@ -350,35 +504,25 @@ function submitAnnuler() {
                             <tr
                                 v-for="ligne in commande.lignes"
                                 :key="ligne.id"
-                                class="hover:bg-muted/10"
                             >
                                 <td class="px-4 py-3 font-medium">
-                                    {{ ligne.produit_nom ?? '—' }}
+                                    {{ ligne.produit_nom }}
+                                    <span
+                                        v-if="ligne.reference"
+                                        class="block font-mono text-xs font-normal text-muted-foreground"
+                                        >{{ ligne.reference }}</span
+                                    >
+                                </td>
+                                <td class="px-4 py-3 text-center tabular-nums">
+                                    {{ ligne.qte }}
+                                </td>
+                                <td class="px-4 py-3 text-center tabular-nums">
+                                    {{ ligne.qte_recue }}
                                 </td>
                                 <td
                                     class="px-4 py-3 text-center text-muted-foreground tabular-nums"
                                 >
-                                    {{ ligne.qte }}
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <span
-                                        class="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums"
-                                        :class="
-                                            commande.is_receptionnee
-                                                ? ligne.qte_recue >= ligne.qte
-                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                                    : ligne.qte_recue > 0
-                                                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                                                      : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                                                : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500'
-                                        "
-                                    >
-                                        {{
-                                            commande.is_receptionnee
-                                                ? ligne.qte_recue
-                                                : 0
-                                        }}
-                                    </span>
+                                    {{ ligne.reliquat }}
                                 </td>
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
@@ -392,202 +536,141 @@ function submitAnnuler() {
                                 </td>
                             </tr>
                         </tbody>
-                        <tfoot>
-                            <tr class="border-t bg-muted/20">
-                                <td
-                                    colspan="4"
-                                    class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
-                                >
-                                    Total
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right text-lg font-bold tabular-nums"
-                                >
-                                    {{ formatGNF(commande.total_commande) }}
-                                </td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
             </div>
 
-            <!-- Actions mobile ───────────────────────────────────────────────── -->
-            <div class="space-y-3 sm:hidden">
-                <a
-                    :href="`/backoffice/achats/${commande.id}/pdf`"
-                    target="_blank"
-                    class="block"
+            <!-- Réceptions -->
+            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                <h3
+                    class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                 >
-                    <Button variant="outline" class="w-full">
-                        <Download class="mr-2 h-4 w-4" />
-                        Télécharger le PDF
-                    </Button>
-                </a>
-            </div>
-            <div
-                v-if="
-                    !commande.is_annulee &&
-                    !commande.is_receptionnee &&
-                    can('achats.update')
-                "
-                class="space-y-3 sm:hidden"
-            >
-                <Button
-                    class="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                    @click="openReceptionDialog"
+                    Réceptions
+                </h3>
+                <p
+                    v-if="commande.receptions.length === 0"
+                    class="text-sm text-muted-foreground"
                 >
-                    <PackageCheck class="mr-2 h-4 w-4" />
-                    Réceptionner la commande
-                </Button>
-                <Button
-                    variant="outline"
-                    class="w-full border-amber-300 text-amber-600"
-                    @click="annulerDialogVisible = true"
-                >
-                    <XCircle class="mr-2 h-4 w-4" />
-                    Annuler la commande
-                </Button>
+                    Aucune réception enregistrée.
+                </p>
+                <div v-else class="space-y-3">
+                    <div
+                        v-for="r in commande.receptions"
+                        :key="r.id"
+                        class="rounded-lg border p-3"
+                    >
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-2 text-sm"
+                        >
+                            <span class="font-mono font-semibold">{{
+                                r.reference
+                            }}</span>
+                            <span class="text-muted-foreground">
+                                {{ r.date_reception }}
+                                <template v-if="r.created_by"
+                                    >· {{ r.created_by }}</template
+                                >
+                            </span>
+                        </div>
+                        <ul class="mt-2 space-y-0.5 text-sm">
+                            <li
+                                v-for="(l, i) in r.lignes"
+                                :key="i"
+                                class="flex justify-between gap-2"
+                            >
+                                <span>{{ l.produit_nom }}</span>
+                                <span class="tabular-nums"
+                                    >{{ l.qte_recue }} ×
+                                    {{ formatGNF(l.cout_unitaire) }}</span
+                                >
+                            </li>
+                        </ul>
+                        <p
+                            v-if="r.note"
+                            class="mt-2 text-xs text-muted-foreground"
+                        >
+                            {{ r.note }}
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Dialog Réception ──────────────────────────────────────────────────── -->
+        <!-- Validation -->
         <Dialog
-            v-model:visible="receptionDialogVisible"
+            :visible="validerOuvert"
             modal
-            header="Réceptionner la commande"
-            :style="{ width: '560px' }"
+            header="Valider le bon de commande"
+            :closable="!validationEnCours"
+            :style="{ width: '460px', maxWidth: '95vw' }"
+            @update:visible="fermerValider"
         >
-            <div class="space-y-4">
-                <p class="text-sm text-muted-foreground">
-                    Indiquez les quantités réellement reçues. Par défaut elles
-                    correspondent aux quantités commandées.
-                </p>
-
-                <div class="overflow-hidden rounded-lg border">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Produit
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 100px"
-                                >
-                                    Commandé
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 130px"
-                                >
-                                    Qté reçue
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="(ligne, index) in receptionForm.lignes"
-                                :key="ligne.id"
-                                class="hover:bg-muted/10"
-                            >
-                                <td class="px-4 py-3 font-medium">
-                                    {{
-                                        commande.lignes[index]?.produit_nom ??
-                                        '—'
-                                    }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-center text-muted-foreground tabular-nums"
-                                >
-                                    {{ commande.lignes[index]?.qte }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <InputNumber
-                                        v-model="ligne.qte_recue"
-                                        :min="0"
-                                        :max="commande.lignes[index]?.qte"
-                                        :use-grouping="false"
-                                        class="w-full"
-                                        input-class="w-full text-center"
-                                    />
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <p class="text-xs text-muted-foreground">
-                    Seuls les produits avec une quantité reçue &gt; 0 mettront à
-                    jour le stock.
-                </p>
-            </div>
+            <p class="text-sm text-muted-foreground">
+                Valider
+                <span class="font-mono font-semibold text-foreground">{{
+                    commande.reference
+                }}</span>
+                pour
+                <span class="font-semibold text-foreground">{{
+                    formatGNF(commande.total_commande)
+                }}</span>
+                ? La commande ne sera plus modifiable et pourra être
+                réceptionnée à {{ commande.site_nom }}.
+            </p>
             <template #footer>
                 <div class="flex justify-end gap-2">
                     <Button
                         variant="outline"
-                        @click="receptionDialogVisible = false"
-                        >Annuler</Button
+                        :disabled="validationEnCours"
+                        @click="fermerValider(false)"
+                        >Retour</Button
                     >
-                    <Button
-                        class="bg-emerald-600 text-white hover:bg-emerald-700"
-                        :disabled="receptionForm.processing"
-                        @click="submitReception"
-                    >
-                        <PackageCheck class="mr-2 h-4 w-4" />
-                        {{
-                            receptionForm.processing
-                                ? 'Enregistrement…'
-                                : 'Confirmer la réception'
-                        }}
+                    <Button :disabled="validationEnCours" @click="valider">
+                        <i
+                            v-if="validationEnCours"
+                            class="pi pi-spin pi-spinner mr-2"
+                        />
+                        <CheckCircle2 v-else class="mr-2 h-4 w-4" />
+                        Valider
                     </Button>
                 </div>
             </template>
         </Dialog>
 
-        <!-- Dialog Annulation ────────────────────────────────────────────────── -->
+        <!-- Annulation -->
         <Dialog
-            v-model:visible="annulerDialogVisible"
+            :visible="annulerOuvert"
             modal
             header="Annuler la commande"
-            :style="{ width: '480px' }"
+            :closable="!annulerForm.processing"
+            :style="{ width: '480px', maxWidth: '95vw' }"
+            @update:visible="fermerAnnuler"
         >
-            <div class="space-y-4">
-                <p class="text-sm text-muted-foreground">
-                    Vous êtes sur le point d'annuler la commande
-                    <span class="font-mono font-semibold">{{
-                        commande.reference
-                    }}</span
-                    >. Cette action est irréversible.
+            <div class="space-y-2">
+                <Label for="motif-annulation" class="block text-sm">
+                    Motif d'annulation
+                    <span class="text-destructive">*</span>
+                </Label>
+                <Textarea
+                    id="motif-annulation"
+                    v-model="annulerForm.motif_annulation"
+                    rows="4"
+                    class="w-full"
+                    :invalid="!!annulerForm.errors.motif_annulation"
+                />
+                <p
+                    v-if="annulerForm.errors.motif_annulation"
+                    class="text-xs text-destructive"
+                >
+                    {{ annulerForm.errors.motif_annulation }}
                 </p>
-                <div>
-                    <Label class="mb-1.5 block text-sm">
-                        Motif d'annulation
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <Textarea
-                        v-model="annulerForm.motif_annulation"
-                        rows="4"
-                        class="w-full"
-                        placeholder="Indiquez la raison de l'annulation..."
-                        :class="{
-                            'p-invalid': annulerForm.errors.motif_annulation,
-                        }"
-                    />
-                    <p
-                        v-if="annulerForm.errors.motif_annulation"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ annulerForm.errors.motif_annulation }}
-                    </p>
-                </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
                     <Button
                         variant="outline"
-                        @click="annulerDialogVisible = false"
+                        :disabled="annulerForm.processing"
+                        @click="fermerAnnuler(false)"
                         >Retour</Button
                     >
                     <Button
@@ -598,12 +681,67 @@ function submitAnnuler() {
                         "
                         @click="submitAnnuler"
                     >
-                        <XCircle class="mr-2 h-4 w-4" />
-                        {{
-                            annulerForm.processing
-                                ? 'Annulation…'
-                                : "Confirmer l'annulation"
-                        }}
+                        <i
+                            v-if="annulerForm.processing"
+                            class="pi pi-spin pi-spinner mr-2"
+                        />
+                        Confirmer l'annulation
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Clôture du reliquat -->
+        <Dialog
+            :visible="cloturerOuvert"
+            modal
+            header="Clôturer le reliquat"
+            :closable="!cloturerForm.processing"
+            :style="{ width: '480px', maxWidth: '95vw' }"
+            @update:visible="fermerCloturer"
+        >
+            <div class="space-y-2">
+                <p class="text-sm text-muted-foreground">
+                    Les quantités restantes ne seront plus attendues et la
+                    commande ne pourra plus être réceptionnée.
+                </p>
+                <Label for="motif-cloture" class="block text-sm">
+                    Motif <span class="text-destructive">*</span>
+                </Label>
+                <Textarea
+                    id="motif-cloture"
+                    v-model="cloturerForm.motif_cloture"
+                    rows="3"
+                    class="w-full"
+                    :invalid="!!cloturerForm.errors.motif_cloture"
+                />
+                <p
+                    v-if="cloturerForm.errors.motif_cloture"
+                    class="text-xs text-destructive"
+                >
+                    {{ cloturerForm.errors.motif_cloture }}
+                </p>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        :disabled="cloturerForm.processing"
+                        @click="fermerCloturer(false)"
+                        >Retour</Button
+                    >
+                    <Button
+                        :disabled="
+                            cloturerForm.processing ||
+                            !cloturerForm.motif_cloture.trim()
+                        "
+                        @click="submitCloturer"
+                    >
+                        <i
+                            v-if="cloturerForm.processing"
+                            class="pi pi-spin pi-spinner mr-2"
+                        />
+                        Clôturer
                     </Button>
                 </div>
             </template>

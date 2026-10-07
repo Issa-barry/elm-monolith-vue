@@ -75,6 +75,8 @@ final class PermissionCatalog
         'tresorerie.valider_supports' => 'Trésorerie — valider un support (caisse, banque, Mobile Money)',
         'tresorerie.designer_principale' => 'Trésorerie — désigner la trésorerie principale (site central des flux inter-agences)',
         'tresorerie.exporter' => 'Trésorerie — exporter',
+        'achats.valider' => 'Achats — valider un bon de commande (dans la limite du plafond du rôle, Paramètres → Achats)',
+        'achats.annuler' => 'Achats — annuler un bon de commande ou clôturer son reliquat',
         'depenses.soumettre' => 'Dépenses — soumettre',
         'depenses.valider' => 'Dépenses — valider',
         'depenses.rejeter' => 'Dépenses — rejeter',
@@ -153,7 +155,9 @@ final class PermissionCatalog
         'achats' => [
             'label' => 'Achats & Fournisseurs',
             'resources' => ['achats', 'fournisseurs'],
-            'standalone' => [],
+            'standalone' => [
+                'Bons de commande' => ['achats.valider', 'achats.annuler'],
+            ],
         ],
         'contacts' => [
             'label' => 'Clients & Contacts',

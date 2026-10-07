@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\MotifAjustementStock;
+use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVenteLigne;
 use App\Models\CommandeVenteRetourLigne;
 use App\Models\MouvementStock;
+use App\Models\ReceptionAchatLigne;
 use App\Models\TransfertLigne;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -20,10 +22,9 @@ use Illuminate\Support\Collection;
  *    libellé humain (MotifAjustementStock::toNotesString()) — on le fait juste
  *    correspondre à sa valeur d'enum pour obtenir une clé de filtre stable.
  *  - Mouvement automatique (vente, transfert...) : `notes` est vide, on classe via
- *    `source_type`. Seuls CommandeVenteLigne (Vente), CommandeVenteRetourLigne (Retour
- *    livraison) et TransfertLigne (Transfert) sont résolus explicitement pour l'instant — cf.
- *    rapport d'implémentation (réception achat/CommandeAchatLigne reste non étiquetée,
- *    comportement inchangé).
+ *    `source_type` : CommandeVenteLigne (Vente), CommandeVenteRetourLigne (Retour livraison),
+ *    TransfertLigne (Transfert), et ReceptionAchatLigne / CommandeAchatLigne (Réception achat —
+ *    réceptions multiples depuis ADR 0021, et entrées historiques de la réception unique).
  */
 class MouvementStockMotifService
 {
@@ -32,6 +33,8 @@ class MouvementStockMotifService
     public const KEY_TRANSFERT = 'transfert';
 
     public const KEY_RETOUR_LIVRAISON = 'retour_livraison';
+
+    public const KEY_RECEPTION_ACHAT = 'reception_achat';
 
     public const KEY_INCONNU = 'inconnu';
 
@@ -81,13 +84,16 @@ class MouvementStockMotifService
                 ->get()
                 ->mapWithKeys(fn (CommandeVenteRetourLigne $l) => [$l->id => $l->retour?->commande?->reference]);
 
-        return $mouvements->each(function (MouvementStock $m) use ($referencesVente, $referencesTransfert, $referencesRetour) {
+        $referencesAchat = self::referencesAchat($mouvements);
+
+        return $mouvements->each(function (MouvementStock $m) use ($referencesVente, $referencesTransfert, $referencesRetour, $referencesAchat) {
             [$key, $baseLabel] = self::classify($m->source_type, $m->notes);
 
             $label = match ($key) {
                 self::KEY_VENTE => self::avecReference($baseLabel, $referencesVente->get($m->source_id)),
                 self::KEY_TRANSFERT => self::avecReference($baseLabel, $referencesTransfert->get($m->source_id)),
                 self::KEY_RETOUR_LIVRAISON => self::avecReference($baseLabel, $referencesRetour->get($m->source_id)),
+                self::KEY_RECEPTION_ACHAT => self::avecReference($baseLabel, $referencesAchat->get($m->source_type.'|'.$m->source_id)),
                 // Motifs manuels : le texte brut des notes (ex: "Autre : détail saisi")
                 // est plus précis que le libellé générique du cas — jamais tronqué ici.
                 default => (string) $m->notes !== '' ? (string) $m->notes : $baseLabel,
@@ -136,6 +142,7 @@ class MouvementStockMotifService
             $motif === self::KEY_VENTE => $query->where('source_type', CommandeVenteLigne::class),
             $motif === self::KEY_TRANSFERT => $query->where('source_type', TransfertLigne::class),
             $motif === self::KEY_RETOUR_LIVRAISON => $query->where('source_type', CommandeVenteRetourLigne::class),
+            $motif === self::KEY_RECEPTION_ACHAT => $query->whereIn('source_type', [ReceptionAchatLigne::class, CommandeAchatLigne::class]),
             MotifAjustementStock::tryFrom($motif) !== null => self::whereNotesMotif($query, MotifAjustementStock::from($motif)),
             // Clé inconnue (jamais proposée par optionsDisponibles()) : filtre ignoré
             // plutôt qu'un "aucun résultat" silencieux si le menu et les données divergent.
@@ -186,7 +193,37 @@ class MouvementStockMotifService
             return [self::KEY_RETOUR_LIVRAISON, 'Retour livraison'];
         }
 
+        if ($sourceType === ReceptionAchatLigne::class || $sourceType === CommandeAchatLigne::class) {
+            return [self::KEY_RECEPTION_ACHAT, 'Réception achat'];
+        }
+
         return [self::KEY_INCONNU, '—'];
+    }
+
+    /**
+     * Référence du bon de commande, indexée par « source_type|source_id » : les entrées récentes
+     * pointent vers une ligne de réception, les historiques vers la ligne de commande.
+     */
+    private static function referencesAchat(Collection $mouvements): Collection
+    {
+        $receptionIds = $mouvements->where('source_type', ReceptionAchatLigne::class)->pluck('source_id')->filter()->unique();
+        $commandeIds = $mouvements->where('source_type', CommandeAchatLigne::class)->pluck('source_id')->filter()->unique();
+
+        $parReception = $receptionIds->isEmpty()
+            ? collect()
+            : ReceptionAchatLigne::whereIn('id', $receptionIds)
+                ->with('reception.commande:id,reference')
+                ->get()
+                ->mapWithKeys(fn (ReceptionAchatLigne $l) => [ReceptionAchatLigne::class.'|'.$l->id => $l->reception?->commande?->reference]);
+
+        $parCommande = $commandeIds->isEmpty()
+            ? collect()
+            : CommandeAchatLigne::whereIn('id', $commandeIds)
+                ->with('commande:id,reference')
+                ->get()
+                ->mapWithKeys(fn (CommandeAchatLigne $l) => [CommandeAchatLigne::class.'|'.$l->id => $l->commande?->reference]);
+
+        return $parReception->merge($parCommande);
     }
 
     private static function avecReference(string $base, ?string $reference): string

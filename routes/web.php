@@ -3,6 +3,19 @@
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Account\IndexAccountController;
 use App\Http\Controllers\Account\ToggleActiveAccountController;
+use App\Http\Controllers\Achats\AnnulerCommandeAchatController;
+use App\Http\Controllers\Achats\CloturerCommandeAchatController;
+use App\Http\Controllers\Achats\CreateCommandeAchatController;
+use App\Http\Controllers\Achats\DestroyCommandeAchatController;
+use App\Http\Controllers\Achats\EditCommandeAchatController;
+use App\Http\Controllers\Achats\IndexCommandeAchatController;
+use App\Http\Controllers\Achats\PdfCommandeAchatController;
+use App\Http\Controllers\Achats\Receptions\IndexReceptionAchatController;
+use App\Http\Controllers\Achats\Receptions\StoreReceptionAchatController;
+use App\Http\Controllers\Achats\ShowCommandeAchatController;
+use App\Http\Controllers\Achats\StoreCommandeAchatController;
+use App\Http\Controllers\Achats\UpdateCommandeAchatController;
+use App\Http\Controllers\Achats\ValiderCommandeAchatController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitation\AcceptAcceptInvitationController;
 use App\Http\Controllers\Auth\AcceptInvitation\CheckPhoneAcceptInvitationController;
@@ -38,7 +51,6 @@ use App\Http\Controllers\Clients\UpdateDerogationClientController;
 use App\Http\Controllers\Clients\UpdateTarifsGrossisteClientController;
 use App\Http\Controllers\Clients\UpdateVehiculeClientController;
 use App\Http\Controllers\Clients\VerifierTelephoneClientController;
-use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\Comptabilite\ApprovisionnerCaisseAgentController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
@@ -470,10 +482,25 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Achats ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
-            Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
-            Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
-            Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
-            Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
+            // Bons de commande fournisseurs (ADR 0021) : création directe « à valider », validation
+            // par plafond du rôle, réceptions multiples.
+            Route::get('achats', IndexCommandeAchatController::class)->name('achats.index');
+            Route::get('achats/create', CreateCommandeAchatController::class)->name('achats.create');
+            Route::post('achats', StoreCommandeAchatController::class)->name('achats.store');
+            Route::get('achats/{achat}', ShowCommandeAchatController::class)->name('achats.show');
+            Route::get('achats/{achat}/edit', EditCommandeAchatController::class)->name('achats.edit');
+            Route::put('achats/{achat}', UpdateCommandeAchatController::class)->name('achats.update');
+            Route::delete('achats/{achat}', DestroyCommandeAchatController::class)->name('achats.destroy');
+            Route::patch('achats/{achat}/valider', ValiderCommandeAchatController::class)->name('achats.valider');
+            Route::patch('achats/{achat}/annuler', AnnulerCommandeAchatController::class)->name('achats.annuler');
+            Route::patch('achats/{achat}/cloturer', CloturerCommandeAchatController::class)->name('achats.cloturer');
+            Route::get('achats/{achat}/pdf', PdfCommandeAchatController::class)->name('achats.pdf');
+            Route::post('achats/{achat}/receptions', StoreReceptionAchatController::class)->name('achats.receptions.store');
+
+            // Logistique → Réceptions fournisseurs. Rattaché au module Achats (utilisable sans le
+            // module Logistique) et déclaré AVANT le groupe Logistique : son joker
+            // `logistique/{transfert_logistique}` capturerait sinon cette URL.
+            Route::get('logistique/receptions-fournisseurs', IndexReceptionAchatController::class)->name('logistique.receptions-fournisseurs.index');
 
             // Fournisseurs — entité séparée de Prestataire, rattachée au contexte Achats.
             Route::resource('fournisseurs', FournisseurController::class);

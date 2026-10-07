@@ -26,6 +26,7 @@ export type Resource =
     | 'users'
     | 'parametres'
     | 'logistique'
+    | 'receptions'
     | 'comptabilite'
     | 'commissions'
     | 'tresorerie'
@@ -54,7 +55,9 @@ export type StandalonePermission =
     | 'rapports.read_own'
     | 'rapports.read'
     | 'factures.encaisser'
-    | 'factures.encaisser_autre_agence';
+    | 'factures.encaisser_autre_agence'
+    | 'achats.valider'
+    | 'achats.annuler';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

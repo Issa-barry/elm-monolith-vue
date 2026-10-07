@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import ReceptionsOrigineTabs from '@/components/achats/ReceptionsOrigineTabs.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -301,6 +302,12 @@ const commStatutDot: Record<string, string> = {
                 <div v-else class="w-8" />
             </div>
 
+            <ReceptionsOrigineTabs
+                v-if="vue === 'receptions'"
+                actif="transferts"
+                class="px-2"
+            />
+
             <!-- Search -->
             <div class="border-b px-4 py-2">
                 <div class="relative">
@@ -406,6 +413,11 @@ const commStatutDot: Record<string, string> = {
                     </Button>
                 </Link>
             </div>
+
+            <ReceptionsOrigineTabs
+                v-if="vue === 'receptions'"
+                actif="transferts"
+            />
 
             <!-- KPI cards — Transferts -->
             <div

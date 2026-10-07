@@ -23,6 +23,21 @@ class SiteScopeService
         return $user->sites()->pluck('sites.id');
     }
 
+    /** Vrai si l'utilisateur couvre toutes les agences de son organisation (cf. accessibleSiteIds()). */
+    public function couvreToutesLesAgences(User $user): bool
+    {
+        return $user->isAdmin();
+    }
+
+    public function siteAccessible(User $user, ?string $siteId): bool
+    {
+        if ($siteId === null) {
+            return false;
+        }
+
+        return $this->couvreToutesLesAgences($user) || $this->accessibleSiteIds($user)->contains($siteId);
+    }
+
     /**
      * Applique le scoping de site sur une query Eloquent.
      * La colonne de site peut être personnalisée (ex: 'site_id').

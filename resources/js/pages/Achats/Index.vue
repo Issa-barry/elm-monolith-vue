@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -12,115 +12,132 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    ChevronLeft,
     ChevronRight,
     MoreVertical,
     PackageCheck,
     Plus,
-    Search,
     Trash2,
     XCircle,
 } from 'lucide-vue-next';
-import Column from 'primevue/column';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
-    id: number;
+    id: string;
     reference: string;
     statut: string;
     statut_label: string;
     total_commande: number;
     fournisseur_nom: string | null;
-    note: string | null;
+    site_nom: string | null;
     created_at: string;
-    is_annulee: boolean;
-    is_receptionnee: boolean;
     qte_commandee: number;
     qte_recue: number;
+    is_annulee: boolean;
+    annulable: boolean;
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
-const props = defineProps<{ commandes: Commande[] }>();
+interface Paginator<T> {
+    data: T[];
+    links: { url: string | null; label: string; active: boolean }[];
+    total: number;
+    last_page: number;
+}
+
+interface Option {
+    value: string;
+    label: string;
+}
+
+const props = defineProps<{
+    commandes: Paginator<Commande>;
+    filters: Record<string, unknown>;
+    statuts: Option[];
+    fournisseurs: Option[];
+    sites: { id: string; nom: string }[];
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
-
-const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
-    (commande) => `/backoffice/achats/${commande.id}`,
-);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Achats', href: '/backoffice/achats' },
 ];
 
-const search = ref('');
-const mobileSearch = ref('');
-
-const filterFields = computed<FilterField[]>(() => [
-    {
-        key: 'search',
-        type: 'text',
-        label: 'Rechercher',
-        inline: true,
-        placeholder: 'Rechercher...',
-    },
-]);
-
-const desktopFiltered = computed(() => {
-    const q = search.value.toLowerCase().trim();
-    if (!q) return props.commandes;
-    return props.commandes.filter(
-        (c) =>
-            c.reference.toLowerCase().includes(q) ||
-            (c.fournisseur_nom &&
-                c.fournisseur_nom.toLowerCase().includes(q)) ||
-            c.statut_label.toLowerCase().includes(q) ||
-            (c.note && c.note.toLowerCase().includes(q)),
-    );
+const filterFields = computed<FilterField[]>(() => {
+    const fields: FilterField[] = [
+        {
+            key: 'statut',
+            label: 'Statut',
+            type: 'select',
+            inline: true,
+            options: [
+                { value: '', label: 'Tous les statuts' },
+                ...props.statuts,
+            ],
+        },
+        {
+            key: 'fournisseur_id',
+            label: 'Fournisseur',
+            type: 'select',
+            inline: true,
+            searchable: true,
+            options: [
+                { value: '', label: 'Tous les fournisseurs' },
+                ...props.fournisseurs,
+            ],
+        },
+        {
+            key: 'reference',
+            label: 'Référence',
+            type: 'text',
+            inline: true,
+            placeholder: 'BC-…',
+        },
+    ];
+    if (can('achats.valider')) {
+        fields.push({
+            key: 'a_valider_par_moi',
+            label: 'À valider par moi',
+            type: 'boolean',
+        });
+    }
+    return fields;
 });
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-// ── Filtre mobile ─────────────────────────────────────────────────────────────
+function paginationLabel(label: string): string {
+    return label.replace(/&laquo;|&raquo;/g, '').trim();
+}
 
-const mobileFiltered = computed(() => {
-    const q = mobileSearch.value.toLowerCase().trim();
-    if (!q) return props.commandes;
-    return props.commandes.filter(
-        (c) =>
-            c.reference.toLowerCase().includes(q) ||
-            (c.fournisseur_nom && c.fournisseur_nom.toLowerCase().includes(q)),
-    );
-});
+function ouvrir(c: Commande) {
+    router.visit(`/backoffice/achats/${c.id}`);
+}
 
 // ── Annulation ────────────────────────────────────────────────────────────────
 const annulerDialogVisible = ref(false);
 const selectedCommande = ref<Commande | null>(null);
-
-const annulerForm = useForm({
-    motif_annulation: '',
-});
+const annulerForm = useForm({ motif_annulation: '' });
 
 function openAnnulerDialog(commande: Commande) {
     selectedCommande.value = commande;
     annulerForm.reset();
+    annulerForm.clearErrors();
     annulerDialogVisible.value = true;
 }
 
@@ -129,12 +146,12 @@ function submitAnnuler() {
     annulerForm.patch(
         `/backoffice/achats/${selectedCommande.value.id}/annuler`,
         {
+            preserveScroll: true,
             onSuccess: () => {
                 annulerDialogVisible.value = false;
                 toast.add({
                     severity: 'success',
-                    summary: 'Annulée',
-                    detail: 'Commande annulée avec succès.',
+                    summary: 'Commande annulée',
                     life: 3000,
                 });
             },
@@ -156,8 +173,7 @@ function confirmDelete(c: Commande) {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
-                        summary: 'Supprimée',
-                        detail: 'Commande supprimée.',
+                        summary: 'Commande supprimée',
                         life: 3000,
                     }),
             });
@@ -170,126 +186,35 @@ function confirmDelete(c: Commande) {
     <Head title="Achats" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
-        <div class="flex flex-col sm:hidden">
-            <!-- Sticky header -->
-            <div
-                class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
+        <!-- En-tête mobile -->
+        <div
+            class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3 sm:hidden"
+        >
+            <Link
+                href="/backoffice/dashboard"
+                class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             >
-                <Link
-                    href="/backoffice/dashboard"
-                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft class="h-5 w-5" />
-                </Link>
-                <span class="text-base font-semibold">Achats</span>
-                <Link
-                    v-if="can('achats.create')"
-                    href="/backoffice/achats/create"
-                >
-                    <Button size="sm" class="h-8 px-3 text-xs">
-                        <Plus class="mr-1 h-3.5 w-3.5" />
-                        Nouveau
-                    </Button>
-                </Link>
-                <div v-else class="w-8" />
-            </div>
-
-            <!-- Search -->
-            <div class="border-b px-4 py-2">
-                <div class="relative">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="mobileSearch"
-                        type="text"
-                        placeholder="Référence, fournisseur…"
-                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-                    />
-                </div>
-            </div>
-
-            <!-- Card list -->
-            <div class="divide-y">
-                <Link
-                    v-for="c in mobileFiltered"
-                    :key="c.id"
-                    :href="`/backoffice/achats/${c.id}`"
-                    class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
-                >
-                    <div class="min-w-0 flex-1">
-                        <p
-                            class="font-mono text-sm font-semibold tracking-wide text-primary"
-                        >
-                            {{ c.reference }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ c.fournisseur_nom ?? '—' }}
-                        </p>
-                        <p class="mt-1 text-sm font-medium tabular-nums">
-                            {{ formatGNF(c.total_commande) }}
-                        </p>
-                        <div
-                            class="mt-1 flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <span>Cmdé : {{ c.qte_commandee }}</span>
-                            <span>·</span>
-                            <span
-                                >Reçu :
-                                {{ c.is_receptionnee ? c.qte_recue : 0 }}</span
-                            >
-                        </div>
-                    </div>
-                    <div class="flex shrink-0 items-center gap-2">
-                        <div class="flex flex-col items-end gap-1.5">
-                            <StatusDot
-                                :status="c.statut"
-                                :label="c.statut_label"
-                                class="text-xs text-muted-foreground"
-                            />
-                            <span
-                                class="text-xs text-muted-foreground tabular-nums"
-                                >{{ c.created_at }}</span
-                            >
-                        </div>
-                        <ChevronRight
-                            class="h-4 w-4 shrink-0 text-muted-foreground/50"
-                        />
-                    </div>
-                </Link>
-            </div>
-
-            <!-- Empty state -->
-            <div
-                v-if="mobileFiltered.length === 0"
-                class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
-            >
-                <PackageCheck class="h-10 w-10 opacity-30" />
-                <p class="text-sm">Aucune commande trouvée.</p>
-                <Link
-                    v-if="can('achats.create')"
-                    href="/backoffice/achats/create"
-                >
-                    <Button variant="outline" size="sm">
-                        <Plus class="mr-2 h-4 w-4" />
-                        Créer le premier bon de commande
-                    </Button>
-                </Link>
-            </div>
+                <ArrowLeft class="h-5 w-5" />
+            </Link>
+            <span class="text-base font-semibold">Achats</span>
+            <Link v-if="can('achats.create')" href="/backoffice/achats/create">
+                <Button size="sm" class="h-8 px-3 text-xs">
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    Nouveau
+                </Button>
+            </Link>
+            <div v-else class="w-8" />
         </div>
 
-        <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
-        <div class="hidden flex-col gap-6 p-6 sm:flex">
-            <!-- En-tête -->
-            <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
+            <div class="hidden items-center justify-between sm:flex">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Achats
+                        Bons de commande fournisseurs
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ commandes.length }} bon{{
-                            commandes.length !== 1 ? 's' : ''
+                        {{ commandes.total }} bon{{
+                            commandes.total !== 1 ? 's' : ''
                         }}
                         de commande
                     </p>
@@ -305,156 +230,79 @@ function confirmDelete(c: Commande) {
                 </Link>
             </div>
 
-            <!-- Filtres -->
             <DataFilters
-                :values="{ search: search }"
+                url="/backoffice/achats"
+                :values="filters"
+                :sites="sites"
+                :result-count="commandes.total"
                 :fields="filterFields"
-                :result-count="desktopFiltered.length"
-                @apply="
-                    (vals) => {
-                        search = (vals.search as string) || '';
-                    }
-                "
-                @reset="
-                    () => {
-                        search = '';
-                    }
-                "
             />
 
-            <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card">
-                <DataTable
-                    :value="desktopFiltered"
-                    :paginator="desktopFiltered.length > 20"
-                    :rows="20"
-                    data-key="id"
-                    striped-rows
-                    removable-sort
-                    class="text-sm"
-                    table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        tbody: { class: 'divide-y' },
-                        bodyRow: bodyRowPt,
-                    }"
-                    @row-click="onRowClick"
-                >
-                    <!-- Référence -->
-                    <Column
-                        field="reference"
-                        header="Référence"
-                        sortable
-                        style="min-width: 180px"
-                    >
-                        <template #body="{ data }">
-                            <Link
-                                :href="`/backoffice/achats/${data.id}`"
-                                class="font-mono text-sm font-semibold tracking-wide hover:underline"
+            <!-- Tableau (desktop) -->
+            <div
+                class="hidden overflow-hidden overflow-x-auto rounded-xl border bg-card sm:block"
+            >
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr
+                            class="border-b bg-muted/40 text-left text-muted-foreground"
+                        >
+                            <th class="px-4 py-3 font-medium">Référence</th>
+                            <th class="px-4 py-3 font-medium">Date</th>
+                            <th class="px-4 py-3 font-medium">Fournisseur</th>
+                            <th class="px-4 py-3 font-medium">Agence</th>
+                            <th class="px-4 py-3 text-right font-medium">
+                                Reçu / commandé
+                            </th>
+                            <th class="px-4 py-3 text-right font-medium">
+                                Total
+                            </th>
+                            <th class="px-4 py-3 font-medium">Statut</th>
+                            <th class="w-12 px-2 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr
+                            v-for="c in commandes.data"
+                            :key="c.id"
+                            class="cursor-pointer hover:bg-muted/20"
+                            @click="ouvrir(c)"
+                        >
+                            <td class="px-4 py-3">
+                                <span
+                                    class="font-mono font-semibold tracking-wide"
+                                    >{{ c.reference }}</span
+                                >
+                            </td>
+                            <td
+                                class="px-4 py-3 text-muted-foreground tabular-nums"
                             >
-                                {{ data.reference }}
-                            </Link>
-                        </template>
-                    </Column>
-
-                    <!-- Date -->
-                    <Column
-                        field="created_at"
-                        header="Date"
-                        sortable
-                        style="width: 120px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.created_at
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Fournisseur -->
-                    <Column
-                        field="fournisseur_nom"
-                        header="Fournisseur"
-                        style="min-width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.fournisseur_nom ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Note -->
-                    <Column field="note" header="Note" style="min-width: 150px">
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.note ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Qté commandée -->
-                    <Column
-                        field="qte_commandee"
-                        header="Qté cmdée"
-                        sortable
-                        style="width: 100px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.qte_commandee
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Qté reçue -->
-                    <Column
-                        field="qte_recue"
-                        header="Qté reçue"
-                        sortable
-                        style="width: 100px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.is_receptionnee ? data.qte_recue : 0
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Total -->
-                    <Column
-                        field="total_commande"
-                        header="Total"
-                        sortable
-                        style="width: 160px"
-                    >
-                        <template #body="{ data }">
-                            <span class="font-medium tabular-nums">{{
-                                formatGNF(data.total_commande)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Statut -->
-                    <Column
-                        field="statut"
-                        header="Statut"
-                        sortable
-                        style="width: 130px"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
-                                class="text-muted-foreground"
-                            />
-                        </template>
-                    </Column>
-
-                    <!-- Actions -->
-                    <Column header="" style="width: 56px">
-                        <template #body="{ data }">
-                            <div class="flex justify-end">
+                                {{ c.created_at }}
+                            </td>
+                            <td class="px-4 py-3">
+                                {{ c.fournisseur_nom ?? '—' }}
+                            </td>
+                            <td class="px-4 py-3 text-muted-foreground">
+                                {{ c.site_nom ?? '—' }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                            >
+                                {{ c.qte_recue }} / {{ c.qte_commandee }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right font-medium tabular-nums"
+                            >
+                                {{ formatGNF(c.total_commande) }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <StatusDot
+                                    :status="c.statut"
+                                    :label="c.statut_label"
+                                    class="text-muted-foreground"
+                                />
+                            </td>
+                            <td class="px-2 py-3" @click.stop>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
                                         <Button
@@ -471,7 +319,7 @@ function confirmDelete(c: Commande) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/backoffice/achats/${data.id}`"
+                                                :href="`/backoffice/achats/${c.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <PackageCheck class="h-4 w-4" />
@@ -480,75 +328,142 @@ function confirmDelete(c: Commande) {
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="
-                                                !data.is_annulee &&
-                                                !data.is_receptionnee &&
-                                                can('achats.update')
+                                                c.annulable &&
+                                                can('achats.annuler')
                                             "
                                             class="cursor-pointer text-amber-600 focus:text-amber-600"
-                                            @click="openAnnulerDialog(data)"
+                                            @click="openAnnulerDialog(c)"
                                         >
                                             <XCircle class="h-4 w-4" />
                                             Annuler
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator
+                                        <template
                                             v-if="
-                                                data.is_annulee &&
+                                                c.is_annulee &&
                                                 can('achats.delete')
                                             "
-                                        />
-                                        <DropdownMenuItem
-                                            v-if="
-                                                data.is_annulee &&
-                                                can('achats.delete')
-                                            "
-                                            class="cursor-pointer text-destructive focus:text-destructive"
-                                            @click="confirmDelete(data)"
                                         >
-                                            <Trash2 class="h-4 w-4" />
-                                            Supprimer
-                                        </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer text-destructive focus:text-destructive"
+                                                @click="confirmDelete(c)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                                Supprimer
+                                            </DropdownMenuItem>
+                                        </template>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <!-- État vide -->
-                    <template #empty>
-                        <div
-                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
-                        >
-                            <PackageCheck class="h-12 w-12 opacity-30" />
-                            <p class="text-sm">Aucun bon de commande trouvé.</p>
-                            <Link
-                                v-if="can('achats.create')"
-                                href="/backoffice/achats/create"
+                            </td>
+                        </tr>
+                        <tr v-if="commandes.data.length === 0">
+                            <td
+                                colspan="8"
+                                class="px-4 py-16 text-center text-muted-foreground"
                             >
-                                <Button variant="outline" size="sm">
-                                    <Plus class="mr-2 h-4 w-4" />
-                                    Créer le premier bon de commande
-                                </Button>
-                            </Link>
-                        </div>
-                    </template>
-                </DataTable>
+                                <PackageCheck
+                                    class="mx-auto mb-3 h-10 w-10 opacity-30"
+                                />
+                                Aucun bon de commande trouvé.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Cartes (mobile) -->
+            <div class="divide-y rounded-xl border bg-card sm:hidden">
+                <Link
+                    v-for="c in commandes.data"
+                    :key="c.id"
+                    :href="`/backoffice/achats/${c.id}`"
+                    class="flex items-start justify-between gap-3 px-4 py-3 active:bg-muted/20"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p
+                            class="font-mono text-sm font-semibold tracking-wide text-primary"
+                        >
+                            {{ c.reference }}
+                        </p>
+                        <p
+                            class="mt-0.5 truncate text-xs text-muted-foreground"
+                        >
+                            {{ c.fournisseur_nom ?? '—' }} ·
+                            {{ c.site_nom ?? 'Sans agence' }}
+                        </p>
+                        <p class="mt-1 text-sm font-medium tabular-nums">
+                            {{ formatGNF(c.total_commande) }}
+                        </p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Reçu {{ c.qte_recue }} / {{ c.qte_commandee }}
+                        </p>
+                    </div>
+                    <div class="flex shrink-0 flex-col items-end gap-1.5">
+                        <StatusDot
+                            :status="c.statut"
+                            :label="c.statut_label"
+                            class="text-xs text-muted-foreground"
+                        />
+                        <span
+                            class="text-xs text-muted-foreground tabular-nums"
+                        >
+                            {{ c.created_at }}
+                        </span>
+                    </div>
+                </Link>
+                <div
+                    v-if="commandes.data.length === 0"
+                    class="px-4 py-12 text-center text-sm text-muted-foreground"
+                >
+                    Aucun bon de commande trouvé.
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div
+                v-if="commandes.last_page > 1"
+                class="flex flex-wrap items-center justify-center gap-1"
+            >
+                <template v-for="link in commandes.links" :key="link.label">
+                    <Link
+                        v-if="link.url"
+                        :href="link.url"
+                        preserve-scroll
+                        class="inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-2 text-sm transition-colors hover:bg-muted"
+                        :class="{
+                            'border-primary bg-primary text-primary-foreground hover:bg-primary/90':
+                                link.active,
+                        }"
+                    >
+                        <ChevronLeft
+                            v-if="link.label.includes('&laquo')"
+                            class="h-4 w-4"
+                        />
+                        <ChevronRight
+                            v-else-if="link.label.includes('&raquo')"
+                            class="h-4 w-4"
+                        />
+                        <span v-else>{{ paginationLabel(link.label) }}</span>
+                    </Link>
+                </template>
             </div>
         </div>
 
-        <!-- Dialog Annulation -->
+        <!-- Annulation -->
         <Dialog
             v-model:visible="annulerDialogVisible"
             modal
             header="Annuler la commande"
-            :style="{ width: '480px' }"
+            :closable="!annulerForm.processing"
+            :style="{ width: '480px', maxWidth: '95vw' }"
         >
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
-                    Vous êtes sur le point d'annuler la commande
+                    Annuler la commande
                     <span class="font-mono font-semibold">{{
                         selectedCommande?.reference
-                    }}</span
-                    >. Cette action est irréversible.
+                    }}</span>
+                    ? Cette action est irréversible.
                 </p>
                 <div>
                     <Label class="mb-1.5 block text-sm">
@@ -560,9 +475,7 @@ function confirmDelete(c: Commande) {
                         rows="4"
                         class="w-full"
                         placeholder="Indiquez la raison de l'annulation..."
-                        :class="{
-                            'p-invalid': annulerForm.errors.motif_annulation,
-                        }"
+                        :invalid="!!annulerForm.errors.motif_annulation"
                     />
                     <p
                         v-if="annulerForm.errors.motif_annulation"
@@ -576,6 +489,7 @@ function confirmDelete(c: Commande) {
                 <div class="flex justify-end gap-2">
                     <Button
                         variant="outline"
+                        :disabled="annulerForm.processing"
                         @click="annulerDialogVisible = false"
                         >Retour</Button
                     >
@@ -587,12 +501,12 @@ function confirmDelete(c: Commande) {
                         "
                         @click="submitAnnuler"
                     >
-                        <XCircle class="mr-2 h-4 w-4" />
-                        {{
-                            annulerForm.processing
-                                ? 'Annulation…'
-                                : "Confirmer l'annulation"
-                        }}
+                        <i
+                            v-if="annulerForm.processing"
+                            class="pi pi-spin pi-spinner mr-2"
+                        />
+                        <XCircle v-else class="mr-2 h-4 w-4" />
+                        Confirmer l'annulation
                     </Button>
                 </div>
             </template>

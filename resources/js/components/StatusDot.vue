@@ -106,6 +106,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     en_attente: 'bg-orange-500',
     // Précommande en cours de préparation (StatutCommandeVente::A_PREPARER).
     a_preparer: 'bg-orange-500',
+    // Bon de commande fournisseur en attente de validation / reçu en partie (StatutCommandeAchat).
+    a_valider: 'bg-orange-500',
+    partiellement_receptionnee: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',
