@@ -25,7 +25,7 @@ use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionProcessusFilter;
-use App\Support\Commission\CommissionSourceSiteFilter;
+use App\Support\Commission\CommissionSiteResponsableFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -86,7 +86,7 @@ class CommissionProprietaireController extends Controller
 
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom',
-            'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
+            'enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
@@ -98,15 +98,14 @@ class CommissionProprietaireController extends Controller
                 }
             });
 
+        // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
+        // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
         if ($isAdmin && ! empty($filtreSiteIds)) {
-            // Cf. docblock de CommissionSourceSiteFilter : jamais whereHas('enveloppe.source.site',
-            // ...) en chaîne à points, qui plante dès que CommandeVente ET TransfertLogistique
-            // coexistent en base.
-            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
+            CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
         } elseif (! $isAdmin) {
             // Pour un non-admin, une collection vide signifie qu'aucun site n'est accessible ;
             // l'absence de restriction reste exclusivement reservee aux administrateurs.
-            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $siteIds));
+            CommissionSiteResponsableFilter::appliquer($query, $siteIds);
         }
 
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
@@ -196,9 +195,10 @@ class CommissionProprietaireController extends Controller
             $filtrePeriode,
         );
 
+        $nomsSites = $sites->pluck('nom', 'id');
         $beneficiaires = $partsParProprio->map(function (Collection $parts, string $proprioId) use (
             $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
-            $proprietaires, $fichesPayables,
+            $proprietaires, $fichesPayables, $nomsSites,
         ) {
             // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
             // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
@@ -263,7 +263,7 @@ class CommissionProprietaireController extends Controller
                 })
                 ->sortBy('nom')
                 ->values();
-            $agence = $parts->pluck('enveloppe.source.site.nom')->filter()->unique()->sort()->implode(', ');
+            $agence = self::agencesResponsables($parts, $nomsSites);
 
             return [
                 'beneficiaire_id' => $proprioId,
@@ -636,6 +636,18 @@ class CommissionProprietaireController extends Controller
         ]);
     }
 
+    /**
+     * Agence(s) qui paient les commissions du bénéficiaire (site actuel des véhicules), jamais
+     * les sites où les ventes ont eu lieu.
+     *
+     * @param  Collection<string, string>  $nomsSites
+     */
+    private static function agencesResponsables(Collection $parts, Collection $nomsSites): string
+    {
+        return $parts->map(fn (CommissionEnveloppePart $p) => $nomsSites->get((string) $p->enveloppe?->siteResponsableId()))
+            ->filter()->unique()->sort()->implode(', ');
+    }
+
     private function buildSiteGroups(Collection $rows): array
     {
         $grouped = $rows->groupBy(fn ($r) => $r['agence'] ?? 'Sans agence')
@@ -781,7 +793,7 @@ class CommissionProprietaireController extends Controller
         bool $restreindreAuxSites = false,
         array $filtreProcessus = [],
     ): array {
-        $query = CommissionEnveloppePart::with(['enveloppe.source.site:id,nom', 'enveloppe.source.vehicule:id,nom_vehicule,immatriculation'])
+        $query = CommissionEnveloppePart::with(['enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
@@ -793,8 +805,7 @@ class CommissionProprietaireController extends Controller
             });
 
         if ($restreindreAuxSites) {
-            // Cf. docblock de CommissionSourceSiteFilter.
-            CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->whereIn('id', $filtreSiteIds));
+            CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
         }
 
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
@@ -864,7 +875,9 @@ class CommissionProprietaireController extends Controller
     /** @return Collection<int, array<string, mixed>> */
     private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $filtreNom, string $filtreTelephone): Collection
     {
-        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
+        $nomsSites = Site::whereIn('id', $parts->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->siteResponsableId())->filter()->unique()->values())
+            ->pluck('nom', 'id');
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode, $nomsSites) {
             $first = $propParts->first();
             $beneficiaire = $first->resoudreBeneficiaire();
             $partsValidees = $propParts->filter(
@@ -883,8 +896,7 @@ class CommissionProprietaireController extends Controller
                 ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
                 ->values();
 
-            $agence = $propParts->pluck('enveloppe.source.site.nom')
-                ->filter()->unique()->sort()->implode(', ');
+            $agence = self::agencesResponsables($propParts, $nomsSites);
 
             $motifs = $motifsParProprio[$proprioId] ?? null;
 

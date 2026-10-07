@@ -20,9 +20,8 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 8pt; c
 .header table { width: 100%; border-collapse: collapse; }
 .header td { border: none; vertical-align: top; padding: 0; }
 .header-left { width: 70pt; }
-.logo-box { border: 0.75pt solid #666; padding: 4pt 5pt; text-align: center; font-size: 7pt; color: #444; line-height: 1.4; }
-.logo-box .logo-label { display: block; font-size: 6pt; color: #888; }
-.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; margin-top: 2pt; }
+.logo-box { padding: 4pt 0; text-align: center; font-size: 7pt; color: #444; line-height: 1.4; }
+.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; }
 .header-center { text-align: center; padding-top: 2pt; }
 .doc-type { font-size: 13pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4pt; }
 .doc-sub { font-size: 9pt; margin-top: 3pt; color: #333; }
@@ -76,7 +75,6 @@ tbody td.center { text-align: center; }
         <tr>
             <td class="header-left">
                 <div class="logo-box">
-                    <span class="logo-label">LOGO</span>
                     <span class="logo-name">{{ strtoupper($org?->name ?? 'ELM') }}</span>
                 </div>
             </td>

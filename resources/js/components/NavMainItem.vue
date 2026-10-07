@@ -63,6 +63,13 @@ function toggleMenu(item: NavItem) {
     openMenus[key] = !isMenuOpen(item);
 }
 
+// Proportions reprises d'Apollo (mesurées) : chaque ligne fait 38 px, menu comme sous-menu,
+// et le lien de la page courante passe en 700. Le texte reste à 14 px (déjà conforme).
+const LIGNE = 'h-9.5';
+const LIEN_ACTIF = 'data-[active=true]:font-bold';
+// Pas de trait vertical sur les sous-menus (absent d'Apollo) ; l'indentation suffit.
+const SOUS_MENU = 'gap-0 border-l-0';
+
 function parentBadge(item: NavItem): number | undefined {
     const total = item.items?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
     return total > 0 ? total : undefined;
@@ -74,6 +81,7 @@ function parentBadge(item: NavItem): number | undefined {
         <SidebarMenuButton
             v-if="!item.items?.length"
             as-child
+            :class="[LIGNE, LIEN_ACTIF]"
             :is-active="isItemActive(item.href)"
             :tooltip="item.title"
         >
@@ -94,6 +102,7 @@ function parentBadge(item: NavItem): number | undefined {
 
         <template v-else>
             <SidebarMenuButton
+                :class="LIGNE"
                 :is-active="isParentActive(item)"
                 :tooltip="item.title"
                 @click="toggleMenu(item)"
@@ -117,7 +126,7 @@ function parentBadge(item: NavItem): number | undefined {
                 />
             </SidebarMenuAction>
 
-            <SidebarMenuSub v-if="isMenuOpen(item)">
+            <SidebarMenuSub v-if="isMenuOpen(item)" :class="SOUS_MENU">
                 <SidebarMenuSubItem
                     v-for="subItem in item.items"
                     :key="`${item.title}-${subItem.title}`"
@@ -126,6 +135,7 @@ function parentBadge(item: NavItem): number | undefined {
                         <SidebarMenuSubButton
                             as="button"
                             class="w-full cursor-pointer"
+                            :class="LIGNE"
                             :is-active="isParentActive(subItem)"
                             :aria-expanded="isMenuOpen(subItem)"
                             @click="toggleMenu(subItem)"
@@ -145,6 +155,7 @@ function parentBadge(item: NavItem): number | undefined {
                         <SidebarMenuSub
                             v-if="isMenuOpen(subItem)"
                             class="mx-2.5 pr-0"
+                            :class="SOUS_MENU"
                         >
                             <SidebarMenuSubItem
                                 v-for="nestedItem in subItem.items"
@@ -153,6 +164,7 @@ function parentBadge(item: NavItem): number | undefined {
                                 <SidebarMenuSubButton
                                     as-child
                                     size="md"
+                                    :class="[LIGNE, LIEN_ACTIF]"
                                     :is-active="isItemActive(nestedItem.href)"
                                 >
                                     <Link
@@ -174,6 +186,7 @@ function parentBadge(item: NavItem): number | undefined {
                     <SidebarMenuSubButton
                         v-else
                         as-child
+                        :class="[LIGNE, LIEN_ACTIF]"
                         :is-active="isItemActive(subItem.href)"
                     >
                         <Link :href="subItem.href" @click="closeMobileSidebar">

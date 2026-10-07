@@ -19,7 +19,7 @@ use Illuminate\Database\Seeder;
  *
  * Payer une fiche est un décaissement réel (ADR 0009) : l'argent sort d'un support approvisionné de
  * l'agence de la fiche. Les fiches logistiques du préchargement E2E (tests/e2e/global-setup.ts) sont
- * rattachées à CBA, site source de leurs transferts, où le compte admin E2E n'a pas de caisse dédiée.
+ * rattachées à Matoto, site actuel des véhicules elm-1/elm-2 qui exécutent leurs transferts (ADR 0020).
  * Ce seeder y met en service un support Banque doté d'un solde d'ouverture, en passant par les
  * services de production (création en brouillon, validation, solde d'ouverture validé).
  *
@@ -29,7 +29,7 @@ class SupportBanqueE2eSeeder extends Seeder
 {
     public const LIBELLE = 'Banque E2E';
 
-    private const SITE = 'CBA';
+    private const SITE = 'Matoto';
 
     private const TELEPHONE_ADMIN = '+33758855039';
 

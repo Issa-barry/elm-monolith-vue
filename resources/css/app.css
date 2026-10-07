@@ -228,6 +228,30 @@
     }
 }
 
+/*
+  Champs PrimeVue à 14 px, comme nos champs shadcn (md:text-sm) et comme Apollo. PrimeVue écrit
+  `font-size: 1rem` en dur (aucun token) dans des styles injectés hors couche, après cette
+  feuille : le préfixe `html` est nécessaire pour l'emporter. Le libellé du MultiSelect n'a pas
+  de taille fixe et hériterait des 16 px du body. Sur mobile, la règle anti-zoom iOS ci-dessous
+  (!important) repasse les champs saisissables à 16 px.
+*/
+html .p-inputtext,
+html .p-select-label,
+html .p-multiselect-label,
+html .p-textarea,
+html .p-autocomplete-input-chip input {
+    font-size: 0.875rem;
+}
+
+/* Listes d'options des champs PrimeVue, rendues hors de la page (héritent sinon des 16 px du body). */
+@layer base {
+    .p-select-overlay,
+    .p-multiselect-overlay,
+    .p-autocomplete-overlay {
+        font-size: 0.875rem;
+    }
+}
+
 @media (max-width: 768px) {
     /*
       Prevent iOS Safari from auto-zooming on form focus (which visually shifts

@@ -21,6 +21,7 @@ use App\Models\PaieVariable;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Services\Commission\FicheSiteResponsableService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -308,7 +309,7 @@ class PeriodeCalculatorService
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
-            ->with(['enveloppe.source'])
+            ->with(['enveloppe.source.vehicule'])
             ->get()
             ->groupBy('beneficiaire_id');
 
@@ -317,7 +318,7 @@ class PeriodeCalculatorService
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
-            ->with(['commission.transfert', 'livreur'])
+            ->with(['commission.transfert.vehicule', 'livreur'])
             ->get()
             ->groupBy('livreur_id');
 
@@ -412,7 +413,7 @@ class PeriodeCalculatorService
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
-            ->with(['enveloppe.source'])
+            ->with(['enveloppe.source.vehicule'])
             ->get()
             ->groupBy('beneficiaire_id');
 
@@ -421,7 +422,7 @@ class PeriodeCalculatorService
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
-            ->with(['commission.transfert', 'proprietaire'])
+            ->with(['commission.transfert.vehicule', 'proprietaire'])
             ->get()
             ->groupBy('proprietaire_id');
 
@@ -758,26 +759,17 @@ class PeriodeCalculatorService
     }
 
     /**
-     * Site à rattacher à la fiche d'un bénéficiaire (livreur/propriétaire) :
-     * celui qui pèse le plus dans son montant sur la période. Un même
-     * bénéficiaire peut avoir des parts issues de plusieurs véhicules/sites
-     * sur la même quinzaine (rare, remplacement ponctuel) — la fiche ne
-     * porte qu'un site (colonne unique), donc on retient le site majoritaire ;
-     * le calcul du besoin de trésorerie n'en est affecté qu'à la marge dans ce
-     * cas limite. `null` si aucune ligne n'a pu être rattachée à un site
-     * (ex : commande sans site_id).
+     * Site à rattacher à la fiche d'un bénéficiaire livreur/propriétaire : l'agence de ses
+     * commissions est le site actuel de chaque véhicule (CommissionEnveloppe::siteResponsableId()),
+     * le site majoritaire en montant départageant un bénéficiaire passé sur deux véhicules
+     * d'agences différentes. Règle unique : FicheSiteResponsableService, qui réaligne aussi les
+     * fiches non payées quand un véhicule change de site.
      *
      * @param  array<string, float>  $montantParSite
      */
     private function resolveSitePrincipal(array $montantParSite): ?string
     {
-        if (empty($montantParSite)) {
-            return null;
-        }
-
-        arsort($montantParSite);
-
-        return array_key_first($montantParSite);
+        return FicheSiteResponsableService::sitePrincipal($montantParSite);
     }
 
     /**

@@ -6,6 +6,7 @@ import CaParSiteDoughnutWidget from '@/components/dashboard/ventes/CaParSiteDoug
 import EvolutionCAWidget from '@/components/dashboard/ventes/EvolutionCAWidget.vue';
 import PacksPieWidget from '@/components/dashboard/ventes/PacksPieWidget.vue';
 import VehiculeCategoryWidget from '@/components/dashboard/ventes/VehiculeCategoryWidget.vue';
+import VentesParProcessusWidget from '@/components/dashboard/ventes/VentesParProcessusWidget.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
@@ -45,6 +46,13 @@ interface TypeVehiculeData {
     montant: number;
 }
 
+interface ProcessusData {
+    code: string;
+    label: string;
+    montant: number;
+    nb_factures: number;
+}
+
 interface ProduitData {
     nom: string;
     total: number;
@@ -57,6 +65,7 @@ defineProps<{
     ca_par_site: SiteData[];
     ca_par_type_vehicule: TypeVehiculeData[];
     ca_par_produit: ProduitData[];
+    ca_par_processus: ProcessusData[];
     periode: string;
     qr_payload: string | null;
     /** null = toute l'organisation ; sinon agences auxquelles les chiffres sont limités. */
@@ -107,10 +116,15 @@ const breadcrumbs: BreadcrumbItem[] = [
             </div>
 
             <div class="hidden grid-cols-12 gap-8 sm:grid">
-                <div class="col-span-12 xl:col-span-6">
+                <div class="col-span-12 xl:col-span-4">
+                    <VentesParProcessusWidget
+                        :ca-par-processus="ca_par_processus"
+                    />
+                </div>
+                <div class="col-span-12 xl:col-span-4">
                     <CaParSiteDoughnutWidget :ca-par-site="ca_par_site" />
                 </div>
-                <div class="col-span-12 xl:col-span-6">
+                <div class="col-span-12 xl:col-span-4">
                     <PacksPieWidget :ca-par-produit="ca_par_produit" />
                 </div>
             </div>

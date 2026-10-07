@@ -19,8 +19,8 @@ interface NavSection {
 
 /**
  * Regroupe les items top-level par `group` en conservant l'ordre de première
- * apparition de chaque groupe (les items sans `group`, ex. Tableau de bord,
- * restent dans une section sans label en tête de liste).
+ * apparition de chaque groupe (les items sans `group` restent dans une
+ * section sans label en tête de liste).
  */
 const sections = computed((): NavSection[] => {
     const sections: NavSection[] = [];
@@ -43,17 +43,17 @@ const sections = computed((): NavSection[] => {
 
 <template>
     <SidebarGroup class="px-2 py-0">
-        <template
-            v-for="(section, index) in sections"
-            :key="section.label ?? 'root'"
-        >
+        <template v-for="section in sections" :key="section.label ?? 'root'">
+            <!-- Proportions reprises d'Apollo (.layout-menuitem-root-text, mesurées) :
+                 titre 12 px / 700 / majuscules / couleur primaire sur un bloc de 42 px,
+                 éléments collés (pas d'espace entre eux, cf. NavMainItem). -->
             <SidebarGroupLabel
                 v-if="section.label"
-                :class="index > 0 ? 'mt-1' : ''"
+                class="h-10.5 items-end pb-2 text-xs font-bold text-sidebar-primary uppercase group-data-[collapsible=icon]:-mt-10.5"
             >
                 {{ section.label }}
             </SidebarGroupLabel>
-            <SidebarMenu>
+            <SidebarMenu class="gap-0">
                 <NavMainItem
                     v-for="item in section.items"
                     :key="item.title"

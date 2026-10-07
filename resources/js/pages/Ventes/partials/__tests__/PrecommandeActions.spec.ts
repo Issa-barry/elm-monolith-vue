@@ -23,6 +23,16 @@ function largeurEcran(bureau: boolean) {
 
 const precommande: PrecommandeData = {
     livraison: false,
+    etapes: [
+        { cle: 'reservee', libelle: 'Créée' },
+        { cle: 'a_preparer', libelle: 'Préparation en cours' },
+        { cle: 'preparee', libelle: 'Prête au retrait' },
+        { cle: 'retiree', libelle: 'Retirée' },
+        { cle: 'cloturee', libelle: 'Clôturée' },
+    ],
+    etape_courante: 'preparee',
+    stock_reserve: true,
+    facture_statut_label: 'Créée',
     montants: {
         total: 20000,
         acomptes: 2000,
@@ -97,6 +107,24 @@ describe('PrecommandeActions — emplacement des actions', () => {
         expect(
             fiche.get('[data-testid="precommande-actions"]').text(),
         ).toContain('Valider le retrait');
+        fiche.unmount();
+    });
+
+    it('marque l’étape active de la frise, celle du statut de l’en-tête', async () => {
+        largeurEcran(true);
+        const fiche = mount(Fiche, {
+            attachTo: document.body,
+            global: {
+                stubs: { Dialog: true, PaymentCard: true, Select: true },
+            },
+        });
+        await nextTick();
+
+        const active = fiche.get('[aria-current="step"]');
+        expect(active.text()).toBe('Prête au retrait');
+        expect(
+            fiche.get('[data-testid="precommande-frise"]').text(),
+        ).not.toContain('Facturation');
         fiche.unmount();
     });
 });

@@ -20,12 +20,15 @@ defineProps<{
 </script>
 
 <template>
+    <!-- Rendu repris d'Apollo (.layout-breadcrumb, mesuré) : 14 px / 600, 14 px entre éléments. -->
     <Breadcrumb>
-        <BreadcrumbList>
+        <BreadcrumbList class="font-semibold sm:gap-3.5">
             <template v-for="(item, index) in breadcrumbs" :key="index">
                 <BreadcrumbItem>
                     <template v-if="index === breadcrumbs.length - 1">
-                        <BreadcrumbPage>{{ item.title }}</BreadcrumbPage>
+                        <BreadcrumbPage class="font-semibold">{{
+                            item.title
+                        }}</BreadcrumbPage>
                     </template>
                     <template v-else-if="item.href">
                         <BreadcrumbLink as-child>

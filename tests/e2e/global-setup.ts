@@ -310,9 +310,9 @@ async function payFullCommission(
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
 
-    // Montant pré-rempli au reste à payer. La fiche est rattachée à CBA (site source du
-    // transfert), où l'admin E2E n'a pas de caisse dédiée : le paiement sort du support
-    // « Banque E2E » approvisionné par SupportBanqueE2eSeeder — chèque, sans référence requise.
+    // Montant pré-rempli au reste à payer. La fiche est rattachée à Matoto (site actuel du
+    // véhicule elm-1, ADR 0020) : le paiement sort du support « Banque E2E » approvisionné par
+    // SupportBanqueE2eSeeder — chèque, sans référence requise.
     const modeCombobox = dialog.getByRole('combobox').first();
     await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
     await selectOptionFromCombobox(

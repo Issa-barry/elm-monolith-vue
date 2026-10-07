@@ -2,6 +2,7 @@
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -67,51 +68,58 @@ function select(option: T) {
 
 <template>
     <Dialog :open="visible" @update:open="(v) => emit('update:visible', v)">
-        <DialogContent class="flex max-h-[80vh] flex-col sm:max-w-lg">
-            <DialogHeader>
+        <DialogContent
+            class="flex flex-col max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-h-[80vh] sm:max-w-lg max-sm:[&>button]:flex max-sm:[&>button]:size-11 max-sm:[&>button]:items-center max-sm:[&>button]:justify-center"
+        >
+            <DialogHeader class="shrink-0 pr-10 text-left">
                 <DialogTitle>{{ title }}</DialogTitle>
+                <DialogDescription class="sr-only">
+                    Recherchez puis sélectionnez le concerné dans la liste.
+                </DialogDescription>
             </DialogHeader>
 
             <div
-                class="grid shrink-0 gap-2"
-                :class="fields.length > 2 ? 'sm:grid-cols-2' : 'grid-cols-2'"
+                class="min-h-0 flex-1 space-y-4 overflow-y-auto sm:flex sm:flex-col sm:gap-4 sm:space-y-0 sm:overflow-hidden"
             >
-                <div v-for="(f, i) in fields" :key="f.key">
-                    <Label
-                        :for="`picker-${f.key}`"
-                        class="mb-1 block text-xs font-medium text-muted-foreground"
-                    >
-                        {{ f.label }}
-                    </Label>
-                    <Input
-                        :id="`picker-${f.key}`"
-                        v-model="queries[f.key]"
-                        :placeholder="f.placeholder ?? f.label"
-                        :autofocus="i === 0"
-                    />
+                <div class="grid shrink-0 gap-3 sm:grid-cols-2 sm:gap-2">
+                    <div v-for="(f, i) in fields" :key="f.key">
+                        <Label
+                            :for="`picker-${f.key}`"
+                            class="mb-1 block text-xs font-medium text-muted-foreground"
+                        >
+                            {{ f.label }}
+                        </Label>
+                        <Input
+                            :id="`picker-${f.key}`"
+                            v-model="queries[f.key]"
+                            :placeholder="f.placeholder ?? f.label"
+                            :autofocus="i === 0"
+                            class="max-sm:min-h-11 max-sm:text-base"
+                        />
+                    </div>
                 </div>
-            </div>
-
-            <div
-                role="listbox"
-                class="-mx-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1"
-            >
-                <button
-                    v-for="option in filtered"
-                    :key="option.id"
-                    type="button"
-                    role="option"
-                    class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-                    @click="select(option)"
-                >
-                    <slot name="option" :option="option" />
-                </button>
 
                 <div
-                    v-if="filtered.length === 0"
-                    class="px-3 py-8 text-center text-sm text-muted-foreground"
+                    role="listbox"
+                    class="space-y-1 sm:-mx-1 sm:min-h-0 sm:flex-1 sm:overflow-y-auto sm:px-1"
                 >
-                    {{ emptyLabel ?? 'Aucun résultat' }}
+                    <button
+                        v-for="option in filtered"
+                        :key="option.id"
+                        type="button"
+                        role="option"
+                        class="min-h-12 w-full rounded-lg px-3 py-3 text-left text-sm [overflow-wrap:anywhere] transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-0 sm:py-2"
+                        @click="select(option)"
+                    >
+                        <slot name="option" :option="option" />
+                    </button>
+
+                    <div
+                        v-if="filtered.length === 0"
+                        class="px-3 py-8 text-center text-sm text-muted-foreground"
+                    >
+                        {{ emptyLabel ?? 'Aucun résultat' }}
+                    </div>
                 </div>
             </div>
         </DialogContent>

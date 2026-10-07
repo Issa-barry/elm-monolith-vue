@@ -47,8 +47,17 @@ final class PrecommandeEcran
             && $commande->nature_operation === NatureOperation::VENTE_STANDARD
             && $user->can('changerModeRemise', $commande);
 
+        $affichage = $commande->statutAffichage()['value'];
+        $etapes = self::etapes($commande->vehicule_id !== null);
+
         return [
             'livraison' => $commande->vehicule_id !== null,
+            // Frise unique de la fiche : mêmes libellés et même valeur active que le statut de
+            // l'en-tête (statutAffichage), pour qu'ils ne divergent jamais.
+            'etapes' => $etapes,
+            'etape_courante' => collect($etapes)->contains('cle', $affichage) ? $affichage : null,
+            'stock_reserve' => $commande->estPrecommandeAvantRemise(),
+            'facture_statut_label' => $commande->facture?->statut_facture?->label(),
             'montants' => $montants,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'id' => $l->id,
@@ -74,6 +83,35 @@ final class PrecommandeEcran
             'annulation_code_requis' => $renforcee && $codeRequis,
             'decaissement' => ($peutRembourser || $annulable) ? $this->decaissement($commande, $user) : null,
         ];
+    }
+
+    /**
+     * Parcours opérationnel d'une précommande : ni facturation ni commissions, portées par la
+     * facture et leurs onglets.
+     *
+     * @return list<array{cle: string, libelle: string}>
+     */
+    public static function etapes(bool $livraison): array
+    {
+        $etape = fn (StatutCommandeVente $s) => ['cle' => $s->value, 'libelle' => $s->label()];
+
+        return $livraison
+            ? [
+                $etape(StatutCommandeVente::RESERVEE),
+                $etape(StatutCommandeVente::A_PREPARER),
+                $etape(StatutCommandeVente::A_CHARGER),
+                $etape(StatutCommandeVente::CHARGEMENT_EN_COURS),
+                $etape(StatutCommandeVente::LIVRAISON_EN_COURS),
+                $etape(StatutCommandeVente::LIVREE),
+                $etape(StatutCommandeVente::CLOTUREE),
+            ]
+            : [
+                $etape(StatutCommandeVente::RESERVEE),
+                $etape(StatutCommandeVente::A_PREPARER),
+                $etape(StatutCommandeVente::PREPAREE),
+                ['cle' => CommandeVente::STATUT_AFFICHAGE_RETIREE, 'libelle' => CommandeVente::LIBELLE_RETIREE],
+                $etape(StatutCommandeVente::CLOTUREE),
+            ];
     }
 
     /**

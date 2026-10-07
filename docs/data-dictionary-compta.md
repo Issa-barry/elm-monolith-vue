@@ -155,6 +155,7 @@ Ce document distingue deux couches, volontairement séparées :
 | `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) — ou `avance_client` (419100) pour un **acompte de précommande** (`est_acompte`, vente pas encore réalisée, ADR 0019) — / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`). Encaissement reçu par une **autre agence** que celle de la commande (ADR 0012) : pièce posée sur le site d'encaissement, `liaison` (181000, tiers = agence de la commande) au lieu de `client` |
 | `acompte_precommande_impute` | Remise d'une précommande (retrait ou chargement validé), ADR 0019 | Imputation, **bloquant**, sans trésorerie | `avance_client` (419100, débit) / `client` (411000, crédit) — journal OD |
 | `remboursement_client` | `RemboursementVente` créé (trop-perçu, précommande annulée), ADR 0019 | Règlement, **bloquant** | `avance_client` (419100) avant la remise ou `client` (411000) après / trésorerie (compte du support débité) |
+| `fiche_reaffectee_sortie` / `fiche_reaffectee_entree` | Fiche livreur/propriétaire déjà constatée qui change d'agence (véhicule réaffecté), ADR 0020 | Reclassement entre agences, shadow, sans trésorerie | Origine : `dette_tiers_{type}` (467110/467120, débit) / `charge_commission_{type}` (622100/622200, crédit) ; destination : inverse — journal OD |
 | `encaissement_vente_pour_compte` | `EncaissementVente` créé par une autre agence que celle de la commande (ADR 0012) | Règlement, **bloquant**, même transaction que `encaissement_vente_recu` | `liaison` (181000, débit, tiers = agence qui a encaissé) / `client` (411) — site de la commande |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
@@ -223,13 +224,27 @@ leur solde renvoyé est identique (reflet exact du grand livre, pas un bug de ce
 ### Agence d'une fiche de paiement (besoin du Financement)
 
 Le besoin « livreurs » / « propriétaires » d'une agence dans le Financement se lit sur
-`paiement_fiches.site_id`, fixé au calcul de la période (`PeriodeCalculatorService`) : l'agence qui
-pèse le plus dans les commissions de la fiche. L'agence d'une commission est donnée par
-`CommissionEnveloppe::siteResponsableId()` :
+`paiement_fiches.site_id`. Depuis le 2026-10-06 ([ADR 0020](adr/0020-agence-de-paiement-des-commissions-site-du-vehicule.md)),
+l'agence qui paie une commission est le **site actuel du véhicule** de l'opération, quel que soit le
+site de la vente ou du transfert — `CommissionEnveloppe::siteResponsableId()` :
 
-- source commande de vente → `commandes_ventes.site_id` ;
-- source transfert logistique → **agence source** du transfert (`site_source_id`, même règle que
-  `CommissionLogistiqueService::resolveSiteResponsable()`).
+- vente → `vehicules.site_id` du véhicule de la commande ; repli sur `commandes_ventes.site_id` si le
+  véhicule n'est rattaché à aucun site ;
+- transfert logistique → `vehicules.site_id` du véhicule du transfert ; repli sur l'agence source
+  (`site_source_id`) — `CommissionLogistiqueService::resolveSiteResponsable()`.
+
+`paiement_fiches.site_id` est posé au calcul de la période (`PeriodeCalculatorService`) : site
+majoritaire en montant parmi ces agences (cas d'un livreur passé sur deux véhicules d'agences
+différentes). Il **n'est pas figé** : tant que la fiche n'est pas entièrement payée, tout changement de
+site d'un de ses véhicules la réaligne (`Vehicule::booted()` → `FicheSiteResponsableService`), même
+après la période, sa validation ou un paiement partiel. Les paiements déjà faits gardent leur propre
+`paiement_fiche_paiements.site_id`. Une fiche déjà constatée en comptabilité emporte son reste dû
+et la charge correspondante dans la nouvelle agence : une ligne `paiement_fiche_reaffectations`
+(fiche, site d'origine, site de destination, montant) et deux pièces mono-site
+`fiche_reaffectee_sortie` (origine : débit dette 467110/467120, crédit charge 622100/622200) et
+`fiche_reaffectee_entree` (destination : écriture inverse) — jamais par la liaison 181. Les fiches
+calculées avant cette règle se réalignent avec
+`php artisan commissions:realigner-sites-fiches` (aperçu ; `--appliquer` pour écrire).
 
 Une fiche sans aucune commission rattachable reste `site_id = null` et remonte dans la ligne
 « Sans agence » (statut « Données incomplètes »). Avant le 2026-09-27, les commissions de transfert

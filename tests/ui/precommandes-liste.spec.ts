@@ -49,8 +49,8 @@ const retrait = {
     id: '01PRECOMMANDEUI00000000002',
     reference: 'VTE-031026-001',
     statut: 'reservee',
-    statut_label: 'Réservée',
-    statut_affichage: { value: 'reservee', label: 'Réservée' },
+    statut_label: 'Créée',
+    statut_affichage: { value: 'reservee', label: 'Créée' },
     date_remise_prevue: '03/10/2026',
     date_remise_prevue_iso: '2026-10-03',
     en_retard: true,
@@ -180,6 +180,8 @@ test('bureau : compteurs du cycle, véhicule, livreur et client joignables', asy
         );
     }
     await expect(page.getByText('Restant à encaisser')).toHaveCount(0);
+    // « Mes vues », comme sur le Stock (scope `precommandes`).
+    await expect(page.getByRole('button', { name: /Mes vues/ })).toBeVisible();
 
     await expect(
         page.getByTestId('row-vehicule-immatriculation').first(),

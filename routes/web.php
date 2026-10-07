@@ -90,6 +90,7 @@ use App\Http\Controllers\Depenses\UpdateDepenseController;
 use App\Http\Controllers\Depenses\ValiderDepenseController;
 use App\Http\Controllers\Depenses\VehiculeDetailDepenseController;
 use App\Http\Controllers\Divers\IndexCommunicationController;
+use App\Http\Controllers\Divers\IndexDashboardCommissionsController;
 use App\Http\Controllers\Divers\IndexDashboardController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
@@ -352,6 +353,11 @@ Route::prefix('backoffice')->group(function () {
         Route::put('saved-filters/{scope}/default', SetDefaultSavedFilterController::class)->name('saved-filters.default');
         Route::patch('saved-filters/{scope}/{id}', UpdateSavedFilterController::class)->name('saved-filters.update');
         Route::delete('saved-filters/{scope}/{id}', DestroySavedFilterController::class)->name('saved-filters.destroy');
+
+        // Tableau de bord Commissions — écran en préparation, même droit de lecture que les écrans commissions.
+        Route::get('tableau-de-bord/commissions', IndexDashboardCommissionsController::class)
+            ->middleware('module:'.ModuleFeature::COMPTABILITE)
+            ->name('dashboard.commissions');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');

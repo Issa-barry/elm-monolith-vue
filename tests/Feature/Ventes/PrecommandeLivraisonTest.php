@@ -22,6 +22,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Ventes\PrecommandeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -179,6 +180,28 @@ class PrecommandeLivraisonTest extends TestCase
     private function stock(): int
     {
         return (int) VarianteStock::where('produit_variante_id', $this->varianteId())->where('site_id', $this->site->id)->value('qte_stock');
+    }
+
+    // ── Frise de la fiche ─────────────────────────────────────────────────────
+
+    public function test_la_frise_avance_avec_le_chargement_au_lieu_de_rester_sur_a_charger(): void
+    {
+        $commande = $this->precommandeChargee(10);
+        $commande->forceFill(['statut' => StatutCommandeVente::CHARGEMENT_EN_COURS])->saveQuietly();
+
+        $this->get("/backoffice/ventes/{$commande->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.statut_affichage.label', 'Chargement en cours')
+                ->where('precommande.etape_courante', 'chargement_en_cours')
+                ->where('precommande.etapes.3', ['cle' => 'chargement_en_cours', 'libelle' => 'Chargement en cours'])
+                ->where('precommande.etapes.6', ['cle' => 'cloturee', 'libelle' => 'Clôturée']));
+
+        $commande->forceFill(['statut' => StatutCommandeVente::LIVRAISON_EN_COURS])->saveQuietly();
+        $this->get("/backoffice/ventes/{$commande->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.statut_affichage.label', 'Livraison en cours')
+                ->where('precommande.etape_courante', 'livraison_en_cours'));
     }
 
     // ── Chargement ≠ livraison (D13) ──────────────────────────────────────────

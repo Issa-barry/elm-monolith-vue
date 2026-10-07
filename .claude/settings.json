@@ -353,7 +353,19 @@
       "PowerShell($s = \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\c12abbe9-ac16-4dda-b054-9944fb6950bd\\\\scratchpad\"; git show origin/main:database/seeders/RolesAndPermissionsSeeder.php | Out-File -Encoding utf8 \"$s\\\\seeder_main.php\"; Select-String -Path \"$s\\\\seeder_main.php\" -Pattern 'syncPermissions|RESOURCES|foreach|\\\\$manager|\\\\$commerciale|\\\\$comptable|\\\\$adminEntreprise' | Select-Object -First 30)",
       "PowerShell($s = \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\c12abbe9-ac16-4dda-b054-9944fb6950bd\\\\scratchpad\"; php \"$s\\\\diff_matrices.php\" \"$s\\\\seeder_main.php\" database/seeders/RolesAndPermissionsSeeder.php)",
       "Bash(grep -rn \"Confirmer'\\\\|name: 'Confirmer\\\\|/\\\\^confirmer\\\\$/\" tests/e2e/*.ts)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(gh api *)",
+      "Bash(jq '{name, target, enforcement, conditions, bypass_actors, rules: \\(.rules | map\\(if .type==\"required_status_checks\" then .parameters.required_status_checks |= map\\(select\\(.context!=\"E2E\"\\)\\) else . end\\)\\)}' C:/Users/issab/AppData/Local/Temp/claude/c--laragon-www-eau-la-maman-elm-monolithe/118a2644-7894-45a1-9f8d-da4726628c43/scratchpad/ruleset_main_avant.json)",
+      "Bash(jq '.rules[] | select\\(.type==\"required_status_checks\"\\)' C:/Users/issab/AppData/Local/Temp/claude/c--laragon-www-eau-la-maman-elm-monolithe/118a2644-7894-45a1-9f8d-da4726628c43/scratchpad/ruleset_main_apres.json)",
+      "Bash(node -e ' *)",
+      "PowerShell(php artisan test tests/Feature/DashboardCommissionsTest.php tests/Feature/DashboardTest.php 2>&1)",
+      "PowerShell($env:APP_CONFIG_CACHE = \"$env:TEMP\\\\elm-no-config-cache.php\"; php artisan test tests/Feature/DashboardCommissionsTest.php tests/Feature/DashboardTest.php 2>&1 | Select-Object -Last 15)",
+      "PowerShell(Select-String -Path .env -Pattern '^\\(APP_ENV|APP_DEBUG|APP_URL|DB_CONNECTION|DB_HOST|CACHE_STORE|CACHE_DRIVER|SESSION_DRIVER|QUEUE_CONNECTION|TELESCOPE|DEBUGBAR|LOG_LEVEL|LOG_CHANNEL|MAIL_MAILER|BROADCAST\\)' | ForEach-Object { $_.Line }; php -v; php -m | Select-String -Pattern 'xdebug|opcache|Zend OPcache'; php -r \"echo 'opcache.enable='.ini_get\\('opcache.enable'\\).PHP_EOL.'xdebug.mode='.ini_get\\('xdebug.mode'\\).PHP_EOL.'realpath_cache_size='.ini_get\\('realpath_cache_size'\\).PHP_EOL;\"; Get-ChildItem bootstrap/cache | Select-Object Name,LastWriteTime)",
+      "PowerShell(Select-String -Path composer.json -Pattern 'debugbar|telescope|clockwork'; git log --since=\"2026-09-25\" --format=\"%h %ad %s\" --date=short -- composer.json composer.lock app/Http/Middleware/HandleInertiaRequests.php bootstrap/app.php config/ | Select-Object -First 30; \\(Get-Item .env\\).LastWriteTime; Test-Path storage/debugbar; if \\(Test-Path storage/debugbar\\) { $f = Get-ChildItem storage/debugbar; \"debugbar files: $\\($f.Count\\), size MB: $\\([math]::Round\\(\\($f | Measure-Object Length -Sum\\).Sum/1MB,1\\)\\)\" }; $l = Get-Item storage/logs/laravel.log -ErrorAction SilentlyContinue; if \\($l\\) { \"laravel.log MB: $\\([math]::Round\\($l.Length/1MB,1\\)\\)\" }; Get-ChildItem storage/logs | Sort-Object Length -Descending | Select-Object -First 5 Name,@{n='MB';e={[math]::Round\\($_.Length/1MB,1\\)}})",
+      "PowerShell(php artisan route:cache)",
+      "PowerShell(php artisan route:list --name=dashboard.commissions)",
+      "Bash(curl -s -o /dev/null -w \"apollo %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"app %{http_code}\\\\n\" http://localhost:8000/login)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

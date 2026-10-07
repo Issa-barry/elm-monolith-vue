@@ -97,6 +97,26 @@ final class SavedFilterScopes
                     'numero_commande' => $search,
                 ],
             ],
+            // Page Précommandes (ADR 0019) : mêmes critères que la liste Ventes, plus le retard.
+            // Scope distinct : une vue de ventes ne s'applique jamais aux précommandes, ni l'inverse.
+            'precommandes' => [
+                'authorize' => ['viewAny', CommandeVente::class],
+                'share' => 'ventes.update',
+                'sites' => true,
+                'criteria' => [
+                    'statuts' => ['array', Rule::in(array_column(StatutCommandeVente::cases(), 'value'))],
+                    'en_retard' => [Rule::in(['1'])],
+                    'statut_facture' => [Rule::enum(StatutFactureVente::class)],
+                    'statut_commission' => [Rule::enum(StatutCommission::class)],
+                    'date_debut' => ['date_format:Y-m-d'],
+                    'date_fin' => ['date_format:Y-m-d'],
+                    'vehicule' => $search,
+                    'proprietaire' => $search,
+                    'livreur' => $search,
+                    'client' => $search,
+                    'numero_commande' => $search,
+                ],
+            ],
             'factures' => [
                 'authorize' => ['viewAny', CommandeVente::class],
                 'share' => 'ventes.update',

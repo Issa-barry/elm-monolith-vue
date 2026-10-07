@@ -645,6 +645,8 @@ function _progressPercent(f: FactureItem): number {
                     striped-rows
                     removable-sort
                     class="text-sm"
+                    table-class="w-full min-w-[1360px]"
+                    data-testid="factures-table"
                     :pt="{
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
@@ -655,7 +657,8 @@ function _progressPercent(f: FactureItem): number {
                         field="reference"
                         header="Référence"
                         sortable
-                        style="min-width: 180px"
+                        style="width: 13%; min-width: 175px"
+                        body-class="whitespace-nowrap"
                     >
                         <template #body="{ data }">
                             <span
@@ -666,7 +669,11 @@ function _progressPercent(f: FactureItem): number {
                     </Column>
 
                     <!-- Véhicule / Client -->
-                    <Column header="Véhicule / Client" style="min-width: 160px">
+                    <Column
+                        header="Véhicule / Client"
+                        style="width: 16%; min-width: 185px"
+                        body-class="break-words"
+                    >
                         <template #body="{ data }">
                             <div v-if="data.vehicule_nom" class="font-medium">
                                 {{ data.vehicule_nom }}
@@ -691,7 +698,8 @@ function _progressPercent(f: FactureItem): number {
                         field="site_nom"
                         header="Site"
                         sortable
-                        style="min-width: 120px"
+                        style="width: 8%; min-width: 110px"
+                        body-class="break-words"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
@@ -705,7 +713,10 @@ function _progressPercent(f: FactureItem): number {
                         field="quantite_totale"
                         header="Qté"
                         sortable
-                        style="width: 90px"
+                        style="width: 5%; min-width: 80px"
+                        body-class="whitespace-nowrap tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="tabular-nums">{{
@@ -719,7 +730,10 @@ function _progressPercent(f: FactureItem): number {
                         field="montant_net"
                         header="Montant"
                         sortable
-                        style="width: 140px"
+                        style="width: 11%; min-width: 150px"
+                        body-class="whitespace-nowrap tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="tabular-nums">{{
@@ -733,7 +747,10 @@ function _progressPercent(f: FactureItem): number {
                         field="montant_encaisse"
                         header="Encaissé"
                         sortable
-                        style="width: 140px"
+                        style="width: 11%; min-width: 150px"
+                        body-class="whitespace-nowrap tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground tabular-nums">{{
@@ -747,7 +764,10 @@ function _progressPercent(f: FactureItem): number {
                         field="montant_restant"
                         header="Restant"
                         sortable
-                        style="width: 140px"
+                        style="width: 11%; min-width: 150px"
+                        body-class="whitespace-nowrap tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground tabular-nums">
@@ -765,7 +785,8 @@ function _progressPercent(f: FactureItem): number {
                         field="statut_label"
                         header="Statut"
                         sortable
-                        style="width: 120px"
+                        style="width: 13%; min-width: 185px"
+                        body-class="whitespace-nowrap"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -784,7 +805,8 @@ function _progressPercent(f: FactureItem): number {
                         field="created_at"
                         header="Date"
                         sortable
-                        style="width: 110px"
+                        style="width: 8%; min-width: 115px"
+                        body-class="whitespace-nowrap"
                     >
                         <template #body="{ data }">
                             <span
@@ -795,7 +817,7 @@ function _progressPercent(f: FactureItem): number {
                     </Column>
 
                     <!-- Actions -->
-                    <Column header="" style="width: 56px">
+                    <Column header="" style="width: 4%; min-width: 56px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <DropdownMenu>
@@ -804,6 +826,7 @@ function _progressPercent(f: FactureItem): number {
                                             variant="ghost"
                                             size="icon"
                                             class="h-8 w-8"
+                                            :aria-label="`Actions de la facture ${data.reference}`"
                                         >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>

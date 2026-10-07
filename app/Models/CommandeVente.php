@@ -26,6 +26,11 @@ class CommandeVente extends Model
 
     public const STATUT_AFFICHAGE_COMMISSIONS_A_VERSER = 'commissions_a_verser';
 
+    /** Précommande remise au client par retrait (ADR 0019) : un affichage, jamais un statut stocké. */
+    public const STATUT_AFFICHAGE_RETIREE = 'retiree';
+
+    public const LIBELLE_RETIREE = 'Retirée';
+
     /** Statuts d'une précommande dont la marchandise n'est pas encore remise (ADR 0019). */
     public const STATUTS_PRECOMMANDE_AVANT_REMISE = [
         StatutCommandeVente::RESERVEE,
@@ -214,6 +219,12 @@ class CommandeVente extends Model
      */
     public function statutAffichage(): array
     {
+        // Le statut opérationnel d'une précommande retirée prime : « À encaisser » ou « Commissions à
+        // verser » relèvent de la facture, affichée à part.
+        if ($this->estPrecommandeRetiree()) {
+            return ['value' => self::STATUT_AFFICHAGE_RETIREE, 'label' => self::LIBELLE_RETIREE];
+        }
+
         if ($this->isFacturation() && $this->facture?->isPayee()) {
             return [
                 'value' => self::STATUT_AFFICHAGE_COMMISSIONS_A_VERSER,
@@ -306,6 +317,18 @@ class CommandeVente extends Model
         return $this->estPrecommandeAvantRemise()
             && $this->date_remise_prevue !== null
             && $this->date_remise_prevue->lt(today());
+    }
+
+    /**
+     * Précommande en retrait dont la marchandise est remise (retrait validé) mais pas encore
+     * clôturée : statut `facturation`, affiché « Retirée » (spec § 6).
+     */
+    public function estPrecommandeRetiree(): bool
+    {
+        return $this->est_precommande
+            && $this->remise_at !== null
+            && $this->vehicule_id === null
+            && $this->statut === StatutCommandeVente::FACTURATION;
     }
 
     /**

@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { router } from '@inertiajs/vue3';
 import { PackageCheck } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { ref, watch } from 'vue';
+import '../../../../css/logistique-mobile.css';
 
 interface LigneProp {
     id: number;
@@ -109,11 +110,12 @@ function submit() {
 
 <template>
     <Dialog
+        class="logistique-dialog"
         :visible="visible"
         modal
         header="Valider la réception"
         :style="{ width: 'min(1050px, 94vw)' }"
-        :draggable="true"
+        :draggable="false"
         :resizable="false"
         @update:visible="emit('update:visible', $event)"
         @hide="dialogErrors = []"
@@ -134,7 +136,7 @@ function submit() {
                 {{ err }}
             </p>
         </div>
-        <table class="w-full text-sm">
+        <table data-mobile-cards class="w-full text-sm">
             <colgroup>
                 <col />
                 <!-- Produit : flexible -->
@@ -165,16 +167,19 @@ function submit() {
                     :key="l.id"
                     class="align-middle"
                 >
-                    <td class="py-3 pr-4 font-medium">
+                    <td data-label="Produit" class="py-3 pr-4 font-medium">
                         {{ l.produit_nom }}
                     </td>
                     <td
+                        data-label="Chargé"
                         class="py-3 text-center text-muted-foreground tabular-nums"
                     >
                         {{ l.quantite_chargee }}
                     </td>
-                    <td class="px-2 py-3">
+                    <td data-label="Reçu" class="px-2 py-3">
                         <InputNumber
+                            :input-id="`reception-qte-${l.id}`"
+                            :aria-label="`Quantité reçue : ${l.produit_nom}`"
                             v-model="receptionLignes[idx].quantite_recue"
                             :min="0"
                             :use-grouping="false"
@@ -202,6 +207,7 @@ function submit() {
                         />
                     </td>
                     <td
+                        data-label="Écart"
                         class="py-3 text-center font-semibold tabular-nums"
                         :class="
                             ecartReception(idx) === 0
@@ -214,17 +220,28 @@ function submit() {
                         {{ ecartReception(idx) > 0 ? '+' : ''
                         }}{{ ecartReception(idx) }}
                     </td>
-                    <td class="px-2 py-3">
-                        <Dropdown
+                    <td data-label="Type" data-wide class="px-2 py-3">
+                        <Select
                             v-model="receptionLignes[idx].ecart_type"
                             :options="typesEcart"
                             option-label="label"
                             option-value="value"
+                            append-to="self"
+                            :overlay-style="{
+                                width: '100%',
+                                maxWidth: 'calc(100vw - 2rem)',
+                            }"
+                            :pt="{
+                                optionLabel: {
+                                    class: 'whitespace-normal [overflow-wrap:anywhere]',
+                                },
+                            }"
                             class="w-full"
                         />
                     </td>
-                    <td class="px-2 py-3">
+                    <td data-label="Motif" data-wide class="px-2 py-3">
                         <InputText
+                            :aria-label="`Motif : ${l.produit_nom}`"
                             v-model="receptionLignes[idx].ecart_motif"
                             placeholder="Motif (optionnel)…"
                             class="w-full"

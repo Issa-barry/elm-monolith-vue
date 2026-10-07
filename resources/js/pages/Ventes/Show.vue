@@ -801,9 +801,6 @@ const FACTURATION_STEP_IDX = computed(() => (requiertReception.value ? 5 : 4));
 const CLOTUREE_STEP_IDX = computed(() => FACTURATION_STEP_IDX.value + 2);
 
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
-const estPrecommandeAvantPreparation = computed(() =>
-    ['reservee', 'a_preparer', 'preparee'].includes(props.commande.statut),
-);
 
 const currentStepIdx = computed(() => {
     if (
@@ -1069,6 +1066,13 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <CalendarClock class="h-3.5 w-3.5" />
                                 Précommande
                             </span>
+                            <!-- Information de stock, pas une étape : la réservation suit la création. -->
+                            <span
+                                v-if="precommande?.stock_reserve"
+                                class="text-muted-foreground"
+                                data-testid="precommande-stock-reserve"
+                                >Stock réservé ·</span
+                            >
                             <span
                                 v-if="commande.date_remise_prevue"
                                 :class="
@@ -1206,10 +1210,15 @@ function stepLabel(idx: number, defaultLabel: string): string {
                 :precommande="precommande"
             />
 
-            <!-- Timeline de progression — masquée tant que la précommande n'est pas préparée : ses
-                 étapes sont celles de la carte ci-dessus. -->
+            <!-- Timeline de progression d'une vente. Une précommande n'a qu'une frise, celle de sa
+                 carte ci-dessus : seul le bandeau d'annulation ou de retour s'affiche ici. -->
             <div
-                v-if="!estPrecommandeAvantPreparation"
+                v-if="
+                    !commande.est_precommande ||
+                    commande.is_annulee ||
+                    commande.is_retournee ||
+                    commande.is_annulee_erreur_saisie
+                "
                 class="rounded-xl border bg-card px-6 py-4 shadow-sm"
             >
                 <!-- Annulée -->
