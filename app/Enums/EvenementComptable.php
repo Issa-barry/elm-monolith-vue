@@ -76,6 +76,12 @@ enum EvenementComptable: string
     // Remboursement d'un client (RemboursementVente, ADR 0019) : sortie de trésorerie réelle, débit
     // avance client (précommande non remise) ou compte client (trop-perçu après remise).
     case REMBOURSEMENT_CLIENT = 'remboursement_client';
+    // Fiche livreur/propriétaire déjà comptabilisée qui change d'agence (véhicule réaffecté, ADR
+    // 0020) : une pièce par site — à l'origine, débit dette / crédit charge ; à la destination,
+    // débit charge / crédit dette — sur le reste dû. Jamais par la liaison 181 : la dette entre
+    // agences est dérivée des encaissements (ADR 0012), un solde de liaison ne serait jamais réglé.
+    case FICHE_REAFFECTEE_SORTIE = 'fiche_reaffectee_sortie';
+    case FICHE_REAFFECTEE_ENTREE = 'fiche_reaffectee_entree';
 
     public function label(): string
     {
@@ -103,6 +109,8 @@ enum EvenementComptable: string
             self::VERSEMENT_CASHBACK => 'Versement cashback',
             self::ACOMPTE_PRECOMMANDE_IMPUTE => 'Imputation des acomptes de précommande',
             self::REMBOURSEMENT_CLIENT => 'Remboursement client',
+            self::FICHE_REAFFECTEE_SORTIE => "Fiche réaffectée — sortie de l'agence d'origine",
+            self::FICHE_REAFFECTEE_ENTREE => 'Fiche réaffectée — entrée dans la nouvelle agence',
         };
     }
 }

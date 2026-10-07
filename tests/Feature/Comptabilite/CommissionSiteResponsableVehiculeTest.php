@@ -12,14 +12,19 @@ use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionProcessus;
+use App\Models\EcritureComptable;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Models\PaiementFicheReaffectation;
+use App\Models\PieceComptable;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Comptabilite\FicheComptabilisationService;
+use App\Services\Comptabilite\PlanComptableBootstrapService;
 use App\Services\Tresorerie\ObligationsAgenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -223,6 +228,68 @@ class CommissionSiteResponsableVehiculeTest extends TestCase
         $diaraye->update(['site_id' => $this->cba->id]);
 
         $this->assertSame($this->matoto->id, $fiche->fresh()->site_id);
+    }
+
+    /** Solde (crédit − débit) d'un compte sur un site, toutes pièces confondues. */
+    private function soldeCrediteur(string $numeroCompte, ?string $siteId): float
+    {
+        return (float) EcritureComptable::query()
+            ->join('compta_comptes', 'compta_comptes.id', '=', 'compta_ecritures.compte_comptable_id')
+            ->where('compta_comptes.organization_id', $this->org->id)
+            ->where('compta_comptes.numero', $numeroCompte)
+            ->where('compta_ecritures.site_id', $siteId)
+            ->selectRaw('COALESCE(SUM(compta_ecritures.credit), 0) - COALESCE(SUM(compta_ecritures.debit), 0) as solde')
+            ->value('solde');
+    }
+
+    public function test_fiche_deja_comptabilisee_dette_et_charge_suivent_le_vehicule(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $diaraye = $this->makeVehicule($this->matoto);
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $this->makeVente($diaraye, $this->cba, 'livreur', $livreur->id, 300_000);
+        $this->calculerAout();
+
+        $fiche = $this->fiche('livreur', $livreur->id);
+        app(FicheComptabilisationService::class)->comptabiliserFicheValidee($fiche);
+        PaiementFichePaiement::create([
+            'fiche_id' => $fiche->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $fiche->site_id,
+            'montant' => 100_000,
+            'mode_paiement' => 'especes',
+            'date_paiement' => '2026-08-20',
+        ]);
+        $fiche->recalculStatut();
+        $this->assertSame(200_000.0, $this->soldeCrediteur('467120', $this->matoto->id));
+
+        $diaraye->update(['site_id' => $this->cba->id]);
+
+        // Le reste dû (200 000) et la charge correspondante passent de Matoto à Cba ; le paiement
+        // déjà fait à Matoto y reste, avec sa part de charge.
+        $this->assertSame(0.0, $this->soldeCrediteur('467120', $this->matoto->id));
+        $this->assertSame(200_000.0, $this->soldeCrediteur('467120', $this->cba->id));
+        $this->assertSame(-100_000.0, $this->soldeCrediteur('622200', $this->matoto->id));
+        $this->assertSame(-200_000.0, $this->soldeCrediteur('622200', $this->cba->id));
+
+        $reaffectation = PaiementFicheReaffectation::where('fiche_id', $fiche->id)->sole();
+        $this->assertSame($this->matoto->id, $reaffectation->site_origine_id);
+        $this->assertSame($this->cba->id, $reaffectation->site_destination_id);
+        $this->assertSame(2, PieceComptable::where('source_id', $reaffectation->id)->count());
+    }
+
+    public function test_fiche_non_comptabilisee_change_dagence_sans_ecriture(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $diaraye = $this->makeVehicule($this->matoto);
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $this->makeVente($diaraye, $this->cba, 'livreur', $livreur->id, 300_000);
+        $this->calculerAout();
+
+        $diaraye->update(['site_id' => $this->cba->id]);
+
+        $this->assertSame($this->cba->id, $this->fiche('livreur', $livreur->id)->site_id);
+        $this->assertSame(0, PieceComptable::where('organization_id', $this->org->id)->count());
     }
 
     public function test_la_commission_logistique_se_paie_au_site_du_vehicule_pas_au_site_source(): void

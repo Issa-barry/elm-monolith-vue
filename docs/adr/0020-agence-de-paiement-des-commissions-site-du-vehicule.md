@@ -53,8 +53,16 @@ En production, le véhicule Diaraye (BT2586), rattaché à Matoto, charge et ven
 - Le manager de l'agence du véhicule voit et paie toutes ses commissions ; un manager d'une autre
   agence ne les voit plus, même si les ventes ont eu lieu chez lui.
 - Le besoin « livreurs/propriétaires » du Financement et des Remises suit le véhicule.
-- Une écriture de constatation déjà passée à la validation d'une fiche (`FicheComptabilisationService`)
-  garde le site de l'époque ; le paiement est comptabilisé sur le site qui paie. Les deux sites
-  peuvent donc différer pour une fiche réaffectée entre sa validation et son paiement.
+- **Comptabilité (complété le 2026-10-07)** : une fiche déjà constatée (pièce de validation) qui
+  change d'agence voit son **reste dû et la charge correspondante** passer de l'agence d'origine à
+  la nouvelle — `paiement_fiche_reaffectations` (une ligne par changement, trace conservée) et deux
+  pièces mono-site `fiche_reaffectee_sortie` (origine : débit dette 467110/467120, crédit charge
+  622100/622200) et `fiche_reaffectee_entree` (destination : débit charge, crédit dette). La dette
+  est ainsi soldée là où elle est payée, et chaque agence porte la charge de ce qu'elle paie (la
+  part déjà payée par l'origine y reste). **Pas de compte de liaison 181** : la dette entre
+  agences est dérivée des encaissements (ADR 0012), un solde de liaison né d'une réaffectation ne
+  serait jamais réglé. Mode shadow, comme la constatation : un échec comptable est journalisé et
+  ne bloque jamais le changement d'agence. Une fiche non constatée change d'agence sans écriture.
+  La commande de rattrapage passe par le même chemin (`FicheSiteResponsableService::changerSite()`).
 - Tests : `tests/Feature/Comptabilite/CommissionSiteResponsableVehiculeTest.php`,
   `ObligationsAgenceServiceTest::test_commission_comptee_sur_le_site_actuel_du_vehicule_pas_sur_le_site_de_la_vente`.

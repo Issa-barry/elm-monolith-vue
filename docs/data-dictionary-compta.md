@@ -155,6 +155,7 @@ Ce document distingue deux couches, volontairement séparées :
 | `encaissement_vente_recu` | `EncaissementVente` créé | Règlement, **bloquant** | `client` (411) — ou `avance_client` (419100) pour un **acompte de précommande** (`est_acompte`, vente pas encore réalisée, ADR 0019) — / `tresorerie` — ou, pour des espèces encaissées par un agent qui a une caisse dédiée, son sous-compte imposé (option `journal_role`, cf. `encaissements.md`). Encaissement reçu par une **autre agence** que celle de la commande (ADR 0012) : pièce posée sur le site d'encaissement, `liaison` (181000, tiers = agence de la commande) au lieu de `client` |
 | `acompte_precommande_impute` | Remise d'une précommande (retrait ou chargement validé), ADR 0019 | Imputation, **bloquant**, sans trésorerie | `avance_client` (419100, débit) / `client` (411000, crédit) — journal OD |
 | `remboursement_client` | `RemboursementVente` créé (trop-perçu, précommande annulée), ADR 0019 | Règlement, **bloquant** | `avance_client` (419100) avant la remise ou `client` (411000) après / trésorerie (compte du support débité) |
+| `fiche_reaffectee_sortie` / `fiche_reaffectee_entree` | Fiche livreur/propriétaire déjà constatée qui change d'agence (véhicule réaffecté), ADR 0020 | Reclassement entre agences, shadow, sans trésorerie | Origine : `dette_tiers_{type}` (467110/467120, débit) / `charge_commission_{type}` (622100/622200, crédit) ; destination : inverse — journal OD |
 | `encaissement_vente_pour_compte` | `EncaissementVente` créé par une autre agence que celle de la commande (ADR 0012) | Règlement, **bloquant**, même transaction que `encaissement_vente_recu` | `liaison` (181000, débit, tiers = agence qui a encaissé) / `client` (411) — site de la commande |
 | `fiche_proprietaire_validee` | `PaiementFiche` (proprietaire) validée | Engagement, shadow | `charge_commission` (622100) / `dette_tiers` (467110) / `avance_tiers_proprietaire` (467130) |
 | `fiche_livreur_validee` | `PaiementFiche` (livreur) validée | Engagement, shadow | idem (622200 / 467120 / 467140) |
@@ -237,7 +238,12 @@ majoritaire en montant parmi ces agences (cas d'un livreur passé sur deux véhi
 différentes). Il **n'est pas figé** : tant que la fiche n'est pas entièrement payée, tout changement de
 site d'un de ses véhicules la réaligne (`Vehicule::booted()` → `FicheSiteResponsableService`), même
 après la période, sa validation ou un paiement partiel. Les paiements déjà faits gardent leur propre
-`paiement_fiche_paiements.site_id`. Les fiches calculées avant cette règle se réalignent avec
+`paiement_fiche_paiements.site_id`. Une fiche déjà constatée en comptabilité emporte son reste dû
+et la charge correspondante dans la nouvelle agence : une ligne `paiement_fiche_reaffectations`
+(fiche, site d'origine, site de destination, montant) et deux pièces mono-site
+`fiche_reaffectee_sortie` (origine : débit dette 467110/467120, crédit charge 622100/622200) et
+`fiche_reaffectee_entree` (destination : écriture inverse) — jamais par la liaison 181. Les fiches
+calculées avant cette règle se réalignent avec
 `php artisan commissions:realigner-sites-fiches` (aperçu ; `--appliquer` pour écrire).
 
 Une fiche sans aucune commission rattachable reste `site_id = null` et remonte dans la ligne

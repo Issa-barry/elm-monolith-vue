@@ -7,8 +7,11 @@ use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
+use App\Models\PaiementFicheReaffectation;
 use App\Services\CommissionLogistiqueService;
+use App\Services\Comptabilite\FicheComptabilisationService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Agence d'une fiche de paiement livreur/propriétaire (décision du 06/10/2026) : l'agence qui
@@ -102,11 +105,40 @@ class FicheSiteResponsableService
         foreach ($fiches as $fiche) {
             $site = $this->siteDeLaFiche($fiche);
             if ($site !== null && $site !== $fiche->site_id) {
-                $fiche->update(['site_id' => $site]);
+                $this->changerSite($fiche, $site);
                 $modifiees++;
             }
         }
 
         return $modifiees;
+    }
+
+    /**
+     * Seul point qui change l'agence d'une fiche non payée. Si la fiche est déjà constatée en
+     * comptabilité, son reste dû et la charge correspondante suivent dans l'agence qui la paiera
+     * (FicheComptabilisationService::comptabiliserReaffectation()) — en mode shadow, comme la
+     * constatation elle-même : un échec comptable est journalisé, jamais bloquant.
+     */
+    public function changerSite(PaiementFiche $fiche, string $siteId): void
+    {
+        $reaffectation = PaiementFicheReaffectation::create([
+            'organization_id' => $fiche->organization_id,
+            'fiche_id' => $fiche->id,
+            'site_origine_id' => $fiche->site_id,
+            'site_destination_id' => $siteId,
+            'montant' => $fiche->montant_restant,
+        ]);
+
+        $fiche->update(['site_id' => $siteId]);
+
+        try {
+            app(FicheComptabilisationService::class)->comptabiliserReaffectation($reaffectation);
+        } catch (\Throwable $e) {
+            Log::error("Comptabilisation du changement d'agence de fiche échouée", [
+                'fiche_id' => $fiche->id,
+                'reaffectation_id' => $reaffectation->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

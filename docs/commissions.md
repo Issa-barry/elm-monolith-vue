@@ -1459,7 +1459,9 @@ fiche de paiement partait vers le site majoritaire des ventes de la quinzaine.
   (agence source pour un transfert).
 - **Jamais figée** : tant que la fiche n'est pas entièrement payée, elle suit le véhicule réaffecté
   — même après la période, la validation ou un paiement partiel. Une fiche payée ne bouge plus ;
-  un paiement déjà fait garde son site.
+  un paiement déjà fait garde son site. Si la fiche est déjà constatée en comptabilité, son reste
+  dû et la charge correspondante passent aussi dans la nouvelle agence (pièces
+  `fiche_reaffectee_sortie` / `fiche_reaffectee_entree`, cf. ADR 0020).
 - **Écrans Livreurs et Propriétaires** : la colonne **Agence**, le filtre Agence et le périmètre
   d'un non-administrateur (et leurs exports) portent sur cette agence. Un manager voit les
   commissions des véhicules de son agence, et ne voit plus celles des ventes faites chez lui par

@@ -49,7 +49,7 @@ class CommissionsRealignerSitesFichesCommand extends Command
             ];
 
             if ($appliquer) {
-                $fiche->update(['site_id' => $site]);
+                $service->changerSite($fiche, $site);
             }
         }
 
