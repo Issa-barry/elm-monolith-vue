@@ -3,12 +3,21 @@ import BeneficiairePickerDialog from '@/components/Depenses/BeneficiairePickerDi
 import DepenseConfirmDialog from '@/components/Depenses/DepenseConfirmDialog.vue';
 import type { PickerField } from '@/components/Depenses/pickerTypes';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
-import { Lock, Search, X } from 'lucide-vue-next';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Lock, Search, X } from 'lucide-vue-next';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -86,6 +95,16 @@ const typesFiltres = computed<TypeOption[]>(() =>
         : [],
 );
 
+const selectPt = {
+    root: { class: 'max-sm:min-h-11' },
+    label: { class: 'min-w-0 truncate max-sm:!text-base' },
+    option: { class: 'max-sm:min-h-11' },
+    optionLabel: {
+        class: 'min-w-0 whitespace-normal [overflow-wrap:anywhere]',
+    },
+};
+const selectOverlayStyle = { width: '100%', maxWidth: 'calc(100vw - 2rem)' };
+
 // ── Formulaire ────────────────────────────────────────────────────────────────
 const form = useForm({
     depense_type_id: '',
@@ -96,6 +115,24 @@ const form = useForm({
     commentaire: '',
     statut: 'brouillon' as 'brouillon' | 'soumis',
 });
+
+const showDiscardDialog = ref(false);
+
+function annulerSaisie() {
+    if (form.processing) return;
+    if (
+        form.isDirty ||
+        concerneSelectionne.value !== (props.initial_beneficiaire_type ?? '')
+    ) {
+        showDiscardDialog.value = true;
+        return;
+    }
+    quitterSaisie();
+}
+
+function quitterSaisie() {
+    if (!form.processing) router.visit('/backoffice/depenses');
+}
 
 const selectedType = computed<TypeOption | null>(
     () => typesFiltres.value.find((t) => t.id === form.depense_type_id) ?? null,
@@ -300,19 +337,6 @@ const siteNom = computed(
     () => props.sites.find((s) => s.id === form.site_id)?.nom ?? null,
 );
 
-const concerneBadgeClass = computed(() => {
-    const map: Record<string, string> = {
-        vehicule: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        proprietaire: 'border-purple-200 bg-purple-50 text-purple-700',
-        livreur: 'border-amber-200 bg-amber-50 text-amber-700',
-        employe: 'border-blue-200 bg-blue-50 text-blue-700',
-        interne: 'border-slate-200 bg-slate-50 text-slate-700',
-        prestataire: 'border-teal-200 bg-teal-50 text-teal-700',
-        client: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-    };
-    return map[concerneSelectionne.value] ?? '';
-});
-
 // ── Montant formaté ───────────────────────────────────────────────────────────
 const montantDisplay = ref('');
 
@@ -374,22 +398,53 @@ function submitBrouillon() {
 <template>
     <Head title="Nouvelle dépense" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-4 sm:p-6">
-            <div class="mx-auto max-w-2xl">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <header
+            data-testid="depense-create-header"
+            class="fixed inset-x-0 top-0 z-20 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 border-b bg-background px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 sm:hidden"
+        >
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                class="h-11 w-11 text-muted-foreground"
+                aria-label="Annuler la saisie"
+                :disabled="form.processing"
+                @click="annulerSaisie"
+            >
+                <ArrowLeft class="size-5" />
+            </Button>
+            <h1 class="text-center text-base font-semibold">
+                Nouvelle dépense
+            </h1>
+        </header>
+
+        <div
+            class="min-w-0 px-4 pt-[calc(77px+env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6"
+        >
+            <div class="mx-auto max-w-2xl min-w-0">
                 <!-- Header -->
-                <div class="mb-6">
-                    <h1 class="text-xl font-semibold">Nouvelle dépense</h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Sélectionnez d'abord le concerné.
+                <div class="mb-4 sm:mb-6">
+                    <h1 class="hidden text-xl font-semibold sm:block">
+                        Nouvelle dépense
+                    </h1>
+                    <p class="text-sm text-muted-foreground sm:mt-1">
+                        Choisissez le concerné, puis le type de dépense.
                     </p>
                 </div>
 
-                <form class="space-y-4" @submit.prevent>
+                <form
+                    id="depense-form"
+                    class="depense-form min-w-0 space-y-4"
+                    @submit.prevent
+                >
                     <!-- Concerné -->
-                    <div class="space-y-3 rounded-xl border bg-card p-4">
+                    <fieldset
+                        class="min-w-0 space-y-3 rounded-xl border bg-card p-4"
+                    >
+                        <legend class="sr-only">Concerné</legend>
                         <h2
-                            class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            class="text-sm font-semibold sm:text-xs sm:tracking-wide sm:text-muted-foreground sm:uppercase"
                         >
                             Concerné
                         </h2>
@@ -397,16 +452,17 @@ function submitBrouillon() {
                             <label
                                 v-for="cat in categories"
                                 :key="cat.value"
-                                class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                                class="flex min-h-12 min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors focus-within:ring-2 focus-within:ring-ring sm:min-h-0"
                                 :class="
                                     concerneSelectionne === cat.value
-                                        ? `${concerneBadgeClass} font-medium ring-1 ring-current`
+                                        ? 'border-primary bg-primary/5 font-medium text-primary ring-1 ring-primary'
                                         : 'hover:bg-muted/40'
                                 "
                             >
                                 <input
                                     v-model="concerneSelectionne"
                                     type="radio"
+                                    name="concerne"
                                     :value="cat.value"
                                     class="sr-only"
                                 />
@@ -421,47 +477,42 @@ function submitBrouillon() {
                                 {{ cat.label }}
                             </label>
                         </div>
-                    </div>
+                    </fieldset>
 
                     <!-- Type de dépense -->
                     <div class="space-y-3 rounded-xl border bg-card p-4">
                         <h2
-                            class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            class="text-sm font-semibold sm:text-xs sm:tracking-wide sm:text-muted-foreground sm:uppercase"
                         >
                             Type de dépense
                         </h2>
                         <div>
                             <Label
                                 for="dep-type"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Type <span class="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="dep-type"
+                            <Select
+                                input-id="dep-type"
                                 v-model="form.depense_type_id"
+                                :options="typesFiltres"
+                                option-label="libelle"
+                                option-value="id"
                                 :disabled="!concerneSelectionne"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.depense_type_id,
-                                }"
-                            >
-                                <option value="">
-                                    {{
-                                        concerneSelectionne
-                                            ? '— Sélectionner un type —'
-                                            : "— Choisissez d'abord un concerné —"
-                                    }}
-                                </option>
-                                <option
-                                    v-for="t in typesFiltres"
-                                    :key="t.id"
-                                    :value="t.id"
-                                >
-                                    {{ t.libelle }}
-                                </option>
-                            </select>
+                                :placeholder="
+                                    concerneSelectionne
+                                        ? 'Sélectionner un type'
+                                        : 'Sélectionnez un concerné'
+                                "
+                                :invalid="!!form.errors.depense_type_id"
+                                class="w-full min-w-0"
+                                append-to="self"
+                                :overlay-style="selectOverlayStyle"
+                                :pt="selectPt"
+                                scroll-height="min(15rem, 50dvh)"
+                                empty-message="Aucun type disponible pour ce concerné"
+                            />
                             <p
                                 v-if="form.errors.depense_type_id"
                                 class="mt-1 text-xs text-destructive"
@@ -487,7 +538,7 @@ function submitBrouillon() {
                         class="space-y-3 rounded-xl border bg-card p-4"
                     >
                         <h2
-                            class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            class="text-sm font-semibold sm:text-xs sm:tracking-wide sm:text-muted-foreground sm:uppercase"
                         >
                             {{ concerneLabel }}
                         </h2>
@@ -496,7 +547,7 @@ function submitBrouillon() {
                         <div v-if="categorie === 'vehicule'">
                             <Label
                                 for="dep-vehicule"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Véhicule
                                 <span class="text-destructive">*</span>
@@ -510,7 +561,7 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        vehiculeSelected ? 'pr-8' : '',
+                                        vehiculeSelected ? 'pr-12 sm:pr-8' : '',
                                     ]"
                                     @click="showVehiculePicker = true"
                                 >
@@ -534,7 +585,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="vehiculeSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearVehicule"
                                 >
@@ -592,7 +643,7 @@ function submitBrouillon() {
                         <div v-else-if="categorie === 'employe'">
                             <Label
                                 for="dep-employe"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Salarié
                                 <span class="text-destructive">*</span>
@@ -606,7 +657,7 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        employeSelected ? 'pr-8' : '',
+                                        employeSelected ? 'pr-12 sm:pr-8' : '',
                                     ]"
                                     @click="showEmployePicker = true"
                                 >
@@ -630,7 +681,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="employeSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearEmploye"
                                 >
@@ -681,7 +732,7 @@ function submitBrouillon() {
                         <div v-else-if="categorie === 'livreur'">
                             <Label
                                 for="dep-livreur"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Livreur
                                 <span class="text-destructive">*</span>
@@ -695,7 +746,7 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        livreurSelected ? 'pr-8' : '',
+                                        livreurSelected ? 'pr-12 sm:pr-8' : '',
                                     ]"
                                     @click="showLivreurPicker = true"
                                 >
@@ -719,7 +770,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="livreurSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearLivreur"
                                 >
@@ -775,7 +826,7 @@ function submitBrouillon() {
                         <div v-else-if="categorie === 'proprietaire'">
                             <Label
                                 for="dep-proprio"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Propriétaire
                                 <span class="text-destructive">*</span>
@@ -789,7 +840,9 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        proprietaireSelected ? 'pr-8' : '',
+                                        proprietaireSelected
+                                            ? 'pr-12 sm:pr-8'
+                                            : '',
                                     ]"
                                     @click="showProprietairePicker = true"
                                 >
@@ -813,7 +866,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="proprietaireSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearProprietaire"
                                 >
@@ -869,7 +922,7 @@ function submitBrouillon() {
                         <div v-else-if="categorie === 'prestataire'">
                             <Label
                                 for="dep-prestataire"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Prestataire
                                 <span class="text-destructive">*</span>
@@ -883,7 +936,9 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        prestataireSelected ? 'pr-8' : '',
+                                        prestataireSelected
+                                            ? 'pr-12 sm:pr-8'
+                                            : '',
                                     ]"
                                     @click="showPrestatairePicker = true"
                                 >
@@ -907,7 +962,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="prestataireSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearPrestataire"
                                 >
@@ -947,7 +1002,7 @@ function submitBrouillon() {
                         <div v-else-if="categorie === 'client'">
                             <Label
                                 for="dep-client"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Client
                                 <span class="text-destructive">*</span>
@@ -961,7 +1016,7 @@ function submitBrouillon() {
                                         form.errors.beneficiaire_id
                                             ? 'border-destructive'
                                             : '',
-                                        clientSelected ? 'pr-8' : '',
+                                        clientSelected ? 'pr-12 sm:pr-8' : '',
                                     ]"
                                     @click="showClientPicker = true"
                                 >
@@ -985,7 +1040,7 @@ function submitBrouillon() {
                                 <button
                                     v-if="clientSelected"
                                     type="button"
-                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
                                     aria-label="Effacer la sélection"
                                     @click.stop="clearClient"
                                 >
@@ -1028,16 +1083,18 @@ function submitBrouillon() {
                         class="space-y-4 rounded-xl border bg-card p-4"
                     >
                         <h2
-                            class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            class="text-sm font-semibold sm:text-xs sm:tracking-wide sm:text-muted-foreground sm:uppercase"
                         >
                             Détails
                         </h2>
 
-                        <div class="grid grid-cols-3 gap-3">
+                        <div
+                            class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-3"
+                        >
                             <div>
                                 <Label
                                     for="dep-montant"
-                                    class="mb-1.5 block text-xs font-medium"
+                                    class="mb-1.5 block text-sm font-medium sm:text-xs"
                                 >
                                     Montant (GNF)
                                     <span class="text-destructive">*</span>
@@ -1065,7 +1122,7 @@ function submitBrouillon() {
                             <div>
                                 <Label
                                     for="dep-date"
-                                    class="mb-1.5 block text-xs font-medium"
+                                    class="mb-1.5 block text-sm font-medium sm:text-xs"
                                 >
                                     Date
                                     <span class="text-destructive">*</span>
@@ -1089,7 +1146,7 @@ function submitBrouillon() {
                             <div>
                                 <Label
                                     for="dep-site"
-                                    class="mb-1.5 flex items-center gap-1 text-xs font-medium"
+                                    class="mb-1.5 flex items-center gap-1 text-sm font-medium sm:text-xs"
                                 >
                                     Site
                                     <Lock
@@ -1097,30 +1154,32 @@ function submitBrouillon() {
                                         class="h-3 w-3 text-muted-foreground"
                                     />
                                 </Label>
-                                <select
-                                    id="dep-site"
+                                <Select
+                                    input-id="dep-site"
                                     v-model="form.site_id"
+                                    :options="[
+                                        {
+                                            id: '',
+                                            nom: 'Aucun site spécifique',
+                                        },
+                                        ...sites,
+                                    ]"
+                                    option-label="nom"
+                                    option-value="id"
                                     :disabled="!can_change_site"
-                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <option value="">
-                                        Aucun site spécifique
-                                    </option>
-                                    <option
-                                        v-for="s in sites"
-                                        :key="s.id"
-                                        :value="s.id"
-                                    >
-                                        {{ s.nom }}
-                                    </option>
-                                </select>
+                                    class="w-full min-w-0"
+                                    append-to="self"
+                                    :overlay-style="selectOverlayStyle"
+                                    :pt="selectPt"
+                                    scroll-height="min(15rem, 50dvh)"
+                                />
                             </div>
                         </div>
 
                         <div>
                             <Label
                                 for="dep-comment"
-                                class="mb-1.5 block text-xs font-medium"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
                                 Commentaire
                                 <span
@@ -1150,47 +1209,93 @@ function submitBrouillon() {
                     </div>
 
                     <!-- Actions -->
-                    <div class="flex justify-between pt-1">
+                    <div
+                        data-testid="depense-create-actions"
+                        class="depense-create-actions fixed inset-x-0 bottom-0 z-20 flex justify-between border-t bg-background/95 px-4 py-3 backdrop-blur-sm sm:static sm:border-0 sm:bg-transparent sm:px-0 sm:pt-1 sm:pb-0 sm:backdrop-blur-none"
+                    >
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            as-child
+                            class="hidden sm:inline-flex"
+                            :disabled="form.processing"
+                            @click="annulerSaisie"
                         >
-                            <a href="/backoffice/depenses">Annuler</a>
+                            Annuler
                         </Button>
-                        <div class="flex gap-2">
+                        <div class="flex w-full gap-2 sm:w-auto">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                class="h-12 px-4 sm:h-8 sm:px-3"
                                 :disabled="
                                     form.processing || !form.depense_type_id
                                 "
                                 @click="submitBrouillon"
                             >
-                                {{
-                                    form.processing &&
-                                    form.statut === 'brouillon'
-                                        ? 'Enregistrement…'
-                                        : 'Enregistrer comme brouillon'
-                                }}
+                                <span
+                                    v-if="
+                                        form.processing &&
+                                        form.statut === 'brouillon'
+                                    "
+                                    >Enregistrement…</span
+                                >
+                                <template v-else>
+                                    <span class="sm:hidden">Brouillon</span>
+                                    <span class="hidden sm:inline"
+                                        >Enregistrer comme brouillon</span
+                                    >
+                                </template>
                             </Button>
                             <Button
                                 type="button"
                                 size="sm"
+                                class="h-12 min-w-0 flex-1 px-4 sm:h-8 sm:flex-none sm:px-3"
                                 :disabled="
                                     form.processing || !form.depense_type_id
                                 "
                                 @click="openConfirmDialog"
                             >
-                                Soumettre pour validation
+                                <span class="sm:hidden">Soumettre</span>
+                                <span class="hidden sm:inline"
+                                    >Soumettre pour validation</span
+                                >
                             </Button>
                         </div>
                     </div>
                 </form>
             </div>
         </div>
+
+        <Dialog v-model:open="showDiscardDialog">
+            <DialogContent
+                class="max-h-[90dvh] overflow-y-auto sm:max-w-md max-sm:[&>button]:flex max-sm:[&>button]:size-11 max-sm:[&>button]:items-center max-sm:[&>button]:justify-center"
+            >
+                <DialogHeader class="pr-10 text-left">
+                    <DialogTitle>Quitter la saisie ?</DialogTitle>
+                    <DialogDescription
+                        >Votre dépense n'est pas enregistrée. Si vous quittez,
+                        les informations saisies seront
+                        perdues.</DialogDescription
+                    >
+                </DialogHeader>
+                <DialogFooter class="flex-col sm:flex-row">
+                    <Button
+                        variant="outline"
+                        class="h-11"
+                        @click="showDiscardDialog = false"
+                        >Continuer la saisie</Button
+                    >
+                    <Button
+                        class="h-11"
+                        :disabled="form.processing"
+                        @click="quitterSaisie"
+                        >Quitter sans enregistrer</Button
+                    >
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         <DepenseConfirmDialog
             v-model:visible="showConfirmDialog"
@@ -1209,3 +1314,24 @@ function submitBrouillon() {
         />
     </AppLayout>
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    .depense-form :deep(input:not([type='radio'])),
+    .depense-form :deep(select),
+    .depense-form :deep(button[id^='dep-']) {
+        min-width: 0;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    .depense-form :deep(textarea) {
+        min-height: 96px;
+        font-size: 16px;
+    }
+
+    .depense-create-actions {
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+}
+</style>

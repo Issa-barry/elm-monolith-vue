@@ -24,6 +24,7 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Models\Vehicule;
 use App\Services\Tresorerie\ObligationsAgenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -552,27 +553,28 @@ class ObligationsAgenceServiceTest extends TestCase
         $this->assertLessThan($row['livreurs_p1_du'], $row['livreurs_p1']);
     }
 
-    // ── 10. Le site historique de la vente ne bouge pas avec le véhicule ────────
+    // ── 10. La commission suit le site actuel du véhicule, pas le site de la vente ─
 
-    public function test_site_historique_de_la_commande_ignore_le_site_courant_du_vehicule(): void
+    public function test_commission_comptee_sur_le_site_actuel_du_vehicule_pas_sur_le_site_de_la_vente(): void
     {
         $siteVente = $this->defaultSite();
-        $autreSite = $this->makeSite('Autre Site');
+        $siteVehicule = $this->makeSite('Site du véhicule');
         $livreur = $this->makeLivreur();
 
-        // La commission est rattachée à CommandeVente.site_id (siteVente) au
-        // moment de la vente — même si le véhicule ayant servi à la livraison a,
-        // depuis, été réaffecté à un autre site, cette part reste comptée sur
-        // le site historique de la commande.
-        $this->makeCommissionVentePart($siteVente, Carbon::parse('2026-08-05'), 'livreur', $livreur->id, 150_000);
+        // Règle du 06/10/2026 (remplace « le site historique de la commande ne bouge pas avec le
+        // véhicule ») : l'agence qui paie est le site actuel du véhicule, quel que soit le site
+        // de la vente — cf. CommissionSiteResponsableVehiculeTest.
+        $part = $this->makeCommissionVentePart($siteVente, Carbon::parse('2026-08-05'), 'livreur', $livreur->id, 150_000);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'site_id' => $siteVehicule->id]);
+        $part->enveloppe->source->update(['vehicule_id' => $vehicule->id]);
 
         $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
 
-        $this->assertSame(150_000.0, $this->rowFor($rows, $siteVente)['livreurs_p1']);
-        $this->assertSame(0.0, $this->rowFor($rows, $autreSite)['total']);
+        $this->assertSame(150_000.0, $this->rowFor($rows, $siteVehicule)['livreurs_p1']);
+        $this->assertSame(0.0, $this->rowFor($rows, $siteVente)['total']);
     }
 
-    // ── Commission logistique : rattachement au site source du transfert ────────
+    // ── Commission logistique sans véhicule : repli sur le site source du transfert ─
 
     public function test_commission_logistique_rattachee_au_site_source(): void
     {

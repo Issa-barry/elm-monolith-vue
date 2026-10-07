@@ -628,6 +628,32 @@ class CommissionAjustementVenteTest extends TestCase
     }
 
     /** @test */
+    public function periode_show_filtre_les_vehicules_par_nombre_de_livreurs(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        // Un membre ajouté sans commission sur la période ne compte pas : le filtre suit la
+        // colonne « Membres » (nb_membres), pas la taille actuelle de l'équipe.
+        $nouveau = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Nouveau membre']);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $nouveau->id, 'role' => 'convoyeur', 'ordre' => 1]);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $url = route('comptabilite.periodes.show', $periode);
+
+        $this->actingAs($this->user)->get($url.'?nb_membres=3')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 1)
+                ->where('vehicules.0.vehicule_id', $vehicule->id)
+                ->where('filters.nb_membres', '3')
+            );
+
+        $this->get($url.'?nb_membres=4')
+            ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0));
+    }
+
+    /** @test */
     public function periode_show_affiche_et_filtre_le_type_en_conservant_recherche_et_totaux(): void
     {
         $camion = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Camion']);

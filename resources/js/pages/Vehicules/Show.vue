@@ -28,14 +28,16 @@ import {
     Receipt,
     Settings,
     ShoppingCart,
+    Trash2,
     TrendingUp,
     TriangleAlert,
     UserRound,
     Users,
 } from 'lucide-vue-next';
 import SelectButton from 'primevue/selectbutton';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface EquipeMembre {
     livreur_id: string | null;
@@ -220,6 +222,87 @@ function libelleColonnePartage(processusCode: string): string {
 
 const { can } = usePermissions();
 const toast = useToast();
+const confirm = useConfirm();
+const deleting = ref(false);
+function supprimerVehicule() {
+    confirm.require({
+        message: `Supprimer « ${props.vehicule.nom_vehicule} (${props.vehicule.immatriculation}) » ? Cette action est irréversible.`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            deleting.value = true;
+            router.delete(`/backoffice/vehicules/${props.vehicule.id}`, {
+                onFinish: () => {
+                    deleting.value = false;
+                },
+            });
+        },
+    });
+}
+
+const tabNav = ref<HTMLElement | null>(null);
+const detailTabs = computed(
+    () =>
+        [
+            {
+                key: 'informations',
+                label: 'Informations',
+                icon: CircleHelp,
+                count: null,
+            },
+            {
+                key: 'equipe',
+                label: 'Équipe',
+                icon: Users,
+                count: props.vehicule.equipe_membres.length,
+            },
+            { key: 'parrain', label: 'Parrain', icon: UserRound, count: null },
+            {
+                key: 'situation',
+                label: 'Situation',
+                icon: TrendingUp,
+                count: null,
+            },
+            {
+                key: 'depenses',
+                label: 'Dépenses',
+                icon: Receipt,
+                count: props.depenses.length,
+            },
+        ] as const,
+);
+async function centrerOnglet() {
+    await nextTick();
+    const nav = tabNav.value;
+    if (!nav || !window.matchMedia('(max-width: 639px)').matches) return;
+    const tab = nav.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (tab)
+        nav.scrollLeft =
+            tab.offsetLeft - (nav.clientWidth - tab.offsetWidth) / 2;
+}
+watch(activeTab, centrerOnglet);
+onMounted(centrerOnglet);
+function naviguerOnglets(event: KeyboardEvent, key: (typeof ONGLETS)[number]) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const index = ONGLETS.indexOf(key);
+    const next =
+        event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? ONGLETS.length - 1
+              : (index +
+                    (event.key === 'ArrowRight' ? 1 : -1) +
+                    ONGLETS.length) %
+                ONGLETS.length;
+    choisirOnglet(ONGLETS[next]);
+    nextTick(() =>
+        document.getElementById(`vehicule-tab-${ONGLETS[next]}`)?.focus(),
+    );
+}
 useFlashToast();
 
 const STATUTS_EDITABLES = ['brouillon', 'rejete', 'annule'];
@@ -327,969 +410,1025 @@ function formatGNF(val: number): string {
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
-        <div
-            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        <header
+            data-testid="vehicule-mobile-header"
+            class="fixed inset-x-0 top-0 z-20 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 border-b bg-background px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 sm:hidden"
         >
-            <div class="relative flex items-center justify-center px-4 py-3">
-                <Link
-                    href="/backoffice/vehicules"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
-                >
-                    <ArrowLeft class="h-4 w-4" />
-                </Link>
-                <div class="text-center">
-                    <h1 class="text-[17px] leading-tight font-semibold">
-                        {{ vehicule.nom_vehicule }}
-                    </h1>
-                    <p class="font-mono text-[11px] text-muted-foreground">
-                        {{ vehicule.immatriculation }}
-                    </p>
-                </div>
-                <Link
-                    v-if="can('vehicules.update')"
-                    :href="`/backoffice/vehicules/${vehicule.id}/edit`"
-                    class="absolute right-4"
-                >
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        class="h-8 gap-1.5 px-3 text-xs"
-                    >
-                        <Pencil class="h-3.5 w-3.5" />
-                        Modifier
-                    </Button>
-                </Link>
-            </div>
-        </div>
-
-        <div class="w-full space-y-6 p-4 sm:p-6">
-            <!-- Header desktop -->
-            <DetailHeader
-                eyebrow="Véhicule"
-                :title="vehicule.nom_vehicule"
-                :icon="Car"
-                :photo-url="vehicule.photo_url"
-                avatar-shape="square"
-                :status-label="vehicule.is_active ? 'Actif' : 'Inactif'"
-                :status-dot-class="
-                    vehicule.is_active
-                        ? 'bg-emerald-500'
-                        : 'bg-zinc-400 dark:bg-zinc-500'
-                "
+            <Link
+                href="/backoffice/vehicules"
+                aria-label="Retour aux véhicules"
+                class="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
             >
-                <template #subtitle>
-                    <p class="mt-0.5 font-mono text-sm text-muted-foreground">
-                        {{ vehicule.immatriculation }}
-                    </p>
-                    <div class="mt-1.5 flex items-center gap-2">
-                        <span
-                            class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                <ArrowLeft class="h-4 w-4" />
+            </Link>
+            <div class="min-w-0 text-center">
+                <h1 class="truncate text-base leading-tight font-semibold">
+                    Détail du véhicule
+                </h1>
+            </div>
+            <div aria-hidden="true" />
+        </header>
+
+        <div
+            class="vehicule-detail w-full min-w-0 space-y-4 px-4 pt-[calc(77px+env(safe-area-inset-top))] sm:space-y-6 sm:p-6"
+            :class="
+                can('vehicules.update')
+                    ? 'pb-[calc(6rem+env(safe-area-inset-bottom))]'
+                    : 'pb-[max(1rem,env(safe-area-inset-bottom))]'
+            "
+        >
+            <div
+                data-testid="vehicule-identity"
+                class="min-w-0 [overflow-wrap:anywhere]"
+            >
+                <DetailHeader
+                    eyebrow="Véhicule"
+                    :title="vehicule.nom_vehicule"
+                    :icon="Car"
+                    :photo-url="vehicule.photo_url"
+                    avatar-shape="square"
+                    :status-label="vehicule.is_active ? 'Actif' : 'Inactif'"
+                    :status-dot-class="
+                        vehicule.is_active
+                            ? 'bg-emerald-500'
+                            : 'bg-zinc-400 dark:bg-zinc-500'
+                    "
+                >
+                    <template #subtitle>
+                        <p
+                            class="mt-0.5 font-mono text-sm text-muted-foreground"
                         >
-                            {{ vehicule.type_label }}
-                        </span>
-                        <span
-                            v-for="c in vehicule.capacites"
-                            :key="c.categorie_id"
-                            class="text-xs text-muted-foreground"
+                            {{ vehicule.immatriculation }}
+                        </p>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ vehicule.type_label }}
+                            </span>
+                            <span
+                                v-for="c in vehicule.capacites"
+                                :key="c.categorie_id"
+                                class="text-xs text-muted-foreground"
+                            >
+                                {{ c.categorie_nom }} : {{ c.capacite_max }}
+                            </span>
+                        </div>
+                    </template>
+                    <template #actions>
+                        <Link
+                            v-if="vehicule.proprietaire_id"
+                            :href="`/backoffice/proprietaires/${vehicule.proprietaire_id}`"
+                            target="_blank"
+                            data-testid="voir-fiche-proprietaire-btn"
                         >
-                            {{ c.categorie_nom }} : {{ c.capacite_max }}
-                        </span>
-                    </div>
-                </template>
-                <template #actions>
-                    <Link
-                        v-if="vehicule.proprietaire_id"
-                        :href="`/backoffice/proprietaires/${vehicule.proprietaire_id}`"
-                        target="_blank"
-                        data-testid="voir-fiche-proprietaire-btn"
-                    >
-                        <Button variant="outline" size="sm">
-                            <ExternalLink class="mr-1.5 h-4 w-4" />
-                            Fiche propriétaire
-                        </Button>
-                    </Link>
-                    <Link href="/backoffice/vehicules">
-                        <Button variant="outline" size="sm">
-                            <ArrowLeft class="mr-1.5 h-4 w-4" />
-                            Liste de véhicules
-                        </Button>
-                    </Link>
-                </template>
-            </DetailHeader>
+                            <Button variant="outline" size="sm">
+                                <ExternalLink class="mr-1.5 h-4 w-4" />
+                                Fiche propriétaire
+                            </Button>
+                        </Link>
+                        <Link href="/backoffice/vehicules">
+                            <Button variant="outline" size="sm">
+                                <ArrowLeft class="mr-1.5 h-4 w-4" />
+                                Liste de véhicules
+                            </Button>
+                        </Link>
+                    </template>
+                </DetailHeader>
+            </div>
 
             <!-- Tab layout -->
-            <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <!-- Sidebar tabs -->
-                <aside class="h-fit rounded-xl border bg-card p-2">
+            <div
+                class="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]"
+            >
+                <nav
+                    ref="tabNav"
+                    role="tablist"
+                    aria-label="Rubriques du véhicule"
+                    data-testid="vehicule-tabs"
+                    class="vehicule-tabs relative flex min-w-0 gap-1 overflow-x-auto border-b lg:h-fit lg:flex-col lg:rounded-xl lg:border lg:bg-card lg:p-2"
+                >
                     <button
+                        v-for="tab in detailTabs"
+                        :key="tab.key"
+                        :id="'vehicule-tab-' + tab.key"
                         type="button"
-                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        role="tab"
+                        :data-testid="tab.key + '-tab-btn'"
+                        :aria-selected="activeTab === tab.key"
+                        aria-controls="vehicule-tabpanel"
+                        :tabindex="activeTab === tab.key ? 0 : -1"
+                        class="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors lg:w-full lg:rounded-lg lg:border-b-0"
                         :class="
-                            activeTab === 'informations'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted'
+                            activeTab === tab.key
+                                ? 'border-primary text-primary lg:bg-primary lg:text-primary-foreground'
+                                : 'border-transparent text-muted-foreground hover:bg-muted'
                         "
-                        @click="choisirOnglet('informations')"
+                        @click="choisirOnglet(tab.key)"
+                        @keydown="naviguerOnglets($event, tab.key)"
                     >
-                        <span class="inline-flex items-center gap-2">
-                            <CircleHelp class="h-4 w-4" />
-                            Informations
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        :class="
-                            activeTab === 'equipe'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted'
-                        "
-                        @click="choisirOnglet('equipe')"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <Users class="h-4 w-4" />
-                            Equipe
-                        </span>
+                        <span class="inline-flex items-center gap-2"
+                            ><component
+                                :is="tab.icon"
+                                class="hidden size-4 lg:block"
+                            />{{ tab.label }}</span
+                        >
                         <span
-                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            v-if="tab.count !== null"
+                            class="inline-flex size-5 items-center justify-center rounded-full text-[11px]"
                             :class="
-                                activeTab === 'equipe'
-                                    ? 'bg-white/20 text-primary-foreground'
+                                activeTab === tab.key
+                                    ? 'bg-primary/10 text-primary lg:bg-white/20 lg:text-primary-foreground'
                                     : 'bg-muted text-muted-foreground'
                             "
+                            >{{ tab.count }}</span
                         >
-                            {{ vehicule.equipe_membres.length }}
-                        </span>
                     </button>
-                    <button
-                        type="button"
-                        data-testid="parrain-tab-btn"
-                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        :class="
-                            activeTab === 'parrain'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted'
-                        "
-                        @click="choisirOnglet('parrain')"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <UserRound class="h-4 w-4" />
-                            Parrain
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        data-testid="situation-tab-btn"
-                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        :class="
-                            activeTab === 'situation'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted'
-                        "
-                        @click="choisirOnglet('situation')"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <TrendingUp class="h-4 w-4" />
-                            Situation
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        :class="
-                            activeTab === 'depenses'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted'
-                        "
-                        @click="choisirOnglet('depenses')"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <Receipt class="h-4 w-4" />
-                            Dépenses
-                        </span>
-                        <span
-                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
-                            :class="
-                                activeTab === 'depenses'
-                                    ? 'bg-white/20 text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground'
-                            "
-                        >
-                            {{ depenses.length }}
-                        </span>
-                    </button>
-                </aside>
-
-                <!-- Informations tab -->
-                <template v-if="activeTab === 'informations'">
-                    <div class="rounded-xl border bg-card p-5 sm:p-6">
-                        <div class="flex items-center justify-between gap-2">
-                            <h2
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                </nav>
+                <div
+                    id="vehicule-tabpanel"
+                    role="tabpanel"
+                    :aria-labelledby="'vehicule-tab-' + activeTab"
+                    class="min-w-0 [overflow-wrap:anywhere]"
+                >
+                    <!-- Informations tab -->
+                    <template v-if="activeTab === 'informations'">
+                        <div class="rounded-xl border bg-card p-4 sm:p-6">
+                            <div
+                                class="flex items-center justify-between gap-2"
                             >
-                                Informations du véhicule
-                            </h2>
-                            <Link
-                                v-if="can('vehicules.update')"
-                                :href="`/backoffice/vehicules/${vehicule.id}/edit`"
+                                <h2
+                                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Informations du véhicule
+                                </h2>
+                                <Link
+                                    v-if="can('vehicules.update')"
+                                    :href="`/backoffice/vehicules/${vehicule.id}/edit`"
+                                    class="hidden sm:block"
+                                >
+                                    <Button size="sm" variant="outline">
+                                        <Pencil class="mr-1.5 h-4 w-4" />
+                                        Modifier
+                                    </Button>
+                                </Link>
+                            </div>
+                            <div
+                                data-info-grid
+                                class="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-2"
                             >
-                                <Button size="sm" variant="outline">
-                                    <Pencil class="mr-1.5 h-4 w-4" />
-                                    Modifier
-                                </Button>
-                            </Link>
-                        </div>
-                        <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Nom du véhicule
-                                </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.nom_vehicule }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Immatriculation
-                                </p>
-                                <p class="mt-1 font-mono text-sm font-medium">
-                                    {{ vehicule.immatriculation }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Type
-                                </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.type_label }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Catégorie
-                                </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.categorie_label }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Usages
-                                </p>
-                                <p class="mt-1 flex flex-wrap gap-1.5">
-                                    <span
-                                        v-if="vehicule.livraison_vente"
-                                        class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                                        >Vente</span
+                                <div
+                                    class="hidden rounded-lg border bg-background p-4 sm:block"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Nom du véhicule
+                                    </p>
+                                    <p class="mt-1 text-sm font-medium">
+                                        {{ vehicule.nom_vehicule }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="hidden rounded-lg border bg-background p-4 sm:block"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Immatriculation
+                                    </p>
+                                    <p
+                                        class="mt-1 font-mono text-sm font-medium"
                                     >
-                                    <span
-                                        v-if="vehicule.livraison_logistique"
-                                        class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
-                                        >Logistique</span
-                                    >
-                                    <span
+                                        {{ vehicule.immatriculation }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Type
+                                    </p>
+                                    <p class="mt-1 text-sm font-medium">
+                                        {{ vehicule.type_label }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Catégorie
+                                    </p>
+                                    <p class="mt-1 text-sm font-medium">
+                                        {{ vehicule.categorie_label }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Usages
+                                    </p>
+                                    <p class="mt-1 flex flex-wrap gap-1.5">
+                                        <span
+                                            v-if="vehicule.livraison_vente"
+                                            class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                            >Vente</span
+                                        >
+                                        <span
+                                            v-if="vehicule.livraison_logistique"
+                                            class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                                            >Logistique</span
+                                        >
+                                        <span
+                                            v-if="
+                                                !vehicule.livraison_vente &&
+                                                !vehicule.livraison_logistique
+                                            "
+                                            class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                        >
+                                            <TriangleAlert class="h-3 w-3" />
+                                            Usage non défini
+                                        </span>
+                                    </p>
+                                    <p
                                         v-if="
                                             !vehicule.livraison_vente &&
                                             !vehicule.livraison_logistique
                                         "
-                                        class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                        class="mt-1.5 text-xs text-muted-foreground"
                                     >
-                                        <TriangleAlert class="h-3 w-3" />
-                                        Usage non défini
-                                    </span>
-                                </p>
-                                <p
-                                    v-if="
-                                        !vehicule.livraison_vente &&
-                                        !vehicule.livraison_logistique
-                                    "
-                                    class="mt-1.5 text-xs text-muted-foreground"
+                                        Ce véhicule existe mais ne peut être
+                                        utilisé pour aucune opération tant qu'un
+                                        usage n'est pas défini.
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
                                 >
-                                    Ce véhicule existe mais ne peut être utilisé
-                                    pour aucune opération tant qu'un usage n'est
-                                    pas défini.
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Capacités maximales de chargement
-                                </p>
-                                <p
-                                    v-if="vehicule.capacites.length === 0"
-                                    class="mt-1 text-sm font-medium"
+                                    <p class="text-xs text-muted-foreground">
+                                        Capacités maximales de chargement
+                                    </p>
+                                    <p
+                                        v-if="vehicule.capacites.length === 0"
+                                        class="mt-1 text-sm font-medium"
+                                    >
+                                        — (non plafonné)
+                                    </p>
+                                    <p
+                                        v-for="c in vehicule.capacites"
+                                        :key="c.categorie_id"
+                                        class="mt-1 text-sm font-medium"
+                                    >
+                                        {{ c.categorie_nom }} :
+                                        {{ c.capacite_max }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
                                 >
-                                    — (non plafonné)
-                                </p>
-                                <p
-                                    v-for="c in vehicule.capacites"
-                                    :key="c.categorie_id"
-                                    class="mt-1 text-sm font-medium"
+                                    <p class="text-xs text-muted-foreground">
+                                        Site
+                                    </p>
+                                    <p class="mt-1 text-sm font-medium">
+                                        {{ vehicule.site_nom ?? '—' }}
+                                    </p>
+                                </div>
+                                <div
+                                    class="rounded-lg border bg-background p-4"
                                 >
-                                    {{ c.categorie_nom }} :
-                                    {{ c.capacite_max }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Site
-                                </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.site_nom ?? '—' }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Propriétaire
-                                </p>
-                                <template v-if="vehicule.proprietaire_id">
-                                    <div class="mt-1 flex items-center gap-1.5">
+                                    <p class="text-xs text-muted-foreground">
+                                        Propriétaire
+                                    </p>
+                                    <template v-if="vehicule.proprietaire_id">
+                                        <div
+                                            class="mt-1 flex flex-wrap items-center gap-1.5"
+                                        >
+                                            <Link
+                                                :href="`/backoffice/proprietaires/${vehicule.proprietaire_id}`"
+                                                class="text-sm font-medium"
+                                                data-testid="proprietaire-nom"
+                                            >
+                                                {{
+                                                    vehicule.proprietaire_nom_affichage ??
+                                                    vehicule.proprietaire_nom
+                                                }}
+                                            </Link>
+                                            <span
+                                                v-if="
+                                                    vehicule.proprietaire_est_entreprise
+                                                "
+                                                class="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                                >Entreprise</span
+                                            >
+                                        </div>
                                         <p
-                                            class="text-sm font-medium"
-                                            data-testid="proprietaire-nom"
+                                            class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                            data-testid="proprietaire-telephone"
                                         >
                                             {{
-                                                vehicule.proprietaire_nom_affichage ??
-                                                vehicule.proprietaire_nom
+                                                formatPhoneDisplay(
+                                                    vehicule.proprietaire_telephone,
+                                                )
                                             }}
                                         </p>
-                                        <span
-                                            v-if="
-                                                vehicule.proprietaire_est_entreprise
-                                            "
-                                            class="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                                            >Entreprise</span
+                                    </template>
+                                    <template v-else>
+                                        <p
+                                            class="mt-1 text-sm text-muted-foreground"
                                         >
-                                    </div>
-                                    <p
-                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                        data-testid="proprietaire-telephone"
-                                    >
-                                        {{
-                                            formatPhoneDisplay(
-                                                vehicule.proprietaire_telephone,
-                                            )
-                                        }}
-                                    </p>
-                                </template>
-                                <template v-else>
-                                    <p
-                                        class="mt-1 text-sm text-muted-foreground"
-                                    >
-                                        Aucun propriétaire rattaché
-                                    </p>
-                                </template>
+                                            Aucun propriétaire rattaché
+                                        </p>
+                                    </template>
+                                </div>
+                                <DerogationImpayesCard
+                                    data-derogation
+                                    :active="
+                                        vehicule.derogation_impayes_autorisee
+                                    "
+                                    :seuil="vehicule.seuil_derogation_impayes"
+                                    :seuil-global="seuil_global_impayes"
+                                    :update-url="`/backoffice/vehicules/${vehicule.id}/derogation-impayes`"
+                                    :can-update="can('vehicules.update')"
+                                    entite-label="ce véhicule"
+                                />
                             </div>
-                            <DerogationImpayesCard
-                                :active="vehicule.derogation_impayes_autorisee"
-                                :seuil="vehicule.seuil_derogation_impayes"
-                                :seuil-global="seuil_global_impayes"
-                                :update-url="`/backoffice/vehicules/${vehicule.id}/derogation-impayes`"
-                                :can-update="can('vehicules.update')"
-                                entite-label="ce véhicule"
-                            />
-                        </div>
-                    </div>
-                </template>
-
-                <!-- Equipe tab -->
-                <div
-                    v-else-if="activeTab === 'equipe'"
-                    class="rounded-xl border bg-card p-5 sm:p-6"
-                >
-                    <div
-                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <div>
-                            <h2
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            <Button
+                                v-if="can('vehicules.delete')"
+                                variant="ghost"
+                                class="mt-4 min-h-11 w-full text-destructive sm:hidden"
+                                :disabled="deleting"
+                                @click="supprimerVehicule"
+                                ><Trash2 class="mr-2 size-4" />Supprimer le
+                                véhicule</Button
                             >
-                                Équipe de livraison
-                            </h2>
-                            <p class="mt-1 text-sm text-muted-foreground">
-                                {{ vehicule.equipe_membres.length }} membre{{
-                                    vehicule.equipe_membres.length > 1
-                                        ? 's'
-                                        : ''
-                                }}
-                            </p>
                         </div>
-                        <Button
-                            v-if="
-                                can('equipes-livraison.update') &&
-                                vehicule.equipe_id
-                            "
-                            size="sm"
-                            @click="showStepperModal = true"
-                        >
-                            <Settings class="mr-1.5 h-4 w-4" />
-                            Gérer l'équipe
-                        </Button>
-                        <Button
-                            v-else-if="can('equipes-livraison.create')"
-                            size="sm"
-                            @click="showStepperModal = true"
-                        >
-                            <Plus class="mr-1.5 h-4 w-4" />
-                            Ajouter une équipe
-                        </Button>
-                    </div>
+                    </template>
 
-                    <div class="space-y-5">
+                    <!-- Equipe tab -->
+                    <div
+                        v-else-if="activeTab === 'equipe'"
+                        class="rounded-xl border bg-card p-4 sm:p-6"
+                    >
                         <div
-                            v-if="distribution_chauffeur_motif"
-                            class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                        >
-                            <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-                            <p>
-                                Distributions impossibles avec ce véhicule :
-                                {{ distribution_chauffeur_motif }}
-                            </p>
-                        </div>
-
-                        <div
-                            class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
+                            class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                         >
                             <div>
-                                <p class="text-sm font-medium text-foreground">
-                                    Processus affiché
-                                </p>
-                                <p class="text-xs text-muted-foreground">
-                                    Met à jour les parts de l'équipe et les
-                                    commissions par catégorie.
+                                <h2
+                                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Équipe de livraison
+                                </h2>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    {{ vehicule.equipe_membres.length }}
+                                    membre{{
+                                        vehicule.equipe_membres.length > 1
+                                            ? 's'
+                                            : ''
+                                    }}
                                 </p>
                             </div>
-                            <div class="overflow-x-auto">
-                                <SelectButton
-                                    :model-value="processus_actif"
-                                    :options="processus_options"
-                                    option-label="label"
-                                    option-value="value"
-                                    class="w-max [&_.p-togglebutton]:h-10 [&_.p-togglebutton]:px-4"
-                                    @update:model-value="onProcessusChange"
-                                >
-                                    <template #option="slotProps">
-                                        <span
-                                            class="flex items-center gap-2 whitespace-nowrap"
-                                        >
-                                            <ShoppingCart
-                                                v-if="
-                                                    slotProps.option.value ===
-                                                    'vente'
-                                                "
-                                                class="h-4 w-4"
-                                            />
-                                            <PackageCheck
-                                                v-else-if="
-                                                    slotProps.option.value ===
-                                                    'distribution_client'
-                                                "
-                                                class="h-4 w-4"
-                                            />
-                                            <ArrowLeftRight
-                                                v-else
-                                                class="h-4 w-4"
-                                            />
-                                            {{ slotProps.option.label }}
-                                        </span>
-                                    </template>
-                                </SelectButton>
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="vehicule.equipe_membres.length === 0"
-                            class="rounded-lg border border-dashed py-10 text-center"
-                        >
-                            <p class="text-sm text-muted-foreground">
-                                Aucun membre dans l'équipe.
-                            </p>
-                        </div>
-
-                        <div v-else class="overflow-x-auto rounded-lg border">
-                            <table
-                                class="w-full min-w-[820px] table-fixed text-sm"
-                            >
-                                <colgroup>
-                                    <col class="w-[22%]" />
-                                    <col class="w-[20%]" />
-                                    <col class="w-[14%]" />
-                                    <col class="w-[28%]" />
-                                    <col class="w-[16%]" />
-                                </colgroup>
-                                <thead
-                                    class="bg-muted/30 text-left text-muted-foreground"
-                                >
-                                    <tr>
-                                        <th class="px-4 py-3 font-medium">
-                                            Livreur
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Téléphone
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Rôle
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Part — {{ processusActifLabel }}
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr
-                                        v-for="(
-                                            m, i
-                                        ) in vehicule.equipe_membres"
-                                        :key="i"
-                                        class="hover:bg-muted/20"
-                                    >
-                                        <td class="px-4 py-3 font-medium">
-                                            {{ m.livreur_nom ?? '—' }}
-                                            <StatusDot
-                                                v-if="
-                                                    m.livreur_id &&
-                                                    !m.livreur_actif
-                                                "
-                                                :status="
-                                                    m.livreur_a_un_compte
-                                                        ? 'en_attente'
-                                                        : 'inactif'
-                                                "
-                                                :label="
-                                                    m.livreur_a_un_compte
-                                                        ? 'En attente d’approbation'
-                                                        : 'Inactif'
-                                                "
-                                                class="mt-0.5 flex font-normal text-muted-foreground"
-                                            />
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                        >
-                                            {{
-                                                m.telephone
-                                                    ? formatPhoneDisplay(
-                                                          m.telephone,
-                                                      )
-                                                    : '—'
-                                            }}
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <span
-                                                v-if="m.role === 'principal'"
-                                                class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-                                                >Principal</span
-                                            >
-                                            <span
-                                                v-else
-                                                class="text-muted-foreground capitalize"
-                                                >{{ m.role }}</span
-                                            >
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <span
-                                                v-if="
-                                                    !partageProcessusConfigure
-                                                "
-                                                class="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600"
-                                            >
-                                                <TriangleAlert
-                                                    class="h-3.5 w-3.5 shrink-0"
-                                                />
-                                                Partage à faire
-                                            </span>
-                                            <div
-                                                v-else-if="
-                                                    partsCommissionMembre(
-                                                        m.livreur_id,
-                                                    ).length > 0
-                                                "
-                                                class="space-y-1"
-                                            >
-                                                <p
-                                                    v-for="part in partsCommissionMembre(
-                                                        m.livreur_id,
-                                                    )"
-                                                    :key="part.categorie"
-                                                    class="flex items-baseline justify-between gap-3 text-xs"
-                                                >
-                                                    <span
-                                                        class="truncate text-muted-foreground"
-                                                        :title="part.categorie"
-                                                    >
-                                                        {{ part.categorie }}
-                                                    </span>
-                                                    <span
-                                                        class="shrink-0 font-mono font-semibold text-foreground tabular-nums"
-                                                    >
-                                                        {{
-                                                            formatGNF(
-                                                                part.montant,
-                                                            )
-                                                        }}
-                                                        / unité
-                                                    </span>
-                                                </p>
-                                            </div>
-                                            <span
-                                                v-else
-                                                class="text-xs text-muted-foreground"
-                                            >
-                                                Aucune part
-                                            </span>
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <Button
-                                                v-if="
-                                                    can(
-                                                        'equipes-livraison.update',
-                                                    ) && m.livreur_id
-                                                "
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                @click="
-                                                    ouvrirTransfert(
-                                                        m.livreur_id,
-                                                    )
-                                                "
-                                            >
-                                                <ArrowLeftRight
-                                                    class="mr-1.5 h-3.5 w-3.5"
-                                                />
-                                                Changer de véhicule
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Barèmes de commission — un montant Propriétaire et un
-                             montant Livraison PAR CATÉGORIE, jamais un total blended :
-                             les barèmes peuvent différer d'une catégorie à l'autre
-                             (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
-                             Même source que la popup équipe (baremes_commission_categories). -->
-                        <div
-                            v-if="equipe && vehicule.equipe_membres.length > 0"
-                            class="space-y-2"
-                        >
-                            <p
-                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                Commissions par catégorie
-                            </p>
-                            <div
+                            <Button
                                 v-if="
-                                    baremes_commission_categories.length === 0
+                                    can('equipes-livraison.update') &&
+                                    vehicule.equipe_id
                                 "
-                                class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
+                                size="sm"
+                                @click="showStepperModal = true"
                             >
-                                Aucun barème de commission actif pour ce
-                                véhicule.
+                                <Settings class="mr-1.5 h-4 w-4" />
+                                Gérer l'équipe
+                            </Button>
+                            <Button
+                                v-else-if="can('equipes-livraison.create')"
+                                size="sm"
+                                @click="showStepperModal = true"
+                            >
+                                <Plus class="mr-1.5 h-4 w-4" />
+                                Ajouter une équipe
+                            </Button>
+                        </div>
+
+                        <div class="space-y-5">
+                            <div
+                                v-if="distribution_chauffeur_motif"
+                                class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                            >
+                                <TriangleAlert
+                                    class="mt-0.5 h-4 w-4 shrink-0"
+                                />
+                                <p>
+                                    Distributions impossibles avec ce véhicule :
+                                    {{ distribution_chauffeur_motif }}
+                                </p>
                             </div>
+
+                            <div
+                                class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
+                            >
+                                <div>
+                                    <p
+                                        class="text-sm font-medium text-foreground"
+                                    >
+                                        Processus affiché
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Met à jour les parts de l'équipe et les
+                                        commissions par catégorie.
+                                    </p>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <SelectButton
+                                        :model-value="processus_actif"
+                                        :options="processus_options"
+                                        option-label="label"
+                                        option-value="value"
+                                        class="w-max [&_.p-togglebutton]:h-10 [&_.p-togglebutton]:px-4"
+                                        @update:model-value="onProcessusChange"
+                                    >
+                                        <template #option="slotProps">
+                                            <span
+                                                class="flex items-center gap-2 whitespace-nowrap"
+                                            >
+                                                <ShoppingCart
+                                                    v-if="
+                                                        slotProps.option
+                                                            .value === 'vente'
+                                                    "
+                                                    class="h-4 w-4"
+                                                />
+                                                <PackageCheck
+                                                    v-else-if="
+                                                        slotProps.option
+                                                            .value ===
+                                                        'distribution_client'
+                                                    "
+                                                    class="h-4 w-4"
+                                                />
+                                                <ArrowLeftRight
+                                                    v-else
+                                                    class="h-4 w-4"
+                                                />
+                                                {{ slotProps.option.label }}
+                                            </span>
+                                        </template>
+                                    </SelectButton>
+                                </div>
+                            </div>
+
+                            <div
+                                v-if="vehicule.equipe_membres.length === 0"
+                                class="rounded-lg border border-dashed py-10 text-center"
+                            >
+                                <p class="text-sm text-muted-foreground">
+                                    Aucun membre dans l'équipe.
+                                </p>
+                            </div>
+
                             <div
                                 v-else
                                 class="overflow-x-auto rounded-lg border"
                             >
                                 <table
-                                    class="w-full min-w-[900px] text-left text-xs"
+                                    data-mobile-cards="membres"
+                                    class="w-full min-w-[820px] table-fixed text-sm"
                                 >
+                                    <colgroup>
+                                        <col class="w-[22%]" />
+                                        <col class="w-[20%]" />
+                                        <col class="w-[14%]" />
+                                        <col class="w-[28%]" />
+                                        <col class="w-[16%]" />
+                                    </colgroup>
                                     <thead
-                                        class="border-b bg-muted/40 text-muted-foreground"
+                                        class="bg-muted/30 text-left text-muted-foreground"
                                     >
                                         <tr>
                                             <th class="px-4 py-3 font-medium">
-                                                Catégorie
+                                                Livreur
                                             </th>
                                             <th class="px-4 py-3 font-medium">
-                                                Part propriétaire
+                                                Téléphone
                                             </th>
                                             <th class="px-4 py-3 font-medium">
-                                                Part équipe de livraison
+                                                Rôle
                                             </th>
-                                            <th
-                                                v-for="option in processus_options"
-                                                :key="option.value"
-                                                class="px-4 py-3 font-medium"
-                                            >
-                                                {{
-                                                    libelleColonnePartage(
-                                                        option.value,
-                                                    )
-                                                }}
+                                            <th class="px-4 py-3 font-medium">
+                                                Part — {{ processusActifLabel }}
+                                            </th>
+                                            <th class="px-4 py-3 font-medium">
+                                                Actions
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y">
                                         <tr
-                                            v-for="cat in baremes_commission_categories"
-                                            :key="cat.categorie_id"
+                                            v-for="(
+                                                m, i
+                                            ) in vehicule.equipe_membres"
+                                            :key="i"
                                             class="hover:bg-muted/20"
                                         >
                                             <td
-                                                class="px-4 py-3 font-semibold text-foreground"
+                                                data-label="Livreur"
+                                                class="px-4 py-3 font-medium"
                                             >
-                                                {{ cat.categorie_nom }}
+                                                {{ m.livreur_nom ?? '—' }}
+                                                <StatusDot
+                                                    v-if="
+                                                        m.livreur_id &&
+                                                        !m.livreur_actif
+                                                    "
+                                                    :status="
+                                                        m.livreur_a_un_compte
+                                                            ? 'en_attente'
+                                                            : 'inactif'
+                                                    "
+                                                    :label="
+                                                        m.livreur_a_un_compte
+                                                            ? 'En attente d’approbation'
+                                                            : 'Inactif'
+                                                    "
+                                                    class="mt-0.5 flex font-normal text-muted-foreground"
+                                                />
                                             </td>
                                             <td
-                                                class="px-4 py-3 font-mono font-semibold text-primary tabular-nums"
+                                                data-label="Téléphone"
+                                                class="px-4 py-3 font-mono text-xs text-muted-foreground"
                                             >
                                                 {{
-                                                    formatGNF(
-                                                        cat.montant_proprietaire,
-                                                    )
+                                                    m.telephone
+                                                        ? formatPhoneDisplay(
+                                                              m.telephone,
+                                                          )
+                                                        : '—'
                                                 }}
-                                                <span
-                                                    class="font-sans font-normal text-muted-foreground"
-                                                >
-                                                    / unité</span
-                                                >
                                             </td>
                                             <td
-                                                class="px-4 py-3 font-mono font-semibold text-foreground tabular-nums"
-                                            >
-                                                {{
-                                                    formatGNF(
-                                                        cat.montant_livraison,
-                                                    )
-                                                }}
-                                                <span
-                                                    class="font-sans font-normal text-muted-foreground"
-                                                >
-                                                    / unité</span
-                                                >
-                                            </td>
-                                            <td
-                                                v-for="option in processus_options"
-                                                :key="option.value"
+                                                data-label="Rôle"
                                                 class="px-4 py-3"
                                             >
                                                 <span
                                                     v-if="
-                                                        statutPartage(
-                                                            cat.categorie_id,
-                                                            option.value,
-                                                        ) === 'fait'
+                                                        m.role === 'principal'
                                                     "
-                                                    class="inline-flex items-center gap-1.5 font-medium text-emerald-600"
+                                                    class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                                                    >Principal</span
                                                 >
-                                                    <CheckCircle
-                                                        class="h-3.5 w-3.5"
-                                                    />
-                                                    Fait
-                                                </span>
-                                                <span
-                                                    v-else-if="
-                                                        statutPartage(
-                                                            cat.categorie_id,
-                                                            option.value,
-                                                        ) === 'a_faire'
-                                                    "
-                                                    class="inline-flex items-center gap-1.5 font-medium text-orange-600"
-                                                >
-                                                    <TriangleAlert
-                                                        class="h-3.5 w-3.5"
-                                                    />
-                                                    À faire
-                                                </span>
                                                 <span
                                                     v-else
-                                                    class="inline-flex items-center gap-1.5 text-muted-foreground"
+                                                    class="text-muted-foreground capitalize"
+                                                    >{{ m.role }}</span
                                                 >
-                                                    <CircleHelp
-                                                        class="h-3.5 w-3.5"
+                                            </td>
+                                            <td
+                                                :data-label="
+                                                    'Part — ' +
+                                                    processusActifLabel
+                                                "
+                                                data-wide
+                                                class="px-4 py-3"
+                                            >
+                                                <span
+                                                    v-if="
+                                                        !partageProcessusConfigure
+                                                    "
+                                                    class="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600"
+                                                >
+                                                    <TriangleAlert
+                                                        class="h-3.5 w-3.5 shrink-0"
                                                     />
-                                                    Non requis
+                                                    Partage à faire
                                                 </span>
+                                                <div
+                                                    v-else-if="
+                                                        partsCommissionMembre(
+                                                            m.livreur_id,
+                                                        ).length > 0
+                                                    "
+                                                    class="space-y-1"
+                                                >
+                                                    <p
+                                                        v-for="part in partsCommissionMembre(
+                                                            m.livreur_id,
+                                                        )"
+                                                        :key="part.categorie"
+                                                        class="flex items-baseline justify-between gap-3 text-xs"
+                                                    >
+                                                        <span
+                                                            class="truncate text-muted-foreground"
+                                                            :title="
+                                                                part.categorie
+                                                            "
+                                                        >
+                                                            {{ part.categorie }}
+                                                        </span>
+                                                        <span
+                                                            class="shrink-0 font-mono font-semibold text-foreground tabular-nums"
+                                                        >
+                                                            {{
+                                                                formatGNF(
+                                                                    part.montant,
+                                                                )
+                                                            }}
+                                                            / unité
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    v-else
+                                                    class="text-xs text-muted-foreground"
+                                                >
+                                                    Aucune part
+                                                </span>
+                                            </td>
+                                            <td data-wide class="px-4 py-3">
+                                                <Button
+                                                    v-if="
+                                                        can(
+                                                            'equipes-livraison.update',
+                                                        ) && m.livreur_id
+                                                    "
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    @click="
+                                                        ouvrirTransfert(
+                                                            m.livreur_id,
+                                                        )
+                                                    "
+                                                >
+                                                    <ArrowLeftRight
+                                                        class="mr-1.5 h-3.5 w-3.5"
+                                                    />
+                                                    Changer de véhicule
+                                                </Button>
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- Barèmes de commission — un montant Propriétaire et un
+                             montant Livraison PAR CATÉGORIE, jamais un total blended :
+                             les barèmes peuvent différer d'une catégorie à l'autre
+                             (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
+                             Même source que la popup équipe (baremes_commission_categories). -->
+                            <div
+                                v-if="
+                                    equipe && vehicule.equipe_membres.length > 0
+                                "
+                                class="space-y-2"
+                            >
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Commissions par catégorie
+                                </p>
+                                <div
+                                    v-if="
+                                        baremes_commission_categories.length ===
+                                        0
+                                    "
+                                    class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
+                                >
+                                    Aucun barème de commission actif pour ce
+                                    véhicule.
+                                </div>
+                                <div
+                                    v-else
+                                    class="overflow-x-auto rounded-lg border"
+                                >
+                                    <table
+                                        data-mobile-cards="baremes"
+                                        class="w-full min-w-[900px] text-left text-xs"
+                                    >
+                                        <thead
+                                            class="border-b bg-muted/40 text-muted-foreground"
+                                        >
+                                            <tr>
+                                                <th
+                                                    class="px-4 py-3 font-medium"
+                                                >
+                                                    Catégorie
+                                                </th>
+                                                <th
+                                                    class="px-4 py-3 font-medium"
+                                                >
+                                                    Part propriétaire
+                                                </th>
+                                                <th
+                                                    class="px-4 py-3 font-medium"
+                                                >
+                                                    Part équipe de livraison
+                                                </th>
+                                                <th
+                                                    v-for="option in processus_options"
+                                                    :key="option.value"
+                                                    class="px-4 py-3 font-medium"
+                                                >
+                                                    {{
+                                                        libelleColonnePartage(
+                                                            option.value,
+                                                        )
+                                                    }}
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y">
+                                            <tr
+                                                v-for="cat in baremes_commission_categories"
+                                                :key="cat.categorie_id"
+                                                class="hover:bg-muted/20"
+                                            >
+                                                <td
+                                                    data-label="Catégorie"
+                                                    class="px-4 py-3 font-semibold text-foreground"
+                                                >
+                                                    {{ cat.categorie_nom }}
+                                                </td>
+                                                <td
+                                                    data-label="Part propriétaire"
+                                                    class="px-4 py-3 font-mono font-semibold text-primary tabular-nums"
+                                                >
+                                                    {{
+                                                        formatGNF(
+                                                            cat.montant_proprietaire,
+                                                        )
+                                                    }}
+                                                    <span
+                                                        class="font-sans font-normal text-muted-foreground"
+                                                    >
+                                                        / unité</span
+                                                    >
+                                                </td>
+                                                <td
+                                                    data-label="Part équipe de livraison"
+                                                    class="px-4 py-3 font-mono font-semibold text-foreground tabular-nums"
+                                                >
+                                                    {{
+                                                        formatGNF(
+                                                            cat.montant_livraison,
+                                                        )
+                                                    }}
+                                                    <span
+                                                        class="font-sans font-normal text-muted-foreground"
+                                                    >
+                                                        / unité</span
+                                                    >
+                                                </td>
+                                                <td
+                                                    v-for="option in processus_options"
+                                                    :key="option.value"
+                                                    :data-label="
+                                                        libelleColonnePartage(
+                                                            option.value,
+                                                        )
+                                                    "
+                                                    class="px-4 py-3"
+                                                >
+                                                    <span
+                                                        v-if="
+                                                            statutPartage(
+                                                                cat.categorie_id,
+                                                                option.value,
+                                                            ) === 'fait'
+                                                        "
+                                                        class="inline-flex items-center gap-1.5 font-medium text-emerald-600"
+                                                    >
+                                                        <CheckCircle
+                                                            class="h-3.5 w-3.5"
+                                                        />
+                                                        Fait
+                                                    </span>
+                                                    <span
+                                                        v-else-if="
+                                                            statutPartage(
+                                                                cat.categorie_id,
+                                                                option.value,
+                                                            ) === 'a_faire'
+                                                        "
+                                                        class="inline-flex items-center gap-1.5 font-medium text-orange-600"
+                                                    >
+                                                        <TriangleAlert
+                                                            class="h-3.5 w-3.5"
+                                                        />
+                                                        À faire
+                                                    </span>
+                                                    <span
+                                                        v-else
+                                                        class="inline-flex items-center gap-1.5 text-muted-foreground"
+                                                    >
+                                                        <CircleHelp
+                                                            class="h-3.5 w-3.5"
+                                                        />
+                                                        Non requis
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Parrain tab (phase 1 : pas de commission ni d'historique — cf.
+                    <!-- Parrain tab (phase 1 : pas de commission ni d'historique — cf.
                 docs/parrainage-vehicule.md) -->
-                <div
-                    v-else-if="activeTab === 'parrain'"
-                    class="rounded-xl border bg-card p-5 sm:p-6"
-                >
-                    <h2
-                        class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Parrain
-                    </h2>
-
                     <div
-                        v-if="!vehicule.parrain_id"
-                        class="rounded-lg border border-dashed py-10 text-center"
+                        v-else-if="activeTab === 'parrain'"
+                        class="rounded-xl border bg-card p-4 sm:p-6"
                     >
-                        <p class="text-sm text-muted-foreground">
-                            Aucun parrain associé à ce véhicule.
-                        </p>
-                        <Button
-                            v-if="can('vehicules.update')"
-                            data-testid="ajouter-parrain-btn"
-                            size="sm"
-                            class="mt-4"
-                            @click="ouvrirAjoutParrain"
+                        <h2
+                            class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                         >
-                            <Plus class="mr-1.5 h-4 w-4" />
-                            Ajouter un parrain
-                        </Button>
-                    </div>
+                            Parrain
+                        </h2>
 
-                    <div v-else class="rounded-lg border bg-background p-4">
-                        <p
-                            class="text-sm font-medium"
-                            data-testid="parrain-nom"
-                        >
-                            {{ vehicule.parrain_nom_complet }}
-                        </p>
-                        <p
-                            class="mt-0.5 font-mono text-xs text-muted-foreground"
-                            data-testid="parrain-telephone"
-                        >
-                            {{ formatPhoneDisplay(vehicule.parrain_telephone) }}
-                        </p>
-                        <p
-                            v-if="
-                                vehicule.parrain_ville || vehicule.parrain_pays
-                            "
-                            class="mt-0.5 text-xs text-muted-foreground"
-                        >
-                            {{
-                                [vehicule.parrain_ville, vehicule.parrain_pays]
-                                    .filter(Boolean)
-                                    .join(' · ')
-                            }}
-                        </p>
                         <div
-                            v-if="can('vehicules.update')"
-                            class="mt-4 flex gap-2"
+                            v-if="!vehicule.parrain_id"
+                            class="rounded-lg border border-dashed py-10 text-center"
                         >
+                            <p class="text-sm text-muted-foreground">
+                                Aucun parrain associé à ce véhicule.
+                            </p>
                             <Button
-                                variant="outline"
+                                v-if="can('vehicules.update')"
+                                data-testid="ajouter-parrain-btn"
                                 size="sm"
-                                data-testid="modifier-parrain-btn"
-                                @click="ouvrirModifierParrain"
-                            >
-                                Modifier
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                data-testid="changer-parrain-btn"
+                                class="mt-4"
                                 @click="ouvrirAjoutParrain"
                             >
-                                Changer de parrain
+                                <Plus class="mr-1.5 h-4 w-4" />
+                                Ajouter un parrain
                             </Button>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Situation tab -->
-                <SituationTab
-                    v-else-if="activeTab === 'situation'"
-                    :vehicule-id="vehicule.id"
-                    :vehicule-recherche="vehicule.immatriculation"
-                    :ventes="situation_ventes"
-                    :periode="situation_periode"
-                />
-
-                <!-- Dépenses tab -->
-                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
-                    <div
-                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
-                    >
-                        <div>
-                            <h2
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        <div v-else class="rounded-lg border bg-background p-4">
+                            <p
+                                class="text-sm font-medium"
+                                data-testid="parrain-nom"
                             >
-                                Dépenses du véhicule
-                            </h2>
-                            <p class="mt-1 text-xs text-muted-foreground">
-                                Dépenses opérationnelles gérées via le module
-                                Dépenses.
+                                {{ vehicule.parrain_nom_complet }}
+                            </p>
+                            <p
+                                class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                data-testid="parrain-telephone"
+                            >
+                                {{
+                                    formatPhoneDisplay(
+                                        vehicule.parrain_telephone,
+                                    )
+                                }}
+                            </p>
+                            <p
+                                v-if="
+                                    vehicule.parrain_ville ||
+                                    vehicule.parrain_pays
+                                "
+                                class="mt-0.5 text-xs text-muted-foreground"
+                            >
+                                {{
+                                    [
+                                        vehicule.parrain_ville,
+                                        vehicule.parrain_pays,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' · ')
+                                }}
+                            </p>
+                            <div
+                                v-if="can('vehicules.update')"
+                                class="mt-4 flex gap-2"
+                            >
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="modifier-parrain-btn"
+                                    @click="ouvrirModifierParrain"
+                                >
+                                    Modifier
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="changer-parrain-btn"
+                                    @click="ouvrirAjoutParrain"
+                                >
+                                    Changer de parrain
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Situation tab -->
+                    <SituationTab
+                        v-else-if="activeTab === 'situation'"
+                        :vehicule-id="vehicule.id"
+                        :vehicule-recherche="vehicule.immatriculation"
+                        :ventes="situation_ventes"
+                        :periode="situation_periode"
+                    />
+
+                    <!-- Dépenses tab -->
+                    <div v-else class="rounded-xl border bg-card p-4 sm:p-6">
+                        <div
+                            class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                            <div>
+                                <h2
+                                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Dépenses du véhicule
+                                </h2>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    Dépenses opérationnelles gérées via le
+                                    module Dépenses.
+                                </p>
+                            </div>
+                            <span
+                                v-if="totalApprouve > 0"
+                                class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
+                            >
+                                Approuvés : {{ formatGNF(totalApprouve) }}
+                            </span>
+                        </div>
+
+                        <div
+                            v-if="!depenses.length"
+                            class="rounded-lg border border-dashed py-10 text-center"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Aucune dépense enregistrée pour ce véhicule.
                             </p>
                         </div>
-                        <span
-                            v-if="totalApprouve > 0"
-                            class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
-                        >
-                            Approuvés : {{ formatGNF(totalApprouve) }}
-                        </span>
-                    </div>
 
-                    <div
-                        v-if="!depenses.length"
-                        class="rounded-lg border border-dashed py-10 text-center"
-                    >
-                        <p class="text-sm text-muted-foreground">
-                            Aucune dépense enregistrée pour ce véhicule.
-                        </p>
-                    </div>
-
-                    <div v-else class="divide-y rounded-lg border">
-                        <div
-                            v-for="d in depenses"
-                            :key="d.id"
-                            class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
-                        >
-                            <div class="min-w-0 flex-1">
-                                <div class="text-sm font-semibold tabular-nums">
-                                    {{ formatGNF(d.montant) }}
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    {{ d.libelle }}
-                                    <span v-if="d.commentaire">
-                                        · {{ d.commentaire }}</span
-                                    >
-                                </div>
-                            </div>
+                        <div v-else class="divide-y rounded-lg border">
                             <div
-                                class="hidden text-xs text-muted-foreground sm:block"
+                                v-for="d in depenses"
+                                :key="d.id"
+                                class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
                             >
-                                {{ d.date_depense ?? '—' }}
+                                <div class="min-w-0 flex-1">
+                                    <div
+                                        class="text-sm font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(d.montant) }}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ d.libelle }}
+                                        <span v-if="d.commentaire">
+                                            · {{ d.commentaire }}</span
+                                        >
+                                    </div>
+                                </div>
+                                <div
+                                    class="hidden text-xs text-muted-foreground sm:block"
+                                >
+                                    {{ d.date_depense ?? '—' }}
+                                </div>
+                                <StatusDot
+                                    :status="d.statut"
+                                    :label="statutLabel[d.statut] ?? d.statut"
+                                    class="shrink-0"
+                                />
+                                <template v-if="can('depenses.update')">
+                                    <button
+                                        v-if="
+                                            STATUTS_EDITABLES.includes(d.statut)
+                                        "
+                                        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        @click="editerDepense(d)"
+                                    >
+                                        <Pencil class="h-3.5 w-3.5" />
+                                    </button>
+                                    <span
+                                        v-else
+                                        class="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md"
+                                        :class="
+                                            d.statut === 'valide'
+                                                ? 'text-green-500/70'
+                                                : 'text-blue-400/70'
+                                        "
+                                        :title="`Dépense ${statutLabel[d.statut] ?? d.statut} — non modifiable`"
+                                    >
+                                        <CheckCircle class="h-3.5 w-3.5" />
+                                    </span>
+                                </template>
                             </div>
-                            <StatusDot
-                                :status="d.statut"
-                                :label="statutLabel[d.statut] ?? d.statut"
-                                class="shrink-0"
-                            />
-                            <template v-if="can('depenses.update')">
-                                <button
-                                    v-if="STATUTS_EDITABLES.includes(d.statut)"
-                                    class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    @click="editerDepense(d)"
-                                >
-                                    <Pencil class="h-3.5 w-3.5" />
-                                </button>
-                                <span
-                                    v-else
-                                    class="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md"
-                                    :class="
-                                        d.statut === 'valide'
-                                            ? 'text-green-500/70'
-                                            : 'text-blue-400/70'
-                                    "
-                                    :title="`Dépense ${statutLabel[d.statut] ?? d.statut} — non modifiable`"
-                                >
-                                    <CheckCircle class="h-3.5 w-3.5" />
-                                </span>
-                            </template>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+        <div
+            v-if="can('vehicules.update')"
+            data-testid="vehicule-mobile-actions"
+            class="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:hidden"
+        >
+            <Button as-child class="h-12 w-full"
+                ><Link :href="'/backoffice/vehicules/' + vehicule.id + '/edit'"
+                    ><Pencil class="mr-2 size-4" />Modifier le véhicule</Link
+                ></Button
+            >
+        </div>
     </AppLayout>
-
     <EquipeStepperModal
         v-model:visible="showStepperModal"
         :vehicule="{
@@ -1334,3 +1473,80 @@ function formatGNF(val: number): string {
         "
     />
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    .vehicule-detail [data-info-grid] {
+        gap: 0;
+    }
+    .vehicule-detail
+        [data-info-grid]
+        > div:not(.hidden):not([data-derogation]) {
+        display: grid;
+        grid-template-columns: 7rem minmax(0, 1fr);
+        align-items: start;
+        gap: 0.25rem 0.75rem;
+        border: 0;
+        border-top: 1px solid var(--border);
+        border-radius: 0;
+        padding: 0.875rem 0;
+        background: transparent;
+    }
+    .vehicule-detail
+        [data-info-grid]
+        > div:not([data-derogation])
+        > :first-child {
+        grid-column: 1;
+    }
+    .vehicule-detail
+        [data-info-grid]
+        > div:not([data-derogation])
+        > :not(:first-child) {
+        grid-column: 2;
+        margin-top: 0;
+    }
+    .vehicule-detail [data-info-grid] > [data-derogation] {
+        margin-top: 0.75rem;
+    }
+    .vehicule-detail [data-mobile-cards],
+    .vehicule-detail [data-mobile-cards] tbody {
+        display: block;
+        min-width: 0;
+        table-layout: auto;
+    }
+    .vehicule-detail [data-mobile-cards] colgroup,
+    .vehicule-detail [data-mobile-cards] thead {
+        display: none;
+    }
+    .vehicule-detail [data-mobile-cards] tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        padding: 1rem;
+    }
+    .vehicule-detail [data-mobile-cards] td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        overflow-wrap: anywhere;
+    }
+    .vehicule-detail [data-mobile-cards] td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--muted-foreground);
+        font: 400 0.75rem var(--font-sans);
+    }
+    .vehicule-detail [data-mobile-cards] td:first-child,
+    .vehicule-detail [data-mobile-cards] td[data-wide] {
+        grid-column: 1 / -1;
+    }
+    .vehicule-detail [data-mobile-cards] td:first-child::before,
+    .vehicule-detail [data-mobile-cards] td:not([data-label])::before {
+        display: none;
+    }
+    .vehicule-detail :deep(button:not([role='switch'])) {
+        min-height: 44px;
+    }
+}
+</style>

@@ -6,6 +6,7 @@ use App\Enums\EvenementComptable;
 use App\Enums\StatutPieceComptable;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Models\PaiementFicheReaffectation;
 use App\Models\PieceComptable;
 use Illuminate\Support\Carbon;
 
@@ -175,6 +176,64 @@ class FicheComptabilisationService
             siteId: $paiement->site_id,
             createdBy: $paiement->created_by,
         );
+    }
+
+    /**
+     * Fiche livreur/propriétaire déjà constatée qui change d'agence (ADR 0020) : déplace le reste
+     * dû et la charge correspondante de l'agence d'origine vers la nouvelle, pour que la dette soit
+     * soldée là où elle est payée. Sans effet si la fiche n'a jamais été constatée (pas de pièce de
+     * validation) ou s'il ne reste rien à payer.
+     *
+     * @return array{0: PieceComptable, 1: PieceComptable}|null
+     */
+    public function comptabiliserReaffectation(PaiementFicheReaffectation $reaffectation): ?array
+    {
+        $fiche = $reaffectation->fiche;
+        $type = $fiche?->beneficiaire_type;
+        if (! in_array($type, ['livreur', 'proprietaire'], true) || (float) $reaffectation->montant <= 0.009) {
+            return null;
+        }
+
+        if (! $this->ecritures->pieceExistantePour($fiche->organization_id, $fiche, self::EVENEMENT_VALIDATION[$type])) {
+            return null;
+        }
+
+        $beneficiaire = $fiche->getBeneficiaireModel();
+        if (! $beneficiaire) {
+            return null;
+        }
+
+        $montant = (float) $reaffectation->montant;
+        $dette = fn (string $sens) => [
+            'role' => "dette_tiers_{$type}",
+            'sens' => $sens,
+            'montant' => $montant,
+            'tiers_type' => $type,
+            'tiers_model' => $beneficiaire,
+        ];
+        $charge = fn (string $sens) => ['role' => "charge_commission_{$type}", 'sens' => $sens, 'montant' => $montant];
+        $libelle = "Fiche {$fiche->reference} — {$fiche->beneficiaire_nom} : changement d'agence";
+
+        return [
+            $this->ecritures->comptabiliser(
+                evenement: EvenementComptable::FICHE_REAFFECTEE_SORTIE,
+                source: $reaffectation,
+                organizationId: $reaffectation->organization_id,
+                dateComptable: Carbon::parse($reaffectation->created_at ?? now()),
+                libelle: $libelle,
+                lignes: [$dette('debit'), $charge('credit')],
+                siteId: $reaffectation->site_origine_id,
+            ),
+            $this->ecritures->comptabiliser(
+                evenement: EvenementComptable::FICHE_REAFFECTEE_ENTREE,
+                source: $reaffectation,
+                organizationId: $reaffectation->organization_id,
+                dateComptable: Carbon::parse($reaffectation->created_at ?? now()),
+                libelle: $libelle,
+                lignes: [$charge('debit'), $dette('credit')],
+                siteId: $reaffectation->site_destination_id,
+            ),
+        ];
     }
 
     /**

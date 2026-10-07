@@ -678,7 +678,9 @@ en §9). Résolution exclusivement via `ClientIdentityResolver` → `identity->c
 ```
 
 Depuis le 04/10/2026, une **précommande** (ADR 0019) figure dans cette liste comme toute commande,
-avec le statut `reservee` (« Réservée ») tant qu'elle n'est pas remise. Aucune création depuis
+avec les statuts `reservee` (« Créée »), `a_preparer` (« Préparation en cours ») et `preparee`
+(« Prête au retrait ») tant qu'elle n'est pas remise (libellés du 06/10/2026). Une précommande
+retirée en attente de solde garde `statut: "facturation"` mais `statut_label: "Retirée"`. Aucune création depuis
 l'application en V1.
 
 Query params optionnels : `statut` (`StatutCommandeVente`), `date_debut`/

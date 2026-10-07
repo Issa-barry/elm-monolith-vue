@@ -34,9 +34,13 @@ class IndexCommandeVenteController extends Controller
         $this->authorize('viewAny', CommandeVente::class);
 
         $request->validate(['saved_view' => ['nullable', 'ulid']]);
-        $savedView = $request->routeIs('ventes.index')
-            ? app(SavedFilterService::class)->applyToRequest($request, 'ventes')
-            : null;
+        // « Mes vues » : un scope par liste ; Distribution n'en a pas encore.
+        $scopeVues = match (true) {
+            $request->routeIs('ventes.index') => 'ventes',
+            $request->routeIs('precommandes.index') => 'precommandes',
+            default => null,
+        };
+        $savedView = $scopeVues ? app(SavedFilterService::class)->applyToRequest($request, $scopeVues) : null;
 
         $user = auth()->user();
         $orgId = $user->organization_id;

@@ -10,7 +10,12 @@ Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-pe
 | **Rapport d'activité** | `GET /backoffice/rapports/activite` (`rapports.activite`) | `rapports.read` | Responsables : agences accessibles, tous les agents ou un agent |
 | Exports | `…/export?format=xlsx\|pdf` (`ma-situation.export`, `rapports.activite.export`) | idem écran | Mêmes filtres, même périmètre que l'écran |
 
-Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Groupe
+Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Ses entrées
+sont des vues statistiques, toujours préfixées `Stat-` pour ne jamais être confondues avec le module
+métier homonyme : **Stat-Ventes** (`/backoffice/dashboard`) et **Stat-Commissions**
+(`/backoffice/tableau-de-bord/commissions`), alors que **Ventes** (Commercial) et **Comptabilité ›
+Commissions** (Finance) restent les modules de travail. Toute nouvelle vue statistique du tableau de
+bord suit cette convention (protégée par `AppSidebarTableauDeBord.spec.ts`). Groupe
 « Pilotage » : **Rapports › Ma situation** et **Rapports › Rapport d'activité** (chaque sous-entrée
 selon sa permission ; le menu Rapports n'apparaît que si l'une des deux est accordée). « Ma situation »
 reste en accès direct dans le menu mobile `MobileQuickMenu`. Ce n'est jamais un filtre du rapport
@@ -188,10 +193,24 @@ séparé du lot 1 : le tableau de bord applique le même périmètre que les rap
 
 - **Administrateur** (super admin, administrateur entreprise) : toute l'organisation, inchangé.
 - **Autre utilisateur** : uniquement ses agences (`user_sites`) — statistiques de factures, encaissé,
-  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par type de véhicule et par
-  produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
+  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par processus, par type de
+  véhicule et par produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
 - Une facture sans agence n'apparaît que dans la vue organisation.
 - Pas de filtre Agence sur le tableau de bord : le périmètre découle des droits.
 
 **Changement visible** dès la mise en production : un responsable qui voyait l'organisation entière
 ne voit plus que ses agences.
+
+## Tableau de bord — ventes par processus (2026-10-06)
+
+Carte « Ventes par processus » : CA facturé (`montant_net`) de la période choisie, factures annulées
+exclues, même périmètre d'agence que ci-dessus. Les trois processus d'une vente sont toujours listés,
+même à 0 : **Vente**, **Distribution client**, **Transfert grossiste**. Le transfert logistique n'est
+pas une vente et n'y figure pas.
+
+- Le processus n'est pas stocké : il est dérivé de la commande par
+  `CommissionProcessusDefaults::identiteCodePourVente()` (nature d'opération, type de client, mode de
+  remise grossiste), la même source que la colonne « Processus » de la liste des ventes. Un grossiste
+  en enlèvement compte donc en **Vente**, un grossiste livré en **Transfert grossiste**.
+- Affichage en barres horizontales classées du plus gros au plus petit : longueur relative au premier
+  processus, part (%) relative au total, nombre de factures et montant GNF complet.

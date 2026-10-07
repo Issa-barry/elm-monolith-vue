@@ -151,6 +151,12 @@ const filterFields = computed<FilterField[]>(() =>
                   type: 'text',
                   placeholder: 'Nom du propriétaire…',
               },
+              {
+                  key: 'nb_membres',
+                  label: 'Nombre de livreurs',
+                  type: 'number',
+                  placeholder: 'Ex. 2',
+              },
           ]
         : [
               {

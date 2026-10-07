@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ClientType;
+use App\Enums\ModeRemiseGrossiste;
+use App\Enums\NatureOperation;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
@@ -113,5 +117,74 @@ class DashboardTest extends TestCase
         $this->assertEquals(1_000_000, $props['stats_factures']['total_montant']);
         $this->assertEqualsCanonicalizing(['Matoto', 'Kouria'], array_column($props['ca_par_site'], 'nom'));
         $this->assertNull($props['agences']);
+    }
+
+    // ── Ventes par processus (identité résolue comme la liste des ventes) ────
+
+    private function factureProcessus(Organization $org, Site $site, float $montant, array $commande, ?ClientType $clientType = null, string $statut = 'impayee'): void
+    {
+        $client = $clientType
+            ? Client::factory()->create(['organization_id' => $org->id, 'type' => $clientType->value])
+            : null;
+
+        $cmd = CommandeVente::factory()->create(array_merge([
+            'organization_id' => $org->id,
+            'site_id' => $site->id,
+            'client_id' => $client?->id,
+            'total_commande' => $montant,
+        ], $commande));
+
+        FactureVente::create([
+            'organization_id' => $org->id,
+            'site_id' => $site->id,
+            'commande_vente_id' => $cmd->id,
+            'montant_brut' => $montant,
+            'montant_net' => $montant,
+            'statut_facture' => $statut,
+        ]);
+    }
+
+    public function test_le_ca_est_reparti_par_processus_de_vente_hors_factures_annulees(): void
+    {
+        $org = Organization::factory()->create();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'agence', 'localisation' => 'Conakry']);
+
+        $this->factureProcessus($org, $site, 100_000, ['nature_operation' => NatureOperation::VENTE_STANDARD->value], ClientType::REVENDEUR);
+        $this->factureProcessus($org, $site, 50_000, ['nature_operation' => NatureOperation::VENTE_STANDARD->value]);
+        // Grossiste en enlèvement : reste une Vente (décision produit du 05/09/2026).
+        $this->factureProcessus($org, $site, 30_000, ['mode_remise_grossiste' => ModeRemiseGrossiste::ENLEVEMENT->value], ClientType::GROSSISTE);
+        $this->factureProcessus($org, $site, 400_000, ['mode_remise_grossiste' => ModeRemiseGrossiste::LIVRAISON->value], ClientType::GROSSISTE);
+        $this->factureProcessus($org, $site, 200_000, ['nature_operation' => NatureOperation::DISTRIBUTION_CLIENT->value], ClientType::REVENDEUR);
+        $this->factureProcessus($org, $site, 999_000, ['nature_operation' => NatureOperation::DISTRIBUTION_CLIENT->value], ClientType::REVENDEUR, 'annulee');
+
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $admin = User::factory()->create(['organization_id' => $org->id]);
+        $admin->assignRole('admin_entreprise');
+        $admin->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $parCode = collect($this->props($admin)['ca_par_processus'])->keyBy('code');
+
+        $this->assertSame(['vente', 'distribution_client', 'transfert_grossiste'], $parCode->keys()->all());
+        $this->assertEquals(180_000, $parCode['vente']['montant']);
+        $this->assertSame(3, $parCode['vente']['nb_factures']);
+        $this->assertSame('Vente', $parCode['vente']['label']);
+        $this->assertEquals(200_000, $parCode['distribution_client']['montant']);
+        $this->assertSame(1, $parCode['distribution_client']['nb_factures']);
+        $this->assertEquals(400_000, $parCode['transfert_grossiste']['montant']);
+        $this->assertSame('Transfert grossiste', $parCode['transfert_grossiste']['label']);
+    }
+
+    public function test_le_ca_par_processus_respecte_le_perimetre_d_agence(): void
+    {
+        [$org, $matoto] = $this->deuxAgences();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $manager = User::factory()->create(['organization_id' => $org->id]);
+        $manager->assignRole('manager');
+        $manager->sites()->attach($matoto->id, ['role' => 'employe', 'is_default' => true]);
+
+        $parCode = collect($this->props($manager)['ca_par_processus'])->keyBy('code');
+
+        $this->assertEquals(100_000, $parCode['vente']['montant']);
+        $this->assertEquals(100_000, $parCode->sum('montant'));
     }
 }

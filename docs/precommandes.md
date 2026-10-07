@@ -29,7 +29,7 @@ remise plus tard au client, soit par **retrait sur site**, soit par **livraison*
 | R8 | Opérations **atomiques** à la création : stock vérifié et réservé, acompte (s'il y en a un) vérifié et enregistré, précommande créée — tout ou rien. Jamais d'argent encaissé sans réservation. |
 | R9 | **Pas de réservation à découvert** : précommande refusée si le disponible est insuffisant. Le stock « Entrant » n'est pas utilisé en V1. |
 | R10 | Deux modes de remise : **retrait sur site** et **livraison** (circuit logistique existant). |
-| R11 | Étape de **préparation** réelle : Réservée → À préparer → Préparée. |
+| R11 | Étape de **préparation** réelle : Créée → Préparation en cours → Prête au retrait (libellés du 06/10/2026 ; auparavant Réservée → À préparer → Préparée). |
 | R12 | La quantité **réellement remise** (retrait) ou **réellement chargée / livrée** (livraison) détermine le montant final. Les quantités non remises sont libérées et ne sont pas facturées. |
 | R13 | **Trop-perçu remboursé** (acompte supérieur à la valeur réellement remise). |
 | R14 | Le **solde n'est pas obligatoire** à la remise : le reste dû devient une créance soumise aux règles existantes (solvabilité, impayés, dérogation) — aucune règle nouvelle. |
@@ -138,9 +138,32 @@ LIVRAISON_EN_COURS ──(retour total)──► RETOURNEE (encaissé net à rem
 | `reservee` → `annulee` | Annuler la précommande | `ventes.annuler_precommande` | Motif (≥ 10 caractères) ; remboursement de l'encaissé net dans la même opération ; réservation libérée ; facture annulée (jamais comptabilisée) |
 | `a_preparer` / `preparee` / `a_charger` → `annulee` | Annuler la précommande — **procédure renforcée** (D1) | `ventes.annuler_precommande_preparee` | Idem + code e-mail si l'organisation l'exige (même réglage que l'annulation exceptionnelle). Jamais une fois le chargement démarré |
 
-« Retirée » n'est pas un statut : la page Précommandes l'affiche pour toute précommande dont
-`remise_at` est renseigné et la commande en `facturation`/`cloturee`. Le statut de paiement reste
-porté par la facture (Payée / Partiel / Impayée), jamais mélangé au statut de commande.
+« Retirée » n'est pas un statut : il s'affiche (fiche, listes, filtres, API espace client) pour
+une précommande en retrait dont `remise_at` est renseigné et la commande en `facturation`
+(`CommandeVente::estPrecommandeRetiree()`, `statutAffichage()`) ; une fois clôturée, elle affiche
+« Clôturée ». Le statut de paiement reste porté par la facture (Payée / Partiel / Impayée), jamais
+mélangé au statut de commande : « À encaisser » et « Commissions à verser » ne remplacent jamais
+« Retirée ».
+
+**Vocabulaire et frise (06/10/2026, représentation seule — aucun statut ni transition modifiés)** :
+
+| Statut backend | Libellé (enum, partout) | Action suivante | Statut suivant |
+|---|---|---|---|
+| `reservee` | **Créée** (+ « Stock réservé » en information secondaire) | Lancer la préparation | `a_preparer` |
+| `a_preparer` | **Préparation en cours** | Valider la préparation | `preparee` / `a_charger` |
+| `preparee` | **Prête au retrait** | Valider le retrait | `facturation` (« Retirée ») ou `cloturee` |
+| `a_charger` | À charger | Démarrer le chargement | `chargement_en_cours` |
+| `chargement_en_cours` | Chargement en cours | Valider le chargement | `livraison_en_cours` |
+| `livraison_en_cours` | Livraison en cours | Confirmer la livraison | `livree` |
+| `facturation` (retrait remis) | **Retirée** (dérivé) | Encaisser le reste | `cloturee` |
+| `livree` | Livrée | Encaisser le reste | `cloturee` |
+
+La fiche n'a qu'**une frise**, fournie par le serveur (`PrecommandeEcran::etapes()`), dont l'étape
+active est la valeur affichée dans l'en-tête : Retrait = Créée → Préparation en cours → Prête au
+retrait → Retirée → Clôturée ; Livraison = Créée → Préparation en cours → À charger → Chargement en
+cours → Livraison en cours → Livrée → Clôturée. La frise générique d'une vente (… → Facturation →
+Commissions → Clôturée) n'apparaît pas sur une précommande ; seuls ses bandeaux Annulée / Retournée
+restent. Le statut de la facture figure à part, dans le bloc des montants.
 
 **Livraison déjà soldée par les acomptes** (révisé au lot 3, D13) : le chargement **ne vaut pas
 livraison**. La commande reste « En livraison » — un retour ou un écart reste possible si la
@@ -322,7 +345,7 @@ Garde-fou : `FactureVente::recalculStatut()` ne fait **jamais** sortir une factu
 | Ventes → **Précommandes** (nouveau menu, permission `ventes.read`, comme la liste Ventes) | Liste : Référence, Client, Agence, Date de précommande, Date prévue, Mode, Total, Acompte, Reste à payer, Quantité réservée, Statut (`StatusDot`), indicateurs En retard / Trop-perçu. `DataFilters` : Agence (`site_ids[]`) → Statut → filtres inline (Mode, En retard, Trop-perçu) → drawer (dates). Sur le modèle de la page Distribution. **Compteurs en tête de page (05/10/2026)** — pilotage du cycle, aucun montant (le suivi financier reste sur les factures et la liste Ventes) : **En cours** (réservée, à préparer, préparée, à charger, chargement en cours, en livraison), **À préparer** (réservée ou à préparer : préparation à lancer ou à valider), **En livraison** (`livraison_en_cours` : chargée, livraison pas encore confirmée, D13), **En retard** (`isEnRetard()`, ambre — D8). Regroupements définis côté serveur (`PrecommandeSuivi`) ; compteurs calculés avec les filtres Agence / dates / texte mais **hors** filtres Statut et En retard, car chaque carte sert de filtre rapide (`statuts[]` ou `en_retard=1`, second clic = retrait). Colonnes Date prévue et Mode placées juste après la Référence. Pour joindre chacun sans ouvrir la fiche : immatriculation sous le véhicule, téléphone sous le livreur (chauffeur de l'équipe) et sous le client ; sur mobile, la fiche de la commande donne les deux téléphones. |
 | Ventes (liste) | Boutons « Nouvelle vente » / « Nouvelle précommande » ; marqueur « Précommande » sur les lignes. |
 | Nouvelle précommande | § 7.1. |
-| Fiche commande | Badge « Précommande », date prévue, bloc Acomptes / Encaissé net / Reste / Trop-perçu, actions selon statut et permission : Lancer la préparation, Valider la préparation, Valider le retrait, **Passer en livraison / Passer en retrait** (D16, ventes uniquement — une distribution ne se retire pas), **Confirmer la livraison** (lot 3), Ajouter un acompte, Rembourser, Annuler la précommande. Le bouton **Retour** existant (ADR 0003) et l'écart de réception sont disponibles malgré les acomptes (lot 3). Étapes affichées en livraison : Réservée → À préparer → À charger → En livraison → Livrée. Sur bureau, les actions de la précommande sont dans l'en-tête de la fiche, à côté de « Ticket », comme celles d'une vente (06/10/2026) ; sur mobile, elles restent dans la carte Précommande. Mêmes onglets qu'une vente (Informations, Produits, Facturation, **Journal d'activité**, **Historique**) — aucun historique propre aux précommandes. Le Journal (`CommandeVenteActiviteService`) trace, avec auteur et date/heure : enregistrement (acompte, date prévue), acompte complémentaire, lancement et validation de la préparation (quantité préparée), retrait (quantité remise), changement du mode de remise (nouveau mode, véhicule), démarrage et validation du chargement (quantité chargée), confirmation de livraison, retour (quantité, montant, motif), remboursement (montant, motif), annulation (motif) et clôture (05/10/2026 : attribuée à l'auteur de l'action qui la déclenche, « Système » hors requête — vaut pour toutes les ventes). L'Historique (`AuditLog`) garde les modifications de données : création, encaissements et acomptes, modification, annulation. |
+| Fiche commande | Badge « Précommande », date prévue, bloc Acomptes / Encaissé net / Reste / Trop-perçu, actions selon statut et permission : Lancer la préparation, Valider la préparation, Valider le retrait, **Passer en livraison / Passer en retrait** (D16, ventes uniquement — une distribution ne se retire pas), **Confirmer la livraison** (lot 3), Ajouter un acompte, Rembourser, Annuler la précommande. Le bouton **Retour** existant (ADR 0003) et l'écart de réception sont disponibles malgré les acomptes (lot 3). Une seule frise, synchronisée avec l'en-tête (cf. § 6, vocabulaire et frise). Sur bureau, les actions de la précommande sont dans l'en-tête de la fiche, à côté de « Ticket », comme celles d'une vente (06/10/2026) ; sur mobile, elles restent dans la carte Précommande. Mêmes onglets qu'une vente (Informations, Produits, Facturation, **Journal d'activité**, **Historique**) — aucun historique propre aux précommandes. Le Journal (`CommandeVenteActiviteService`) trace, avec auteur et date/heure : enregistrement (acompte, date prévue), acompte complémentaire, lancement et validation de la préparation (quantité préparée), retrait (quantité remise), changement du mode de remise (nouveau mode, véhicule), démarrage et validation du chargement (quantité chargée), confirmation de livraison, retour (quantité, montant, motif), remboursement (montant, motif), annulation (motif) et clôture (05/10/2026 : attribuée à l'auteur de l'action qui la déclenche, « Système » hors requête — vaut pour toutes les ventes). L'Historique (`AuditLog`) garde les modifications de données : création, encaissements et acomptes, modification, annulation. |
 | Stock | « Engagé » → « Réservé ». |
 | Paramètres → Ventes | Bloc « Précommandes » : « Acompte obligatoire » (Oui / Non) et « Taux d'acompte (%) », saisie libre ; tant que Oui / Non n'est pas choisi, un bandeau indique que les précommandes sont bloquées — refus serveur d'un taux de 0 % quand l'acompte est obligatoire — modifiables avec `parametres.update` (permission déjà contrôlée par cet écran). |
 | `StatusDot.vue` | `reservee`, `a_preparer`, `preparee` ajoutés **uniquement** dans `STATUS_COLOR_MAP`. |

@@ -171,7 +171,7 @@ class PaiementPeriodeController extends Controller
 
         $allFiches = $periode->fiches()->get();
 
-        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
+        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'nb_membres', 'etat', 'beneficiaire']);
 
         // Le détail de période est centré véhicule pour livreur/propriétaire : c'est ainsi que
         // le métier travaille pour ces deux types (une commission de vente/logistique s'ancre
@@ -225,6 +225,11 @@ class PaiementPeriodeController extends Controller
                         if ($v['statut_validation'] !== $filters['etat']) {
                             return false;
                         }
+                    }
+                    // Même valeur que la colonne « Membres » : bénéficiaires commissionnés sur
+                    // la période, pas la taille actuelle de l'équipe.
+                    if (! empty($filters['nb_membres']) && $v['nb_membres'] !== (int) $filters['nb_membres']) {
+                        return false;
                     }
                     if (! empty($filters['livreur']) || ! empty($filters['proprietaire'])) {
                         $needle = mb_strtolower(trim($filters['livreur'] ?? $filters['proprietaire']));

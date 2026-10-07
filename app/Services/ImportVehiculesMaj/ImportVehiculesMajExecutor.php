@@ -63,8 +63,9 @@ class ImportVehiculesMajExecutor
         // Whitelist explicite : seules ces deux clés scalaires peuvent atterrir dans
         // l'UPDATE du véhicule — jamais un tableau construit à partir de la ligne Excel brute.
         $donneesVehicule = array_intersect_key($maj, array_flip(['site_id', 'livraison_vente', 'livraison_logistique']));
+        // Par le modèle : un changement de site réaligne les fiches non payées (Vehicule::booted()).
         if (! empty($donneesVehicule)) {
-            Vehicule::whereKey($vehiculeId)->update($donneesVehicule);
+            Vehicule::whereKey($vehiculeId)->first()?->update($donneesVehicule);
         }
 
         foreach ($maj['capacites'] ?? [] as $capacite) {

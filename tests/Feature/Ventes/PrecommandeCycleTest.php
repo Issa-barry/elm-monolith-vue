@@ -6,6 +6,7 @@ use App\Enums\ModeConfirmationAnnulationExceptionnelle;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Enums\StatutReservationStock;
+use App\Http\Resources\Api\Client\CommandeVenteMineResource;
 use App\Mail\PrecommandeAnnulationCodeMail;
 use App\Models\Client;
 use App\Models\CommandeVente;
@@ -23,6 +24,7 @@ use App\Models\VarianteStock;
 use App\Services\AnnulationExceptionnelleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -191,6 +193,49 @@ class PrecommandeCycleTest extends TestCase
         // Acompte imputé : 419100 soldé, créance client = reste à payer.
         $this->assertSame(0.0, $this->soldeCompte('419100'));
         $this->assertSame($total - 50000, $this->soldeCompte('411000'));
+    }
+
+    /** En-tête et frise : même état à chaque étape ; le statut financier reste à part. */
+    private function assertAffichage(CommandeVente $commande, string $valeur, string $libelle, bool $stockReserve): void
+    {
+        $this->get("/backoffice/ventes/{$commande->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commande.statut_affichage.value', $valeur)
+                ->where('commande.statut_affichage.label', $libelle)
+                ->where('precommande.etape_courante', $valeur)
+                ->where('precommande.stock_reserve', $stockReserve));
+    }
+
+    public function test_retrait_l_entete_et_la_frise_suivent_le_meme_parcours_jusqu_a_retiree(): void
+    {
+        $commande = $this->precommande(10, 50000);
+
+        $this->get("/backoffice/ventes/{$commande->id}")->assertInertia(fn (Assert $page) => $page
+            ->where('precommande.etapes', [
+                ['cle' => 'reservee', 'libelle' => 'Créée'],
+                ['cle' => 'a_preparer', 'libelle' => 'Préparation en cours'],
+                ['cle' => 'preparee', 'libelle' => 'Prête au retrait'],
+                ['cle' => 'retiree', 'libelle' => 'Retirée'],
+                ['cle' => 'cloturee', 'libelle' => 'Clôturée'],
+            ]));
+        $this->assertAffichage($commande, 'reservee', 'Créée', true);
+
+        $this->post("/backoffice/ventes/{$commande->id}/precommande/preparation/lancer")->assertSessionHasNoErrors();
+        $this->assertAffichage($commande, 'a_preparer', 'Préparation en cours', true);
+
+        $this->post("/backoffice/ventes/{$commande->id}/precommande/preparation/valider", ['lignes' => $this->lignes($commande, 10)])->assertSessionHasNoErrors();
+        $this->assertAffichage($commande, 'preparee', 'Prête au retrait', true);
+
+        $this->retirer($commande, 10);
+
+        // Statut `facturation` en base, « Retirée » à l'écran et dans l'API : jamais « À encaisser ».
+        $commande->refresh();
+        $this->assertSame(StatutCommandeVente::FACTURATION, $commande->statut);
+        $this->assertAffichage($commande, 'retiree', 'Retirée', false);
+        $this->get("/backoffice/ventes/{$commande->id}")->assertInertia(fn (Assert $page) => $page
+            ->where('precommande.facture_statut_label', StatutFactureVente::PARTIEL->label()));
+        $this->assertSame('Retirée', (new CommandeVenteMineResource($commande))->resolve()['statut_label']);
     }
 
     public function test_retrait_deja_solde_par_les_acomptes_paye_et_cloture_la_commande(): void

@@ -22,6 +22,7 @@ import {
     ArrowLeft,
     Car,
     ChevronDown,
+    ChevronRight,
     Download,
     Eye,
     History,
@@ -230,50 +231,48 @@ function confirmDelete(v: Vehicule) {
         <div class="flex flex-col sm:hidden">
             <!-- Sticky header -->
             <div
-                class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
+                class="sticky top-0 z-10 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 border-b bg-background px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2"
             >
-                <Link href="/backoffice/dashboard">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-8 w-8 shrink-0"
-                    >
-                        <ArrowLeft class="h-4 w-4" />
-                    </Button>
+                <Link
+                    href="/backoffice/dashboard"
+                    aria-label="Retour à l’accueil"
+                    class="flex size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                >
+                    <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Véhicules</span
                 >
-                <div class="h-8 w-[72px]" />
+                <div aria-hidden="true" />
             </div>
 
             <!-- Vues et filtres : même état serveur que sur desktop. -->
-            <div class="flex flex-wrap items-center gap-2 px-3 py-2">
-                <DataFilters
-                    trigger-only
-                    saved-filter-scope="vehicules"
-                    url="/backoffice/vehicules"
-                    :values="filters"
-                    :fields="filterFields"
-                    :result-count="filteredVehicules.length"
-                />
-            </div>
+            <ListPageActions class="px-3 py-2">
+                <template #filters>
+                    <DataFilters
+                        trigger-only
+                        saved-filter-scope="vehicules"
+                        url="/backoffice/vehicules"
+                        :values="filters"
+                        :fields="filterFields"
+                        :result-count="filteredVehicules.length"
+                    />
+                </template>
+            </ListPageActions>
 
             <!-- Card list -->
             <div class="divide-y">
-                <div
+                <Link
                     v-for="v in filteredVehicules"
                     :key="v.id"
-                    class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
+                    :href="`/backoffice/vehicules/${v.id}`"
+                    :aria-label="`Voir le véhicule ${v.nom_vehicule}, ${v.immatriculation}`"
+                    data-testid="vehicule-mobile-row"
+                    class="flex min-h-20 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset active:bg-muted/40"
                 >
                     <!-- Photo or icon -->
                     <div
                         class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
-                        :class="v.photo_url ? 'cursor-zoom-in' : ''"
-                        @click="
-                            v.photo_url &&
-                            openLightbox(v.photo_url, v.nom_vehicule)
-                        "
                     >
                         <img
                             v-if="v.photo_url"
@@ -317,53 +316,11 @@ function confirmDelete(v: Vehicule) {
                         class="shrink-0 text-xs text-muted-foreground"
                     />
 
-                    <!-- Dropdown -->
-                    <DropdownMenu>
-                        <DropdownMenuTrigger as-child>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 shrink-0"
-                            >
-                                <MoreVertical class="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-44">
-                            <DropdownMenuItem as-child>
-                                <Link
-                                    :href="`/backoffice/vehicules/${v.id}`"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <Eye class="h-4 w-4" />
-                                    Voir le détail
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                v-if="can('vehicules.update')"
-                                as-child
-                            >
-                                <Link
-                                    :href="`/backoffice/vehicules/${v.id}/edit`"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <Pencil class="h-4 w-4" />
-                                    Modifier
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator
-                                v-if="can('vehicules.delete')"
-                            />
-                            <DropdownMenuItem
-                                v-if="can('vehicules.delete')"
-                                class="cursor-pointer text-destructive focus:text-destructive"
-                                @click="confirmDelete(v)"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                                Supprimer
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                    <ChevronRight
+                        aria-hidden="true"
+                        class="size-4 shrink-0 text-muted-foreground"
+                    />
+                </Link>
             </div>
 
             <!-- Empty state -->

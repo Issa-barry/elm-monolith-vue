@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers\Divers;
 
+use App\Enums\ClientType;
+use App\Enums\ModeRemiseGrossiste;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionProcessus;
 use App\Models\FactureVente;
 use App\Models\Site;
 use App\Services\Client\QrPayloadResolver;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SiteScopeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -227,6 +232,53 @@ class IndexDashboardController extends Controller
             ->values()
             ->toArray();
 
+        // ── CA par processus (mêmes factures que le CA par site, sans exiger d'agence) ──
+        // Le processus n'est pas stocké : il est dérivé de la commande par
+        // CommissionProcessusDefaults::identiteCodePourVente(), la même source que la colonne
+        // « Processus » de la liste des ventes et la génération des commissions. On agrège donc
+        // par triplet (nature, type de client, mode de remise) puis on résout le code en PHP.
+        $caParProcessusQuery = DB::table('factures_ventes as fv')
+            ->join('commandes_ventes as cv', 'cv.id', '=', 'fv.commande_vente_id')
+            ->leftJoin('clients as c', 'c.id', '=', 'cv.client_id')
+            ->where('fv.organization_id', $orgId)
+            ->whereNull('fv.deleted_at')
+            ->whereNull('cv.deleted_at')
+            ->when($siteIds !== null, fn ($q) => $q->whereIn('fv.site_id', $siteIds))
+            ->where('fv.statut_facture', '!=', StatutFactureVente::ANNULEE->value);
+        if ($start && $end) {
+            $caParProcessusQuery->whereBetween('fv.created_at', [$start, $end]);
+        }
+
+        $caParProcessus = collect([
+            CommissionProcessus::CODE_VENTE,
+            CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
+            CommissionProcessus::CODE_TRANSFERT_GROSSISTE,
+        ])->mapWithKeys(fn (string $code) => [$code => ['montant' => 0.0, 'nb_factures' => 0]])->all();
+
+        $caParProcessusQuery
+            ->selectRaw('cv.nature_operation, c.type as client_type, cv.mode_remise_grossiste, COUNT(*) as nb_factures, COALESCE(SUM(fv.montant_net), 0) as montant')
+            ->groupBy('cv.nature_operation', 'c.type', 'cv.mode_remise_grossiste')
+            ->get()
+            ->each(function ($r) use (&$caParProcessus) {
+                $code = CommissionProcessusDefaults::identiteCodePourVente(
+                    NatureOperation::tryFrom((string) $r->nature_operation) ?? NatureOperation::VENTE_STANDARD,
+                    ClientType::tryFrom((string) $r->client_type),
+                    ModeRemiseGrossiste::tryFrom((string) $r->mode_remise_grossiste),
+                );
+                $caParProcessus[$code]['montant'] += (float) $r->montant;
+                $caParProcessus[$code]['nb_factures'] += (int) $r->nb_factures;
+            });
+
+        $caParProcessus = collect($caParProcessus)
+            ->map(fn (array $totaux, string $code) => [
+                'code' => $code,
+                'label' => CommissionProcessusDefaults::libelle($code),
+                'montant' => $totaux['montant'],
+                'nb_factures' => $totaux['nb_factures'],
+            ])
+            ->values()
+            ->toArray();
+
         return Inertia::render('Dashboard', [
             'periode' => $periode,
             // null = toute l'organisation ; sinon les agences auxquelles les chiffres sont limités.
@@ -253,6 +305,7 @@ class IndexDashboardController extends Controller
             'ca_par_site' => $caParSite,
             'ca_par_type_vehicule' => $caParTypeVehicule,
             'ca_par_produit' => $caParProduit,
+            'ca_par_processus' => $caParProcessus,
         ]);
     }
 }

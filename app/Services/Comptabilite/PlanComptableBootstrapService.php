@@ -314,6 +314,16 @@ class PlanComptableBootstrapService
             ['paiement_commission_logistique_direct', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_commission_logistique_direct', 'tresorerie', 'cheque', '521000', 'BQ'],
 
+            // Fiche réaffectée à une autre agence (ADR 0020) : reste dû et charge déplacés.
+            ['fiche_reaffectee_sortie', 'dette_tiers_livreur', null, '467120', 'OD'],
+            ['fiche_reaffectee_sortie', 'charge_commission_livreur', null, '622200', 'OD'],
+            ['fiche_reaffectee_sortie', 'dette_tiers_proprietaire', null, '467110', 'OD'],
+            ['fiche_reaffectee_sortie', 'charge_commission_proprietaire', null, '622100', 'OD'],
+            ['fiche_reaffectee_entree', 'dette_tiers_livreur', null, '467120', 'OD'],
+            ['fiche_reaffectee_entree', 'charge_commission_livreur', null, '622200', 'OD'],
+            ['fiche_reaffectee_entree', 'dette_tiers_proprietaire', null, '467110', 'OD'],
+            ['fiche_reaffectee_entree', 'charge_commission_proprietaire', null, '622100', 'OD'],
+
             // Régularisation de clôture (provision, reprise automatique à la validation réelle)
             ['regularisation_cloture_fiche', 'charge_commission_proprietaire', null, '622100', 'OD'],
             ['regularisation_cloture_fiche', 'dette_tiers_provisoire_proprietaire', null, '467150', 'OD'],

@@ -3,6 +3,7 @@ import {
     updateSurfacePalette,
     usePreset,
 } from '@primeuix/styled';
+import { definePreset } from '@primeuix/themes';
 import Aura from '@primeuix/themes/aura';
 import Lara from '@primeuix/themes/lara';
 import Material from '@primeuix/themes/material';
@@ -46,12 +47,30 @@ export type PrimeVueSurfaceName =
     | 'neutral'
     | 'gray';
 
+// Densité des tableaux alignée sur Apollo (mesuré à sa base de 14 px : cellules 10,5 × 14 px,
+// boutons de pagination 35 px). Les tokens des presets sont en rem et notre base est à 16 px :
+// sans cette surcharge, tout serait 14 % plus grand. Mêmes valeurs dans les 4 presets.
+const DENSITE_APOLLO = {
+    components: {
+        datatable: {
+            headerCell: { padding: '0.65625rem 0.875rem' },
+            bodyCell: { padding: '0.65625rem 0.875rem' },
+            footerCell: { padding: '0.65625rem 0.875rem' },
+        },
+        paginator: {
+            navButton: { width: '2.1875rem', height: '2.1875rem' },
+        },
+    },
+};
+
+const AURA = definePreset(Aura, DENSITE_APOLLO);
+
 const PRIMEVUE_PRESETS: Record<PrimeVueThemeName, Record<string, unknown>> = {
-    aura: Aura,
-    lara: Lara,
-    material: Material,
-    nora: Nora,
-    starter: Aura,
+    aura: AURA,
+    lara: definePreset(Lara, DENSITE_APOLLO),
+    material: definePreset(Material, DENSITE_APOLLO),
+    nora: definePreset(Nora, DENSITE_APOLLO),
+    starter: AURA,
 };
 
 const PRIMARY_PALETTES: Record<PrimeVuePrimaryName, Record<number, string>> = {

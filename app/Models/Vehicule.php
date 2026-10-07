@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CategorieVehicule;
+use App\Services\Commission\FicheSiteResponsableService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -45,6 +46,14 @@ class Vehicule extends Model
     {
         static::saving(function (self $vehicule) {
             $vehicule->immatriculation_normalisee = self::normaliserImmatriculation($vehicule->immatriculation);
+        });
+
+        // Une commission non payée se paie au site actuel du véhicule (06/10/2026) : toute
+        // réaffectation doit passer par le modèle (jamais un update() de requête) pour arriver ici.
+        static::updated(function (self $vehicule) {
+            if ($vehicule->wasChanged('site_id')) {
+                app(FicheSiteResponsableService::class)->resynchroniserPourVehicule($vehicule->organization_id, $vehicule->id);
+            }
         });
     }
 

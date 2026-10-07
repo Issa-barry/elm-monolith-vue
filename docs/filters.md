@@ -408,6 +408,7 @@ Listes activées :
 
 | Scope | Page | Critères enregistrables | Partage |
 |---|---|---|---|
+| `precommandes` | `/backoffice/precommandes` | `statuts`, `en_retard`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `site_ids`, `site_scope` | `ventes.update` |
 | `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
 | `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
 | `tresorerie-supports` | `/backoffice/comptabilite/tresorerie/supports` | `statut`, `type`, `nature`, `agent_id`, `site_ids`, `site_scope` | `tresorerie.gerer_soldes_ouverture` |
@@ -448,6 +449,10 @@ défaut **par utilisateur** et par scope — choisir une vue partagée comme dé
 Ventes, Factures et Véhicules utilisent les scopes `ventes`, `factures` et `vehicules`.
 Le partage exige `ventes.update` (ventes/factures) ou `vehicules.update`. La vue des ventes
 ne s'applique pas à Distribution, même si ces pages partagent un contrôleur.
+Précommandes (06/10/2026) a son propre scope `precommandes` (même contrôleur, choisi par nom de
+route) : une vue de ventes ne s'y applique jamais, ni l'inverse. Ses compteurs (En cours, À
+préparer, En livraison, En retard) restent calculés hors filtres Statut / En retard ; un clic sur
+une carte repart des filtres effectifs renvoyés par le serveur (vue comprise) et envoie `all=1`.
 Les filtres des véhicules sont appliqués côté serveur par `VehiculeIndexFilters` ; les compteurs
 restent globaux. Le type et l'agence du propriétaire sont enregistrés par identifiant, tandis
 que `site_ids[]` désigne l'agence du véhicule. Sur Factures, une vue sans période conserve le

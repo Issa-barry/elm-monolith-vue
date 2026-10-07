@@ -265,7 +265,7 @@ function approuver(livreur: Livreur) {
                 striped-rows
                 :rows="30"
                 :paginator="livreursFiltres.length > 30"
-                class="rounded-xl border bg-card shadow-sm"
+                class="rounded-xl border bg-card text-sm shadow-sm"
                 :pt="{ bodyRow: bodyRowPt }"
                 @row-click="onRowClick"
             >

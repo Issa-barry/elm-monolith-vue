@@ -1,0 +1,141 @@
+/* Fiche et dialogues logistiques : styles limités à ces composants. */
+@media (max-width: 639px) {
+    .logistique-detail [data-mobile-cards],
+    .logistique-dialog [data-mobile-cards],
+    .logistique-detail [data-mobile-cards] tbody,
+    .logistique-dialog [data-mobile-cards] tbody {
+        display: block;
+        min-width: 0;
+    }
+
+    .logistique-detail [data-mobile-cards] colgroup,
+    .logistique-dialog [data-mobile-cards] colgroup,
+    .logistique-detail [data-mobile-cards] thead,
+    .logistique-dialog [data-mobile-cards] thead {
+        display: none;
+    }
+
+    .logistique-detail [data-mobile-cards] tbody tr,
+    .logistique-dialog [data-mobile-cards] tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        padding: 1rem;
+        overflow-wrap: anywhere;
+    }
+
+    .logistique-dialog [data-mobile-cards] tbody tr {
+        margin-bottom: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+    }
+
+    .logistique-detail [data-mobile-cards] td,
+    .logistique-dialog [data-mobile-cards] td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        text-align: left;
+    }
+
+    .logistique-detail [data-mobile-cards] tbody td::before,
+    .logistique-dialog [data-mobile-cards] tbody td::before {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--muted-foreground);
+        font-size: 0.75rem;
+        font-weight: 400;
+        content: attr(data-label);
+    }
+
+    .logistique-detail [data-mobile-cards] tbody td:first-child,
+    .logistique-dialog [data-mobile-cards] tbody td:first-child,
+    .logistique-dialog [data-mobile-cards] td[data-wide] {
+        grid-column: 1 / -1;
+    }
+
+    .logistique-detail [data-mobile-cards] tbody td:first-child::before,
+    .logistique-dialog [data-mobile-cards] tbody td:first-child::before {
+        display: none;
+    }
+
+    .logistique-detail [data-mobile-cards] tfoot,
+    .logistique-detail [data-mobile-cards] tfoot tr {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.5rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .logistique-detail [data-mobile-cards] tfoot {
+        display: block;
+    }
+
+    .logistique-detail [data-mobile-cards] td > .flex {
+        min-width: 0;
+    }
+
+    .logistique-dialog.p-dialog {
+        position: fixed;
+        bottom: 0;
+        width: 100% !important;
+        max-width: 100%;
+        max-height: 90dvh;
+        margin: 0;
+        border-radius: 1.25rem 1.25rem 0 0;
+    }
+
+    .logistique-dialog .p-dialog-header {
+        gap: 0.5rem;
+        padding: 1rem;
+        overflow-wrap: anywhere;
+    }
+
+    .logistique-dialog .p-dialog-header-actions {
+        flex-shrink: 0;
+    }
+
+    .logistique-dialog .p-dialog-header-actions button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .logistique-dialog .p-dialog-content {
+        min-height: 0;
+        padding: 0 1rem 1rem;
+        overflow-wrap: anywhere;
+        overflow-x: hidden;
+    }
+
+    .logistique-dialog .p-dialog-footer {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem max(1rem, env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border);
+    }
+
+    .logistique-dialog .p-dialog-footer button {
+        width: 100%;
+        min-height: 44px;
+        height: auto;
+        padding-block: 0.75rem;
+        white-space: normal;
+    }
+
+    .logistique-dialog .p-inputnumber,
+    .logistique-dialog .p-select {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .logistique-dialog input,
+    .logistique-dialog .p-select {
+        min-height: 44px;
+    }
+
+    .logistique-dialog .p-select-label {
+        min-width: 0;
+    }
+}

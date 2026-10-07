@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -52,19 +53,23 @@ function fmt(n: number | '') {
             }
         "
     >
-        <DialogContent class="sm:max-w-md">
-            <DialogHeader>
+        <DialogContent
+            class="flex max-h-[90dvh] flex-col max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-md max-sm:[&>button]:flex max-sm:[&>button]:size-11 max-sm:[&>button]:items-center max-sm:[&>button]:justify-center"
+        >
+            <DialogHeader class="shrink-0 pr-10 text-left">
                 <DialogTitle class="flex items-center gap-2">
                     <Send class="h-4 w-4" />
                     Confirmer la soumission
                 </DialogTitle>
             </DialogHeader>
 
-            <div class="py-2">
-                <p class="mb-4 text-sm text-muted-foreground">
+            <div
+                class="min-h-0 overflow-y-auto py-2 [overflow-wrap:anywhere] [&_dd]:min-w-0"
+            >
+                <DialogDescription class="mb-4 text-sm text-muted-foreground">
                     Vérifiez les informations avant de soumettre pour
                     validation.
-                </p>
+                </DialogDescription>
 
                 <dl class="divide-y rounded-lg border text-sm">
                     <div class="grid grid-cols-3 gap-1 px-3 py-2.5">
@@ -130,15 +135,20 @@ function fmt(n: number | '') {
                 </dl>
             </div>
 
-            <DialogFooter>
+            <DialogFooter class="shrink-0 flex-col gap-2 sm:flex-row">
                 <Button
                     variant="outline"
+                    class="max-sm:min-h-11"
                     :disabled="processing"
                     @click="emit('cancel')"
                 >
                     Retour à l'édition
                 </Button>
-                <Button :disabled="processing" @click="emit('confirm')">
+                <Button
+                    class="max-sm:min-h-11"
+                    :disabled="processing"
+                    @click="emit('confirm')"
+                >
                     <Send class="mr-1.5 h-3.5 w-3.5" />
                     <span v-if="processing">Envoi en cours…</span>
                     <span v-else>Confirmer l'envoi</span>

@@ -24,7 +24,8 @@ class CommandeVenteMineResource extends JsonResource
             'id' => $this->id,
             'reference' => $this->reference ?? '—',
             'statut' => $this->statut?->value,
-            'statut_label' => $this->statut_label,
+            // Précommande retirée : « Retirée », jamais le statut financier « À encaisser ».
+            'statut_label' => $this->estPrecommandeRetiree() ? CommandeVente::LIBELLE_RETIREE : $this->statut_label,
             'date' => $date?->toDateString(),
             'total_commande' => (float) $this->total_commande,
             'vehicule' => $this->whenLoaded('vehicule', fn () => $this->vehicule ? [

@@ -76,15 +76,13 @@ body {
 .header td { border: none; vertical-align: top; padding: 0; }
 .header-left { width: 70pt; }
 .logo-box {
-    border: 0.75pt solid #666;
-    padding: 4pt 5pt;
+    padding: 4pt 0;
     text-align: center;
     font-size: 7pt;
     color: #444;
     line-height: 1.4;
 }
-.logo-box .logo-label { display: block; font-size: 6pt; color: #888; }
-.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; margin-top: 2pt; }
+.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; }
 
 .header-center { text-align: center; padding-top: 2pt; }
 .doc-type {
@@ -163,15 +161,14 @@ tbody td.center { text-align: center; }
 
 /* Colonnes supplémentaires propres à l'export Commission vente. Les largeurs
    historiques des exports Logistique/Propriétaire restent inchangées. */
-.validation-columns .col-ben { width: 19%; }
-.validation-columns .col-veh { width: 14%; }
-.validation-columns .col-gen { width: 9%; }
-.validation-columns .col-cum { width: 9%; }
+.validation-columns .col-ben { width: 22%; }
+.validation-columns .col-veh { width: 17%; }
+.validation-columns .col-cum { width: 10%; }
 .validation-columns .col-fra { width: 8%; }
-.validation-columns .col-net { width: 9%; }
+.validation-columns .col-net { width: 10%; }
 .validation-columns .col-pay { width: 9%; }
-.validation-columns .col-res { width: 9%; }
-.validation-columns .col-sta { width: 8%; }
+.validation-columns .col-res { width: 10%; }
+.validation-columns .col-sta { width: 7%; }
 .validation-columns .col-sig { width: 7%; }
 
 /* ── Ligne de totaux ──────────────────────────────────────────────── */
@@ -211,7 +208,6 @@ tbody td.center { text-align: center; }
             <tr>
                 <td class="header-left">
                     <div class="logo-box">
-                        <span class="logo-label">LOGO</span>
                         <span class="logo-name">{{ strtoupper($org?->name ?? 'ELM') }}</span>
                     </div>
                 </td>
@@ -260,7 +256,6 @@ tbody td.center { text-align: center; }
                 @endunless
                 <th class="col-veh">Véhicule(s)</th>
                 @if($show_validation_columns ?? false)
-                <th class="col-gen right">Généré (GNF)</th>
                 <th class="col-cum right">Brut validé (GNF)</th>
                 @else
                 <th class="col-cum right">Total cumulé (GNF)</th>
@@ -299,9 +294,6 @@ tbody td.center { text-align: center; }
                     —
                     @endforelse
                 </td>
-                @if($show_validation_columns ?? false)
-                <td class="col-gen right">{{ number_format((float) $row['total_genere'], 0, ',', "\xc2\xa0") }}</td>
-                @endif
                 <td class="col-cum right">{{ number_format((float) $row['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-fra right">{{ $row['frais'] > 0 ? number_format((float) $row['frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
                 @if($show_validation_columns ?? false)
@@ -314,16 +306,13 @@ tbody td.center { text-align: center; }
             </tr>
             @empty
             <tr>
-                <td colspan="{{ ($show_validation_columns ?? false) ? 10 : 9 }}" style="text-align:center; padding:12pt; color:#555;">Aucun résultat pour ces critères.</td>
+                <td colspan="9" style="text-align:center; padding:12pt; color:#555;">Aucun résultat pour ces critères.</td>
             </tr>
             @endforelse
 
             @if(count($siteData['rows']) > 0)
             <tr class="total-row">
                 <td colspan="{{ ($show_validation_columns ?? false) ? 2 : 3 }}" style="text-align:right; padding-right:5pt; font-size:8.5pt;">TOTAUX :</td>
-                @if($show_validation_columns ?? false)
-                <td class="right">{{ number_format((float) $siteData['totaux']['total_genere'], 0, ',', "\xc2\xa0") }}</td>
-                @endif
                 <td class="right">{{ number_format((float) $siteData['totaux']['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="right">{{ $siteData['totaux']['total_frais'] > 0 ? number_format((float) $siteData['totaux']['total_frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
                 @if($show_validation_columns ?? false)
