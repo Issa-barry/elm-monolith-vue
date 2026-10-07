@@ -59,23 +59,14 @@ class CommissionLogistiqueService
     }
 
     /**
-     * Détermine l'agence responsable du financement de la commission logistique
-     * d'un transfert.
-     *
-     * ⚠️ DÉCISION MÉTIER NON TRANCHÉE : un transfert relie deux sites
-     * (site_source_id, site_destination_id) et rien dans les règles actuelles
-     * du projet ne désigne lequel des deux doit financer la commission de
-     * l'équipe qui a effectué le transfert. Cette méthode isole ce choix en un
-     * point unique pour qu'il soit trivial à changer une fois la règle
-     * fonctionnelle confirmée — ne pas dupliquer cette décision ailleurs.
-     *
-     * Choix par défaut retenu ici (à confirmer) : le site source, l'agence de
-     * rattachement du véhicule/équipe qui exécute le transfert et à qui
-     * l'agence de départ doit reverser la commission de sa propre équipe.
+     * Agence qui paie la commission logistique d'un transfert : le site ACTUEL du véhicule
+     * qui l'a exécuté (décision du 06/10/2026, même règle que les commissions de vente, cf.
+     * CommissionEnveloppe::siteResponsableId()) — ni le site source ni le site destination.
+     * Repli sur le site source si le véhicule n'est rattaché à aucun site.
      */
     public static function resolveSiteResponsable(TransfertLogistique $transfert): ?string
     {
-        return $transfert->site_source_id;
+        return $transfert->vehicule?->site_id ?? $transfert->site_source_id;
     }
 
     // ── Private ───────────────────────────────────────────────────────────────

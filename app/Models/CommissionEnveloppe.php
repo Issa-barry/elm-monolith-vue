@@ -74,9 +74,12 @@ class CommissionEnveloppe extends Model
     }
 
     /**
-     * Agence à laquelle rattacher la commission. Un transfert logistique n'a pas
-     * de colonne site_id : son agence est l'agence source (même règle que
-     * CommissionLogistiqueService::resolveSiteResponsable()).
+     * Agence qui paie la commission (décision du 06/10/2026) : le site ACTUEL du véhicule de
+     * l'opération, quel que soit le site où la vente ou le transfert a eu lieu — relu à chaque
+     * appel, jamais figé, pour qu'une commission non payée suive le véhicule réaffecté. Sans
+     * véhicule rattaché à un site, repli sur le site de l'opération (agence source pour un
+     * transfert, cf. CommissionLogistiqueService::resolveSiteResponsable()). Même règle en SQL :
+     * CommissionSiteResponsableFilter.
      */
     public function siteResponsableId(): ?string
     {
@@ -86,7 +89,7 @@ class CommissionEnveloppe extends Model
             return CommissionLogistiqueService::resolveSiteResponsable($source);
         }
 
-        return $source?->site_id;
+        return $source?->vehicule?->site_id ?? $source?->site_id;
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────────

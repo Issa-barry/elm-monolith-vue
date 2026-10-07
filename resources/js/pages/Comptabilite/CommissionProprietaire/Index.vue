@@ -309,6 +309,7 @@ function fmtTel(tel: string | null | undefined): string {
                         </th>
                         <th
                             scope="col"
+                            title="Agence qui paie : site actuel du véhicule, quel que soit le site de la vente"
                             class="px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Agence

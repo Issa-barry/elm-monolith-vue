@@ -1446,3 +1446,26 @@ base pour comprendre les commissions non générées qui ont suivi.
 - **Hors périmètre.** Les changements de partage des équipes (fiche véhicule) ne figurent pas
   dans cet historique : ils sont versionnés séparément dans `equipe_livraison_partages_categorie`.
 - Tests : `tests/Feature/Settings/CommissionBaremeHistoriqueTest.php`.
+
+## Agence qui paie une commission livreur/propriétaire : site actuel du véhicule (06/10/2026, ADR 0020)
+
+Voir [ADR 0020](adr/0020-agence-de-paiement-des-commissions-site-du-vehicule.md). Constat en
+production : Diaraye (rattaché à Matoto) vend à Cba, Lambanyi, Matoto, Sonfonia et Tombolia ; ses
+commissions apparaissaient sous l'agence de chaque vente (« Cba » pour le manager de Cba) et sa
+fiche de paiement partait vers le site majoritaire des ventes de la quinzaine.
+
+- **Règle** : l'agence qui paie est le **site actuel du véhicule**, quel que soit le site où la
+  commission a été générée (vente ou transfert logistique). Véhicule sans site → site de la vente
+  (agence source pour un transfert).
+- **Jamais figée** : tant que la fiche n'est pas entièrement payée, elle suit le véhicule réaffecté
+  — même après la période, la validation ou un paiement partiel. Une fiche payée ne bouge plus ;
+  un paiement déjà fait garde son site.
+- **Écrans Livreurs et Propriétaires** : la colonne **Agence**, le filtre Agence et le périmètre
+  d'un non-administrateur (et leurs exports) portent sur cette agence. Un manager voit les
+  commissions des véhicules de son agence, et ne voit plus celles des ventes faites chez lui par
+  un véhicule d'une autre agence. Le site de chaque vente reste visible dans le détail d'un bénéficiaire et
+  dans les sites contributeurs d'un véhicule (écran Propriétaires).
+- **Hors règle** : les commissions de la cible **Site** restent dues au site de la vente.
+- **Rattrapage** : `php artisan commissions:realigner-sites-fiches` liste les fiches non payées
+  calculées avant la règle dont l'agence doit changer ; `--appliquer` les corrige.
+- Tests : `tests/Feature/Comptabilite/CommissionSiteResponsableVehiculeTest.php`.

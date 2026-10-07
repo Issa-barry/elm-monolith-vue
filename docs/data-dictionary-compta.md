@@ -223,13 +223,22 @@ leur solde renvoyé est identique (reflet exact du grand livre, pas un bug de ce
 ### Agence d'une fiche de paiement (besoin du Financement)
 
 Le besoin « livreurs » / « propriétaires » d'une agence dans le Financement se lit sur
-`paiement_fiches.site_id`, fixé au calcul de la période (`PeriodeCalculatorService`) : l'agence qui
-pèse le plus dans les commissions de la fiche. L'agence d'une commission est donnée par
-`CommissionEnveloppe::siteResponsableId()` :
+`paiement_fiches.site_id`. Depuis le 2026-10-06 ([ADR 0020](adr/0020-agence-de-paiement-des-commissions-site-du-vehicule.md)),
+l'agence qui paie une commission est le **site actuel du véhicule** de l'opération, quel que soit le
+site de la vente ou du transfert — `CommissionEnveloppe::siteResponsableId()` :
 
-- source commande de vente → `commandes_ventes.site_id` ;
-- source transfert logistique → **agence source** du transfert (`site_source_id`, même règle que
-  `CommissionLogistiqueService::resolveSiteResponsable()`).
+- vente → `vehicules.site_id` du véhicule de la commande ; repli sur `commandes_ventes.site_id` si le
+  véhicule n'est rattaché à aucun site ;
+- transfert logistique → `vehicules.site_id` du véhicule du transfert ; repli sur l'agence source
+  (`site_source_id`) — `CommissionLogistiqueService::resolveSiteResponsable()`.
+
+`paiement_fiches.site_id` est posé au calcul de la période (`PeriodeCalculatorService`) : site
+majoritaire en montant parmi ces agences (cas d'un livreur passé sur deux véhicules d'agences
+différentes). Il **n'est pas figé** : tant que la fiche n'est pas entièrement payée, tout changement de
+site d'un de ses véhicules la réaligne (`Vehicule::booted()` → `FicheSiteResponsableService`), même
+après la période, sa validation ou un paiement partiel. Les paiements déjà faits gardent leur propre
+`paiement_fiche_paiements.site_id`. Les fiches calculées avant cette règle se réalignent avec
+`php artisan commissions:realigner-sites-fiches` (aperçu ; `--appliquer` pour écrire).
 
 Une fiche sans aucune commission rattachable reste `site_id = null` et remonte dans la ligne
 « Sans agence » (statut « Données incomplètes »). Avant le 2026-09-27, les commissions de transfert

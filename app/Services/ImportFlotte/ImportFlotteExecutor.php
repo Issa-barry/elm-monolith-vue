@@ -133,8 +133,9 @@ class ImportFlotteExecutor
 
             // Seul le site est réécrit pour un véhicule déjà en base (cf. docblock de classe) :
             // toujours réappliqué, comme upsertCapacite() ci-dessous, plutôt que conditionné à un
-            // changement effectif — écrire la même valeur est sans effet.
-            Vehicule::whereKey($vehiculeId)->update(['site_id' => $vData['site_id']]);
+            // changement effectif — écrire la même valeur est sans effet. Mise à jour par le modèle :
+            // un changement de site réaligne les fiches non payées (Vehicule::booted()).
+            Vehicule::whereKey($vehiculeId)->first()?->update(['site_id' => $vData['site_id']]);
         } else {
             $vehicule = Vehicule::create([
                 'organization_id' => $orgId,
