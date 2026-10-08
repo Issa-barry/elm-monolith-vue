@@ -7,6 +7,7 @@ use App\Models\CompteMapping;
 use App\Models\FactureFournisseur;
 use App\Models\PieceComptable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Comptabilisation d'une facture fournisseur validée (ADR 0022), par le moteur commun
@@ -26,7 +27,24 @@ class FactureFournisseurComptabilisationService
 {
     public function __construct(private readonly EcritureComptableService $ecritures) {}
 
+    /**
+     * Le statut est relu SOUS VERROU de la facture, dans la même transaction que la pièce : une
+     * relance (fiche, rattrapage) lancée sur une facture lue « validée » juste avant son annulation
+     * ne peut pas passer une écriture après coup (l'annulation verrouille la même ligne).
+     */
     public function comptabiliserFactureValidee(FactureFournisseur $facture): PieceComptable
+    {
+        return DB::transaction(function () use ($facture) {
+            $facture = FactureFournisseur::whereKey($facture->id)->lockForUpdate()->firstOrFail();
+            if (! $facture->isConstatee()) {
+                throw new \RuntimeException("Facture {$facture->reference} non validée ou annulée : aucune écriture à passer.");
+            }
+
+            return $this->passerPiece($facture);
+        });
+    }
+
+    private function passerPiece(FactureFournisseur $facture): PieceComptable
     {
         $facture->loadMissing(['lignes.variante.produit.produitType', 'fournisseur']);
 

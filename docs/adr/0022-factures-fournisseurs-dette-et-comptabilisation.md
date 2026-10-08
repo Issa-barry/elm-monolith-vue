@@ -31,6 +31,10 @@ servi.
    `cle_numero_unique` (= numéro tant que la facture n'est pas annulée, NULL une fois annulée) et
    index unique (organisation, fournisseur, clé). Une saisie simultanée du même numéro est refusée
    par la base et rendue comme une erreur de saisie ; un numéro annulé peut être ressaisi.
+3bis. **Annulation atomique** : statut « annulée » et contrepassation de la pièce dans la même
+   transaction — si la contrepassation échoue, l'annulation est refusée (jamais une facture annulée
+   avec une écriture active). Toute comptabilisation relit le statut sous verrou de la facture : une
+   relance tardive ne passe jamais d'écriture sur une facture annulée.
 3. **Statuts** : brouillon → validée → partiellement payée / payée (lot 4) ; annulée (brouillon, ou
    validée sans paiement, avec contrepassation).
 4. **La dette naît à la validation**, jamais à la réception ni au brouillon. Elle est portée par la

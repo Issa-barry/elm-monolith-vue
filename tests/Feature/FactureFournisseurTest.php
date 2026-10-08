@@ -23,6 +23,8 @@ use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Achats\FactureFournisseurService;
+use App\Services\Comptabilite\EcritureComptableService;
+use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -472,6 +474,67 @@ class FactureFournisseurTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 1)], ['numero_facture_fournisseur' => 'F-2026-AUTRE']))
             ->assertSessionHasErrors('lignes.0.qte');
+    }
+
+    public function test_echec_de_la_contrepassation_l_annulation_est_entierement_refusee(): void
+    {
+        $this->mapperCompteAchat();
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture));
+        $origine = $this->piece($facture);
+
+        // Contrepassation en panne (ex. période, base) : l'annulation doit être entièrement annulée.
+        $this->app->instance(FactureFournisseurComptabilisationService::class, new class(app(EcritureComptableService::class)) extends FactureFournisseurComptabilisationService
+        {
+            public function annuler(FactureFournisseur $facture, string $motif, ?string $userId): ?PieceComptable
+            {
+                throw new \RuntimeException('contrepassation en panne');
+            }
+        });
+
+        $this->actingAs($this->user)
+            ->patch(route('achats.factures.annuler', $facture), ['motif_annulation' => 'Erreur'])
+            ->assertSessionHasErrors('motif_annulation');
+
+        $facture->refresh();
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->statut);
+        $this->assertSame('F-2026-001', $facture->cle_numero_unique);
+        $this->assertNull($facture->annulee_at);
+        $this->assertSame(10_000.0, $facture->resteDu());
+        $this->assertTrue($origine->fresh()->isValidee());
+        $this->assertSame(0, PieceComptable::where('piece_origine_id', $origine->id)->count());
+    }
+
+    public function test_annulation_d_une_facture_validee_en_attente_de_comptabilisation(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture));
+        $this->assertNull($this->piece($facture));
+
+        $this->actingAs($this->user)
+            ->patch(route('achats.factures.annuler', $facture), ['motif_annulation' => 'Erreur'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(StatutFactureFournisseur::ANNULEE, $facture->fresh()->statut);
+        $this->assertSame(0, PieceComptable::where('source_id', $facture->id)->count());
+    }
+
+    public function test_une_relance_tardive_ne_comptabilise_jamais_une_facture_annulee(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture));
+        $luAvantAnnulation = $facture->fresh();
+
+        $this->actingAs($this->user)->patch(route('achats.factures.annuler', $facture), ['motif_annulation' => 'Erreur']);
+        $this->mapperCompteAchat();
+
+        // Relance partie sur une lecture « validée » antérieure à l'annulation : aucune écriture.
+        $this->assertFalse(app(FactureFournisseurService::class)->comptabiliser($luAvantAnnulation));
+        $this->artisan('comptabilite:rattraper', ['--organization' => [$this->org->id], '--type' => ['facture-fournisseur']])->assertSuccessful();
+        $this->assertSame(0, PieceComptable::where('source_id', $facture->id)->count());
     }
 
     public function test_unicite_du_numero_garantie_en_base(): void

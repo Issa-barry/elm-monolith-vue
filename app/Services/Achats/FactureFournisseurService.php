@@ -234,47 +234,51 @@ class FactureFournisseurService
     }
 
     /**
-     * Annule un brouillon, ou une facture validée tant qu'aucun paiement n'a eu lieu (sa pièce
-     * comptable est alors contrepassée). Les quantités redeviennent facturables.
+     * Annule un brouillon, ou une facture validée tant qu'aucun paiement n'a eu lieu. ATOMIQUE :
+     * la contrepassation de la pièce comptable (si elle existe) se fait dans la MÊME transaction
+     * que le changement de statut — si elle échoue, rien n'est annulé (jamais une facture annulée
+     * dont l'écriture resterait active). Une facture validée encore en attente de comptabilisation
+     * s'annule sans pièce à contrepasser. Les quantités et le numéro redeviennent disponibles.
      */
     public function annuler(FactureFournisseur $facture, User $user, string $motif): FactureFournisseur
     {
-        $etaitValidee = false;
+        try {
+            return DB::transaction(function () use ($facture, $user, $motif) {
+                $facture = FactureFournisseur::whereKey($facture->id)->lockForUpdate()->firstOrFail();
 
-        $facture = DB::transaction(function () use ($facture, $user, $motif, &$etaitValidee) {
-            $facture = FactureFournisseur::whereKey($facture->id)->lockForUpdate()->firstOrFail();
+                if ($facture->statut === StatutFactureFournisseur::ANNULEE) {
+                    throw ValidationException::withMessages(['motif_annulation' => 'Cette facture est déjà annulée.']);
+                }
+                if ((float) $facture->montant_paye > 0) {
+                    throw ValidationException::withMessages(['motif_annulation' => 'Une facture déjà payée, même en partie, ne peut pas être annulée.']);
+                }
+                if (! $this->perimetre->couvreSite($user, $facture->site_id)) {
+                    throw ValidationException::withMessages(['motif_annulation' => "L'agence de cette facture n'est pas dans votre périmètre d'achat."]);
+                }
 
-            if ($facture->statut === StatutFactureFournisseur::ANNULEE) {
-                throw ValidationException::withMessages(['motif_annulation' => 'Cette facture est déjà annulée.']);
-            }
-            if ((float) $facture->montant_paye > 0) {
-                throw ValidationException::withMessages(['motif_annulation' => 'Une facture déjà payée, même en partie, ne peut pas être annulée.']);
-            }
-            if (! $this->perimetre->couvreSite($user, $facture->site_id)) {
-                throw ValidationException::withMessages(['motif_annulation' => "L'agence de cette facture n'est pas dans votre périmètre d'achat."]);
-            }
+                $etaitValidee = $facture->statut === StatutFactureFournisseur::VALIDEE;
+                $facture->update([
+                    'statut' => StatutFactureFournisseur::ANNULEE,
+                    'cle_numero_unique' => null,
+                    'annulee_at' => now(),
+                    'annulee_par' => $user->id,
+                    'motif_annulation' => $motif,
+                ]);
 
-            $etaitValidee = $facture->statut === StatutFactureFournisseur::VALIDEE;
-            $facture->update([
-                'statut' => StatutFactureFournisseur::ANNULEE,
-                'cle_numero_unique' => null,
-                'annulee_at' => now(),
-                'annulee_par' => $user->id,
-                'motif_annulation' => $motif,
+                if ($etaitValidee) {
+                    $this->comptabilisation->annuler($facture, $motif, $user->id);
+                }
+
+                return $facture;
+            });
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Annulation facture fournisseur refusée : contrepassation impossible', ['facture_id' => $facture->id, 'error' => $e->getMessage()]);
+            throw ValidationException::withMessages([
+                'motif_annulation' => "La facture n'a pas été annulée : son écriture comptable n'a pas pu être contrepassée ({$e->getMessage()}).",
             ]);
-
-            return $facture;
-        });
-
-        if ($etaitValidee) {
-            try {
-                $this->comptabilisation->annuler($facture, $motif, $user->id);
-            } catch (\Throwable $e) {
-                Log::error('Contrepassation facture fournisseur échouée', ['facture_id' => $facture->id, 'error' => $e->getMessage()]);
-            }
         }
-
-        return $facture;
     }
 
     /**
