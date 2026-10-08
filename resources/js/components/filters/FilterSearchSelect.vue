@@ -5,6 +5,8 @@ import { computed } from 'vue';
 export interface SearchSelectOption {
     value: string | number;
     label: string;
+    // Texte de recherche supplémentaire (ex. téléphone sans espaces), jamais affiché.
+    recherche?: string;
 }
 
 const props = withDefaults(
@@ -48,6 +50,7 @@ function choisir(nouvelle: string | number | null | undefined) {
         :disabled="disabled"
         :title="libelleChoisi"
         filter
+        :filter-fields="['label', 'recherche']"
         auto-filter-focus
         filter-placeholder="Rechercher…"
         empty-filter-message="Aucun résultat"

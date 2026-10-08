@@ -21,7 +21,7 @@ class ImprimerDepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $org = Organization::find($orgId);
         $printedBy = $user->name;

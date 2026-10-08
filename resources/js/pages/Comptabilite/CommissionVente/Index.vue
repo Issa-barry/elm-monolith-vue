@@ -527,12 +527,13 @@ function fmtTel(tel: string | null | undefined): string {
                 </div>
             </template>
 
-            <table class="w-full min-w-[1620px] text-sm">
+            <div class="commission-responsive">
+            <table data-testid="livreur-commissions-table" class="commission-table w-full text-sm">
                 <thead>
                     <tr class="border-b bg-muted/50">
                         <th
                             scope="col"
-                            class="sticky left-0 z-20 w-10 bg-muted px-3 py-3"
+                            class="commission-selection w-10 px-3 py-3"
                         >
                             <Checkbox
                                 :model-value="allSelected"
@@ -540,83 +541,38 @@ function fmtTel(tel: string | null | undefined): string {
                                 aria-label="Tout sélectionner"
                                 @update:model-value="toggleAll"
                             />
+                            <span class="commission-select-label">Tout sélectionner</span>
                         </th>
                         <th
                             scope="col"
-                            class="sticky left-10 z-20 w-[240px] min-w-[240px] border-r bg-muted px-4 py-3 text-left font-semibold text-foreground/70"
+                            class="commission-identity px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Livreur
                         </th>
                         <th
                             scope="col"
-                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                            class="commission-context px-4 py-3 text-left font-semibold text-foreground/70"
                         >
-                            Véhicule
+                            Véhicule / Agence
                         </th>
                         <th
                             scope="col"
-                            title="Agence qui paie : site actuel du véhicule, quel que soit le site de la vente"
-                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                            class="commission-calculation px-4 py-3 text-right font-semibold text-foreground/70"
                         >
-                            Agence
+                            Commissions
                         </th>
                         <th
                             scope="col"
-                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                            class="commission-payment px-4 py-3 text-right font-semibold text-foreground/70"
                         >
-                            Processus
+                            Paiements
                         </th>
                         <th
                             scope="col"
-                            title="Montant calculé avant validation de la direction"
-                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                            class="commission-actions px-4 py-3 text-left font-semibold text-foreground/70"
                         >
-                            Généré
+                            Statut / Actions
                         </th>
-                        <th
-                            scope="col"
-                            title="Montant brut retenu, avant déduction des dépenses"
-                            class="px-4 py-3 text-right font-semibold whitespace-nowrap text-foreground/70"
-                        >
-                            Brut
-                        </th>
-                        <th
-                            scope="col"
-                            title="Dépenses déduites du montant retenu"
-                            class="px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Dépenses
-                        </th>
-                        <th
-                            scope="col"
-                            title="Montant actuellement retenu après dépenses et ajustements — indépendant de la validation de la période"
-                            class="px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Net à payer
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Déjà payé
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Reste à payer
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-4 py-3 text-left font-semibold text-foreground/70"
-                        >
-                            Statut
-                        </th>
-                        <th
-                            scope="col"
-                            aria-label="Actions"
-                            class="sticky right-0 z-20 w-10 border-l bg-muted px-3 py-3"
-                        />
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -631,7 +587,7 @@ function fmtTel(tel: string | null | undefined): string {
                         class="group even:bg-muted/20"
                     >
                         <td
-                            class="sticky left-0 z-10 w-10 bg-card px-3 py-3 group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
+                            class="commission-selection px-3 py-4 align-top"
                             @click.stop
                         >
                             <Checkbox
@@ -642,14 +598,14 @@ function fmtTel(tel: string | null | undefined): string {
                             />
                         </td>
                         <td
-                            class="sticky left-10 z-10 w-[240px] min-w-[240px] border-r bg-card px-4 py-3 group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
+                            class="commission-identity px-4 py-4 align-top"
                         >
                             <div class="flex items-center gap-2.5">
                                 <User
                                     class="h-4 w-4 shrink-0 text-muted-foreground"
                                 />
-                                <div>
-                                    <p class="font-semibold">
+                                <div class="min-w-0">
+                                    <p class="font-semibold break-words">
                                         {{ b.beneficiaire_nom }}
                                     </p>
                                     <p
@@ -661,25 +617,25 @@ function fmtTel(tel: string | null | undefined): string {
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-3" @click.stop>
+                        <td class="commission-context space-y-2 px-4 py-4 align-top" @click.stop>
                             <div
                                 v-if="b.vehicules.length"
                                 class="flex items-start gap-1.5 text-sm text-muted-foreground"
                             >
                                 <Truck class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                <div>
+                                <div class="min-w-0 space-y-1.5">
                                     <div
                                         v-for="(v, idx) in b.vehicules"
                                         :key="idx"
                                     >
                                         <button
                                             type="button"
-                                            class="flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                                            class="flex max-w-full items-start gap-1 text-left font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-primary"
                                             @click="openVehicule(v)"
                                         >
-                                            {{ v.nom }}
+                                            <span class="min-w-0 break-words">{{ v.nom }}</span>
                                             <ExternalLink
-                                                class="h-3 w-3 shrink-0"
+                                                class="mt-1 h-3 w-3 shrink-0"
                                             />
                                         </button>
                                         <span
@@ -693,20 +649,17 @@ function fmtTel(tel: string | null | undefined): string {
                             <span v-else class="text-xs text-muted-foreground"
                                 >—</span
                             >
-                        </td>
-                        <td class="px-4 py-3 text-sm">
                             <div
                                 v-if="b.agence"
-                                class="flex items-center gap-1.5 text-muted-foreground"
+                                class="flex items-start gap-1.5 text-xs text-muted-foreground"
+                                title="Agence qui paie : site actuel du véhicule"
                             >
-                                <Building2 class="h-3.5 w-3.5 shrink-0" />
-                                <span>{{ b.agence }}</span>
+                                <Building2 class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span class="min-w-0 break-words">{{ b.agence }}</span>
                             </div>
                             <span v-else class="text-xs text-muted-foreground"
                                 >—</span
                             >
-                        </td>
-                        <td class="px-4 py-3" @click.stop>
                             <div
                                 v-if="b.processus_labels.length"
                                 class="flex flex-wrap gap-1"
@@ -714,7 +667,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 <span
                                     v-for="label in b.processus_labels"
                                     :key="label"
-                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
+                                    class="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
                                 >
                                     {{ label }}
                                 </span>
@@ -723,42 +676,41 @@ function fmtTel(tel: string | null | undefined): string {
                                 >—</span
                             >
                         </td>
-                        <td
-                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                        >
-                            {{ fmt(b.total_genere ?? b.total_brut_cumule) }}
+                        <td class="commission-calculation px-4 py-4 align-top">
+                            <dl class="commission-amounts">
+                                <div title="Montant calculé avant validation de la direction">
+                                    <dt>Généré</dt>
+                                    <dd>{{ fmt(b.total_genere ?? b.total_brut_cumule) }}</dd>
+                                </div>
+                                <div title="Montant brut retenu, avant déduction des dépenses">
+                                    <dt>Brut</dt>
+                                    <dd>{{ fmt(b.total_brut_cumule) }}</dd>
+                                </div>
+                                <div title="Dépenses déduites du montant retenu">
+                                    <dt>Dépenses</dt>
+                                    <dd class="text-red-600 dark:text-red-400">{{ b.total_frais > 0 ? '-' + fmt(b.total_frais) : '—' }}</dd>
+                                </div>
+                            </dl>
                         </td>
-                        <td
-                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                        >
-                            {{ fmt(b.total_brut_cumule) }}
+                        <td class="commission-payment px-4 py-4 align-top">
+                            <dl class="commission-amounts">
+                                <div title="Montant actuellement retenu après dépenses et ajustements — indépendant de la validation de la période">
+                                    <dt>Net à payer</dt>
+                                    <dd>{{ fmt(b.total_net_cumule) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>Déjà payé</dt>
+                                    <dd>{{ fmt(b.total_verse) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>Reste à payer</dt>
+                                    <dd class="font-bold text-foreground">{{ fmt(b.solde_restant) }}</dd>
+                                </div>
+                            </dl>
                         </td>
-                        <td
-                            class="px-4 py-3 text-right whitespace-nowrap text-red-600 tabular-nums dark:text-red-400"
-                        >
-                            {{
-                                b.total_frais > 0
-                                    ? '-' + fmt(b.total_frais)
-                                    : '—'
-                            }}
-                        </td>
-                        <td
-                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                        >
-                            {{ fmt(b.total_net_cumule) }}
-                        </td>
-                        <td
-                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                        >
-                            {{ fmt(b.total_verse) }}
-                        </td>
-                        <td
-                            class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums"
-                        >
-                            {{ fmt(b.solde_restant) }}
-                        </td>
-                        <td class="px-4 py-3" @click.stop>
-                            <div class="flex items-center gap-2">
+                        <td class="commission-actions px-4 py-4 align-top" @click.stop>
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div class="flex min-w-0 flex-col items-start gap-2">
                                 <StatusDot
                                     :status="b.display_status"
                                     :label="b.display_label"
@@ -767,7 +719,7 @@ function fmtTel(tel: string | null | undefined): string {
                                     v-if="b.creee_parts.length > 0"
                                     variant="outline"
                                     size="sm"
-                                    class="h-6 px-2 text-xs"
+                                    class="h-9 px-3 text-xs"
                                     @click="validerRow(b)"
                                 >
                                     Valider
@@ -776,25 +728,20 @@ function fmtTel(tel: string | null | undefined): string {
                                     v-else-if="peutPayer(b)"
                                     variant="outline"
                                     size="sm"
-                                    class="h-6 px-2 text-xs"
+                                    class="h-9 px-3 text-xs"
                                     @click="openPaiement(b)"
                                 >
                                     <HandCoins class="mr-1 h-3.5 w-3.5" />
                                     Payer
                                 </Button>
-                            </div>
-                        </td>
-                        <td
-                            class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right group-hover:bg-muted/50 group-focus-visible:bg-muted/50"
-                            @click.stop
-                        >
+                                </div>
                             <DropdownMenu>
                                 <DropdownMenuTrigger as-child>
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         :aria-label="`Actions pour ${b.beneficiaire_nom}`"
-                                        class="h-7 w-7"
+                                        class="h-9 w-9 shrink-0"
                                     >
                                         <MoreHorizontal class="h-4 w-4" />
                                     </Button>
@@ -858,10 +805,12 @@ function fmtTel(tel: string | null | undefined): string {
                                     </template>
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                            </div>
                         </td>
                     </ClickableTableRow>
                 </tbody>
             </table>
+            </div>
         </CommissionIndexLayout>
     </AppLayout>
 
@@ -982,3 +931,142 @@ function fmtTel(tel: string | null | undefined): string {
         </template>
     </Dialog>
 </template>
+
+<style scoped>
+.commission-responsive {
+    container-type: inline-size;
+}
+
+.commission-table {
+    table-layout: fixed;
+}
+
+.commission-selection {
+    width: 3rem;
+}
+
+.commission-identity,
+.commission-context,
+.commission-calculation {
+    width: 21%;
+}
+
+.commission-payment {
+    width: 22%;
+}
+
+.commission-select-label {
+    display: none;
+}
+
+.commission-amounts {
+    display: grid;
+    gap: 0.625rem;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.commission-amounts > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    column-gap: 0.5rem;
+    row-gap: 0.125rem;
+}
+
+.commission-amounts dt {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+}
+
+.commission-amounts dd {
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.commission-actions :deep(.inline-flex) {
+    white-space: normal;
+}
+
+@container (max-width: 1049px) {
+    .commission-table,
+    .commission-table thead,
+    .commission-table tbody {
+        display: block;
+    }
+
+    .commission-table thead tr {
+        display: block;
+        border: 0;
+    }
+
+    .commission-table thead th {
+        display: none;
+    }
+
+    .commission-table thead .commission-selection {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.75rem;
+        text-align: left;
+    }
+
+    .commission-select-label {
+        display: inline;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .commission-table tbody tr {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .commission-table tbody td {
+        display: block;
+        width: auto;
+        min-width: 0;
+        padding: 0;
+    }
+
+    .commission-table tbody .commission-selection {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+    }
+
+    .commission-table tbody .commission-identity {
+        grid-column: 1 / -1;
+        padding-left: 2rem;
+    }
+
+    .commission-context,
+    .commission-actions {
+        grid-column: 1 / -1;
+    }
+
+    .commission-calculation,
+    .commission-payment,
+    .commission-actions {
+        border-top: 1px solid var(--border);
+        padding-top: 0.75rem !important;
+    }
+
+    .commission-actions :deep(button) {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+    }
+}
+
+@container (max-width: 449px) {
+    .commission-table tbody tr {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+</style>

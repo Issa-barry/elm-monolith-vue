@@ -713,6 +713,18 @@ function confirmDelete(v: Vehicule) {
                             <div class="leading-tight">
                                 <div class="text-muted-foreground">
                                     {{ data.equipe_nom ?? '—' }}
+                                    <span
+                                        v-if="data.equipe_nom"
+                                        class="ml-1 text-xs text-muted-foreground/70"
+                                    >
+                                        ·
+                                        {{ data.equipe_membres.length }}
+                                        {{
+                                            data.equipe_membres.length > 1
+                                                ? 'membres'
+                                                : 'membre'
+                                        }}
+                                    </span>
                                 </div>
                                 <div
                                     v-if="data.livreur_principal_nom"

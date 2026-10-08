@@ -1548,4 +1548,116 @@ class DepenseTest extends TestCase
 
         $this->get("/backoffice/depenses/{$otherDepense->id}/historique")->assertForbidden();
     }
+    // ── Filtre Propriétaire → Véhicules (docs/depenses-filtres.md) ────────────
+
+    /** @return array{0: Proprietaire, 1: Vehicule, 2: Vehicule, 3: Vehicule} */
+    private function proprietaireAvecTroisVehicules(): array
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'prenom' => 'Mamadou',
+            'nom' => 'DIALLO',
+            'telephone' => '+224 623 16 48 33',
+        ]);
+        $vehicules = collect([['FANTA', 'JA473'], ['TOYOTA', 'RC125'], ['TRICYCLE', 'AB456']])
+            ->map(fn ($v) => Vehicule::factory()->create([
+                'organization_id' => $this->org->id,
+                'proprietaire_id' => $proprietaire->id,
+                'nom_vehicule' => $v[0],
+                'immatriculation' => $v[1],
+            ]));
+
+        return [$proprietaire, ...$vehicules->all()];
+    }
+
+    private function depenseSur(string $beneficiaireType, string $beneficiaireId): Depense
+    {
+        $type = DepenseType::factory()->{$beneficiaireType}()->create(['organization_id' => $this->org->id]);
+
+        return Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => $beneficiaireType,
+            'beneficiaire_id' => $beneficiaireId,
+        ]);
+    }
+
+    public function test_index_propose_les_proprietaires_et_tous_leurs_vehicules_meme_sans_depense(): void
+    {
+        [$proprietaire] = $this->proprietaireAvecTroisVehicules();
+        Proprietaire::factory()->create(['organization_id' => $this->org->id]); // sans véhicule
+        Vehicule::factory()->create(); // autre organisation
+
+        $this->get('/backoffice/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('proprietaires', 1)
+                ->where('proprietaires.0.value', $proprietaire->id)
+                ->where('proprietaires.0.label', 'Mamadou DIALLO — +224 623 16 48 33')
+                ->where('proprietaires.0.recherche', 'Mamadou DIALLO 224623164833')
+                ->has('vehicules', 3)
+                ->where('vehicules', fn ($vehicules) => collect($vehicules)->every(fn ($v) => $v['proprietaire_id'] === $proprietaire->id)
+                    && collect($vehicules)->pluck('label')->sort()->values()->all() === ['FANTA — JA473', 'TOYOTA — RC125', 'TRICYCLE — AB456'])
+            );
+    }
+
+    public function test_filtre_proprietaire_retourne_les_depenses_de_ses_vehicules_et_pas_celles_ou_il_est_concerne(): void
+    {
+        [$proprietaire, $fanta, $toyota] = $this->proprietaireAvecTroisVehicules();
+        $depFanta = $this->depenseSur('vehicule', $fanta->id);
+        $depToyota = $this->depenseSur('vehicule', $toyota->id);
+        $this->depenseSur('proprietaire', $proprietaire->id); // avance : il est le concerné
+        $this->depenseSur('vehicule', Vehicule::factory()->create(['organization_id' => $this->org->id])->id);
+
+        $this->get("/backoffice/depenses?proprietaire_id={$proprietaire->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('depenses.data', 2)
+                ->where('depenses.data', fn ($data) => collect($data)->pluck('id')->sort()->values()->all()
+                    === collect([$depFanta->id, $depToyota->id])->sort()->values()->all())
+                ->where('filters.proprietaire_id', $proprietaire->id)
+            );
+    }
+
+    public function test_filtre_plusieurs_vehicules(): void
+    {
+        [, $fanta, $toyota, $tricycle] = $this->proprietaireAvecTroisVehicules();
+        $this->depenseSur('vehicule', $fanta->id);
+        $this->depenseSur('vehicule', $toyota->id);
+        $this->depenseSur('vehicule', $tricycle->id);
+
+        $this->get("/backoffice/depenses?vehicule_ids[]={$fanta->id}&vehicule_ids[]={$tricycle->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('depenses.data', 2)
+                ->where('depenses.data', fn ($data) => collect($data)->pluck('vehicule_id')->sort()->values()->all()
+                    === collect([$fanta->id, $tricycle->id])->sort()->values()->all())
+                ->where('stats.total', 2)
+            );
+    }
+
+    public function test_filtre_vehicule_hors_du_parc_du_proprietaire_ne_retourne_rien(): void
+    {
+        [$proprietaire, $fanta] = $this->proprietaireAvecTroisVehicules();
+        $autre = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        $this->depenseSur('vehicule', $fanta->id);
+        $this->depenseSur('vehicule', $autre->id);
+
+        $this->get("/backoffice/depenses?proprietaire_id={$proprietaire->id}&vehicule_ids[]={$autre->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
+
+    public function test_filtre_proprietaire_d_une_autre_organisation_ne_retourne_rien(): void
+    {
+        [, $fanta] = $this->proprietaireAvecTroisVehicules();
+        $this->depenseSur('vehicule', $fanta->id);
+        $etranger = Proprietaire::factory()->create();
+        Vehicule::factory()->create(['organization_id' => $etranger->organization_id, 'proprietaire_id' => $etranger->id]);
+
+        $this->get("/backoffice/depenses?proprietaire_id={$etranger->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
 }

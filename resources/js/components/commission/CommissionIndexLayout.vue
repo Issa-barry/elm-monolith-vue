@@ -101,7 +101,7 @@ defineEmits<{
 </script>
 
 <template>
-    <div class="space-y-5 p-4 sm:p-6">
+    <div class="min-w-0 space-y-5 p-4 sm:p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight">

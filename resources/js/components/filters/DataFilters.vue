@@ -34,6 +34,8 @@ const PERIODE_PERSONNALISEE = 'personnalisee';
 export interface FilterOption {
     value: string | number;
     label: string;
+    /** Texte supplémentaire pris en compte par la recherche des listes `searchable` (ex. téléphone sans espaces) */
+    recherche?: string;
 }
 
 export interface FilterField {
@@ -47,8 +49,17 @@ export interface FilterField {
     disabled?: boolean;
     /** Affiche le champ dans la barre principale plutôt que dans le drawer */
     inline?: boolean;
-    /** Pour type: 'select' — liste avec champ de recherche par nom et croix d'effacement (choix unique) */
+    /**
+     * Pour type: 'select' — liste avec champ de recherche par nom et croix d'effacement (choix unique).
+     * Pour type: 'multi-select' — ajoute un champ de recherche dans la liste déroulante.
+     */
     searchable?: boolean;
+    /**
+     * Options calculées à partir des valeurs en cours de saisie (non encore appliquées) des
+     * autres champs — ex. les véhicules du propriétaire choisi. Remplace `options` ; les choix
+     * devenus absents de la liste sont retirés automatiquement.
+     */
+    optionsFrom?: (values: Record<string, unknown>) => FilterOption[];
     /** Champ `inline` plus large (280 px au lieu de 180) pour afficher en entier un libellé long */
     wide?: boolean;
     /** Pour type: 'autocomplete' — URL de l'endpoint de suggestions */
@@ -142,7 +153,7 @@ function describeSavedFilters(
         if (value === undefined || value === '') continue;
         const selected = Array.isArray(value) ? value : [value];
         labels.push(
-            `${field.label} : ${selected.map((v) => field.options?.find((o) => String(o.value) === String(v))?.label ?? (field.options ? 'Choix indisponible' : v)).join(', ')}`,
+            `${field.label} : ${selected.map((v) => fieldOptions(field).find((o) => String(o.value) === String(v))?.label ?? (field.options || field.optionsFrom ? 'Choix indisponible' : v)).join(', ')}`,
         );
     }
     return labels.join(' · ');
@@ -245,6 +256,33 @@ function initLocal() {
 initLocal();
 watch(() => props.values, initLocal, { deep: true });
 
+function fieldOptions(field: FilterField): FilterOption[] {
+    return field.optionsFrom
+        ? field.optionsFrom(localValues.value)
+        : (field.options ?? []);
+}
+
+// Un choix qui n'existe plus dans des options dépendantes (ex. véhicule d'un autre propriétaire)
+// ne doit jamais partir silencieusement au serveur.
+watch(
+    localValues,
+    () => {
+        for (const field of props.fields) {
+            if (!field.optionsFrom) continue;
+            const current = localValues.value[field.key];
+            if (!Array.isArray(current) || current.length === 0) continue;
+            const valid = new Set(
+                fieldOptions(field).map((o) => String(o.value)),
+            );
+            const kept = current.filter((v) => valid.has(String(v)));
+            if (kept.length !== current.length) {
+                localValues.value[field.key] = kept;
+            }
+        }
+    },
+    { deep: true, immediate: true },
+);
+
 // ── Détection de changements en attente ───────────────────────────────────────
 
 const pendingChange = computed(() => {
@@ -307,7 +345,7 @@ function buildParams(): Record<string, string | string[]> {
         } else if (field.type === 'multi-select') {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
-            const total = meaningfulTotal(field.options);
+            const total = meaningfulTotal(fieldOptions(field));
             if (arr.length > 0 && (total <= 1 || arr.length < total)) {
                 params[field.key] = arr;
             }
@@ -413,7 +451,7 @@ function countActiveFields(fields: FilterField[]): number {
         } else if (field.type === 'multi-select' || field.type === 'select') {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
-            const total = meaningfulTotal(field.options);
+            const total = meaningfulTotal(fieldOptions(field));
             if (arr.length > 0 && (total <= 1 || arr.length < total)) n++;
         } else if (field.type === 'boolean') {
             if (localValues.value[field.key] !== '') n++;
@@ -488,17 +526,18 @@ const hasActiveFilters = computed(
                     <FilterSearchSelect
                         v-if="field.searchable && field.type === 'select'"
                         v-model="localValues[field.key] as (string | number)[]"
-                        :options="field.options ?? []"
+                        :options="fieldOptions(field)"
                         :placeholder="field.placeholder ?? field.label"
                         :disabled="field.disabled ?? false"
                     />
                     <FilterMultiSelect
                         v-else
                         v-model="localValues[field.key] as (string | number)[]"
-                        :options="field.options ?? []"
+                        :options="fieldOptions(field)"
                         :placeholder="field.placeholder ?? field.label"
                         :disabled="field.disabled ?? false"
                         :single-select="field.type === 'select'"
+                        :filter="field.searchable ?? false"
                     />
                     <Lock
                         v-if="field.disabled"
@@ -519,7 +558,7 @@ const hasActiveFilters = computed(
                     }}</span>
                     <Select
                         v-model="localValues[field.key]"
-                        :options="field.options ?? []"
+                        :options="fieldOptions(field)"
                         option-label="label"
                         option-value="value"
                         :aria-label="field.label"
@@ -714,7 +753,7 @@ const hasActiveFilters = computed(
                                             | number
                                         )[]
                                     "
-                                    :options="field.options ?? []"
+                                    :options="fieldOptions(field)"
                                     :placeholder="field.placeholder ?? 'Tous'"
                                     :disabled="field.disabled ?? false"
                                 />
@@ -726,10 +765,11 @@ const hasActiveFilters = computed(
                                             | number
                                         )[]
                                     "
-                                    :options="field.options ?? []"
+                                    :options="fieldOptions(field)"
                                     :placeholder="field.placeholder ?? 'Tous'"
                                     :disabled="field.disabled ?? false"
                                     :single-select="field.type === 'select'"
+                                    :filter="field.searchable ?? false"
                                 />
                             </div>
 
@@ -775,7 +815,7 @@ const hasActiveFilters = computed(
                                 <Label>{{ field.label }}</Label>
                                 <Select
                                     v-model="localValues[field.key]"
-                                    :options="field.options ?? []"
+                                    :options="fieldOptions(field)"
                                     option-label="label"
                                     option-value="value"
                                     :aria-label="field.label"
