@@ -122,6 +122,11 @@ class CommandeAchat extends Model
         return $this->hasMany(ReceptionAchat::class);
     }
 
+    public function factures(): HasMany
+    {
+        return $this->hasMany(FactureFournisseur::class);
+    }
+
     public function valideePar(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validee_par');

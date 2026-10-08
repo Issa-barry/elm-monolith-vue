@@ -13,7 +13,7 @@ Bon de commande ──► À valider ──valider (permission + plafond + sépa
                                        Partiellement réceptionnée ──► Réceptionnée (ou Clôturée : reliquat abandonné)
 ```
 
-Factures fournisseurs, dette, paiement et écritures comptables : lots 3 et 4, pas encore livrés.
+Factures fournisseurs et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-dette-et-comptabilisation.md), section ci-dessous). Paiement des fournisseurs : lot 4, pas encore livré.
 
 ## Règles
 
@@ -35,6 +35,23 @@ Factures fournisseurs, dette, paiement et écritures comptables : lots 3 et 4, p
 | ACH-013 | Notifications après commit : création → validateurs potentiels (permission + plafond suffisant) et super administrateurs dont le périmètre couvre le bon ; validation → créateur et utilisateurs de l'agence ayant `receptions.create` ; annulation → créateur. Jamais l'auteur de l'action. |
 | ACH-014 | PDF : filigrane « NON VALIDÉ » tant que le bon n'est pas validé, « ANNULÉ » s'il est annulé. |
 
+## Factures fournisseurs (lot 3)
+
+| Code | Règle |
+|---|---|
+| FAF-001 | Une facture appartient à un bon de commande **validé** (validée, partiellement réceptionnée, réceptionnée ou clôturée) et à son fournisseur ; un autre fournisseur est refusé. Agence = agence du bon. |
+| FAF-002 | Elle facture des **lignes de réception** (une ou plusieurs réceptions du bon). Quantité facturable d'une ligne = reçu − déjà facturé sur des factures validées. Contrôlé à la saisie et **sous verrou à la validation** (lecture verrouillante, prouvée sur MySQL réel) : jamais deux fois la même quantité reçue, même en concurrence. Les réceptions ne sont jamais modifiées. |
+| FAF-003 | Le numéro de facture du fournisseur est unique par fournisseur (factures non annulées), **garanti en base** (clé technique + index unique) : une saisie simultanée du même numéro est refusée. Un numéro annulé peut être ressaisi. |
+| FAF-004 | Saisie (`factures-fournisseurs.create`) et modification (`update`) en brouillon, pour un bon dont l'agence est couverte par ACH-000. Une facture validée n'est plus modifiable. |
+| FAF-005 | Validation : `factures-fournisseurs.valider` + agence couverte par ACH-000 + ni l'auteur de la saisie ni le dernier modificateur. Aucun passe-droit (super administrateur compris). |
+| FAF-006 | **La dette naît à la validation** (jamais à la réception ni au brouillon) : HT, TVA (taux saisi, 0 par défaut), TTC, payé = 0, reste dû = TTC. Dette d'un fournisseur = somme des restes dus de ses factures validées. Montants, libellés et nom du fournisseur figés. |
+| FAF-007 | Écriture à la validation (événement `facture_fournisseur_validee`) : débit achat HT (rôle `achat_{type de produit}`, repli `achat`), débit `tva_deductible`, crédit `fournisseur` TTC (401000, journal AC, tiers = fournisseur). Non bloquante : sans compte d'achat/TVA paramétré, la dette existe et l'écriture est « en attente » (relance depuis la fiche ou `comptabilite:rattraper --type=facture-fournisseur`, idempotent). État comptable affiché séparément du statut : Comptabilisée / En attente de paramétrage / Contrepassée. |
+| FAF-008 | Annulation (`factures-fournisseurs.annuler`, motif) d'un brouillon ou d'une facture validée sans paiement ; l'écriture est contrepassée et les quantités redeviennent facturables. |
+| FAF-009 | Lecture : factures des bons visibles (ACH-012), plus celles que l'utilisateur a saisies ou validées. |
+
+**En attente du comptable** : compte(s) d'achat (un seul ou par type de produit), TVA récupérable
+(compte et taux), confirmation 401000 / journal AC — cf. ADR 0022.
+
 ## Paramètres → Achats
 
 Une ligne par rôle (super administrateur compris, rien n'est verrouillé) : case « Peut acheter
@@ -50,6 +67,9 @@ Permission de la page : `parametres.update`.
 | `achats.valider` | valider (borné par le plafond du rôle) |
 | `achats.annuler` | annuler, clôturer un reliquat |
 | `receptions.read` / `receptions.create` | Logistique → Réceptions → Commandes fournisseurs |
+| `factures-fournisseurs.read` / `create` / `update` / `delete` | lire, saisir, modifier une facture en brouillon |
+| `factures-fournisseurs.valider` | valider (constate la dette) |
+| `factures-fournisseurs.annuler` | annuler (contrepassation si validée) |
 
 ## Données
 
@@ -60,6 +80,12 @@ Permission de la page : `parametres.update`.
 - `receptions_achats` (`RCA-JJMMAA-NNN`) et `reception_achat_lignes` (coût, mouvement de stock).
 - `regles_validation_roles` : organisation, domaine (`achats`), rôle, plafond, sans limite,
   périmètre, agences.
+
+- `factures_fournisseurs` (`FAF-JJMMAA-NNN`) : bon, fournisseur, agence, n° du fournisseur, dates,
+  taux de TVA, HT / TVA / TTC / payé, statut, auteurs (saisie, dernière modification, validation,
+  annulation), nom du fournisseur figé, dernier motif d'échec de comptabilisation.
+- `facture_fournisseur_lignes` : ligne de réception, ligne de commande, variante, libellé et
+  référence figés, quantité, prix unitaire, total HT.
 
 ## Historique
 

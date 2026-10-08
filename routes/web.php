@@ -8,6 +8,15 @@ use App\Http\Controllers\Achats\CloturerCommandeAchatController;
 use App\Http\Controllers\Achats\CreateCommandeAchatController;
 use App\Http\Controllers\Achats\DestroyCommandeAchatController;
 use App\Http\Controllers\Achats\EditCommandeAchatController;
+use App\Http\Controllers\Achats\Factures\AnnulerFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ComptabiliserFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\CreateFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\EditFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\IndexFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ShowFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\StoreFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\UpdateFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ValiderFactureFournisseurController;
 use App\Http\Controllers\Achats\IndexCommandeAchatController;
 use App\Http\Controllers\Achats\PdfCommandeAchatController;
 use App\Http\Controllers\Achats\Receptions\IndexReceptionAchatController;
@@ -484,6 +493,18 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
             // Bons de commande fournisseurs (ADR 0021) : création directe « à valider », validation
             // par plafond du rôle, réceptions multiples.
+            // Factures fournisseurs (ADR 0022) — AVANT `achats/{achat}`, dont le joker capturerait
+            // `achats/factures`.
+            Route::get('achats/factures', IndexFactureFournisseurController::class)->name('achats.factures.index');
+            Route::get('achats/factures/create', CreateFactureFournisseurController::class)->name('achats.factures.create');
+            Route::post('achats/factures', StoreFactureFournisseurController::class)->name('achats.factures.store');
+            Route::get('achats/factures/{facture}', ShowFactureFournisseurController::class)->name('achats.factures.show');
+            Route::get('achats/factures/{facture}/edit', EditFactureFournisseurController::class)->name('achats.factures.edit');
+            Route::put('achats/factures/{facture}', UpdateFactureFournisseurController::class)->name('achats.factures.update');
+            Route::patch('achats/factures/{facture}/valider', ValiderFactureFournisseurController::class)->name('achats.factures.valider');
+            Route::patch('achats/factures/{facture}/annuler', AnnulerFactureFournisseurController::class)->name('achats.factures.annuler');
+            Route::post('achats/factures/{facture}/comptabiliser', ComptabiliserFactureFournisseurController::class)->name('achats.factures.comptabiliser');
+
             Route::get('achats', IndexCommandeAchatController::class)->name('achats.index');
             Route::get('achats/create', CreateCommandeAchatController::class)->name('achats.create');
             Route::post('achats', StoreCommandeAchatController::class)->name('achats.store');

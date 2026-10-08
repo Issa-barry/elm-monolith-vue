@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
+use App\Models\FactureFournisseur;
 use App\Models\Fournisseur;
 use App\Models\Livreur;
 use App\Models\OptionCatalogue;
@@ -29,6 +30,7 @@ use App\Policies\ClientPolicy;
 use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
 use App\Policies\EquipeLivraisonPolicy;
+use App\Policies\FactureFournisseurPolicy;
 use App\Policies\FournisseurPolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\OptionCataloguePolicy;
@@ -68,6 +70,7 @@ class AuthServiceProvider extends ServiceProvider
         UserInvitation::class => UserInvitationPolicy::class,
         CommandeVente::class => CommandeVentePolicy::class,
         CommandeAchat::class => CommandeAchatPolicy::class,
+        FactureFournisseur::class => FactureFournisseurPolicy::class,
         PropositionVehicule::class => PropositionVehiculePolicy::class,
         PaiePeriode::class => PaiePolicy::class,
         PaiementPeriode::class => PaiementPeriodePolicy::class,

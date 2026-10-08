@@ -3,8 +3,8 @@
 - **Date** : 2026-10-07
 - **Statut** : **accepté le 2026-10-07** (décisions de l'utilisateur pendant la conception du module Achats)
 - **Périmètre** : bons de commande fournisseurs, Paramètres → Achats, Logistique → Réceptions,
-  stock entrant. Lots 1 et 2 livrés ; factures fournisseurs, dette, paiement et comptabilité
-  (lots 3 et 4) restent à faire.
+  stock entrant. Lots 1 et 2 livrés ; factures fournisseurs et dette : lot 3, ADR 0022 ;
+  paiement (lot 4) à faire.
 - **Détail fonctionnel** : [docs/achats.md](../achats.md)
 
 ## Contexte

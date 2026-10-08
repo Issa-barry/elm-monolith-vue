@@ -10,6 +10,7 @@ import {
     ArrowLeft,
     CheckCircle2,
     Download,
+    FileText,
     Info,
     PackageCheck,
     Pencil,
@@ -70,6 +71,16 @@ interface CommandeData {
     is_a_valider: boolean;
     lignes: LigneCommande[];
     receptions: Reception[];
+    factures: {
+        id: string;
+        reference: string;
+        numero_facture_fournisseur: string;
+        date_facture: string;
+        montant_ttc: number;
+        reste_du: number;
+        statut: string;
+        statut_label: string;
+    }[];
 }
 
 interface Actions {
@@ -79,6 +90,7 @@ interface Actions {
     peut_annuler: boolean;
     peut_cloturer: boolean;
     lien_reception: string | null;
+    lien_facture: string | null;
     peut_supprimer: boolean;
 }
 
@@ -309,6 +321,15 @@ function supprimer() {
                             Réceptionner dans Logistique
                         </Button>
                     </Link>
+                    <Link
+                        v-if="actions.lien_facture"
+                        :href="actions.lien_facture"
+                    >
+                        <Button variant="outline" size="sm">
+                            <FileText class="mr-2 h-4 w-4" />
+                            Saisir une facture
+                        </Button>
+                    </Link>
                     <Button
                         v-if="actions.peut_cloturer"
                         variant="outline"
@@ -537,6 +558,47 @@ function supprimer() {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Factures fournisseurs -->
+            <div
+                v-if="commande.factures.length > 0"
+                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+            >
+                <h3
+                    class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                >
+                    Factures fournisseurs
+                </h3>
+                <div class="divide-y rounded-lg border">
+                    <Link
+                        v-for="f in commande.factures"
+                        :key="f.id"
+                        :href="`/backoffice/achats/factures/${f.id}`"
+                        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/20"
+                    >
+                        <span>
+                            <span class="font-mono font-semibold">{{
+                                f.reference
+                            }}</span>
+                            <span class="text-muted-foreground">
+                                · N° {{ f.numero_facture_fournisseur }} ·
+                                {{ f.date_facture }}</span
+                            >
+                        </span>
+                        <span class="flex items-center gap-4">
+                            <span class="tabular-nums"
+                                >{{ formatGNF(f.montant_ttc) }} · reste dû
+                                {{ formatGNF(f.reste_du) }}</span
+                            >
+                            <StatusDot
+                                :status="f.statut"
+                                :label="f.statut_label"
+                                class="text-muted-foreground"
+                            />
+                        </span>
+                    </Link>
                 </div>
             </div>
 

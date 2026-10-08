@@ -82,6 +82,10 @@ enum EvenementComptable: string
     // agences est dérivée des encaissements (ADR 0012), un solde de liaison ne serait jamais réglé.
     case FICHE_REAFFECTEE_SORTIE = 'fiche_reaffectee_sortie';
     case FICHE_REAFFECTEE_ENTREE = 'fiche_reaffectee_entree';
+    // Facture fournisseur validée (ADR 0022) : constatation de l'achat (charge HT, TVA déductible)
+    // et de la dette fournisseur (TTC, 401). Jamais à la réception (stock physique seulement).
+    // Annulation d'une facture validée = contrepassation de cette pièce.
+    case FACTURE_FOURNISSEUR_VALIDEE = 'facture_fournisseur_validee';
 
     public function label(): string
     {
@@ -111,6 +115,7 @@ enum EvenementComptable: string
             self::REMBOURSEMENT_CLIENT => 'Remboursement client',
             self::FICHE_REAFFECTEE_SORTIE => "Fiche réaffectée — sortie de l'agence d'origine",
             self::FICHE_REAFFECTEE_ENTREE => 'Fiche réaffectée — entrée dans la nouvelle agence',
+            self::FACTURE_FOURNISSEUR_VALIDEE => 'Facture fournisseur validée',
         };
     }
 }

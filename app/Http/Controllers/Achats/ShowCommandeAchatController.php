@@ -6,10 +6,12 @@ use App\Enums\StatutCommandeAchat;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
+use App\Models\FactureFournisseur;
 use App\Models\ReceptionAchat;
 use App\Models\RegleValidationRole;
 use App\Policies\CommandeAchatPolicy;
 use App\Services\Achats\CommandeAchatService;
+use App\Services\Achats\FactureFournisseurService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Http\Request;
@@ -18,7 +20,7 @@ use Inertia\Response;
 
 class ShowCommandeAchatController extends Controller
 {
-    public function __invoke(Request $request, CommandeAchat $achat, ValidationParPlafondService $plafonds, CommandeAchatService $service): Response
+    public function __invoke(Request $request, CommandeAchat $achat, ValidationParPlafondService $plafonds, CommandeAchatService $service, FactureFournisseurService $factures): Response
     {
         $this->authorize('view', $achat);
         app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
@@ -29,6 +31,7 @@ class ShowCommandeAchatController extends Controller
             'createdBy', 'valideePar', 'annuleePar', 'clotureePar',
             'receptions' => fn ($q) => $q->orderByDesc('date_reception')->orderByDesc('created_at'),
             'receptions.createdBy', 'receptions.lignes.commandeLigne',
+            'factures' => fn ($q) => $q->orderByDesc('date_facture')->orderByDesc('created_at'),
         ]);
 
         $montant = (float) $achat->total_commande;
@@ -44,6 +47,14 @@ class ShowCommandeAchatController extends Controller
             $motifNonValidable = $service->motifNonValidable($achat, $user);
             $peutValider = $motifNonValidable === null;
         }
+
+        // Saisie d'une facture : permission, bon validé dans le périmètre, et au moins une quantité
+        // reçue non encore facturée (FactureFournisseurService::lignesFacturables(), seule source).
+        $peutFacturer = $achat->validee_at !== null
+            && ! $achat->isAnnulee()
+            && $user->can('create', FactureFournisseur::class)
+            && app(PerimetreCommandesAchat::class)->couvreSite($user, $achat->site_id)
+            && $factures->lignesFacturables($achat)->sum('facturable') > 0;
 
         return Inertia::render('Achats/Show', [
             'commande' => [
@@ -90,6 +101,16 @@ class ShowCommandeAchatController extends Controller
                         'cout_unitaire' => (float) $rl->cout_unitaire,
                     ])->values(),
                 ])->values(),
+                'factures' => $user->can('factures-fournisseurs.read') ? $achat->factures->map(fn (FactureFournisseur $f) => [
+                    'id' => $f->id,
+                    'reference' => $f->reference,
+                    'numero_facture_fournisseur' => $f->numero_facture_fournisseur,
+                    'date_facture' => $f->date_facture?->format('d/m/Y'),
+                    'montant_ttc' => (float) $f->montant_ttc,
+                    'reste_du' => $f->resteDu(),
+                    'statut' => $f->statut?->value,
+                    'statut_label' => $f->statut?->label(),
+                ])->values() : [],
             ],
             'actions' => [
                 'peut_modifier' => $aValider && $user->can('update', $achat),
@@ -102,6 +123,7 @@ class ShowCommandeAchatController extends Controller
                     ? route('logistique.receptions-fournisseurs.index', ['reference' => $achat->reference])
                     : null,
                 'peut_supprimer' => $achat->isAnnulee() && $user->can('delete', $achat),
+                'lien_facture' => $peutFacturer ? route('achats.factures.create', ['commande' => $achat->id]) : null,
             ],
             'validable_par' => $aValider && $achat->site_id !== null
                 ? $plafonds->rolesPouvantValider($achat->organization_id, RegleValidationRole::DOMAINE_ACHATS, 'achats.valider', $achat->site_id, $montant)

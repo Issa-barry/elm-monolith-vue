@@ -175,12 +175,24 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('achats.read', 'achats')) {
+    const achatsSousItems: NavItem[] = [];
+    if (canSee('achats.read', 'achats'))
+        achatsSousItems.push({
+            title: 'Bons de commande',
+            href: '/backoffice/achats',
+        });
+    if (canSee('factures-fournisseurs.read', 'achats'))
+        achatsSousItems.push({
+            title: 'Factures fournisseurs',
+            href: '/backoffice/achats/factures',
+        });
+    if (achatsSousItems.length > 0) {
         items.push({
             title: 'Achats',
-            href: '/backoffice/achats',
+            href: achatsSousItems[0].href,
             icon: PackageCheck,
             group: 'Commercial',
+            items: achatsSousItems.length > 1 ? achatsSousItems : undefined,
         });
     }
 

@@ -18,6 +18,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     cloture: 'bg-emerald-500',
     cloturee: 'bg-emerald-500',
     receptionnee: 'bg-emerald-500',
+    // Facture fournisseur dont la pièce comptable est passée (ADR 0022).
+    comptabilisee: 'bg-emerald-500',
     reception: 'bg-emerald-500',
     termine: 'bg-emerald-500',
     disponible: 'bg-emerald-500',
@@ -109,6 +111,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Bon de commande fournisseur en attente de validation / reçu en partie (StatutCommandeAchat).
     a_valider: 'bg-orange-500',
     partiellement_receptionnee: 'bg-orange-500',
+    // Facture fournisseur réglée en partie (StatutFactureFournisseur, lot 4).
+    partiellement_payee: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',

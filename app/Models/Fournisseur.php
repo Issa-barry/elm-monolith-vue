@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Fournisseur extends Model
@@ -138,5 +139,11 @@ class Fournisseur extends Model
     public function scopeActifs(Builder $q): Builder
     {
         return $q->where('is_active', true);
+    }
+
+    /** Factures fournisseurs : la dette fournisseur est la somme de leurs restes dus (ADR 0022). */
+    public function factures(): HasMany
+    {
+        return $this->hasMany(FactureFournisseur::class);
     }
 }
