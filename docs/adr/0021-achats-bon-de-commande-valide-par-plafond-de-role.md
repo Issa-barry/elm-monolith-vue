@@ -19,13 +19,24 @@ annulation et réception sous la même permission `achats.update`.
 
 1. **Pas de demande d'achat.** Le circuit part directement du bon de commande :
    bon de commande → validation → réception (Logistique) → facture → dette → paiement.
-2. **Validation = permission `achats.valider` ET plafond du rôle.** Le plafond se règle par rôle
-   (Paramètres → Achats), avec les agences couvertes. Égalité autorisée ; pas de règle = rien à
-   valider ; « sans limite » est un choix explicite. Utilisateur à plusieurs rôles : la règle la
-   plus favorable qui couvre l'agence. Contrôle côté serveur, sous verrou, montant relu.
-3. **Aucune exception pour le super administrateur** : il lui faut aussi une règle de plafond, et la
-   séparation des tâches s'applique à lui. Diffère volontairement des dépenses (DEPVAL-001), dont
-   les règles ne changent pas.
+2. **Un seul périmètre, « Peut acheter pour »**, porté par une règle par rôle (Paramètres → Achats,
+   table `regles_validation_roles`, domaine `achats`) : son agence, agences sélectionnées ou toutes
+   les agences. Il gouverne les TROIS actions :
+   - **créer** = `achats.create` + une règle d'un des rôles de l'utilisateur couvrant l'agence ;
+   - **voir** = `achats.read` + règle couvrant l'agence (le créateur et le validateur d'un bon le
+     voient toujours) ;
+   - **valider** = `achats.valider` + règle couvrant l'agence + montant ≤ plafond de cette règle
+     (égalité autorisée ; règle sans plafond = ne valide rien ; « sans limite » explicite ; plusieurs
+     rôles : le plafond le plus élevé parmi les règles couvrant l'agence, sans hiérarchie de rôles).
+   Tout est contrôlé côté serveur, sous verrou pour la validation (montant relu).
+3. **Aucun passe-droit, ni admin_entreprise ni super administrateur** : sans règle, aucun accès.
+   Aucune condition `isAdmin()` / `hasRole('super_admin')` dans le moteur, la policy ou les
+   contrôleurs. Le `Gate::before` du super administrateur ne laisse passer que la permission :
+   périmètre, plafond et séparation des tâches sont vérifiés hors de lui (contrôle explicite dans
+   les contrôleurs et le service). Les dépenses gardent leur exception DEPVAL-001, non modifiée.
+   **Règles de départ** (données, modifiables) : admin_entreprise et super_admin reçoivent
+   « toutes agences, sans limite » — migration pour les organisations existantes (sans écraser une
+   règle déjà configurée), `InstallationService` pour les nouvelles.
 4. **Séparation des tâches** : ni le créateur du bon, ni le dernier utilisateur ayant modifié son
    contenu ne peuvent le valider.
 5. **Snapshot à la validation** : fournisseur, agence, libellé et référence (SKU) de chaque ligne,
@@ -37,7 +48,8 @@ annulation et réception sous la même permission `achats.update`.
    l'enregistrement, sur l'agence de la commande, par `MouvementStockService::appliquer()`. Le
    `prix_achat` de la variante est mis à jour, sauf s'il atteindrait le prix de vente d'un produit
    soumis à la règle de marge (avertissement, réception jamais bloquée).
-8. **Lecture** : commandes des agences de l'utilisateur, plus celles qu'il a créées ou validées.
+8. **Réception** : réservée aux utilisateurs rattachés à l'agence de la commande (sans passe-droit
+   de rôle).
 9. **Notifications** (base + push, après commit, en file) : création → validateurs potentiels et
    super administrateurs ; validation → créateur et réceptionnaires de l'agence ; annulation →
    créateur.

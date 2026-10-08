@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Achats;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Services\Achats\CommandeAchatService;
+use App\Services\Achats\PerimetreCommandesAchat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +14,7 @@ class AnnulerCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatService $service): RedirectResponse
     {
         $this->authorize('annuler', $achat);
+        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
 
         $data = $request->validate([
             'motif_annulation' => 'required|string|max:2000',

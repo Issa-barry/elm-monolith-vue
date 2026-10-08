@@ -58,18 +58,16 @@ function onPlafondBlur(l: RegleRole) {
     affichage.value[l.role_name] = formatMontant(l.plafond);
 }
 
-function toggleIllimite(l: RegleRole) {
-    l.plafond_illimite = !l.plafond_illimite;
-}
-
 function toggleSite(l: RegleRole, siteId: string) {
     const i = l.sites.indexOf(siteId);
     if (i === -1) l.sites.push(siteId);
     else l.sites.splice(i, 1);
 }
 
-function configuree(l: RegleRole): boolean {
-    return l.plafond_illimite || l.plafond !== null;
+function resumeValidation(l: RegleRole): string {
+    if (l.plafond_illimite) return 'Valide sans limite';
+    if (l.plafond === null) return 'Ne valide aucun bon';
+    return `Valide jusqu'à ${formatMontant(l.plafond)} GNF`;
 }
 
 const enregistrement = ref(false);
@@ -87,7 +85,7 @@ function enregistrer() {
         {
             config: lignes.value.map((l) => ({
                 role_name: l.role_name,
-                actif: configuree(l),
+                actif: l.actif,
                 plafond: l.plafond_illimite ? null : l.plafond,
                 plafond_illimite: l.plafond_illimite,
                 perimetre: l.perimetre,
@@ -99,7 +97,7 @@ function enregistrer() {
             onSuccess: () =>
                 toast.add({
                     severity: 'success',
-                    summary: 'Plafonds enregistrés',
+                    summary: 'Paramètres des achats enregistrés',
                     life: 3000,
                 }),
             onError: (e) => {
@@ -118,14 +116,14 @@ function enregistrer() {
 </script>
 
 <template>
-    <Head title="Validation des achats" />
+    <Head title="Achats — périmètre et plafonds" />
 
     <AppLayout>
         <SettingsLayout :wide="true">
             <div class="space-y-6">
                 <HeadingSmall
-                    title="Validation des achats"
-                    description="Jusqu'à quel montant chaque rôle peut valider un bon de commande fournisseur, et pour quelles agences. La permission « Achats — valider » se donne dans l'écran Rôles : sans plafond ici, elle ne permet de valider aucun bon."
+                    title="Achats — périmètre et plafonds"
+                    description="Pour chaque rôle : les agences pour lesquelles il peut acheter (créer, voir et valider des bons de commande) et son plafond de validation. Sans périmètre, le rôle n'a aucun accès aux bons de commande. Les permissions Achats se donnent dans l'écran Rôles."
                 />
 
                 <div
@@ -134,9 +132,7 @@ function enregistrer() {
                     <div
                         class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
                     >
-                        <p class="text-sm font-medium">
-                            Plafonds de validation par rôle
-                        </p>
+                        <p class="text-sm font-medium">Règles par rôle</p>
                         <Button
                             size="sm"
                             :disabled="enregistrement"
@@ -155,15 +151,47 @@ function enregistrer() {
                         <div
                             v-for="(l, index) in lignes"
                             :key="l.role_name"
-                            class="grid gap-4 px-6 py-4 lg:grid-cols-[220px_260px_1fr]"
+                            class="grid gap-4 px-6 py-4 lg:grid-cols-[240px_1fr_240px]"
                         >
-                            <div>
-                                <p class="text-sm font-medium">
+                            <div class="space-y-1">
+                                <button
+                                    type="button"
+                                    class="flex items-center gap-2 text-left text-sm font-medium"
+                                    :aria-pressed="l.actif"
+                                    @click="l.actif = !l.actif"
+                                >
+                                    <span
+                                        class="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2"
+                                        :class="
+                                            l.actif
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border'
+                                        "
+                                    >
+                                        <Check v-if="l.actif" class="h-3 w-3" />
+                                    </span>
                                     {{ l.role_label }}
+                                </button>
+                                <p
+                                    v-if="!l.actif"
+                                    class="pl-6 text-xs text-muted-foreground"
+                                >
+                                    Aucun accès aux bons de commande.
                                 </p>
                                 <p
-                                    v-if="!l.a_permission && configuree(l)"
-                                    class="mt-1 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                    v-else
+                                    class="pl-6 text-xs text-muted-foreground"
+                                >
+                                    {{ resumeValidation(l) }}
+                                </p>
+                                <p
+                                    v-if="
+                                        l.actif &&
+                                        !l.a_permission &&
+                                        (l.plafond_illimite ||
+                                            l.plafond !== null)
+                                    "
+                                    class="flex items-start gap-1 pl-6 text-xs text-amber-600 dark:text-amber-400"
                                 >
                                     <AlertTriangle
                                         class="mt-0.5 h-3 w-3 shrink-0"
@@ -171,61 +199,14 @@ function enregistrer() {
                                     Sans la permission « Achats — valider », ce
                                     plafond n'a pas d'effet.
                                 </p>
-                                <p
-                                    v-else-if="!configuree(l)"
-                                    class="mt-1 text-xs text-muted-foreground"
-                                >
-                                    Aucun plafond : ne valide aucun bon.
-                                </p>
                             </div>
 
-                            <div class="space-y-2">
-                                <div class="relative">
-                                    <input
-                                        type="text"
-                                        inputmode="numeric"
-                                        :aria-label="`Plafond — ${l.role_label}`"
-                                        :value="affichage[l.role_name]"
-                                        :disabled="l.plafond_illimite"
-                                        placeholder="Aucun plafond"
-                                        class="h-9 w-full rounded-md border bg-background py-1.5 pr-11 pl-2 text-right text-sm tabular-nums disabled:opacity-50"
-                                        @input="onPlafondInput(l, $event)"
-                                        @blur="onPlafondBlur(l)"
-                                    />
-                                    <span
-                                        class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-muted-foreground"
-                                        >GNF</span
-                                    >
-                                </div>
-                                <button
-                                    type="button"
-                                    class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
-                                    @click="toggleIllimite(l)"
-                                >
-                                    <span
-                                        class="flex h-4 w-4 items-center justify-center rounded border-2"
-                                        :class="
-                                            l.plafond_illimite
-                                                ? 'border-primary bg-primary text-primary-foreground'
-                                                : 'border-border'
-                                        "
-                                    >
-                                        <Check
-                                            v-if="l.plafond_illimite"
-                                            class="h-3 w-3"
-                                        />
-                                    </span>
-                                    Sans limite
-                                </button>
+                            <div v-if="l.actif" class="space-y-2">
                                 <p
-                                    v-if="erreur(index, 'plafond')"
-                                    class="text-xs text-destructive"
+                                    class="text-xs font-medium text-muted-foreground"
                                 >
-                                    {{ erreur(index, 'plafond') }}
+                                    Peut acheter pour
                                 </p>
-                            </div>
-
-                            <div v-if="configuree(l)" class="space-y-2">
                                 <div class="flex flex-wrap gap-2">
                                     <button
                                         v-for="p in PERIMETRES"
@@ -285,6 +266,53 @@ function enregistrer() {
                                 class="text-xs text-muted-foreground/60"
                             >
                                 —
+                            </div>
+
+                            <div v-if="l.actif" class="space-y-2">
+                                <p
+                                    class="text-xs font-medium text-muted-foreground"
+                                >
+                                    Plafond de validation
+                                </p>
+                                <div class="relative">
+                                    <input
+                                        type="text"
+                                        inputmode="numeric"
+                                        :aria-label="`Plafond de validation — ${l.role_label}`"
+                                        :value="affichage[l.role_name]"
+                                        :disabled="l.plafond_illimite"
+                                        placeholder="Ne valide pas"
+                                        class="h-9 w-full rounded-md border bg-background py-1.5 pr-11 pl-2 text-right text-sm tabular-nums disabled:opacity-50"
+                                        @input="onPlafondInput(l, $event)"
+                                        @blur="onPlafondBlur(l)"
+                                    />
+                                    <span
+                                        class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-muted-foreground"
+                                        >GNF</span
+                                    >
+                                </div>
+                                <button
+                                    type="button"
+                                    class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+                                    @click="
+                                        l.plafond_illimite = !l.plafond_illimite
+                                    "
+                                >
+                                    <span
+                                        class="flex h-4 w-4 items-center justify-center rounded border-2"
+                                        :class="
+                                            l.plafond_illimite
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border'
+                                        "
+                                    >
+                                        <Check
+                                            v-if="l.plafond_illimite"
+                                            class="h-3 w-3"
+                                        />
+                                    </span>
+                                    Sans limite
+                                </button>
                             </div>
                         </div>
                     </div>

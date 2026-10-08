@@ -5,10 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Règles de validation par plafond, portées par le RÔLE et par DOMAINE métier (ADR 0021). Premier
- * domaine : `achats` (validation des bons de commande fournisseurs). Une seule ligne par
- * organisation, domaine et rôle. Aucune règle n'est créée ici : sans règle, un rôle ne valide rien
- * (plafond absent = 0) — seul le super administrateur reste sans limite.
+ * Règles portées par le RÔLE et par DOMAINE métier (ADR 0021) : périmètre d'agences et plafond de
+ * validation. Premier domaine : `achats`, où le périmètre (« Peut acheter pour ») gouverne la
+ * création, la lecture et la validation des bons de commande. Une seule ligne par organisation,
+ * domaine et rôle. Sans règle, un rôle n'a aucun accès, super administrateur compris ; les règles
+ * de départ sont créées par 2026_10_07_200400_provisionner_regles_achats_par_defaut.
  */
 return new class extends Migration
 {

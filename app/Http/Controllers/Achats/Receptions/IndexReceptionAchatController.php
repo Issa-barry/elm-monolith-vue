@@ -7,8 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\Fournisseur;
-use App\Models\Site;
-use App\Services\SiteScopeService;
+use App\Policies\CommandeAchatPolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,7 +27,7 @@ class IndexReceptionAchatController extends Controller
         StatutCommandeAchat::CLOTUREE,
     ];
 
-    public function __invoke(Request $request, SiteScopeService $siteScope): Response
+    public function __invoke(Request $request): Response
     {
         $user = $request->user();
         abort_unless($user->can('receptions.read'), 403);
@@ -49,9 +48,8 @@ class IndexReceptionAchatController extends Controller
             ->whereIn('statut', $statuts)
             ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'lignes']);
 
-        if (! $siteScope->couvreToutesLesAgences($user)) {
-            $query->whereIn('site_id', $siteScope->accessibleSiteIds($user));
-        }
+        // Réceptionnaire : uniquement les agences auxquelles il est rattaché, sans passe-droit de rôle.
+        $query->whereIn('site_id', $user->sites()->pluck('sites.id'));
 
         $query
             ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
@@ -60,9 +58,7 @@ class IndexReceptionAchatController extends Controller
 
         $paginator = $query->orderBy('validee_at')->orderBy('created_at')->paginate(20)->withQueryString();
 
-        $sites = $siteScope->couvreToutesLesAgences($user)
-            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
-            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+        $sites = $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->with(['personne', 'entrepriseTierce'])
@@ -89,7 +85,7 @@ class IndexReceptionAchatController extends Controller
                     'qte_recue' => (int) $l->qte_recue,
                     'reliquat' => $l->reliquat(),
                 ])->values(),
-                'peut_receptionner' => $c->isReceptionnable() && $user->can('receptionner', $c),
+                'peut_receptionner' => $c->isReceptionnable() && $user->can('receptionner', $c) && CommandeAchatPolicy::estRattacheAgence($user, $c),
             ]),
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),
             'statuts' => array_map(fn ($s) => ['value' => $s->value, 'label' => $s->label()], self::STATUTS_AFFICHES),

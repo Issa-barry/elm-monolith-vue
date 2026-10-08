@@ -65,6 +65,7 @@ const props = defineProps<{
     statuts: Option[];
     fournisseurs: Option[];
     sites: { id: string; nom: string }[];
+    peut_creer: boolean;
 }>();
 
 const { can } = usePermissions();
@@ -197,7 +198,7 @@ function confirmDelete(c: Commande) {
                 <ArrowLeft class="h-5 w-5" />
             </Link>
             <span class="text-base font-semibold">Achats</span>
-            <Link v-if="can('achats.create')" href="/backoffice/achats/create">
+            <Link v-if="peut_creer" href="/backoffice/achats/create">
                 <Button size="sm" class="h-8 px-3 text-xs">
                     <Plus class="mr-1 h-3.5 w-3.5" />
                     Nouveau
@@ -219,10 +220,7 @@ function confirmDelete(c: Commande) {
                         de commande
                     </p>
                 </div>
-                <Link
-                    v-if="can('achats.create')"
-                    href="/backoffice/achats/create"
-                >
+                <Link v-if="peut_creer" href="/backoffice/achats/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau bon de commande

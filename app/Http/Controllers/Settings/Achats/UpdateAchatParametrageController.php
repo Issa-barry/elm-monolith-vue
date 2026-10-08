@@ -39,9 +39,6 @@ class UpdateAchatParametrageController extends Controller
             if (! $item['actif']) {
                 continue;
             }
-            if (! $item['plafond_illimite'] && ($item['plafond'] ?? null) === null) {
-                $erreurs["config.{$i}.plafond"] = 'Le plafond est obligatoire (ou cochez « Sans limite »).';
-            }
             if ($item['perimetre'] === 'agences_selectionnees' && empty($item['sites'])) {
                 $erreurs["config.{$i}.sites"] = 'Sélectionnez au moins une agence.';
             }

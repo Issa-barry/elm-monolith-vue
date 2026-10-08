@@ -9,8 +9,8 @@ use Spatie\Permission\PermissionRegistrar;
  * Migration de DONNÉES — permissions du circuit Achats refondu (ADR 0021).
  *
  * - `achats.valider` (nouvelle action) : accordée au seul rôle système `admin_entreprise`. Elle ne
- *   suffit pas : le montant doit aussi tenir dans le plafond du rôle (Paramètres → Achats), et
- *   aucune règle de plafond n'est créée ici.
+ *   suffit pas : l'agence et le montant doivent aussi être couverts par la règle du rôle
+ *   (Paramètres → Achats, règles de départ créées par la migration 200400).
  * - Annuler et réceptionner une commande dépendaient jusqu'ici de `achats.update`. Elles passent à
  *   `achats.annuler` et `receptions.create` : tout rôle (système ou personnalisé) qui avait
  *   `achats.update` les reçoit, pour ne retirer aucun droit existant.

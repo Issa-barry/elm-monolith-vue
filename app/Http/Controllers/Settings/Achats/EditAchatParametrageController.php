@@ -11,10 +11,10 @@ use Inertia\Response;
 use Spatie\Permission\Models\Role;
 
 /**
- * Paramètres → Achats : plafond de validation des bons de commande par rôle, et agences couvertes
- * (ADR 0021). La permission `achats.valider` se coche dans l'écran Rôles ; cette page ne fait que
- * la borner. Le super administrateur se configure ici comme tout autre rôle : sans règle, il ne
- * valide aucun bon de commande (décision du 07/10/2026).
+ * Paramètres → Achats (ADR 0021) : par rôle, le périmètre « Peut acheter pour » (agences pour
+ * lesquelles le rôle crée, voit et valide des bons de commande) et le plafond de validation (vide =
+ * le rôle ne valide rien). Les permissions `achats.*` se cochent dans l'écran Rôles. Tous les
+ * rôles se configurent ici à l'identique, super administrateur compris : sans règle, aucun accès.
  */
 class EditAchatParametrageController extends Controller
 {

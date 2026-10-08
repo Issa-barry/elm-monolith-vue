@@ -7,9 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Models\Fournisseur;
 use App\Models\RegleValidationRole;
-use App\Models\Site;
 use App\Services\Achats\PerimetreCommandesAchat;
-use App\Services\SiteScopeService;
 use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -61,11 +59,10 @@ class IndexCommandeAchatController extends Controller
             ->values()
             ->map(fn (Fournisseur $f) => ['value' => $f->id, 'label' => $f->nom_complet]);
 
-        $sites = app(SiteScopeService::class)->couvreToutesLesAgences($user)
-            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
-            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+        $sites = $this->perimetre->sites($user);
 
         return Inertia::render('Achats/Index', [
+            'peut_creer' => $user->can('create', CommandeAchat::class) && $sites->isNotEmpty(),
             'commandes' => $paginator->through(fn (CommandeAchat $c) => [
                 'id' => $c->id,
                 'reference' => $c->reference,

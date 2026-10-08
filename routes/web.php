@@ -636,9 +636,9 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('produits/types/{type}', DestroyProduitTypeController::class)->name('produits.types.destroy');
 
             // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
-            // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit
-            // fonctionner même si le module Achats est désactivé pour l'organisation, cf.
-            // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
+            // le formulaire Produit et le bon de commande — rattachée au module Produits (pas Achats) :
+            // elle doit fonctionner même si le module Achats est désactivé pour l'organisation, cf.
+            // CreateFournisseurModal.vue. Le CRUD complet reste sous le module Achats (route
             // fournisseurs.* ci-dessus).
             Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
 

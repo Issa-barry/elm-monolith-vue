@@ -6,20 +6,22 @@ use App\Enums\ProduitStatut;
 use App\Models\Fournisseur;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
-use App\Models\Site;
 use App\Models\User;
 use App\Services\Achats\AchatReferentielValidator;
-use App\Services\SiteScopeService;
+use App\Services\Achats\PerimetreCommandesAchat;
 
 /**
  * Options des formulaires de création et de modification d'un bon de commande fournisseur :
- * agences du périmètre de l'utilisateur, fournisseurs actifs, et une option par VARIANTE active
+ * agences du périmètre « Peut acheter pour », fournisseurs actifs, et une option par VARIANTE active
  * d'un produit actif achetable (un produit à plusieurs déclinaisons ne pouvait pas être commandé
  * avant ADR 0021, faute de sélecteur de variante).
  */
 class CommandeAchatFormOptions
 {
-    public function __construct(private readonly AchatReferentielValidator $referentiel) {}
+    public function __construct(
+        private readonly AchatReferentielValidator $referentiel,
+        private readonly PerimetreCommandesAchat $perimetre,
+    ) {}
 
     public function pour(User $user): array
     {
@@ -52,9 +54,9 @@ class CommandeAchatFormOptions
             ->values()
             ->map(fn (Fournisseur $f) => ['id' => $f->id, 'nom' => $f->nom_complet]);
 
-        $sites = app(SiteScopeService::class)->couvreToutesLesAgences($user)
-            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
-            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+        // Agences du périmètre « Peut acheter pour » des rôles de l'utilisateur, seules acceptées
+        // par le serveur (AchatReferentielValidator).
+        $sites = $this->perimetre->sites($user);
 
         $siteParDefaut = $user->sites()->wherePivot('is_default', true)->value('sites.id');
 

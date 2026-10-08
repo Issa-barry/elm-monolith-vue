@@ -67,7 +67,7 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
             ...(((page.props as any).module_flags?.achats as
                 | boolean
                 | undefined) !== false
-                ? [{ title: 'Validation des achats', href: '/settings/achats' }]
+                ? [{ title: 'Achats', href: '/settings/achats' }]
                 : []),
             { title: 'Ventes', href: '/settings/ventes' },
             { title: 'Logistique', href: '/settings/logistique' },

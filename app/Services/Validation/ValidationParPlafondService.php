@@ -11,8 +11,12 @@ use Spatie\Permission\Models\Role;
 /**
  * Validation par plafond porté par le rôle, générique par domaine métier (ADR 0021).
  *
+ * Une règle porte, pour un rôle et un domaine, un périmètre d'agences (pour les achats : « Peut
+ * acheter pour », qui gouverne aussi la création et la lecture) et un plafond de validation.
+ *
  * Valider = permission du domaine (vérifiée par l'appelant) ET une règle d'un des rôles de
  * l'utilisateur qui couvre l'agence ET un montant inférieur ou égal au plafond (égalité autorisée).
+ * - Règle sans plafond (et pas « sans limite ») : périmètre seul, ne valide rien.
  * - Plusieurs rôles : la règle la plus favorable parmi celles qui couvrent l'agence s'applique.
  * - Pas de règle = plafond 0 : le rôle ne valide rien. « Sans limite » est un choix explicite.
  * - AUCUNE exception, super administrateur compris : il lui faut aussi une règle (décision du
@@ -37,16 +41,50 @@ class ValidationParPlafondService
             return "Aucun plafond de validation n'est configuré pour votre rôle.";
         }
 
-        $regle = $this->meilleureRegle($regles->filter(fn (RegleValidationRole $r) => $this->couvreSite($r, $user, $siteId)));
+        $regle = $this->meilleureRegle($regles->filter(fn (RegleValidationRole $r) => $this->regleCouvreSite($r, $user, $siteId)));
         if ($regle === null) {
             return 'Votre plafond de validation ne couvre pas cette agence.';
         }
 
-        if (! $regle->plafond_illimite && $montant > (float) ($regle->plafond ?? 0)) {
+        if (! $regle->plafond_illimite && $regle->plafond === null) {
+            return "Votre rôle n'a pas de plafond de validation.";
+        }
+
+        if (! $regle->plafond_illimite && $montant > (float) $regle->plafond) {
             return 'Montant supérieur à votre plafond de validation ('.self::formaterMontant((float) $regle->plafond).').';
         }
 
         return null;
+    }
+
+    /**
+     * Agences couvertes par les règles des rôles de l'utilisateur (« Peut acheter pour » pour les
+     * achats) : null = toutes les agences de l'organisation, [] = aucune. Aucune exception de rôle.
+     *
+     * @return list<string>|null
+     */
+    public function sitesCouverts(User $user, string $domaine): ?array
+    {
+        $sites = [];
+
+        foreach ($this->reglesDe($user, $domaine) as $regle) {
+            $sites = match ($regle->perimetre) {
+                'toutes_agences' => null,
+                'son_agence' => [...$sites, ...$user->sites()->pluck('sites.id')->all()],
+                default => [...$sites, ...array_values($regle->sites ?? [])],
+            };
+            if ($sites === null) {
+                return null;
+            }
+        }
+
+        return array_values(array_unique($sites));
+    }
+
+    public function couvreSite(User $user, string $domaine, ?string $siteId): bool
+    {
+        return $siteId !== null
+            && $this->reglesDe($user, $domaine)->contains(fn (RegleValidationRole $r) => $this->regleCouvreSite($r, $user, $siteId));
     }
 
     /**
@@ -60,7 +98,7 @@ class ValidationParPlafondService
         }
 
         return $this->meilleureRegle(
-            $this->reglesDe($user, $domaine)->filter(fn (RegleValidationRole $r) => $this->couvreSite($r, $user, $siteId))
+            $this->reglesDe($user, $domaine)->filter(fn (RegleValidationRole $r) => $this->regleCouvreSite($r, $user, $siteId))
         );
     }
 
@@ -75,6 +113,7 @@ class ValidationParPlafondService
         $sitesUtilisateur = null;
 
         return $this->reglesDe($user, $domaine)
+            ->filter(fn (RegleValidationRole $r) => $r->plafond_illimite || $r->plafond !== null)
             ->map(function (RegleValidationRole $r) use ($user, &$sitesUtilisateur) {
                 $sites = match ($r->perimetre) {
                     'toutes_agences' => null,
@@ -84,7 +123,7 @@ class ValidationParPlafondService
 
                 return [
                     'sites' => $sites,
-                    'plafond' => $r->plafond_illimite ? null : (float) ($r->plafond ?? 0),
+                    'plafond' => $r->plafond_illimite ? null : (float) $r->plafond,
                 ];
             })
             ->values()
@@ -119,7 +158,7 @@ class ValidationParPlafondService
                     default => true,
                 };
 
-                return $couvre && ($regle->plafond_illimite || $montant <= (float) ($regle->plafond ?? 0));
+                return $couvre && ($regle->plafond_illimite || ($regle->plafond !== null && $montant <= (float) $regle->plafond));
             })
             ->map(fn (Role $role) => [
                 'role' => $role->name,
@@ -139,7 +178,7 @@ class ValidationParPlafondService
             ->get();
     }
 
-    private function couvreSite(RegleValidationRole $regle, User $user, ?string $siteId): bool
+    private function regleCouvreSite(RegleValidationRole $regle, User $user, ?string $siteId): bool
     {
         return match ($regle->perimetre) {
             'toutes_agences' => true,

@@ -6,6 +6,7 @@ use App\Models\CommandeAchat;
 use App\Models\RegleValidationRole;
 use App\Models\User;
 use App\Notifications\CommandeAchatNotification;
+use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use App\Services\Validation\ValidationParPlafondService;
@@ -21,7 +22,7 @@ use Illuminate\Support\Collection;
  * opération annulée par un rollback. L'auteur de l'action n'est jamais notifié de sa propre action.
  *
  * - créée   → validateurs potentiels (permission `achats.valider` ET plafond couvrant le montant
- *             et l'agence) + super administrateurs de l'organisation ;
+ *             et l'agence) + super administrateurs dont le périmètre couvre le bon ;
  * - validée → créateur + utilisateurs de l'agence de réception ayant `receptions.create` ;
  * - annulée → créateur.
  */
@@ -90,7 +91,7 @@ class NotifierCommandeAchatJob implements ShouldQueue
         return User::where('organization_id', $commande->organization_id)
             ->with('roles')
             ->get()
-            ->filter(fn (User $u) => $u->hasRole('super_admin')
+            ->filter(fn (User $u) => ($u->hasRole('super_admin') && app(PerimetreCommandesAchat::class)->estVisible($commande, $u))
                 || ($u->checkPermissionTo('achats.valider')
                     && $plafonds->peutValider($u, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant)));
     }

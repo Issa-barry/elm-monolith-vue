@@ -5,10 +5,10 @@ namespace App\Policies;
 use App\Models\CommandeAchat;
 use App\Models\User;
 use App\Services\Achats\PerimetreCommandesAchat;
-use App\Services\SiteScopeService;
 
 /**
- * Permission + périmètre de lecture (organisation, agences, créateur, validateur). Les conditions
+ * Permission + périmètre « Peut acheter pour » (PerimetreCommandesAchat : règles des rôles, plus le
+ * créateur et le validateur). Les conditions
  * d'état, le plafond et la séparation créateur/validateur sont vérifiés par CommandeAchatService /
  * ReceptionAchatService sous verrou, avec un message explicite — le Gate::before du super
  * administrateur court-circuite cette policy, jamais ces services.
@@ -45,12 +45,18 @@ class CommandeAchatPolicy
         return $user->can('achats.annuler') && $this->visible($user, $commande);
     }
 
-    /** Réceptionner (Logistique) : permission + agence de la commande dans le périmètre de l'utilisateur. */
+    /** Réceptionner (Logistique) : permission + utilisateur rattaché à l'agence de la commande. */
     public function receptionner(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('receptions.create')
+        return $user->can('receptions.create') && self::estRattacheAgence($user, $commande);
+    }
+
+    /** Sans passe-droit de rôle : vérifié aussi par le contrôleur (Gate::before du super administrateur). */
+    public static function estRattacheAgence(User $user, CommandeAchat $commande): bool
+    {
+        return $commande->site_id !== null
             && $user->organization_id === $commande->organization_id
-            && app(SiteScopeService::class)->siteAccessible($user, $commande->site_id);
+            && $user->sites()->where('sites.id', $commande->site_id)->exists();
     }
 
     public function delete(User $user, CommandeAchat $commande): bool

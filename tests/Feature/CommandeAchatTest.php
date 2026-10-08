@@ -13,8 +13,10 @@ use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Notifications\CommandeAchatNotification;
+use App\Services\Achats\CommandeAchatService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
@@ -48,6 +50,10 @@ class CommandeAchatTest extends TestCase
         $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
         $this->produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 500 ml', 'type' => 'materiel'], ['prix_achat' => 1000, 'sku' => 'BT-500']);
         $this->fournisseur = $this->makeFournisseur($this->org);
+
+        // Périmètre « Peut acheter pour » de l'acheteur de référence (rôle admin_entreprise) :
+        // toutes les agences, sans plafond (il crée et voit, ne valide pas).
+        $this->regle('admin_entreprise', null);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -121,7 +127,7 @@ class CommandeAchatTest extends TestCase
             ->post(route('achats.store'), $this->payload(['lignes' => [['variante_id' => $this->varianteId(), 'qte' => $qte, 'prix_achat' => 1000]]]))
             ->assertSessionHasNoErrors();
 
-        return CommandeAchat::latest('created_at')->firstOrFail();
+        return CommandeAchat::orderByDesc('numero')->firstOrFail();
     }
 
     // ── Accès ─────────────────────────────────────────────────────────────────
@@ -164,6 +170,31 @@ class CommandeAchatTest extends TestCase
         $this->assertSame('BT-500', $ligne->reference_snapshot);
     }
 
+    public function test_creation_rapide_d_un_fournisseur_depuis_le_bon_de_commande(): void
+    {
+        Permission::firstOrCreate(['name' => 'fournisseurs.create', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('fournisseurs.create');
+
+        $this->actingAs($this->user)
+            ->from(route('achats.create'))
+            ->post(route('produits.fournisseurs.store'), [
+                'raison_sociale' => 'Plastiques de Kaloum',
+                'code_pays' => 'GN',
+                'phone' => '622000111',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('achats.create'))
+            ->assertSessionHas('created_fournisseur_id');
+
+        $cree = Fournisseur::where('organization_id', $this->org->id)->findOrFail(session('created_fournisseur_id'));
+
+        $this->actingAs($this->user)
+            ->get(route('achats.create'))
+            ->assertInertia(fn ($page) => $page
+                ->component('Achats/Form')
+                ->where('fournisseurs', fn ($fournisseurs) => collect($fournisseurs)->contains('id', $cree->id)));
+    }
+
     public function test_store_exige_agence_et_fournisseur(): void
     {
         $this->actingAs($this->user)
@@ -195,13 +226,38 @@ class CommandeAchatTest extends TestCase
         $this->assertSame(0, CommandeAchat::count());
     }
 
-    public function test_store_refuse_une_agence_hors_du_perimetre_de_l_utilisateur(): void
+    public function test_creation_permise_si_la_regle_du_role_couvre_l_agence_refusee_sinon(): void
     {
         $autreSite = Site::factory()->for($this->org)->create();
         $acheteur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.create']);
+        $this->regle('acheteur', null, false, 'son_agence');
 
         $this->actingAs($acheteur)
             ->post(route('achats.store'), $this->payload(['site_id' => $autreSite->id]))
+            ->assertSessionHasErrors(['site_id' => "Votre rôle ne permet pas d'acheter pour cette agence."]);
+
+        $this->actingAs($acheteur)
+            ->post(route('achats.store'), $this->payload())
+            ->assertSessionHasNoErrors();
+        $this->assertSame(1, CommandeAchat::count());
+
+        $this->actingAs($acheteur)->get(route('achats.create'))
+            ->assertInertia(fn ($page) => $page->where('sites', fn ($sites) => collect($sites)->pluck('id')->all() === [$this->site->id]));
+    }
+
+    public function test_admin_entreprise_sans_regle_n_a_aucun_acces_automatique(): void
+    {
+        $commande = $this->creerCommande(10);
+        $autreAdmin = $this->makeUserWithPermissions($this->org, ['achats.read', 'achats.create', 'achats.update']);
+        $autreAdmin->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+        RegleValidationRole::where('role_name', 'admin_entreprise')->delete();
+
+        $this->actingAs($autreAdmin)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 0)->where('peut_creer', false));
+        $this->actingAs($autreAdmin)->get(route('achats.show', $commande))->assertForbidden();
+        $this->actingAs($autreAdmin)->get(route('achats.pdf', $commande))->assertForbidden();
+        $this->actingAs($autreAdmin)
+            ->post(route('achats.store'), $this->payload())
             ->assertSessionHasErrors('site_id');
     }
 
@@ -209,6 +265,7 @@ class CommandeAchatTest extends TestCase
     {
         $commande = $this->creerCommande(10);
         $modificateur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.update']);
+        $this->regle('acheteur', null);
 
         $this->actingAs($modificateur)
             ->put(route('achats.update', $commande), $this->payload(['lignes' => [['variante_id' => $this->varianteId(), 'qte' => 4, 'prix_achat' => 1000]]]))
@@ -286,14 +343,23 @@ class CommandeAchatTest extends TestCase
         $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
     }
 
-    public function test_validation_refusee_sans_regle_de_plafond(): void
+    public function test_validation_refusee_sans_regle_le_bon_est_hors_perimetre(): void
     {
         $commande = $this->creerCommande(10);
         $validateur = $this->makeUtilisateur('responsable_achat', ['achats.read', 'achats.valider']);
 
+        $this->actingAs($validateur)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+    }
+
+    public function test_validation_refusee_avec_un_perimetre_sans_plafond(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur('responsable_achat', null);
+
         $this->actingAs($validateur)
             ->patch(route('achats.valider', $commande))
-            ->assertSessionHasErrors(['validation' => "Aucun plafond de validation n'est configuré pour votre rôle."]);
+            ->assertSessionHasErrors(['validation' => "Votre rôle n'a pas de plafond de validation."]);
     }
 
     public function test_plusieurs_roles_le_plafond_le_plus_favorable_s_applique(): void
@@ -314,9 +380,8 @@ class CommandeAchatTest extends TestCase
         $autreSite = Site::factory()->for($this->org)->create();
         $validateur = $this->makeValidateur('responsable_achat', 5_000_000, false, 'agences_selectionnees', [$autreSite->id]);
 
-        $this->actingAs($validateur)
-            ->patch(route('achats.valider', $commande))
-            ->assertSessionHasErrors(['validation' => 'Votre plafond de validation ne couvre pas cette agence.']);
+        $this->actingAs($validateur)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
     }
 
     // ── Séparation des tâches ─────────────────────────────────────────────────
@@ -348,7 +413,7 @@ class CommandeAchatTest extends TestCase
             ->assertSessionHasErrors(['validation' => 'Vous avez modifié ce bon de commande en dernier : il doit être validé par une autre personne.']);
     }
 
-    public function test_le_super_administrateur_est_soumis_au_plafond_et_a_la_separation_des_taches(): void
+    public function test_le_super_administrateur_suit_le_moteur_normal_de_perimetre_et_de_plafond(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
         $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
@@ -357,22 +422,51 @@ class CommandeAchatTest extends TestCase
 
         $commande = $this->creerCommande(10);
 
-        // Sans règle de plafond : refus, malgré le Gate::before.
-        $this->actingAs($superAdmin)
-            ->patch(route('achats.valider', $commande))
-            ->assertSessionHasErrors(['validation' => "Aucun plafond de validation n'est configuré pour votre rôle."]);
+        // Sans règle : aucun accès, malgré le Gate::before.
+        $this->actingAs($superAdmin)->get(route('achats.show', $commande))->assertForbidden();
+        $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasErrors('site_id');
 
-        // Avec une règle « sans limite » : un bon qu'il a lui-même créé reste refusé.
-        $this->regle('super_admin', null, true);
+        // Règle par défaut (toutes agences, sans limite) : crée, voit, valide le bon d'un autre…
+        RegleValidationRole::provisionnerAchatsParDefaut($this->org->id);
         $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
         $sonBon = CommandeAchat::where('created_by', $superAdmin->id)->firstOrFail();
-        $this->actingAs($superAdmin)
-            ->patch(route('achats.valider', $sonBon))
-            ->assertSessionHasErrors('validation');
-
-        // Le bon d'un autre, avec la règle : accepté.
+        $this->actingAs($superAdmin)->get(route('achats.show', $commande))->assertOk();
         $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
         $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
+
+        // … mais jamais le sien.
+        $this->actingAs($superAdmin)
+            ->patch(route('achats.valider', $sonBon))
+            ->assertSessionHasErrors(['validation' => 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.']);
+
+        // Règle restreinte à une autre agence : plus d'accès aux bons de cette agence.
+        $autreSite = Site::factory()->for($this->org)->create();
+        RegleValidationRole::where('role_name', 'super_admin')->update(['perimetre' => 'agences_selectionnees', 'sites' => json_encode([$autreSite->id])]);
+        $bonDUnAutre = $this->creerCommande(5);
+        $this->actingAs($superAdmin)->get(route('achats.show', $bonDUnAutre))->assertForbidden();
+        $this->actingAs($superAdmin)->patch(route('achats.valider', $bonDUnAutre))->assertForbidden();
+        $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasErrors('site_id');
+    }
+
+    public function test_la_migration_cree_les_regles_par_defaut_sans_ecraser_une_regle_configuree(): void
+    {
+        RegleValidationRole::where('role_name', 'admin_entreprise')->update(['plafond' => 1_000, 'perimetre' => 'son_agence']);
+        $autreOrg = Organization::factory()->create();
+
+        (require database_path('migrations/2026_10_07_200400_provisionner_regles_achats_par_defaut.php'))->up();
+
+        $admin = RegleValidationRole::where('organization_id', $this->org->id)->where('role_name', 'admin_entreprise')->firstOrFail();
+        $this->assertSame(1_000.0, (float) $admin->plafond);
+        $this->assertSame('son_agence', $admin->perimetre);
+        $this->assertFalse($admin->plafond_illimite);
+
+        foreach ([$this->org->id, $autreOrg->id] as $orgId) {
+            $super = RegleValidationRole::where('organization_id', $orgId)->where('role_name', 'super_admin')->firstOrFail();
+            $this->assertTrue($super->plafond_illimite);
+            $this->assertSame('toutes_agences', $super->perimetre);
+        }
+        $this->assertTrue(RegleValidationRole::where('organization_id', $autreOrg->id)->where('role_name', 'admin_entreprise')->firstOrFail()->plafond_illimite);
     }
 
     // ── Isolation et périmètre de lecture ─────────────────────────────────────
@@ -393,10 +487,14 @@ class CommandeAchatTest extends TestCase
         $commande = $this->creerCommande(10);
         $commande->update(['site_id' => $autreSite->id]);
 
+        // Lecteur dont la règle couvre seulement l'agence principale : voit ses bons, pas les autres.
         $lecteur = $this->makeUtilisateur('lecteur_achats', ['achats.read']);
+        $this->regle('lecteur_achats', null, false, 'agences_selectionnees', [$this->site->id]);
+        $bonVisible = $this->creerCommande(3);
         $this->actingAs($lecteur)->get(route('achats.show', $commande))->assertForbidden();
+        $this->actingAs($lecteur)->get(route('achats.show', $bonVisible))->assertOk();
         $this->actingAs($lecteur)->get(route('achats.index'))
-            ->assertInertia(fn ($page) => $page->where('commandes.total', 0));
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.id', $bonVisible->id));
 
         $createur = $this->makeUtilisateur('acheteur', ['achats.read', 'achats.create']);
         $commande->update(['created_by' => $createur->id]);
@@ -405,7 +503,7 @@ class CommandeAchatTest extends TestCase
         $validateur = $this->makeUtilisateur('valideur_hors_agence', ['achats.read']);
         $commande->update(['validee_par' => $validateur->id]);
         $this->actingAs($validateur)->get(route('achats.index'))
-            ->assertInertia(fn ($page) => $page->where('commandes.total', 1));
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.id', $commande->id));
     }
 
     public function test_filtre_a_valider_par_moi(): void
@@ -484,6 +582,24 @@ class CommandeAchatTest extends TestCase
         Notification::assertNothingSent();
     }
 
+    public function test_aucune_notification_si_la_transaction_englobante_est_annulee_apres_la_validation(): void
+    {
+        $commande = $this->creerCommande(10);
+        $validateur = $this->makeValidateur();
+        Notification::fake();
+
+        try {
+            DB::transaction(function () use ($commande, $validateur) {
+                app(CommandeAchatService::class)->valider($commande, $validateur);
+                throw new \RuntimeException('rollback simulé');
+            });
+        } catch (\RuntimeException) {
+        }
+
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+        Notification::assertNothingSent();
+    }
+
     // ── PDF ───────────────────────────────────────────────────────────────────
 
     public function test_pdf_porte_le_filigrane_non_valide_tant_que_le_bon_n_est_pas_valide(): void
@@ -523,8 +639,12 @@ class CommandeAchatTest extends TestCase
         $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'admin_entreprise', 'plafond' => 5_000_000]);
         $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'super_admin', 'plafond_illimite' => true]);
 
+        // Périmètre seul (sans plafond) accepté ; agences sélectionnées sans agence refusé.
         $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [
             ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => null, 'plafond_illimite' => false, 'perimetre' => 'toutes_agences', 'sites' => []],
-        ]])->assertSessionHasErrors('config.0.plafond');
+        ]])->assertSessionHasNoErrors();
+        $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [
+            ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => null, 'plafond_illimite' => false, 'perimetre' => 'agences_selectionnees', 'sites' => []],
+        ]])->assertSessionHasErrors('config.0.sites');
     }
 }

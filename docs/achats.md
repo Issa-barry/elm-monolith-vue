@@ -19,26 +19,28 @@ Factures fournisseurs, dette, paiement et écritures comptables : lots 3 et 4, p
 
 | Code | Règle |
 |---|---|
-| ACH-001 | Un bon de commande a une agence de livraison (dans le périmètre du créateur), un fournisseur actif et au moins une ligne. Agence, fournisseur et variantes doivent appartenir à l'organisation. |
+| ACH-000 | **Périmètre « Peut acheter pour »** : règle par rôle (son agence / agences sélectionnées / toutes les agences). Il gouverne la création, la lecture et la validation. Sans règle couvrant l'agence : aucun accès, admin_entreprise et super administrateur compris. |
+| ACH-001 | Créer exige `achats.create` et une règle d'un des rôles couvrant l'agence de livraison (seules ces agences sont proposées, et le serveur refuse les autres). Fournisseur actif, au moins une ligne ; agence, fournisseur et variantes de l'organisation. |
 | ACH-002 | Un bon est modifiable (`achats.update`) tant qu'il est à valider. Chaque modification enregistre son auteur (`contenu_modifie_par`). |
-| ACH-003 | Valider exige la permission `achats.valider` ET une règle de plafond d'un des rôles de l'utilisateur qui couvre l'agence, avec montant ≤ plafond (égalité autorisée). Sans règle : refus. Plusieurs rôles : la règle la plus favorable. |
-| ACH-004 | Le super administrateur est soumis à ACH-003 et ACH-005, sans exception. |
+| ACH-003 | Valider exige `achats.valider` ET une règle couvrant l'agence avec montant ≤ plafond (égalité autorisée). Règle sans plafond : ne valide rien. Plusieurs rôles : le plafond le plus élevé parmi les règles couvrant l'agence. |
+| ACH-004 | Aucun passe-droit : super administrateur et admin_entreprise suivent ACH-000, ACH-003 et ACH-005 comme tout rôle. Règles de départ (modifiables) : « toutes agences, sans limite » pour ces deux rôles, créées par migration et à l'installation. |
 | ACH-005 | Le créateur du bon et le dernier modificateur de son contenu ne peuvent pas le valider. |
 | ACH-006 | À la validation sont figés : montant, nom du fournisseur, nom de l'agence, libellé et référence des lignes, règle de plafond appliquée (rôle, plafond, agences). Fiche et PDF lisent ce snapshot. |
 | ACH-007 | Annuler (`achats.annuler`, motif obligatoire) est possible quel que soit le plafond, tant qu'aucune quantité n'a été reçue. |
 | ACH-008 | Une commande partiellement reçue peut être clôturée (`achats.annuler`, motif) : le reliquat n'est plus attendu. |
-| ACH-009 | Réception (`receptions.create`, agence de la commande dans le périmètre de l'utilisateur) : uniquement depuis Logistique → Réceptions, sur une commande validée ou partiellement reçue. Chaque quantité ≤ reliquat, relu sous verrou ; sinon refus sans aucun effet. |
+| ACH-009 | Réception (`receptions.create`, utilisateur rattaché à l'agence de la commande) : uniquement depuis Logistique → Réceptions, sur une commande validée ou partiellement reçue. Chaque quantité ≤ reliquat, relu sous verrou ; sinon refus sans aucun effet. |
 | ACH-010 | Le stock entre dès l'enregistrement de la réception, sur l'agence de la commande. Le coût unitaire (prix de la commande) est figé sur la ligne de réception ; le mouvement de stock porte le motif « Réception achat — référence du bon ». |
 | ACH-011 | Le `prix_achat` de la variante prend le coût reçu, sauf pour un produit vendable dont la marge se calcule sur le prix d'achat si ce coût atteint le prix de vente : avertissement orange, réception non bloquée. |
-| ACH-012 | Lecture (`achats.read`) : commandes des agences de l'utilisateur, plus celles qu'il a créées ou validées. |
-| ACH-013 | Notifications après commit : création → validateurs potentiels (permission + plafond suffisant) et super administrateurs ; validation → créateur et utilisateurs de l'agence ayant `receptions.create` ; annulation → créateur. Jamais l'auteur de l'action. |
+| ACH-012 | Lecture (`achats.read`) : bons des agences couvertes par ACH-000, plus ceux que l'utilisateur a créés ou validés. |
+| ACH-013 | Notifications après commit : création → validateurs potentiels (permission + plafond suffisant) et super administrateurs dont le périmètre couvre le bon ; validation → créateur et utilisateurs de l'agence ayant `receptions.create` ; annulation → créateur. Jamais l'auteur de l'action. |
 | ACH-014 | PDF : filigrane « NON VALIDÉ » tant que le bon n'est pas validé, « ANNULÉ » s'il est annulé. |
 
 ## Paramètres → Achats
 
-Une ligne par rôle (super administrateur compris) : plafond en GNF ou « sans limite », et agences
-couvertes (toutes, son agence, agences sélectionnées). Pas de plafond = le rôle ne valide rien. La
-permission `achats.valider` se coche dans l'écran Rôles. Permission de la page : `parametres.update`.
+Une ligne par rôle (super administrateur compris, rien n'est verrouillé) : case « Peut acheter
+pour » (sans elle, aucun accès), agences couvertes, et plafond de validation en GNF ou « sans
+limite » (vide = le rôle ne valide rien). Les permissions `achats.*` se cochent dans l'écran Rôles.
+Permission de la page : `parametres.update`.
 
 ## Permissions
 

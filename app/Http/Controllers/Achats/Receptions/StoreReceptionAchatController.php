@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Achats\Receptions;
 
 use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
+use App\Policies\CommandeAchatPolicy;
 use App\Services\Achats\ReceptionAchatService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,8 @@ class StoreReceptionAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, ReceptionAchatService $service): RedirectResponse
     {
         $this->authorize('receptionner', $achat);
+        // Explicite : le Gate::before du super administrateur court-circuite la policy.
+        abort_unless(CommandeAchatPolicy::estRattacheAgence($request->user(), $achat), 403, "Vous n'êtes pas rattaché à l'agence de cette commande.");
 
         $data = $request->validate([
             'date_reception' => ['required', 'date', 'before_or_equal:today'],

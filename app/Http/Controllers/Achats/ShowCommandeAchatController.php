@@ -8,7 +8,9 @@ use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\ReceptionAchat;
 use App\Models\RegleValidationRole;
+use App\Policies\CommandeAchatPolicy;
 use App\Services\Achats\CommandeAchatService;
+use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,6 +21,7 @@ class ShowCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, ValidationParPlafondService $plafonds, CommandeAchatService $service): Response
     {
         $this->authorize('view', $achat);
+        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
 
         $user = $request->user();
         $achat->load([
@@ -95,7 +98,7 @@ class ShowCommandeAchatController extends Controller
                 'peut_annuler' => ($aValider || $achat->statut === StatutCommandeAchat::VALIDEE) && ! $dejaRecu && $user->can('annuler', $achat),
                 'peut_cloturer' => $achat->statut === StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE && $user->can('annuler', $achat),
                 // La réception se fait uniquement dans Logistique → Réceptions : la fiche y renvoie.
-                'lien_reception' => $achat->isReceptionnable() && $achat->site_id !== null && $user->can('receptionner', $achat)
+                'lien_reception' => $achat->isReceptionnable() && $user->can('receptionner', $achat) && CommandeAchatPolicy::estRattacheAgence($user, $achat)
                     ? route('logistique.receptions-fournisseurs.index', ['reference' => $achat->reference])
                     : null,
                 'peut_supprimer' => $achat->isAnnulee() && $user->can('delete', $achat),

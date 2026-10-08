@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Achats;
 
 use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
+use App\Services\Achats\PerimetreCommandesAchat;
 use App\Support\Achats\CommandeAchatFormOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,7 @@ class EditCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatFormOptions $options): Response|RedirectResponse
     {
         $this->authorize('update', $achat);
+        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
 
         if (! $achat->isAValider()) {
             return redirect()->route('achats.show', $achat)

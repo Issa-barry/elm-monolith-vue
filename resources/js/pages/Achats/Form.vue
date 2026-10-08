@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import CreateFournisseurModal from '@/components/fournisseurs/CreateFournisseurModal.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -8,7 +10,7 @@ import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-vue-next';
 import InputNumber, { type InputNumberInputEvent } from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface VarianteOption {
     id: string;
@@ -73,6 +75,19 @@ const form = useForm({
         ? props.commande.lignes.map((l) => ({ ...l }))
         : [{ variante_id: null, qte: 1, prix_achat: 0 }]) as LigneForm[],
 });
+
+const { can } = usePermissions();
+
+const fournisseurSelect = ref<{ hide: () => void } | null>(null);
+const rechercheFournisseur = ref('');
+const creationFournisseurVisible = ref(false);
+
+// Création rapide (même route que le formulaire Produit) : le fournisseur créé revient dans la
+// liste au rechargement des props et est sélectionné via l'événement created.
+function ouvrirCreationFournisseur() {
+    fournisseurSelect.value?.hide();
+    creationFournisseurVisible.value = true;
+}
 
 const retourHref = computed(() =>
     props.commande
@@ -219,6 +234,7 @@ function submit() {
                                 <span class="text-destructive">*</span>
                             </Label>
                             <Select
+                                ref="fournisseurSelect"
                                 v-model="form.fournisseur_id"
                                 input-id="achat-fournisseur"
                                 :options="fournisseurs"
@@ -226,8 +242,51 @@ function submit() {
                                 option-value="id"
                                 placeholder="Choisir un fournisseur"
                                 filter
+                                filter-placeholder="Rechercher un fournisseur…"
                                 class="w-full"
                                 :invalid="!!form.errors.fournisseur_id"
+                                @filter="rechercheFournisseur = $event.value"
+                                @show="rechercheFournisseur = ''"
+                            >
+                                <template #empty>
+                                    <div
+                                        class="px-3 py-2 text-sm text-muted-foreground"
+                                    >
+                                        Aucun fournisseur enregistré.
+                                    </div>
+                                </template>
+                                <template #emptyfilter>
+                                    <div
+                                        class="px-3 py-2 text-sm text-muted-foreground"
+                                    >
+                                        Aucun fournisseur ne correspond à «
+                                        {{ rechercheFournisseur }} ».
+                                    </div>
+                                </template>
+                                <template
+                                    v-if="can('fournisseurs.create')"
+                                    #footer
+                                >
+                                    <div class="border-t p-1">
+                                        <button
+                                            type="button"
+                                            class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary hover:bg-muted"
+                                            @click="ouvrirCreationFournisseur"
+                                        >
+                                            <Plus class="h-4 w-4" />
+                                            {{
+                                                rechercheFournisseur.trim()
+                                                    ? `Créer « ${rechercheFournisseur.trim()} »`
+                                                    : 'Créer un fournisseur'
+                                            }}
+                                        </button>
+                                    </div>
+                                </template>
+                            </Select>
+                            <CreateFournisseurModal
+                                v-model:visible="creationFournisseurVisible"
+                                :nom-initial="rechercheFournisseur.trim()"
+                                @created="form.fournisseur_id = $event"
                             />
                             <p
                                 v-if="form.errors.fournisseur_id"

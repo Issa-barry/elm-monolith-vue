@@ -10,10 +10,12 @@ use App\Models\Fournisseur;
 use App\Models\MouvementStock;
 use App\Models\Produit;
 use App\Models\ReceptionAchatLigne;
+use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\MouvementStockMotifService;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
@@ -188,6 +190,7 @@ class ReceptionAchatTest extends TestCase
         $commande = $this->commandeValidee(100);
         $this->receptionner($commande, 60);
         $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'achats.annuler', 'guard_name' => 'web']));
+        RegleValidationRole::create(['organization_id' => $this->org->id, 'domaine' => RegleValidationRole::DOMAINE_ACHATS, 'role_name' => 'admin_entreprise', 'perimetre' => 'toutes_agences']);
 
         $this->actingAs($this->user)
             ->patch(route('achats.cloturer', $commande), ['motif_cloture' => 'Fournisseur en rupture'])
@@ -206,6 +209,33 @@ class ReceptionAchatTest extends TestCase
 
         $this->assertSame(MouvementStockMotifService::KEY_RECEPTION_ACHAT, $mouvement->motif_type);
         $this->assertSame('Réception achat — '.$commande->reference, $mouvement->motif_label);
+    }
+
+    public function test_le_stock_entre_sur_l_agence_de_la_commande_meme_si_le_receptionnaire_a_une_autre_agence_par_defaut(): void
+    {
+        $commande = $this->commandeValidee(10);
+        $multiAgences = $this->makeMagasinier([$this->autreAgence, $this->agenceCommande]);
+
+        $this->receptionner($commande, 4, $multiAgences)->assertSessionHasNoErrors();
+
+        $this->assertSame(4, $this->stock($this->agenceCommande));
+        $this->assertSame(0, $this->stock($this->autreAgence));
+    }
+
+    public function test_le_super_administrateur_ne_receptionne_que_dans_les_agences_auxquelles_il_est_rattache(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->autreAgence->id, ['role' => 'employe', 'is_default' => true]);
+        $commande = $this->commandeValidee(10);
+
+        $this->receptionner($commande, 5, $superAdmin)->assertForbidden();
+        $this->assertSame(0, $this->stock($this->agenceCommande));
+
+        $superAdmin->sites()->attach($this->agenceCommande->id, ['role' => 'employe', 'is_default' => false]);
+        $this->receptionner($commande, 5, $superAdmin->fresh())->assertSessionHasNoErrors();
+        $this->assertSame(5, $this->stock($this->agenceCommande));
     }
 
     public function test_ecran_logistique_liste_les_commandes_validees_des_agences_de_l_utilisateur(): void
