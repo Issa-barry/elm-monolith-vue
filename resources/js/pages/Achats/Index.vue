@@ -18,6 +18,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     MoreVertical,
@@ -45,6 +46,7 @@ interface Commande {
     qte_recue: number;
     is_annulee: boolean;
     annulable: boolean;
+    peut_valider: boolean;
 }
 
 interface Paginator<T> {
@@ -128,6 +130,47 @@ function paginationLabel(label: string): string {
 
 function ouvrir(c: Commande) {
     router.visit(`/backoffice/achats/${c.id}`);
+}
+
+// ── Validation ────────────────────────────────────────────────────────────────
+const aValider = ref<Commande | null>(null);
+const validationEnCours = ref(false);
+
+function fermerValider(valeur: boolean) {
+    if (!valeur && validationEnCours.value) return;
+    if (!valeur) aValider.value = null;
+}
+
+function valider() {
+    if (!aValider.value) return;
+    validationEnCours.value = true;
+    router.patch(
+        `/backoffice/achats/${aValider.value.id}/valider`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                aValider.value = null;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Bon de commande validé',
+                    life: 3000,
+                });
+            },
+            onError: (errors) => {
+                aValider.value = null;
+                toast.add({
+                    severity: 'error',
+                    summary: 'Validation refusée',
+                    detail: errors.validation ?? Object.values(errors)[0],
+                    life: 7000,
+                });
+            },
+            onFinish: () => {
+                validationEnCours.value = false;
+            },
+        },
+    );
 }
 
 // ── Annulation ────────────────────────────────────────────────────────────────
@@ -325,6 +368,14 @@ function confirmDelete(c: Commande) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
+                                            v-if="c.peut_valider"
+                                            class="cursor-pointer text-emerald-600 focus:text-emerald-600"
+                                            @click="aValider = c"
+                                        >
+                                            <CheckCircle2 class="h-4 w-4" />
+                                            Valider
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
                                             v-if="
                                                 c.annulable &&
                                                 can('achats.annuler')
@@ -446,6 +497,47 @@ function confirmDelete(c: Commande) {
                 </template>
             </div>
         </div>
+
+        <!-- Validation -->
+        <Dialog
+            :visible="aValider !== null"
+            modal
+            header="Valider le bon de commande"
+            :closable="!validationEnCours"
+            :style="{ width: '460px', maxWidth: '95vw' }"
+            @update:visible="fermerValider"
+        >
+            <p v-if="aValider" class="text-sm text-muted-foreground">
+                Valider
+                <span class="font-mono font-semibold text-foreground">{{
+                    aValider.reference
+                }}</span>
+                pour
+                <span class="font-semibold text-foreground">{{
+                    formatGNF(aValider.total_commande)
+                }}</span>
+                ? La commande ne sera plus modifiable et pourra être
+                réceptionnée à {{ aValider.site_nom }}.
+            </p>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        :disabled="validationEnCours"
+                        @click="fermerValider(false)"
+                        >Retour</Button
+                    >
+                    <Button :disabled="validationEnCours" @click="valider">
+                        <i
+                            v-if="validationEnCours"
+                            class="pi pi-spin pi-spinner mr-2"
+                        />
+                        <CheckCircle2 v-else class="mr-2 h-4 w-4" />
+                        Valider
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
 
         <!-- Annulation -->
         <Dialog

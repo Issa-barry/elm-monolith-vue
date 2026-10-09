@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Models\Fournisseur;
 use App\Models\RegleValidationRole;
+use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +20,7 @@ class IndexCommandeAchatController extends Controller
     public function __construct(
         private readonly PerimetreCommandesAchat $perimetre,
         private readonly ValidationParPlafondService $plafonds,
+        private readonly CommandeAchatService $service,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -76,6 +78,11 @@ class IndexCommandeAchatController extends Controller
                 'qte_recue' => (int) $c->qte_recue,
                 'is_annulee' => $c->isAnnulee(),
                 'annulable' => ($c->isAValider() || $c->statut === StatutCommandeAchat::VALIDEE) && (int) $c->qte_recue === 0,
+                // Même règle que la fiche (permission, périmètre, plafond, séparation des tâches) :
+                // l'action « Valider » de la liste n'apparaît que si le serveur l'accepterait.
+                'peut_valider' => $c->isAValider()
+                    && $user->can('valider', $c)
+                    && $this->service->motifNonValidable($c, $user) === null,
             ]),
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),
             'statuts' => StatutCommandeAchat::options(),

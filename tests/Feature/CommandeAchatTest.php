@@ -441,7 +441,10 @@ class CommandeAchatTest extends TestCase
         $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
         $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
 
-        // … et le sien : sa règle par défaut l'autorise à valider ses propres bons (décision du 09/10/2026).
+        // … et le sien : sa règle par défaut l'autorise à valider ses propres bons (décision du 09/10/2026),
+        // action proposée aussi depuis la liste.
+        $this->actingAs($superAdmin)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', fn ($data) => collect($data)->firstWhere('id', $sonBon->id)['peut_valider'] === true));
         $this->actingAs($superAdmin)->patch(route('achats.valider', $sonBon))->assertSessionHasNoErrors();
         $this->assertSame(StatutCommandeAchat::VALIDEE, $sonBon->fresh()->statut);
         $this->assertTrue($sonBon->fresh()->validation_regle_snapshot['son_propre_bon']);
@@ -730,6 +733,11 @@ class CommandeAchatTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.id', $commande->id));
         $this->actingAs($b)->get(route('achats.show', $commande))
             ->assertInertia(fn ($page) => $page->where('actions.peut_valider', true)->where('aucun_validateur_disponible', false));
+        // Action « Valider » de la liste : proposée à B, pas à A (créateur sans auto-validation).
+        $this->actingAs($b)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data.0.id', $commande->id)->where('commandes.data.0.peut_valider', true));
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data.0.id', $commande->id)->where('commandes.data.0.peut_valider', false));
 
         $this->actingAs($this->user)
             ->patch(route('achats.valider', $commande))
