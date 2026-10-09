@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\RegleValidationRole;
 use Illuminate\Database\Seeder;
 
 /**
@@ -17,9 +18,13 @@ class ElmDemoOrganizationSeeder extends Seeder
 {
     public function run(): void
     {
-        Organization::firstOrCreate(
+        $org = Organization::firstOrCreate(
             ['slug' => 'elm'],
             ['name' => 'Eau la maman', 'is_active' => true]
         );
+
+        // Comme InstallationService : sans règle « Peut acheter pour » (ADR 0021), même le super
+        // administrateur ne se voit proposer aucune agence sur le formulaire de bon de commande.
+        RegleValidationRole::provisionnerAchatsParDefaut($org->id);
     }
 }

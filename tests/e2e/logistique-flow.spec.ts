@@ -173,7 +173,7 @@ test('stepper — 6 étapes dont "Commission" grise dès la création', async ({
 
     // L'onglet "Commission logistique" doit être désactivé (pas encore atteint)
     await expect(
-        page.getByRole('button', { name: /commission logistique/i }),
+        page.getByRole('tab', { name: /commission logistique/i }),
     ).toBeDisabled({ timeout: 5_000 });
 });
 
@@ -193,7 +193,7 @@ test('stepper — étape commission affiche "Impayé" ou "Partiel" sur elm-2 (co
 
     // L'onglet commission est accessible
     await expect(
-        page.getByRole('button', { name: /commission logistique/i }),
+        page.getByRole('tab', { name: /commission logistique/i }),
     ).not.toBeDisabled({ timeout: 5_000 });
 });
 
@@ -209,7 +209,7 @@ test('stepper — étape commission affiche "Payé" sur elm-1 (commission intég
 
     // L'onglet commission est accessible
     await expect(
-        page.getByRole('button', { name: /commission logistique/i }),
+        page.getByRole('tab', { name: /commission logistique/i }),
     ).not.toBeDisabled({ timeout: 5_000 });
 });
 
