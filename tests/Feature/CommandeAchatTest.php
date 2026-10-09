@@ -15,9 +15,11 @@ use App\Models\User;
 use App\Notifications\CommandeAchatNotification;
 use App\Services\Achats\CommandeAchatService;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -40,6 +42,10 @@ class CommandeAchatTest extends TestCase
     private Produit $produit;
 
     private Fournisseur $fournisseur;
+
+    private const MOTIF_CREATEUR = 'Vous avez créé ce bon de commande : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.';
+
+    private const MOTIF_MODIFICATEUR = 'Vous avez modifié ce bon de commande en dernier : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.';
 
     protected function setUp(): void
     {
@@ -396,7 +402,7 @@ class CommandeAchatTest extends TestCase
 
         $this->actingAs($createur)
             ->patch(route('achats.valider', $commande))
-            ->assertSessionHasErrors(['validation' => 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_CREATEUR]);
         $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
     }
 
@@ -410,7 +416,7 @@ class CommandeAchatTest extends TestCase
 
         $this->actingAs($validateur)
             ->patch(route('achats.valider', $commande))
-            ->assertSessionHasErrors(['validation' => 'Vous avez modifié ce bon de commande en dernier : il doit être validé par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_MODIFICATEUR]);
     }
 
     public function test_le_super_administrateur_suit_le_moteur_normal_de_perimetre_et_de_plafond(): void
@@ -435,10 +441,18 @@ class CommandeAchatTest extends TestCase
         $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
         $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
 
-        // … mais jamais le sien.
+        // … et le sien : sa règle par défaut l'autorise à valider ses propres bons (décision du 09/10/2026).
+        $this->actingAs($superAdmin)->patch(route('achats.valider', $sonBon))->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $sonBon->fresh()->statut);
+        $this->assertTrue($sonBon->fresh()->validation_regle_snapshot['son_propre_bon']);
+
+        // Réglage retiré dans Paramètres → Achats : la séparation des tâches s'applique à lui aussi.
+        RegleValidationRole::where('role_name', 'super_admin')->update(['peut_valider_ses_propres_bons' => false]);
+        $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
+        $sonSecondBon = CommandeAchat::where('created_by', $superAdmin->id)->where('statut', StatutCommandeAchat::A_VALIDER)->firstOrFail();
         $this->actingAs($superAdmin)
-            ->patch(route('achats.valider', $sonBon))
-            ->assertSessionHasErrors(['validation' => 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.']);
+            ->patch(route('achats.valider', $sonSecondBon))
+            ->assertSessionHasErrors(['validation' => self::MOTIF_CREATEUR]);
 
         // Règle restreinte à une autre agence : plus d'accès aux bons de cette agence.
         $autreSite = Site::factory()->for($this->org)->create();
@@ -480,12 +494,16 @@ class CommandeAchatTest extends TestCase
         $this->regle('lecteur_achats', null);
         $actions($lecteur, $commande, false, null);
 
-        // Permission rétablie : bouton sur le bon d'un autre, séparation des tâches sur le sien.
+        // Permission rétablie : bouton sur le bon d'un autre comme sur le sien (règle par défaut)…
         Role::findByName('super_admin')->givePermissionTo('achats.valider');
         $actions($superAdmin->fresh(), $commande, true, null);
         $this->actingAs($superAdmin->fresh())->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
         $sonBon = CommandeAchat::where('created_by', $superAdmin->id)->firstOrFail();
-        $actions($superAdmin->fresh(), $sonBon, false, 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.');
+        $actions($superAdmin->fresh(), $sonBon, true, null);
+
+        // … et le motif de séparation des tâches s'affiche si le réglage est retiré.
+        RegleValidationRole::where('role_name', 'super_admin')->update(['peut_valider_ses_propres_bons' => false]);
+        $actions($superAdmin->fresh(), $sonBon, false, self::MOTIF_CREATEUR);
     }
 
     public function test_la_migration_cree_les_regles_par_defaut_sans_ecraser_une_regle_configuree(): void
@@ -504,8 +522,83 @@ class CommandeAchatTest extends TestCase
             $super = RegleValidationRole::where('organization_id', $orgId)->where('role_name', 'super_admin')->firstOrFail();
             $this->assertTrue($super->plafond_illimite);
             $this->assertSame('toutes_agences', $super->perimetre);
+            $this->assertTrue($super->peut_valider_ses_propres_bons);
         }
-        $this->assertTrue(RegleValidationRole::where('organization_id', $autreOrg->id)->where('role_name', 'admin_entreprise')->firstOrFail()->plafond_illimite);
+        $adminAutreOrg = RegleValidationRole::where('organization_id', $autreOrg->id)->where('role_name', 'admin_entreprise')->firstOrFail();
+        $this->assertTrue($adminAutreOrg->plafond_illimite);
+        $this->assertFalse($adminAutreOrg->peut_valider_ses_propres_bons);
+    }
+
+    public function test_la_migration_autorise_l_auto_validation_des_regles_super_admin_existantes_seulement(): void
+    {
+        $super = $this->regle('super_admin', null, true);
+        RegleValidationRole::whereKey($super->id)->update(['peut_valider_ses_propres_bons' => false]);
+        $admin = RegleValidationRole::where('role_name', 'admin_entreprise')->firstOrFail();
+
+        (require database_path('migrations/2026_10_09_200000_add_peut_valider_ses_propres_bons_to_regles_validation_roles_table.php'))->up();
+
+        $this->assertTrue($super->fresh()->peut_valider_ses_propres_bons);
+        $this->assertFalse($admin->fresh()->peut_valider_ses_propres_bons);
+    }
+
+    public function test_deploiement_les_deux_migrations_dans_la_meme_passe_sans_colonne_au_depart(): void
+    {
+        // Base pas encore déployée (production, formation) : 200400 tourne avant que 200000 n'ajoute
+        // la colonne. Elle ne doit pas échouer, et le super administrateur doit finir autorisé.
+        RegleValidationRole::query()->delete();
+        Schema::table('regles_validation_roles', fn (Blueprint $t) => $t->dropColumn('peut_valider_ses_propres_bons'));
+
+        (require database_path('migrations/2026_10_07_200400_provisionner_regles_achats_par_defaut.php'))->up();
+        (require database_path('migrations/2026_10_09_200000_add_peut_valider_ses_propres_bons_to_regles_validation_roles_table.php'))->up();
+
+        $regles = RegleValidationRole::where('organization_id', $this->org->id)->get()->keyBy('role_name');
+        $this->assertTrue($regles['super_admin']->peut_valider_ses_propres_bons);
+        $this->assertFalse($regles['admin_entreprise']->peut_valider_ses_propres_bons);
+    }
+
+    public function test_un_role_autorise_a_valider_ses_propres_bons_le_fait_dans_la_limite_de_son_plafond(): void
+    {
+        $acheteur = $this->makeValidateur('responsable_achat', 15_000);
+        $acheteur->givePermissionTo(['achats.create', 'achats.update']);
+        RegleValidationRole::where('role_name', 'responsable_achat')->update(['peut_valider_ses_propres_bons' => true]);
+
+        $this->actingAs($acheteur)->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
+        $petit = CommandeAchat::where('created_by', $acheteur->id)->firstOrFail();
+
+        // Visible dans « À valider par moi », bouton affiché, validation acceptée.
+        $this->actingAs($acheteur)->get(route('achats.index', ['a_valider_par_moi' => '1']))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.id', $petit->id));
+        $this->actingAs($acheteur)->get(route('achats.show', $petit))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_valider', true)->where('aucun_validateur_disponible', false));
+        $this->actingAs($acheteur)->patch(route('achats.valider', $petit))->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $petit->fresh()->statut);
+
+        // Le plafond reste contrôlé : 20 000 GNF > 15 000 GNF.
+        $this->actingAs($acheteur)->post(route('achats.store'), $this->payload([
+            'lignes' => [['variante_id' => $this->varianteId(), 'qte' => 20, 'prix_achat' => 1000]],
+        ]))->assertSessionHasNoErrors();
+        $gros = CommandeAchat::where('created_by', $acheteur->id)->where('statut', StatutCommandeAchat::A_VALIDER)->firstOrFail();
+        $this->actingAs($acheteur)->patch(route('achats.valider', $gros))->assertSessionHasErrors('validation');
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $gros->fresh()->statut);
+    }
+
+    public function test_le_reglage_d_auto_validation_ne_concerne_que_le_role_qui_le_porte(): void
+    {
+        // Le créateur (admin_entreprise, sans auto-validation) reste soumis à la séparation des
+        // tâches ; un autre rôle autorisé à valider SES bons garde son plafond sur ceux des autres.
+        $this->createurAvecDroitDeValiderSansLimite();
+        $autoValidateur = $this->makeValidateur('responsable_achat', 5_000);
+        RegleValidationRole::where('role_name', 'responsable_achat')->update(['peut_valider_ses_propres_bons' => true]);
+
+        $commande = $this->creerCommande(10);
+
+        $this->actingAs($this->user)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => self::MOTIF_CREATEUR]);
+        $this->actingAs($autoValidateur)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors('validation');
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
     }
 
     // ── Isolation et périmètre de lecture ─────────────────────────────────────
@@ -611,6 +704,61 @@ class CommandeAchatTest extends TestCase
         Notification::assertSentTo($magasinier, CommandeAchatNotification::class, fn ($n) => $n->toArray($magasinier)['type'] === 'commande_achat_validee');
     }
 
+    /** Le créateur de référence ($this->user, rôle admin_entreprise) peut lui aussi valider, sans limite. */
+    private function createurAvecDroitDeValiderSansLimite(): void
+    {
+        Permission::firstOrCreate(['name' => 'achats.valider', 'guard_name' => 'web']);
+        Role::findByName('admin_entreprise', 'web')->givePermissionTo('achats.valider');
+        RegleValidationRole::where('organization_id', $this->org->id)
+            ->where('role_name', 'admin_entreprise')
+            ->update(['plafond' => null, 'plafond_illimite' => true]);
+    }
+
+    public function test_parcours_complet_a_cree_b_est_notifie_retrouve_le_bon_et_le_valide(): void
+    {
+        Notification::fake();
+        // A pourrait valider (permission + sans limite) : seule la séparation des tâches l'en empêche.
+        $this->createurAvecDroitDeValiderSansLimite();
+        $b = $this->makeValidateur('responsable_achat', 50_000);
+
+        $commande = $this->creerCommande(10);
+
+        Notification::assertSentTo($b, CommandeAchatNotification::class, fn ($n) => $n->toArray($b)['type'] === 'commande_achat_creee');
+        $this->actingAs($b)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', fn ($data) => collect($data)->contains('id', $commande->id)));
+        $this->actingAs($b)->get(route('achats.index', ['a_valider_par_moi' => '1']))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.id', $commande->id));
+        $this->actingAs($b)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_valider', true)->where('aucun_validateur_disponible', false));
+
+        $this->actingAs($this->user)
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => self::MOTIF_CREATEUR]);
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+
+        $this->actingAs($b)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->fresh()->statut);
+        $this->assertSame($b->id, $commande->fresh()->validee_par);
+    }
+
+    public function test_la_fiche_signale_quand_aucun_autre_utilisateur_ne_peut_valider(): void
+    {
+        // Le créateur est le seul validateur possible (permission + règle sans limite).
+        $this->createurAvecDroitDeValiderSansLimite();
+        $commande = $this->creerCommande(10);
+
+        $this->actingAs($this->user)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page
+                ->where('aucun_validateur_disponible', true)
+                ->where('actions.peut_valider', false)
+                ->where('validable_par', fn ($roles) => collect($roles)->contains('role', 'admin_entreprise')));
+
+        // Un second utilisateur éligible lève le message.
+        $this->makeValidateur('responsable_achat', 50_000);
+        $this->actingAs($this->user)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page->where('aucun_validateur_disponible', false));
+    }
+
     public function test_aucune_notification_quand_la_validation_est_refusee(): void
     {
         $commande = $this->creerCommande(10);
@@ -671,12 +819,14 @@ class CommandeAchatTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('config', fn ($config) => collect($config)->contains('role_name', 'super_admin')));
 
         $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [
-            ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => 5_000_000, 'plafond_illimite' => false, 'perimetre' => 'toutes_agences', 'sites' => []],
-            ['role_name' => 'super_admin', 'actif' => true, 'plafond' => null, 'plafond_illimite' => true, 'perimetre' => 'toutes_agences', 'sites' => []],
+            ['role_name' => 'admin_entreprise', 'actif' => true, 'plafond' => 5_000_000, 'plafond_illimite' => false, 'peut_valider_ses_propres_bons' => true, 'perimetre' => 'toutes_agences', 'sites' => []],
+            ['role_name' => 'super_admin', 'actif' => true, 'plafond' => null, 'plafond_illimite' => true, 'peut_valider_ses_propres_bons' => false, 'perimetre' => 'toutes_agences', 'sites' => []],
         ]])->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'admin_entreprise', 'plafond' => 5_000_000]);
-        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'super_admin', 'plafond_illimite' => true]);
+        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'admin_entreprise', 'plafond' => 5_000_000, 'peut_valider_ses_propres_bons' => true]);
+        $this->assertDatabaseHas('regles_validation_roles', ['organization_id' => $this->org->id, 'role_name' => 'super_admin', 'plafond_illimite' => true, 'peut_valider_ses_propres_bons' => false]);
+        $this->actingAs($this->user)->get(route('settings.achats'))
+            ->assertInertia(fn ($page) => $page->where('config', fn ($config) => collect($config)->firstWhere('role_name', 'admin_entreprise')['peut_valider_ses_propres_bons'] === true));
 
         // Périmètre seul (sans plafond) accepté ; agences sélectionnées sans agence refusé.
         $this->actingAs($this->user)->put(route('settings.achats.validation'), ['config' => [

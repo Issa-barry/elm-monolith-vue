@@ -32,11 +32,18 @@ class ValidationParPlafondService
 
     /**
      * Message explicite si l'utilisateur ne peut pas valider ce montant pour cette agence, null
-     * sinon. Ne vérifie PAS la permission du domaine.
+     * sinon. Ne vérifie PAS la permission du domaine. Avec $sonPropreBon, seules comptent les
+     * règles qui autorisent à valider ses propres bons (`peut_valider_ses_propres_bons`).
      */
-    public function motifRefus(User $user, string $domaine, ?string $siteId, float $montant): ?string
+    public function motifRefus(User $user, string $domaine, ?string $siteId, float $montant, bool $sonPropreBon = false): ?string
     {
         $regles = $this->reglesDe($user, $domaine);
+        if ($sonPropreBon) {
+            $regles = $regles->filter(fn (RegleValidationRole $r) => $r->peut_valider_ses_propres_bons);
+            if ($regles->isEmpty()) {
+                return 'Votre rôle ne permet pas de valider vos propres bons de commande.';
+            }
+        }
         if ($regles->isEmpty()) {
             return "Aucun plafond de validation n'est configuré pour votre rôle.";
         }
@@ -91,14 +98,16 @@ class ValidationParPlafondService
      * Règle qui autorise la validation (la plus favorable couvrant l'agence), ou null si
      * l'utilisateur ne peut pas valider ce montant. Sert au snapshot de la validation.
      */
-    public function regleAppliquee(User $user, string $domaine, ?string $siteId, float $montant): ?RegleValidationRole
+    public function regleAppliquee(User $user, string $domaine, ?string $siteId, float $montant, bool $sonPropreBon = false): ?RegleValidationRole
     {
-        if ($this->motifRefus($user, $domaine, $siteId, $montant) !== null) {
+        if ($this->motifRefus($user, $domaine, $siteId, $montant, $sonPropreBon) !== null) {
             return null;
         }
 
         return $this->meilleureRegle(
-            $this->reglesDe($user, $domaine)->filter(fn (RegleValidationRole $r) => $this->regleCouvreSite($r, $user, $siteId))
+            $this->reglesDe($user, $domaine)
+                ->filter(fn (RegleValidationRole $r) => ! $sonPropreBon || $r->peut_valider_ses_propres_bons)
+                ->filter(fn (RegleValidationRole $r) => $this->regleCouvreSite($r, $user, $siteId))
         );
     }
 
@@ -106,7 +115,7 @@ class ValidationParPlafondService
      * Périmètres de validation de l'utilisateur, pour filtrer une liste « à valider par moi » en
      * SQL : une entrée par règle, `sites` null = toutes les agences, `plafond` null = sans limite.
      *
-     * @return list<array{sites: list<string>|null, plafond: float|null}>
+     * @return list<array{sites: list<string>|null, plafond: float|null, ses_propres_bons: bool}>
      */
     public function perimetresDeValidation(User $user, string $domaine): array
     {
@@ -124,6 +133,7 @@ class ValidationParPlafondService
                 return [
                     'sites' => $sites,
                     'plafond' => $r->plafond_illimite ? null : (float) $r->plafond,
+                    'ses_propres_bons' => (bool) $r->peut_valider_ses_propres_bons,
                 ];
             })
             ->values()

@@ -12,8 +12,8 @@ use Spatie\Permission\Models\Role;
 
 /**
  * Paramètres → Achats (ADR 0021) : par rôle, le périmètre « Peut acheter pour » (agences pour
- * lesquelles le rôle crée, voit et valide des bons de commande) et le plafond de validation (vide =
- * le rôle ne valide rien). Les permissions `achats.*` se cochent dans l'écran Rôles. Tous les
+ * lesquelles le rôle crée, voit et valide des bons de commande), le plafond de validation (vide =
+ * le rôle ne valide rien) et le droit de valider ses propres bons (séparation des tâches sinon). Les permissions `achats.*` se cochent dans l'écran Rôles. Tous les
  * rôles se configurent ici à l'identique, super administrateur compris : sans règle, aucun accès.
  */
 class EditAchatParametrageController extends Controller
@@ -44,6 +44,7 @@ class EditAchatParametrageController extends Controller
                 'actif' => $regle !== null,
                 'plafond' => $regle?->plafond !== null ? (float) $regle->plafond : null,
                 'plafond_illimite' => (bool) ($regle?->plafond_illimite ?? false),
+                'peut_valider_ses_propres_bons' => (bool) ($regle?->peut_valider_ses_propres_bons ?? false),
                 'perimetre' => $regle?->perimetre ?? 'toutes_agences',
                 'sites' => $regle?->sites ?? [],
             ];

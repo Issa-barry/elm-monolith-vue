@@ -97,6 +97,7 @@ interface Actions {
 const props = defineProps<{
     commande: CommandeData;
     actions: Actions;
+    aucun_validateur_disponible: boolean;
     validable_par: { role: string; label: string; plafond: number | null }[];
 }>();
 
@@ -366,14 +367,17 @@ function supprimer() {
                 v-if="commande.is_a_valider"
                 class="space-y-2 rounded-xl border p-4 text-sm"
                 :class="
-                    actions.motif_non_validable
+                    actions.motif_non_validable || aucun_validateur_disponible
                         ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
                         : 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200'
                 "
             >
                 <p class="flex items-start gap-2 font-medium">
                     <AlertTriangle
-                        v-if="actions.motif_non_validable"
+                        v-if="
+                            actions.motif_non_validable ||
+                            aucun_validateur_disponible
+                        "
                         class="mt-0.5 h-4 w-4 shrink-0"
                     />
                     <Info v-else class="mt-0.5 h-4 w-4 shrink-0" />
@@ -383,8 +387,18 @@ function supprimer() {
                 <p v-if="actions.motif_non_validable" class="pl-6">
                     {{ actions.motif_non_validable }}
                 </p>
+                <p v-if="aucun_validateur_disponible" class="pl-6">
+                    Aucun autre utilisateur ne peut valider ce bon. Attribuez à
+                    un autre utilisateur un rôle autorisé à valider les achats
+                    et vérifiez son périmètre et son plafond.
+                </p>
                 <p v-if="validable_par.length > 0" class="pl-6">
-                    Validable par : {{ validateursTexte }}.
+                    {{
+                        aucun_validateur_disponible
+                            ? 'Rôles autorisés pour ce montant'
+                            : 'Validable par'
+                    }}
+                    : {{ validateursTexte }}.
                 </p>
                 <p v-else-if="commande.site_nom" class="pl-6">
                     Aucun rôle ne peut valider ce montant pour cette agence :

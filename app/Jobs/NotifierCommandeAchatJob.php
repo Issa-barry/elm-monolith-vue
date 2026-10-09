@@ -3,13 +3,12 @@
 namespace App\Jobs;
 
 use App\Models\CommandeAchat;
-use App\Models\RegleValidationRole;
 use App\Models\User;
 use App\Notifications\CommandeAchatNotification;
+use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
-use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,8 +20,9 @@ use Illuminate\Support\Collection;
  * de la transaction métier (`->afterCommit()` chez l'appelant) : jamais de notification pour une
  * opération annulée par un rollback. L'auteur de l'action n'est jamais notifié de sa propre action.
  *
- * - créée   → validateurs potentiels (permission `achats.valider` ET plafond couvrant le montant
- *             et l'agence) + super administrateurs dont le périmètre couvre le bon ;
+ * - créée   → validateurs possibles (CommandeAchatService::validateursPossibles() : permission,
+ *             séparation des tâches, périmètre et plafond) + super administrateurs dont le
+ *             périmètre couvre le bon ;
  * - validée → créateur + utilisateurs de l'agence de réception ayant `receptions.create` ;
  * - annulée → créateur.
  */
@@ -44,7 +44,7 @@ class NotifierCommandeAchatJob implements ShouldQueue
         public readonly ?string $acteurId,
     ) {}
 
-    public function handle(ValidationParPlafondService $plafonds): void
+    public function handle(CommandeAchatService $service): void
     {
         $commande = CommandeAchat::with(['site:id,nom', 'createdBy'])->find($this->commandeId);
         if ($commande === null) {
@@ -52,7 +52,7 @@ class NotifierCommandeAchatJob implements ShouldQueue
         }
 
         $destinataires = match ($this->evenement) {
-            self::CREEE => $this->validateursPotentiels($commande, $plafonds),
+            self::CREEE => $this->validateursPotentiels($commande, $service),
             self::VALIDEE => collect([$commande->createdBy])->merge($this->receptionnaires($commande)),
             self::ANNULEE => collect([$commande->createdBy]),
             default => collect(),
@@ -84,16 +84,14 @@ class NotifierCommandeAchatJob implements ShouldQueue
     }
 
     /** @return Collection<int, User> */
-    private function validateursPotentiels(CommandeAchat $commande, ValidationParPlafondService $plafonds): Collection
+    private function validateursPotentiels(CommandeAchat $commande, CommandeAchatService $service): Collection
     {
-        $montant = (float) $commande->total_commande;
-
-        return User::where('organization_id', $commande->organization_id)
-            ->with('roles')
+        $superAdmins = User::where('organization_id', $commande->organization_id)
+            ->whereHas('roles', fn ($q) => $q->where('name', 'super_admin'))
             ->get()
-            ->filter(fn (User $u) => ($u->hasRole('super_admin') && app(PerimetreCommandesAchat::class)->estVisible($commande, $u))
-                || ($u->checkPermissionTo('achats.valider')
-                    && $plafonds->peutValider($u, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant)));
+            ->filter(fn (User $u) => app(PerimetreCommandesAchat::class)->estVisible($commande, $u));
+
+        return $service->validateursPossibles($commande)->merge($superAdmins);
     }
 
     /** @return Collection<int, User> */

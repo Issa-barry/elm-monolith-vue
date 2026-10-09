@@ -37,8 +37,14 @@ annulation et réception sous la même permission `achats.update`.
    **Règles de départ** (données, modifiables) : admin_entreprise et super_admin reçoivent
    « toutes agences, sans limite » — migration pour les organisations existantes (sans écraser une
    règle déjà configurée), `InstallationService` pour les nouvelles.
-4. **Séparation des tâches** : ni le créateur du bon, ni le dernier utilisateur ayant modifié son
-   contenu ne peuvent le valider.
+4. **Séparation des tâches, réglable par rôle** (révisé le 2026-10-09) : par défaut, ni le créateur
+   du bon ni le dernier utilisateur ayant modifié son contenu ne peuvent le valider. La règle du rôle
+   peut l'autoriser (« Peut valider ses propres bons », Paramètres → Achats) : l'auteur valide alors
+   son bon, toujours dans la limite de la permission, du périmètre et du plafond de cette règle.
+   Activé par défaut pour le super administrateur (règle de départ et migration des règles
+   existantes), désactivé pour les autres rôles. C'est une donnée de configuration, jamais une
+   condition sur le rôle dans le code. *Avant le 09/10/2026 : séparation obligatoire pour tous,
+   super administrateur compris — décision remplacée à la demande de l'utilisateur.*
 5. **Snapshot à la validation** : fournisseur, agence, libellé et référence (SKU) de chaque ligne,
    montant validé et règle de plafond appliquée (rôle, plafond, agences) sont figés.
 6. **Annulation** (permission `achats.annuler`, motif) possible quel que soit le plafond, tant que

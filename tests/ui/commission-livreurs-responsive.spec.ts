@@ -72,7 +72,7 @@ const beneficiaires = [
     },
 ];
 
-async function ouvrir(page: Page, dark = false) {
+async function ouvrir(page: Page, dark = false, manyRows = false) {
     const manifest = JSON.parse(
         await readFile('public/build/manifest.json', 'utf8'),
     );
@@ -102,7 +102,13 @@ async function ouvrir(page: Page, dark = false) {
                 allowed: {},
                 locked: {},
             },
-            beneficiaires,
+            beneficiaires: manyRows
+                ? Array.from({ length: 18 }, (_, index) => ({
+                      ...beneficiaires[0],
+                      beneficiaire_id: `livreur-${index + 1}`,
+                      beneficiaire_nom: `Livreur ${index + 1}`,
+                  }))
+                : beneficiaires,
             kpis: {
                 nb_livreurs: 2,
                 total_brut: 120190000,
@@ -174,15 +180,36 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
         await ouvrir(page);
         const table = page.getByTestId('livreur-commissions-table');
         const row = table.locator('tbody tr').first();
-        const scroller = page.getByTestId('commission-table-scroll');
+        const scroller = page.getByTestId('commission-livreurs-scroll');
         expect(
             await page.evaluate(
                 () => document.documentElement.scrollWidth <= innerWidth,
             ),
         ).toBe(true);
         expect(
-            await scroller.evaluate((el) => el.scrollWidth <= el.clientWidth),
+            await scroller.evaluate((el) => el.scrollWidth > el.clientWidth),
         ).toBe(true);
+        const headers = [
+            'Livreur',
+            'Véhicule',
+            'Agence',
+            'Processus',
+            'Généré',
+            'Brut',
+            'Dépenses',
+            'Net à payer',
+            'Déjà payé',
+            'Reste à payer',
+            'Statut',
+            'Actions',
+        ];
+        await expect(table.locator('thead th')).toHaveCount(13);
+        await expect(row.locator('td')).toHaveCount(13);
+        for (const label of headers) {
+            await expect(
+                table.getByRole('columnheader', { name: label, exact: true }),
+            ).toBeVisible();
+        }
         for (const text of [
             '123 456 789 GNF',
             '120 000 000 GNF',
@@ -192,7 +219,9 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
             '109 995 000 GNF',
         ]) {
             const amount = row.getByText(text, { exact: true });
+            await amount.scrollIntoViewIfNeeded();
             await expect(amount).toBeVisible();
+            await expect(amount).toBeInViewport();
             const fits = await amount.evaluate((el) => {
                 const bounds = el.getBoundingClientRect();
                 const cell = el.closest('td')!.getBoundingClientRect();
@@ -205,14 +234,11 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
                 );
             });
             expect(fits, text).toBe(true);
+            const cell = amount.locator('..');
+            await expect(cell).toHaveCSS('text-align', 'right');
+            await expect(cell).toHaveCSS('border-right-width', '1px');
         }
         for (const value of [
-            'Généré',
-            'Brut',
-            'Dépenses',
-            'Net à payer',
-            'Déjà payé',
-            'Reste à payer',
             'À valider',
             'Vente',
             'Transfert logistique',
@@ -227,7 +253,29 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
         const rowDisplay = await row.evaluate(
             (el) => getComputedStyle(el).display,
         );
-        expect(rowDisplay).toBe(width >= 1440 ? 'table-row' : 'grid');
+        expect(rowDisplay).toBe('table-row');
+        await scroller.evaluate((el) => {
+            el.scrollLeft = 0;
+        });
+        const identityBefore = await row.locator('td').nth(1).boundingBox();
+        await scroller.evaluate((el) => {
+            el.scrollLeft = el.scrollWidth;
+        });
+        if (width >= 900) {
+            const identityAfter = await row.locator('td').nth(1).boundingBox();
+            expect(identityAfter!.x).toBeCloseTo(identityBefore!.x, 0);
+            await expect(
+                row.getByText(beneficiaires[0].beneficiaire_nom, {
+                    exact: true,
+                }),
+            ).toBeInViewport();
+        }
+        await expect(
+            row.getByRole('button', { name: 'Actions pour' }),
+        ).toBeInViewport();
+        await scroller.evaluate((el) => {
+            el.scrollLeft = 0;
+        });
         await table
             .getByRole('checkbox', { name: 'Tout sélectionner' })
             .click();
@@ -246,6 +294,9 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
         await page
             .getByRole('button', { name: 'Annuler', exact: true })
             .click();
+        await scroller.evaluate((el) => {
+            el.scrollLeft = el.scrollWidth;
+        });
         await row.getByRole('button', { name: 'Actions pour' }).click();
         await expect(
             page.getByRole('menuitem', { name: 'Historique' }),
@@ -254,6 +305,9 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
             page.getByRole('menuitem', { name: 'Ajuster' }),
         ).toBeVisible();
         await page.keyboard.press('Escape');
+        await scroller.evaluate((el) => {
+            el.scrollLeft = 0;
+        });
         await row
             .getByRole('button', {
                 name: 'Thierno-Moto livraison grande agence',
@@ -270,8 +324,18 @@ for (const width of [360, 390, 768, 1024, 1440, 1920]) {
             .getByText('Fermer', { exact: true })
             .click();
         await expect(page.getByRole('dialog')).toBeHidden();
+        await scroller.evaluate((el) => {
+            el.scrollLeft = 0;
+        });
         await page.screenshot({
             path: testInfo.outputPath('commissions.png'),
+            fullPage: true,
+        });
+        await scroller.evaluate((el) => {
+            el.scrollLeft = el.scrollWidth;
+        });
+        await page.screenshot({
+            path: testInfo.outputPath('commissions-fin-colonnes.png'),
             fullPage: true,
         });
         expect(errors).toEqual([]);
@@ -285,8 +349,8 @@ for (const width of [390, 1920]) {
         await expect(page.locator('html')).toHaveClass(/dark/);
         expect(
             await page
-                .getByTestId('commission-table-scroll')
-                .evaluate((el) => el.scrollWidth <= el.clientWidth),
+                .getByTestId('commission-livreurs-scroll')
+                .evaluate((el) => el.scrollWidth > el.clientWidth),
         ).toBe(true);
         await page.screenshot({
             path: testInfo.outputPath('commissions-sombre.png'),
@@ -294,3 +358,38 @@ for (const width of [390, 1920]) {
         });
     });
 }
+
+test('les en-têtes et la barre de défilement restent accessibles sur une longue liste', async ({
+    page,
+}, testInfo) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await ouvrir(page, false, true);
+    const scroller = page.getByTestId('commission-livreurs-scroll');
+    await scroller.scrollIntoViewIfNeeded();
+    expect(
+        await scroller.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    await scroller.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+    });
+    const header = page.getByRole('columnheader', {
+        name: 'Livreur',
+        exact: true,
+    });
+    const headerBox = await header.boundingBox();
+    const scrollBox = await scroller.boundingBox();
+    expect(headerBox!.y).toBeCloseTo(scrollBox!.y, 0);
+    await expect(
+        page.getByText('Livreur 18', { exact: true }),
+    ).toBeInViewport();
+    const viewport = await scroller.evaluate((el) => ({
+        bottom: el.getBoundingClientRect().bottom,
+        height: innerHeight,
+    }));
+    // Le défilement natif peut aligner le bord sur un sous-pixel.
+    expect(viewport.bottom).toBeLessThanOrEqual(viewport.height + 1);
+    await page.screenshot({
+        path: testInfo.outputPath('commissions-longue-liste.png'),
+        fullPage: true,
+    });
+});

@@ -205,6 +205,11 @@ class TransfertLogistique extends Model
         return $this->statut === StatutTransfert::ANNULE;
     }
 
+    public function isAnnulable(): bool
+    {
+        return $this->statut instanceof StatutTransfert && $this->statut->isAnnulable();
+    }
+
     public function isTerminal(): bool
     {
         return $this->statut instanceof StatutTransfert && $this->statut->isTerminal();

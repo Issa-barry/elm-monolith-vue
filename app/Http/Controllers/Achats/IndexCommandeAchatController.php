@@ -92,9 +92,7 @@ class IndexCommandeAchatController extends Controller
     private function restreindreAValiderPar(Builder $query, $user): void
     {
         $query->whereIn('statut', array_map(fn ($s) => $s->value, StatutCommandeAchat::aValider()))
-            ->whereNotNull('site_id')
-            ->where(fn (Builder $q) => $q->whereNull('created_by')->orWhere('created_by', '!=', $user->id))
-            ->where(fn (Builder $q) => $q->whereNull('contenu_modifie_par')->orWhere('contenu_modifie_par', '!=', $user->id));
+            ->whereNotNull('site_id');
 
         $perimetres = $user->checkPermissionTo('achats.valider')
             ? $this->plafonds->perimetresDeValidation($user, RegleValidationRole::DOMAINE_ACHATS)
@@ -106,10 +104,15 @@ class IndexCommandeAchatController extends Controller
             return;
         }
 
-        $query->where(function (Builder $q) use ($perimetres) {
+        $query->where(function (Builder $q) use ($perimetres, $user) {
             foreach ($perimetres as $p) {
-                $q->orWhere(function (Builder $q) use ($p) {
+                $q->orWhere(function (Builder $q) use ($p, $user) {
                     $q->whereNotNull('site_id');
+                    // Ses propres bons (créés ou modifiés en dernier) seulement si la règle l'autorise.
+                    if (! $p['ses_propres_bons']) {
+                        $q->where(fn (Builder $q) => $q->whereNull('created_by')->orWhere('created_by', '!=', $user->id))
+                            ->where(fn (Builder $q) => $q->whereNull('contenu_modifie_par')->orWhere('contenu_modifie_par', '!=', $user->id));
+                    }
                     if ($p['sites'] !== null) {
                         $q->whereIn('site_id', $p['sites'] === [] ? [''] : $p['sites']);
                     }

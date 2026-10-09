@@ -62,6 +62,12 @@ enum StatutTransfert: string
     }
 
     /** Statuts terminaux (irréversibles) */
+    /** Annulation possible tant que la marchandise n'est pas partie (avant TRANSIT). */
+    public function isAnnulable(): bool
+    {
+        return in_array($this, [self::BROUILLON, self::CHARGEMENT]);
+    }
+
     public function isTerminal(): bool
     {
         return in_array($this, [self::CLOTURE, self::ANNULE]);

@@ -199,7 +199,7 @@ function submit() {
                     >
                         Informations générales
                     </h2>
-                    <div class="grid gap-4 sm:grid-cols-3">
+                    <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <Label
                                 for="achat-site"
@@ -295,7 +295,7 @@ function submit() {
                                 {{ form.errors.fournisseur_id }}
                             </p>
                         </div>
-                        <div>
+                        <div class="sm:col-span-2">
                             <Label for="achat-note" class="mb-1.5 block text-sm"
                                 >Note</Label
                             >

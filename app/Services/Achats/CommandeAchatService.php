@@ -10,18 +10,21 @@ use App\Models\RegleValidationRole;
 use App\Models\User;
 use App\Services\ReferenceNumeroService;
 use App\Services\Validation\ValidationParPlafondService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 /**
  * Cycle d'un bon de commande fournisseur (ADR 0021) : création directe « à valider », modification
- * tant qu'il n'est pas validé, validation (permission + plafond du rôle + séparation des tâches),
+ * tant qu'il n'est pas validé, validation (permission + plafond du rôle + séparation des tâches,
+ * levée par le réglage « peut valider ses propres bons » de la règle du rôle),
  * annulation (motif, quel que soit le plafond) et clôture du reliquat.
  *
  * Toutes les règles sont vérifiées ICI, sous verrou — jamais seulement dans la policy, que le
  * Gate::before du super administrateur court-circuite. Le super administrateur est soumis aux
- * mêmes règles que tout le monde (plafond, créateur ≠ validateur).
+ * mêmes règles que tout le monde : sa règle par défaut l'autorise à valider ses propres bons.
  *
  * Les notifications partent dans un job mis en file APRÈS le commit : jamais pour une opération
  * annulée par un rollback.
@@ -139,14 +142,58 @@ class CommandeAchatService
         if ($commande->site_id === null || $commande->fournisseur_id === null) {
             return "Renseignez l'agence et le fournisseur de la commande avant de la valider.";
         }
-        if ($commande->created_by !== null && $commande->created_by === $user->id) {
-            return 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.';
-        }
-        if ($commande->contenu_modifie_par !== null && $commande->contenu_modifie_par === $user->id) {
-            return 'Vous avez modifié ce bon de commande en dernier : il doit être validé par une autre personne.';
+
+        $montant = $this->montant($commande);
+        $refus = $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant);
+        if ($refus !== null) {
+            return $refus;
         }
 
-        return $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $this->montant($commande));
+        // Séparation des tâches, sauf si une règle du rôle autorise à valider ses propres bons
+        // (Paramètres → Achats) pour cette agence et ce montant.
+        $estAuteur = $this->estAuteur($commande, $user);
+        if ($estAuteur !== null
+            && $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant, sonPropreBon: true) !== null) {
+            return $estAuteur === 'createur'
+                ? 'Vous avez créé ce bon de commande : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.'
+                : 'Vous avez modifié ce bon de commande en dernier : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.';
+        }
+
+        return null;
+    }
+
+    /** 'createur', 'modificateur' ou null si l'utilisateur n'est pas l'auteur du bon. */
+    private function estAuteur(CommandeAchat $commande, User $user): ?string
+    {
+        if ($commande->created_by !== null && $commande->created_by === $user->id) {
+            return 'createur';
+        }
+        if ($commande->contenu_modifie_par !== null && $commande->contenu_modifie_par === $user->id) {
+            return 'modificateur';
+        }
+
+        return null;
+    }
+
+    /**
+     * Utilisateurs actifs qui pourraient valider ce bon maintenant, selon motifNonValidable() :
+     * même source pour les notifications de création et pour le message de la fiche quand
+     * personne d'autre ne peut valider.
+     *
+     * @return Collection<int, User>
+     */
+    public function validateursPossibles(CommandeAchat $commande): Collection
+    {
+        if (! Permission::where('name', 'achats.valider')->where('guard_name', 'web')->exists()) {
+            return collect();
+        }
+
+        return User::permission('achats.valider')
+            ->where('organization_id', $commande->organization_id)
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereNull('is_active'))
+            ->get()
+            ->filter(fn (User $u) => $this->motifNonValidable($commande, $u) === null)
+            ->values();
     }
 
     /**
@@ -170,7 +217,8 @@ class CommandeAchatService
             }
 
             $montant = $this->montant($commande);
-            $regle = $this->plafonds->regleAppliquee($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant);
+            $sonPropreBon = $this->estAuteur($commande, $user) !== null;
+            $regle = $this->plafonds->regleAppliquee($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant, $sonPropreBon);
 
             $this->figerLignes($commande);
 
@@ -189,6 +237,7 @@ class CommandeAchatService
                     'plafond_illimite' => (bool) $regle->plafond_illimite,
                     'perimetre' => $regle->perimetre,
                     'sites' => $regle->sites,
+                    'son_propre_bon' => $sonPropreBon,
                 ],
             ]);
 

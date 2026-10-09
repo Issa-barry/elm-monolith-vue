@@ -17,6 +17,7 @@ interface RegleRole {
     actif: boolean;
     plafond: number | null;
     plafond_illimite: boolean;
+    peut_valider_ses_propres_bons: boolean;
     perimetre: Perimetre;
     sites: string[];
 }
@@ -65,9 +66,13 @@ function toggleSite(l: RegleRole, siteId: string) {
 }
 
 function resumeValidation(l: RegleRole): string {
-    if (l.plafond_illimite) return 'Valide sans limite';
-    if (l.plafond === null) return 'Ne valide aucun bon';
-    return `Valide jusqu'à ${formatMontant(l.plafond)} GNF`;
+    if (l.plafond === null && !l.plafond_illimite) return 'Ne valide aucun bon';
+    const plafond = l.plafond_illimite
+        ? 'Valide sans limite'
+        : `Valide jusqu'à ${formatMontant(l.plafond)} GNF`;
+    return l.peut_valider_ses_propres_bons
+        ? `${plafond}, y compris ses propres bons`
+        : plafond;
 }
 
 const enregistrement = ref(false);
@@ -88,6 +93,7 @@ function enregistrer() {
                 actif: l.actif,
                 plafond: l.plafond_illimite ? null : l.plafond,
                 plafond_illimite: l.plafond_illimite,
+                peut_valider_ses_propres_bons: l.peut_valider_ses_propres_bons,
                 perimetre: l.perimetre,
                 sites: l.perimetre === 'agences_selectionnees' ? l.sites : [],
             })),
@@ -281,7 +287,11 @@ function enregistrer() {
                                         :aria-label="`Plafond de validation — ${l.role_label}`"
                                         :value="affichage[l.role_name]"
                                         :disabled="l.plafond_illimite"
-                                        placeholder="Ne valide pas"
+                                        :placeholder="
+                                            l.plafond_illimite
+                                                ? 'Sans limite'
+                                                : 'Ne valide pas'
+                                        "
                                         class="h-9 w-full rounded-md border bg-background py-1.5 pr-11 pl-2 text-right text-sm tabular-nums disabled:opacity-50"
                                         @input="onPlafondInput(l, $event)"
                                         @blur="onPlafondBlur(l)"
@@ -312,6 +322,36 @@ function enregistrer() {
                                         />
                                     </span>
                                     Sans limite
+                                </button>
+                                <button
+                                    type="button"
+                                    class="flex items-center gap-2 text-left text-xs text-muted-foreground hover:text-foreground"
+                                    :title="
+                                        l.peut_valider_ses_propres_bons
+                                            ? 'Ses utilisateurs peuvent valider un bon qu’ils ont créé ou modifié en dernier, dans la limite de leur plafond.'
+                                            : 'Un bon créé ou modifié en dernier par un utilisateur de ce rôle doit être validé par une autre personne.'
+                                    "
+                                    @click="
+                                        l.peut_valider_ses_propres_bons =
+                                            !l.peut_valider_ses_propres_bons
+                                    "
+                                >
+                                    <span
+                                        class="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2"
+                                        :class="
+                                            l.peut_valider_ses_propres_bons
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border'
+                                        "
+                                    >
+                                        <Check
+                                            v-if="
+                                                l.peut_valider_ses_propres_bons
+                                            "
+                                            class="h-3 w-3"
+                                        />
+                                    </span>
+                                    Peut valider ses propres bons
                                 </button>
                             </div>
                         </div>

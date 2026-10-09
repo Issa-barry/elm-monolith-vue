@@ -126,6 +126,10 @@ class ShowCommandeAchatController extends Controller
                 'peut_supprimer' => $achat->isAnnulee() && $user->can('delete', $achat),
                 'lien_facture' => $peutFacturer ? route('achats.factures.create', ['commande' => $achat->id]) : null,
             ],
+            // Mêmes règles que les destinataires de la notification de création : si personne ne
+            // peut valider (cas d'un seul validateur, qui est aussi le créateur), la fiche le dit.
+            'aucun_validateur_disponible' => $aValider && $achat->site_id !== null
+                && $service->validateursPossibles($achat)->isEmpty(),
             'validable_par' => $aValider && $achat->site_id !== null
                 ? $plafonds->rolesPouvantValider($achat->organization_id, RegleValidationRole::DOMAINE_ACHATS, 'achats.valider', $achat->site_id, $montant)
                 : [],
