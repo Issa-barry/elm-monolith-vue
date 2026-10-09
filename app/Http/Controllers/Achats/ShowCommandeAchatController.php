@@ -39,11 +39,12 @@ class ShowCommandeAchatController extends Controller
         $dejaRecu = (int) $achat->lignes->sum('qte_recue') > 0;
 
         // Bouton Valider : affiché seulement si le serveur accepterait (mêmes règles que
-        // CommandeAchatService::valider()). Avec la permission mais une règle bloquante (plafond,
-        // agence, créateur/modificateur), le motif est affiché à la place.
+        // CommandeAchatService::valider()). Sinon le motif est affiché à la place — y compris
+        // l'absence de `achats.valider` sur le rôle quand le Gate::before du super administrateur
+        // fait passer can() : sans motif, le bouton disparaissait sans explication.
         $motifNonValidable = null;
         $peutValider = false;
-        if ($aValider && $user->can('valider', $achat) && $user->checkPermissionTo('achats.valider')) {
+        if ($aValider && $user->can('valider', $achat)) {
             $motifNonValidable = $service->motifNonValidable($achat, $user);
             $peutValider = $motifNonValidable === null;
         }

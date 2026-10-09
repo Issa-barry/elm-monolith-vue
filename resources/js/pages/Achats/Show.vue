@@ -387,9 +387,8 @@ function supprimer() {
                     Validable par : {{ validateursTexte }}.
                 </p>
                 <p v-else-if="commande.site_nom" class="pl-6">
-                    Aucun rôle n'a de plafond suffisant pour ce montant
-                    (Paramètres → Achats) : seul le super administrateur peut la
-                    valider.
+                    Aucun rôle ne peut valider ce montant pour cette agence :
+                    ajustez les plafonds dans Paramètres → Achats.
                 </p>
             </div>
 

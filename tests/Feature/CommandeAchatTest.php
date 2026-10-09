@@ -449,6 +449,45 @@ class CommandeAchatTest extends TestCase
         $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasErrors('site_id');
     }
 
+    public function test_la_fiche_explique_pourquoi_le_bouton_valider_est_absent(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        RegleValidationRole::provisionnerAchatsParDefaut($this->org->id);
+        $superAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $superAdmin->assignRole('super_admin');
+        $superAdmin->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+        $commande = $this->creerCommande(10);
+
+        $actions = fn (User $user, CommandeAchat $bon, bool $peutValider, ?string $motif) => $this->actingAs($user)
+            ->get(route('achats.show', $bon))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('actions.peut_valider', $peutValider)
+                ->where('actions.motif_non_validable', $motif));
+
+        // Rôle super_admin sans `achats.valider` en base (base non resynchronisée) : le Gate::before
+        // fait passer can(), le serveur refuse — la fiche le dit au lieu de masquer le bouton en silence.
+        Role::findByName('super_admin')->revokePermissionTo('achats.valider');
+        $sansPermission = "Votre rôle n'a pas la permission de valider les bons de commande.";
+        $actions($superAdmin->fresh(), $commande, false, $sansPermission);
+        $this->actingAs($superAdmin->fresh())
+            ->patch(route('achats.valider', $commande))
+            ->assertSessionHasErrors(['validation' => $sansPermission]);
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+
+        // Simple lecteur sans la permission : aucun motif (il n'est pas validateur), pas de bouton.
+        $lecteur = $this->makeUtilisateur('lecteur_achats', ['achats.read']);
+        $this->regle('lecteur_achats', null);
+        $actions($lecteur, $commande, false, null);
+
+        // Permission rétablie : bouton sur le bon d'un autre, séparation des tâches sur le sien.
+        Role::findByName('super_admin')->givePermissionTo('achats.valider');
+        $actions($superAdmin->fresh(), $commande, true, null);
+        $this->actingAs($superAdmin->fresh())->post(route('achats.store'), $this->payload())->assertSessionHasNoErrors();
+        $sonBon = CommandeAchat::where('created_by', $superAdmin->id)->firstOrFail();
+        $actions($superAdmin->fresh(), $sonBon, false, 'Vous avez créé ce bon de commande : il doit être validé par une autre personne.');
+    }
+
     public function test_la_migration_cree_les_regles_par_defaut_sans_ecraser_une_regle_configuree(): void
     {
         RegleValidationRole::where('role_name', 'admin_entreprise')->update(['plafond' => 1_000, 'perimetre' => 'son_agence']);

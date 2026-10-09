@@ -134,7 +134,7 @@ class CommandeAchatService
         }
         // checkPermissionTo() lit les permissions réelles des rôles — jamais le Gate::before.
         if (! $user->checkPermissionTo('achats.valider')) {
-            return "Vous n'avez pas la permission de valider les bons de commande.";
+            return "Votre rôle n'a pas la permission de valider les bons de commande.";
         }
         if ($commande->site_id === null || $commande->fournisseur_id === null) {
             return "Renseignez l'agence et le fournisseur de la commande avant de la valider.";
