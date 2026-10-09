@@ -1,4 +1,4 @@
-Poppins (poppins-v20-latin-500 / 600 / 700, woff2, sous-ensemble latin)
+Poppins (poppins-v20-latin regular / 500 / 600 / 700, sous-ensemble latin)
 
 Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
 
@@ -7,6 +7,8 @@ Texte complet : https://openfontlicense.org
 
 Source des fichiers : template Apollo PrimeVue 6.2.0 (src/assets/layout/fonts).
 
-Usage dans ce projet : uniquement les cartes KPI de Trésorerie > Supports (classe `font-apollo`),
-pour reproduire à l'identique la typographie du dashboard Apollo E-Commerce. Le reste de
-l'application reste en Instrument Sans.
+Usage dans ce projet : cartes KPI de Trésorerie > Supports (classe `font-apollo`) et
+rapports PDF de commissions, pour reprendre la typographie des modèles Apollo.
+Poppins-Regular.ttf et Poppins-Bold.ttf proviennent des fichiers WOFF regular / 700
+de resources/css/layout/fonts, convertis au format TrueType pour Dompdf.
+Le reste de l'application reste en Instrument Sans.

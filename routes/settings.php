@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\ImportFlotteController;
+use App\Http\Controllers\Settings\Achats\EditAchatParametrageController;
+use App\Http\Controllers\Settings\Achats\UpdateAchatParametrageController;
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Http\Controllers\Settings\Communications\EditCommunicationRuleController;
 use App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController;
@@ -88,6 +90,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/depenses', EditDepenseParametrageController::class)->name('settings.depenses');
     Route::put('settings/depenses/droits', UpdateDepenseParametrageController::class)->name('settings.depenses.droits');
+
+    Route::get('settings/achats', EditAchatParametrageController::class)->name('settings.achats');
+    Route::put('settings/achats/validation', UpdateAchatParametrageController::class)->name('settings.achats.validation');
 
     // La gestion des types de dépense a déménagé dans le module Dépenses (cf.
     // routes/web.php, groupe module:depenses) — cette page n'existe plus dans

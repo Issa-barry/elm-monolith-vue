@@ -22,7 +22,8 @@ use App\Models\Vehicule;
  *    (`livraison_vente` pour une vente standard, `livraison_logistique` pour une distribution
  *    client — révisé le 31/08/2026 : un véhicule logistique-only n'a `livraison_vente` jamais à
  *    true, sans quoi une distribution utilisant un tel véhicule perdrait silencieusement toute
- *    éligibilité aux commissions, cf. CommissionEnveloppeGenerator::genererPourCommandeVente()) ;
+ *    éligibilité aux commissions, cf. CommissionEnveloppeGenerator::genererPourCommandeVente() ;
+ *    `livraison_grossiste` pour la livraison d'un client grossiste, ADR 0023) ;
  *  - une vente sans véhicule de flotte pour un client EXTERNE facture à prix usine, jamais
  *    de commission (aucun véhicule de flotte impliqué) ;
  *  - une vente sans véhicule de flotte pour un client Revendeur ou Distributeur facture au prix
@@ -39,13 +40,18 @@ class VehiculeCommandeContextResolver
     {
         if ($vehiculeId) {
             $vehicule = Vehicule::query()
-                ->select(['id', 'livraison_vente', 'livraison_logistique', 'type_vehicule_id'])
+                ->select(['id', 'livraison_vente', 'livraison_logistique', 'livraison_grossiste', 'type_vehicule_id'])
                 ->with('typeVehicule:id,categorie_tarifaire')
                 ->find($vehiculeId);
 
-            $commissionEligible = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
-                ? (bool) $vehicule?->livraison_logistique
-                : (bool) ($vehicule?->livraison_vente ?? true);
+            $clientGrossiste = $clientId !== null
+                && Client::query()->select(['id', 'type'])->find($clientId)?->type === ClientType::GROSSISTE;
+
+            $commissionEligible = match (true) {
+                $natureOperation === NatureOperation::DISTRIBUTION_CLIENT => (bool) $vehicule?->livraison_logistique,
+                $clientGrossiste => (bool) $vehicule?->livraison_grossiste,
+                default => (bool) ($vehicule?->livraison_vente ?? true),
+            };
 
             return new VehiculeCommandeContext(
                 ModeTarification::PRIX_VENTE,

@@ -191,6 +191,53 @@ final class CommandeVenteFormBuilder
         return $this->vehiculesEligibles($orgId, fn ($q) => $q->livraisonLogistique());
     }
 
+    /**
+     * Véhicules sélectionnables pour livrer un client grossiste — usage Grossiste coché sur la
+     * fiche véhicule (ADR 0023), indépendamment des usages Vente et Logistique. Troisième pool,
+     * jamais fusionné aux deux précédents.
+     */
+    public function vehiculesGrossistes(string $orgId): Collection
+    {
+        return $this->vehiculesEligibles($orgId, fn ($q) => $q->livraisonGrossiste());
+    }
+
+    /**
+     * Pool à proposer pour une commande déjà rattachée à un client : celui du grossiste pour un
+     * client grossiste, celui de la vente sinon (comportement historique des écrans qui n'ont
+     * qu'une seule liste : modification de commande, changement de mode de remise).
+     */
+    public function vehiculesPourClient(string $orgId, ?ClientType $clientType): Collection
+    {
+        return $clientType === ClientType::GROSSISTE
+            ? $this->vehiculesGrossistes($orgId)
+            : $this->vehiculesActifs($orgId);
+    }
+
+    /**
+     * Livraison grossiste (véhicule choisi pour un client grossiste) : le véhicule doit avoir
+     * l'usage Grossiste (ADR 0023). Même refus à la création, à la modification et au passage
+     * d'une précommande en livraison — la liste proposée est déjà filtrée, ce contrôle empêche
+     * seulement de la contourner.
+     */
+    public function ensureVehiculeAutorisePourGrossiste(?ModeRemiseGrossiste $modeRemiseGrossiste, ?Vehicule $vehicule): void
+    {
+        if ($modeRemiseGrossiste !== ModeRemiseGrossiste::LIVRAISON) {
+            return;
+        }
+
+        if (! $vehicule) {
+            throw ValidationException::withMessages([
+                'vehicule_id' => 'Ce véhicule est introuvable pour votre organisation.',
+            ]);
+        }
+
+        if (! $vehicule->livraison_grossiste) {
+            throw ValidationException::withMessages([
+                'vehicule_id' => "Ce véhicule n'est pas autorisé à livrer les grossistes (usage Grossiste à cocher sur sa fiche).",
+            ]);
+        }
+    }
+
     /** @param  callable(Builder): Builder  $scopeUsage */
     private function vehiculesEligibles(string $orgId, callable $scopeUsage): Collection
     {

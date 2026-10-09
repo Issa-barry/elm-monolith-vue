@@ -32,6 +32,7 @@ use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
@@ -324,6 +325,7 @@ class CommissionExportVenteTest extends TestCase
 
         $document = Mockery::mock(\Barryvdh\DomPDF\PDF::class);
         $document->shouldReceive('setPaper')->once()->with('a4', 'landscape')->andReturnSelf();
+        $document->shouldReceive('setCallbacks')->once()->with(Mockery::type('array'))->andReturnSelf();
         $document->shouldReceive('download')->once()->andReturn(
             response('pdf-test', 200, ['Content-Type' => 'application/pdf'])
         );
@@ -347,9 +349,9 @@ class CommissionExportVenteTest extends TestCase
                     $html,
                 );
                 $this->assertStringNotContainsString('Généré (GNF)', $html);
-                $this->assertStringContainsString('Brut validé (GNF)', $html);
+                $this->assertStringContainsString('Brut validé(GNF)', strip_tags($html));
                 $this->assertStringContainsString('class="ben-phone"', $html);
-                $this->assertStringContainsString((string) $livreur->telephone, $html);
+                $this->assertStringContainsString(PhoneFormatter::display($livreur->telephone), $html);
 
                 return true;
             }))

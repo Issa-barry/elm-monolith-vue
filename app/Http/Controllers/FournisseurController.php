@@ -81,8 +81,8 @@ class FournisseurController extends Controller
     }
 
     /**
-     * Création rapide (formulaire minimal) — utilisée par FournisseurSelect.vue depuis le
-     * formulaire Produit, sans quitter la page. Mêmes normalisations (téléphone/pays) que
+     * Création rapide (formulaire minimal) — utilisée par CreateFournisseurModal.vue depuis le
+     * formulaire Produit et le bon de commande, sans quitter la page. Mêmes normalisations (téléphone/pays) que
      * store(), mais un formulaire volontairement plus léger : pas de nom/prénom séparés,
      * ville et adresse facultatives (la fiche complète — email, notes... — reste éditable
      * ensuite depuis Fournisseurs > Modifier). Toujours une société (raison_sociale) : la

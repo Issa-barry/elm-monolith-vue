@@ -42,6 +42,7 @@ class UpdateCommandeVenteController extends Controller
         // commission ci-dessous ET par la persistance plus bas, jamais un second appel qui
         // pourrait diverger (même principe que store()).
         $modeRemiseGrossiste = $this->formBuilder->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
+        $this->formBuilder->ensureVehiculeAutorisePourGrossiste($modeRemiseGrossiste, $vehiculePourValidation);
         $this->formBuilder->enforcePrixVentePolicy($data, $vente, $client);
         // Rejoue le même garde-fou qu'à la création (05/09/2026, chantier « Transfert grossiste »)
         // — sans cet appel, éditer un brouillon Enlèvement en lui affectant un véhicule (le faisant

@@ -134,6 +134,7 @@ class VehiculeController extends Controller
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
             'livraison_vente' => $v->livraison_vente,
             'livraison_logistique' => $v->livraison_logistique,
+            'livraison_grossiste' => $v->livraison_grossiste,
             'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
@@ -619,7 +620,7 @@ class VehiculeController extends Controller
         $orgId = $user->organization_id;
 
         $data = $request->validate($this->validationRules($orgId, $vehicule), $this->messages());
-        $this->ensureAuMoinsUnUsage($data);
+        $this->ensureAuMoinsUnUsage($data + ['livraison_grossiste' => $vehicule->livraison_grossiste]);
 
         // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
         // site(s) — un admin peut choisir n'importe quel site de l'organisation.
@@ -1026,6 +1027,9 @@ class VehiculeController extends Controller
             'categorie' => ['required', Rule::enum(CategorieVehicule::class)],
             'livraison_vente' => 'required|boolean',
             'livraison_logistique' => 'required|boolean',
+            // Facultatif (ADR 0023) : absent = inchangé en modification, non coché à la création
+            // — les appels antérieurs à l'usage Grossiste restent valides tels quels.
+            'livraison_grossiste' => 'sometimes|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
             // Dérogation impayés : gérée exclusivement depuis la fiche véhicule
@@ -1046,18 +1050,18 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Un véhicule doit servir à quelque chose : au moins l'un des deux usages doit être
+     * Un véhicule doit servir à quelque chose : au moins l'un des trois usages doit être
      * autorisé, sinon il n'a pas sa place dans la flotte gérée (cf. ClientVehicle pour un
      * véhicule partenaire sans usage flotte).
      */
     private function ensureAuMoinsUnUsage(array $data): void
     {
-        if (! empty($data['livraison_vente']) || ! empty($data['livraison_logistique'])) {
+        if (! empty($data['livraison_vente']) || ! empty($data['livraison_logistique']) || ! empty($data['livraison_grossiste'])) {
             return;
         }
 
         throw ValidationException::withMessages([
-            'livraison_vente' => 'Le véhicule doit être autorisé pour la vente et/ou la logistique.',
+            'livraison_vente' => 'Le véhicule doit avoir au moins un usage : vente, logistique ou grossiste.',
         ]);
     }
 

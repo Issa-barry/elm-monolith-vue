@@ -53,6 +53,7 @@ const vehicule = {
     ],
     livraison_vente: true,
     livraison_logistique: true,
+    livraison_grossiste: false,
     photo_url: photo,
     is_active: true,
     derogation_impayes_autorisee: false,

@@ -64,6 +64,7 @@ const form = useForm({
     // logistique en plus si besoin (cf. Vehicule::$livraison_vente par défaut).
     livraison_vente: true,
     livraison_logistique: false,
+    livraison_grossiste: false,
     photo: null as File | null,
     is_active: true,
     capacites: [] as CapaciteRow[],
@@ -81,7 +82,9 @@ const canSubmit = computed(() => {
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
         !!form.categorie &&
-        (form.livraison_vente || form.livraison_logistique)
+        (form.livraison_vente ||
+            form.livraison_logistique ||
+            form.livraison_grossiste)
     );
 });
 

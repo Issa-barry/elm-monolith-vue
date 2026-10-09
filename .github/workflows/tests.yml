@@ -234,9 +234,12 @@ jobs:
     # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
     # flow local `npm run e2e:db:reset` (voir package.json). Un service par job de matrix :
     # chaque shard a la sienne, aucun partage de données entre shards.
+    # Image officielle tirée du miroir ECR Public et non de Docker Hub : les 4 shards + le
+    # smoke tirent en parallèle depuis des IP de runners partagées, et la limite anonyme de
+    # Docker Hub (toomanyrequests) faisait échouer le job avant même le checkout.
     services:
       mysql:
-        image: mysql:8.0
+        image: public.ecr.aws/docker/library/mysql:8.0
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: elm_monolithe_e2e
@@ -380,7 +383,7 @@ jobs:
     timeout-minutes: 20
     services:
       mysql:
-        image: mysql:8.0
+        image: public.ecr.aws/docker/library/mysql:8.0
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: elm_monolithe_e2e

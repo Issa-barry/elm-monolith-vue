@@ -107,7 +107,7 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
     await expect(page.getByTestId('agency-filter')).toBeVisible();
     await page.getByTestId('filters-drawer-close').click();
 
-    const tableScroll = page.getByTestId('commission-table-scroll');
+    const tableScroll = page.getByTestId('commission-livreurs-scroll');
     await expect(tableScroll).toBeVisible();
     expect(
         await tableScroll.evaluate(

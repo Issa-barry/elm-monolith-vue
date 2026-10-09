@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Storage;
  * dans l'organisation est une erreur bloquante à l'analyse, jamais atteinte ici.
  *
  * Whitelist explicite des champs appliqués (jamais de fill()/update() à partir de la ligne
- * Excel brute) : seuls `site_id`, `livraison_vente`, `livraison_logistique` et les capacités
+ * Excel brute) : seuls `site_id`, `livraison_vente`, `livraison_logistique`, `livraison_grossiste` et les capacités
  * (VehiculeCapacite, une par catégorie détectée) peuvent être écrits — cf.
  * ImportVehiculesMajParser::analyserLigne(), qui ne construit `mise_a_jour` qu'à partir de ces
  * clés. Toute autre donnée du véhicule (nom, marque, modèle, type, catégorie, propriétaire...)
@@ -60,9 +60,9 @@ class ImportVehiculesMajExecutor
         $maj = $ligne['mise_a_jour'];
         $vehiculeId = $ligne['vehicule_id'];
 
-        // Whitelist explicite : seules ces deux clés scalaires peuvent atterrir dans
-        // l'UPDATE du véhicule — jamais un tableau construit à partir de la ligne Excel brute.
-        $donneesVehicule = array_intersect_key($maj, array_flip(['site_id', 'livraison_vente', 'livraison_logistique']));
+        // Whitelist explicite : seules ces clés scalaires peuvent atterrir dans l'UPDATE du
+        // véhicule — jamais un tableau construit à partir de la ligne Excel brute.
+        $donneesVehicule = array_intersect_key($maj, array_flip(['site_id', 'livraison_vente', 'livraison_logistique', 'livraison_grossiste']));
         // Par le modèle : un changement de site réaligne les fiches non payées (Vehicule::booted()).
         if (! empty($donneesVehicule)) {
             Vehicule::whereKey($vehiculeId)->first()?->update($donneesVehicule);

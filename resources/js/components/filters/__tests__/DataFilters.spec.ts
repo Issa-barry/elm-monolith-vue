@@ -495,3 +495,88 @@ describe('DataFilters — champ période (raccourcis résolus côté serveur)', 
         expect(hier.find(reinitialiser).exists()).toBe(true);
     });
 });
+
+describe('DataFilters — options dépendantes (optionsFrom)', () => {
+    beforeEach(() => routerGet.mockClear());
+
+    const vehicules = [
+        { value: 'fanta', label: 'FANTA — JA473', proprietaire_id: 'diallo' },
+        { value: 'toyota', label: 'TOYOTA — RC125', proprietaire_id: 'diallo' },
+        { value: 'moto', label: 'MOTO — XX001', proprietaire_id: 'bah' },
+    ];
+
+    const monterParc = (values: Record<string, unknown> = {}) =>
+        shallowMount(DataFilters, {
+            props: {
+                url: '/depenses',
+                values,
+                resultCount: 0,
+                fields: [
+                    {
+                        key: 'proprietaire_id',
+                        label: 'Propriétaire',
+                        type: 'select',
+                        inline: true,
+                        searchable: true,
+                        options: [
+                            { value: 'diallo', label: 'Mamadou DIALLO' },
+                            { value: 'bah', label: 'Alpha BAH' },
+                        ],
+                    },
+                    {
+                        key: 'vehicule_ids',
+                        label: 'Véhicule',
+                        type: 'multi-select',
+                        inline: true,
+                        searchable: true,
+                        optionsFrom: (v) => {
+                            const p = (v.proprietaire_id as string[])?.[0];
+                            return p
+                                ? vehicules.filter(
+                                      (x) => x.proprietaire_id === p,
+                                  )
+                                : vehicules;
+                        },
+                    },
+                ],
+            },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+    const listeVehicules = (wrapper: ReturnType<typeof monterParc>) =>
+        wrapper.findComponent(FilterMultiSelect);
+
+    it('propose tous les véhicules sans propriétaire, puis seulement ceux du propriétaire choisi', async () => {
+        const wrapper = monterParc();
+        expect(listeVehicules(wrapper).props('options')).toHaveLength(3);
+        expect(listeVehicules(wrapper).props('filter')).toBe(true);
+
+        wrapper
+            .findComponent(FilterSearchSelect)
+            .vm.$emit('update:modelValue', ['diallo']);
+        await nextTick();
+
+        expect(
+            listeVehicules(wrapper)
+                .props('options')
+                .map((o) => o.value),
+        ).toEqual(['fanta', 'toyota']);
+    });
+
+    it('retire un véhicule déjà coché qui n’appartient pas au propriétaire choisi', async () => {
+        const wrapper = monterParc({ vehicule_ids: ['fanta', 'moto'] });
+
+        wrapper
+            .findComponent(FilterSearchSelect)
+            .vm.$emit('update:modelValue', ['diallo']);
+        await nextTick();
+        await nextTick();
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/depenses',
+            { proprietaire_id: 'diallo', vehicule_ids: ['fanta'] },
+            expect.anything(),
+        );
+    });
+});

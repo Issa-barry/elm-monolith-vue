@@ -4,21 +4,40 @@
 <meta charset="UTF-8" />
 <title>{{ $title }}</title>
 <style>
+/* Police du template Apollo Invoice, embarquee localement pour l'impression. */
+@font-face {
+    font-family: PoppinsPdf;
+    font-style: normal;
+    font-weight: 400;
+    src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-Regular.ttf')) }}") format('truetype');
+}
+@font-face {
+    font-family: PoppinsPdf;
+    font-style: normal;
+    font-weight: 700;
+    src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-Bold.ttf')) }}") format('truetype');
+}
 @page {
-    /* Marges volontairement généreuses : beaucoup d'imprimantes ont une zone
-       non imprimable réelle plus large que ce qu'affiche un lecteur PDF à
-       l'écran — un contenu collé à la marge déclarée peut être rogné au
-       moment de l'impression physique même s'il paraît correct à l'écran. */
-    margin: 18mm 17mm 24mm 17mm;
+    size: A4 landscape;
+    /* Rapport compact : garder une marge imprimable tout en donnant plus
+       de largeur au tableau. La marge basse reserve le pied de page. */
+    margin: 10mm 12mm 32mm 12mm;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Ne pas appliquer margin: 0 au selecteur universel : Dompdf l'applique
+   aussi a la page et annule les marges d'impression declarees ci-dessus. */
+* { box-sizing: border-box; }
 
 body {
-    font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
-    font-size: 8pt;
-    color: #000;
+    margin: 0;
+    padding: 0;
+    font-family: PoppinsPdf, DejaVu Sans, sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.1;
+    color: #334155;
     background: #fff;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 /* ── Pied de page fixe (répété sur toutes les pages) ─────────────── */
@@ -29,19 +48,20 @@ body {
    de mise en page le plus robuste et le mieux supporté par dompdf. */
 .page-footer {
     position: fixed;
-    bottom: 0;
+    height: 36pt;
+    /* Dans la marge basse, hors de la zone reservee aux lignes du tableau. */
+    bottom: -14mm;
     left: 0;
     right: 0;
     font-size: 7pt;
-    color: #333;
-    border-top: 0.75pt solid #888;
+    color: #64748b;
+    border-top: 0.5pt solid #e2e8f0;
 }
 .page-footer table { width: 100%; border-collapse: collapse; }
-.page-footer td { border: none; padding: 3pt 0 0; }
-.footer-center { text-align: center; }
-.footer-right { text-align: right; }
-.page-num:before   { content: counter(page); }
-.page-total:before { content: counter(pages); }
+.page-footer td { border: none; padding: 3pt 0 0; font-size: 7pt; }
+.footer-left { width: 40%; }
+.footer-center { width: 10%; text-align: center; }
+.footer-right { width: 50%; text-align: right; }
 
 /* ── Bloc par agence ──────────────────────────────────────────────── */
 /* Important : on ajoute la classe "new-page" explicitement en PHP (cf. boucle
@@ -53,13 +73,12 @@ body {
 
 /* ── Ligne meta (filtres + total) ─────────────────────────────────── */
 .meta-row {
-    margin-bottom: 8pt;
-    padding-left: 16pt;
-    font-size: 8pt;
-    color: #333;
+    margin-bottom: 14pt;
+    font-size: 8.5pt;
+    color: #64748b;
 }
-.meta-row > div { display: inline-block; margin-right: 16pt; }
-.meta-row b { color: #000; }
+.meta-row > div { display: block; margin-bottom: 3pt; }
+.meta-row b { color: #334155; }
 
 /* ── Véhicule(s) : nom puis immatriculation en dessous ────────────── */
 .veh-item { margin-bottom: 3pt; }
@@ -68,39 +87,43 @@ body {
 
 /* ── En-tête ──────────────────────────────────────────────────────── */
 .header {
-    margin-bottom: 8pt;
-    padding-bottom: 7pt;
-    border-bottom: 1.5pt solid #000;
+    margin-bottom: 16pt;
+    padding-top: 4pt;
+    padding-bottom: 18pt;
+    border-bottom: 0.5pt solid #e2e8f0;
+    page-break-inside: avoid;
 }
 .header table { width: 100%; border-collapse: collapse; }
 .header td { border: none; vertical-align: top; padding: 0; }
-.header-left { width: 70pt; }
-.logo-box {
-    padding: 4pt 0;
-    text-align: center;
-    font-size: 7pt;
-    color: #444;
-    line-height: 1.4;
-}
-.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; }
-
-.header-center { text-align: center; padding-top: 2pt; }
+.header td.header-left { width: 44%; padding-right: 26pt; }
+.company-name { font-size: 18pt; font-weight: 700; color: #0f172a; line-height: 1.05; }
 .doc-type {
     font-size: 13pt;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4pt;
+    color: #334155;
+    line-height: 1.1;
+    margin-bottom: 12pt;
 }
-.doc-sub { font-size: 9pt; margin-top: 3pt; color: #333; }
+.doc-sub { font-size: 9pt; margin-top: 9pt; color: #64748b; }
 
 .header td.header-right {
-    width: 150pt;
-    font-size: 7.5pt;
+    width: 56%;
+    font-size: 8.5pt;
     text-align: right;
-    line-height: 1.7;
-    padding: 0 24pt 0 6pt;
+    padding: 0;
 }
-.header-right strong { font-weight: 700; }
+.header table.header-details { width: 70%; margin-left: 30%; }
+.header-details th, .header-details td {
+    border: none;
+    padding: 3pt 0;
+    vertical-align: top;
+    font-size: 8.5pt;
+    line-height: 1.1;
+}
+.header-details th { width: 30%; text-align: right; font-weight: 700; }
+.header-details td { width: 70%; padding-left: 12pt; text-align: left; }
+.header .header-details tr { background: #fff; }
 
 /* ── Tableau ──────────────────────────────────────────────────────── */
 table {
@@ -110,32 +133,39 @@ table {
     table-layout: fixed;
 }
 
-thead { display: table-header-group; }
+thead { display: table-header-group; page-break-after: avoid; }
+thead tr { page-break-after: avoid; }
 
 thead th {
-    background: #d0d0d0;
-    border: 0.75pt solid #000;
-    padding: 4pt 6pt;
-    font-size: 7pt;
+    background: #f8fafc;
+    border: 0.5pt solid #cbd5e1;
+    padding: 7pt 6pt;
+    font-size: 7.5pt;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.2pt;
-    color: #000;
-    vertical-align: bottom;
+    color: #334155;
+    vertical-align: middle;
     white-space: normal;
 }
 thead th.right  { text-align: right; padding-right: 8pt; }
 thead th.center { text-align: center; }
+thead th.col-sig { padding-left: 2pt; padding-right: 2pt; }
+/* Meme ligne pour les libelles, puis une ligne dediee a la devise. */
+.column-label { display: block; white-space: nowrap; }
+.column-unit { display: block; margin-top: 3pt; white-space: nowrap; }
 
 tbody td {
-    border: 0.75pt solid #bbb;
-    padding: 3.5pt 6pt;
+    border: 0.5pt solid #cbd5e1;
+    padding: 6pt 6pt;
     font-size: 8.5pt;
     vertical-align: top;
 }
-tbody tr:nth-child(even) { background: #f0f0f0; }
-tbody td.right  { text-align: right; padding-right: 8pt; white-space: nowrap; }
+tbody tr:nth-child(even) { background: #f8fafc; }
+/* Les groupes de milliers peuvent revenir a la ligne : un grand montant
+   ne doit pas agrandir le tableau ni deborder dans la colonne voisine. */
+tbody td.right  { text-align: right; padding-right: 8pt; white-space: normal; }
 tbody td.center { text-align: center; }
+tbody td.col-sta { padding-left: 2pt; padding-right: 2pt; }
+tbody td.col-veh { padding-left: 4pt; padding-right: 4pt; }
 
 .ben-phone {
     display: block;
@@ -143,11 +173,12 @@ tbody td.center { text-align: center; }
     color: #555;
     font-size: 7pt;
     font-weight: 400;
-    white-space: nowrap;
+    white-space: normal;
 }
 
-/* Largeurs de colonnes fixes (A4 paysage ≈ 267mm utilisables avec marges 15mm) */
+/* Largeurs de colonnes fixes (A4 paysage : 273mm avec marges de 12mm). */
 .col-ben  { width: 21%; text-align: left; }
+thead th.col-ben, tbody td.col-ben { padding-left: 12pt; padding-right: 10pt; }
 .col-tel  { width: 9%; }
 .col-veh  { width: 19%; }
 .col-gen  { width: 8%; }
@@ -161,26 +192,24 @@ tbody td.center { text-align: center; }
 
 /* Colonnes supplémentaires propres à l'export Commission vente. Les largeurs
    historiques des exports Logistique/Propriétaire restent inchangées. */
-.validation-columns .col-ben { width: 22%; }
-.validation-columns .col-veh { width: 17%; }
-.validation-columns .col-cum { width: 10%; }
+.validation-columns .col-ben { width: 23%; }
+.validation-columns .col-veh { width: 11%; }
+.validation-columns .col-cum { width: 11%; }
 .validation-columns .col-fra { width: 8%; }
-.validation-columns .col-net { width: 10%; }
-.validation-columns .col-pay { width: 9%; }
-.validation-columns .col-res { width: 10%; }
-.validation-columns .col-sta { width: 7%; }
-.validation-columns .col-sig { width: 7%; }
+.validation-columns .col-net { width: 11%; }
+.validation-columns .col-pay { width: 8%; }
+.validation-columns .col-res { width: 11%; }
+.validation-columns .col-sta { width: 9%; }
+.validation-columns .col-sig { width: 8%; }
 
 /* ── Ligne de totaux ──────────────────────────────────────────────── */
 .total-row td {
-    background: #d0d0d0 !important;
+    background: #f1f5f9 !important;
     font-weight: 700;
-    font-size: 9pt;
-    border-top: 1.5pt solid #000;
-    border-bottom: 1.5pt solid #000;
-    border-left: 0.75pt solid #000;
-    border-right: 0.75pt solid #000;
-    padding: 4pt 6pt;
+    font-size: 8pt;
+    color: #0f172a;
+    border: 0.75pt solid #94a3b8;
+    padding: 7pt 6pt;
 }
 .total-row td.right { text-align: right; padding-right: 8pt; }
 </style>
@@ -191,9 +220,10 @@ tbody td.center { text-align: center; }
 <div class="page-footer">
     <table>
         <tr>
-            <td>{{ $title }} – Document confidentiel</td>
-            <td class="footer-center">Page <span class="page-num"></span> / <span class="page-total"></span></td>
-            <td class="footer-right">{{ count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') }}</td>
+            <td class="footer-left">{{ $title }} – Document confidentiel</td>
+            {{-- Remplis apres le rendu : nombre total de pages et agence de chaque section. --}}
+            <td class="footer-center">&#160;</td>
+            <td class="footer-right">&#160;</td>
         </tr>
     </table>
 </div>
@@ -202,26 +232,24 @@ tbody td.center { text-align: center; }
 
 <div class="site-page{{ !$loop->first ? ' new-page' : '' }}">
 
-    {{-- En-tête 3 zones --}}
-    <div class="header">
+    {{-- Apollo Invoice : entreprise a gauche, titre et informations a droite. --}}
+    <div class="header" data-footer-agency="{{ $siteData['site_nom'] ?: '—' }}">
         <table>
             <tr>
                 <td class="header-left">
-                    <div class="logo-box">
-                        <span class="logo-name">{{ strtoupper($org?->name ?? 'ELM') }}</span>
-                    </div>
-                </td>
-                <td class="header-center">
-                    <div class="doc-type">{{ $title }}</div>
+                    <div class="company-name">{{ strtoupper($org?->name ?? 'ELM') }}</div>
                     <div class="doc-sub">Rapport de commissions</div>
                 </td>
                 <td class="header-right">
-                    @if($siteData['site_nom'])
-                    <strong>Agence :</strong> {{ $siteData['site_nom'] }}<br>
-                    @endif
-                    <strong>Période :</strong> {{ $periode_label }}<br>
-                    <strong>Imprimé le :</strong> {{ $generated_at->format('d/m/Y H:i') }}<br>
-                    <strong>Imprimé par :</strong> {{ $printed_by }}
+                    <div class="doc-type">{{ $title }}</div>
+                    <table class="header-details">
+                        @if($siteData['site_nom'])
+                        <tr><th>Agence</th><td>{{ $siteData['site_nom'] }}</td></tr>
+                        @endif
+                        <tr><th>Période</th><td>{{ $periode_label }}</td></tr>
+                        <tr><th>Imprimé le</th><td>{{ $generated_at->format('d/m/Y H:i') }}</td></tr>
+                        <tr><th>Imprimé par</th><td>{{ $printed_by }}</td></tr>
+                    </table>
                 </td>
             </tr>
         </table>
@@ -256,31 +284,38 @@ tbody td.center { text-align: center; }
                 @endunless
                 <th class="col-veh">Véhicule(s)</th>
                 @if($show_validation_columns ?? false)
-                <th class="col-cum right">Brut validé (GNF)</th>
+                <th class="col-cum right"><span class="column-label">Brut validé</span><span class="column-unit">(GNF)</span></th>
                 @else
-                <th class="col-cum right">Total cumulé (GNF)</th>
+                <th class="col-cum right"><span class="column-label">Total cumulé</span><span class="column-unit">(GNF)</span></th>
                 @endif
-                <th class="col-fra right">Dépenses (GNF)</th>
+                <th class="col-fra right"><span class="column-label">Dépenses</span><span class="column-unit">(GNF)</span></th>
                 @if($show_validation_columns ?? false)
-                <th class="col-net right">Net validé (GNF)</th>
+                <th class="col-net right"><span class="column-label">Net validé</span><span class="column-unit">(GNF)</span></th>
                 @endif
-                <th class="col-pay right">Déjà payé (GNF)</th>
-                <th class="col-res right">Reste à payer (GNF)</th>
+                <th class="col-pay right"><span class="column-label">Déjà payé</span><span class="column-unit">(GNF)</span></th>
+                <th class="col-res right"><span class="column-label">Reste à payer</span><span class="column-unit">(GNF)</span></th>
                 <th class="col-sta center">Statut</th>
                 <th class="col-sig center">Signature</th>
             </tr>
         </thead>
         <tbody>
             @forelse($siteData['rows'] as $row)
+            @php
+                $telephone = $row['telephone'] ?? null;
+                // Conserver les annotations eventuelles (ex. poste), sans supprimer de texte.
+                $telephoneAffiche = preg_match('/^[+\d\s().-]+$/u', (string) $telephone)
+                    ? \App\Support\PhoneFormatter::display($telephone)
+                    : ($telephone ?: '—');
+            @endphp
             <tr>
                 <td class="col-ben">
                     <strong>{{ $row['beneficiaire_nom'] }}</strong>
                     @if(($show_validation_columns ?? false) && !empty($row['telephone']))
-                    <span class="ben-phone">{{ $row['telephone'] }}</span>
+                    <span class="ben-phone">{{ $telephoneAffiche }}</span>
                     @endif
                 </td>
                 @unless($show_validation_columns ?? false)
-                <td class="col-tel center">{{ $row['telephone'] ?? '—' }}</td>
+                <td class="col-tel center">{{ $telephoneAffiche }}</td>
                 @endunless
                 <td class="col-veh">
                     @forelse($row['vehicules'] ?? [] as $vehicule)
@@ -294,13 +329,13 @@ tbody td.center { text-align: center; }
                     —
                     @endforelse
                 </td>
-                <td class="col-cum right">{{ number_format((float) $row['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
-                <td class="col-fra right">{{ $row['frais'] > 0 ? number_format((float) $row['frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
+                <td class="col-cum right">{{ number_format((float) $row['total_cumule'], 0, ',', " ") }}</td>
+                <td class="col-fra right">{{ $row['frais'] > 0 ? number_format((float) $row['frais'], 0, ',', " ") : '—' }}</td>
                 @if($show_validation_columns ?? false)
-                <td class="col-net right">{{ number_format((float) $row['net_valide'], 0, ',', "\xc2\xa0") }}</td>
+                <td class="col-net right">{{ number_format((float) $row['net_valide'], 0, ',', " ") }}</td>
                 @endif
-                <td class="col-pay right">{{ number_format((float) $row['deja_paye'], 0, ',', "\xc2\xa0") }}</td>
-                <td class="col-res right">{{ $row['reste'] > 0 ? number_format((float) $row['reste'], 0, ',', "\xc2\xa0") : '—' }}</td>
+                <td class="col-pay right">{{ number_format((float) $row['deja_paye'], 0, ',', " ") }}</td>
+                <td class="col-res right">{{ $row['reste'] > 0 ? number_format((float) $row['reste'], 0, ',', " ") : '—' }}</td>
                 <td class="col-sta center">{{ $row['statut'] ?? '—' }}</td>
                 <td class="col-sig"></td>
             </tr>
@@ -313,13 +348,13 @@ tbody td.center { text-align: center; }
             @if(count($siteData['rows']) > 0)
             <tr class="total-row">
                 <td colspan="{{ ($show_validation_columns ?? false) ? 2 : 3 }}" style="text-align:right; padding-right:5pt; font-size:8.5pt;">TOTAUX :</td>
-                <td class="right">{{ number_format((float) $siteData['totaux']['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
-                <td class="right">{{ $siteData['totaux']['total_frais'] > 0 ? number_format((float) $siteData['totaux']['total_frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
+                <td class="right">{{ number_format((float) $siteData['totaux']['total_cumule'], 0, ',', " ") }}</td>
+                <td class="right">{{ $siteData['totaux']['total_frais'] > 0 ? number_format((float) $siteData['totaux']['total_frais'], 0, ',', " ") : '—' }}</td>
                 @if($show_validation_columns ?? false)
-                <td class="right">{{ number_format((float) $siteData['totaux']['total_net_valide'], 0, ',', "\xc2\xa0") }}</td>
+                <td class="right">{{ number_format((float) $siteData['totaux']['total_net_valide'], 0, ',', " ") }}</td>
                 @endif
-                <td class="right">{{ number_format((float) $siteData['totaux']['total_deja_paye'], 0, ',', "\xc2\xa0") }}</td>
-                <td class="right">{{ number_format((float) $siteData['totaux']['total_reste'], 0, ',', "\xc2\xa0") }}</td>
+                <td class="right">{{ number_format((float) $siteData['totaux']['total_deja_paye'], 0, ',', " ") }}</td>
+                <td class="right">{{ number_format((float) $siteData['totaux']['total_reste'], 0, ',', " ") }}</td>
                 <td colspan="2"></td>
             </tr>
             @endif

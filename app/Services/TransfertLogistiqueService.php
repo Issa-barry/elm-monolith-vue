@@ -130,7 +130,7 @@ class TransfertLogistiqueService
      */
     public static function annuler(TransfertLogistique $transfert): TransfertLogistique
     {
-        if (! in_array($transfert->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT])) {
+        if (! $transfert->isAnnulable()) {
             return $transfert;
         }
 

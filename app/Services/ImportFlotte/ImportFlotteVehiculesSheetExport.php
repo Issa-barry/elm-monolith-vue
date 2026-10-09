@@ -35,6 +35,7 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
             ...$this->colonnesCapacite(),
             'vehicule_livraison_vente',
             'vehicule_livraison_logistique',
+            'vehicule_livraison_grossiste',
             'proprietaire_nom',
             'proprietaire_prenom',
             'proprietaire_telephone',
@@ -54,10 +55,10 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // ligne d'ancrage pour un véhicule déjà existant) — jamais devinée silencieusement, cf.
         // ImportFlotteParser. "partenaire" exige les colonnes proprietaire_* renseignées ;
         // "interne" exige qu'elles restent vides.
-        // vehicule_livraison_vente / vehicule_livraison_logistique : oui/non (yes/no, 1/0,
-        // true/false acceptés) — une cellule vide vaut "non" (aucun usage par défaut,
-        // jamais un usage vente implicite), cf. ImportFlotteParser::toUsageBool(). Un
-        // véhicule sans aucun des deux reste importé mais non exploitable tant qu'un usage
+        // vehicule_livraison_vente / vehicule_livraison_logistique / vehicule_livraison_grossiste :
+        // oui/non (yes/no, 1/0, true/false acceptés) — une cellule vide vaut "non" (aucun usage
+        // par défaut, jamais un usage vente implicite), cf. ImportFlotteParser::toUsageBool(). Un
+        // véhicule sans aucun usage reste importé mais non exploitable tant qu'un usage
         // n'est pas défini (cf. Vehicule::aAuMoinsUnUsage()).
         $nbColonnesCapacite = count($this->colonnesCapacite());
         // Exemple de valeur uniquement sur la toute première colonne de capacité (si
@@ -66,8 +67,8 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         $exempleCapacites = $nbColonnesCapacite > 0 ? array_pad(['80'], $nbColonnesCapacite, '') : [];
 
         return [
-            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', 'interne', ...$exempleCapacites, 'oui', 'non', '', '', '', ''],
-            ['Matoto', 'Camion 2', 'RC-5678-B', 'Tricycle', 'partenaire', ...array_fill(0, $nbColonnesCapacite, ''), 'oui', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
+            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', 'interne', ...$exempleCapacites, 'oui', 'non', 'non', '', '', '', ''],
+            ['Matoto', 'Camion 2', 'RC-5678-B', 'Tricycle', 'partenaire', ...array_fill(0, $nbColonnesCapacite, ''), 'oui', 'non', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];
     }
 

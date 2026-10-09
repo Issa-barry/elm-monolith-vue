@@ -256,7 +256,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
         $this->creerRegle($distribution, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300, $categorie->id);
         $this->creerRegle($transfert, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 400, $categorie->id);
 
-        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
+        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true, 'livraison_grossiste' => true]);
         $equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
@@ -287,8 +287,8 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
                 ->where('vehicule.equipe_membres.0.livreur_id', $livreur->id)
                 ->where("statuts_partage_commission.{$categorie->id}.vente", 'fait')
                 ->where("statuts_partage_commission.{$categorie->id}.logistique_transfert", 'a_faire')
-                // transfert_grossiste (chantier 05/09/2026) : applicable à ce véhicule mixte (même
-                // usage que logistique_transfert), mais AUCUNE CommissionRegle configurée ici pour
+                // transfert_grossiste : applicable à ce véhicule (usage Grossiste coché, ADR 0023),
+                // mais AUCUNE CommissionRegle configurée ici pour
                 // AUCUNE catégorie — baremesCommissionParCategorie() ne renvoie donc aucune ligne
                 // pour ce processus, la clé est absente (jamais "à faire" ni "non_requis", qui
                 // supposeraient une catégorie effectivement résolue) — même absence que

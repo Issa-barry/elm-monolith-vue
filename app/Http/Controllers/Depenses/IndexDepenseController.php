@@ -27,7 +27,10 @@ class IndexDepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
+        if (isset($filters['vehicule_ids'])) {
+            $filters['vehicule_ids'] = array_values(array_filter((array) $filters['vehicule_ids']));
+        }
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $paginator = $this->listing->query($filters, $orgId, $siteIds)
@@ -62,6 +65,8 @@ class IndexDepenseController extends Controller
             'depenses' => $paginator->through(fn (Depense $d) => $this->listing->transform($d, $beneficiaireCache, $vehiculeInfoCache, $user, $droitValidation)),
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'libelle' => $t->libelle, 'categorie' => $t->categorie->value]),
             'sites' => $sites,
+            'proprietaires' => $this->listing->optionsProprietaires($orgId),
+            'vehicules' => $this->listing->optionsVehicules($orgId),
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),

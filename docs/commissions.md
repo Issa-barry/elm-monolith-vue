@@ -316,9 +316,10 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
 - **« Processus disponible » ≠ « processus obligatoire »** (révisé le 31/08/2026, incident : la
   fiche d'un Tricycle Vente-only affichait Distribution client comme « à faire », alors qu'aucune
   donnée métier ne l'autorise à exercer ce processus). Les processus pertinents pour un véhicule
-  dépendent de ses usages : `vente` ↔ `livraison_vente = true` ; `logistique_transfert` ET
-  `transfert_grossiste` (depuis le 05/09/2026) ↔ `livraison_logistique = true`, TOUJOURS
-  simultanément, jamais un choix exclusif (source unique :
+  dépendent de ses usages : `vente` ↔ `livraison_vente = true` ; `logistique_transfert` ↔
+  `livraison_logistique = true` ; `transfert_grossiste` ↔ `livraison_grossiste = true` (usage
+  propre depuis le 09/10/2026, ADR 0023 — rattaché à `livraison_logistique` du 05/09 au 09/10/2026)
+  (source unique :
   `CommissionProcessusDefaults::codesApplicablesPourVehicule()`) — un véhicule expose donc au
   maximum 3 onglets (1 pour Vente + 2 pour la logistique), jamais 4.
   - `EquipeLivraisonController::rules()` restreint le whitelist `processus_code` à ce sous-ensemble
@@ -627,7 +628,7 @@ décisions AMOA antérieures au chantier Grossiste.
   - `CODE_PROPRIETAIRE`/`CODE_EQUIPE_LIVRAISON` exigent un véhicule **éligible** pour l'usage
     réellement concerné par l'opération (`CommissionOperationContext::$vehiculeEligibleCommission`,
     alimenté par `commission_eligible_snapshot` pour une `CommandeVente` — champ inchangé,
-    toujours dérivé de `Vehicule::livraison_vente`/`livraison_logistique` via
+    toujours dérivé de `Vehicule::livraison_vente`/`livraison_logistique`/`livraison_grossiste` via
     `VehiculeCommandeContextResolver`, mais dont le RÔLE est désormais scopé à ces deux seules
     cibles, plus jamais un verrou d'entrée global). Toujours `true` pour un `TransfertLogistique`
     (véhicule structurellement obligatoire, comportement inchangé).
@@ -727,15 +728,15 @@ COMMISSION qui change.
   - `nature_operation = distribution_client` → `CODE_DISTRIBUTION_CLIENT`, priorité, inchangé.
   - `client.type = GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` → `CODE_TRANSFERT_GROSSISTE`.
   - **Grossiste + Enlèvement reste sur `CODE_VENTE`**, décision produit explicite du 05/09/2026 :
-    Transfert grossiste ne s'applique qu'aux véhicules qui font de la logistique — un Enlèvement
+    Transfert grossiste ne s'applique qu'aux véhicules d'usage Grossiste — un Enlèvement
     n'a structurellement aucun véhicule/équipe, la question ne se pose donc pas. Ne pas généraliser.
   - Tout le reste (Externe/Revendeur/Distributeur, avec ou sans véhicule) → `CODE_VENTE`, inchangé.
-  - Usage véhicule requis pour ce processus : `livraison_logistique` (comme
-    `logistique_transfert`/`distribution_client`, jamais `livraison_vente`) — un véhicule qui fait
-    de la logistique expose donc **simultanément** les onglets « Transferts logistiques » ET
-    « Transferts grossistes » (jamais un choix exclusif), et son équipe peut avoir des montants
-    fixes différents pour chacun sur la même catégorie (`equipe_livraison_partages_categorie.processus_id`,
-    mécanique déjà générique, aucune migration nécessaire).
+  - Usage véhicule requis pour ce processus : `livraison_grossiste` — usage propre depuis le
+    09/10/2026 (ADR 0023, remplace `livraison_logistique`). Seuls ces véhicules sont proposés et
+    acceptés pour livrer un grossiste, et seuls eux exposent l'onglet « Transferts grossistes ». Un
+    véhicule Logistique + Grossiste expose les deux onglets logistiques, et son équipe peut avoir
+    des montants fixes différents pour chacun sur la même catégorie
+    (`equipe_livraison_partages_categorie.processus_id`, mécanique déjà générique).
 - **COMM-012** — Contrairement à `distribution_client`, `transfert_grossiste` n'a **aucun repli de
   barème** (`CommissionProcessusDefaults::processusResolutionBareme()` ne le concerne pas — décision
   produit explicite : les bénéficiaires étant différents de `logistique_transfert`, hériter de son
@@ -1240,6 +1241,26 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Un écart (Équipe > Membres) signale un membre de l'équipe sans commission sur la période.
 - Conteneur étroit (< 1000px) : la taille d'équipe passe sous le nom du véhicule.
 - Test : `CommissionAjustementVenteTest::periode_show_distingue_la_taille_de_l_equipe_des_membres_commissionnes`.
+
+### Cartes, « Déjà payé » et colonne Propriétaire du détail de période (09/10/2026)
+
+- **Cartes (Reste à payer / Net à payer / Déjà payé)** : sans filtre, totaux des fiches de la
+  période. **Avec un filtre actif** (état, livreur, propriétaire, type, véhicule, nombre de
+  livreurs, bénéficiaire), elles additionnent les **lignes affichées** — remplace l'ancienne
+  règle « totaux de la période conservés quel que soit le filtre », qui montrait par exemple
+  39 M GNF pour un propriétaire dont les deux véhicules filtrés totalisaient 412 400 GNF. Le reste
+  de toute la période reste rappelé sous la carte (`stats.reste_periode`).
+  Véhicules : brut = `theorique`, net = `ajuste`, payé = `deja_paye`, reste = `reste`.
+- **Déjà payé d'un véhicule** = somme des `montant_verse` de ses parts de commission (alimenté
+  par l'allocation FIFO des paiements de fiche), et non plus le total payé de la fiche de chaque
+  bénéficiaire : un propriétaire de plusieurs véhicules voyait sinon son paiement compté en
+  entier sur chacun d'eux (reste à payer faussé à 0 dès un paiement partiel).
+- **Colonne Propriétaire** : propriétaire **actuel** du véhicule (`nom_affichage` : raison sociale
+  pour une entreprise) et son téléphone. Un changement de propriétaire après la période s'y
+  reflète ; le bénéficiaire réellement payé reste celui de la fiche.
+- Tests : `CommissionAjustementVenteTest::periode_show_deja_paye_par_vehicule_vient_des_parts_et_les_cartes_suivent_les_filtres`,
+  `periode_show_affiche_le_proprietaire_du_vehicule_avec_son_telephone`,
+  `periode_show_affiche_et_filtre_le_type_en_conservant_la_recherche`.
 
 ## Bouton « Payer » sur les écrans Commissions (27/09/2026)
 

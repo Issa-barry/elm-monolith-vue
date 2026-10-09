@@ -3,6 +3,29 @@
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Account\IndexAccountController;
 use App\Http\Controllers\Account\ToggleActiveAccountController;
+use App\Http\Controllers\Achats\AnnulerCommandeAchatController;
+use App\Http\Controllers\Achats\CloturerCommandeAchatController;
+use App\Http\Controllers\Achats\CreateCommandeAchatController;
+use App\Http\Controllers\Achats\DestroyCommandeAchatController;
+use App\Http\Controllers\Achats\EditCommandeAchatController;
+use App\Http\Controllers\Achats\Factures\AnnulerFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ComptabiliserFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\CreateFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\EditFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\IndexFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ShowFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\StoreFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\StorePaiementFournisseurController;
+use App\Http\Controllers\Achats\Factures\UpdateFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\ValiderFactureFournisseurController;
+use App\Http\Controllers\Achats\IndexCommandeAchatController;
+use App\Http\Controllers\Achats\PdfCommandeAchatController;
+use App\Http\Controllers\Achats\Receptions\IndexReceptionAchatController;
+use App\Http\Controllers\Achats\Receptions\StoreReceptionAchatController;
+use App\Http\Controllers\Achats\ShowCommandeAchatController;
+use App\Http\Controllers\Achats\StoreCommandeAchatController;
+use App\Http\Controllers\Achats\UpdateCommandeAchatController;
+use App\Http\Controllers\Achats\ValiderCommandeAchatController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitation\AcceptAcceptInvitationController;
 use App\Http\Controllers\Auth\AcceptInvitation\CheckPhoneAcceptInvitationController;
@@ -38,7 +61,6 @@ use App\Http\Controllers\Clients\UpdateDerogationClientController;
 use App\Http\Controllers\Clients\UpdateTarifsGrossisteClientController;
 use App\Http\Controllers\Clients\UpdateVehiculeClientController;
 use App\Http\Controllers\Clients\VerifierTelephoneClientController;
-use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\Comptabilite\ApprovisionnerCaisseAgentController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
@@ -470,10 +492,38 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Achats ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
-            Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
-            Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
-            Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
-            Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
+            // Bons de commande fournisseurs (ADR 0021) : création directe « à valider », validation
+            // par plafond du rôle, réceptions multiples.
+            // Factures fournisseurs (ADR 0022) — AVANT `achats/{achat}`, dont le joker capturerait
+            // `achats/factures`.
+            Route::get('achats/factures', IndexFactureFournisseurController::class)->name('achats.factures.index');
+            Route::get('achats/factures/create', CreateFactureFournisseurController::class)->name('achats.factures.create');
+            Route::post('achats/factures', StoreFactureFournisseurController::class)->name('achats.factures.store');
+            Route::get('achats/factures/{facture}', ShowFactureFournisseurController::class)->name('achats.factures.show');
+            Route::get('achats/factures/{facture}/edit', EditFactureFournisseurController::class)->name('achats.factures.edit');
+            Route::put('achats/factures/{facture}', UpdateFactureFournisseurController::class)->name('achats.factures.update');
+            Route::patch('achats/factures/{facture}/valider', ValiderFactureFournisseurController::class)->name('achats.factures.valider');
+            Route::patch('achats/factures/{facture}/annuler', AnnulerFactureFournisseurController::class)->name('achats.factures.annuler');
+            Route::post('achats/factures/{facture}/comptabiliser', ComptabiliserFactureFournisseurController::class)->name('achats.factures.comptabiliser');
+            Route::post('achats/factures/{facture}/paiements', StorePaiementFournisseurController::class)->name('achats.factures.paiements.store');
+
+            Route::get('achats', IndexCommandeAchatController::class)->name('achats.index');
+            Route::get('achats/create', CreateCommandeAchatController::class)->name('achats.create');
+            Route::post('achats', StoreCommandeAchatController::class)->name('achats.store');
+            Route::get('achats/{achat}', ShowCommandeAchatController::class)->name('achats.show');
+            Route::get('achats/{achat}/edit', EditCommandeAchatController::class)->name('achats.edit');
+            Route::put('achats/{achat}', UpdateCommandeAchatController::class)->name('achats.update');
+            Route::delete('achats/{achat}', DestroyCommandeAchatController::class)->name('achats.destroy');
+            Route::patch('achats/{achat}/valider', ValiderCommandeAchatController::class)->name('achats.valider');
+            Route::patch('achats/{achat}/annuler', AnnulerCommandeAchatController::class)->name('achats.annuler');
+            Route::patch('achats/{achat}/cloturer', CloturerCommandeAchatController::class)->name('achats.cloturer');
+            Route::get('achats/{achat}/pdf', PdfCommandeAchatController::class)->name('achats.pdf');
+            Route::post('achats/{achat}/receptions', StoreReceptionAchatController::class)->name('achats.receptions.store');
+
+            // Logistique → Réceptions fournisseurs. Rattaché au module Achats (utilisable sans le
+            // module Logistique) et déclaré AVANT le groupe Logistique : son joker
+            // `logistique/{transfert_logistique}` capturerait sinon cette URL.
+            Route::get('logistique/receptions-fournisseurs', IndexReceptionAchatController::class)->name('logistique.receptions-fournisseurs.index');
 
             // Fournisseurs — entité séparée de Prestataire, rattachée au contexte Achats.
             Route::resource('fournisseurs', FournisseurController::class);
@@ -609,9 +659,9 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('produits/types/{type}', DestroyProduitTypeController::class)->name('produits.types.destroy');
 
             // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
-            // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit
-            // fonctionner même si le module Achats est désactivé pour l'organisation, cf.
-            // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
+            // le formulaire Produit et le bon de commande — rattachée au module Produits (pas Achats) :
+            // elle doit fonctionner même si le module Achats est désactivé pour l'organisation, cf.
+            // CreateFournisseurModal.vue. Le CRUD complet reste sous le module Achats (route
             // fournisseurs.* ci-dessus).
             Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
 

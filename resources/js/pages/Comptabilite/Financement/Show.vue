@@ -41,6 +41,7 @@ const sections: { key: string; label: string }[] = [
     { key: 'livreurs_p2', label: 'Commissions livreurs — 2e quinzaine' },
     { key: 'proprietaires', label: 'Commissions propriétaires' },
     { key: 'salaires', label: 'Salaires' },
+    { key: 'fournisseurs', label: 'Factures fournisseurs à payer' },
 ];
 
 function restant(item: DetailFiche): number {

@@ -24,6 +24,7 @@ use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementPeriode;
+use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
@@ -654,7 +655,7 @@ class CommissionAjustementVenteTest extends TestCase
     }
 
     /** @test */
-    public function periode_show_affiche_et_filtre_le_type_en_conservant_recherche_et_totaux(): void
+    public function periode_show_affiche_et_filtre_le_type_en_conservant_la_recherche(): void
     {
         $camion = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Camion']);
         $tricycle = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Tricycle']);
@@ -690,12 +691,81 @@ class CommissionAjustementVenteTest extends TestCase
                 ->where('filters.type_vehicule_id', $camion->id)
                 ->where('filters.vehicule', 'ou114')
                 ->has('typesVehicule', 2)
-                ->where('stats.total_brut', 240000)
-                ->where('stats.total_net', 240000)
+                // Les cartes suivent le filtre : un seul véhicule affiché (120 000), le reste
+                // de toute la période reste exposé à part.
+                ->where('stats.filtre', true)
+                ->where('stats.nb_lignes', 1)
+                ->where('stats.total_brut', 120000)
+                ->where('stats.total_net', 120000)
+                ->where('stats.reste', 120000)
+                ->where('stats.reste_periode', 240000)
             );
         $this->get($url.'?'.http_build_query(['type_vehicule_id' => $tricycle->id, 'vehicule' => 'ADAMA']))
             ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0)->has('typesVehicule', 2));
         $this->get($url.'?type_vehicule_id='.$typeAutreOrganisation->id)
             ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0)->has('typesVehicule', 2));
+    }
+
+    /** @test */
+    public function periode_show_affiche_le_proprietaire_du_vehicule_avec_son_telephone(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'prenom' => 'Moussa',
+            'nom' => 'SIDIBE',
+            'telephone' => '+224620000001',
+        ]);
+        $vehicule->update(['proprietaire_id' => $proprietaire->id]);
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 1)
+                ->where('vehicules.0.proprietaire_nom', $proprietaire->nom_affichage)
+                ->where('vehicules.0.proprietaire_telephone', '+224620000001')
+            );
+    }
+
+    /** @test */
+    public function periode_show_deja_paye_par_vehicule_vient_des_parts_et_les_cartes_suivent_les_filtres(): void
+    {
+        ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
+        $vehiculeA->update(['nom_vehicule' => 'ADAMA']);
+        $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
+        ['vehicule' => $vehiculeB, 'categorie' => $categorieB] = $this->makeVehiculeTroisLivreurs(' B');
+        $vehiculeB->update(['nom_vehicule' => 'BOBO']);
+        $this->creerCommandeEtGenererCommission($vehiculeB, $categorieB);
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        // Versement alloué à une part du véhicule A uniquement : il ne doit apparaître que sur A.
+        $partA = CommissionAdjustmentService::partsPourPeriode($periode)
+            ->first(fn (CommissionEnveloppePart $p) => $p->enveloppe->source->vehicule_id === $vehiculeA->id);
+        $partA->forceFill(['montant_verse' => 20000])->saveQuietly();
+
+        $url = route('comptabilite.periodes.show', $periode);
+        $this->actingAs($this->user)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('stats.filtre', false)
+            ->where('stats.total_net', 240000)
+            ->where('vehicules.0.vehicule_id', $vehiculeA->id)
+            ->where('vehicules.0.deja_paye', 20000)
+            ->where('vehicules.0.reste', 100000)
+            ->where('vehicules.1.vehicule_id', $vehiculeB->id)
+            ->where('vehicules.1.deja_paye', 0)
+            ->where('vehicules.1.reste', 120000)
+        );
+
+        $this->get($url.'?vehicule=adama')->assertInertia(fn (Assert $page) => $page
+            ->has('vehicules', 1)
+            ->where('stats.filtre', true)
+            ->where('stats.nb_lignes', 1)
+            ->where('stats.total_brut', 120000)
+            ->where('stats.total_net', 120000)
+            ->where('stats.total_paye', 20000)
+            ->where('stats.reste', 100000)
+        );
     }
 }

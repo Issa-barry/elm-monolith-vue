@@ -87,26 +87,25 @@ class CommissionProcessusDefaults
     }
 
     /**
-     * Colonne d'usage (`Vehicule::livraison_vente`/`livraison_logistique`) qui rend CE processus
+     * Colonne d'usage (`Vehicule::livraison_vente`/`livraison_logistique`/`livraison_grossiste`) qui rend CE processus
      * applicable à un véhicule — source unique du mapping "processus disponible" ≠ "processus
      * obligatoire" (révisé le 31/08/2026, incident : un véhicule Vente-only affichait Distribution
      * client/Transfert logistique comme « à faire » alors qu'aucune donnée métier ne l'autorise à
      * exercer ces processus). Consommée par VehiculeController (onglets/tabs et statuts de partage
      * de la fiche véhicule) et EquipeLivraisonController (validation `processus_code`), pour que
      * les deux ne puissent jamais diverger sur "ce processus a-t-il un sens pour ce véhicule ?".
-     * `vente` ↔ livraison_vente ; `distribution_client`/`logistique_transfert`/`transfert_grossiste`
-     * ↔ livraison_logistique (une distribution client, un transfert interne et une livraison
-     * Grossiste sont tous les trois des opérations logistiques, jamais des ventes au comptoir —
-     * décision produit du 05/09/2026, cf. docs/grossiste.md : "Transfert grossiste" ne s'applique
-     * qu'aux véhicules qui font de la logistique).
+     * `vente` ↔ livraison_vente ; `distribution_client`/`logistique_transfert` ↔ livraison_logistique ;
+     * `transfert_grossiste` ↔ livraison_grossiste — usage propre depuis le 09/10/2026 (ADR 0023), qui
+     * remplace la règle du 05/09/2026 « Transfert grossiste = véhicules qui font de la logistique » :
+     * la fiche véhicule décide seule s'il livre des grossistes, comme pour Vente et Logistique.
      */
     public static function usageVehiculeRequis(string $code): string
     {
         return match ($code) {
             CommissionProcessus::CODE_VENTE => 'livraison_vente',
             CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
-            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
-            CommissionProcessus::CODE_TRANSFERT_GROSSISTE => 'livraison_logistique',
+            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT => 'livraison_logistique',
+            CommissionProcessus::CODE_TRANSFERT_GROSSISTE => 'livraison_grossiste',
             default => throw new InvalidArgumentException("Code processus inconnu : {$code}"),
         };
     }

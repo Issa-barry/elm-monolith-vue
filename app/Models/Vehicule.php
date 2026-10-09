@@ -33,6 +33,7 @@ class Vehicule extends Model
         'categorie',
         'livraison_vente',
         'livraison_logistique',
+        'livraison_grossiste',
         'photo_path',
         'is_active',
     ];
@@ -82,6 +83,7 @@ class Vehicule extends Model
             'categorie' => CategorieVehicule::class,
             'livraison_vente' => 'boolean',
             'livraison_logistique' => 'boolean',
+            'livraison_grossiste' => 'boolean',
             'capacite_packs' => 'integer',
             'capacite_bouteilles' => 'integer',
             'derogation_impayes_autorisee' => 'boolean',
@@ -109,7 +111,7 @@ class Vehicule extends Model
     }
 
     /**
-     * Libellé d'usage affiché dans la gestion des véhicules (Index/Show) — dérivé des deux
+     * Libellé d'usage affiché dans la gestion des véhicules (Index/Show) — dérivé des trois
      * booléens plutôt que stocké, pour une seule source de vérité. "Usage non défini" est
      * le cas d'un véhicule créé par import flotte sans qu'aucun usage n'ait été saisi dans
      * le fichier (cf. ImportFlotteParser) — jamais possible via le formulaire manuel, qui
@@ -117,23 +119,24 @@ class Vehicule extends Model
      */
     public function getUsageLabelAttribute(): string
     {
-        return match (true) {
-            $this->livraison_vente && $this->livraison_logistique => 'Vente + Logistique',
-            $this->livraison_vente => 'Vente',
-            $this->livraison_logistique => 'Logistique',
-            default => 'Usage non défini',
-        };
+        $usages = array_keys(array_filter([
+            'Vente' => $this->livraison_vente,
+            'Logistique' => $this->livraison_logistique,
+            'Grossiste' => $this->livraison_grossiste,
+        ]));
+
+        return $usages === [] ? 'Usage non défini' : implode(' + ', $usages);
     }
 
     /**
      * Un véhicule sans aucun usage n'a pas sa place dans les opérations métier — déjà
-     * garanti par scopeLivraisonVente()/scopeLivraisonLogistique() ci-dessous (qui
-     * l'excluent tous les deux), cette méthode ne fait que centraliser la lecture de cet
+     * garanti par scopeLivraisonVente()/scopeLivraisonLogistique()/scopeLivraisonGrossiste()
+     * ci-dessous (qui l'excluent tous), cette méthode ne fait que centraliser la lecture de cet
      * état pour l'UI et les contrôles applicatifs.
      */
     public function aAuMoinsUnUsage(): bool
     {
-        return $this->livraison_vente || $this->livraison_logistique;
+        return $this->livraison_vente || $this->livraison_logistique || $this->livraison_grossiste;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -220,6 +223,15 @@ class Vehicule extends Model
     public function scopeLivraisonLogistique($query)
     {
         return $query->where('livraison_logistique', true);
+    }
+
+    /**
+     * Véhicules sélectionnables pour une livraison à un client grossiste (processus de commission
+     * transfert_grossiste, ADR 0023) — usage propre, indépendant de Vente et de Logistique.
+     */
+    public function scopeLivraisonGrossiste($query)
+    {
+        return $query->where('livraison_grossiste', true);
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────

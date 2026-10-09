@@ -107,7 +107,7 @@ class TransfertLogistiquePolicy
         }
 
         // Annulation interdite dès TRANSIT
-        if (! in_array($transfert->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT])) {
+        if (! $transfert->isAnnulable()) {
             return false;
         }
 

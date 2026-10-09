@@ -68,7 +68,9 @@ const contactsItems = computed((): NavItem[] => {
     const sub: NavItem[] = [];
     if (can('clients.read'))
         sub.push({ title: 'Clients', href: '/backoffice/clients' });
-    if (can('fournisseurs.read'))
+    // Les routes fournisseurs sont dans le groupe module:achats : sans le module, le lien
+    // mènerait à un refus.
+    if (canSee('fournisseurs.read', 'achats'))
         sub.push({ title: 'Fournisseurs', href: '/backoffice/fournisseurs' });
     if (canSee('prestataires.read', 'prestataires'))
         sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
@@ -173,12 +175,24 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('achats.read', 'achats')) {
+    const achatsSousItems: NavItem[] = [];
+    if (canSee('achats.read', 'achats'))
+        achatsSousItems.push({
+            title: 'Bons de commande',
+            href: '/backoffice/achats',
+        });
+    if (canSee('factures-fournisseurs.read', 'achats'))
+        achatsSousItems.push({
+            title: 'Factures fournisseurs',
+            href: '/backoffice/achats/factures',
+        });
+    if (achatsSousItems.length > 0) {
         items.push({
             title: 'Achats',
-            href: '/backoffice/achats',
+            href: achatsSousItems[0].href,
             icon: PackageCheck,
             group: 'Commercial',
+            items: achatsSousItems.length > 1 ? achatsSousItems : undefined,
         });
     }
 
@@ -256,6 +270,10 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
+    // Réceptions des bons de commande fournisseurs (ADR 0021) : rattachées au module Achats,
+    // affichées sous Logistique même quand le module Logistique est désactivé.
+    const receptionsFournisseurs = canSee('receptions.read', 'achats');
+
     if (moduleActive('logistique') && can('logistique.read')) {
         items.push({
             title: 'Logistique',
@@ -274,6 +292,19 @@ const mainNavItems = computed((): NavItem[] => {
                         transfertsAReceptionner.value > 0
                             ? transfertsAReceptionner.value
                             : undefined,
+                },
+            ],
+        });
+    } else if (receptionsFournisseurs) {
+        items.push({
+            title: 'Logistique',
+            href: '/backoffice/logistique/receptions-fournisseurs',
+            icon: Truck,
+            group: 'Opérations',
+            items: [
+                {
+                    title: 'Réceptions',
+                    href: '/backoffice/logistique/receptions-fournisseurs',
                 },
             ],
         });

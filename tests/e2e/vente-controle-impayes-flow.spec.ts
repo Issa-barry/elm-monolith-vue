@@ -527,10 +527,7 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
  * pas la répartition elle-même) via le même flux UI qu'un administrateur suivrait réellement.
  */
 async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
-    await page
-        .locator('aside button')
-        .filter({ hasText: /equipe/i })
-        .click();
+    await page.getByTestId('equipe-tab-btn').click();
 
     // "Ajouter une équipe" (véhicule fraîchement créé, aucune équipe encore
     // assignée) — jamais "Gérer l'équipe", réservé aux véhicules qui en ont

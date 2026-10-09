@@ -25,7 +25,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * - vehicule_site
  * - capacite__<REFERENCE> (une colonne par catégorie du catalogue produit ayant une
  *   `reference`, même convention dynamique que ImportFlotteParser — cf. CapaciteColonneResolver)
- * - vehicule_livraison_vente / vehicule_livraison_logistique
+ * - vehicule_livraison_vente / vehicule_livraison_logistique / vehicule_livraison_grossiste
  *
  * Toute autre colonne présente dans le fichier (nom, type, catégorie, propriétaire...) est
  * silencieusement ignorée : ce parseur ne lit jamais que les clés ci-dessus, quelle que soit la
@@ -265,10 +265,11 @@ class ImportVehiculesMajParser
             $miseAJour['capacites'] = $capacitesMaj;
         }
 
-        // ── Usages vente / logistique ────────────────────────────────────────
+        // ── Usages vente / logistique / grossiste ────────────────────────────
         foreach ([
             ['vehicule_livraison_vente', 'livraison_vente', 'Vente'],
             ['vehicule_livraison_logistique', 'livraison_logistique', 'Logistique'],
+            ['vehicule_livraison_grossiste', 'livraison_grossiste', 'Grossiste'],
         ] as [$colonne, $champ, $label]) {
             $brut = $ligne[$colonne] ?? null;
             if ($brut === null || trim((string) $brut) === '') {

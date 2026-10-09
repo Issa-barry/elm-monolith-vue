@@ -5,11 +5,13 @@ namespace App\Console\Commands;
 use App\Enums\CategorieDepense;
 use App\Enums\EvenementComptable;
 use App\Enums\StatutDepense;
+use App\Enums\StatutFactureFournisseur;
 use App\Enums\StatutFactureVente;
 use App\Enums\StatutPeriodePaiement;
 use App\Models\CommandeVenteRetour;
 use App\Models\Depense;
 use App\Models\EncaissementVente;
+use App\Models\FactureFournisseur;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
@@ -17,6 +19,7 @@ use App\Models\PaiementFichePaiement;
 use App\Models\PieceComptable;
 use App\Services\Comptabilite\DepenseComptabilisationService;
 use App\Services\Comptabilite\EcritureComptableService;
+use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Console\Command;
@@ -47,20 +50,21 @@ class ComptabiliteRattrapageCommand extends Command
 {
     protected $signature = 'comptabilite:rattraper
         {--organization=* : ID, code ou slug d\'organisation (répétable) ; toutes si omis}
-        {--type=* : depense,fiche,paiement-fiche,vente,retour,encaissement (répétable) ; tous si omis}
+        {--type=* : depense,fiche,paiement-fiche,vente,retour,encaissement,facture-fournisseur (répétable) ; tous si omis}
         {--depuis= : date de début (YYYY-MM-DD), filtre sur la date métier}
         {--jusqua= : date de fin (YYYY-MM-DD), filtre sur la date métier}
         {--dry-run : simule sans rien écrire en base}';
 
-    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/retours de livraison/encaissements historiques éligibles. Idempotent.';
+    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/retours de livraison/encaissements/factures fournisseurs historiques éligibles. Idempotent.';
 
-    private const TYPES_VALIDES = ['depense', 'fiche', 'paiement-fiche', 'vente', 'retour', 'encaissement'];
+    private const TYPES_VALIDES = ['depense', 'fiche', 'paiement-fiche', 'vente', 'retour', 'encaissement', 'facture-fournisseur'];
 
     public function handle(
         DepenseComptabilisationService $depenseService,
         FicheComptabilisationService $ficheService,
         VenteComptabilisationService $venteService,
         EcritureComptableService $ecritures,
+        FactureFournisseurComptabilisationService $factureFournisseurService,
     ): int {
         $dryRun = (bool) $this->option('dry-run');
         $types = $this->resolveTypes();
@@ -110,6 +114,9 @@ class ComptabiliteRattrapageCommand extends Command
             }
             if (in_array('encaissement', $types, true)) {
                 $lignes[] = $this->traiterEncaissements($organization, $depuis, $jusqua, $dryRun, $venteService, $ecritures, $erreursDetail);
+            }
+            if (in_array('facture-fournisseur', $types, true)) {
+                $lignes[] = $this->traiterFacturesFournisseurs($organization, $depuis, $jusqua, $dryRun, $factureFournisseurService, $ecritures, $erreursDetail);
             }
 
             $this->table(
@@ -317,6 +324,33 @@ class ComptabiliteRattrapageCommand extends Command
     /**
      * @param  callable(Model): (PieceComptable|null)  $comptabiliserFn
      */
+    /**
+     * Factures fournisseurs validées dont l'écriture n'a pas pu être passée (comptes d'achat ou de
+     * TVA pas encore paramétrés, ADR 0022) — à relancer une fois les mappings configurés.
+     */
+    private function traiterFacturesFournisseurs(
+        Organization $org, ?Carbon $depuis, ?Carbon $jusqua, bool $dryRun,
+        FactureFournisseurComptabilisationService $service, EcritureComptableService $ecritures, array &$erreursDetail
+    ): array {
+        $query = FactureFournisseur::where('organization_id', $org->id)
+            ->whereIn('statut', array_map(fn ($s) => $s->value, StatutFactureFournisseur::constatees()))
+            ->when($depuis, fn (Builder $q) => $q->where('date_facture', '>=', $depuis->toDateString()))
+            ->when($jusqua, fn (Builder $q) => $q->where('date_facture', '<=', $jusqua->toDateString()));
+
+        $compteurs = $this->compteursVides();
+        $query->chunkById(100, function (Collection $factures) use ($org, $service, $ecritures, $dryRun, &$compteurs, &$erreursDetail) {
+            foreach ($factures as $facture) {
+                $this->traiterUn(
+                    $facture, $org->id, EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE,
+                    fn (Model $f) => $service->comptabiliserFactureValidee($f),
+                    'FactureFournisseur', $dryRun, $ecritures, $compteurs, $erreursDetail
+                );
+            }
+        });
+
+        return $this->ligneRapport('Factures fournisseurs', $compteurs, $dryRun);
+    }
+
     private function traiterUn(
         Model $source, string $organizationId, EvenementComptable $evenement,
         callable $comptabiliserFn, string $typeLabel, bool $dryRun,

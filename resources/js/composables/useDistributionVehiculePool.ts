@@ -3,7 +3,8 @@
  * distribution client du 31/08/2026 : dès qu'un client DISTRIBUTEUR est sélectionné, seuls les
  * véhicules autorisés pour l'usage logistique (Vehicule::livraison_logistique = true) doivent
  * être proposables, jamais les véhicules vente-only (et inversement pour tout autre type de
- * client). Extrait en fonctions pures pour rester testable indépendamment du montage de
+ * client). Même principe pour un client GROSSISTE depuis l'ADR 0023 : seuls les véhicules
+ * d'usage Grossiste (Vehicule::livraison_grossiste = true). Extrait en fonctions pures pour rester testable indépendamment du montage de
  * Ventes/Create.vue (AutoComplete PrimeVue, fetch de solvabilité, etc.).
  */
 
@@ -24,10 +25,13 @@ export function poolVehiculesPourClient<T>(
     clientType: ClientTypePourPool,
     vehiculesVente: T[],
     vehiculesDistribution: T[],
+    vehiculesGrossiste: T[],
 ): T[] {
-    return clientType === 'distributeur'
-        ? vehiculesDistribution
-        : vehiculesVente;
+    if (clientType === 'distributeur') {
+        return vehiculesDistribution;
+    }
+
+    return clientType === 'grossiste' ? vehiculesGrossiste : vehiculesVente;
 }
 
 /**

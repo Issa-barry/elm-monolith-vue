@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 import {
     ensureModuleEnabled,
     escapeRegExp,
-    getVisibleSearchInput,
     login,
     openRowActions,
     randomDigits,
+    selectOptionFromCombobox,
 } from './helpers';
 
 test.setTimeout(240_000);
@@ -15,7 +15,10 @@ test.beforeEach(async ({ page }) => {
     await ensureModuleEnabled(page, 'module.achats');
 });
 
-test('create achat -> annuler -> supprimer depuis la liste', async ({
+// Bon de commande direct (ADR 0021) : agence, fournisseur et produit obligatoires, puis
+// annulation et suppression. La validation n'est pas jouée ici : l'auteur du bon ne peut pas
+// valider son propre bon (séparation des tâches), couvert par CommandeAchatTest.
+test('create bon de commande -> annuler -> supprimer depuis la liste', async ({
     page,
 }) => {
     const note = `E2E-ACHAT-${Date.now()}${randomDigits(2)}`.slice(-18);
@@ -23,56 +26,54 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await page.goto('/backoffice/achats/create');
     await expect(page).toHaveURL(/\/achats\/create$/, { timeout: 20_000 });
 
-    await page
-        .locator('input[placeholder*="fournisseur" i]')
-        .first()
-        .fill(note);
+    await selectOptionFromCombobox(page, page.locator('#achat-site'));
+    await selectOptionFromCombobox(page, page.locator('#achat-fournisseur'));
+    await selectOptionFromCombobox(page, page.locator('#ligne-variante-0'));
+    await page.locator('#achat-note').fill(note);
 
     const submit = page
-        .locator('#achat-form button[type="submit"]:visible')
+        .getByRole('button', { name: /enregistrer le bon de commande/i })
+        .filter({ visible: true })
         .first();
     await expect(submit).toBeEnabled({ timeout: 15_000 });
     await submit.click();
 
     await expect(page).toHaveURL(/\/achats\/[a-z0-9]+$/, { timeout: 30_000 });
+    await expect(page.getByText(/en attente de validation/i)).toBeVisible({
+        timeout: 15_000,
+    });
+    const reference = (
+        await page
+            .locator('h1.font-mono')
+            .filter({ visible: true })
+            .first()
+            .innerText()
+    ).trim();
+    expect(reference).toMatch(/^BC-/);
 
-    const annulerBtn = page
-        .getByRole('button', { name: /annuler(?: la commande)?/i })
-        .first();
-    await expect(annulerBtn).toBeVisible({ timeout: 15_000 });
-    await annulerBtn.click();
-
+    await page
+        .getByRole('button', { name: /^annuler$/i })
+        .first()
+        .click();
     const dialog = page
         .locator('[role="dialog"]')
         .filter({ hasText: /annuler la commande/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await dialog
-        .locator('textarea[placeholder*="raison" i]')
-        .fill('Annulation e2e');
+    await dialog.locator('#motif-annulation').fill('Annulation e2e');
     await dialog
         .getByRole('button', { name: /confirmer l'annulation/i })
         .click();
 
-    await expect(page.getByText(/motif d['’]annulation/i)).toBeVisible({
+    await expect(page.getByText(/annulée le/i)).toBeVisible({
         timeout: 20_000,
     });
 
-    await page.goto('/backoffice/achats');
-    await expect(page).toHaveURL(/\/achats$/, { timeout: 15_000 });
-
-    // Re-récupéré via getVisibleSearchInput() à chaque recherche (jamais le même
-    // Locator réutilisé après une navigation) : sur une page DataFilters
-    // trigger-only, ce Locator est scopé au drawer Filtres, qui se referme à
-    // chaque rechargement — un `.fill()` dessus après coup n'a plus rien à cibler
-    // et attend indéfiniment (pas de timeout explicite), jusqu'au timeout du test.
-    let search = await getVisibleSearchInput(page);
-    await search.fill(note);
-    await search.press('Enter');
-    await page.waitForLoadState('networkidle');
-
+    await page.goto(
+        `/backoffice/achats?reference=${encodeURIComponent(reference)}`,
+    );
     const row = page
-        .locator('.p-datatable-table tbody tr', {
-            hasText: new RegExp(escapeRegExp(note), 'i'),
+        .locator('table tbody tr', {
+            hasText: new RegExp(escapeRegExp(reference), 'i'),
         })
         .first();
     await expect(row).toBeVisible({ timeout: 15_000 });
@@ -88,13 +89,12 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
         .click();
 
     await page.waitForLoadState('networkidle');
-    search = await getVisibleSearchInput(page);
-    await search.fill(note);
-    await search.press('Enter');
-    await page.waitForLoadState('networkidle');
+    await page.goto(
+        `/backoffice/achats?reference=${encodeURIComponent(reference)}`,
+    );
     await expect(
-        page.locator('.p-datatable-table tbody tr', {
-            hasText: new RegExp(escapeRegExp(note), 'i'),
+        page.locator('table tbody tr', {
+            hasText: new RegExp(escapeRegExp(reference), 'i'),
         }),
     ).toHaveCount(0);
 });

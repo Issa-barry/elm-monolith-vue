@@ -42,6 +42,9 @@ class CreatePrecommandeController extends Controller
             'produits' => $this->formBuilder->produitsActifs($orgId, $userSite->id, stockStrict: true),
             'vehicules' => $this->formBuilder->vehiculesActifs($orgId),
             'vehicules_distribution' => $this->formBuilder->vehiculesLogistiques($orgId),
+            // Troisième pool (ADR 0023) : véhicules d'usage Grossiste, proposés seuls dès qu'un client
+            // grossiste est sélectionné.
+            'vehicules_grossiste' => $this->formBuilder->vehiculesGrossistes($orgId),
             'clients' => $this->formBuilder->clientsActifs($orgId),
             'user_site' => $this->formBuilder->getUserSite(),
             'can_modifier_qte' => $user->can('ventes.qte.update'),

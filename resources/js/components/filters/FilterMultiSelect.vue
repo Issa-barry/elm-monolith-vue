@@ -24,12 +24,16 @@ const props = withDefaults(
         // s'y ajouter ; l'en-tête générique "Tous" (qui coche tout, sémantiquement incohérent en
         // single-select) est masqué.
         singleSelect?: boolean;
+        // Champ de recherche dans la liste (longues listes : véhicules…), sur le libellé et
+        // sur `recherche` quand l'option en porte un.
+        filter?: boolean;
     }>(),
     {
         placeholder: 'Tous',
         disabled: false,
         emptyMeansAll: false,
         singleSelect: false,
+        filter: false,
     },
 );
 
@@ -91,6 +95,11 @@ function handleChange(newVal: (string | number)[]) {
         fluid
         display="chip"
         :show-toggle-all="false"
+        :filter="filter"
+        :filter-fields="['label', 'recherche']"
+        filter-placeholder="Rechercher…"
+        empty-filter-message="Aucun résultat"
+        empty-message="Aucune option"
         append-to="self"
         :disabled="disabled"
         :pt="{

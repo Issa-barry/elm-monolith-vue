@@ -44,6 +44,7 @@ interface Equipe {
     vehicule_immatriculation: string | null;
     vehicule_livraison_vente: boolean;
     vehicule_livraison_logistique: boolean;
+    vehicule_livraison_grossiste: boolean;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: Membre[];
@@ -67,7 +68,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
-const usage = ref<'tous' | 'vente' | 'logistique'>('tous');
+const usage = ref<'tous' | 'vente' | 'logistique' | 'grossiste'>('tous');
 const proprietaire = ref('tous');
 
 const filterFields = computed<FilterField[]>(() => {
@@ -113,6 +114,7 @@ const filterFields = computed<FilterField[]>(() => {
                 { value: 'tous', label: 'Tous véhicules' },
                 { value: 'vente', label: 'Vente' },
                 { value: 'logistique', label: 'Logistique' },
+                { value: 'grossiste', label: 'Grossiste' },
             ],
         },
         {
@@ -185,6 +187,8 @@ const equipesFiltrees = computed(() => {
         if (usage.value === 'vente' && !e.vehicule_livraison_vente)
             return false;
         if (usage.value === 'logistique' && !e.vehicule_livraison_logistique)
+            return false;
+        if (usage.value === 'grossiste' && !e.vehicule_livraison_grossiste)
             return false;
         if (
             proprietaire.value !== 'tous' &&

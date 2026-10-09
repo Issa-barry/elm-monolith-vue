@@ -73,7 +73,7 @@ final class PrecommandeEcran
             'can_annuler' => $annulable && $user->can('annulerPrecommande', $commande),
             'can_changer_mode_remise' => $peutChangerMode,
             'vehicules_livraison' => $peutChangerMode && $commande->vehicule_id === null
-                ? $this->formBuilder->vehiculesActifs($commande->organization_id)
+                ? $this->formBuilder->vehiculesPourClient($commande->organization_id, $commande->client?->type)
                     ->map(fn (array $v) => [
                         'id' => $v['id'],
                         'nom' => $v['immatriculation'] ? "{$v['nom_vehicule']} ({$v['immatriculation']})" : $v['nom_vehicule'],

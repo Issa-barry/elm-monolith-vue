@@ -63,6 +63,25 @@ final class DepenseListingService
                 );
         }
 
+        // Propriétaire → véhicules (cf. docs/depenses-filtres.md) : le propriétaire ne sert qu'à
+        // désigner un parc de véhicules, jamais la personne concernée de la dépense. Seules les
+        // dépenses imputées à l'un de ces véhicules remontent, même si le propriétaire n'est le
+        // concerné d'aucune dépense.
+        $vehiculeIds = array_values(array_filter((array) ($filters['vehicule_ids'] ?? [])));
+        if (! empty($filters['proprietaire_id']) || $vehiculeIds !== []) {
+            $query->where('beneficiaire_type', 'vehicule');
+
+            if ($vehiculeIds !== []) {
+                $query->whereIn('beneficiaire_id', $vehiculeIds);
+            }
+            if (! empty($filters['proprietaire_id'])) {
+                $query->whereIn('beneficiaire_id', Vehicule::withTrashed()
+                    ->where('organization_id', $orgId)
+                    ->where('proprietaire_id', $filters['proprietaire_id'])
+                    ->select('id'));
+            }
+        }
+
         if (! empty($filters['search'])) {
             $like = '%'.$filters['search'].'%';
             $digits = preg_replace('/\D/', '', $filters['search']);
@@ -301,6 +320,49 @@ final class DepenseListingService
                 && $this->droitCreationDepense->peutValiderSurSite($user, $droitValidation, $d->site_id)
                 && $this->droitCreationDepense->peutValiderMontant($user, $droitValidation, (float) $d->montant),
         ];
+    }
+
+    /**
+     * Options du filtre Propriétaire : tout propriétaire possédant au moins un véhicule, qu'il
+     * soit ou non le concerné d'une dépense. `recherche` porte le téléphone sans séparateurs pour
+     * qu'une saisie « 623164833 » retrouve « +224 623 16 48 33 ».
+     *
+     * @return list<array{value: string, label: string, recherche: string}>
+     */
+    public function optionsProprietaires(string $orgId): array
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->whereHas('vehicules')
+            ->with('personne')
+            ->get()
+            ->map(fn (Proprietaire $p) => [
+                'value' => $p->id,
+                'label' => $p->telephone ? $p->nom_affichage.' — '.$p->telephone : $p->nom_affichage,
+                'recherche' => trim($p->nom_complet.' '.preg_replace('/\D/', '', (string) $p->telephone)),
+            ])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Options du filtre Véhicule, chacune rattachée à son propriétaire actuel (relation
+     * Propriétaire → Véhicules) pour que l'écran restreigne la liste au propriétaire choisi.
+     * Les véhicules inactifs restent proposés : leurs dépenses passées restent consultables.
+     *
+     * @return list<array{value: string, label: string, proprietaire_id: ?string}>
+     */
+    public function optionsVehicules(string $orgId): array
+    {
+        return Vehicule::where('organization_id', $orgId)
+            ->orderBy('nom_vehicule')
+            ->get(['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id'])
+            ->map(fn (Vehicule $v) => [
+                'value' => $v->id,
+                'label' => $v->immatriculation ? $v->nom_vehicule.' — '.$v->immatriculation : $v->nom_vehicule,
+                'proprietaire_id' => $v->proprietaire_id,
+            ])
+            ->all();
     }
 
     public function preloadBeneficiaires(array $depenses): array

@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
@@ -65,6 +66,8 @@ interface VehiculeCard {
     vehicule_immat: string | null;
     type_vehicule_id: string | null;
     type_vehicule_nom: string | null;
+    proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
     nb_membres: number;
     taille_equipe: number | null;
     nb_commandes: number;
@@ -104,6 +107,9 @@ const props = defineProps<{
         commissions_hors_fiches: { nombre: number; montant: number };
     };
     stats: {
+        filtre: boolean;
+        nb_lignes: number | null;
+        reste_periode: number;
         total_brut: number;
         total_net: number;
         total_paye: number;
@@ -770,7 +776,16 @@ function exportPdf() {
                         {{ fmt(stats.reste) }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
-                        Sur l'ensemble de la période
+                        <template v-if="stats.filtre">
+                            Sur les {{ stats.nb_lignes }}
+                            {{ isVehiculeType ? 'véhicule' : 'bénéficiaire'
+                            }}{{
+                                (stats.nb_lignes ?? 0) > 1 ? 's' : ''
+                            }}
+                            filtré{{ (stats.nb_lignes ?? 0) > 1 ? 's' : '' }} ·
+                            période : {{ fmt(stats.reste_periode) }}
+                        </template>
+                        <template v-else>Sur l'ensemble de la période</template>
                     </p>
                 </div>
                 <div class="min-w-0 rounded-xl border bg-card p-4">
@@ -1032,6 +1047,22 @@ function exportPdf() {
                                         · {{ vehicule.type_vehicule_nom }}</span
                                     >
                                 </p>
+                                <p
+                                    v-if="vehicule.proprietaire_nom"
+                                    class="mt-0.5 text-xs text-muted-foreground"
+                                >
+                                    Propriétaire : {{ vehicule.proprietaire_nom
+                                    }}<span
+                                        v-if="vehicule.proprietaire_telephone"
+                                    >
+                                        ·
+                                        {{
+                                            formatPhoneDisplay(
+                                                vehicule.proprietaire_telephone,
+                                            )
+                                        }}</span
+                                    >
+                                </p>
                             </div>
                             <StatusDot
                                 :status="vehicule.statut_validation"
@@ -1214,6 +1245,34 @@ function exportPdf() {
                                         </div>
                                     </div>
                                 </div>
+                            </template>
+                        </Column>
+
+                        <Column
+                            field="proprietaire_nom"
+                            header="Propriétaire"
+                            sortable
+                            :pt="COL_COMPACTE"
+                        >
+                            <template #body="{ data }">
+                                <div v-if="data.proprietaire_nom">
+                                    <div class="font-medium">
+                                        {{ data.proprietaire_nom }}
+                                    </div>
+                                    <div
+                                        v-if="data.proprietaire_telephone"
+                                        class="text-xs text-muted-foreground tabular-nums"
+                                    >
+                                        {{
+                                            formatPhoneDisplay(
+                                                data.proprietaire_telephone,
+                                            )
+                                        }}
+                                    </div>
+                                </div>
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
                             </template>
                         </Column>
 

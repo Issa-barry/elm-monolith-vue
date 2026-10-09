@@ -71,6 +71,12 @@ const props = defineProps<{
     depenses: Paginator;
     types: TypeOption[];
     sites: { id: string; nom: string }[];
+    proprietaires: { value: string; label: string; recherche: string }[];
+    vehicules: {
+        value: string;
+        label: string;
+        proprietaire_id: string | null;
+    }[];
     categories: Option[];
     statuts: Option[];
     filters: {
@@ -82,6 +88,8 @@ const props = defineProps<{
         date_debut?: string;
         date_fin?: string;
         vehicule?: string;
+        proprietaire_id?: string;
+        vehicule_ids?: string[];
         concerne?: string;
         telephone_concerne?: string;
         montant?: string;
@@ -112,6 +120,7 @@ function currentParams() {
         date_debut: props.filters.date_debut || undefined,
         date_fin: props.filters.date_fin || undefined,
         vehicule: props.filters.vehicule || undefined,
+        proprietaire_id: props.filters.proprietaire_id || undefined,
         concerne: props.filters.concerne || undefined,
         telephone_concerne: props.filters.telephone_concerne || undefined,
         montant: props.filters.montant || undefined,
@@ -127,6 +136,8 @@ const filterValues = computed(() => ({
     date_debut: props.filters.date_debut ?? '',
     date_fin: props.filters.date_fin ?? '',
     vehicule: props.filters.vehicule ?? '',
+    proprietaire_id: props.filters.proprietaire_id ?? '',
+    vehicule_ids: props.filters.vehicule_ids ?? [],
     concerne: props.filters.concerne ?? '',
     telephone_concerne: props.filters.telephone_concerne ?? '',
     montant: props.filters.montant ?? '',
@@ -171,13 +182,30 @@ const filterFields = computed<FilterField[]>(() => [
         suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'telephone_concerne',
     },
+    // Propriétaire → véhicules : indépendant du concerné de la dépense, il ne sert qu'à
+    // restreindre la liste des véhicules (cf. docs/depenses-filtres.md).
     {
-        key: 'vehicule',
+        key: 'proprietaire_id',
+        label: 'Propriétaire du véhicule',
+        type: 'select',
+        searchable: true,
+        placeholder: 'Nom, prénom ou téléphone…',
+        options: props.proprietaires,
+    },
+    {
+        key: 'vehicule_ids',
         label: 'Véhicule',
-        type: 'autocomplete',
-        placeholder: 'Nom ou immatriculation…',
-        suggestionsUrl: '/backoffice/depenses/suggestions',
-        suggestionsField: 'vehicule',
+        type: 'multi-select',
+        searchable: true,
+        placeholder: 'Tous les véhicules',
+        optionsFrom: (values) => {
+            const proprietaireId = (values.proprietaire_id as string[])?.[0];
+            return proprietaireId
+                ? props.vehicules.filter(
+                      (v) => v.proprietaire_id === proprietaireId,
+                  )
+                : props.vehicules;
+        },
     },
     {
         key: 'type',
@@ -216,6 +244,9 @@ function buildExportParams(): URLSearchParams {
     });
     (props.filters.site_ids ?? []).forEach((id) => {
         params.append('site_ids[]', id);
+    });
+    (props.filters.vehicule_ids ?? []).forEach((id) => {
+        params.append('vehicule_ids[]', id);
     });
     return params;
 }

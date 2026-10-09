@@ -27,6 +27,7 @@ class ProprietaireController extends Controller
         $this->authorize('viewAny', Proprietaire::class);
 
         $proprietaires = Proprietaire::with('personne')
+            ->withCount('vehicules')
             ->where('organization_id', auth()->user()->organization_id)
             ->get()
             ->sortBy('nom')
@@ -48,6 +49,7 @@ class ProprietaireController extends Controller
                 'code_pays' => $p->code_pays,
                 'adresse' => $p->adresse,
                 'is_active' => $p->is_active,
+                'vehicules_count' => $p->vehicules_count,
             ])
             ->values();
 

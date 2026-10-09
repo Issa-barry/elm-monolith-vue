@@ -60,13 +60,14 @@ class VehiculePartagesCommissionListeTest extends TestCase
         return $processus;
     }
 
-    private function vehicule(bool $vente, bool $logistique, ?array $partages = null): Vehicule
+    private function vehicule(bool $vente, bool $logistique, ?array $partages = null, bool $grossiste = false): Vehicule
     {
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
             'livraison_vente' => $vente,
             'livraison_logistique' => $logistique,
+            'livraison_grossiste' => $grossiste,
         ]);
 
         if ($partages !== null) {
@@ -96,17 +97,20 @@ class VehiculePartagesCommissionListeTest extends TestCase
         // Transfert grossiste : processus existant mais aucun barème Livreur positif.
         $this->baremeLivreur(CommissionProcessus::CODE_TRANSFERT_GROSSISTE, 0);
 
-        $complet = $this->vehicule(true, true, [[$vente, 800], [$logistique, 500]]);
-        $aFaire = $this->vehicule(true, true, [[$vente, 700], [$logistique, 500]]);
+        $complet = $this->vehicule(true, true, [[$vente, 800], [$logistique, 500]], grossiste: true);
+        $aFaire = $this->vehicule(true, true, [[$vente, 700], [$logistique, 500]], grossiste: true);
         $sansEquipe = $this->vehicule(true, false);
+        // ADR 0023 : un camion de transfert sans usage Grossiste n'a jamais de partage grossiste à faire.
+        $logistiqueSeule = $this->vehicule(false, true, [[$logistique, 500]]);
 
         $this->actingAs($this->user)->get(route('vehicules.index'))
-            ->assertInertia(function (AssertableInertia $page) use ($complet, $aFaire, $sansEquipe) {
+            ->assertInertia(function (AssertableInertia $page) use ($complet, $aFaire, $sansEquipe, $logistiqueSeule) {
                 $partages = collect($page->toArray()['props']['vehicules'])->pluck('partages_commission', 'id');
 
                 $this->assertSame(['vente' => 'fait', 'logistique_transfert' => 'fait', 'transfert_grossiste' => 'non_requis'], $partages[$complet->id]);
                 $this->assertSame(['vente' => 'a_faire', 'logistique_transfert' => 'fait', 'transfert_grossiste' => 'non_requis'], $partages[$aFaire->id]);
                 $this->assertSame(['vente' => 'sans_equipe', 'logistique_transfert' => 'non_applicable', 'transfert_grossiste' => 'non_applicable'], $partages[$sansEquipe->id]);
+                $this->assertSame(['vente' => 'non_applicable', 'logistique_transfert' => 'fait', 'transfert_grossiste' => 'non_applicable'], $partages[$logistiqueSeule->id]);
             });
     }
 }

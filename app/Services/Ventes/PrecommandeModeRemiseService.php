@@ -77,6 +77,7 @@ final class PrecommandeModeRemiseService
 
         $modeRemiseGrossiste = $this->formBuilder->deriverModeRemiseGrossiste($vehiculeId, $client);
         $this->formBuilder->ensureNatureOperationCoherente($nature, $vehiculeId, $vehicule);
+        $this->formBuilder->ensureVehiculeAutorisePourGrossiste($modeRemiseGrossiste, $vehicule);
         $this->formBuilder->ensureQuantiteMatchesVehiculeCapacity(['vehicule_id' => $vehiculeId, 'lignes' => $lignes]);
         $this->formBuilder->ensurePartageLivraisonCategorieConfigure($nature, $vehicule, $lignes, $client?->type, $modeRemiseGrossiste);
 

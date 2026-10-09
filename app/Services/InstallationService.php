@@ -13,6 +13,7 @@ use App\Models\DroitCreationDepense;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\Proprietaire;
+use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
@@ -434,6 +435,11 @@ class InstallationService
                 'peut_augmenter' => true,
                 'peut_diminuer' => true,
             ]);
+
+            // Achats (ADR 0021) : le périmètre « Peut acheter pour » des règles de rôle gouverne
+            // création, lecture et validation, sans passe-droit — règles de départ pour
+            // admin_entreprise et super_admin, modifiables dans Paramètres → Achats.
+            RegleValidationRole::provisionnerAchatsParDefaut($org->id);
 
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —
