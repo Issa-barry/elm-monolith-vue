@@ -198,6 +198,9 @@ const props = defineProps<{
     // contient que des véhicules autorisés pour la vente (cf. règle métier distribution client
     // du 31/08/2026, CommandeVenteFormBuilder::vehiculesLogistiques()).
     vehicules_distribution: VehiculeOption[];
+    // Troisième pool (ADR 0023) : véhicules d'usage Grossiste, seuls proposés pour un client
+    // grossiste (CommandeVenteFormBuilder::vehiculesGrossistes()).
+    vehicules_grossiste: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
     can_modifier_qte: boolean;
@@ -294,6 +297,7 @@ const vehiculesDisponibles = computed<VehiculeOption[]>(() =>
         clientSelected.value?.type,
         props.vehicules,
         props.vehicules_distribution,
+        props.vehicules_grossiste,
     ),
 );
 
@@ -304,6 +308,7 @@ const vehiculesDisponibles = computed<VehiculeOption[]>(() =>
 const vehiculesPourLookup = computed<VehiculeOption[]>(() => [
     ...props.vehicules,
     ...props.vehicules_distribution,
+    ...props.vehicules_grossiste,
 ]);
 
 function searchVehicule(event: { query: string }) {

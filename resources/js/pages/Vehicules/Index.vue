@@ -72,6 +72,7 @@ interface Vehicule {
     is_active: boolean;
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    livraison_grossiste: boolean;
     usage_label: string;
     /** processus_code → fait | a_faire | non_requis | sans_equipe | non_applicable */
     partages_commission: Record<string, string>;
@@ -152,6 +153,7 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'vente', label: 'Vente' },
             { value: 'logistique', label: 'Logistique' },
+            { value: 'grossiste', label: 'Grossiste' },
             { value: 'aucun', label: 'Usage non défini' },
         ],
     },
@@ -297,7 +299,11 @@ function confirmDelete(v: Vehicule) {
                             {{ v.type_label }}
                         </span>
                         <div
-                            v-if="!v.livraison_vente && !v.livraison_logistique"
+                            v-if="
+                                !v.livraison_vente &&
+                                !v.livraison_logistique &&
+                                !v.livraison_grossiste
+                            "
                             class="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"
                         >
                             <TriangleAlert class="h-3 w-3" />
@@ -747,7 +753,8 @@ function confirmDelete(v: Vehicule) {
                             <span
                                 v-if="
                                     data.livraison_vente ||
-                                    data.livraison_logistique
+                                    data.livraison_logistique ||
+                                    data.livraison_grossiste
                                 "
                                 class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
                             >

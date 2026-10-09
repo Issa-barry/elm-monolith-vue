@@ -53,6 +53,7 @@ final class CommandeVenteCreationService
         $modeRemiseGrossiste = $this->formBuilder->deriverModeRemiseGrossiste($data['vehicule_id'] ?? null, $client);
 
         $this->formBuilder->ensureNatureOperationCoherente($natureOperation, $data['vehicule_id'] ?? null, $vehiculePourValidation);
+        $this->formBuilder->ensureVehiculeAutorisePourGrossiste($modeRemiseGrossiste, $vehiculePourValidation);
         $this->formBuilder->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->formBuilder->enforcePrixVentePolicy($data, null, $client);
         $this->formBuilder->ensurePartageLivraisonCategorieConfigure(

@@ -13,7 +13,7 @@ Bon de commande ──► À valider ──valider (permission + plafond + sépa
                                        Partiellement réceptionnée ──► Réceptionnée (ou Clôturée : reliquat abandonné)
 ```
 
-Factures fournisseurs et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-dette-et-comptabilisation.md), section ci-dessous). Paiement des fournisseurs : lot 4, pas encore livré.
+Factures fournisseurs et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-dette-et-comptabilisation.md), section ci-dessous). Paiement des fournisseurs : lot 4 ([ADR 0024](adr/0024-paiement-des-factures-fournisseurs.md), section ci-dessous).
 
 ## Règles
 
@@ -52,6 +52,18 @@ Factures fournisseurs et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseur
 **En attente du comptable** : compte(s) d'achat (un seul ou par type de produit), TVA récupérable
 (compte et taux), confirmation 401000 / journal AC — cf. ADR 0022.
 
+## Paiement des fournisseurs (lot 4)
+
+| Code | Règle |
+|---|---|
+| PAF-001 | Seule une facture validée ou partiellement payée est payable ; montant ≤ reste dû, relu sous verrou de la facture (jamais payée deux fois, même en concurrence). Plusieurs paiements possibles : validée → partiellement payée → payée. |
+| PAF-002 | L'argent sort d'un support de l'**agence de la facture** : caisse dédiée active du payeur en espèces, sinon un moyen actif de l'agence (même dialogue et mêmes moyens que le paiement des fiches, ADR 0009). Référence obligatoire selon le moyen. |
+| PAF-003 | Solde du support garanti sous verrou avant la sortie ; solde insuffisant = refus sans aucun effet. |
+| PAF-004 | Écriture bloquante, dans la même transaction que le paiement : débit 401000 Fournisseurs (tiers = fournisseur), crédit du compte du support débité (journal CA / MM / BQ). |
+| PAF-005 | Droits : `factures-fournisseurs.payer` + agence couverte par ACH-000, sans passe-droit (super administrateur compris). |
+| PAF-006 | Les factures validées non soldées entrent dans ce que l'agence conserve avant toute remise (ADR 0016, colonne « Fournisseurs » du Financement des agences) : obligation du mois de leur échéance (à défaut date de facture), arriéré une fois échues. |
+| PAF-007 | Une facture déjà payée, même en partie, ne peut plus être annulée. L'annulation d'un paiement n'existe pas en V1. |
+
 ## Paramètres → Achats
 
 Une ligne par rôle (super administrateur compris, rien n'est verrouillé) : case « Peut acheter
@@ -70,6 +82,7 @@ Permission de la page : `parametres.update`.
 | `factures-fournisseurs.read` / `create` / `update` / `delete` | lire, saisir, modifier une facture en brouillon |
 | `factures-fournisseurs.valider` | valider (constate la dette) |
 | `factures-fournisseurs.annuler` | annuler (contrepassation si validée) |
+| `factures-fournisseurs.payer` | payer une facture validée (décaissement depuis l'agence de la facture) |
 
 ## Données
 
@@ -86,6 +99,8 @@ Permission de la page : `parametres.update`.
   annulation), nom du fournisseur figé, dernier motif d'échec de comptabilisation.
 - `facture_fournisseur_lignes` : ligne de réception, ligne de commande, variante, libellé et
   référence figés, quantité, prix unitaire, total HT.
+- `paiements_fournisseurs` : facture, fournisseur, agence, montant, mode et détail du moyen,
+  support de trésorerie débité, référence, date, auteur — une pièce comptable par paiement.
 
 ## Historique
 

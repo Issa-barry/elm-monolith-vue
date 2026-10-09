@@ -48,6 +48,7 @@ interface FormData {
     categorie: string | null;
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    livraison_grossiste: boolean;
     photo: File | null;
     is_active: boolean;
     capacites: CapaciteRow[];
@@ -152,14 +153,17 @@ function onProprietaireClear() {
 }
 
 function onUsageChange(
-    field: 'livraison_vente' | 'livraison_logistique',
+    field: 'livraison_vente' | 'livraison_logistique' | 'livraison_grossiste',
     value: boolean,
 ) {
     emit('update:form', { ...props.form, [field]: value });
 }
 
 const auMoinsUnUsage = computed(
-    () => props.form.livraison_vente || props.form.livraison_logistique,
+    () =>
+        props.form.livraison_vente ||
+        props.form.livraison_logistique ||
+        props.form.livraison_grossiste,
 );
 
 const canSubmit = computed(
@@ -226,6 +230,27 @@ function handleSubmit() {
                         >
                         <p class="text-xs text-muted-foreground">
                             Sélectionnable pour un transfert entre sites.
+                        </p>
+                    </div>
+                </label>
+
+                <label class="flex cursor-pointer items-center gap-3">
+                    <Checkbox
+                        :model-value="form.livraison_grossiste"
+                        @update:model-value="
+                            onUsageChange(
+                                'livraison_grossiste',
+                                $event === true,
+                            )
+                        "
+                    />
+                    <div>
+                        <span class="text-sm font-medium"
+                            >Livraison grossiste</span
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Sélectionnable pour livrer une commande d'un client
+                            grossiste.
                         </p>
                     </div>
                 </label>

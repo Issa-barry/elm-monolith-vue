@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Achats\Factures;
 use App\Enums\StatutFactureFournisseur;
 use App\Http\Controllers\Controller;
 use App\Models\FactureFournisseur;
+use App\Models\PaiementFournisseur;
 use App\Services\Achats\FactureFournisseurService;
+use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
+use App\Services\Tresorerie\DecaissementSupportResolver;
 use App\Support\Achats\FactureFournisseurPresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,12 +25,28 @@ class ShowFactureFournisseurController extends Controller
         FactureFournisseurService $service,
         FactureFournisseurPresenter $presenter,
         FactureFournisseurComptabilisationService $comptabilisation,
+        PaiementFournisseurService $paiements,
+        DecaissementSupportResolver $supports,
     ): Response {
         $this->authorize('view', $facture);
         $user = $request->user();
         $perimetre->autoriserFacture($facture, $user);
 
-        $facture->load('commande');
+        $facture->load(['commande', 'paiements' => fn ($q) => $q->orderByDesc('date_paiement')->orderByDesc('created_at'), 'paiements.compteTresorerie', 'paiements.createdBy']);
+
+        // Bouton Payer : seulement si le serveur accepterait (mêmes règles que
+        // PaiementFournisseurService::payer()) ; options du dialogue = moyens et caisse de l'AGENCE
+        // DE LA FACTURE (DecaissementSupportResolver, comme pour les fiches).
+        $motifNonPayable = null;
+        $peutPayer = false;
+        $optionsPaiement = null;
+        if ($facture->isConstatee() && $facture->resteDu() > 0 && $user->can('payer', $facture) && $user->checkPermissionTo('factures-fournisseurs.payer')) {
+            $motifNonPayable = $paiements->motifNonPayable($facture, $user);
+            $peutPayer = $motifNonPayable === null;
+            if ($peutPayer) {
+                $optionsPaiement = $supports->optionsPourSites($facture->organization_id, [$facture->site_id], $user)[$facture->site_id] ?? null;
+            }
+        }
 
         // Bouton Valider : seulement si le serveur accepterait ; avec la permission mais une règle
         // bloquante (périmètre, auteur, dernier modificateur), le motif est affiché à la place.
@@ -47,7 +66,19 @@ class ShowFactureFournisseurController extends Controller
             'comptabilite' => $etatComptable + [
                 'erreur' => $etatComptable['statut'] === 'en_attente' ? $facture->comptabilisation_erreur : null,
             ],
+            'paiements' => $facture->paiements->map(fn (PaiementFournisseur $p) => [
+                'id' => $p->id,
+                'date_paiement' => $p->date_paiement?->format('d/m/Y'),
+                'montant' => (float) $p->montant,
+                'mode_paiement' => $p->mode_paiement,
+                'support' => $p->compteTresorerie?->libelle,
+                'reference_paiement' => $p->reference_paiement,
+                'created_by' => $p->createdBy ? trim($p->createdBy->prenom.' '.$p->createdBy->nom) : null,
+            ])->values(),
+            'paiement' => $optionsPaiement,
             'actions' => [
+                'peut_payer' => $peutPayer,
+                'motif_non_payable' => $motifNonPayable,
                 'peut_modifier' => $facture->isBrouillon() && $user->can('update', $facture),
                 'peut_valider' => $peutValider,
                 'motif_non_validable' => $motifNonValidable,

@@ -187,7 +187,6 @@ class PaiementPeriodeController extends Controller
             $vehicules = $this->avecDetailsVehicule($this->avecMontantsPayes(
                 collect(CommissionAdjustmentService::vehiculesParPeriodeCombine($periode)),
                 $periode,
-                $allFiches,
             ), $periode);
 
             // Options issues de toute la période, avant les filtres : la sélection
@@ -277,12 +276,7 @@ class PaiementPeriodeController extends Controller
                 'effectue' => $recalcul['recalcule'],
                 'nb_fiches' => $recalcul['nb_fiches'],
             ],
-            'stats' => [
-                'total_brut' => (float) $allFiches->sum('montant_brut'),
-                'total_net' => (float) $allFiches->sum('montant_net'),
-                'total_paye' => (float) $allFiches->sum('montant_paye'),
-                'reste' => max(0.0, (float) $allFiches->sum('montant_net') - (float) $allFiches->sum('montant_paye')),
-            ],
+            'stats' => $this->stats($allFiches, $filters, $vehicules, $beneficiaires, $periode),
             'validation' => $this->etatValidation($periode),
             'can' => [
                 'calculer' => auth()->user()->can('calculer', $periode),
@@ -295,46 +289,72 @@ class PaiementPeriodeController extends Controller
     }
 
     /**
-     * Enrichit chaque véhicule avec le montant déjà payé et le reste à payer, en réutilisant
-     * les fiches déjà chargées pour la période (aucune requête supplémentaire). Le paiement
-     * vit au niveau du bénéficiaire (fiche), pas du véhicule : un livreur/propriétaire présent
-     * sur plusieurs véhicules de la quinzaine (rare) verra son montant compté sur chacun, comme
-     * pour nb_membres dans CommissionAdjustmentService::vehiculesParPeriode().
+     * Cartes de synthèse. Sans filtre : totaux des fiches de la période. Avec un filtre actif :
+     * somme des lignes affichées (véhicules ou bénéficiaires), pour que les cartes décrivent
+     * toujours ce que montre le tableau. Le reste de toute la période reste exposé à part.
+     *
+     * @param  Collection<int, PaiementFiche>  $allFiches
+     * @param  list<array>  $vehicules
+     * @param  list<array>  $beneficiaires
+     */
+    private function stats(Collection $allFiches, array $filters, array $vehicules, array $beneficiaires, PaiementPeriode $periode): array
+    {
+        $totalNet = (float) $allFiches->sum('montant_net');
+        $totalPaye = (float) $allFiches->sum('montant_paye');
+        $restePeriode = max(0.0, $totalNet - $totalPaye);
+
+        if (! array_filter($filters)) {
+            return [
+                'filtre' => false,
+                'nb_lignes' => null,
+                'total_brut' => (float) $allFiches->sum('montant_brut'),
+                'total_net' => $totalNet,
+                'total_paye' => $totalPaye,
+                'reste' => $restePeriode,
+                'reste_periode' => $restePeriode,
+            ];
+        }
+
+        $estVehicule = in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true);
+        $lignes = collect($estVehicule ? $vehicules : $beneficiaires);
+
+        return [
+            'filtre' => true,
+            'nb_lignes' => $lignes->count(),
+            'total_brut' => round((float) $lignes->sum($estVehicule ? 'theorique' : 'montant_brut'), 2),
+            'total_net' => round((float) $lignes->sum($estVehicule ? 'ajuste' : 'montant_net'), 2),
+            'total_paye' => round((float) $lignes->sum($estVehicule ? 'deja_paye' : 'montant_paye'), 2),
+            'reste' => round((float) $lignes->sum('reste'), 2),
+            'reste_periode' => $restePeriode,
+        ];
+    }
+
+    /**
+     * Enrichit chaque véhicule avec le montant déjà payé et le reste à payer. Le déjà payé est
+     * la somme des montants versés sur les parts de commission du véhicule (`montant_verse`,
+     * alimenté par l'allocation des paiements de fiche), et non le total payé de la fiche du
+     * bénéficiaire : un propriétaire possède souvent plusieurs véhicules, le total de sa fiche
+     * serait sinon compté sur chacun d'eux.
      *
      * @param  Collection<int, array>  $vehicules
-     * @param  Collection<int, PaiementFiche>  $allFiches
      * @return Collection<int, array>
      */
-    private function avecMontantsPayes(Collection $vehicules, PaiementPeriode $periode, Collection $allFiches): Collection
+    private function avecMontantsPayes(Collection $vehicules, PaiementPeriode $periode): Collection
     {
         if ($vehicules->isEmpty()) {
             return $vehicules;
         }
 
-        $fichesParBeneficiaire = $allFiches->keyBy(fn ($f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
-
-        $beneficiairesParVehicule = collect([
+        $verseParVehicule = collect([
             ...CommissionAdjustmentService::groupesParCommission($periode),
             ...CommissionAdjustmentService::groupesLogistiqueParCommission($periode),
         ])
             ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
-            ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
-                ->map(function ($p) {
-                    return match (true) {
-                        $p instanceof CommissionEnveloppePart => "{$p->beneficiaire_type}:{$p->beneficiaire_id}",
-                        (bool) $p->livreur_id => "livreur:{$p->livreur_id}",
-                        (bool) $p->proprietaire_id => "proprietaire:{$p->proprietaire_id}",
-                        default => null,
-                    };
-                })
-                ->filter()
-                ->unique());
+            ->map(fn ($groupes) => (float) $groupes->flatMap(fn (array $g) => $g['parts'])
+                ->sum(fn ($p) => (float) $p->montant_verse));
 
-        return $vehicules->map(function (array $v) use ($beneficiairesParVehicule, $fichesParBeneficiaire) {
-            $cle = $v['vehicule_id'] ?? '__sans_vehicule__';
-
-            $dejaPaye = $beneficiairesParVehicule->get($cle, collect())
-                ->sum(fn (string $ref) => (float) ($fichesParBeneficiaire->get($ref)?->montant_paye ?? 0));
+        return $vehicules->map(function (array $v) use ($verseParVehicule) {
+            $dejaPaye = (float) $verseParVehicule->get($v['vehicule_id'] ?? '__sans_vehicule__', 0.0);
 
             $v['deja_paye'] = round($dejaPaye, 2);
             $v['reste'] = max(0.0, round($v['ajuste'] - $v['deja_paye'], 2));
@@ -347,6 +367,7 @@ class PaiementPeriodeController extends Controller
      * Ajoute `taille_equipe` : nombre de membres de l'équipe active du véhicule (composition
      * actuelle — l'équipe n'est pas historisée), à distinguer de `nb_membres` qui ne compte que
      * les bénéficiaires ayant une commission sur la période. Null sans véhicule ou sans équipe.
+     * Ajoute aussi le type et le propriétaire actuel du véhicule (libellé d'affichage + téléphone).
      *
      * @param  Collection<int, array>  $vehicules
      * @return Collection<int, array>
@@ -356,8 +377,12 @@ class PaiementPeriodeController extends Controller
         $details = Vehicule::withTrashed()
             ->where('organization_id', $periode->organization_id)
             ->whereIn('id', $vehicules->pluck('vehicule_id')->filter()->all())
-            ->with(['typeVehicule' => fn ($query) => $query->withTrashed()->where('organization_id', $periode->organization_id)])
-            ->get(['id', 'type_vehicule_id'])
+            ->with([
+                'typeVehicule' => fn ($query) => $query->withTrashed()->where('organization_id', $periode->organization_id),
+                'proprietaire' => fn ($query) => $query->withTrashed()->where('organization_id', $periode->organization_id),
+                'proprietaire.personne' => fn ($query) => $query->withTrashed(),
+            ])
+            ->get(['id', 'type_vehicule_id', 'proprietaire_id'])
             ->keyBy('id');
 
         $tailles = EquipeLivraison::where('organization_id', $periode->organization_id)
@@ -372,6 +397,9 @@ class PaiementPeriodeController extends Controller
             $type = $details->get($v['vehicule_id'])?->typeVehicule;
             $v['type_vehicule_id'] = $type?->id;
             $v['type_vehicule_nom'] = $type?->nom;
+            $proprietaire = $details->get($v['vehicule_id'])?->proprietaire;
+            $v['proprietaire_nom'] = $proprietaire?->nom_affichage ?: null;
+            $v['proprietaire_telephone'] = $proprietaire?->telephone;
 
             return $v;
         });

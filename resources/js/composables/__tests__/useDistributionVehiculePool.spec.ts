@@ -19,6 +19,10 @@ const vehiculesDistribution: VehiculeStub[] = [
     { id: 11, nom_vehicule: 'Camion Logistique B' },
 ];
 
+const vehiculesGrossiste: VehiculeStub[] = [
+    { id: 20, nom_vehicule: 'Minibus Grossiste A' },
+];
+
 describe('poolVehiculesPourClient', () => {
     it('retourne le pool distribution pour un client distributeur', () => {
         expect(
@@ -26,8 +30,20 @@ describe('poolVehiculesPourClient', () => {
                 'distributeur',
                 vehiculesVente,
                 vehiculesDistribution,
+                vehiculesGrossiste,
             ),
         ).toBe(vehiculesDistribution);
+    });
+
+    it('retourne le pool grossiste pour un client grossiste, jamais celui de la vente', () => {
+        expect(
+            poolVehiculesPourClient(
+                'grossiste',
+                vehiculesVente,
+                vehiculesDistribution,
+                vehiculesGrossiste,
+            ),
+        ).toBe(vehiculesGrossiste);
     });
 
     it('retourne le pool vente pour un client externe', () => {
@@ -36,6 +52,7 @@ describe('poolVehiculesPourClient', () => {
                 'externe',
                 vehiculesVente,
                 vehiculesDistribution,
+                vehiculesGrossiste,
             ),
         ).toBe(vehiculesVente);
     });
@@ -46,6 +63,7 @@ describe('poolVehiculesPourClient', () => {
                 'revendeur',
                 vehiculesVente,
                 vehiculesDistribution,
+                vehiculesGrossiste,
             ),
         ).toBe(vehiculesVente);
     });
@@ -56,6 +74,7 @@ describe('poolVehiculesPourClient', () => {
                 undefined,
                 vehiculesVente,
                 vehiculesDistribution,
+                vehiculesGrossiste,
             ),
         ).toBe(vehiculesVente);
         expect(
@@ -63,6 +82,7 @@ describe('poolVehiculesPourClient', () => {
                 null,
                 vehiculesVente,
                 vehiculesDistribution,
+                vehiculesGrossiste,
             ),
         ).toBe(vehiculesVente);
     });

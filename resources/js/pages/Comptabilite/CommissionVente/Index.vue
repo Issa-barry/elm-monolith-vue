@@ -504,7 +504,7 @@ function fmtTel(tel: string | null | undefined): string {
             <template #after-header>
                 <div
                     v-if="selected.size > 0"
-                    class="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5"
                 >
                     <span class="text-sm font-medium">
                         {{ selected.size }} sélectionné{{
@@ -528,288 +528,357 @@ function fmtTel(tel: string | null | undefined): string {
             </template>
 
             <div class="commission-responsive">
-            <table data-testid="livreur-commissions-table" class="commission-table w-full text-sm">
-                <thead>
-                    <tr class="border-b bg-muted/50">
-                        <th
-                            scope="col"
-                            class="commission-selection w-10 px-3 py-3"
-                        >
-                            <Checkbox
-                                :model-value="allSelected"
-                                :disabled="selectableRows.length === 0"
-                                aria-label="Tout sélectionner"
-                                @update:model-value="toggleAll"
-                            />
-                            <span class="commission-select-label">Tout sélectionner</span>
-                        </th>
-                        <th
-                            scope="col"
-                            class="commission-identity px-4 py-3 text-left font-semibold text-foreground/70"
-                        >
-                            Livreur
-                        </th>
-                        <th
-                            scope="col"
-                            class="commission-context px-4 py-3 text-left font-semibold text-foreground/70"
-                        >
-                            Véhicule / Agence
-                        </th>
-                        <th
-                            scope="col"
-                            class="commission-calculation px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Commissions
-                        </th>
-                        <th
-                            scope="col"
-                            class="commission-payment px-4 py-3 text-right font-semibold text-foreground/70"
-                        >
-                            Paiements
-                        </th>
-                        <th
-                            scope="col"
-                            class="commission-actions px-4 py-3 text-left font-semibold text-foreground/70"
-                        >
-                            Statut / Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <!-- Ne force pas ?processus=vente : la fiche détail affiche par défaut la
+                <table
+                    data-testid="livreur-commissions-table"
+                    class="commission-table w-full text-sm"
+                >
+                    <thead>
+                        <tr class="border-b bg-muted/50">
+                            <th
+                                scope="col"
+                                class="commission-selection w-10 px-3 py-3"
+                            >
+                                <Checkbox
+                                    :model-value="allSelected"
+                                    :disabled="selectableRows.length === 0"
+                                    aria-label="Tout sélectionner"
+                                    @update:model-value="toggleAll"
+                                />
+                                <span class="commission-select-label"
+                                    >Tout sélectionner</span
+                                >
+                            </th>
+                            <th
+                                scope="col"
+                                class="commission-identity px-4 py-3 text-left font-semibold text-foreground/70"
+                            >
+                                Livreur
+                            </th>
+                            <th
+                                scope="col"
+                                class="commission-context px-4 py-3 text-left font-semibold text-foreground/70"
+                            >
+                                Véhicule / Agence
+                            </th>
+                            <th
+                                scope="col"
+                                class="commission-calculation px-4 py-3 text-right font-semibold text-foreground/70"
+                            >
+                                Commissions
+                            </th>
+                            <th
+                                scope="col"
+                                class="commission-payment px-4 py-3 text-right font-semibold text-foreground/70"
+                            >
+                                Paiements
+                            </th>
+                            <th
+                                scope="col"
+                                class="commission-actions px-4 py-3 text-left font-semibold text-foreground/70"
+                            >
+                                Statut / Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <!-- Ne force pas ?processus=vente : la fiche détail affiche par défaut la
                          situation TOUS PROCESSUS confondus du bénéficiaire (décision produit du
                          31/08/2026), même en arrivant depuis cet écran "Commission vente". -->
-                    <ClickableTableRow
-                        v-for="b in lignesAffichees"
-                        :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
-                        :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
-                        class="group even:bg-muted/20"
-                    >
-                        <td
-                            class="commission-selection px-3 py-4 align-top"
-                            @click.stop
+                        <ClickableTableRow
+                            v-for="b in lignesAffichees"
+                            :key="b.beneficiaire_id"
+                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
+                            :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
+                            class="group even:bg-muted/20"
                         >
-                            <Checkbox
-                                :model-value="selected.has(b.beneficiaire_id)"
-                                :disabled="b.creee_parts.length === 0"
-                                :aria-label="`Sélectionner ${b.beneficiaire_nom}`"
-                                @update:model-value="toggleRow(b)"
-                            />
-                        </td>
-                        <td
-                            class="commission-identity px-4 py-4 align-top"
-                        >
-                            <div class="flex items-center gap-2.5">
-                                <User
-                                    class="h-4 w-4 shrink-0 text-muted-foreground"
-                                />
-                                <div class="min-w-0">
-                                    <p class="font-semibold break-words">
-                                        {{ b.beneficiaire_nom }}
-                                    </p>
-                                    <p
-                                        v-if="b.telephone"
-                                        class="mt-0.5 text-xs text-muted-foreground"
-                                    >
-                                        {{ fmtTel(b.telephone) }}
-                                    </p>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="commission-context space-y-2 px-4 py-4 align-top" @click.stop>
-                            <div
-                                v-if="b.vehicules.length"
-                                class="flex items-start gap-1.5 text-sm text-muted-foreground"
+                            <td
+                                class="commission-selection px-3 py-4 align-top"
+                                @click.stop
                             >
-                                <Truck class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                <div class="min-w-0 space-y-1.5">
-                                    <div
-                                        v-for="(v, idx) in b.vehicules"
-                                        :key="idx"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="flex max-w-full items-start gap-1 text-left font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-primary"
-                                            @click="openVehicule(v)"
+                                <Checkbox
+                                    :model-value="
+                                        selected.has(b.beneficiaire_id)
+                                    "
+                                    :disabled="b.creee_parts.length === 0"
+                                    :aria-label="`Sélectionner ${b.beneficiaire_nom}`"
+                                    @update:model-value="toggleRow(b)"
+                                />
+                            </td>
+                            <td class="commission-identity px-4 py-4 align-top">
+                                <div class="flex items-center gap-2.5">
+                                    <User
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
+                                    <div class="min-w-0">
+                                        <p class="font-semibold break-words">
+                                            {{ b.beneficiaire_nom }}
+                                        </p>
+                                        <p
+                                            v-if="b.telephone"
+                                            class="mt-0.5 text-xs text-muted-foreground"
                                         >
-                                            <span class="min-w-0 break-words">{{ v.nom }}</span>
-                                            <ExternalLink
-                                                class="mt-1 h-3 w-3 shrink-0"
-                                            />
-                                        </button>
-                                        <span
-                                            v-if="v.immatriculation"
-                                            class="block text-xs text-muted-foreground/80"
-                                            >{{ v.immatriculation }}</span
-                                        >
+                                            {{ fmtTel(b.telephone) }}
+                                        </p>
                                     </div>
                                 </div>
-                            </div>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
+                            </td>
+                            <td
+                                class="commission-context space-y-2 px-4 py-4 align-top"
+                                @click.stop
                             >
-                            <div
-                                v-if="b.agence"
-                                class="flex items-start gap-1.5 text-xs text-muted-foreground"
-                                title="Agence qui paie : site actuel du véhicule"
-                            >
-                                <Building2 class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                <span class="min-w-0 break-words">{{ b.agence }}</span>
-                            </div>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
-                            <div
-                                v-if="b.processus_labels.length"
-                                class="flex flex-wrap gap-1"
-                            >
-                                <span
-                                    v-for="label in b.processus_labels"
-                                    :key="label"
-                                    class="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                <div
+                                    v-if="b.vehicules.length"
+                                    class="flex items-start gap-1.5 text-sm text-muted-foreground"
                                 >
-                                    {{ label }}
-                                </span>
-                            </div>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
-                        </td>
-                        <td class="commission-calculation px-4 py-4 align-top">
-                            <dl class="commission-amounts">
-                                <div title="Montant calculé avant validation de la direction">
-                                    <dt>Généré</dt>
-                                    <dd>{{ fmt(b.total_genere ?? b.total_brut_cumule) }}</dd>
-                                </div>
-                                <div title="Montant brut retenu, avant déduction des dépenses">
-                                    <dt>Brut</dt>
-                                    <dd>{{ fmt(b.total_brut_cumule) }}</dd>
-                                </div>
-                                <div title="Dépenses déduites du montant retenu">
-                                    <dt>Dépenses</dt>
-                                    <dd class="text-red-600 dark:text-red-400">{{ b.total_frais > 0 ? '-' + fmt(b.total_frais) : '—' }}</dd>
-                                </div>
-                            </dl>
-                        </td>
-                        <td class="commission-payment px-4 py-4 align-top">
-                            <dl class="commission-amounts">
-                                <div title="Montant actuellement retenu après dépenses et ajustements — indépendant de la validation de la période">
-                                    <dt>Net à payer</dt>
-                                    <dd>{{ fmt(b.total_net_cumule) }}</dd>
-                                </div>
-                                <div>
-                                    <dt>Déjà payé</dt>
-                                    <dd>{{ fmt(b.total_verse) }}</dd>
-                                </div>
-                                <div>
-                                    <dt>Reste à payer</dt>
-                                    <dd class="font-bold text-foreground">{{ fmt(b.solde_restant) }}</dd>
-                                </div>
-                            </dl>
-                        </td>
-                        <td class="commission-actions px-4 py-4 align-top" @click.stop>
-                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                <div class="flex min-w-0 flex-col items-start gap-2">
-                                <StatusDot
-                                    :status="b.display_status"
-                                    :label="b.display_label"
-                                />
-                                <Button
-                                    v-if="b.creee_parts.length > 0"
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-9 px-3 text-xs"
-                                    @click="validerRow(b)"
-                                >
-                                    Valider
-                                </Button>
-                                <Button
-                                    v-else-if="peutPayer(b)"
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-9 px-3 text-xs"
-                                    @click="openPaiement(b)"
-                                >
-                                    <HandCoins class="mr-1 h-3.5 w-3.5" />
-                                    Payer
-                                </Button>
-                                </div>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger as-child>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        :aria-label="`Actions pour ${b.beneficiaire_nom}`"
-                                        class="h-9 w-9 shrink-0"
-                                    >
-                                        <MoreHorizontal class="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem as-child>
-                                        <Link
-                                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
-                                            class="flex w-full cursor-pointer items-center"
+                                    <Truck
+                                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                                    />
+                                    <div class="min-w-0 space-y-1.5">
+                                        <div
+                                            v-for="(v, idx) in b.vehicules"
+                                            :key="idx"
                                         >
-                                            Détail
-                                        </Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        class="cursor-pointer"
-                                        @click="openAudit(b)"
+                                            <button
+                                                type="button"
+                                                class="flex max-w-full items-start gap-1 text-left font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-primary"
+                                                @click="openVehicule(v)"
+                                            >
+                                                <span
+                                                    class="min-w-0 break-words"
+                                                    >{{ v.nom }}</span
+                                                >
+                                                <ExternalLink
+                                                    class="mt-1 h-3 w-3 shrink-0"
+                                                />
+                                            </button>
+                                            <span
+                                                v-if="v.immatriculation"
+                                                class="block text-xs text-muted-foreground/80"
+                                                >{{ v.immatriculation }}</span
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
+                                <div
+                                    v-if="b.agence"
+                                    class="flex items-start gap-1.5 text-xs text-muted-foreground"
+                                    title="Agence qui paie : site actuel du véhicule"
+                                >
+                                    <Building2
+                                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                                    />
+                                    <span class="min-w-0 break-words">{{
+                                        b.agence
+                                    }}</span>
+                                </div>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
+                                <div
+                                    v-if="b.processus_labels.length"
+                                    class="flex flex-wrap gap-1"
+                                >
+                                    <span
+                                        v-for="label in b.processus_labels"
+                                        :key="label"
+                                        class="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
                                     >
-                                        <History class="mr-2 h-4 w-4" />
-                                        Historique
-                                    </DropdownMenuItem>
-                                    <template v-if="b.creee_parts.length > 0">
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
+                                        {{ label }}
+                                    </span>
+                                </div>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
+                            </td>
+                            <td
+                                class="commission-calculation px-4 py-4 align-top"
+                            >
+                                <dl class="commission-amounts">
+                                    <div
+                                        title="Montant calculé avant validation de la direction"
+                                    >
+                                        <dt>Généré</dt>
+                                        <dd>
+                                            {{
+                                                fmt(
+                                                    b.total_genere ??
+                                                        b.total_brut_cumule,
+                                                )
+                                            }}
+                                        </dd>
+                                    </div>
+                                    <div
+                                        title="Montant brut retenu, avant déduction des dépenses"
+                                    >
+                                        <dt>Brut</dt>
+                                        <dd>{{ fmt(b.total_brut_cumule) }}</dd>
+                                    </div>
+                                    <div
+                                        title="Dépenses déduites du montant retenu"
+                                    >
+                                        <dt>Dépenses</dt>
+                                        <dd
+                                            class="text-red-600 dark:text-red-400"
+                                        >
+                                            {{
+                                                b.total_frais > 0
+                                                    ? '-' + fmt(b.total_frais)
+                                                    : '—'
+                                            }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </td>
+                            <td class="commission-payment px-4 py-4 align-top">
+                                <dl class="commission-amounts">
+                                    <div
+                                        title="Montant actuellement retenu après dépenses et ajustements — indépendant de la validation de la période"
+                                    >
+                                        <dt>Net à payer</dt>
+                                        <dd>{{ fmt(b.total_net_cumule) }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Déjà payé</dt>
+                                        <dd>{{ fmt(b.total_verse) }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Reste à payer</dt>
+                                        <dd class="font-bold text-foreground">
+                                            {{ fmt(b.solde_restant) }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </td>
+                            <td
+                                class="commission-actions px-4 py-4 align-top"
+                                @click.stop
+                            >
+                                <div
+                                    class="flex flex-wrap items-start justify-between gap-2"
+                                >
+                                    <div
+                                        class="flex min-w-0 flex-col items-start gap-2"
+                                    >
+                                        <StatusDot
+                                            :status="b.display_status"
+                                            :label="b.display_label"
+                                        />
+                                        <Button
+                                            v-if="b.creee_parts.length > 0"
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-9 px-3 text-xs"
                                             @click="validerRow(b)"
                                         >
-                                            <CheckCircle2
-                                                class="mr-2 h-4 w-4"
-                                            />
                                             Valider
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
-                                            @click="openAjuster(b)"
-                                        >
-                                            <SlidersHorizontal
-                                                class="mr-2 h-4 w-4"
-                                            />
-                                            Ajuster
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="repartirUrl(b)"
-                                            as-child
-                                            class="cursor-pointer"
-                                        >
-                                            <Link :href="repartirUrl(b)!">
-                                                <Split class="mr-2 h-4 w-4" />
-                                                Répartir
-                                            </Link>
-                                        </DropdownMenuItem>
-                                    </template>
-                                    <template v-if="peutPayer(b)">
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
+                                        </Button>
+                                        <Button
+                                            v-else-if="peutPayer(b)"
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-9 px-3 text-xs"
                                             @click="openPaiement(b)"
                                         >
-                                            <HandCoins class="mr-2 h-4 w-4" />
+                                            <HandCoins
+                                                class="mr-1 h-3.5 w-3.5"
+                                            />
                                             Payer
-                                        </DropdownMenuItem>
-                                    </template>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            </div>
-                        </td>
-                    </ClickableTableRow>
-                </tbody>
-            </table>
+                                        </Button>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                :aria-label="`Actions pour ${b.beneficiaire_nom}`"
+                                                class="h-9 w-9 shrink-0"
+                                            >
+                                                <MoreHorizontal
+                                                    class="h-4 w-4"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    Détail
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openAudit(b)"
+                                            >
+                                                <History class="mr-2 h-4 w-4" />
+                                                Historique
+                                            </DropdownMenuItem>
+                                            <template
+                                                v-if="b.creee_parts.length > 0"
+                                            >
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="validerRow(b)"
+                                                >
+                                                    <CheckCircle2
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Valider
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="openAjuster(b)"
+                                                >
+                                                    <SlidersHorizontal
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Ajuster
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    v-if="repartirUrl(b)"
+                                                    as-child
+                                                    class="cursor-pointer"
+                                                >
+                                                    <Link
+                                                        :href="repartirUrl(b)!"
+                                                    >
+                                                        <Split
+                                                            class="mr-2 h-4 w-4"
+                                                        />
+                                                        Répartir
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                            </template>
+                                            <template v-if="peutPayer(b)">
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="openPaiement(b)"
+                                                >
+                                                    <HandCoins
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Payer
+                                                </DropdownMenuItem>
+                                            </template>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </td>
+                        </ClickableTableRow>
+                    </tbody>
+                </table>
             </div>
         </CommissionIndexLayout>
     </AppLayout>
@@ -858,7 +927,7 @@ function fmtTel(tel: string | null | undefined): string {
         v-model:visible="vehiculeDialogVisible"
         modal
         header="Détail véhicule"
-        :style="{ width: '28rem' }"
+        :style="{ width: '28rem', maxWidth: 'calc(100vw - 2rem)' }"
     >
         <div class="space-y-3 px-1 py-2">
             <div class="flex justify-between">

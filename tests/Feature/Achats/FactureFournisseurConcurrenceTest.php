@@ -15,12 +15,14 @@ use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Achats\FactureFournisseurService;
+use App\Services\Achats\PaiementFournisseurService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Concerns\HasProduitVariante;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\TestCase;
 
 /**
@@ -36,7 +38,11 @@ use Tests\TestCase;
  */
 class FactureFournisseurConcurrenceTest extends TestCase
 {
-    use HasProduitVariante;
+    use HasCaissesDediees, HasProduitVariante;
+
+    private Organization $org;
+
+    private User $user;
 
     private const CONNECTION = 'mysql_testing';
 
@@ -117,6 +123,68 @@ class FactureFournisseurConcurrenceTest extends TestCase
 
         $this->assertNotNull($refus, 'La seconde validation aurait facturé une deuxième fois les 100 unités reçues.');
         $this->assertStringContainsString('seulement 0 reçus et non encore facturés', $refus);
+    }
+
+    /**
+     * ADR 0024 : le paiement B a déjà lu la base quand un paiement A soldant la facture est commité
+     * par une autre connexion — B relit la facture sous verrou (dernière version) et refuse : la
+     * facture n'est jamais payée deux fois.
+     */
+    public function test_un_paiement_concurrent_ne_paie_jamais_deux_fois_la_meme_facture(): void
+    {
+        $org = Organization::factory()->create();
+        $site = Site::factory()->for($org)->create();
+        $entreprise = EntrepriseTierce::create(['organization_id' => $org->id, 'raison_sociale' => 'FOURNISSEUR PAIEMENT']);
+        $fournisseur = Fournisseur::create(['organization_id' => $org->id, 'entreprise_tierce_id' => $entreprise->id, 'is_active' => true]);
+        $commande = CommandeAchat::create([
+            'organization_id' => $org->id, 'site_id' => $site->id, 'fournisseur_id' => $fournisseur->id,
+            'total_commande' => 100_000, 'statut' => StatutCommandeAchat::RECEPTIONNEE, 'validee_at' => now(),
+        ]);
+        $facture = FactureFournisseur::create([
+            'organization_id' => $org->id, 'commande_achat_id' => $commande->id, 'fournisseur_id' => $fournisseur->id,
+            'site_id' => $site->id, 'reference' => 'FAF-CONC-PAY-'.uniqid(), 'numero_facture_fournisseur' => 'CONC-PAY',
+            'date_facture' => now()->toDateString(), 'montant_ht' => 100_000, 'montant_ttc' => 100_000,
+            'statut' => StatutFactureFournisseur::VALIDEE, 'validee_at' => now(),
+        ]);
+
+        $permission = Permission::firstOrCreate(['name' => 'factures-fournisseurs.payer', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'tresorier_concurrence', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+        RegleValidationRole::create([
+            'organization_id' => $org->id, 'domaine' => RegleValidationRole::DOMAINE_ACHATS,
+            'role_name' => 'tresorier_concurrence', 'perimetre' => 'toutes_agences',
+        ]);
+        $payeur = User::factory()->create(['organization_id' => $org->id]);
+        $payeur->assignRole($role);
+        $payeur->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        // HasCaissesDediees lit $this->org / $this->user (auteur de l'alimentation de la caisse).
+        $this->org = $org;
+        $this->user = $payeur->fresh();
+        $this->equiperPayeurEspeces($this->user, $site->id, 500_000);
+
+        $refus = null;
+        DB::connection(self::CONNECTION)->beginTransaction();
+        try {
+            // B a déjà lu la facture (encore « validée ») : sa vue cohérente est figée ici.
+            $lueParB = FactureFournisseur::findOrFail($facture->id);
+
+            // A solde la facture et commite par une AUTRE connexion pendant ce temps.
+            DB::connection('mysql_testing_2')->table('factures_fournisseurs')
+                ->where('id', $facture->id)
+                ->update(['montant_paye' => 100_000, 'statut' => StatutFactureFournisseur::PAYEE->value]);
+
+            try {
+                app(PaiementFournisseurService::class)->payer($lueParB, $payeur->fresh(), [
+                    'montant' => 100_000, 'mode_paiement' => 'especes', 'date_paiement' => now()->toDateString(),
+                ]);
+            } catch (ValidationException $e) {
+                $refus = $e->errors()['paiement'][0] ?? $e->errors()['montant'][0] ?? null;
+            }
+        } finally {
+            DB::connection(self::CONNECTION)->rollBack();
+        }
+
+        $this->assertNotNull($refus, 'Le second paiement aurait payé une deuxième fois la facture déjà soldée.');
     }
 
     private function brouillon(Organization $org, CommandeAchat $commande, Fournisseur $fournisseur, Site $site, $ligneRecue, string $suffixe): FactureFournisseur

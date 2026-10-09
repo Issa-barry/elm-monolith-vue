@@ -15,6 +15,7 @@ use App\Http\Controllers\Achats\Factures\EditFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\IndexFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\ShowFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\StoreFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\StorePaiementFournisseurController;
 use App\Http\Controllers\Achats\Factures\UpdateFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\ValiderFactureFournisseurController;
 use App\Http\Controllers\Achats\IndexCommandeAchatController;
@@ -504,6 +505,7 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('achats/factures/{facture}/valider', ValiderFactureFournisseurController::class)->name('achats.factures.valider');
             Route::patch('achats/factures/{facture}/annuler', AnnulerFactureFournisseurController::class)->name('achats.factures.annuler');
             Route::post('achats/factures/{facture}/comptabiliser', ComptabiliserFactureFournisseurController::class)->name('achats.factures.comptabiliser');
+            Route::post('achats/factures/{facture}/paiements', StorePaiementFournisseurController::class)->name('achats.factures.paiements.store');
 
             Route::get('achats', IndexCommandeAchatController::class)->name('achats.index');
             Route::get('achats/create', CreateCommandeAchatController::class)->name('achats.create');

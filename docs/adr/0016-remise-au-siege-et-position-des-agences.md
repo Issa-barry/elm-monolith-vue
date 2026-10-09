@@ -57,6 +57,7 @@ d'`ObligationsAgenceService` :
 | Commissions des livreurs | P1 (le 15) et P2 (fin de mois) |
 | Paiements aux propriétaires | fin de mois |
 | Salaires | fin de mois |
+| Factures fournisseurs validées non soldées (ADR 0024) | fin du mois de leur échéance (à défaut, date de facture) |
 
 Montant conservé = **obligations de la prochaine échéance + obligations échues encore impayées**
 (une commission en retard n'est jamais remise à la trésorerie principale). Les fiches de paiement

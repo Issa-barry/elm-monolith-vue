@@ -43,6 +43,11 @@ class FactureFournisseurPolicy
         return $user->can('factures-fournisseurs.annuler') && $this->visible($user, $facture);
     }
 
+    public function payer(User $user, FactureFournisseur $facture): bool
+    {
+        return $user->can('factures-fournisseurs.payer') && $this->visible($user, $facture);
+    }
+
     private function visible(User $user, FactureFournisseur $facture): bool
     {
         return app(PerimetreCommandesAchat::class)->factureVisible($facture, $user);

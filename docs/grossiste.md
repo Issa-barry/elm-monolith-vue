@@ -204,8 +204,10 @@ Résumé de la règle :
 - **Grossiste + Livraison** (véhicule de flotte, `mode_remise_grossiste = LIVRAISON`) →
   `CODE_TRANSFERT_GROSSISTE` — un processus à part, jamais Vente ni Transfert logistique (ses
   bénéficiaires diffèrent des deux, notamment le Site, commissionnable ici mais jamais sur un
-  transfert logistique interne). Applicable uniquement aux véhicules qui font de la logistique
-  (`livraison_logistique = true`) — même usage que Transfert logistique, jamais un usage propre.
+  transfert logistique interne). Applicable uniquement aux véhicules d'usage **Grossiste**
+  (`livraison_grossiste = true`) — usage propre depuis le 09/10/2026 (ADR 0023), voir la section
+  « Usage Grossiste du véhicule » ci-dessous. La règle d'origine (« même usage que Transfert
+  logistique, jamais un usage propre ») est remplacée.
 - **Grossiste + Enlèvement** (aucun véhicule) → reste sur `CODE_VENTE`, inchangé : Transfert
   grossiste n'a de sens qu'avec un véhicule/une équipe de logistique, qu'un Enlèvement n'a
   structurellement jamais.
@@ -213,9 +215,33 @@ Résumé de la règle :
   configurer explicitement l'onglet « Transferts grossistes » (Paramètres > Commissions) — sans
   quoi la création d'une commande Grossiste + Livraison est **bloquée** avec un message explicite,
   jamais une commission silencieuse à 0.
-- Une équipe dont le véhicule fait de la logistique peut désormais avoir des montants fixes
+- Une équipe dont le véhicule a les usages Logistique et Grossiste peut avoir des montants fixes
   différents pour Transfert logistique ET Transfert grossiste sur la même catégorie, simultanément
   (même mécanique que Vente/Transfert logistique déjà en place, aucune migration nécessaire).
+
+## Usage Grossiste du véhicule (fait le 09/10/2026, ADR 0023)
+
+La fiche véhicule porte trois usages indépendants, cochés un par un : **Vente**, **Logistique /
+transfert** et **Grossiste** (`vehicules.livraison_grossiste`).
+
+- **Seul l'usage Grossiste autorise la livraison d'un client grossiste.** À la saisie (création,
+  précommande, modification, passage d'une précommande en livraison), un client grossiste se voit
+  proposer la liste des seuls véhicules d'usage Grossiste ; le serveur refuse tout autre véhicule
+  (`CommandeVenteFormBuilder::ensureVehiculeAutorisePourGrossiste()`), même d'une autre organisation.
+- **Partage Transfert grossiste exigé seulement pour ces véhicules** : un camion Logistique seule
+  n'a plus d'onglet ni de partage grossiste à faire ; un véhicule Grossiste seul (ni Vente ni
+  Logistique) n'expose que l'onglet Transfert grossiste.
+- **Commission** : l'éligibilité figée sur la commande (`commission_eligible_snapshot`) suit l'usage
+  Grossiste pour un client grossiste livré (`VehiculeCommandeContextResolver`).
+- **Reprise** (décision du 09/10/2026) : la migration a coché l'usage sur les véhicules déjà
+  Vente ET Logistique, sur ceux dont l'équipe avait un partage Transfert grossiste en vigueur, et
+  sur ceux qui avaient déjà livré une commande grossiste — jamais une pratique existante retirée.
+  Les autres véhicules se cochent à la main sur leur fiche ; le partage Transfert grossiste devient
+  alors exigé. Transferts logistiques et distributions restent sur l'usage Logistique, inchangés.
+- **Imports** : colonne facultative `vehicule_livraison_grossiste` (oui/non) dans l'import flotte et
+  dans l'import de mise à jour des véhicules ; filtre « Grossiste » dans les listes Véhicules et
+  Équipes de livraison ; colonne « Usage grossiste » dans l'export de la liste.
+- Tests : `tests/Feature/VehiculeUsageGrossisteTest.php`.
 
 ## Chantier « Réception Grossiste » (fait le 06/09/2026) — cycle de vie, pas seulement commission
 

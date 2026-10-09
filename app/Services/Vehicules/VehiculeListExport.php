@@ -46,6 +46,7 @@ class VehiculeListExport implements FromCollection, WithHeadings, WithMapping, W
             'Équipe (chauffeur)',
             'Usage vente',
             'Usage logistique',
+            'Usage grossiste',
             'Statut',
         ];
     }
@@ -69,6 +70,7 @@ class VehiculeListExport implements FromCollection, WithHeadings, WithMapping, W
             $premierChauffeur?->livreur?->nom_complet ?? '',
             $vehicule->livraison_vente ? 'Oui' : 'Non',
             $vehicule->livraison_logistique ? 'Oui' : 'Non',
+            $vehicule->livraison_grossiste ? 'Oui' : 'Non',
             $vehicule->is_active ? 'Actif' : 'Inactif',
         ];
     }

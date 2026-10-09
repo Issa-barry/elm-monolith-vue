@@ -22,7 +22,7 @@ class EditCommandeVenteController extends Controller
         abort_if(! $vente->isEditable(), 403, 'Cette commande ne peut plus être modifiée après le brouillon.');
 
         $orgId = auth()->user()->organization_id;
-        $vente->load(['lignes.variante']);
+        $vente->load(['lignes.variante', 'client:id,type']);
 
         return Inertia::render('Ventes/Edit', [
             'commande' => [
@@ -43,6 +43,9 @@ class EditCommandeVenteController extends Controller
             ],
             'produits' => $this->formBuilder->produitsActifs($orgId),
             'vehicules' => $this->formBuilder->vehiculesActifs($orgId),
+            // Client grossiste (ADR 0023) : seuls les véhicules d'usage Grossiste peuvent le
+            // livrer — la page bascule sur cette liste dès qu'un client grossiste est choisi.
+            'vehicules_grossiste' => $this->formBuilder->vehiculesGrossistes($orgId),
             'clients' => $this->formBuilder->clientsActifs($orgId),
             'user_site' => $this->formBuilder->getUserSite(),
             'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),

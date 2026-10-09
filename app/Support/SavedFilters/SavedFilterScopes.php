@@ -141,7 +141,7 @@ final class SavedFilterScopes
                     'nom' => $search,
                     'statut' => [Rule::in(['actif', 'inactif'])],
                     'type_vehicule_id' => ['ulid', Rule::exists('type_vehicules', 'id')->where('organization_id', $org)],
-                    'usage' => [Rule::in(['vente', 'logistique', 'aucun'])],
+                    'usage' => [Rule::in(['vente', 'logistique', 'grossiste', 'aucun'])],
                     'agence_proprietaire_id' => ['string', function (string $attribute, mixed $value, \Closure $fail) use ($org): void {
                         if ($value !== '__none__' && ! Site::where('organization_id', $org)->whereKey($value)->exists()) {
                             $fail('Cette agence est indisponible.');

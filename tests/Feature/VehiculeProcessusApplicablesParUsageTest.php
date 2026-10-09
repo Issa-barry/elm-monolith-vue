@@ -29,7 +29,8 @@ use Tests\TestCase;
  * métier ne l'autorise à exercer ce processus). Les processus réellement pertinents pour un
  * véhicule dépendent de ses usages :
  *  - livraison_vente = true  → processus `vente` applicable ;
- *  - livraison_logistique = true → `logistique_transfert` ET `transfert_grossiste` applicables.
+ *  - livraison_logistique = true → `logistique_transfert` applicable ;
+ *  - livraison_grossiste = true → `transfert_grossiste` applicable (usage propre depuis l'ADR 0023).
  *
  * Révisé le 01/09/2026 (décision produit) : `distribution_client` n'est PLUS un processus
  * configurable, quel que soit l'usage du véhicule — une distribution utilise désormais le même
@@ -41,6 +42,11 @@ use Tests\TestCase;
  * une même équipe peut avoir des montants fixes différents pour chacun sur la même catégorie, cf.
  * equipe_livraison_partages_categorie.processus_id) — l'ancienne limite "2 processus au maximum,
  * jamais 3" ne tient donc plus pour un véhicule mixte (vente + logistique), qui en expose désormais 3.
+ *
+ * Révisé le 09/10/2026 (ADR 0023) : `transfert_grossiste` dépend de son propre usage
+ * (`livraison_grossiste`), jamais plus de `livraison_logistique` — un camion qui ne fait que de la
+ * logistique n'expose plus d'onglet Transfert grossiste, et un véhicule peut livrer des grossistes
+ * sans faire de logistique.
  *
  * Source unique du mapping : CommissionProcessusDefaults::codesApplicablesPourVehicule(),
  * consommée à la fois par VehiculeController::show() (onglets/statuts de la fiche véhicule) et
@@ -134,30 +140,56 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
     }
 
     /** @test */
-    public function logistique_uniquement_expose_logistique_transfert_et_transfert_grossiste(): void
+    public function logistique_uniquement_expose_seulement_logistique_transfert(): void
     {
-        // Depuis le 05/09/2026 (chantier « Transfert grossiste ») : les deux processus liés à
-        // livraison_logistique sont applicables simultanément, jamais un choix exclusif.
+        // ADR 0023 : la logistique seule n'ouvre plus le Transfert grossiste (cas des camions de
+        // transfert qui ne livrent jamais de grossiste).
         $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Vehicules/Show')
-                ->has('processus_options', 2)
+                ->has('processus_options', 1)
                 ->where('processus_options.0.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
-                ->where('processus_options.1.value', CommissionProcessus::CODE_TRANSFERT_GROSSISTE)
                 ->where('processus_actif', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
             );
     }
 
     /** @test */
-    public function vehicule_mixte_expose_vente_logistique_transfert_et_transfert_grossiste(): void
+    public function grossiste_uniquement_expose_seulement_transfert_grossiste(): void
     {
-        // 3 processus depuis le 05/09/2026 (chantier « Transfert grossiste ») pour un véhicule
-        // polyvalent — distribution_client reste absent (jamais configurable, décision du
-        // 01/09/2026), mais transfert_grossiste s'ajoute désormais à logistique_transfert.
-        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
+        $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => false, 'livraison_grossiste' => true]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->has('processus_options', 1)
+                ->where('processus_options.0.value', CommissionProcessus::CODE_TRANSFERT_GROSSISTE)
+                ->where('processus_actif', CommissionProcessus::CODE_TRANSFERT_GROSSISTE)
+            );
+    }
+
+    /** @test */
+    public function vehicule_vente_et_logistique_sans_grossiste_expose_deux_processus(): void
+    {
+        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true, 'livraison_grossiste' => false]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('processus_options', 2)
+                ->where('processus_options.0.value', CommissionProcessus::CODE_VENTE)
+                ->where('processus_options.1.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+            );
+    }
+
+    /** @test */
+    public function vehicule_aux_trois_usages_expose_vente_logistique_transfert_et_transfert_grossiste(): void
+    {
+        // distribution_client reste absent (jamais configurable, décision du 01/09/2026).
+        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true, 'livraison_grossiste' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
@@ -293,19 +325,31 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
     }
 
     /**
-     * Chantier « Transfert grossiste » (05/09/2026) : même usage requis (livraison_logistique) que
-     * logistique_transfert, jamais un usage propre — cf. CommissionProcessusDefaults::usageVehiculeRequis().
+     * ADR 0023 : Transfert grossiste a son propre usage (livraison_grossiste), indépendant de la
+     * logistique — cf. CommissionProcessusDefaults::usageVehiculeRequis().
      */
     /** @test */
-    public function accepte_processus_code_transfert_grossiste_pour_un_vehicule_logistique_uniquement(): void
+    public function accepte_processus_code_transfert_grossiste_pour_un_vehicule_grossiste_uniquement(): void
     {
-        $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true]);
+        $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => false, 'livraison_grossiste' => true]);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($vehicule, CommissionProcessus::CODE_TRANSFERT_GROSSISTE))
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', ['vehicule_id' => $vehicule->id]);
+    }
+
+    /** @test */
+    public function refuse_processus_code_transfert_grossiste_pour_un_vehicule_logistique_sans_usage_grossiste(): void
+    {
+        $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true, 'livraison_grossiste' => false]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($vehicule, CommissionProcessus::CODE_TRANSFERT_GROSSISTE))
+            ->assertSessionHasErrors('processus_code');
+
+        $this->assertDatabaseMissing('equipes_livraison', ['vehicule_id' => $vehicule->id]);
     }
 
     /** @test */
@@ -358,9 +402,9 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page->has('processus_options', 1));
 
-        // Le véhicule devient mixte : logistique_transfert ET transfert_grossiste deviennent
-        // applicables — sans qu'aucune migration ni suppression ne soit nécessaire.
-        $vehicule->update(['livraison_logistique' => true]);
+        // Le véhicule prend les trois usages : logistique_transfert ET transfert_grossiste
+        // deviennent applicables — sans qu'aucune migration ni suppression ne soit nécessaire.
+        $vehicule->update(['livraison_logistique' => true, 'livraison_grossiste' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))

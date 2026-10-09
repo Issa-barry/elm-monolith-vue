@@ -104,7 +104,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(219, $map);
+        $this->assertCount(220, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

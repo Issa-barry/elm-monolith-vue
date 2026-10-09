@@ -5,6 +5,7 @@ namespace App\Services\Comptabilite;
 use App\Enums\EvenementComptable;
 use App\Models\CompteMapping;
 use App\Models\FactureFournisseur;
+use App\Models\PaiementFournisseur;
 use App\Models\PieceComptable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -109,6 +110,45 @@ class FactureFournisseurComptabilisationService
         };
 
         return ['statut' => $statut, 'label' => $label, 'piece_numero' => $piece?->numero, 'extourne_numero' => $extourne];
+    }
+
+    /**
+     * Paiement d'une facture fournisseur (ADR 0024) : débit 401 (tiers = fournisseur), crédit du
+     * compte du support réellement débité (son solde, lu au grand livre, baisse) — journal résolu
+     * par le moyen de paiement. Appelé dans la transaction du paiement : un échec annule tout.
+     */
+    public function comptabiliserPaiement(PaiementFournisseur $paiement): PieceComptable
+    {
+        $paiement->loadMissing(['facture', 'fournisseur', 'compteTresorerie']);
+        $support = $paiement->compteTresorerie;
+        $montant = (float) $paiement->montant;
+
+        return $this->ecritures->comptabiliser(
+            evenement: EvenementComptable::PAIEMENT_FOURNISSEUR,
+            source: $paiement,
+            organizationId: $paiement->organization_id,
+            dateComptable: Carbon::parse($paiement->date_paiement),
+            libelle: "Paiement facture {$paiement->facture->numero_facture_fournisseur} — {$paiement->facture->reference}",
+            lignes: [
+                [
+                    'role' => 'fournisseur',
+                    'sens' => 'debit',
+                    'montant' => $montant,
+                    'tiers_type' => 'fournisseur',
+                    'tiers_model' => $paiement->fournisseur,
+                ],
+                [
+                    'compte_comptable_id' => $support->compte_comptable_id,
+                    'journal_role' => 'tresorerie',
+                    'moyen_paiement' => $paiement->mode_paiement,
+                    'sens' => 'credit',
+                    'montant' => $montant,
+                    'libelle' => "Paiement fournisseur {$paiement->facture->reference} — {$support->libelle}",
+                ],
+            ],
+            siteId: $paiement->site_id,
+            createdBy: $paiement->created_by,
+        );
     }
 
     /** Annulation d'une facture validée : contrepassation, jamais de suppression. */

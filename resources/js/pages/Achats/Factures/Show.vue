@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import type {
+    EncaissementPayload,
+    MoyenEncaissement,
+} from '@/components/payment/moyensEncaissement';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -8,6 +13,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
+    HandCoins,
     Info,
     Pencil,
     RefreshCw,
@@ -59,6 +65,16 @@ interface Facture {
     lignes: Ligne[];
 }
 
+interface Paiement {
+    id: string;
+    date_paiement: string;
+    montant: number;
+    mode_paiement: string;
+    support: string | null;
+    reference_paiement: string | null;
+    created_by: string | null;
+}
+
 const props = defineProps<{
     facture: Facture;
     commande: {
@@ -74,16 +90,25 @@ const props = defineProps<{
         extourne_numero: string | null;
         erreur: string | null;
     };
+    paiements: Paiement[];
+    paiement: {
+        moyens: MoyenEncaissement[];
+        especes_disponibles: boolean;
+        solde_especes: number | null;
+    } | null;
     actions: {
         peut_modifier: boolean;
         peut_valider: boolean;
         motif_non_validable: string | null;
         peut_annuler: boolean;
         peut_relancer_comptabilite: boolean;
+        peut_payer: boolean;
+        motif_non_payable: string | null;
     };
 }>();
 
 const toast = useToast();
+
 const page = usePage();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -179,6 +204,57 @@ function annuler() {
     );
 }
 
+// ── Paiement (lot 4) : PaymentCard en décaissement, comme pour les fiches ───────
+const paiementOuvert = ref(false);
+const paiementEnCours = ref(false);
+const erreursPaiement = ref<Record<string, string>>({});
+
+function dateDuJour(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function payer(payload: EncaissementPayload) {
+    paiementEnCours.value = true;
+    erreursPaiement.value = {};
+    router.post(
+        `/backoffice/achats/factures/${props.facture.id}/paiements`,
+        { ...payload, date_paiement: dateDuJour() },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                paiementOuvert.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paiement enregistré',
+                    life: 3000,
+                });
+            },
+            onError: (e) => {
+                erreursPaiement.value = e as Record<string, string>;
+                const affichees = [
+                    'montant',
+                    'mode_paiement',
+                    'compte_tresorerie_id',
+                    'reference_paiement',
+                ];
+                const autres = Object.entries(erreursPaiement.value)
+                    .filter(([cle]) => !affichees.includes(cle))
+                    .map(([, message]) => message);
+                if (autres.length > 0) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Paiement non enregistré',
+                        detail: autres.join(' '),
+                        life: 6000,
+                    });
+                }
+            },
+            onFinish: () => (paiementEnCours.value = false),
+        },
+    );
+}
+
 // ── Relance comptable ─────────────────────────────────────────────────────────
 const relanceEnCours = ref(false);
 
@@ -235,6 +311,15 @@ function relancerComptabilite() {
                             Modifier
                         </Button>
                     </Link>
+                    <Button
+                        v-if="actions.peut_payer"
+                        size="sm"
+                        class="bg-emerald-600 text-white hover:bg-emerald-700"
+                        @click="paiementOuvert = true"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        Payer
+                    </Button>
                     <Button
                         v-if="actions.peut_valider"
                         size="sm"
@@ -439,6 +524,57 @@ function relancerComptabilite() {
                 </div>
             </div>
 
+            <p
+                v-if="actions.motif_non_payable"
+                class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                {{ actions.motif_non_payable }}
+            </p>
+
+            <div
+                v-if="paiements.length > 0"
+                class="overflow-x-auto rounded-xl border bg-card shadow-sm"
+            >
+                <div class="border-b bg-muted/30 px-4 py-2 text-sm font-medium">
+                    Paiements
+                </div>
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b text-left text-muted-foreground">
+                            <th class="px-3 py-2 font-medium">Date</th>
+                            <th class="px-3 py-2 font-medium">Moyen</th>
+                            <th class="px-3 py-2 font-medium">Référence</th>
+                            <th class="px-3 py-2 font-medium">Par</th>
+                            <th class="px-3 py-2 text-right font-medium">
+                                Montant
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="p in paiements" :key="p.id">
+                            <td class="px-3 py-2 tabular-nums">
+                                {{ p.date_paiement }}
+                            </td>
+                            <td class="px-3 py-2">
+                                {{ p.support ?? p.mode_paiement }}
+                            </td>
+                            <td class="px-3 py-2 font-mono text-xs">
+                                {{ p.reference_paiement ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2 text-muted-foreground">
+                                {{ p.created_by ?? '—' }}
+                            </td>
+                            <td
+                                class="px-3 py-2 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatGNF(p.montant) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
             <div class="overflow-x-auto rounded-xl border bg-card shadow-sm">
                 <table class="w-full text-sm">
                     <thead>
@@ -535,6 +671,30 @@ function relancerComptabilite() {
                 </table>
             </div>
         </div>
+
+        <PaymentCard
+            v-if="paiement"
+            v-model:visible="paiementOuvert"
+            :title="`Payer la facture ${facture.reference}`"
+            :info-rows="[
+                { label: 'Fournisseur', value: facture.fournisseur_nom ?? '—' },
+                {
+                    label: 'N° fournisseur',
+                    value: facture.numero_facture_fournisseur,
+                },
+                { label: 'Montant TTC', value: formatGNF(facture.montant_ttc) },
+                { label: 'Déjà payé', value: formatGNF(facture.montant_paye) },
+            ]"
+            sens="decaissement"
+            solde-label="Reste dû"
+            :solde="facture.reste_du"
+            :moyens="paiement.moyens"
+            :especes-disponibles="paiement.especes_disponibles"
+            :solde-especes="paiement.solde_especes"
+            :processing="paiementEnCours"
+            :errors="erreursPaiement"
+            @submit="payer"
+        />
 
         <Dialog
             :visible="validerOuvert"

@@ -3,6 +3,7 @@
 namespace App\Services\Tresorerie;
 
 use App\Models\Site;
+use App\Services\Tresorerie\Obligations\FournisseurObligationContributor;
 use App\Services\Tresorerie\Obligations\LivreurObligationContributor;
 use App\Services\Tresorerie\Obligations\ObligationAccumulator;
 use App\Services\Tresorerie\Obligations\ObligationContributor;
@@ -38,8 +39,9 @@ class ObligationsAgenceService
         LivreurObligationContributor $livreur,
         ProprietaireObligationContributor $proprietaire,
         SalaireObligationContributor $salaire,
+        FournisseurObligationContributor $fournisseur,
     ) {
-        $this->contributors = [$livreur, $proprietaire, $salaire];
+        $this->contributors = [$livreur, $proprietaire, $salaire, $fournisseur];
     }
 
     /** @return list<array<string, mixed>> */

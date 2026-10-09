@@ -269,6 +269,16 @@ class PlanComptableBootstrapService
             // Facture fournisseur validée (ADR 0022) : crédit de la dette fournisseur, journal Achats.
             ['facture_fournisseur_validee', 'fournisseur', null, '401000', 'AC'],
 
+            // Paiement d'une facture fournisseur (ADR 0024) : débit de la dette fournisseur. Le crédit
+            // vise le compte du support réellement débité ; seul le journal est résolu par ces lignes
+            // `tresorerie` (moyen de paiement), comme pour les autres paiements.
+            ['paiement_fournisseur', 'fournisseur', null, '401000', null],
+            ['paiement_fournisseur', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_fournisseur', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_fournisseur', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_fournisseur', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_fournisseur', 'tresorerie', 'cheque', '521000', 'BQ'],
+
             // Dépense interne (vraie charge ELM)
             ['depense_interne_validee', 'charge_defaut', null, '628800', 'OD'],
             ['depense_interne_validee', 'tresorerie', null, '571000', 'CA'],

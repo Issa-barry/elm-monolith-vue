@@ -79,6 +79,7 @@ final class PermissionCatalog
         'achats.annuler' => 'Achats — annuler un bon de commande ou clôturer son reliquat',
         'factures-fournisseurs.valider' => 'Factures fournisseurs — valider (constate la dette fournisseur)',
         'factures-fournisseurs.annuler' => 'Factures fournisseurs — annuler (contrepassation si validée)',
+        'factures-fournisseurs.payer' => "Factures fournisseurs — payer (décaissement depuis la trésorerie de l'agence)",
         'depenses.soumettre' => 'Dépenses — soumettre',
         'depenses.valider' => 'Dépenses — valider',
         'depenses.rejeter' => 'Dépenses — rejeter',
@@ -159,7 +160,7 @@ final class PermissionCatalog
             'resources' => ['achats', 'factures-fournisseurs', 'fournisseurs'],
             'standalone' => [
                 'Bons de commande' => ['achats.valider', 'achats.annuler'],
-                'Factures fournisseurs' => ['factures-fournisseurs.valider', 'factures-fournisseurs.annuler'],
+                'Factures fournisseurs' => ['factures-fournisseurs.valider', 'factures-fournisseurs.annuler', 'factures-fournisseurs.payer'],
             ],
         ],
         'contacts' => [

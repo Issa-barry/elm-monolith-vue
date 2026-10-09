@@ -60,7 +60,8 @@ export type StandalonePermission =
     | 'achats.valider'
     | 'achats.annuler'
     | 'factures-fournisseurs.valider'
-    | 'factures-fournisseurs.annuler';
+    | 'factures-fournisseurs.annuler'
+    | 'factures-fournisseurs.payer';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

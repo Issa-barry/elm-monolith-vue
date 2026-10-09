@@ -59,12 +59,13 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * mettre à jour des livreurs sans avoir à retaper toute la ligne véhicule
  * (nom, type, site, capacité...) juste pour l'utiliser comme ancrage.
  *
- * Usages livraison_vente/livraison_logistique (colonnes vehicule_livraison_vente /
- * vehicule_livraison_logistique, cf. toUsageBool()) : une cellule vide/absente vaut
- * "non" — aucun usage saisi = aucun usage attribué, jamais un usage vente par défaut.
- * Un véhicule sans aucun des deux usages est importé quand même (pas une erreur) mais
- * reste alors non exploitable dans les opérations métier tant qu'un usage n'est pas défini
- * (cf. Vehicule::aAuMoinsUnUsage(), scopes livraisonVente()/livraisonLogistique()). Sur un
+ * Usages livraison_vente/livraison_logistique/livraison_grossiste (colonnes
+ * vehicule_livraison_vente / vehicule_livraison_logistique / vehicule_livraison_grossiste, cf.
+ * toUsageBool()) : une cellule vide/absente vaut "non" — aucun usage saisi = aucun usage
+ * attribué, jamais un usage vente par défaut. Un véhicule sans aucun usage est importé quand
+ * même (pas une erreur) mais reste alors non exploitable dans les opérations métier tant qu'un
+ * usage n'est pas défini (cf. Vehicule::aAuMoinsUnUsage(), scopes livraisonVente()/
+ * livraisonLogistique()/livraisonGrossiste()). Sur un
  * véhicule déjà existant (immatriculation déjà en base), une colonne vide reprend la
  * valeur déjà enregistrée plutôt que de la remettre à "non" — un import ne doit jamais
  * effacer silencieusement un usage déjà configuré. Ceci dit, l'exécuteur
@@ -336,6 +337,7 @@ class ImportFlotteParser
                     'capacites' => [],
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
+                    'livraison_grossiste' => null,
                     'site_id' => null,
                     'categorie' => null,
                 ],
@@ -679,6 +681,13 @@ class ImportFlotteParser
         if ($erreurLivraisonLogistique) {
             $erreurs[] = "Usage logistique invalide : {$erreurLivraisonLogistique}";
         }
+        [$livraisonGrossiste, $erreurLivraisonGrossiste] = $this->toUsageBool(
+            $ligneVehicule['vehicule_livraison_grossiste'] ?? null,
+            $vehiculeExistant?->livraison_grossiste ?? false
+        );
+        if ($erreurLivraisonGrossiste) {
+            $erreurs[] = "Usage grossiste invalide : {$erreurLivraisonGrossiste}";
+        }
         // Facultatives : laissées vides, ce véhicule reste non plafonné pour cette catégorie
         // (cf. VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
         // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour la
@@ -747,9 +756,10 @@ class ImportFlotteParser
         // Un véhicule sans aucun usage n'est plus une erreur de saisie : il est
         // simplement créé/laissé sans usage, donc non exploitable tant qu'un usage n'est
         // pas défini (cf. Vehicule::aAuMoinsUnUsage() et les scopes livraisonVente()/
-        // livraisonLogistique(), qui l'excluent déjà de tous les sélecteurs opérationnels).
+        // livraisonLogistique()/livraisonGrossiste(), qui l'excluent déjà de tous les
+        // sélecteurs opérationnels).
 
-        // Contrairement aux usages vente/logistique, la catégorie n'a pas de repli sur la
+        // Contrairement aux usages vente/logistique/grossiste, la catégorie n'a pas de repli sur la
         // valeur déjà en base pour un véhicule existant : elle est obligatoire sur CHAQUE ligne
         // (nouvelle ou déjà en base), même si l'exécuteur ne l'applique de toute façon jamais à
         // un véhicule déjà existant (ligne = simple ancrage pour ses livreurs/équipe, cf.
@@ -925,6 +935,7 @@ class ImportFlotteParser
                 'capacites' => $capacites,
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
+                'livraison_grossiste' => $livraisonGrossiste,
                 'site_id' => $site?->id,
                 // Garanti non-null ici : $erreurs serait non vide sinon (retour anticipé
                 // ci-dessus), donc ce point n'est atteint que si $categorie a été résolue.

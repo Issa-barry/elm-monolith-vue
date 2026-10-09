@@ -40,6 +40,7 @@ interface VehiculeData {
     categorie: string | null;
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    livraison_grossiste: boolean;
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
@@ -77,6 +78,7 @@ const form = useForm({
     categorie: props.vehicule.categorie as string | null,
     livraison_vente: props.vehicule.livraison_vente,
     livraison_logistique: props.vehicule.livraison_logistique,
+    livraison_grossiste: props.vehicule.livraison_grossiste,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
     capacites: [...props.capacites] as CapaciteRow[],
@@ -94,7 +96,9 @@ const canSubmit = computed(() => {
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
         !!form.categorie &&
-        (form.livraison_vente || form.livraison_logistique)
+        (form.livraison_vente ||
+            form.livraison_logistique ||
+            form.livraison_grossiste)
     );
 });
 

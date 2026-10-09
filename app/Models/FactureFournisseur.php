@@ -79,6 +79,11 @@ class FactureFournisseur extends Model
         return $this->hasMany(FactureFournisseurLigne::class);
     }
 
+    public function paiements(): HasMany
+    {
+        return $this->hasMany(PaiementFournisseur::class);
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
