@@ -306,7 +306,7 @@ class CommissionSiteController extends Controller
         // et CommissionProcessusFilter).
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 

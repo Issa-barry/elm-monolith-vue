@@ -25,7 +25,7 @@ class IndexFactureFournisseurController extends Controller
         $filters = $request->only(['statut', 'fournisseur_id', 'numero']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $query = fn () => $perimetre->appliquerFactures(FactureFournisseur::query(), $user)
+        $query = fn () => $perimetre->appliquerFacturesConsultation(FactureFournisseur::query(), $user)
             ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
             ->when($filters['statut'] ?? null, fn (Builder $q, string $s) => $q->where('statut', $s))
             ->when($filters['fournisseur_id'] ?? null, fn (Builder $q, string $id) => $q->where('fournisseur_id', $id))
@@ -78,7 +78,7 @@ class IndexFactureFournisseurController extends Controller
                 ->sortBy('nom_complet')
                 ->values()
                 ->map(fn (Fournisseur $f) => ['value' => $f->id, 'label' => $f->nom_complet]),
-            'sites' => $perimetre->sites($user)->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values(),
+            'sites' => $perimetre->sitesConsultables($user)->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values(),
         ]);
     }
 }

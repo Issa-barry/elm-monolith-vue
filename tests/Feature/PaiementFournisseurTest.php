@@ -8,16 +8,20 @@ use App\Enums\StatutFactureFournisseur;
 use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
 use App\Models\CompteComptable;
+use App\Models\CompteMapping;
 use App\Models\CompteTresorerie;
 use App\Models\EcritureComptable;
 use App\Models\EntrepriseTierce;
 use App\Models\FactureFournisseur;
 use App\Models\Fournisseur;
+use App\Models\JournalComptable;
 use App\Models\PaiementFournisseur;
 use App\Models\PieceComptable;
+use App\Models\ReceptionAchat;
 use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Tresorerie\ObligationsAgenceService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -58,7 +62,8 @@ class PaiementFournisseurTest extends TestCase
         $this->fournisseur = Fournisseur::create(['organization_id' => $this->org->id, 'entreprise_tierce_id' => $entreprise->id, 'is_active' => true]);
     }
 
-    private function facture(float $ttc = 100_000, StatutFactureFournisseur $statut = StatutFactureFournisseur::VALIDEE, ?Site $site = null, ?string $echeance = null): FactureFournisseur
+    /** Facture d'achat ; constatée, son écriture de validation est passée sauf si $comptabiliser est faux. */
+    private function facture(float $ttc = 100_000, StatutFactureFournisseur $statut = StatutFactureFournisseur::VALIDEE, ?Site $site = null, ?string $echeance = null, bool $comptabiliser = true): FactureFournisseur
     {
         $site ??= $this->agence;
         $commande = CommandeAchat::create([
@@ -66,12 +71,44 @@ class PaiementFournisseurTest extends TestCase
             'total_commande' => $ttc, 'statut' => StatutCommandeAchat::RECEPTIONNEE, 'validee_at' => now(),
         ]);
 
-        return FactureFournisseur::create([
+        $facture = FactureFournisseur::create([
             'organization_id' => $this->org->id, 'commande_achat_id' => $commande->id, 'fournisseur_id' => $this->fournisseur->id,
             'site_id' => $site->id, 'reference' => 'FAF-PAY-'.Str::upper(Str::random(5)), 'numero_facture_fournisseur' => 'N-'.Str::random(6),
             'date_facture' => now()->toDateString(), 'date_echeance' => $echeance,
             'montant_ht' => $ttc, 'montant_ttc' => $ttc, 'statut' => $statut, 'validee_at' => now(),
         ]);
+
+        // Une ligne facturée (bon → réception → facture) : l'écriture de validation débite les lignes.
+        $ligneCommande = $commande->lignes()->create(['qte' => 1, 'qte_recue' => 1, 'prix_achat_snapshot' => $ttc, 'total_ligne' => $ttc, 'libelle_snapshot' => 'Article test']);
+        $reception = ReceptionAchat::create([
+            'organization_id' => $this->org->id, 'commande_achat_id' => $commande->id, 'site_id' => $site->id,
+            'reference' => 'RCA-PAY-'.Str::upper(Str::random(6)), 'date_reception' => now()->toDateString(),
+        ]);
+        $ligneRecue = $reception->lignes()->create(['commande_achat_ligne_id' => $ligneCommande->id, 'qte_recue' => 1, 'cout_unitaire' => $ttc]);
+        $facture->lignes()->create([
+            'reception_achat_ligne_id' => $ligneRecue->id, 'commande_achat_ligne_id' => $ligneCommande->id,
+            'libelle_snapshot' => 'Article test', 'qte_facturee' => 1, 'prix_unitaire' => $ttc, 'total_ht' => $ttc,
+        ]);
+
+        if ($comptabiliser && $facture->isConstatee()) {
+            $this->mapperCompteAchat();
+            app(FactureFournisseurComptabilisationService::class)->comptabiliserFactureValidee($facture);
+        }
+
+        return $facture;
+    }
+
+    private function mapperCompteAchat(): void
+    {
+        $compte = CompteComptable::firstOrCreate(['organization_id' => $this->org->id, 'numero' => '601000'], ['libelle' => 'Achats (test)', 'actif' => true]);
+        CompteMapping::firstOrCreate(
+            ['organization_id' => $this->org->id, 'evenement' => EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value, 'role' => 'achat'],
+            [
+                'compte_comptable_id' => $compte->id,
+                'journal_comptable_id' => JournalComptable::where('organization_id', $this->org->id)->where('code', 'AC')->value('id'),
+                'actif' => true,
+            ],
+        );
     }
 
     private function payer(FactureFournisseur $facture, array $donnees, ?User $user = null)
@@ -113,6 +150,32 @@ class PaiementFournisseurTest extends TestCase
         $this->assertNotNull($debit->tiers_comptable_id);
         $this->assertSame($caisse->compte_comptable_id, $credit->compte_comptable_id);
         $this->assertSame(40_000.0, (float) $credit->credit);
+    }
+
+    public function test_paiement_bloque_tant_que_l_ecriture_de_la_facture_est_en_attente(): void
+    {
+        $caisse = $this->equiperPayeurEspeces($this->user, $this->agence->id, 500_000);
+        $facture = $this->facture(100_000, comptabiliser: false);
+        $motif = "Paiement impossible : l'écriture comptable de cette facture est en attente (compte d'achat ou de TVA non paramétré). Faites paramétrer les comptes, relancez la comptabilisation de la facture, puis payez-la.";
+
+        // Fiche : pas de bouton Payer, motif affiché.
+        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_payer', false)->where('actions.motif_non_payable', $motif));
+
+        // Appel direct : refus serveur, sans aucun effet.
+        $this->payer($facture, ['montant' => 40_000, 'mode_paiement' => 'especes'])->assertSessionHasErrors(['paiement' => $motif]);
+        $this->assertSame(0, PaiementFournisseur::count());
+        $this->assertSame(0.0, (float) $facture->fresh()->montant_paye);
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
+        $this->assertSame(500_000.0, $this->solde($caisse));
+        $this->assertFalse(PieceComptable::where('type_evenement', EvenementComptable::PAIEMENT_FOURNISSEUR->value)->exists());
+
+        // Rattrapage comptable (compte d'achat paramétré, écriture passée) : paiement accepté.
+        $this->mapperCompteAchat();
+        app(FactureFournisseurComptabilisationService::class)->comptabiliserFactureValidee($facture);
+        $this->payer($facture, ['montant' => 40_000, 'mode_paiement' => 'especes'])->assertSessionHasNoErrors();
+        $this->assertSame(40_000.0, (float) $facture->fresh()->montant_paye);
+        $this->assertSame(460_000.0, $this->solde($caisse));
     }
 
     public function test_plusieurs_paiements_jusqu_a_payee_et_jamais_au_dela_du_reste_du(): void

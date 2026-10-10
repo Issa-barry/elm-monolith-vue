@@ -69,7 +69,8 @@ class TransfertLogistiqueController extends Controller
         $search = $request->input('search');
         $departSiteIds = array_values(array_filter((array) $request->input('depart_site_ids', [])));
         $arriveeSiteIds = array_values(array_filter((array) $request->input('arrivee_site_ids', [])));
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+        // Liste = consultation : toutes les agences pour un admin ou la vision 360° (ADR 0025).
+        $isAdmin = $user->voitToutesLesAgences();
         $siteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
         $sites = Site::where('organization_id', $orgId)
             ->select('id', 'nom')
@@ -416,7 +417,7 @@ class TransfertLogistiqueController extends Controller
         // Contexte de navigation : transferts ou réceptions
         $user = auth()->user();
         $statut = $transfert_logistique->statut;
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+        $isAdmin = $user->voitToutesLesAgences();
 
         if ($isAdmin) {
             $contexte = in_array($statut, [StatutTransfert::RECEPTION, StatutTransfert::CLOTURE])

@@ -23,9 +23,13 @@ class ShowCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, ValidationParPlafondService $plafonds, CommandeAchatService $service, FactureFournisseurService $factures): Response
     {
         $this->authorize('view', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserConsultation($achat, auth()->user());
 
         $user = $request->user();
+        // Fiche ouverte en simple consultation (vision 360°, ADR 0025) : aucune action d'écriture hors
+        // du périmètre « Peut acheter pour » — contrôle explicite, le Gate::before du super
+        // administrateur court-circuitant les policies.
+        $dansPerimetre = app(PerimetreCommandesAchat::class)->estVisible($achat, $user);
         $achat->load([
             'fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'lignes',
             'createdBy', 'valideePar', 'annuleePar', 'clotureePar',
@@ -44,7 +48,7 @@ class ShowCommandeAchatController extends Controller
         // fait passer can() : sans motif, le bouton disparaissait sans explication.
         $motifNonValidable = null;
         $peutValider = false;
-        if ($aValider && $user->can('valider', $achat)) {
+        if ($aValider && $dansPerimetre && $user->can('valider', $achat)) {
             $motifNonValidable = $service->motifNonValidable($achat, $user);
             $peutValider = $motifNonValidable === null;
         }
@@ -114,16 +118,16 @@ class ShowCommandeAchatController extends Controller
                 ])->values() : [],
             ],
             'actions' => [
-                'peut_modifier' => $aValider && $user->can('update', $achat),
+                'peut_modifier' => $aValider && $dansPerimetre && $user->can('update', $achat),
                 'peut_valider' => $peutValider,
                 'motif_non_validable' => $motifNonValidable,
-                'peut_annuler' => ($aValider || $achat->statut === StatutCommandeAchat::VALIDEE) && ! $dejaRecu && $user->can('annuler', $achat),
-                'peut_cloturer' => $achat->statut === StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE && $user->can('annuler', $achat),
+                'peut_annuler' => ($aValider || $achat->statut === StatutCommandeAchat::VALIDEE) && ! $dejaRecu && $dansPerimetre && $user->can('annuler', $achat),
+                'peut_cloturer' => $achat->statut === StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE && $dansPerimetre && $user->can('annuler', $achat),
                 // La réception se fait uniquement dans Logistique → Réceptions : la fiche y renvoie.
                 'lien_reception' => $achat->isReceptionnable() && $user->can('receptionner', $achat) && CommandeAchatPolicy::estRattacheAgence($user, $achat)
                     ? route('logistique.receptions-fournisseurs.index', ['reference' => $achat->reference])
                     : null,
-                'peut_supprimer' => $achat->isAnnulee() && $user->can('delete', $achat),
+                'peut_supprimer' => $achat->isAnnulee() && $dansPerimetre && $user->can('delete', $achat),
                 'lien_facture' => $peutFacturer ? route('achats.factures.create', ['commande' => $achat->id]) : null,
             ],
             // Mêmes règles que les destinataires de la notification de création : si personne ne

@@ -27,7 +27,7 @@ class IndexFactureVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
 
         // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
         $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');

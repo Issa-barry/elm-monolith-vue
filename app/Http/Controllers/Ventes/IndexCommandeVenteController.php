@@ -69,7 +69,7 @@ class IndexCommandeVenteController extends Controller
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at');
 
-        if ($user->isAdmin()) {
+        if ($user->voitToutesLesAgences()) {
             if (! empty($siteIds)) {
                 $query->whereIn('site_id', $siteIds);
             }
@@ -244,7 +244,7 @@ class IndexCommandeVenteController extends Controller
         $encaissementParFacture = app(AgenceEncaissementResolver::class)->pourEcran($user, $commandes->map(fn (CommandeVente $c) => $c->facture));
         $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user, $encaissementParFacture));
 
-        $sites = $user->isAdmin()
+        $sites = $user->voitToutesLesAgences()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get()
                 ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values()
             : [];
@@ -253,7 +253,7 @@ class IndexCommandeVenteController extends Controller
         // de sites qu'ailleurs sur cette page : tous les véhicules de l'organisation pour un admin,
         // uniquement ceux des sites de l'utilisateur sinon.
         $vehiculesQuery = Vehicule::where('organization_id', $orgId);
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             $userSiteIds = $user->sites()->pluck('sites.id');
             $vehiculesQuery->whereIn('site_id', $userSiteIds);
         }
@@ -305,7 +305,7 @@ class IndexCommandeVenteController extends Controller
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
             'vehicules' => $vehicules,
-            'is_admin' => $user->isAdmin(),
+            'is_admin' => $user->voitToutesLesAgences(),
             'can_creer_commande' => $canCreerCommande,
             'raison_blocage_commande' => $raisonBlocageCommande,
             'filters' => [

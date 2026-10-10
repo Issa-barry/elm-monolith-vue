@@ -44,7 +44,13 @@ payeur en espèces, solde contrôlé sous verrou au grand livre, écriture indis
 ## Conséquences
 
 - Une facture partiellement payée ne peut plus être annulée (règle du lot 3, inchangée).
-- Si la pièce de validation de la facture est encore « en attente de paramétrage » (comptes d'achat
-  non décidés), son paiement débite déjà le 401000 : le compte fournisseur est temporairement
-  débiteur jusqu'au rattrapage de la pièce de validation (`comptabilite:rattraper
-  --type=facture-fournisseur`), qui le ramène à l'équilibre.
+- **Révisé le 2026-10-10 (décision de l'utilisateur) : une facture dont la pièce de validation est
+  « en attente de paramétrage » (comptes d'achat ou de TVA non décidés) n'est PAS payable.** Refus
+  serveur dans `PaiementFournisseurService::motifNonPayable()`, relu sous verrou (un appel direct est
+  refusé de la même façon), sans paiement, sans écriture, sans sortie de trésorerie ; la fiche
+  affiche le motif à la place du bouton Payer. Le paiement redevient possible dès que l'écriture
+  est passée (bouton « Relancer » de la fiche ou `comptabilite:rattraper --type=facture-fournisseur`).
+  Conséquence assumée : tant que le comptable n'a pas fixé les comptes d'achat et de TVA, aucune
+  facture d'achat ne peut être payée.
+  *Avant le 10/10/2026 : le paiement était accepté et le 401000 restait temporairement débiteur
+  jusqu'au rattrapage — règle remplacée.*

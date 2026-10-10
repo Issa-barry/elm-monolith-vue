@@ -428,8 +428,15 @@ class CommandeAchatTest extends TestCase
 
         $commande = $this->creerCommande(10);
 
-        // Sans règle : aucun accès, malgré le Gate::before.
-        $this->actingAs($superAdmin)->get(route('achats.show', $commande))->assertForbidden();
+        // Sans règle : aucune action, malgré le Gate::before. Seule la CONSULTATION lui reste
+        // ouverte (ADR 0025) : il détient toutes les permissions, dont « consulter les données de
+        // toutes les agences » — la fiche s'ouvre, sans aucune action proposée.
+        $this->actingAs($superAdmin)->get(route('achats.show', $commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('actions.peut_modifier', false)
+                ->where('actions.peut_valider', false)
+                ->where('actions.peut_annuler', false));
         $this->actingAs($superAdmin)->patch(route('achats.valider', $commande))->assertForbidden();
         $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasErrors('site_id');
 
@@ -457,11 +464,14 @@ class CommandeAchatTest extends TestCase
             ->patch(route('achats.valider', $sonSecondBon))
             ->assertSessionHasErrors(['validation' => self::MOTIF_CREATEUR]);
 
-        // Règle restreinte à une autre agence : plus d'accès aux bons de cette agence.
+        // Règle restreinte à une autre agence : plus aucune action sur les bons de cette agence
+        // (la consultation seule reste ouverte, ADR 0025).
         $autreSite = Site::factory()->for($this->org)->create();
         RegleValidationRole::where('role_name', 'super_admin')->update(['perimetre' => 'agences_selectionnees', 'sites' => json_encode([$autreSite->id])]);
         $bonDUnAutre = $this->creerCommande(5);
-        $this->actingAs($superAdmin)->get(route('achats.show', $bonDUnAutre))->assertForbidden();
+        $this->actingAs($superAdmin)->get(route('achats.show', $bonDUnAutre))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('actions.peut_valider', false)->where('actions.peut_annuler', false));
         $this->actingAs($superAdmin)->patch(route('achats.valider', $bonDUnAutre))->assertForbidden();
         $this->actingAs($superAdmin)->post(route('achats.store'), $this->payload())->assertSessionHasErrors('site_id');
     }

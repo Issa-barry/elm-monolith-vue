@@ -24,7 +24,8 @@ annulation et réception sous la même permission `achats.update`.
    les agences. Il gouverne les TROIS actions :
    - **créer** = `achats.create` + une règle d'un des rôles de l'utilisateur couvrant l'agence ;
    - **voir** = `achats.read` + règle couvrant l'agence (le créateur et le validateur d'un bon le
-     voient toujours) ;
+     voient toujours) ; *amendé le 2026-10-10 par l'[ADR 0025](0025-vision-360-consultation-de-toutes-les-agences.md) :
+     la permission `sites.lecture_toutes_agences` ouvre aussi la consultation, et elle seule* ;
    - **valider** = `achats.valider` + règle couvrant l'agence + montant ≤ plafond de cette règle
      (égalité autorisée ; règle sans plafond = ne valide rien ; « sans limite » explicite ; plusieurs
      rôles : le plafond le plus élevé parmi les règles couvrant l'agence, sans hiérarchie de rôles).

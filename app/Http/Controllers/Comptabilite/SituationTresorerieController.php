@@ -35,7 +35,7 @@ class SituationTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
 
         $date = $request->filled('date') ? Carbon::parse($request->input('date')) : now();
 
@@ -109,7 +109,7 @@ class SituationTresorerieController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        if (! $user->isAdmin() && ! $this->siteScope->accessibleSiteIds($user)->contains($site)) {
+        if (! $user->voitToutesLesAgences() && ! $this->siteScope->accessibleSiteIds($user)->contains($site)) {
             abort(403, "Vous n'avez pas accès à cette agence.");
         }
 

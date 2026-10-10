@@ -74,7 +74,7 @@ class InterAgencesController extends Controller
     {
         $user = $request->user();
         abort_unless($user->can('tresorerie.read'), 403);
-        $this->verifierCouple($user, $debiteur, $creancier);
+        $this->verifierCouple($user, $debiteur, $creancier, consultation: true);
 
         $statut = (string) $request->input('statut', '');
         $toutes = $this->dettes->lignes($user->organization_id, $debiteur->id, $creancier->id);
@@ -193,19 +193,23 @@ class InterAgencesController extends Controller
             ->all();
     }
 
-    /** Couple de l'organisation, et l'utilisateur a accès à l'une des deux agences (admin : toutes). */
-    private function verifierCouple(User $user, Site $debiteur, Site $creancier): void
+    /**
+     * Couple de l'organisation, et l'utilisateur a accès à l'une des deux agences (admin : toutes).
+     * En consultation, la vision 360° (ADR 0025) ouvre tous les couples ; un règlement reste réservé
+     * aux agences de rattachement.
+     */
+    private function verifierCouple(User $user, Site $debiteur, Site $creancier, bool $consultation = false): void
     {
         abort_unless(
             $debiteur->organization_id === $user->organization_id && $creancier->organization_id === $user->organization_id,
             404,
         );
 
-        if ($user->isAdmin()) {
+        if ($consultation ? $user->voitToutesLesAgences() : $user->isAdmin()) {
             return;
         }
 
-        $accessibles = $this->siteScope->accessibleSiteIds($user);
+        $accessibles = $consultation ? $this->siteScope->accessibleSiteIds($user) : $this->siteScope->assignedSiteIds($user);
         abort_unless($accessibles->contains($debiteur->id) || $accessibles->contains($creancier->id), 403, "Vous n'avez pas accès à ces agences.");
     }
 
@@ -220,7 +224,7 @@ class InterAgencesController extends Controller
     {
         $query = Site::where('organization_id', $user->organization_id)->orderBy('nom');
 
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             $query->whereIn('id', $this->siteScope->accessibleSiteIds($user));
         }
         if ($filtre !== []) {

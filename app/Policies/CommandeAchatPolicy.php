@@ -22,7 +22,7 @@ class CommandeAchatPolicy
 
     public function view(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.read') && $this->visible($user, $commande);
+        return $user->can('achats.read') && app(PerimetreCommandesAchat::class)->estConsultable($commande, $user);
     }
 
     public function create(User $user): bool

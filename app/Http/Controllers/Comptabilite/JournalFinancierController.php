@@ -38,7 +38,7 @@ class JournalFinancierController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
 
         $comptesTresorerie = CompteTresorerie::forOrg($orgId)->pluck('compte_comptable_id');
 
@@ -170,7 +170,7 @@ class JournalFinancierController extends Controller
     {
         $query = Site::where('organization_id', $orgId)->orderBy('nom');
 
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             $query->whereIn('id', $this->siteScope->accessibleSiteIds($user));
         }
 

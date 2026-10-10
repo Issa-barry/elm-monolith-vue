@@ -61,7 +61,8 @@ export type StandalonePermission =
     | 'achats.annuler'
     | 'factures-fournisseurs.valider'
     | 'factures-fournisseurs.annuler'
-    | 'factures-fournisseurs.payer';
+    | 'factures-fournisseurs.payer'
+    | 'sites.lecture_toutes_agences';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**
@@ -94,6 +95,12 @@ export interface Auth {
      */
     role_labels: Record<string, string>;
     default_site: AuthSite | null;
+    /**
+     * Périmètre de CONSULTATION : l'utilisateur voit les données de toutes les agences
+     * (administrateur ou permission `sites.lecture_toutes_agences`, ADR 0025). Ne jamais s'en
+     * servir pour afficher une action d'écriture.
+     */
+    voit_toutes_agences: boolean;
 }
 
 export interface BreadcrumbItem {

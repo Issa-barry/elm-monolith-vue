@@ -88,7 +88,7 @@ class CommissionVenteController extends Controller
         // "Processus" dédiée.
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
@@ -720,7 +720,7 @@ class CommissionVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
@@ -772,7 +772,7 @@ class CommissionVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));

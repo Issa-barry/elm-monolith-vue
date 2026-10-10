@@ -116,7 +116,7 @@ const emit = defineEmits<{
     reset: [];
 }>();
 
-// ── Détection admin ───────────────────────────────────────────────────────────
+// ── Périmètre de consultation des agences ─────────────────────────────────────
 
 const page = usePage();
 const savedViews = ref<InstanceType<typeof SavedViews> | null>(null);
@@ -159,17 +159,17 @@ function describeSavedFilters(
     return labels.join(' · ');
 }
 
-const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
-
-const isAdmin = computed(() => {
+// Filtre Agence libre : l'utilisateur consulte toutes les agences (administrateur ou permission
+// « vision 360° », ADR 0025). Calculé par le backend (auth.voit_toutes_agences), jamais déduit du
+// nom d'un rôle. Ne concerne que la consultation.
+const toutesAgences = computed(() => {
     const auth = (page.props as Record<string, unknown>).auth as
         | Record<string, unknown>
         | undefined;
-    const roles = Array.isArray(auth?.roles) ? (auth.roles as string[]) : [];
-    return roles.some((r) => ADMIN_ROLES.has(r));
+    return auth?.voit_toutes_agences === true;
 });
 
-// Sites de l'utilisateur connecté (vide pour admin, non-vide pour non-admin)
+// Sites de l'utilisateur connecté (vide s'il consulte toutes les agences, non-vide sinon)
 const authUserSites = computed<SiteOption[]>(() => {
     const auth = (page.props as Record<string, unknown>).auth as
         | Record<string, unknown>
@@ -187,17 +187,17 @@ const effectiveSites = computed<SiteOption[]>(() => {
 });
 
 // Options du sélecteur :
-// - admin → tous les sites de l'organisation
-// - non-admin → uniquement ses sites
+// - toutes les agences consultables → tous les sites de l'organisation
+// - sinon → uniquement ses sites
 const siteOptions = computed(() => {
-    if (!isAdmin.value && authUserSites.value.length > 0) {
+    if (!toutesAgences.value && authUserSites.value.length > 0) {
         return authUserSites.value.map((s) => ({ value: s.id, label: s.nom }));
     }
     return effectiveSites.value.map((s) => ({ value: s.id, label: s.nom }));
 });
 
-// Non-admin : sélecteur verrouillé (périmètre imposé par le backend)
-const siteSelectorLocked = computed(() => !isAdmin.value);
+// Périmètre limité à ses agences : sélecteur verrouillé (périmètre imposé par le backend)
+const siteSelectorLocked = computed(() => !toutesAgences.value);
 
 // ── État local ────────────────────────────────────────────────────────────────
 
@@ -222,7 +222,7 @@ function toArray(val: unknown): string[] {
 function initLocal() {
     const v = props.values ?? {};
 
-    if (!isAdmin.value && authUserSites.value.length > 0) {
+    if (!toutesAgences.value && authUserSites.value.length > 0) {
         localSiteIds.value = authUserSites.value.map((s) => s.id);
     } else {
         localSiteIds.value = toArray(v.site_ids);
@@ -314,8 +314,8 @@ function meaningfulTotal(options?: FilterOption[]): number {
 function buildParams(): Record<string, string | string[]> {
     const params: Record<string, string | string[]> = { ...props.baseParams };
 
-    // Filtre agence : seulement pour admin, et seulement si une sélection partielle
-    if (isAdmin.value && localSiteIds.value.length > 0) {
+    // Filtre agence : seulement si toutes les agences sont consultables, et seulement si une sélection partielle
+    if (toutesAgences.value && localSiteIds.value.length > 0) {
         const totalSites = siteOptions.value.length;
         if (totalSites <= 1 || localSiteIds.value.length < totalSites) {
             params.site_ids = localSiteIds.value;
@@ -385,7 +385,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    if (isAdmin.value) {
+    if (toutesAgences.value) {
         localSiteIds.value = [];
     }
 
@@ -468,14 +468,14 @@ const activeFilterCount = computed(
     () =>
         drawerFilterCount.value +
         countActiveFields(inlineFields.value) +
-        (isAdmin.value && localSiteIds.value.length > 0 ? 1 : 0),
+        (toutesAgences.value && localSiteIds.value.length > 0 ? 1 : 0),
 );
 
 const hasActiveFilters = computed(
     () =>
         drawerFilterCount.value > 0 ||
         countActiveFields(inlineFields.value) > 0 ||
-        (isAdmin.value && localSiteIds.value.length > 0),
+        (toutesAgences.value && localSiteIds.value.length > 0),
 );
 </script>
 
@@ -495,7 +495,7 @@ const hasActiveFilters = computed(
                     v-model="localSiteIds"
                     :options="siteOptions"
                     placeholder="Toutes les agences"
-                    :empty-means-all="isAdmin"
+                    :empty-means-all="toutesAgences"
                     :disabled="siteSelectorLocked"
                 />
                 <Lock
@@ -717,7 +717,7 @@ const hasActiveFilters = computed(
                                 v-model="localSiteIds"
                                 :options="siteOptions"
                                 placeholder="Toutes les agences"
-                                :empty-means-all="isAdmin"
+                                :empty-means-all="toutesAgences"
                                 :disabled="siteSelectorLocked"
                             />
                         </div>

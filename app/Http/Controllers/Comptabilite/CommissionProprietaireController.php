@@ -80,7 +80,7 @@ class CommissionProprietaireController extends Controller
         // et CommissionProcessusFilter).
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
@@ -697,10 +697,10 @@ class CommissionProprietaireController extends Controller
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
-        $filtreSiteIds = $user->isAdmin()
+        $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
@@ -750,10 +750,10 @@ class CommissionProprietaireController extends Controller
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
-        $filtreSiteIds = $user->isAdmin()
+        $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(

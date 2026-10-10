@@ -13,7 +13,7 @@ class PdfCommandeAchatController extends Controller
     public function __invoke(CommandeAchat $achat): Response
     {
         $this->authorize('view', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserConsultation($achat, auth()->user());
 
         $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'valideePar', 'organization', 'site']);
 

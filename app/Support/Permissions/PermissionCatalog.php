@@ -111,6 +111,7 @@ final class PermissionCatalog
         'logistique.cloturer' => 'Logistique — clôturer',
         'rapports.read_own' => 'Rapports — consulter « Ma situation » (ses propres ventes, encaissements et caisse)',
         'rapports.read' => "Rapports — consulter le rapport d'activité de ses agences (tous les agents)",
+        'sites.lecture_toutes_agences' => 'Agences — consulter les données de toutes les agences (lecture seule, là où le rôle a déjà « Lire »)',
     ];
 
     /**
@@ -200,7 +201,9 @@ final class PermissionCatalog
         'sites' => [
             'label' => 'Sites',
             'resources' => ['sites'],
-            'standalone' => [],
+            'standalone' => [
+                'Périmètre de consultation' => ['sites.lecture_toutes_agences'],
+            ],
         ],
         'finance' => [
             'label' => 'Finance & Comptabilité',

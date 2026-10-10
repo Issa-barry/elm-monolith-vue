@@ -42,7 +42,7 @@ class IndexStockController extends Controller
         $user = $request->user();
         $orgId = (string) $user->organization_id;
         $sites = $this->sitesConsultables($user, $orgId);
-        $siteIds = $this->siteIdsFiltres($request, $sites, $user->isAdmin());
+        $siteIds = $this->siteIdsFiltres($request, $sites, $user->voitToutesLesAgences());
         $seuilOrganisation = Parametre::getSeuilStockFaible($orgId);
 
         $filters = [
@@ -278,7 +278,7 @@ class IndexStockController extends Controller
     {
         $query = Site::where('organization_id', $orgId)->orderBy('nom');
 
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             $query->whereIn('id', $user->sites()->where('sites.organization_id', $orgId)->pluck('sites.id'));
         }
 

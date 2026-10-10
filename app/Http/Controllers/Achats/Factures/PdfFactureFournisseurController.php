@@ -18,7 +18,7 @@ class PdfFactureFournisseurController extends Controller
     public function __invoke(FactureFournisseur $facture, PerimetreCommandesAchat $perimetre): Response
     {
         $this->authorize('view', $facture);
-        $perimetre->autoriserFacture($facture, auth()->user());
+        $perimetre->autoriserConsultationFacture($facture, auth()->user());
 
         $facture->load([
             'commande', 'site', 'fournisseur.personne', 'fournisseur.entrepriseTierce', 'createdBy', 'valideePar',

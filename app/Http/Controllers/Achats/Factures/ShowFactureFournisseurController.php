@@ -30,7 +30,10 @@ class ShowFactureFournisseurController extends Controller
     ): Response {
         $this->authorize('view', $facture);
         $user = $request->user();
-        $perimetre->autoriserFacture($facture, $user);
+        $perimetre->autoriserConsultationFacture($facture, $user);
+        // Fiche ouverte en simple consultation (vision 360°, ADR 0025) : aucune action d'écriture hors
+        // du périmètre d'achat — contrôle explicite (Gate::before du super administrateur).
+        $dansPerimetre = $perimetre->factureVisible($facture, $user);
 
         $facture->load(['commande', 'paiements' => fn ($q) => $q->orderByDesc('date_paiement')->orderByDesc('created_at'), 'paiements.compteTresorerie', 'paiements.createdBy']);
 
@@ -40,7 +43,7 @@ class ShowFactureFournisseurController extends Controller
         $motifNonPayable = null;
         $peutPayer = false;
         $optionsPaiement = null;
-        if ($facture->isConstatee() && $facture->resteDu() > 0 && $user->can('payer', $facture) && $user->checkPermissionTo('factures-fournisseurs.payer')) {
+        if ($dansPerimetre && $facture->isConstatee() && $facture->resteDu() > 0 && $user->can('payer', $facture) && $user->checkPermissionTo('factures-fournisseurs.payer')) {
             $motifNonPayable = $paiements->motifNonPayable($facture, $user);
             $peutPayer = $motifNonPayable === null;
             if ($peutPayer) {
@@ -52,7 +55,7 @@ class ShowFactureFournisseurController extends Controller
         // bloquante (périmètre, auteur, dernier modificateur), le motif est affiché à la place.
         $motifNonValidable = null;
         $peutValider = false;
-        if ($facture->isBrouillon() && $user->can('valider', $facture) && $user->checkPermissionTo('factures-fournisseurs.valider')) {
+        if ($dansPerimetre && $facture->isBrouillon() && $user->can('valider', $facture) && $user->checkPermissionTo('factures-fournisseurs.valider')) {
             $motifNonValidable = $service->motifNonValidable($facture, $user);
             $peutValider = $motifNonValidable === null;
         }
@@ -79,13 +82,14 @@ class ShowFactureFournisseurController extends Controller
             'actions' => [
                 'peut_payer' => $peutPayer,
                 'motif_non_payable' => $motifNonPayable,
-                'peut_modifier' => $facture->isBrouillon() && $user->can('update', $facture),
+                'peut_modifier' => $dansPerimetre && $facture->isBrouillon() && $user->can('update', $facture),
                 'peut_valider' => $peutValider,
                 'motif_non_validable' => $motifNonValidable,
-                'peut_annuler' => in_array($facture->statut, [StatutFactureFournisseur::BROUILLON, StatutFactureFournisseur::VALIDEE], true)
+                'peut_annuler' => $dansPerimetre
+                    && in_array($facture->statut, [StatutFactureFournisseur::BROUILLON, StatutFactureFournisseur::VALIDEE], true)
                     && (float) $facture->montant_paye === 0.0
                     && $user->can('annuler', $facture),
-                'peut_relancer_comptabilite' => $facture->isConstatee() && ! $piece && $user->can('valider', $facture),
+                'peut_relancer_comptabilite' => $dansPerimetre && $facture->isConstatee() && ! $piece && $user->can('valider', $facture),
             ],
         ]);
     }

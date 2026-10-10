@@ -241,8 +241,8 @@ class HandleInertiaRequests extends Middleware
         if (! $user || ! $user->organization_id) {
             return [];
         }
-        if ($user->isAdmin()) {
-            return []; // Admin = pas de restriction de périmètre
+        if ($user->voitToutesLesAgences()) {
+            return []; // Admin ou vision 360° (ADR 0025) = pas de restriction de périmètre en consultation
         }
 
         return $user->sites()
@@ -365,6 +365,8 @@ class HandleInertiaRequests extends Middleware
                 'role_labels' => $this->roleLabels($request),
                 'default_site' => $this->defaultSite($request),
                 'user_sites' => $this->userSites($request),
+                // Filtre Agence libre (DataFilters.vue) : périmètre de consultation, jamais un droit d'écriture.
+                'voit_toutes_agences' => (bool) $request->user()?->voitToutesLesAgences(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),

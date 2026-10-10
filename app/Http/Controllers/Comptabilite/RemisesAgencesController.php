@@ -122,7 +122,7 @@ class RemisesAgencesController extends Controller
     /** @return list<string>|null null = toutes les agences */
     private function agencesVisibles(User $user): ?array
     {
-        if ($user->isAdmin()) {
+        if ($user->voitToutesLesAgences()) {
             return null;
         }
 

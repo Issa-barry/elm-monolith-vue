@@ -22,7 +22,7 @@ class PaiementFichePolicy
             return false;
         }
 
-        return $user->isAdmin() || $this->sameSite($user, $fiche);
+        return $user->voitToutesLesAgences() || $this->sameSite($user, $fiche);
     }
 
     public function payer(User $user, PaiementFiche $fiche): bool

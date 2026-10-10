@@ -32,7 +32,7 @@ class IndexCommandeAchatController extends Controller
         $filters = $request->only(['statut', 'fournisseur_id', 'reference', 'a_valider_par_moi']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $query = $this->perimetre->appliquer(CommandeAchat::query(), $user)
+        $query = $this->perimetre->appliquerConsultation(CommandeAchat::query(), $user)
             ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom'])
             ->withSum('lignes as qte_commandee', 'qte')
             ->withSum('lignes as qte_recue', 'qte_recue');
@@ -61,10 +61,11 @@ class IndexCommandeAchatController extends Controller
             ->values()
             ->map(fn (Fournisseur $f) => ['value' => $f->id, 'label' => $f->nom_complet]);
 
-        $sites = $this->perimetre->sites($user);
+        // Filtre Agence = agences consultables ; création = périmètre « Peut acheter pour » seul.
+        $sites = $this->perimetre->sitesConsultables($user);
 
         return Inertia::render('Achats/Index', [
-            'peut_creer' => $user->can('create', CommandeAchat::class) && $sites->isNotEmpty(),
+            'peut_creer' => $user->can('create', CommandeAchat::class) && $this->perimetre->sites($user)->isNotEmpty(),
             'commandes' => $paginator->through(fn (CommandeAchat $c) => [
                 'id' => $c->id,
                 'reference' => $c->reference,
@@ -77,7 +78,9 @@ class IndexCommandeAchatController extends Controller
                 'qte_commandee' => (int) $c->qte_commandee,
                 'qte_recue' => (int) $c->qte_recue,
                 'is_annulee' => $c->isAnnulee(),
-                'annulable' => ($c->isAValider() || $c->statut === StatutCommandeAchat::VALIDEE) && (int) $c->qte_recue === 0,
+                // Un bon seulement consultable (vision 360°, ADR 0025) n'est jamais annulable depuis la liste.
+                'annulable' => ($c->isAValider() || $c->statut === StatutCommandeAchat::VALIDEE) && (int) $c->qte_recue === 0
+                    && $this->perimetre->estVisible($c, $user),
                 // Même règle que la fiche (permission, périmètre, plafond, séparation des tâches) :
                 // l'action « Valider » de la liste n'apparaît que si le serveur l'accepterait.
                 'peut_valider' => $c->isAValider()

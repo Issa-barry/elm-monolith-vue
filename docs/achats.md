@@ -19,7 +19,7 @@ Factures d’achat et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-d
 
 | Code | Règle |
 |---|---|
-| ACH-000 | **Périmètre « Peut acheter pour »** : règle par rôle (son agence / agences sélectionnées / toutes les agences). Il gouverne la création, la lecture et la validation. Sans règle couvrant l'agence : aucun accès, admin_entreprise et super administrateur compris. |
+| ACH-000 | **Périmètre « Peut acheter pour »** : règle par rôle (son agence / agences sélectionnées / toutes les agences). Il gouverne la création, la lecture et la validation. Sans règle couvrant l'agence : aucun accès, admin_entreprise et super administrateur compris. **Seule ouverture, en consultation uniquement (ADR 0025)** : un rôle ayant la permission `sites.lecture_toutes_agences` consulte les bons, les factures d'achat (liste, fiche, PDF) et la liste des réceptions fournisseurs de toutes les agences, sans aucune action hors de son périmètre d'achat ; le super administrateur, qui détient toutes les permissions, est dans ce cas. |
 | ACH-001 | Créer exige `achats.create` et une règle d'un des rôles couvrant l'agence de livraison (seules ces agences sont proposées, et le serveur refuse les autres). Fournisseur actif, au moins une ligne ; agence, fournisseur et variantes de l'organisation. |
 | ACH-002 | Un bon est modifiable (`achats.update`) tant qu'il est à valider. Chaque modification enregistre son auteur (`contenu_modifie_par`). |
 | ACH-003 | Valider exige `achats.valider` ET une règle couvrant l'agence avec montant ≤ plafond (égalité autorisée). Règle sans plafond : ne valide rien. Plusieurs rôles : le plafond le plus élevé parmi les règles couvrant l'agence. |
@@ -67,6 +67,7 @@ Terminologie (10/10/2026) : l'écran s'appelle « Factures d’achat » ; les no
 | PAF-005 | Droits : `factures-fournisseurs.payer` + agence couverte par ACH-000, sans passe-droit (super administrateur compris). |
 | PAF-006 | Les factures validées non soldées entrent dans ce que l'agence conserve avant toute remise (ADR 0016, colonne « Fournisseurs » du Financement des agences) : obligation du mois de leur échéance (à défaut date de facture), arriéré une fois échues. |
 | PAF-007 | Une facture déjà payée, même en partie, ne peut plus être annulée. L'annulation d'un paiement n'existe pas en V1. |
+| PAF-008 | Une facture n'est payable que si son écriture de validation est passée (révisé le 10/10/2026). En attente de paramétrage des comptes d'achat ou de TVA : refus serveur sans aucun effet, motif affiché à la place du bouton Payer ; payable dès que l'écriture est relancée avec succès. |
 
 ## Paramètres → Achats
 

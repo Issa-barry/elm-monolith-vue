@@ -35,7 +35,7 @@ class MouvementFondsController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
 
         $query = $this->mouvementsVisibles($orgId, $user, $isAdmin)
             ->with([
@@ -184,7 +184,7 @@ class MouvementFondsController extends Controller
         $orgId = auth()->user()->organization_id;
 
         return Inertia::render('Comptabilite/MouvementsFonds/Create', [
-            'sites' => $this->sitesDisponibles($orgId, auth()->user()),
+            'sites' => $this->sitesDisponibles($orgId, auth()->user(), pourCreation: true),
             'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->agence()->get(['id', 'site_id', 'libelle', 'type']),
             'site_prerempli' => $request->input('site_id'),
             'montant_prerempli' => $request->input('montant'),
@@ -315,12 +315,21 @@ class MouvementFondsController extends Controller
         ];
     }
 
-    /** @return list<array{value:string,label:string}> */
-    private function sitesDisponibles(string $orgId, $user): array
+    /**
+     * Agences proposées : celles que l'utilisateur consulte (filtre de la liste), ou — pour le
+     * formulaire de création — celles auxquelles il est rattaché (la vision 360° n'élargit pas l'écriture).
+     *
+     * @return list<array{value:string,label:string}>
+     */
+    private function sitesDisponibles(string $orgId, $user, bool $pourCreation = false): array
     {
         $query = Site::where('organization_id', $orgId)->orderBy('nom');
 
-        if (! $user->isAdmin()) {
+        if ($pourCreation) {
+            if (! $user->isAdmin()) {
+                $query->whereIn('id', $this->siteScope->assignedSiteIds($user));
+            }
+        } elseif (! $user->voitToutesLesAgences()) {
             $query->whereIn('id', $this->siteScope->accessibleSiteIds($user));
         }
 

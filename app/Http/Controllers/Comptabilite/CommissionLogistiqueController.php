@@ -69,7 +69,7 @@ class CommissionLogistiqueController extends Controller
             $filtrePeriode = '';
         }
 
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
@@ -537,7 +537,7 @@ class CommissionLogistiqueController extends Controller
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
@@ -580,7 +580,7 @@ class CommissionLogistiqueController extends Controller
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();

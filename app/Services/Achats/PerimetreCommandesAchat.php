@@ -18,6 +18,12 @@ use Illuminate\Support\Collection;
  * ni admin_entreprise ni super_admin n'ont d'accès automatique sans règle. Le créateur et le
  * validateur d'un bon le voient toujours.
  *
+ * Seule ouverture, en CONSULTATION uniquement (ADR 0025, qui amende le point « voir » de l'ADR
+ * 0021) : la permission « consulter les données de toutes les agences » rend visibles les bons et
+ * factures de toute l'organisation — méthodes *Consultation / *Consultable. C'est une permission du
+ * rôle, pas une condition sur un rôle. Créer, modifier, valider, annuler, facturer et payer restent
+ * sur « Peut acheter pour » (estVisible(), couvreSite()).
+ *
  * Vérifié explicitement par les contrôleurs, pas seulement par la policy : le Gate::before du
  * super administrateur court-circuite les policies.
  */
@@ -120,5 +126,66 @@ class PerimetreCommandesAchat
     public function autoriser(CommandeAchat $commande, User $user): void
     {
         abort_unless($this->estVisible($commande, $user), 403, "Ce bon de commande n'est pas dans votre périmètre d'achat.");
+    }
+
+    // ── Consultation (ADR 0025) : lecture seule, jamais utilisé pour autoriser une écriture ──────
+
+    /** Agences proposées au filtre Agence des listes. */
+    public function sitesConsultables(User $user): Collection
+    {
+        if (! $this->consulteToutesLesAgences($user)) {
+            return $this->sites($user);
+        }
+
+        return Site::where('organization_id', $user->organization_id)->orderBy('nom')->get(['id', 'nom']);
+    }
+
+    public function appliquerConsultation(Builder $query, User $user): Builder
+    {
+        return $this->consulteToutesLesAgences($user)
+            ? $query->where('organization_id', $user->organization_id)
+            : $this->appliquer($query, $user);
+    }
+
+    public function appliquerFacturesConsultation(Builder $query, User $user): Builder
+    {
+        return $this->consulteToutesLesAgences($user)
+            ? $query->where('organization_id', $user->organization_id)
+            : $this->appliquerFactures($query, $user);
+    }
+
+    public function estConsultable(CommandeAchat $commande, User $user): bool
+    {
+        if ($commande->organization_id !== $user->organization_id) {
+            return false;
+        }
+
+        return $this->consulteToutesLesAgences($user) || $this->estVisible($commande, $user);
+    }
+
+    public function factureConsultable(FactureFournisseur $facture, User $user): bool
+    {
+        if ($facture->organization_id !== $user->organization_id) {
+            return false;
+        }
+
+        return $this->consulteToutesLesAgences($user) || $this->factureVisible($facture, $user);
+    }
+
+    /** 403 si le bon n'est pas consultable — fiche et PDF, à appeler après authorize(). */
+    public function autoriserConsultation(CommandeAchat $commande, User $user): void
+    {
+        abort_unless($this->estConsultable($commande, $user), 403, "Ce bon de commande n'est pas dans votre périmètre d'achat.");
+    }
+
+    public function autoriserConsultationFacture(FactureFournisseur $facture, User $user): void
+    {
+        abort_unless($this->factureConsultable($facture, $user), 403, "Cette facture n'est pas dans votre périmètre d'achat.");
+    }
+
+    /** La permission seule, sans isAdmin() : aucun rôle n'a d'accès automatique aux achats (ADR 0021). */
+    private function consulteToutesLesAgences(User $user): bool
+    {
+        return $user->can(User::PERMISSION_LECTURE_TOUTES_AGENCES);
     }
 }

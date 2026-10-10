@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\Fournisseur;
+use App\Models\Site;
+use App\Models\User;
 use App\Policies\CommandeAchatPolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -49,7 +51,12 @@ class IndexReceptionAchatController extends Controller
             ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'lignes']);
 
         // Réceptionnaire : uniquement les agences auxquelles il est rattaché, sans passe-droit de rôle.
-        $query->whereIn('site_id', $user->sites()->pluck('sites.id'));
+        // Seule la permission de consultation de toutes les agences (ADR 0025) élargit la LISTE ;
+        // réceptionner reste réservé au rattachement (`peut_receptionner`, CommandeAchatPolicy).
+        $toutesAgences = $user->can(User::PERMISSION_LECTURE_TOUTES_AGENCES);
+        if (! $toutesAgences) {
+            $query->whereIn('site_id', $user->sites()->pluck('sites.id'));
+        }
 
         $query
             ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
@@ -58,7 +65,9 @@ class IndexReceptionAchatController extends Controller
 
         $paginator = $query->orderBy('validee_at')->orderBy('created_at')->paginate(20)->withQueryString();
 
-        $sites = $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+        $sites = $toutesAgences
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->with(['personne', 'entrepriseTierce'])

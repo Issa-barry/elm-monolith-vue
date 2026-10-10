@@ -35,7 +35,7 @@ class IndexProduitController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
 
         $filters = $request->only(['search', 'produit_type_id', 'statut', 'categorie_id', 'stock']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));

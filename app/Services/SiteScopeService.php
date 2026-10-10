@@ -7,14 +7,34 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
+/**
+ * Périmètre d'agences en CONSULTATION (listes, détails, recherches, exports, statistiques) : toute
+ * l'organisation pour qui voit toutes les agences (User::voitToutesLesAgences() — administrateur
+ * ou permission « vision 360° », ADR 0025), ses agences `user_sites` sinon.
+ *
+ * Ne sert jamais à autoriser une écriture : pour cela, assignedSiteIds() (rattachement réel).
+ */
 class SiteScopeService
 {
     /**
-     * Retourne les IDs de sites accessibles pour l'utilisateur.
-     * Admin → collection vide (= pas de restriction).
-     * Non-admin → sites affectés via user_sites.
+     * Retourne les IDs de sites consultables par l'utilisateur.
+     * Vision de toutes les agences → collection vide (= pas de restriction).
+     * Sinon → sites affectés via user_sites.
      */
     public function accessibleSiteIds(User $user): Collection
+    {
+        if ($user->voitToutesLesAgences()) {
+            return collect();
+        }
+
+        return $user->sites()->pluck('sites.id');
+    }
+
+    /**
+     * Périmètre d'ÉCRITURE : les agences auxquelles l'utilisateur est réellement rattaché. La vision
+     * 360° ne l'élargit pas. Administrateur → collection vide (= pas de restriction).
+     */
+    public function assignedSiteIds(User $user): Collection
     {
         if ($user->isAdmin()) {
             return collect();
@@ -24,12 +44,12 @@ class SiteScopeService
     }
 
     /**
-     * Applique le scoping de site sur une query Eloquent.
+     * Applique le périmètre de consultation sur une query Eloquent.
      * La colonne de site peut être personnalisée (ex: 'site_id').
      */
     public function applyToQuery(Builder $query, User $user, string $column = 'site_id'): Builder
     {
-        if ($user->isAdmin()) {
+        if ($user->voitToutesLesAgences()) {
             return $query;
         }
 
@@ -44,12 +64,12 @@ class SiteScopeService
 
     /**
      * Résout le filtre site depuis la requête.
-     * Pour un non-admin : ignore le param URL, retourne ''.
-     * Pour un admin : retourne la valeur du param.
+     * Périmètre limité à ses agences : ignore le param URL, retourne ''.
+     * Vision de toutes les agences : retourne la valeur du param.
      */
     public function resolveFiltreSite(User $user, string $param = ''): string
     {
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             return '';
         }
 
@@ -58,15 +78,15 @@ class SiteScopeService
 
     /**
      * Retourne les props Inertia pour le filtre site :
-     *   - is_admin : bool
+     *   - is_admin : bool (filtre Agence libre — toutes les agences consultables)
      *   - sites    : [{ value: id, label: nom }]
-     *   - filtre_site : valeur actuelle (vide pour non-admin)
+     *   - filtre_site : valeur actuelle (vide si le périmètre est limité à ses agences)
      */
     public function inertiaProps(User $user, string $orgId, string $filtreParam = ''): array
     {
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
-        if ($isAdmin) {
+        if ($toutesAgences) {
             $sites = Site::where('organization_id', $orgId)
                 ->orderBy('nom')
                 ->get(['id', 'nom'])
@@ -81,9 +101,9 @@ class SiteScopeService
         }
 
         return [
-            'is_admin' => $isAdmin,
+            'is_admin' => $toutesAgences,
             'sites' => $sites,
-            'filtre_site' => $isAdmin ? trim($filtreParam) : '',
+            'filtre_site' => $toutesAgences ? trim($filtreParam) : '',
         ];
     }
 }

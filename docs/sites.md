@@ -67,6 +67,21 @@ trésorerie, ni les commissions. Un site qui a des enfants ne peut pas être sup
 voit que les données de ses sites rattachés (`SiteScopeService`), sans héritage vers les sites
 enfants.
 
+### Périmètre de consultation et périmètre d'écriture (ADR 0025)
+
+| Périmètre | Qui voit / agit sur toutes les agences | Source unique |
+|---|---|---|
+| **Consultation** (listes, détails, recherche, exports, statistiques) | administrateur, **ou** rôle ayant la permission `sites.lecture_toutes_agences` | `User::voitToutesLesAgences()`, `SiteScopeService::accessibleSiteIds()` |
+| **Écriture** (créer, modifier, supprimer, valider, payer, réceptionner…) | administrateur seulement ; sinon agences de rattachement | `User::isAdmin()`, `SiteScopeService::assignedSiteIds()`, policies |
+
+- La permission se coche dans Rôles & Permissions → Sites → « Périmètre de consultation ». Elle
+  n'ouvre aucun écran : « Lire » sur la ressource reste requis. Elle ne dépend ni du libellé ni du
+  trinôme du rôle.
+- Elle n'accorde aucune écriture : un rôle qui a aussi « Créer » ou « Modifier » continue d'agir
+  uniquement dans ses agences de rattachement.
+- Tout nouvel écran de liste applique `voitToutesLesAgences()` pour la lecture et `isAdmin()` pour
+  l'écriture — jamais `isAdmin()` pour décider de ce qui est affiché.
+
 ## Import CSV
 
 Le type est reconnu par son libellé exact (« Agence », « Usine », « Dépôt »…). « Siège » reste

@@ -55,7 +55,7 @@ class SalaireController extends Controller
         $filtreStatut = (string) $request->input('statut', '');
         $search = trim((string) $request->input('search', ''));
 
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
