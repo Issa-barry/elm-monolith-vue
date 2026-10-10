@@ -250,7 +250,7 @@ class IndexCommandeVenteController extends Controller
             : [];
 
         // Options du filtre Véhicule de la modale d'export (cf. Ventes/Index.vue) — même périmètre
-        // de sites qu'ailleurs sur cette page : tous les véhicules de l'organisation pour un admin,
+        // de sites qu'ailleurs sur cette page : tous les véhicules de l'organisation pour qui consulte toutes les agences,
         // uniquement ceux des sites de l'utilisateur sinon.
         $vehiculesQuery = Vehicule::where('organization_id', $orgId);
         if (! $user->voitToutesLesAgences()) {

@@ -55,10 +55,10 @@ class SalaireController extends Controller
         $filtreStatut = (string) $request->input('statut', '');
         $search = trim((string) $request->input('search', ''));
 
-        $isAdmin = $user->voitToutesLesAgences();
+        $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $periode = $this->paieCalc->getOrGenererPeriode($orgId, $filtreMois, $filtreAnnee);
 
@@ -72,11 +72,11 @@ class SalaireController extends Controller
                 $query->where('statut', $filtreStatut);
             }
 
-            if ($isAdmin && ! empty($filtreSiteIds)) {
+            if ($toutesAgences && ! empty($filtreSiteIds)) {
                 $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
             }
 
-            if (! $isAdmin && ! empty($siteIds)) {
+            if (! $toutesAgences && ! empty($siteIds)) {
                 $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $siteIds));
             }
 

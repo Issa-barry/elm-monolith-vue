@@ -650,8 +650,16 @@ class FactureFournisseurTest extends TestCase
         $ligne = $this->ligneRecue($r, $this->ligneA);
         $facture = $this->saisir($this->payload([$this->ligne($ligne, 10)]));
 
-        // Sans règle « Peut acheter pour » : ni fiche ni validation, malgré le Gate::before.
-        $this->actingAs($superAdmin)->get(route('achats.factures.show', $facture))->assertForbidden();
+        // Sans règle « Peut acheter pour » : aucune action, malgré le Gate::before. Seule la
+        // CONSULTATION lui reste ouverte (ADR 0025) : il détient toutes les permissions, dont
+        // « consulter les données de toutes les agences » — la fiche s'ouvre, sans action proposée.
+        $this->actingAs($superAdmin)->get(route('achats.factures.show', $facture))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('actions.peut_valider', false)
+                ->where('actions.peut_modifier', false)
+                ->where('actions.peut_annuler', false)
+                ->where('actions.peut_payer', false));
         $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $facture))->assertForbidden();
 
         // Avec sa règle par défaut : valide la facture d'un autre, et la sienne (décision du 10/10/2026).

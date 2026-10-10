@@ -306,9 +306,9 @@ class CommissionSiteController extends Controller
         // et CommissionProcessusFilter).
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->voitToutesLesAgences();
-        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $toutesAgences = $user->voitToutesLesAgences();
+        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom,code,type',
@@ -325,9 +325,9 @@ class CommissionSiteController extends Controller
                 }
             });
 
-        if ($isAdmin && ! empty($filtreSiteIds)) {
+        if ($toutesAgences && ! empty($filtreSiteIds)) {
             $query->whereIn('beneficiaire_id', $filtreSiteIds);
-        } elseif (! $isAdmin && ! empty($siteIds)) {
+        } elseif (! $toutesAgences && ! empty($siteIds)) {
             $query->whereIn('beneficiaire_id', $siteIds);
         }
 

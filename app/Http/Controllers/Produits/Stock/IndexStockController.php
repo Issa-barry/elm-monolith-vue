@@ -305,10 +305,10 @@ class IndexStockController extends Controller
         return $libelle !== '' ? $libelle : 'Variante';
     }
 
-    private function siteIdsFiltres(Request $request, Collection $sites, bool $isAdmin): array
+    private function siteIdsFiltres(Request $request, Collection $sites, bool $toutesAgences): array
     {
         $consultables = $sites->pluck('id')->map(fn ($id) => (string) $id)->all();
-        if (! $isAdmin) {
+        if (! $toutesAgences) {
             return $consultables;
         }
 

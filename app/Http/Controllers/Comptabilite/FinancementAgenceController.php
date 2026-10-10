@@ -34,7 +34,7 @@ class FinancementAgenceController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->voitToutesLesAgences();
+        $toutesAgences = $user->voitToutesLesAgences();
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
@@ -43,12 +43,12 @@ class FinancementAgenceController extends Controller
             $echeance = 'mensuel';
         }
 
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $rows = $this->financement->calculerPourEcheance($orgId, $annee, $mois, $echeance);
         $rows = $this->restreindreAuxSitesAccessibles($rows, $user);
 
-        if ($isAdmin && $filtreSiteIds !== []) {
+        if ($toutesAgences && $filtreSiteIds !== []) {
             $rows = array_values(array_filter(
                 $rows,
                 fn (array $row) => $row['site_id'] !== null && in_array($row['site_id'], $filtreSiteIds, true),
@@ -68,10 +68,10 @@ class FinancementAgenceController extends Controller
             ],
             'echeance_debut' => $echeanceDebut->toDateString(),
             'echeance_fin' => $echeanceFin->toDateString(),
-            'sites' => $isAdmin
+            'sites' => $toutesAgences
                 ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
                 : collect(),
-            'is_admin' => $isAdmin,
+            'is_admin' => $toutesAgences,
         ]);
     }
 

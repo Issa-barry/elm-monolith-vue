@@ -30,7 +30,7 @@ class ExportCommandeVenteController extends Controller
             ->orderByDesc('created_at');
 
         // Site (« Agence ») : même règle de périmètre que IndexCommandeVenteController — un
-        // non-admin ne peut jamais exporter au-delà de ses propres sites, quoi qu'il envoie.
+        // utilisateur limité à ses agences ne peut jamais exporter au-delà de ses propres sites, quoi qu'il envoie.
         if ($user->voitToutesLesAgences()) {
             $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
             if (! empty($siteIds)) {

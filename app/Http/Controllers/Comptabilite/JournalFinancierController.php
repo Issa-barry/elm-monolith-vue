@@ -38,7 +38,7 @@ class JournalFinancierController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->voitToutesLesAgences();
+        $toutesAgences = $user->voitToutesLesAgences();
 
         $comptesTresorerie = CompteTresorerie::forOrg($orgId)->pluck('compte_comptable_id');
 
@@ -47,7 +47,7 @@ class JournalFinancierController extends Controller
             ->whereHas('piece', fn ($q) => $q->where('organization_id', $orgId))
             ->with(['piece.journal', 'piece.lignes.compte', 'site:id,nom']);
 
-        if (! $isAdmin) {
+        if (! $toutesAgences) {
             $query->whereIn('site_id', $this->siteScope->accessibleSiteIds($user));
         } elseif ($siteIds = array_filter((array) $request->input('site_ids', []))) {
             $query->whereIn('site_id', $siteIds);
@@ -120,7 +120,7 @@ class JournalFinancierController extends Controller
             'compte_options' => CompteComptable::whereIn('id', $comptesTresorerie)->orderBy('numero')->get(['id', 'numero', 'libelle'])
                 ->map(fn (CompteComptable $c) => ['value' => $c->id, 'label' => "{$c->numero} — {$c->libelle}"]),
             'sites' => $this->sitesDisponibles($orgId, $user),
-            'is_admin' => $isAdmin,
+            'is_admin' => $toutesAgences,
             'filters' => [
                 'annee' => $request->input('annee', ''),
                 'mois' => $request->input('mois', ''),
