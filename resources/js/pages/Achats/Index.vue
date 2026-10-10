@@ -41,6 +41,7 @@ interface Commande {
     total_commande: number;
     fournisseur_nom: string | null;
     site_nom: string | null;
+    site_payeur_nom: string | null;
     created_at: string;
     qte_commandee: number;
     qte_recue: number;
@@ -325,6 +326,12 @@ function confirmDelete(c: Commande) {
                             </td>
                             <td class="px-4 py-3 text-muted-foreground">
                                 {{ c.site_nom ?? '—' }}
+                                <span
+                                    v-if="c.site_payeur_nom"
+                                    class="block text-xs"
+                                >
+                                    Payé par {{ c.site_payeur_nom }}
+                                </span>
                             </td>
                             <td
                                 class="px-4 py-3 text-right text-muted-foreground tabular-nums"

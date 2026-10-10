@@ -18,6 +18,10 @@ use Illuminate\Support\Collection;
  * ni admin_entreprise ni super_admin n'ont d'accès automatique sans règle. Le créateur et le
  * validateur d'un bon le voient toujours.
  *
+ * Un bon a deux agences depuis le 10/10/2026 : livraison (`site_id`) et paiement (`site_payeur_id`).
+ * Le LIRE demande qu'une des deux soit couverte (estVisible()) ; AGIR dessus demande les deux
+ * (peutAgir()). Une facture relève de l'agence payeuse (`factures_fournisseurs.site_id`).
+ *
  * Seule ouverture, en CONSULTATION uniquement (ADR 0025, qui amende le point « voir » de l'ADR
  * 0021) : la permission « consulter les données de toutes les agences » rend visibles les bons et
  * factures de toute l'organisation — méthodes *Consultation / *Consultable. C'est une permission du
@@ -68,8 +72,12 @@ class PerimetreCommandesAchat
             return $query;
         }
 
+        $couverts = $couverts === [] ? [''] : $couverts;
+
+        // Un bon se lit dès qu'une de ses deux agences (livraison ou paiement) est couverte.
         return $query->where(fn (Builder $q) => $q
-            ->whereIn('site_id', $couverts === [] ? [''] : $couverts)
+            ->whereIn('site_id', $couverts)
+            ->orWhereIn('site_payeur_id', $couverts)
             ->orWhere('created_by', $user->id)
             ->orWhere('validee_par', $user->id));
     }
@@ -84,7 +92,27 @@ class PerimetreCommandesAchat
             return true;
         }
 
-        return $this->sitesCouverts($user) === null || $this->couvreSite($user, $commande->site_id);
+        return $this->sitesCouverts($user) === null
+            || $this->couvreSite($user, $commande->site_id)
+            || $this->couvreSite($user, $commande->sitePayeurId());
+    }
+
+    /**
+     * Agir sur un bon (modifier, valider, annuler, clôturer, supprimer) : le périmètre doit couvrir
+     * SES DEUX agences. Voir un bon livré à son agence ne donne pas le droit d'engager l'agence qui
+     * le paie, et inversement (décision du 10/10/2026).
+     */
+    public function peutAgir(CommandeAchat $commande, User $user): bool
+    {
+        return $commande->organization_id === $user->organization_id
+            && $this->couvreSite($user, $commande->site_id)
+            && $this->couvreSite($user, $commande->sitePayeurId());
+    }
+
+    /** 403 si l'utilisateur ne peut pas agir sur ce bon — à appeler après authorize(). */
+    public function autoriserAction(CommandeAchat $commande, User $user): void
+    {
+        abort_unless($this->peutAgir($commande, $user), 403, "Ce bon de commande engage une agence qui n'est pas dans votre périmètre d'achat.");
     }
 
     /** Une facture fournisseur suit le périmètre de son bon de commande ; son auteur et son validateur la voient toujours. */

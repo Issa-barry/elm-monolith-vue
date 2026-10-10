@@ -701,6 +701,40 @@ class FactureFournisseurTest extends TestCase
         $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
     }
 
+    // ── Achat centralisé : la facture relève de l'agence payeuse ──────────────
+
+    public function test_la_facture_d_un_achat_centralise_appartient_a_l_agence_payeuse(): void
+    {
+        // Bon livré à Cba, payé par l'agence principale ($this->site).
+        $cba = Site::factory()->for($this->org)->create(['nom' => 'Cba']);
+        $this->commande->update(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]);
+        $r = $this->receptionner($this->commande->fresh(), [$this->ligneA->id => 10]);
+        $payload = $this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]);
+
+        // Un utilisateur dont le périmètre ne couvre que l'agence de livraison ne peut pas la saisir.
+        foreach (self::PERMISSIONS_SAISIE as $p) {
+            Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
+        }
+        $role = Role::firstOrCreate(['name' => 'agent_cba', 'guard_name' => 'web']);
+        $role->givePermissionTo(self::PERMISSIONS_SAISIE);
+        $this->regle('agent_cba', 'agences_selectionnees', [$cba->id]);
+        $agentCba = User::factory()->create(['organization_id' => $this->org->id]);
+        $agentCba->assignRole($role);
+        $agentCba->sites()->attach($cba->id, ['role' => 'employe', 'is_default' => true]);
+        $this->actingAs($agentCba)->post(route('achats.factures.store'), $payload)->assertSessionHasErrors('commande');
+        $this->assertSame(0, FactureFournisseur::count());
+
+        // L'acheteur central (toutes agences) la saisit : elle est rattachée à l'agence payeuse.
+        $facture = $this->saisir($payload);
+        $this->assertSame($this->site->id, $facture->site_id);
+
+        // Elle se valide et se paie donc dans le périmètre de l'agence payeuse, pas de Cba.
+        $this->assertStringContainsString("n'est pas dans votre périmètre", (string) app(FactureFournisseurService::class)->motifNonValidable(
+            $facture,
+            tap($agentCba, fn (User $u) => $role->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.valider', 'guard_name' => 'web'])))->fresh(),
+        ));
+    }
+
     // ── Isolation et périmètre ────────────────────────────────────────────────
 
     public function test_isolation_organisationnelle(): void

@@ -127,7 +127,8 @@ class FactureFournisseurService
                 'organization_id' => $commande->organization_id,
                 'commande_achat_id' => $commande->id,
                 'fournisseur_id' => $commande->fournisseur_id,
-                'site_id' => $commande->site_id,
+                // Agence PAYEUSE du bon : la facture, la dette et le paiement lui appartiennent.
+                'site_id' => $commande->sitePayeurId(),
                 'reference' => $reference,
                 'numero' => $numero,
                 'statut' => StatutFactureFournisseur::BROUILLON,
@@ -332,8 +333,8 @@ class FactureFournisseurService
         if (! $facturable) {
             throw ValidationException::withMessages(['commande' => 'Seul un bon de commande validé peut être facturé.']);
         }
-        if (! $this->perimetre->couvreSite($user, $commande->site_id)) {
-            throw ValidationException::withMessages(['commande' => "L'agence de ce bon de commande n'est pas dans votre périmètre d'achat."]);
+        if (! $this->perimetre->couvreSite($user, $commande->sitePayeurId())) {
+            throw ValidationException::withMessages(['commande' => "L'agence qui paie ce bon de commande n'est pas dans votre périmètre d'achat."]);
         }
     }
 

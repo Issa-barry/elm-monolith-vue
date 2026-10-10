@@ -52,6 +52,8 @@ interface CommandeData {
     montant_valide: number | null;
     fournisseur_nom: string | null;
     site_nom: string | null;
+    site_payeur_nom: string | null;
+    paye_par_autre_agence: boolean;
     note: string | null;
     created_at: string;
     created_by: string | null;
@@ -421,6 +423,15 @@ function supprimer() {
                         </p>
                         <p class="mt-0.5 font-medium">
                             {{ commande.site_nom ?? '—' }}
+                        </p>
+                        <p
+                            v-if="commande.paye_par_autre_agence"
+                            class="mt-1 text-xs text-muted-foreground"
+                        >
+                            Payé par
+                            <span class="font-medium text-foreground">{{
+                                commande.site_payeur_nom
+                            }}</span>
                         </p>
                     </div>
                     <div>

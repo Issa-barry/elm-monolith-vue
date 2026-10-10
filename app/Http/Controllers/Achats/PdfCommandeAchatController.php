@@ -15,11 +15,11 @@ class PdfCommandeAchatController extends Controller
         $this->authorize('view', $achat);
         app(PerimetreCommandesAchat::class)->autoriserConsultation($achat, auth()->user());
 
-        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'valideePar', 'organization', 'site']);
+        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'valideePar', 'organization', 'site', 'sitePayeur']);
 
         $createdBy = $achat->createdBy
             ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)
-            : '—';
+            : 'â€”';
 
         $pdf = Pdf::loadView('pdf.bon_commande_achat', [
             'commande' => $achat,

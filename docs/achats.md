@@ -31,7 +31,8 @@ Factures d’achat et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-d
 | ACH-009 | Réception (`receptions.create`, utilisateur rattaché à l'agence de la commande) : uniquement depuis Logistique → Réceptions, sur une commande validée ou partiellement reçue. Chaque quantité ≤ reliquat, relu sous verrou ; sinon refus sans aucun effet. |
 | ACH-010 | Le stock entre dès l'enregistrement de la réception, sur l'agence de la commande. Le coût unitaire (prix de la commande) est figé sur la ligne de réception ; le mouvement de stock porte le motif « Réception achat — référence du bon ». |
 | ACH-011 | Le `prix_achat` de la variante prend le coût reçu, sauf pour un produit vendable dont la marge se calcule sur le prix d'achat si ce coût atteint le prix de vente : avertissement orange, réception non bloquée. |
-| ACH-012 | Lecture (`achats.read`) : bons des agences couvertes par ACH-000, plus ceux que l'utilisateur a créés ou validés. |
+| ACH-012 | Lecture (`achats.read`) : bons dont l'agence de livraison OU l'agence payeuse est couverte par ACH-000, plus ceux que l'utilisateur a créés ou validés. Voir un bon ne donne pas le droit d'agir dessus (ACH-015). |
+| ACH-015 | **Deux agences par bon** (10/10/2026) : agence de livraison (réception, stock) et agence payeuse (facture, dette, paiement, écritures, obligation du Financement) — « Payé par », par défaut la trésorerie principale si le périmètre de l'utilisateur la couvre, sinon l'agence de livraison ; figée à la validation. Créer, modifier, valider, annuler, clôturer et supprimer exigent que le périmètre ACH-000 couvre LES DEUX agences ; le plafond de validation (ACH-003) est celui d'une règle couvrant l'agence payeuse. Bons antérieurs : agence payeuse = agence de livraison. |
 | ACH-013 | Notifications après commit : création → validateurs possibles (mêmes règles que la validation : permission, séparation des tâches, périmètre, plafond) et super administrateurs dont le périmètre couvre le bon ; validation → créateur et utilisateurs de l'agence ayant `receptions.create` ; annulation → créateur. Jamais l'auteur de l'action. |
 | ACH-013b | Quand aucun autre utilisateur actif ne peut valider le bon (même calcul que les destinataires de ACH-013), la fiche l'indique : « Aucun autre utilisateur ne peut valider ce bon… » avec les rôles autorisés pour ce montant. |
 | ACH-014 | PDF : filigrane « NON VALIDÉ » tant que le bon n'est pas validé, « ANNULÉ » s'il est annulé. |
@@ -42,7 +43,7 @@ Terminologie (10/10/2026) : l'écran s'appelle « Factures d’achat » ; les no
 
 | Code | Règle |
 |---|---|
-| FAF-001 | Une facture appartient à un bon de commande **validé** (validée, partiellement réceptionnée, réceptionnée ou clôturée) et à son fournisseur ; un autre fournisseur est refusé. Agence = agence du bon. |
+| FAF-001 | Une facture appartient à un bon de commande **validé** (validée, partiellement réceptionnée, réceptionnée ou clôturée) et à son fournisseur ; un autre fournisseur est refusé. Agence de la facture = **agence payeuse** du bon (ACH-015) : c'est elle qui gouverne la saisie, la validation, le paiement et l'obligation de trésorerie. |
 | FAF-002 | Elle facture des **lignes de réception** (une ou plusieurs réceptions du bon). Quantité facturable d'une ligne = reçu − déjà facturé sur des factures validées. Contrôlé à la saisie et **sous verrou à la validation** (lecture verrouillante, prouvée sur MySQL réel) : jamais deux fois la même quantité reçue, même en concurrence. Les réceptions ne sont jamais modifiées. |
 | FAF-003 | Le numéro de facture du fournisseur est unique par fournisseur (factures non annulées), **garanti en base** (clé technique + index unique) : une saisie simultanée du même numéro est refusée. Un numéro annulé peut être ressaisi. |
 | FAF-004 | Saisie (`factures-fournisseurs.create`) et modification (`update`) en brouillon, pour un bon dont l'agence est couverte par ACH-000. Une facture validée n'est plus modifiable. |
@@ -92,7 +93,7 @@ Permission de la page : `parametres.update`.
 
 ## Données
 
-- `commandes_achats` : `site_id`, `numero`, `contenu_modifie_par/at`, `validee_at/par`,
+- `commandes_achats` : `site_id` (livraison), `site_payeur_id` et `site_payeur_nom_snapshot` (paiement), `numero`, `contenu_modifie_par/at`, `validee_at/par`,
   `montant_valide`, `fournisseur_nom_snapshot`, `site_nom_snapshot`, `validation_regle_snapshot`,
   `cloturee_at/par`, `motif_cloture`. Références `BC-JJMMAA-NNN` ; les `ACH-…` historiques restent.
 - `commande_achat_lignes.reference_snapshot` (SKU) ; `qte_recue` = cumul des réceptions.

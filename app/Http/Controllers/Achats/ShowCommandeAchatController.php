@@ -31,7 +31,7 @@ class ShowCommandeAchatController extends Controller
         // administrateur court-circuitant les policies.
         $dansPerimetre = app(PerimetreCommandesAchat::class)->estVisible($achat, $user);
         $achat->load([
-            'fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'lignes',
+            'fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'sitePayeur:id,nom', 'lignes',
             'createdBy', 'valideePar', 'annuleePar', 'clotureePar',
             'receptions' => fn ($q) => $q->orderByDesc('date_reception')->orderByDesc('created_at'),
             'receptions.createdBy', 'receptions.lignes.commandeLigne',
@@ -58,7 +58,7 @@ class ShowCommandeAchatController extends Controller
         $peutFacturer = $achat->validee_at !== null
             && ! $achat->isAnnulee()
             && $user->can('create', FactureFournisseur::class)
-            && app(PerimetreCommandesAchat::class)->couvreSite($user, $achat->site_id)
+            && app(PerimetreCommandesAchat::class)->couvreSite($user, $achat->sitePayeurId())
             && $factures->lignesFacturables($achat)->sum('facturable') > 0;
 
         return Inertia::render('Achats/Show', [
@@ -71,6 +71,8 @@ class ShowCommandeAchatController extends Controller
                 'montant_valide' => $achat->montant_valide !== null ? (float) $achat->montant_valide : null,
                 'fournisseur_nom' => $achat->fournisseurNom(),
                 'site_nom' => $achat->siteNom(),
+                'site_payeur_nom' => $achat->sitePayeurNom(),
+                'paye_par_autre_agence' => $achat->estPayeParUneAutreAgence(),
                 'note' => $achat->note,
                 'created_at' => $achat->created_at?->format('d/m/Y'),
                 'created_by' => $this->nom($achat->createdBy),
@@ -135,7 +137,7 @@ class ShowCommandeAchatController extends Controller
             'aucun_validateur_disponible' => $aValider && $achat->site_id !== null
                 && $service->validateursPossibles($achat)->isEmpty(),
             'validable_par' => $aValider && $achat->site_id !== null
-                ? $plafonds->rolesPouvantValider($achat->organization_id, RegleValidationRole::DOMAINE_ACHATS, 'achats.valider', $achat->site_id, $montant)
+                ? $plafonds->rolesPouvantValider($achat->organization_id, RegleValidationRole::DOMAINE_ACHATS, 'achats.valider', $achat->sitePayeurId(), $montant)
                 : [],
         ]);
     }

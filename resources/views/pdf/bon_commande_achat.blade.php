@@ -85,6 +85,9 @@
             <div class="org-nom">{{ strtoupper($organisation->name) }}</div>
             @if($commande->siteNom())
                 <div class="muted">Agence de livraison : {{ $commande->siteNom() }}</div>
+                @if($commande->estPayeParUneAutreAgence())
+                    <div class="muted">Payé par : {{ $commande->sitePayeurNom() }}</div>
+                @endif
             @endif
         </td>
         <td style="width: 42%;">

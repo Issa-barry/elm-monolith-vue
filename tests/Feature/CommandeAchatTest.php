@@ -618,6 +618,129 @@ class CommandeAchatTest extends TestCase
         $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
     }
 
+    // ── Deux agences : livraison et paiement (décision du 10/10/2026) ─────────
+
+    /** Rôle d'acheteur dont le périmètre « Peut acheter pour » se limite aux agences données. */
+    private function makeAcheteur(string $role, array $sites, array $permissions = ['achats.read', 'achats.create', 'achats.update']): User
+    {
+        $user = $this->makeUtilisateur($role, $permissions, [$sites[0]]);
+        $this->regle($role, null, false, 'agences_selectionnees', array_map(fn (Site $s) => $s->id, $sites));
+
+        return $user;
+    }
+
+    public function test_achat_centralise_livre_a_une_agence_paye_par_une_autre(): void
+    {
+        $cba = Site::factory()->for($this->org)->create(['nom' => 'Cba']);
+
+        // $this->user (toutes agences) : livraison à Cba, paiement par l'agence principale.
+        $this->actingAs($this->user)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]))
+            ->assertSessionHasNoErrors();
+        $commande = CommandeAchat::latest('created_at')->firstOrFail();
+
+        $this->assertSame($cba->id, $commande->site_id);
+        $this->assertSame($this->site->id, $commande->site_payeur_id);
+        $this->assertTrue($commande->estPayeParUneAutreAgence());
+        $this->actingAs($this->user)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page
+                ->where('commande.site_nom', 'Cba')
+                ->where('commande.site_payeur_nom', $this->site->nom)
+                ->where('commande.paye_par_autre_agence', true));
+
+        // Sans « Payé par » : l'agence payeuse est l'agence de livraison (comportement d'origine).
+        $simple = $this->creerCommande(1);
+        $this->assertSame($simple->site_id, $simple->site_payeur_id);
+        $this->assertFalse($simple->estPayeParUneAutreAgence());
+    }
+
+    public function test_pouvoir_acheter_pour_une_agence_ne_permet_pas_d_engager_la_tresorerie_d_une_autre(): void
+    {
+        $cba = Site::factory()->for($this->org)->create();
+        $agentCba = $this->makeAcheteur('agent_cba', [$cba]);
+
+        // Livré à Cba, payé par Cba : accepté.
+        $this->actingAs($agentCba)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $cba->id]))
+            ->assertSessionHasNoErrors();
+
+        // Livré à Cba, payé par l'agence principale (hors de son périmètre) : refusé, rien n'est créé.
+        $avant = CommandeAchat::count();
+        $this->actingAs($agentCba)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]))
+            ->assertSessionHasErrors(['site_payeur_id' => "Votre rôle ne permet pas d'engager la trésorerie de cette agence."]);
+        $this->assertSame($avant, CommandeAchat::count());
+
+        // Agence payeuse d'une autre organisation : refusée.
+        $etranger = Site::factory()->for(Organization::factory()->create())->create();
+        $this->actingAs($agentCba)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $etranger->id]))
+            ->assertSessionHasErrors('site_payeur_id');
+    }
+
+    public function test_voir_un_bon_par_une_seule_de_ses_agences_ne_donne_pas_le_droit_d_agir(): void
+    {
+        $cba = Site::factory()->for($this->org)->create();
+        $this->actingAs($this->user)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]))
+            ->assertSessionHasNoErrors();
+        $commande = CommandeAchat::latest('created_at')->firstOrFail();
+
+        // L'agent de Cba (livraison seulement) voit le bon, dans la liste comme sur la fiche…
+        $agentCba = $this->makeAcheteur('agent_cba', [$cba], ['achats.read', 'achats.create', 'achats.update', 'achats.annuler']);
+        $this->actingAs($agentCba)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.site_payeur_nom', $this->site->nom));
+        $this->actingAs($agentCba)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_modifier', false)->where('actions.peut_annuler', false));
+
+        // … mais ne peut ni le modifier ni l'annuler : il engage l'agence principale.
+        $this->actingAs($agentCba)->put(route('achats.update', $commande), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $cba->id]))->assertForbidden();
+        $this->actingAs($agentCba)->patch(route('achats.annuler', $commande), ['motif_annulation' => 'Test'])->assertForbidden();
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+        $this->assertSame($this->site->id, $commande->fresh()->site_payeur_id);
+    }
+
+    public function test_validation_le_plafond_est_celui_de_l_agence_payeuse_et_la_livraison_doit_etre_couverte(): void
+    {
+        $cba = Site::factory()->for($this->org)->create();
+        $this->actingAs($this->user)
+            ->post(route('achats.store'), $this->payload(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]))
+            ->assertSessionHasNoErrors();
+        $commande = CommandeAchat::latest('created_at')->firstOrFail();
+
+        // Plafond suffisant sur l'agence payeuse seulement : la livraison à Cba n'est pas couverte.
+        $payeurSeul = $this->makeValidateur('valideur_principale', 50_000, false, 'agences_selectionnees', [$this->site->id]);
+        $this->actingAs($payeurSeul)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->assertSame("L'agence de livraison de ce bon n'est pas dans votre périmètre d'achat.", app(CommandeAchatService::class)->motifNonValidable($commande->fresh(), $payeurSeul));
+
+        // Plafond sur l'agence de livraison seulement : la trésorerie de l'agence payeuse n'est pas couverte.
+        $livraisonSeule = $this->makeValidateur('valideur_cba', 50_000, false, 'agences_selectionnees', [$cba->id]);
+        $this->actingAs($livraisonSeule)->patch(route('achats.valider', $commande))->assertForbidden();
+        $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+
+        // Les deux agences couvertes, plafond suffisant : validé, agence payeuse figée.
+        $lesDeux = $this->makeValidateur('valideur_deux', 50_000, false, 'agences_selectionnees', [$this->site->id, $cba->id]);
+        $this->actingAs($lesDeux)->get(route('achats.index', ['a_valider_par_moi' => '1']))
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1));
+        $this->actingAs($lesDeux)->patch(route('achats.valider', $commande))->assertSessionHasNoErrors();
+        $commande->refresh();
+        $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->statut);
+        $this->assertSame($this->site->nom, $commande->site_payeur_nom_snapshot);
+        $this->assertSame('valideur_deux', $commande->validation_regle_snapshot['role']);
+    }
+
+    public function test_la_migration_initialise_l_agence_payeuse_des_bons_existants(): void
+    {
+        $commande = $this->creerCommande(1);
+        DB::table('commandes_achats')->where('id', $commande->id)->update(['site_payeur_id' => null, 'site_nom_snapshot' => 'Agence figée', 'site_payeur_nom_snapshot' => null]);
+
+        (require database_path('migrations/2026_10_10_500000_add_site_payeur_to_commandes_achats_table.php'))->up();
+
+        $commande->refresh();
+        $this->assertSame($commande->site_id, $commande->site_payeur_id);
+        $this->assertSame('Agence figée', $commande->site_payeur_nom_snapshot);
+    }
+
     // ── Isolation et périmètre de lecture ─────────────────────────────────────
 
     public function test_isolation_organisationnelle(): void
@@ -634,7 +757,7 @@ class CommandeAchatTest extends TestCase
     {
         $autreSite = Site::factory()->for($this->org)->create();
         $commande = $this->creerCommande(10);
-        $commande->update(['site_id' => $autreSite->id]);
+        $commande->update(['site_id' => $autreSite->id, 'site_payeur_id' => $autreSite->id]);
 
         // Lecteur dont la règle couvre seulement l'agence principale : voit ses bons, pas les autres.
         $lecteur = $this->makeUtilisateur('lecteur_achats', ['achats.read']);

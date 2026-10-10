@@ -12,6 +12,7 @@ use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,12 +34,13 @@ class IndexCommandeAchatController extends Controller
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $query = $this->perimetre->appliquerConsultation(CommandeAchat::query(), $user)
-            ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom'])
+            ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'sitePayeur:id,nom'])
             ->withSum('lignes as qte_commandee', 'qte')
             ->withSum('lignes as qte_recue', 'qte_recue');
 
         $query
-            ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
+            // Filtre Agence : bons livrés à l'agence OU payés par elle.
+            ->when($siteIds !== [], fn (Builder $q) => $q->where(fn (Builder $q) => $q->whereIn('site_id', $siteIds)->orWhereIn('site_payeur_id', $siteIds)))
             ->when($filters['statut'] ?? null, function (Builder $q, string $statut) {
                 $statuts = $statut === StatutCommandeAchat::A_VALIDER->value
                     ? array_map(fn ($s) => $s->value, StatutCommandeAchat::aValider())
@@ -74,6 +76,7 @@ class IndexCommandeAchatController extends Controller
                 'total_commande' => (float) $c->total_commande,
                 'fournisseur_nom' => $c->fournisseurNom(),
                 'site_nom' => $c->siteNom(),
+                'site_payeur_nom' => $c->estPayeParUneAutreAgence() ? $c->sitePayeurNom() : null,
                 'created_at' => $c->created_at?->format('d/m/Y'),
                 'qte_commandee' => (int) $c->qte_commandee,
                 'qte_recue' => (int) $c->qte_recue,
@@ -95,8 +98,8 @@ class IndexCommandeAchatController extends Controller
     }
 
     /**
-     * Commandes à valider que l'utilisateur peut valider : agence et montant dans au moins une de
-     * ses règles de plafond, et ni créées ni modifiées en dernier par lui (ADR 0021). Sans la
+     * Commandes à valider que l'utilisateur peut valider : agence payeuse et montant dans au moins
+     * une de ses règles de plafond, agence de livraison dans son périmètre, et ni créées ni modifiées en dernier par lui (ADR 0021). Sans la
      * permission `achats.valider`, aucune.
      */
     private function restreindreAValiderPar(Builder $query, $user): void
@@ -114,6 +117,12 @@ class IndexCommandeAchatController extends Controller
             return;
         }
 
+        // L'agence de livraison doit elle aussi être dans le périmètre de l'utilisateur.
+        $couverts = $this->perimetre->sitesCouverts($user);
+        if ($couverts !== null) {
+            $query->whereIn('site_id', $couverts === [] ? [''] : $couverts);
+        }
+
         $query->where(function (Builder $q) use ($perimetres, $user) {
             foreach ($perimetres as $p) {
                 $q->orWhere(function (Builder $q) use ($p, $user) {
@@ -123,8 +132,9 @@ class IndexCommandeAchatController extends Controller
                         $q->where(fn (Builder $q) => $q->whereNull('created_by')->orWhere('created_by', '!=', $user->id))
                             ->where(fn (Builder $q) => $q->whereNull('contenu_modifie_par')->orWhere('contenu_modifie_par', '!=', $user->id));
                     }
+                    // Plafond et périmètre de la règle : sur l'agence PAYEUSE (trésorerie engagée).
                     if ($p['sites'] !== null) {
-                        $q->whereIn('site_id', $p['sites'] === [] ? [''] : $p['sites']);
+                        $q->whereIn(DB::raw('COALESCE(site_payeur_id, site_id)'), $p['sites'] === [] ? [''] : $p['sites']);
                     }
                     if ($p['plafond'] !== null) {
                         $q->where('total_commande', '<=', $p['plafond']);
