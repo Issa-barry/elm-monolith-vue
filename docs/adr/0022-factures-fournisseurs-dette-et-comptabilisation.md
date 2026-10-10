@@ -54,8 +54,12 @@ servi.
    - Débit `achat_{code du type de produit}`, repli `achat` — montant HT ;
    - Débit `tva_deductible` — montant de TVA, si > 0 ;
    - Crédit `fournisseur` (tiers = fournisseur) — montant TTC.
-   Aucun numéro de compte dans le code. Seul `fournisseur` → **401000 Fournisseurs, journal AC** est
-   provisionné (bootstrap + migration).
+   Aucun numéro de compte dans le code du moteur. Provisionnés par le plan par défaut (bootstrap +
+   migration, sans jamais écraser une correspondance déjà configurée) : `fournisseur` → **401000
+   Fournisseurs, journal AC** ; et, **depuis le 2026-10-10, à titre PROVISOIRE et à valider par le
+   comptable** (décision de l'utilisateur, comme les autres comptes du plan par défaut) : `achat` →
+   **601000 Achats de marchandises**, `tva_deductible` → **445200 TVA récupérable sur achats**.
+   Aucun compte par type de produit (`achat_{type}`) n'est créé : le moteur se replie sur `achat`.
 7. **Comptabilisation non bloquante** (comme `vente_facturee`) : tant qu'un compte d'achat ou de TVA
    n'est pas mappé, la facture est validée et la dette existe, mais la pièce n'est pas passée ; le
    motif est conservé sur la facture et affiché, avec un bouton « Relancer ». `comptabilite:rattraper
@@ -70,16 +74,26 @@ servi.
 
 ## Décisions en attente (comptable)
 
-- Compte(s) d'achat : un seul compte (`achat`, ex. 601) ou un par type de produit
+Les comptes 601000 et 445200 sont en place à titre provisoire depuis le 2026-10-10 pour que les
+factures puissent être comptabilisées puis payées ; ils restent à confirmer :
+
+- Compte(s) d'achat : garder le seul 601000 (`achat`) ou en distinguer un par type de produit
   (`achat_materiel`, `achat_matiere_production`, `achat_achat_vente` — ex. 602 / 604 / 601 / 608) ?
-- TVA : les factures fournisseurs portent-elles une TVA récupérable ? Si oui, quel compte
-  (`tva_deductible`, ex. 4452) et quels taux ?
+  Un « matériel » peut relever d'une immobilisation et non d'une charge.
+- TVA : est-elle récupérable pour l'entreprise ? Aujourd'hui toute TVA saisie sur une facture est
+  débitée au 445200. **Tant que ce point n'est pas confirmé, saisir les factures avec un taux de
+  TVA à 0** ; le traitement « TVA non récupérable » (TVA ajoutée au coût) n'existe pas encore.
+- Une écriture passée n'est jamais réécrite : si les comptes changent, les factures déjà
+  comptabilisées restent sur les comptes provisoires et se reclassent par opération diverse.
+- Aucun écran ne permet encore au comptable de modifier ces correspondances (chantier ultérieur).
 - Confirmation du compte 401000 et du journal AC pour la dette fournisseur.
 - Faut-il, en plus, comptabiliser le stock (classe 3) à la réception ? Aujourd'hui : non (stock
   physique seulement, comme pour les ventes).
 
-Une fois tranchées : ajouter les lignes de mapping (bootstrap + migration, comme pour les autres
-événements), puis lancer `php artisan comptabilite:rattraper --type=facture-fournisseur`.
+Après le déploiement de la migration `2026_10_10_400000` : aucune écriture n'est rattrapée
+automatiquement. Les factures en attente se relancent volontairement, depuis leur fiche (bouton
+« Relancer ») ou par `php artisan comptabilite:rattraper --type=facture-fournisseur` ; elles ne
+sont payables qu'une fois leur écriture passée (ADR 0024).
 
 ## Conséquences
 

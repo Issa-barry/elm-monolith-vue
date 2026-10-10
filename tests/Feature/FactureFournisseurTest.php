@@ -23,8 +23,10 @@ use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Achats\FactureFournisseurService;
+use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
+use App\Services\Comptabilite\PlanComptableBootstrapService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,6 +70,15 @@ class FactureFournisseurTest extends TestCase
         Feature::for($this->org)->activate(ModuleFeature::ACHATS);
         $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
         $this->regle('admin_entreprise');
+
+        // Point de départ de ces tests : comptes d'achat et de TVA NON paramétrés (organisation dont
+        // le comptable a retiré les comptes provisoires du plan par défaut). Les tests qui en ont
+        // besoin les paramètrent avec mapperCompteAchat() / mapperTva() ; ceux du plan par défaut
+        // les rétablissent avec PlanComptableBootstrapService.
+        CompteMapping::where('organization_id', $this->org->id)
+            ->where('evenement', EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value)
+            ->whereIn('role', ['achat', 'tva_deductible'])
+            ->delete();
 
         $this->fournisseur = $this->makeFournisseur($this->org, 'FOURNISSEUR A');
         [$this->commande, $this->ligneA, $this->ligneB] = $this->commandeValidee($this->org, $this->site, $this->fournisseur);
@@ -598,6 +609,96 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame(1, PieceComptable::where('source_id', $facture->id)->count());
         $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
             ->assertInertia(fn ($page) => $page->where('comptabilite.statut', 'comptabilisee')->where('comptabilite.erreur', null));
+    }
+
+    // ── Comptes d'achat et de TVA provisoires du plan par défaut ──────────────
+
+    /** @return array<string, array{compte: string, journal: ?string}> correspondances achat/TVA d'une organisation, par rôle */
+    private function correspondancesAchat(string $organizationId): array
+    {
+        return CompteMapping::where('organization_id', $organizationId)
+            ->where('evenement', EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value)
+            ->whereIn('role', ['achat', 'tva_deductible'])
+            ->get()
+            ->mapWithKeys(fn (CompteMapping $m) => [$m->role => [
+                'compte' => CompteComptable::find($m->compte_comptable_id)->numero,
+                'journal' => $m->journal_comptable_id ? JournalComptable::find($m->journal_comptable_id)->code : null,
+            ]])
+            ->all();
+    }
+
+    public function test_une_nouvelle_organisation_recoit_les_comptes_d_achat_et_de_tva_provisoires(): void
+    {
+        $nouvelle = Organization::factory()->create();
+
+        $this->assertSame(
+            ['achat' => ['compte' => '601000', 'journal' => 'AC'], 'tva_deductible' => ['compte' => '445200', 'journal' => null]],
+            $this->correspondancesAchat($nouvelle->id),
+        );
+        $this->assertSame('Achats de marchandises', CompteComptable::where('organization_id', $nouvelle->id)->where('numero', '601000')->value('libelle'));
+        // Aucun compte par type de produit n'est créé.
+        $this->assertFalse(CompteMapping::where('organization_id', $nouvelle->id)->where('role', 'like', 'achat\_%')->exists());
+        // Isolation : rien n'est créé pour l'organisation de référence, dont les comptes ont été retirés.
+        $this->assertSame([], $this->correspondancesAchat($this->org->id));
+    }
+
+    public function test_la_migration_complete_une_organisation_existante_sans_doublon_ni_ecrasement(): void
+    {
+        // Correspondance d'achat personnalisée par le comptable ; TVA absente.
+        $personnalise = CompteComptable::create(['organization_id' => $this->org->id, 'numero' => '602000', 'libelle' => 'Achats de matières (choix du comptable)', 'actif' => true]);
+        CompteMapping::create([
+            'organization_id' => $this->org->id, 'evenement' => EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value,
+            'role' => 'achat', 'compte_comptable_id' => $personnalise->id, 'journal_comptable_id' => null, 'actif' => true,
+        ]);
+
+        $migration = require database_path('migrations/2026_10_10_400000_bootstrap_comptes_achat_et_tva_provisoires.php');
+        $migration->up();
+        $comptesApres = CompteComptable::where('organization_id', $this->org->id)->count();
+        $mappingsApres = CompteMapping::where('organization_id', $this->org->id)->count();
+        $migration->up();
+
+        // Personnalisation conservée, TVA manquante créée, deuxième passage sans effet.
+        $this->assertSame(
+            ['achat' => ['compte' => '602000', 'journal' => null], 'tva_deductible' => ['compte' => '445200', 'journal' => null]],
+            $this->correspondancesAchat($this->org->id),
+        );
+        $this->assertSame($comptesApres, CompteComptable::where('organization_id', $this->org->id)->count());
+        $this->assertSame($mappingsApres, CompteMapping::where('organization_id', $this->org->id)->count());
+        $this->assertSame(1, CompteComptable::where('organization_id', $this->org->id)->where('numero', '601000')->count());
+    }
+
+    public function test_avec_les_comptes_par_defaut_la_validation_passe_l_ecriture_ht_tva_ttc(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['taux_tva' => 18]));
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+
+        $piece = $this->piece($facture);
+        $this->assertNotNull($piece);
+        $parCompte = EcritureComptable::where('piece_comptable_id', $piece->id)->get()
+            ->mapWithKeys(fn ($e) => [CompteComptable::find($e->compte_comptable_id)->numero => (float) $e->debit - (float) $e->credit]);
+        $this->assertSame(['601000' => 10_000.0, '445200' => 1_800.0, '401000' => -11_800.0], $parCompte->all());
+    }
+
+    public function test_la_migration_ne_rattrape_rien_le_paiement_reste_bloque_jusqu_a_la_relance(): void
+    {
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.payer', 'guard_name' => 'web']));
+        $paiements = app(PaiementFournisseurService::class);
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHas('warning');
+
+        // La migration crée les comptes mais ne passe aucune écriture : facture toujours impayable.
+        (require database_path('migrations/2026_10_10_400000_bootstrap_comptes_achat_et_tva_provisoires.php'))->up();
+        $this->assertNull($this->piece($facture));
+        $this->assertStringStartsWith('Paiement impossible', (string) $paiements->motifNonPayable($facture->fresh(), $this->user));
+
+        // Relance volontaire depuis la fiche : écriture passée, facture payable.
+        $this->actingAs($this->makeValidateur())->post(route('achats.factures.comptabiliser', $facture))->assertSessionHas('success');
+        $this->assertNotNull($this->piece($facture));
+        $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
     }
 
     // ── Isolation et périmètre ────────────────────────────────────────────────
