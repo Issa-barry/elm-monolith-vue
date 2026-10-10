@@ -9,6 +9,9 @@ Source des fichiers : template Apollo PrimeVue 6.2.0 (src/assets/layout/fonts).
 
 Usage dans ce projet : cartes KPI de Trésorerie > Supports (classe `font-apollo`) et
 rapports PDF de commissions, pour reprendre la typographie des modèles Apollo.
-Poppins-Regular.ttf et Poppins-Bold.ttf proviennent des fichiers WOFF regular / 700
-de resources/css/layout/fonts, convertis au format TrueType pour Dompdf.
+Poppins-Regular.ttf, Poppins-Medium.ttf, Poppins-SemiBold.ttf et Poppins-Bold.ttf
+proviennent des fichiers WOFF regular / 500 / 600 / 700 du template Apollo,
+convertis au format TrueType pour Dompdf sans modification des dessins de glyphes.
+Les quatre graisses sont embarquées dans le PDF de facture d’achat, avec les tailles
+et espacements de Invoice.vue (base 14px, titres 31.5px et 21px).
 Le reste de l'application reste en Instrument Sans.

@@ -28,6 +28,10 @@ class PdfFactureFournisseurController extends Controller
         return Pdf::loadView('pdf.facture_achat', [
             'facture' => $facture,
             'organisation' => Organization::findOrFail($facture->organization_id),
-        ])->setPaper('a4', 'portrait')->download($facture->reference.'.pdf');
+        ])->setPaper('a4', 'portrait')
+            // Poppins : ascender 1.05 + descender 0.35. DomPDF multiplie l'interligne CSS
+            // par la hauteur de la fonte ; ce ratio conserve les interlignes d'Apollo.
+            ->setOption('fontHeightRatio', 1 / 1.4)
+            ->download($facture->reference.'.pdf');
     }
 }

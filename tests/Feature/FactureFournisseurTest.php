@@ -713,6 +713,12 @@ class FactureFournisseurTest extends TestCase
         return [collect($j['etapes'])->pluck('etat', 'cle')->all(), $j['prochaine_action'], $j['autres_actions'], $j['resume']];
     }
 
+    /** Statut de facturation du bon (colonne « Statut facture » de la liste), ou null. */
+    private function statutFacture(CommandeAchat $commande): ?string
+    {
+        return app(JalonsCommandeAchat::class)->pour($commande->fresh())['statut_facture']['statut'] ?? null;
+    }
+
     public function test_la_frise_suit_les_donnees_reelles_du_bon_jusqu_au_paiement(): void
     {
         // À valider : seule la création est faite.
@@ -721,12 +727,22 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame(['creation' => 'fait', 'validation' => 'en_cours', 'reception' => 'a_venir', 'facture' => 'a_venir', 'paiement' => 'a_venir', 'termine' => 'a_venir'], $etats);
         $this->assertSame('Faire valider le bon de commande', $action);
         $this->assertSame('À valider', $resume);
+        $this->assertNull($this->statutFacture($aValider));
 
         // Validé, rien reçu.
         [$etats, $action, $autres] = $this->jalons($this->commande);
         $this->assertSame('en_cours', $etats['reception']);
         $this->assertStringStartsWith('Réceptionner les marchandises', $action);
         $this->assertSame([], $autres);
+        // Rien de reçu : rien à facturer, la colonne « Statut facture » reste vide ; la liste
+        // rappelle sous le statut du bon ce qui le concerne.
+        $this->assertNull($this->statutFacture($this->commande));
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', function ($data) {
+                $ligne = collect($data)->firstWhere('id', $this->commande->id);
+
+                return $ligne['prochaine_action'] === 'À réceptionner' && $ligne['statut_facture'] === null && $ligne['statut_facture_label'] === null;
+            }));
 
         // Réception partielle (40 sur 200) : le reliquat d'abord, facturer le déjà reçu est possible.
         $r1 = $this->receptionner($this->commande, [$this->ligneA->id => 40]);
@@ -737,16 +753,25 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame('Réceptionner le reliquat : 160 sur 200 restent à recevoir', $action);
         $this->assertSame(["Saisir la facture d'achat des quantités déjà reçues"], $autres);
         $this->assertSame('Reliquat à réceptionner', $resume);
+        $this->assertSame('a_facturer', $this->statutFacture($this->commande));
 
         // Facture en brouillon sur le reçu : à valider, plus rien à saisir.
         $f1 = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r1, $this->ligneA), 40)]));
         [, , $autres] = $this->jalons($this->commande);
         $this->assertSame(["Valider la facture {$f1->reference}"], $autres);
+        $this->assertSame('brouillon', $this->statutFacture($this->commande));
 
         // Validée sans compte d'achat : écriture en attente, donc pas encore payable.
         $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $f1));
         [, , $autres] = $this->jalons($this->commande);
         $this->assertSame(["Relancer la comptabilisation de la facture {$f1->reference} avant de la payer"], $autres);
+        $this->assertSame('facture_impayee', $this->statutFacture($this->commande));
+        // Même libellé que les factures de vente ; la valeur enregistrée reste « validee ».
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $f1->fresh()->statut);
+        $this->actingAs($this->user)->get(route('achats.factures.show', $f1))
+            ->assertInertia(fn ($page) => $page->where('facture.statut', 'validee')->where('facture.statut_label', 'Impayée')->where('facture.statut_affichage', 'facture_impayee'));
+        $this->actingAs($this->user)->get(route('achats.factures.index'))
+            ->assertInertia(fn ($page) => $page->where('factures.data.0.statut_label', 'Impayée')->where('factures.data.0.statut_affichage', 'facture_impayee'));
 
         // Écriture passée : payable.
         $this->mapperCompteAchat();
@@ -775,8 +800,14 @@ class FactureFournisseurTest extends TestCase
         // Fiche et liste exposent la même chose.
         $this->actingAs($this->user)->get(route('achats.show', $this->commande))
             ->assertInertia(fn ($page) => $page->where('jalons.etapes.4.etat', 'en_cours')->where('jalons.termine', false));
+        // Dans la liste, la facturation a sa colonne : plus de rappel sous le statut du bon.
         $this->actingAs($this->user)->get(route('achats.index'))
-            ->assertInertia(fn ($page) => $page->where('commandes.data', fn ($data) => collect($data)->firstWhere('id', $this->commande->id)['prochaine_action'] === 'À payer'));
+            ->assertInertia(fn ($page) => $page->where('commandes.data', function ($data) {
+                $ligne = collect($data)->firstWhere('id', $this->commande->id);
+
+                return $ligne['statut'] === 'receptionnee' && $ligne['prochaine_action'] === null
+                    && $ligne['statut_facture'] === 'facture_impayee' && $ligne['statut_facture_label'] === 'Impayée';
+            }));
 
         // Paiement partiel puis total : terminé seulement quand plus rien n'est dû.
         $f1->update(['montant_paye' => 40_000, 'statut' => StatutFactureFournisseur::PAYEE]);
@@ -784,16 +815,44 @@ class FactureFournisseurTest extends TestCase
         [$etats, $action] = $this->jalons($this->commande);
         $this->assertSame('en_cours', $etats['paiement']);
         $this->assertSame("Payer la facture {$f2->reference} (reste dû 100 000 GNF)", $action);
+        $this->assertSame('partiellement_payee', $this->statutFacture($this->commande));
 
         $f2->update(['montant_paye' => 110_000, 'statut' => StatutFactureFournisseur::PAYEE]);
         $j = app(JalonsCommandeAchat::class)->pour($this->commande->fresh());
         $this->assertTrue($j['termine']);
         $this->assertNull($j['prochaine_action']);
         $this->assertSame(['fait'], collect($j['etapes'])->pluck('etat')->unique()->values()->all());
+        $this->assertSame(['statut' => 'payee', 'label' => 'Payée'], $j['statut_facture']);
 
         // Bon annulé : pas de frise.
         $aValider->update(['statut' => StatutCommandeAchat::ANNULEE]);
         $this->assertTrue(app(JalonsCommandeAchat::class)->pour($aValider->fresh())['annule']);
+        $this->assertNull($this->statutFacture($aValider));
+    }
+
+    public function test_statut_facture_du_bon_la_situation_la_moins_avancee_l_emporte(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 30]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Une facture payée sur 10 des 30 reçus : il reste du reçu à facturer.
+        $payee = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'P-1']));
+        $payee->update(['statut' => StatutFactureFournisseur::PAYEE, 'montant_paye' => 10_000]);
+        $this->assertSame('partiellement_facturee', $this->statutFacture($this->commande));
+
+        // Une seconde facture en brouillon passe devant la facture payée.
+        $brouillon = $this->saisir($this->payload([$this->ligne($ligne, 20)], ['numero_facture_fournisseur' => 'P-2']));
+        $this->assertSame('brouillon', $this->statutFacture($this->commande));
+
+        // Validée et pas encore payée, alors qu'une autre l'est : payé en partie à l'échelle du bon.
+        $brouillon->update(['statut' => StatutFactureFournisseur::VALIDEE]);
+        $this->assertSame('partiellement_payee', $this->statutFacture($this->commande));
+
+        // Une facture annulée ne compte pas.
+        $brouillon->update(['statut' => StatutFactureFournisseur::ANNULEE]);
+        $this->assertSame('partiellement_facturee', $this->statutFacture($this->commande));
+        $payee->update(['statut' => StatutFactureFournisseur::ANNULEE]);
+        $this->assertSame('a_facturer', $this->statutFacture($this->commande));
     }
 
     // ── Référence interne FAC-JJMMAA-NNN (décision du 10/10/2026) ──────────────
@@ -1065,7 +1124,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
 
         $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
-        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
+        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
 

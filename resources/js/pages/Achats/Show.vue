@@ -87,6 +87,7 @@ interface CommandeData {
         reste_du: number;
         statut: string;
         statut_label: string;
+        statut_affichage: string;
     }[];
 }
 
@@ -696,7 +697,7 @@ function supprimer() {
                                 {{ formatGNF(f.reste_du) }}</span
                             >
                             <StatusDot
-                                :status="f.statut"
+                                :status="f.statut_affichage"
                                 :label="f.statut_label"
                                 class="text-muted-foreground"
                             />

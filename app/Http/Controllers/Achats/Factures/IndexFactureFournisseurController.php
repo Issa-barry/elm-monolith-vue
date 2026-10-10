@@ -68,6 +68,7 @@ class IndexFactureFournisseurController extends Controller
                 'reste_du' => $f->resteDu(),
                 'statut' => $f->statut?->value,
                 'statut_label' => $f->statut?->label(),
+                'statut_affichage' => $f->statut?->statutAffichage(),
             ]),
             'dette_totale' => $dette,
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),

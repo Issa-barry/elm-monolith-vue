@@ -21,6 +21,7 @@ interface Facture {
     reste_du: number;
     statut: string;
     statut_label: string;
+    statut_affichage: string;
     comptabilite: { statut: string; label: string };
 }
 
@@ -190,7 +191,7 @@ function paginationLabel(label: string): string {
                             </td>
                             <td class="px-4 py-3">
                                 <StatusDot
-                                    :status="f.statut"
+                                    :status="f.statut_affichage"
                                     :label="f.statut_label"
                                     class="text-muted-foreground"
                                 />

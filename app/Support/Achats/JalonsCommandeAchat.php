@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  * (statut du bon, quantités commandées / reçues / facturées, factures, reste dû, écriture passée).
  * Une étape n'est jamais « faite » si ces données ne le confirment pas.
  *
+ * Elle donne aussi le « statut facture » du bon affiché dans la liste : synthèse de ses factures non
+ * annulées (la moins avancée l'emporte), elle aussi dérivée, jamais enregistrée.
+ *
  * Une seule source pour la fiche et la liste, calculée par lot (requêtes groupées, jamais par ligne).
  * C'est un affichage : il ne donne aucun droit, les boutons restent soumis aux permissions.
  */
@@ -32,7 +35,7 @@ class JalonsCommandeAchat
         'termine' => 'Terminé',
     ];
 
-    /** @return array{etapes: list<array{cle: string, libelle: string, etat: string}>, annule: bool, termine: bool, prochaine_action: ?string, autres_actions: list<string>, resume: string} */
+    /** @return array{etapes: list<array{cle: string, libelle: string, etat: string}>, annule: bool, termine: bool, prochaine_action: ?string, autres_actions: list<string>, resume: string, resume_domaine: ?string, statut_facture: ?array{statut: string, label: string}} */
     public function pour(CommandeAchat $commande): array
     {
         return $this->pourCommandes(collect([$commande]))[$commande->id];
@@ -94,7 +97,7 @@ class JalonsCommandeAchat
     private function calculer(CommandeAchat $c, int $commande, int $recu, int $facture, Collection $factures, Collection $comptabilisees): array
     {
         if ($c->isAnnulee()) {
-            return $this->resultat([], true, false, [], 'Annulé');
+            return $this->resultat([], true, false, [], 'Annulé', null);
         }
 
         $statut = $c->statut;
@@ -120,25 +123,26 @@ class JalonsCommandeAchat
         // suivantes sont possibles en parallèle (ex. facturer le déjà reçu avant la fin de la réception).
         $actions = [];
         if (! $valide) {
-            $actions[] = ['Faire valider le bon de commande', 'À valider'];
+            $actions[] = ['Faire valider le bon de commande', 'À valider', 'commande'];
         } elseif (! $receptionFinie) {
             $actions[] = $recu === 0
-                ? ['Réceptionner les marchandises (Logistique → Réceptions)', 'À réceptionner']
-                : ['Réceptionner le reliquat : '.($commande - $recu)." sur {$commande} restent à recevoir", 'Reliquat à réceptionner'];
+                ? ['Réceptionner les marchandises (Logistique → Réceptions)', 'À réceptionner', 'commande']
+                : ['Réceptionner le reliquat : '.($commande - $recu)." sur {$commande} restent à recevoir", 'Reliquat à réceptionner', 'commande'];
         }
         if ($valide && $resteAFacturer > 0 && $brouillons->isEmpty()) {
             $actions[] = [
                 $receptionFinie ? "Saisir la facture d'achat" : "Saisir la facture d'achat des quantités déjà reçues",
                 'À facturer',
+                'facture',
             ];
         }
         foreach ($brouillons as $f) {
-            $actions[] = ["Valider la facture {$f->reference}", 'Facture à valider'];
+            $actions[] = ["Valider la facture {$f->reference}", 'Facture à valider', 'facture'];
         }
         foreach ($dues as $f) {
             $actions[] = $comptabilisees->has($f->id)
-                ? ["Payer la facture {$f->reference} (reste dû ".number_format($f->resteDu(), 0, ',', ' ').' GNF)', 'À payer']
-                : ["Relancer la comptabilisation de la facture {$f->reference} avant de la payer", 'Écriture à passer'];
+                ? ["Payer la facture {$f->reference} (reste dû ".number_format($f->resteDu(), 0, ',', ' ').' GNF)', 'À payer', 'facture']
+                : ["Relancer la comptabilisation de la facture {$f->reference} avant de la payer", 'Écriture à passer', 'facture'];
         }
 
         $etapes = [];
@@ -153,11 +157,56 @@ class JalonsCommandeAchat
             ];
         }
 
-        return $this->resultat($etapes, false, $paiementFait, $actions, $paiementFait ? 'Terminé' : ($actions[0][1] ?? 'En cours'));
+        return $this->resultat(
+            $etapes,
+            false,
+            $paiementFait,
+            $actions,
+            $paiementFait ? 'Terminé' : ($actions[0][1] ?? 'En cours'),
+            $this->statutFacture($factures, $brouillons, $dues, $recu, $resteAFacturer),
+        );
     }
 
-    /** @param  list<array{0: string, 1: string}>  $actions  [libellé détaillé, libellé court] */
-    private function resultat(array $etapes, bool $annule, bool $termine, array $actions, string $resume): array
+    /**
+     * Statut de facturation d'un bon, pour la colonne « Statut facture » de la liste. Un bon peut
+     * porter plusieurs factures : c'est la situation la moins avancée qui est affichée. Les valeurs
+     * et libellés d'une facture sont ceux de StatutFactureFournisseur (mêmes mots que la liste des
+     * factures d'achat) ; s'y ajoutent « À facturer » et « Partiellement facturée », propres au bon.
+     * Rien tant qu'il n'y a ni facture ni quantité reçue à facturer.
+     *
+     * @param  Collection<int, FactureFournisseur>  $factures  factures non annulées du bon
+     * @return ?array{statut: string, label: string}
+     */
+    private function statutFacture(Collection $factures, Collection $brouillons, Collection $dues, int $recu, int $resteAFacturer): ?array
+    {
+        if ($factures->isEmpty()) {
+            return $recu > 0 ? ['statut' => 'a_facturer', 'label' => 'À facturer'] : null;
+        }
+        if ($brouillons->isNotEmpty()) {
+            return $this->statutDe(StatutFactureFournisseur::BROUILLON);
+        }
+        if ($dues->isNotEmpty()) {
+            $dejaPaye = (float) $factures->sum(fn (FactureFournisseur $f) => (float) $f->montant_paye);
+
+            return $this->statutDe($dejaPaye > 0 ? StatutFactureFournisseur::PARTIELLEMENT_PAYEE : StatutFactureFournisseur::VALIDEE);
+        }
+
+        return $resteAFacturer > 0
+            ? ['statut' => 'partiellement_facturee', 'label' => 'Partiellement facturée']
+            : $this->statutDe(StatutFactureFournisseur::PAYEE);
+    }
+
+    /** @return array{statut: string, label: string} */
+    private function statutDe(StatutFactureFournisseur $statut): array
+    {
+        return ['statut' => $statut->statutAffichage(), 'label' => $statut->label()];
+    }
+
+    /**
+     * @param  list<array{0: string, 1: string, 2: string}>  $actions  [libellé détaillé, libellé court, domaine « commande » ou « facture »]
+     * @param  ?array{statut: string, label: string}  $statutFacture
+     */
+    private function resultat(array $etapes, bool $annule, bool $termine, array $actions, string $resume, ?array $statutFacture): array
     {
         return [
             'etapes' => $etapes,
@@ -166,6 +215,10 @@ class JalonsCommandeAchat
             'prochaine_action' => $actions[0][0] ?? null,
             'autres_actions' => array_values(array_map(fn (array $a) => $a[0], array_slice($actions, 1, 3))),
             'resume' => $resume,
+            // Domaine de la prochaine action : la liste n'affiche sous le statut du bon que ce qui
+            // le concerne (validation, réception) ; la facturation a sa propre colonne.
+            'resume_domaine' => $actions[0][2] ?? null,
+            'statut_facture' => $statutFacture,
         ];
     }
 }

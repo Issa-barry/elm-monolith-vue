@@ -76,6 +76,7 @@ class FactureFournisseurPresenter
             'reste_du' => $facture->resteDu(),
             'statut' => $facture->statut?->value,
             'statut_label' => $facture->statut?->label(),
+            'statut_affichage' => $facture->statut?->statutAffichage(),
             'note' => $facture->note,
             'fournisseur_nom' => $facture->fournisseurNom(),
             'created_by' => $this->nom($facture->createdBy),

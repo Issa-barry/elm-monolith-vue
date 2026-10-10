@@ -56,7 +56,8 @@ class IndexCommandeAchatController extends Controller
         }
 
         $paginator = $query->orderByDesc('created_at')->paginate(30)->withQueryString();
-        // Prochaine action de chaque bon de la page, calculée par lot (même source que la frise de la fiche).
+        // Prochaine action et statut de facturation de chaque bon de la page, calculés par lot
+        // (même source que la frise de la fiche).
         $jalons = app(JalonsCommandeAchat::class)->pourCommandes(collect($paginator->items()));
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
@@ -72,7 +73,10 @@ class IndexCommandeAchatController extends Controller
         return Inertia::render('Achats/Index', [
             'peut_creer' => $user->can('create', CommandeAchat::class) && $this->perimetre->sites($user)->isNotEmpty(),
             'commandes' => $paginator->through(fn (CommandeAchat $c) => [
-                'prochaine_action' => $jalons[$c->id]['resume'] ?? null,
+                // Sous le statut du bon : seulement ce qui le concerne (à réceptionner, reliquat).
+                'prochaine_action' => ($jalons[$c->id]['resume_domaine'] ?? null) === 'commande' ? $jalons[$c->id]['resume'] : null,
+                'statut_facture' => $jalons[$c->id]['statut_facture']['statut'] ?? null,
+                'statut_facture_label' => $jalons[$c->id]['statut_facture']['label'] ?? null,
                 'id' => $c->id,
                 'reference' => $c->reference,
                 'statut' => $c->statut?->value,

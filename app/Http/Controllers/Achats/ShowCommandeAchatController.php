@@ -123,6 +123,7 @@ class ShowCommandeAchatController extends Controller
                     'reste_du' => $f->resteDu(),
                     'statut' => $f->statut?->value,
                     'statut_label' => $f->statut?->label(),
+                    'statut_affichage' => $f->statut?->statutAffichage(),
                 ])->values() : [],
             ],
             // Frise d'avancement et prochaine action, dérivées des données du bon (aucun nouveau statut).

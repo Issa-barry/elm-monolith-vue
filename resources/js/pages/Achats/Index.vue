@@ -43,6 +43,8 @@ interface Commande {
     site_nom: string | null;
     site_payeur_nom: string | null;
     prochaine_action: string | null;
+    statut_facture: string | null;
+    statut_facture_label: string | null;
     created_at: string;
     date_achat: string;
     qte_commandee: number;
@@ -132,8 +134,9 @@ function paginationLabel(label: string): string {
     return label.replace(/&laquo;|&raquo;/g, '').trim();
 }
 
-// Prochaine action du bon (calculée par le serveur), sous le statut — masquée quand elle ne ferait
-// que répéter le statut (« À valider », « Annulée »).
+// Prochaine action propre au bon (validation, réception), calculée par le serveur et affichée
+// sous son statut — masquée quand elle ne ferait que le répéter (« À valider »). Tout ce qui
+// relève de la facturation est dans la colonne « Statut facture ».
 function actionAffichee(c: Commande): string | null {
     const action = c.prochaine_action;
     if (!action || action === c.statut_label || action === 'Annulé')
@@ -311,7 +314,12 @@ function confirmDelete(c: Commande) {
                             <th class="px-4 py-3 text-right font-medium">
                                 Total
                             </th>
-                            <th class="px-4 py-3 font-medium">Statut</th>
+                            <th class="px-4 py-3 font-medium whitespace-nowrap">
+                                Statut commande
+                            </th>
+                            <th class="px-4 py-3 font-medium whitespace-nowrap">
+                                Statut facture
+                            </th>
                             <th class="w-12 px-2 py-3"></th>
                         </tr>
                     </thead>
@@ -367,6 +375,17 @@ function confirmDelete(c: Commande) {
                                 >
                                     {{ actionAffichee(c) }}
                                 </span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <StatusDot
+                                    v-if="c.statut_facture"
+                                    :status="c.statut_facture"
+                                    :label="c.statut_facture_label ?? ''"
+                                    class="text-muted-foreground"
+                                />
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
                             <td class="px-2 py-3" @click.stop>
                                 <DropdownMenu>
@@ -432,7 +451,7 @@ function confirmDelete(c: Commande) {
                         </tr>
                         <tr v-if="commandes.data.length === 0">
                             <td
-                                colspan="8"
+                                colspan="9"
                                 class="px-4 py-16 text-center text-muted-foreground"
                             >
                                 <PackageCheck
@@ -476,6 +495,12 @@ function confirmDelete(c: Commande) {
                         <StatusDot
                             :status="c.statut"
                             :label="c.statut_label"
+                            class="text-xs text-muted-foreground"
+                        />
+                        <StatusDot
+                            v-if="c.statut_facture"
+                            :status="c.statut_facture"
+                            :label="`Facture : ${c.statut_facture_label}`"
                             class="text-xs text-muted-foreground"
                         />
                         <span

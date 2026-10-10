@@ -1,7 +1,7 @@
 @php
     /*
      * Facture d'achat — récapitulatif de la facture enregistrée dans l'application, même mise en
-     * page « Invoice » Apollo que le bon de commande (tableaux : DomPDF ne gère pas flexbox).
+     * page du template local « Invoice » Apollo 6.2.0 (tableaux : DomPDF ne gère pas flexbox).
      * Ce n'est PAS la facture originale du fournisseur : la mention figure sur le document.
      * Filigrane « BROUILLON » tant que la facture n'est pas validée, « ANNULÉE » si elle est annulée.
      */
@@ -10,7 +10,6 @@
     $filigrane = $estAnnulee ? 'ANNULÉE' : ($facture->isBrouillon() ? 'BROUILLON' : null);
     $fournisseur = $facture->fournisseur;
     $taux = rtrim(rtrim(number_format((float) $facture->taux_tva, 2, ',', ' '), '0'), ',');
-    $nom = fn ($u) => $u ? trim($u->prenom.' '.$u->nom) : null;
     $logo = null;
     if ($organisation->logo_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($organisation->logo_path)) {
         $chemin = \Illuminate\Support\Facades\Storage::disk('public')->path($organisation->logo_path);
@@ -23,211 +22,154 @@
 <meta charset="UTF-8" />
 <title>{{ $facture->reference }}</title>
 <style>
-    body, div, table, th, td, span { margin: 0; padding: 0; }
-    @page { margin: 48px 52px 60px; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 12px; line-height: 1.5; color: #334155; }
-    table { width: 100%; border-collapse: collapse; }
-    .muted { color: #64748b; }
-    .strong { font-weight: bold; color: #0f172a; }
-
-    .filigrane {
-        position: fixed; top: 330px; left: -40px; width: 760px; text-align: center;
-        font-size: 84px; font-weight: bold; letter-spacing: 6px;
-        color: rgba(220, 38, 38, 0.10); transform: rotate(-30deg);
+    @font-face {
+        font-family: PoppinsInvoice;
+        font-style: normal;
+        font-weight: 400;
+        src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-Regular.ttf')) }}") format('truetype');
+    }
+    @font-face {
+        font-family: PoppinsInvoice;
+        font-style: normal;
+        font-weight: 500;
+        src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-Medium.ttf')) }}") format('truetype');
+    }
+    @font-face {
+        font-family: PoppinsInvoice;
+        font-style: normal;
+        font-weight: 600;
+        src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-SemiBold.ttf')) }}") format('truetype');
+    }
+    @font-face {
+        font-family: PoppinsInvoice;
+        font-style: normal;
+        font-weight: 700;
+        src: url("{{ str_replace('\\', '/', resource_path('fonts/poppins/Poppins-Bold.ttf')) }}") format('truetype');
     }
 
-    .entete { table-layout: fixed; border-bottom: 1px solid #e2e8f0; }
-    .entete td { vertical-align: top; padding-bottom: 28px; }
-    .entete .gauche { padding-right: 24px; }
-    .org-nom { font-size: 28px; line-height: 1.2; font-weight: bold; color: #0f172a; margin: 12px 0 8px; overflow-wrap: break-word; }
-    .doc-titre { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; color: #64748b; text-align: right; }
-    .doc-reference { font-family: DejaVu Sans Mono, monospace; font-size: 19px; line-height: 1.3; font-weight: bold; color: #0f172a; text-align: right; margin: 6px 0 16px; overflow-wrap: break-word; }
-    .meta { table-layout: fixed; font-size: 11px; }
-    .entete .meta td { padding: 3px 0; }
-    .meta .cle { width: 44%; color: #64748b; padding-right: 8px; }
+    /* Apollo 6.2.0 : racine 14px, Poppins 400/500/600/700, _main.scss et Invoice.vue.
+       .card (chargé après Tailwind) impose 2rem = 28px de padding.
+       1px CSS = 0.75pt dans DomPDF ; ne pas réduire les tailles à l'impression. */
+    @page { margin: 28px 28px 56px; }
+    body { margin: 0; padding: 0; font-family: PoppinsInvoice, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.2; color: #334155; }
+    table { border-collapse: collapse; }
+    .card { padding: 28px; background: #fff; }
+    .entete { width: 100%; border-bottom: 1px solid #e2e8f0; }
+    .entete > tbody > tr > td { vertical-align: middle; padding: 0 0 28px; }
+    .logo-cadre { width: 48px; height: 50px; }
+    .logo { max-width: 48px; max-height: 50px; }
+    .org-nom { margin: 14px 0; font-size: 31.5px; line-height: 35px; font-weight: 700; color: #2563eb; }
+    .adresse { margin-bottom: 7px; }
+    .doc-titre { margin: 0 0 14px; font-size: 21px; line-height: 28px; font-weight: 600; text-align: right; }
+    .meta { width: auto; margin-left: auto; }
+    .meta td { padding: 0 0 7px; vertical-align: top; }
+    .meta tr:last-child td { padding-bottom: 0; }
+    .meta .cle { font-weight: 600; padding-right: 42px; white-space: nowrap; }
     .meta .val { text-align: right; overflow-wrap: break-word; }
 
-    .parties { table-layout: fixed; margin: 28px 0 32px; }
-    .parties td { vertical-align: top; width: 50%; }
-    .parties .fournisseur { padding-right: 28px; }
-    .partie-titre { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: #64748b; margin-bottom: 10px; }
-    .fournisseur-nom { font-size: 19px; line-height: 1.3; margin-bottom: 6px; }
-    .partie td { padding: 2px 0; overflow-wrap: break-word; }
+    .fournisseur { margin: 28px 0 70px; }
+    .partie-titre { margin: 0 0 14px; font-size: 21px; line-height: 28px; font-weight: 500; }
+    .fournisseur p { margin: 0 0 7px; }
+    .fournisseur p:last-child { margin-bottom: 0; }
 
-    .lignes { table-layout: fixed; }
+    .lignes { width: 100%; table-layout: auto; }
     .lignes thead { display: table-header-group; }
     .lignes tr { page-break-inside: avoid; }
-    .lignes th { text-align: left; font-weight: bold; color: #0f172a; padding: 12px 8px; border-bottom: 1px solid #e2e8f0; }
-    .lignes td { vertical-align: top; padding: 14px 8px; border-bottom: 1px solid #e2e8f0; }
-    .lignes th:first-child, .lignes td:first-child { padding-left: 0; }
-    .lignes th:last-child, .lignes td:last-child { padding-right: 0; }
-    .lignes .droite { text-align: right; white-space: nowrap; }
+    .lignes th, .lignes td { padding: 14px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; line-height: 1.2; font-weight: 400; }
+    .lignes th { font-weight: 600; text-align: left; white-space: nowrap; }
     .lignes .description { overflow-wrap: break-word; }
-    .lignes .ref { display: block; font-size: 10px; line-height: 1.5; color: #64748b; margin-top: 3px; }
+    .lignes .quantite, .lignes .prix { padding-left: 14px; padding-right: 14px; text-align: right; white-space: nowrap; }
+    .lignes .total { text-align: right; white-space: nowrap; }
 
-    .resume { page-break-inside: avoid; }
-    .pied { table-layout: fixed; margin-top: 30px; }
-    .pied td { vertical-align: top; }
-    .notes-titre { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
+    .resume { margin-top: 70px; page-break-inside: avoid; }
+    .pied { width: 100%; }
+    .pied > tbody > tr > td { padding: 0; vertical-align: top; }
+    .notes-titre { margin-bottom: 14px; font-weight: 600; }
     .note { overflow-wrap: break-word; }
-    .totaux { table-layout: fixed; page-break-inside: avoid; }
-    .totaux td { padding: 5px 0; }
-    .totaux .cle { width: 42%; color: #64748b; padding-right: 12px; }
-    .totaux .val { text-align: right; white-space: nowrap; }
-    .totaux .total td { padding-top: 8px; font-weight: bold; color: #0f172a; }
-    .totaux .paiement td { border-top: 1px solid #e2e8f0; padding-top: 10px; }
-    .totaux .solde td { font-size: 15px; font-weight: bold; color: #0f172a; padding-top: 6px; }
+    .totaux { width: auto; margin-left: auto; }
+    .totaux td { padding: 0 0 7px; }
+    .totaux tr:last-child td { padding-bottom: 0; }
+    .totaux .cle { padding-right: 42px; font-weight: 600; white-space: nowrap; }
+    .totaux .val { font-weight: 400; text-align: right; white-space: nowrap; }
 
-    .suivi { margin-top: 30px; padding-top: 16px; border-top: 1px solid #e2e8f0; page-break-inside: avoid; }
-    .suivi-titre { font-size: 10px; font-weight: bold; color: #0f172a; margin-bottom: 5px; }
-    .mention { margin-top: 18px; font-size: 9px; line-height: 1.5; color: #64748b; }
-    .bas { position: fixed; bottom: -34px; left: 0; right: 0; font-size: 9px; color: #94a3b8; }
+    .mention { position: fixed; bottom: -35px; left: 28px; right: 28px; font-size: 10.5px; line-height: 1.2; color: #64748b; }
+    .filigrane { position: fixed; top: 330px; left: -28px; width: 760px; text-align: center; font-size: 84px; font-weight: 700; color: rgba(220, 38, 38, 0.10); transform: rotate(-30deg); }
 </style>
 </head>
 <body>
 @if($filigrane)
     <div class="filigrane">{{ $filigrane }}</div>
 @endif
-<table class="entete">
-    <tr>
-        <td class="gauche" style="width: 52%;">
-            @if($logo)
-                <img src="{{ $logo }}" alt="" style="max-height: 50px; max-width: 160px;" />
-            @endif
-            <div class="org-nom">{{ strtoupper($organisation->name) }}</div>
-            @if($facture->site)
-                <div class="muted">Agence : {{ $facture->site->nom }}</div>
-            @endif
-        </td>
-        <td style="width: 48%;">
-            <div class="doc-titre">FACTURE D’ACHAT</div>
-            <div class="doc-reference">{{ $facture->reference }}</div>
-            <table class="meta">
-                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur ?: 'Sans numéro' }}</td></tr>
-                <tr><td class="cle">DATE</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
-                <tr><td class="cle">ÉCHÉANCE</td><td class="val">{{ $facture->date_echeance?->format('d/m/Y') ?? '—' }}</td></tr>
-                <tr><td class="cle">STATUT</td><td class="val">{{ $facture->statut?->label() }}</td></tr>
-            </table>
-        </td>
-    </tr>
-</table>
-<table class="parties">
-    <tr>
-        <td class="fournisseur">
-            <div class="partie-titre">FOURNISSEUR</div>
-            <table class="partie">
-                <tr><td class="fournisseur-nom strong">{{ $facture->fournisseurNom() ?? '—' }}</td></tr>
-                @if($fournisseur?->phone)
-                    <tr><td>{{ trim(($fournisseur->code_phone_pays ? $fournisseur->code_phone_pays.' ' : '').$fournisseur->phone) }}</td></tr>
+<div class="mention">Ce document n’est pas l’original du fournisseur.</div>
+<div class="card">
+    <table class="entete">
+        <tbody><tr>
+            <td style="width: 48%;">
+                @if($logo)
+                    <div class="logo-cadre"><img class="logo" src="{{ $logo }}" alt="Logo de {{ $organisation->name }}" /></div>
                 @endif
-                @if($fournisseur?->email)
-                    <tr><td>{{ $fournisseur->email }}</td></tr>
-                @endif
-            </table>
-        </td>
-        <td>
-            <div class="partie-titre">BON DE COMMANDE</div>
-            <table class="partie">
-                <tr><td class="strong">{{ $facture->commande?->reference ?? '—' }}</td></tr>
-                <tr><td>Livré à {{ $facture->site?->nom ?? '—' }}</td></tr>
-                @if($nom($facture->createdBy))
-                    <tr><td class="muted">Saisie par {{ $nom($facture->createdBy) }}</td></tr>
-                @endif
-            </table>
-        </td>
-    </tr>
-</table>
-<table class="lignes">
-    <thead>
-        <tr>
-            <th style="width: 42%;">Description</th>
-            <th class="droite" style="width: 10%;">Quantité</th>
-            <th class="droite" style="width: 24%;">Prix unitaire HT</th>
-            <th class="droite" style="width: 24%;">Total HT</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach($facture->lignes as $ligne)
-            @php $reception = $ligne->receptionLigne?->reception; @endphp
-            <tr>
-                <td class="description">
-                    <span class="strong">{{ $ligne->libelle_snapshot ?? '—' }}</span>
-                    @if($ligne->reference_snapshot)
-                        <span class="ref">Réf. {{ $ligne->reference_snapshot }}</span>
+                <div class="org-nom">{{ mb_strtoupper($organisation->name) }}</div>
+                @if($facture->site)
+                    <div class="adresse">Agence : {{ $facture->site->nom }}</div>
+                    @if($facture->site->localisation)
+                        <div>{{ $facture->site->localisation }}</div>
+                    @elseif($facture->site->ville || $facture->site->quartier)
+                        <div>{{ collect([$facture->site->ville, $facture->site->quartier])->filter()->implode(', ') }}</div>
                     @endif
-                    @if($reception)
-                        <span class="ref">
-                            Réception {{ $reception->reference }}
-                            @if($reception->date_reception) · {{ $reception->date_reception->format('d/m/Y') }} @endif
-                        </span>
-                    @endif
-                </td>
-                <td class="droite">{{ $ligne->qte_facturee }}</td>
-                <td class="droite">{{ $montant($ligne->prix_unitaire) }}</td>
-                <td class="droite strong">{{ $montant($ligne->total_ht) }}</td>
-            </tr>
-        @endforeach
-    </tbody>
-</table>
-<div class="resume">
-<table class="pied">
-    <tr>
-        <td style="width: 54%; padding-right: 32px;">
-            <div class="notes-titre">NOTES</div>
-            <div class="note">{!! nl2br(e($facture->note ?: '—')) !!}</div>
-        </td>
-        <td style="width: 46%;">
-            <table class="totaux">
-                <tr><td class="cle">TOTAL HT</td><td class="val">{{ $montant($facture->montant_ht) }}</td></tr>
-                <tr><td class="cle">TVA ({{ $taux }} %)</td><td class="val">{{ $montant($facture->montant_tva) }}</td></tr>
-                <tr class="total"><td class="cle">TOTAL TTC</td><td class="val strong">{{ $montant($facture->montant_ttc) }}</td></tr>
-                @if($facture->isConstatee())
-                    <tr class="paiement"><td class="cle">DÉJÀ PAYÉ</td><td class="val">{{ $montant($facture->montant_paye) }}</td></tr>
-                    <tr class="solde"><td class="cle">RESTE DÛ</td><td class="val strong">{{ $montant($facture->resteDu()) }}</td></tr>
                 @endif
-            </table>
-        </td>
-    </tr>
-</table>
-
-@if($estAnnulee)
-    <div class="suivi">
-        <div class="suivi-titre">Facture annulée</div>
-        <div>{{ $facture->motif_annulation }}</div>
-        @if($facture->annulee_at)
-            <div class="muted">Le {{ $facture->annulee_at->format('d/m/Y à H:i') }}</div>
-        @endif
-    </div>
-@elseif($facture->isConstatee())
-    <div class="suivi">
-        <div class="suivi-titre">Facture validée — dette fournisseur constatée</div>
-        <div>
-            Le {{ $facture->validee_at?->format('d/m/Y à H:i') }}
-            @if($nom($facture->valideePar)) par {{ $nom($facture->valideePar) }} @endif
-        </div>
-    </div>
-@else
-    <div class="suivi">
-        <div class="suivi-titre">Brouillon</div>
-        <div>Aucune dette n'est constatée tant que la facture n'est pas validée.</div>
-    </div>
-@endif
-
-<div class="mention">
-    Récapitulatif établi par {{ $organisation->name }} de l’achat enregistré dans l’application
-    (document du fournisseur : {{ $facture->numero_facture_fournisseur ? 'n° '.$facture->numero_facture_fournisseur : 'sans numéro' }}).
-    Ce document n’est pas l’original du fournisseur.
-</div>
-
-</div>
-
-<div class="bas">
-    <table>
-        <tr>
-            <td>{{ $organisation->name }} — {{ $facture->reference }}</td>
-            <td style="text-align: right;">Généré le {{ now()->format('d/m/Y à H:i') }}</td>
-        </tr>
+            </td>
+            <td style="width: 52%;">
+                <div class="doc-titre">FACTURE D’ACHAT</div>
+                <table class="meta">
+                    <tr><td class="cle">DATE</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
+                    <tr><td class="cle">FACTURE N°</td><td class="val">{{ $facture->reference }}</td></tr>
+                    <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur ?: 'Sans numéro' }}</td></tr>
+                </table>
+            </td>
+        </tr></tbody>
     </table>
+
+    <div class="fournisseur">
+        <div class="partie-titre">FOURNISSEUR</div>
+        <p>{{ $facture->fournisseurNom() ?? '—' }}</p>
+        @php $adresseFournisseur = collect([$fournisseur?->adresse, $fournisseur?->ville, $fournisseur?->pays])->filter()->implode(', '); @endphp
+        @if($adresseFournisseur)<p>{{ $adresseFournisseur }}</p>@endif
+    </div>
+
+    <table class="lignes">
+        <thead><tr>
+            <th class="description">Description</th>
+            <th class="quantite">Quantité</th>
+            <th class="prix">Prix unitaire</th>
+            <th class="total">Total HT</th>
+        </tr></thead>
+        <tbody>
+            @foreach($facture->lignes as $ligne)
+                <tr>
+                    <td class="description">{{ $ligne->libelle_snapshot ?? '—' }}</td>
+                    <td class="quantite">{{ $ligne->qte_facturee }}</td>
+                    <td class="prix">{{ $montant($ligne->prix_unitaire) }}</td>
+                    <td class="total">{{ $montant($ligne->total_ht) }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    <div class="resume">
+        <table class="pied"><tbody><tr>
+            <td style="width: 50%; padding-right: 28px;">
+                <div class="notes-titre">NOTES</div>
+                @if($facture->note)<div class="note">{!! nl2br(e($facture->note)) !!}</div>@endif
+            </td>
+            <td style="width: 50%;">
+                <table class="totaux">
+                    <tr><td class="cle">TOTAL HT</td><td class="val">{{ $montant($facture->montant_ht) }}</td></tr>
+                    <tr><td class="cle">TVA ({{ $taux }} %)</td><td class="val">{{ $montant($facture->montant_tva) }}</td></tr>
+                    <tr><td class="cle">TOTAL TTC</td><td class="val">{{ $montant($facture->montant_ttc) }}</td></tr>
+                </table>
+            </td>
+        </tr></tbody></table>
+    </div>
 </div>
 
 </body>

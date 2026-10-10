@@ -53,6 +53,7 @@ interface Facture {
     reste_du: number;
     statut: string;
     statut_label: string;
+    statut_affichage: string;
     note: string | null;
     fournisseur_nom: string | null;
     created_by: string | null;
@@ -289,7 +290,7 @@ function relancerComptabilite() {
                         class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
                     >
                         <StatusDot
-                            :status="facture.statut"
+                            :status="facture.statut_affichage"
                             :label="facture.statut_label"
                             class="text-foreground"
                         />
