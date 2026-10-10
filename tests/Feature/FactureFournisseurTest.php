@@ -27,9 +27,11 @@ use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -701,23 +703,114 @@ class FactureFournisseurTest extends TestCase
         $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
     }
 
-    // ── Achats sans facture ou sans numéro (décision du 10/10/2026) ───────────
+    // ── Frise d'avancement et prochaine action ───────────────────────────────
+
+    /** @return array{0: array<string, string>, 1: ?string, 2: list<string>, 3: string} états par étape, prochaine action, autres actions, résumé */
+    private function jalons(CommandeAchat $commande): array
+    {
+        $j = app(JalonsCommandeAchat::class)->pour($commande->fresh());
+
+        return [collect($j['etapes'])->pluck('etat', 'cle')->all(), $j['prochaine_action'], $j['autres_actions'], $j['resume']];
+    }
+
+    public function test_la_frise_suit_les_donnees_reelles_du_bon_jusqu_au_paiement(): void
+    {
+        // À valider : seule la création est faite.
+        [$aValider] = $this->commandeValidee($this->org, $this->site, $this->fournisseur, StatutCommandeAchat::A_VALIDER);
+        [$etats, $action, , $resume] = $this->jalons($aValider);
+        $this->assertSame(['creation' => 'fait', 'validation' => 'en_cours', 'reception' => 'a_venir', 'facture' => 'a_venir', 'paiement' => 'a_venir', 'termine' => 'a_venir'], $etats);
+        $this->assertSame('Faire valider le bon de commande', $action);
+        $this->assertSame('À valider', $resume);
+
+        // Validé, rien reçu.
+        [$etats, $action, $autres] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['reception']);
+        $this->assertStringStartsWith('Réceptionner les marchandises', $action);
+        $this->assertSame([], $autres);
+
+        // Réception partielle (40 sur 200) : le reliquat d'abord, facturer le déjà reçu est possible.
+        $r1 = $this->receptionner($this->commande, [$this->ligneA->id => 40]);
+        $this->commande->update(['statut' => StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE]);
+        [$etats, $action, $autres, $resume] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['reception']);
+        $this->assertSame('a_venir', $etats['facture']);
+        $this->assertSame('Réceptionner le reliquat : 160 sur 200 restent à recevoir', $action);
+        $this->assertSame(["Saisir la facture d'achat des quantités déjà reçues"], $autres);
+        $this->assertSame('Reliquat à réceptionner', $resume);
+
+        // Facture en brouillon sur le reçu : à valider, plus rien à saisir.
+        $f1 = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r1, $this->ligneA), 40)]));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Valider la facture {$f1->reference}"], $autres);
+
+        // Validée sans compte d'achat : écriture en attente, donc pas encore payable.
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $f1));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Relancer la comptabilisation de la facture {$f1->reference} avant de la payer"], $autres);
+
+        // Écriture passée : payable.
+        $this->mapperCompteAchat();
+        $this->actingAs($this->makeValidateur())->post(route('achats.factures.comptabiliser', $f1));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Payer la facture {$f1->reference} (reste dû 40 000 GNF)"], $autres);
+
+        // Réception terminée : la facture devient l'étape courante, le reste est à facturer.
+        $r2 = $this->receptionner($this->commande, [$this->ligneA->id => 60, $this->ligneB->id => 100]);
+        $this->commande->update(['statut' => StatutCommandeAchat::RECEPTIONNEE]);
+        [$etats, $action, $autres] = $this->jalons($this->commande);
+        $this->assertSame(['fait', 'en_cours', 'a_venir'], [$etats['reception'], $etats['facture'], $etats['paiement']]);
+        $this->assertSame("Saisir la facture d'achat", $action);
+        $this->assertSame(["Payer la facture {$f1->reference} (reste dû 40 000 GNF)"], $autres);
+
+        // Tout facturé et validé, encore dû : le paiement est l'étape courante — jamais « Terminé ».
+        $f2 = $this->saisir($this->payload([
+            $this->ligne($this->ligneRecue($r2, $this->ligneA), 60),
+            $this->ligne($this->ligneRecue($r2, $this->ligneB), 100, 500),
+        ], ['numero_facture_fournisseur' => 'F-2026-002']));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $f2));
+        [$etats, , , $resume] = $this->jalons($this->commande);
+        $this->assertSame(['fait', 'en_cours', 'a_venir'], [$etats['facture'], $etats['paiement'], $etats['termine']]);
+        $this->assertSame('À payer', $resume);
+
+        // Fiche et liste exposent la même chose.
+        $this->actingAs($this->user)->get(route('achats.show', $this->commande))
+            ->assertInertia(fn ($page) => $page->where('jalons.etapes.4.etat', 'en_cours')->where('jalons.termine', false));
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', fn ($data) => collect($data)->firstWhere('id', $this->commande->id)['prochaine_action'] === 'À payer'));
+
+        // Paiement partiel puis total : terminé seulement quand plus rien n'est dû.
+        $f1->update(['montant_paye' => 40_000, 'statut' => StatutFactureFournisseur::PAYEE]);
+        $f2->update(['montant_paye' => 10_000, 'statut' => StatutFactureFournisseur::PARTIELLEMENT_PAYEE]);
+        [$etats, $action] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['paiement']);
+        $this->assertSame("Payer la facture {$f2->reference} (reste dû 100 000 GNF)", $action);
+
+        $f2->update(['montant_paye' => 110_000, 'statut' => StatutFactureFournisseur::PAYEE]);
+        $j = app(JalonsCommandeAchat::class)->pour($this->commande->fresh());
+        $this->assertTrue($j['termine']);
+        $this->assertNull($j['prochaine_action']);
+        $this->assertSame(['fait'], collect($j['etapes'])->pluck('etat')->unique()->values()->all());
+
+        // Bon annulé : pas de frise.
+        $aValider->update(['statut' => StatutCommandeAchat::ANNULEE]);
+        $this->assertTrue(app(JalonsCommandeAchat::class)->pour($aValider->fresh())['annule']);
+    }
+
+    // ── Numéro du document facultatif, sans type de justificatif (décision du 10/10/2026) ──
 
     public function test_facture_sans_numero_acceptee_et_plusieurs_peuvent_coexister(): void
     {
         $r = $this->receptionner($this->commande, [$this->ligneA->id => 20]);
         $ligne = $this->ligneRecue($r, $this->ligneA);
 
-        // Reçu sans numéro : aucun numéro n'est inventé, aucune clé de doublon.
-        $recu = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => null, 'type_justificatif' => 'recu']));
-        $this->assertNull($recu->numero_facture_fournisseur);
-        $this->assertNull($recu->cle_numero_unique);
-        $this->assertSame('recu', $recu->type_justificatif->value);
-        $this->assertSame('Reçu sans numéro', $recu->designationDocument());
+        // Numéro absent : aucun numéro n'est inventé, aucune clé de doublon.
+        $premiere = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => null]));
+        $this->assertNull($premiere->numero_facture_fournisseur);
+        $this->assertNull($premiere->cle_numero_unique);
 
-        // Un second document sans numéro du même fournisseur n'est pas un doublon.
-        $ticket = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => '   ', 'type_justificatif' => 'ticket']));
-        $this->assertNull($ticket->numero_facture_fournisseur);
+        // Une seconde saisie sans numéro (espaces seuls compris) du même fournisseur n'est pas un doublon.
+        $seconde = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => '   ']));
+        $this->assertNull($seconde->numero_facture_fournisseur);
         $this->assertSame(2, FactureFournisseur::count());
 
         // Le contrôle de doublon reste actif dès qu'un numéro est saisi.
@@ -725,43 +818,45 @@ class FactureFournisseurTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-77']))
             ->assertSessionHasErrors(['numero_facture_fournisseur' => 'Une facture de ce fournisseur porte déjà ce numéro.']);
-
-        // Sans type précisé : « facture », comme avant.
-        $this->assertSame('facture', FactureFournisseur::where('numero_facture_fournisseur', 'F-77')->firstOrFail()->type_justificatif->value);
     }
 
-    public function test_achat_sans_justificatif_enregistre_valide_et_trace_dans_l_ecriture(): void
+    public function test_un_numero_vide_ne_fait_jamais_dire_sans_justificatif(): void
     {
         $this->mapperCompteAchat();
-        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 20]);
         $ligne = $this->ligneRecue($r, $this->ligneA);
 
-        // Sans document, un numéro n'a pas de sens.
-        $this->actingAs($this->user)
-            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'aucun', 'numero_facture_fournisseur' => 'F-1']))
-            ->assertSessionHasErrors('numero_facture_fournisseur');
-        $this->actingAs($this->user)
-            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'inconnu']))
-            ->assertSessionHasErrors('type_justificatif');
+        // Aucun type de document n'est demandé ni conservé.
+        $this->assertFalse(Schema::hasColumn('factures_fournisseurs', 'type_justificatif'));
 
-        $facture = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'aucun', 'numero_facture_fournisseur' => null]));
-        $this->assertTrue($facture->estSansJustificatif());
-        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
-            ->assertInertia(fn ($page) => $page->where('facture.sans_justificatif', true)->where('facture.numero_facture_fournisseur', null));
+        $sansNumero = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => null]));
+        $avecNumero = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'F-88']));
+        $this->assertSame('Facture d’achat sans numéro', $sansNumero->designationDocument());
+        $this->assertSame('Facture d’achat n° F-88', $avecNumero->designationDocument());
+
+        // Fiche et liste : le numéro tel quel, sans indicateur de justificatif.
+        $this->actingAs($this->user)->get(route('achats.factures.show', $sansNumero))
+            ->assertInertia(fn ($page) => $page
+                ->where('facture.numero_facture_fournisseur', null)
+                ->missing('facture.sans_justificatif')
+                ->missing('facture.type_justificatif'));
         $this->actingAs($this->user)->get(route('achats.factures.index'))
-            ->assertInertia(fn ($page) => $page->where('factures.data.0.sans_justificatif', true));
+            ->assertInertia(fn ($page) => $page->missing('factures.data.0.sans_justificatif'));
 
-        // Validée comme les autres : la dette naît et l'écriture mentionne l'absence de justificatif.
-        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
-        $piece = $this->piece($facture);
-        $this->assertNotNull($piece);
-        $this->assertSame('Achat sans justificatif — '.$facture->reference, $piece->libelle);
-        $this->assertSame(10_000.0, $facture->fresh()->resteDu());
+        // Validées et comptabilisées de la même façon : seul le libellé reprend le numéro s'il existe.
+        $validateur = $this->makeValidateur();
+        $this->actingAs($validateur)->patch(route('achats.factures.valider', $sansNumero))->assertSessionHasNoErrors();
+        $this->actingAs($validateur)->patch(route('achats.factures.valider', $avecNumero))->assertSessionHasNoErrors();
+        $this->assertSame('Facture d’achat sans numéro — '.$sansNumero->reference, $this->piece($sansNumero)->libelle);
+        $this->assertSame('Facture d’achat n° F-88 — '.$avecNumero->reference, $this->piece($avecNumero)->libelle);
+        $this->assertSame(10_000.0, $sansNumero->fresh()->resteDu());
 
-        // Le PDF le dit aussi.
-        $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
-        $this->assertStringContainsString('achat enregistré sans justificatif du fournisseur', $html);
-        $this->assertStringContainsString('Aucun document', $html);
+        // PDF : « Sans numéro », jamais « sans justificatif » ni « aucun document ».
+        $html = view('pdf.facture_achat', ['facture' => $sansNumero->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('Sans numéro', $html);
+        $this->assertStringContainsString('n’est pas l’original du fournisseur', $html);
+        $this->assertStringNotContainsStringIgnoringCase('justificatif', $html);
+        $this->assertStringNotContainsStringIgnoringCase('aucun document', $html);
     }
 
     public function test_la_saisie_propose_la_date_d_achat_du_bon(): void

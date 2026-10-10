@@ -10,6 +10,7 @@ use App\Models\RegleValidationRole;
 use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,8 @@ class IndexCommandeAchatController extends Controller
         }
 
         $paginator = $query->orderByDesc('created_at')->paginate(30)->withQueryString();
+        // Prochaine action de chaque bon de la page, calculée par lot (même source que la frise de la fiche).
+        $jalons = app(JalonsCommandeAchat::class)->pourCommandes(collect($paginator->items()));
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->with(['personne', 'entrepriseTierce'])
@@ -69,6 +72,7 @@ class IndexCommandeAchatController extends Controller
         return Inertia::render('Achats/Index', [
             'peut_creer' => $user->can('create', CommandeAchat::class) && $this->perimetre->sites($user)->isNotEmpty(),
             'commandes' => $paginator->through(fn (CommandeAchat $c) => [
+                'prochaine_action' => $jalons[$c->id]['resume'] ?? null,
                 'id' => $c->id,
                 'reference' => $c->reference,
                 'statut' => $c->statut?->value,

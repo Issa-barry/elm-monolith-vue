@@ -4,7 +4,6 @@ namespace App\Services\Achats;
 
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutFactureFournisseur;
-use App\Enums\TypeJustificatifAchat;
 use App\Models\CommandeAchat;
 use App\Models\FactureFournisseur;
 use App\Models\FactureFournisseurLigne;
@@ -16,7 +15,6 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -45,7 +43,6 @@ class FactureFournisseurService
             'fournisseur_id' => ['required', 'string'],
             // Facultatif : certains fournisseurs ne remettent aucun document, ou un document sans numéro.
             'numero_facture_fournisseur' => ['nullable', 'string', 'max:100'],
-            'type_justificatif' => ['nullable', Rule::enum(TypeJustificatifAchat::class)],
             'date_facture' => ['required', 'date', 'before_or_equal:today'],
             'date_echeance' => ['nullable', 'date', 'after_or_equal:date_facture'],
             'taux_tva' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -60,7 +57,6 @@ class FactureFournisseurService
     public static function messagesSaisie(): array
     {
         return [
-            'type_justificatif.enum' => 'Type de justificatif inconnu.',
             'date_facture.before_or_equal' => 'La date de facture ne peut pas être dans le futur.',
             'date_echeance.after_or_equal' => "L'échéance ne peut pas précéder la date de facture.",
             'lignes.required' => 'Sélectionnez au moins une ligne reçue à facturer.',
@@ -406,16 +402,9 @@ class FactureFournisseurService
     private function entete(array $data): array
     {
         $numero = self::numero($data);
-        $type = TypeJustificatifAchat::tryFrom((string) ($data['type_justificatif'] ?? '')) ?? TypeJustificatifAchat::FACTURE;
-        if ($type === TypeJustificatifAchat::AUCUN && $numero !== null) {
-            throw ValidationException::withMessages([
-                'numero_facture_fournisseur' => 'Sans document du fournisseur, le numéro doit rester vide.',
-            ]);
-        }
 
         return [
             'numero_facture_fournisseur' => $numero,
-            'type_justificatif' => $type,
             // Clé du contrôle de doublon : absente sans numéro (plusieurs achats sans numéro
             // coexistent), présente dès qu'un numéro est saisi.
             'cle_numero_unique' => $numero,

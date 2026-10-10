@@ -77,7 +77,6 @@ class FactureFournisseurComptabilisationService
             source: $facture,
             organizationId: $facture->organization_id,
             dateComptable: Carbon::parse($facture->date_facture),
-            // Le libellé dit quel document justifie l'achat, y compris quand il n'y en a aucun.
             libelle: "{$facture->designationDocument()} — {$facture->reference}",
             lignes: $lignes,
             siteId: $facture->site_id,

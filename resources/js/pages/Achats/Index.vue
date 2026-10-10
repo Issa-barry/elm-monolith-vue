@@ -42,6 +42,7 @@ interface Commande {
     fournisseur_nom: string | null;
     site_nom: string | null;
     site_payeur_nom: string | null;
+    prochaine_action: string | null;
     created_at: string;
     date_achat: string;
     qte_commandee: number;
@@ -129,6 +130,15 @@ function formatGNF(val: number): string {
 
 function paginationLabel(label: string): string {
     return label.replace(/&laquo;|&raquo;/g, '').trim();
+}
+
+// Prochaine action du bon (calculée par le serveur), sous le statut — masquée quand elle ne ferait
+// que répéter le statut (« À valider », « Annulée »).
+function actionAffichee(c: Commande): string | null {
+    const action = c.prochaine_action;
+    if (!action || action === c.statut_label || action === 'Annulé')
+        return null;
+    return action;
 }
 
 function ouvrir(c: Commande) {
@@ -351,6 +361,12 @@ function confirmDelete(c: Commande) {
                                     :label="c.statut_label"
                                     class="text-muted-foreground"
                                 />
+                                <span
+                                    v-if="actionAffichee(c)"
+                                    class="mt-0.5 block pl-4 text-xs text-muted-foreground"
+                                >
+                                    {{ actionAffichee(c) }}
+                                </span>
                             </td>
                             <td class="px-2 py-3" @click.stop>
                                 <DropdownMenu>

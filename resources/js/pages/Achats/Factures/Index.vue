@@ -13,7 +13,6 @@ interface Facture {
     id: string;
     reference: string;
     numero_facture_fournisseur: string | null;
-    sans_justificatif: boolean;
     date_facture: string;
     fournisseur_nom: string | null;
     site_nom: string | null;
@@ -161,11 +160,9 @@ function paginationLabel(label: string): string {
                                 <span
                                     class="block text-xs text-muted-foreground"
                                     >{{
-                                        f.sans_justificatif
-                                            ? 'Sans justificatif'
-                                            : f.numero_facture_fournisseur
-                                              ? `N° ${f.numero_facture_fournisseur}`
-                                              : 'Sans numéro'
+                                        f.numero_facture_fournisseur
+                                            ? `N° ${f.numero_facture_fournisseur}`
+                                            : 'Sans numéro'
                                     }}</span
                                 >
                             </td>

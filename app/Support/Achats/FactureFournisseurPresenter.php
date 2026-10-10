@@ -2,7 +2,6 @@
 
 namespace App\Support\Achats;
 
-use App\Enums\TypeJustificatifAchat;
 use App\Models\CommandeAchat;
 use App\Models\FactureFournisseur;
 use App\Models\FactureFournisseurLigne;
@@ -67,9 +66,6 @@ class FactureFournisseurPresenter
             'id' => $facture->id,
             'reference' => $facture->reference,
             'numero_facture_fournisseur' => $facture->numero_facture_fournisseur,
-            'type_justificatif' => ($facture->type_justificatif ?? TypeJustificatifAchat::FACTURE)->value,
-            'type_justificatif_label' => ($facture->type_justificatif ?? TypeJustificatifAchat::FACTURE)->label(),
-            'sans_justificatif' => $facture->estSansJustificatif(),
             'date_facture' => $facture->date_facture?->format('Y-m-d'),
             'date_echeance' => $facture->date_echeance?->format('Y-m-d'),
             'taux_tva' => (float) $facture->taux_tva,

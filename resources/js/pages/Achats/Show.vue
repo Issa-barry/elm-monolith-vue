@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
+import StepTimeline, { type TimelineStep } from '@/components/StepTimeline.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -11,9 +12,12 @@ import {
     CheckCircle2,
     Download,
     FileText,
+    HandCoins,
     Info,
     PackageCheck,
     Pencil,
+    Receipt,
+    ShieldCheck,
     Trash2,
     XCircle,
 } from 'lucide-vue-next';
@@ -101,11 +105,41 @@ const props = defineProps<{
     commande: CommandeData;
     actions: Actions;
     aucun_validateur_disponible: boolean;
+    jalons: {
+        etapes: {
+            cle: string;
+            libelle: string;
+            etat: 'fait' | 'en_cours' | 'a_venir';
+        }[];
+        annule: boolean;
+        termine: boolean;
+        prochaine_action: string | null;
+        autres_actions: string[];
+    };
     validable_par: { role: string; label: string; plafond: number | null }[];
 }>();
 
 const toast = useToast();
 const confirm = useConfirm();
+
+// Frise d'avancement : les états viennent du serveur, seules les icônes sont choisies ici.
+const ICONES_JALONS = {
+    creation: FileText,
+    validation: ShieldCheck,
+    reception: PackageCheck,
+    facture: Receipt,
+    paiement: HandCoins,
+    termine: CheckCircle2,
+} as const;
+
+const etapesFrise = computed<TimelineStep[]>(() =>
+    props.jalons.etapes.map((e) => ({
+        key: e.cle,
+        label: e.libelle,
+        state: e.etat,
+        icon: ICONES_JALONS[e.cle as keyof typeof ICONES_JALONS] ?? FileText,
+    })),
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -363,6 +397,45 @@ function supprimer() {
                         Supprimer
                     </Button>
                 </div>
+            </div>
+
+            <!-- Avancement de l'achat et prochaine action -->
+            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+                <div
+                    v-if="jalons.annule"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
+                    <XCircle class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Ce bon de commande a été annulé.</span
+                    >
+                </div>
+                <template v-else>
+                    <StepTimeline :steps="etapesFrise" />
+                    <p
+                        v-if="jalons.termine"
+                        class="mt-4 text-sm font-medium text-emerald-600 dark:text-emerald-400"
+                    >
+                        Achat terminé : tout est reçu, facturé et payé.
+                    </p>
+                    <div v-else-if="jalons.prochaine_action" class="mt-4">
+                        <p class="text-sm">
+                            <span class="text-muted-foreground"
+                                >Prochaine action :</span
+                            >
+                            <span class="font-semibold">
+                                {{ jalons.prochaine_action }}</span
+                            >
+                        </p>
+                        <p
+                            v-if="jalons.autres_actions.length > 0"
+                            class="mt-1 text-xs text-muted-foreground"
+                        >
+                            Aussi possible :
+                            {{ jalons.autres_actions.join(' · ') }}
+                        </p>
+                    </div>
+                </template>
             </div>
 
             <!-- Validation en attente -->

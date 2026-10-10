@@ -7,17 +7,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, Check, Save } from 'lucide-vue-next';
 import InputNumber, { type InputNumberInputEvent } from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import Select from 'primevue/select';
-import { computed, reactive, watch } from 'vue';
-
-type TypeJustificatif = 'facture' | 'recu' | 'ticket' | 'aucun';
-
-const JUSTIFICATIFS: { value: TypeJustificatif; label: string }[] = [
-    { value: 'facture', label: 'Facture' },
-    { value: 'recu', label: 'Reçu' },
-    { value: 'ticket', label: 'Ticket' },
-    { value: 'aucun', label: 'Aucun document' },
-];
+import { computed, reactive } from 'vue';
 
 interface LigneRecue {
     id: string;
@@ -41,7 +31,6 @@ interface FactureEdition {
     id: string;
     reference: string;
     numero_facture_fournisseur: string | null;
-    type_justificatif: TypeJustificatif;
     date_facture: string;
     date_echeance: string | null;
     taux_tva: number;
@@ -115,8 +104,6 @@ const form = useForm({
     commande_achat_id: props.commande.id,
     fournisseur_id: props.commande.fournisseur_id,
     numero_facture_fournisseur: props.facture?.numero_facture_fournisseur ?? '',
-    type_justificatif: (props.facture?.type_justificatif ??
-        'facture') as TypeJustificatif,
     // Préremplie avec la date d'achat du bon : rien à ressaisir quand il n'y a pas de facture.
     date_facture:
         props.facture?.date_facture ??
@@ -154,13 +141,6 @@ const totalTva = computed(
 function depasse(l: LigneRecue): boolean {
     return saisie[l.id].inclus && saisie[l.id].qte > l.facturable;
 }
-
-const sansDocument = computed(() => form.type_justificatif === 'aucun');
-
-// Sans document du fournisseur, il n'y a pas de numéro à saisir.
-watch(sansDocument, (sans) => {
-    if (sans) form.numero_facture_fournisseur = '';
-});
 
 const canSubmit = computed(
     () =>
@@ -245,35 +225,6 @@ function submit() {
                         </p>
                     </div>
                     <div>
-                        <Label
-                            for="ff-justificatif"
-                            class="mb-1.5 block text-sm"
-                        >
-                            Justificatif remis par le fournisseur
-                        </Label>
-                        <Select
-                            v-model="form.type_justificatif"
-                            input-id="ff-justificatif"
-                            :options="JUSTIFICATIFS"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                            :invalid="!!form.errors.type_justificatif"
-                        />
-                        <p
-                            v-if="form.errors.type_justificatif"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.type_justificatif }}
-                        </p>
-                        <p
-                            v-else-if="sansDocument"
-                            class="mt-1 text-xs text-amber-600 dark:text-amber-400"
-                        >
-                            L’achat sera enregistré « Sans justificatif ».
-                        </p>
-                    </div>
-                    <div>
                         <Label for="ff-numero" class="mb-1.5 block text-sm">
                             N° du document du fournisseur
                         </Label>
@@ -281,12 +232,7 @@ function submit() {
                             id="ff-numero"
                             v-model="form.numero_facture_fournisseur"
                             class="w-full"
-                            :disabled="sansDocument"
-                            :placeholder="
-                                sansDocument
-                                    ? 'Aucun document'
-                                    : 'Facultatif — laisser vide s’il n’y en a pas'
-                            "
+                            placeholder="Facultatif — laisser vide s’il n’y en a pas"
                             :invalid="!!form.errors.numero_facture_fournisseur"
                         />
                         <p
@@ -297,11 +243,9 @@ function submit() {
                         </p>
                     </div>
                     <div>
-                        <Label for="ff-date" class="mb-1.5 block text-sm">{{
-                            sansDocument
-                                ? 'Date de l’achat'
-                                : 'Date du document'
-                        }}</Label>
+                        <Label for="ff-date" class="mb-1.5 block text-sm"
+                            >Date du document</Label
+                        >
                         <input
                             id="ff-date"
                             v-model="form.date_facture"

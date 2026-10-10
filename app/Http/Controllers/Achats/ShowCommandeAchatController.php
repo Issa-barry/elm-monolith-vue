@@ -14,6 +14,7 @@ use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\FactureFournisseurService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -124,6 +125,8 @@ class ShowCommandeAchatController extends Controller
                     'statut_label' => $f->statut?->label(),
                 ])->values() : [],
             ],
+            // Frise d'avancement et prochaine action, dérivées des données du bon (aucun nouveau statut).
+            'jalons' => app(JalonsCommandeAchat::class)->pour($achat),
             'actions' => [
                 'peut_modifier' => $aValider && $peutAgir && $user->can('update', $achat),
                 'peut_valider' => $peutValider,

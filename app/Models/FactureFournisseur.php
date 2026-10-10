@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\StatutFactureFournisseur;
-use App\Enums\TypeJustificatifAchat;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,7 +21,7 @@ class FactureFournisseur extends Model
 
     protected $fillable = [
         'organization_id', 'commande_achat_id', 'fournisseur_id', 'site_id', 'reference', 'numero',
-        'numero_facture_fournisseur', 'type_justificatif', 'cle_numero_unique', 'date_facture', 'date_echeance', 'taux_tva', 'montant_ht',
+        'numero_facture_fournisseur', 'cle_numero_unique', 'date_facture', 'date_echeance', 'taux_tva', 'montant_ht',
         'montant_tva', 'montant_ttc', 'montant_paye', 'statut', 'note', 'contenu_modifie_par',
         'contenu_modifie_at', 'validee_at', 'validee_par', 'fournisseur_nom_snapshot', 'annulee_at',
         'annulee_par', 'motif_annulation', 'comptabilisation_erreur', 'created_by', 'updated_by',
@@ -32,7 +31,6 @@ class FactureFournisseur extends Model
     {
         return [
             'statut' => StatutFactureFournisseur::class,
-            'type_justificatif' => TypeJustificatifAchat::class,
             'date_facture' => 'date',
             'date_echeance' => 'date',
             'taux_tva' => 'decimal:2',
@@ -117,21 +115,14 @@ class FactureFournisseur extends Model
         return $this->isConstatee() ? max(0.0, (float) $this->montant_ttc - (float) $this->montant_paye) : 0.0;
     }
 
-    /** Aucun document remis par le fournisseur : achat enregistré sans justificatif. */
-    public function estSansJustificatif(): bool
-    {
-        return $this->type_justificatif === TypeJustificatifAchat::AUCUN;
-    }
-
-    /** Désignation du document pour les libellés : « Facture F-12 », « Reçu sans numéro », « Achat sans justificatif ». */
+    /**
+     * Désignation du document dans les libellés : « Facture d’achat n° F-12 » ou « Facture d’achat
+     * sans numéro ». Un numéro vide ne dit rien de plus : le document peut exister sans numéro, ou ne
+     * pas exister — l'application ne le déduit pas (décision du 10/10/2026).
+     */
     public function designationDocument(): string
     {
-        if ($this->estSansJustificatif()) {
-            return 'Achat sans justificatif';
-        }
-        $type = ($this->type_justificatif ?? TypeJustificatifAchat::FACTURE)->label();
-
-        return filled($this->numero_facture_fournisseur) ? "{$type} {$this->numero_facture_fournisseur}" : "{$type} sans numéro";
+        return 'Facture d’achat '.(filled($this->numero_facture_fournisseur) ? 'n° '.$this->numero_facture_fournisseur : 'sans numéro');
     }
 
     public function fournisseurNom(): ?string

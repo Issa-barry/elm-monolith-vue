@@ -23,54 +23,65 @@
 <meta charset="UTF-8" />
 <title>{{ $facture->reference }}</title>
 <style>
-    @page { margin: 40px 48px; }
-    * { margin: 0; padding: 0; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 10.5px; color: #334155; }
+    body, div, table, th, td, span { margin: 0; padding: 0; }
+    @page { margin: 48px 52px 60px; }
+    body { font-family: DejaVu Sans, sans-serif; font-size: 12px; line-height: 1.5; color: #334155; }
     table { width: 100%; border-collapse: collapse; }
     .muted { color: #64748b; }
     .strong { font-weight: bold; color: #0f172a; }
 
     .filigrane {
-        position: fixed; top: 330px; left: -40px; width: 800px; text-align: center;
-        font-size: 92px; font-weight: bold; letter-spacing: 6px;
-        color: rgba(220, 38, 38, 0.13); transform: rotate(-30deg);
+        position: fixed; top: 330px; left: -40px; width: 760px; text-align: center;
+        font-size: 84px; font-weight: bold; letter-spacing: 6px;
+        color: rgba(220, 38, 38, 0.10); transform: rotate(-30deg);
     }
 
-    .entete td { vertical-align: top; }
-    .entete { border-bottom: 1px solid #e2e8f0; }
-    .entete .gauche { padding-bottom: 24px; }
-    .org-nom { font-size: 26px; font-weight: bold; color: #0f172a; margin: 10px 0 8px; }
-    .doc-titre { font-size: 17px; font-weight: bold; color: #0f172a; text-align: right; margin-bottom: 12px; }
-    .meta td { padding: 2px 0; }
-    .meta .cle { font-weight: bold; color: #0f172a; padding-right: 28px; white-space: nowrap; }
-    .meta .val { text-align: right; white-space: nowrap; }
+    .entete { table-layout: fixed; border-bottom: 1px solid #e2e8f0; }
+    .entete td { vertical-align: top; padding-bottom: 28px; }
+    .entete .gauche { padding-right: 24px; }
+    .org-nom { font-size: 28px; line-height: 1.2; font-weight: bold; color: #0f172a; margin: 12px 0 8px; overflow-wrap: break-word; }
+    .doc-titre { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; color: #64748b; text-align: right; }
+    .doc-reference { font-family: DejaVu Sans Mono, monospace; font-size: 19px; line-height: 1.3; font-weight: bold; color: #0f172a; text-align: right; margin: 6px 0 16px; overflow-wrap: break-word; }
+    .meta { table-layout: fixed; font-size: 11px; }
+    .entete .meta td { padding: 3px 0; }
+    .meta .cle { width: 44%; color: #64748b; padding-right: 8px; }
+    .meta .val { text-align: right; overflow-wrap: break-word; }
 
-    .parties { margin: 26px 0 40px; }
+    .parties { table-layout: fixed; margin: 28px 0 32px; }
     .parties td { vertical-align: top; width: 50%; }
-    .partie-titre { font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 8px; }
-    .partie td { padding: 1px 0; }
+    .parties .fournisseur { padding-right: 28px; }
+    .partie-titre { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: #64748b; margin-bottom: 10px; }
+    .fournisseur-nom { font-size: 19px; line-height: 1.3; margin-bottom: 6px; }
+    .partie td { padding: 2px 0; overflow-wrap: break-word; }
 
-    .lignes th { text-align: left; font-weight: bold; color: #0f172a; padding: 10px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-    .lignes td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }
-    .lignes .droite { text-align: right; }
-    .lignes .ref { display: block; font-size: 9px; color: #64748b; margin-top: 2px; }
+    .lignes { table-layout: fixed; }
+    .lignes thead { display: table-header-group; }
+    .lignes tr { page-break-inside: avoid; }
+    .lignes th { text-align: left; font-weight: bold; color: #0f172a; padding: 12px 8px; border-bottom: 1px solid #e2e8f0; }
+    .lignes td { vertical-align: top; padding: 14px 8px; border-bottom: 1px solid #e2e8f0; }
+    .lignes th:first-child, .lignes td:first-child { padding-left: 0; }
+    .lignes th:last-child, .lignes td:last-child { padding-right: 0; }
+    .lignes .droite { text-align: right; white-space: nowrap; }
+    .lignes .description { overflow-wrap: break-word; }
+    .lignes .ref { display: block; font-size: 10px; line-height: 1.5; color: #64748b; margin-top: 3px; }
 
-    .pied { margin-top: 40px; }
+    .resume { page-break-inside: avoid; }
+    .pied { table-layout: fixed; margin-top: 30px; }
     .pied td { vertical-align: top; }
-    .notes-titre { font-weight: bold; color: #0f172a; margin-bottom: 6px; }
-    .totaux td { padding: 3px 0; }
-    .totaux .cle { font-weight: bold; color: #0f172a; padding-right: 36px; }
-    .totaux .val { text-align: right; }
-    .totaux .total td { font-size: 13px; padding-top: 6px; }
+    .notes-titre { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
+    .note { overflow-wrap: break-word; }
+    .totaux { table-layout: fixed; page-break-inside: avoid; }
+    .totaux td { padding: 5px 0; }
+    .totaux .cle { width: 42%; color: #64748b; padding-right: 12px; }
+    .totaux .val { text-align: right; white-space: nowrap; }
+    .totaux .total td { padding-top: 8px; font-weight: bold; color: #0f172a; }
+    .totaux .paiement td { border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    .totaux .solde td { font-size: 15px; font-weight: bold; color: #0f172a; padding-top: 6px; }
 
-    .encadre { margin-top: 26px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; }
-    .encadre-titre { font-size: 8.5px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-    .ok { color: #047857; }
-    .attention { color: #b45309; }
-    .danger { color: #b91c1c; }
-    .mention { margin-top: 18px; font-size: 8.5px; color: #64748b; }
-
-    .bas { position: fixed; bottom: -20px; left: 0; right: 0; font-size: 8.5px; color: #94a3b8; }
+    .suivi { margin-top: 30px; padding-top: 16px; border-top: 1px solid #e2e8f0; page-break-inside: avoid; }
+    .suivi-titre { font-size: 10px; font-weight: bold; color: #0f172a; margin-bottom: 5px; }
+    .mention { margin-top: 18px; font-size: 9px; line-height: 1.5; color: #64748b; }
+    .bas { position: fixed; bottom: -34px; left: 0; right: 0; font-size: 9px; color: #94a3b8; }
 </style>
 </head>
 <body>
@@ -79,7 +90,7 @@
 @endif
 <table class="entete">
     <tr>
-        <td class="gauche" style="width: 58%;">
+        <td class="gauche" style="width: 52%;">
             @if($logo)
                 <img src="{{ $logo }}" alt="" style="max-height: 50px; max-width: 160px;" />
             @endif
@@ -88,13 +99,12 @@
                 <div class="muted">Agence : {{ $facture->site->nom }}</div>
             @endif
         </td>
-        <td style="width: 42%;">
+        <td style="width: 48%;">
             <div class="doc-titre">FACTURE D’ACHAT</div>
+            <div class="doc-reference">{{ $facture->reference }}</div>
             <table class="meta">
-                <tr><td class="cle">RÉFÉRENCE</td><td class="val">{{ $facture->reference }}</td></tr>
-                <tr><td class="cle">JUSTIFICATIF</td><td class="val">{{ ($facture->type_justificatif ?? \App\Enums\TypeJustificatifAchat::FACTURE)->label() }}</td></tr>
-                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur ?: '—' }}</td></tr>
-                <tr><td class="cle">{{ $facture->estSansJustificatif() ? "DATE D'ACHAT" : 'DATE' }}</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
+                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur ?: 'Sans numéro' }}</td></tr>
+                <tr><td class="cle">DATE</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
                 <tr><td class="cle">ÉCHÉANCE</td><td class="val">{{ $facture->date_echeance?->format('d/m/Y') ?? '—' }}</td></tr>
                 <tr><td class="cle">STATUT</td><td class="val">{{ $facture->statut?->label() }}</td></tr>
             </table>
@@ -103,10 +113,10 @@
 </table>
 <table class="parties">
     <tr>
-        <td>
+        <td class="fournisseur">
             <div class="partie-titre">FOURNISSEUR</div>
             <table class="partie">
-                <tr><td class="strong">{{ $facture->fournisseurNom() ?? '—' }}</td></tr>
+                <tr><td class="fournisseur-nom strong">{{ $facture->fournisseurNom() ?? '—' }}</td></tr>
                 @if($fournisseur?->phone)
                     <tr><td>{{ trim(($fournisseur->code_phone_pays ? $fournisseur->code_phone_pays.' ' : '').$fournisseur->phone) }}</td></tr>
                 @endif
@@ -130,50 +140,50 @@
 <table class="lignes">
     <thead>
         <tr>
-            <th>Désignation</th>
-            <th>Réception</th>
-            <th class="droite">Quantité</th>
-            <th class="droite">Prix unitaire HT</th>
-            <th class="droite">Total HT</th>
+            <th style="width: 42%;">Description</th>
+            <th class="droite" style="width: 10%;">Quantité</th>
+            <th class="droite" style="width: 24%;">Prix unitaire HT</th>
+            <th class="droite" style="width: 24%;">Total HT</th>
         </tr>
     </thead>
     <tbody>
         @foreach($facture->lignes as $ligne)
             @php $reception = $ligne->receptionLigne?->reception; @endphp
             <tr>
-                <td>
-                    {{ $ligne->libelle_snapshot ?? '—' }}
+                <td class="description">
+                    <span class="strong">{{ $ligne->libelle_snapshot ?? '—' }}</span>
                     @if($ligne->reference_snapshot)
                         <span class="ref">Réf. {{ $ligne->reference_snapshot }}</span>
                     @endif
-                </td>
-                <td>
-                    {{ $reception?->reference ?? '—' }}
-                    @if($reception?->date_reception)
-                        <span class="ref">{{ $reception->date_reception->format('d/m/Y') }}</span>
+                    @if($reception)
+                        <span class="ref">
+                            Réception {{ $reception->reference }}
+                            @if($reception->date_reception) · {{ $reception->date_reception->format('d/m/Y') }} @endif
+                        </span>
                     @endif
                 </td>
                 <td class="droite">{{ $ligne->qte_facturee }}</td>
                 <td class="droite">{{ $montant($ligne->prix_unitaire) }}</td>
-                <td class="droite">{{ $montant($ligne->total_ht) }}</td>
+                <td class="droite strong">{{ $montant($ligne->total_ht) }}</td>
             </tr>
         @endforeach
     </tbody>
 </table>
+<div class="resume">
 <table class="pied">
     <tr>
-        <td style="width: 55%; padding-right: 24px;">
+        <td style="width: 54%; padding-right: 32px;">
             <div class="notes-titre">NOTES</div>
-            <div>{{ $facture->note ?: '—' }}</div>
+            <div class="note">{!! nl2br(e($facture->note ?: '—')) !!}</div>
         </td>
-        <td style="width: 45%;">
+        <td style="width: 46%;">
             <table class="totaux">
                 <tr><td class="cle">TOTAL HT</td><td class="val">{{ $montant($facture->montant_ht) }}</td></tr>
                 <tr><td class="cle">TVA ({{ $taux }} %)</td><td class="val">{{ $montant($facture->montant_tva) }}</td></tr>
                 <tr class="total"><td class="cle">TOTAL TTC</td><td class="val strong">{{ $montant($facture->montant_ttc) }}</td></tr>
                 @if($facture->isConstatee())
-                    <tr><td class="cle">DÉJÀ PAYÉ</td><td class="val">{{ $montant($facture->montant_paye) }}</td></tr>
-                    <tr><td class="cle">RESTE DÛ</td><td class="val strong">{{ $montant($facture->resteDu()) }}</td></tr>
+                    <tr class="paiement"><td class="cle">DÉJÀ PAYÉ</td><td class="val">{{ $montant($facture->montant_paye) }}</td></tr>
+                    <tr class="solde"><td class="cle">RESTE DÛ</td><td class="val strong">{{ $montant($facture->resteDu()) }}</td></tr>
                 @endif
             </table>
         </td>
@@ -181,35 +191,34 @@
 </table>
 
 @if($estAnnulee)
-    <div class="encadre">
-        <div class="encadre-titre danger">Facture annulée</div>
+    <div class="suivi">
+        <div class="suivi-titre">Facture annulée</div>
         <div>{{ $facture->motif_annulation }}</div>
         @if($facture->annulee_at)
             <div class="muted">Le {{ $facture->annulee_at->format('d/m/Y à H:i') }}</div>
         @endif
     </div>
 @elseif($facture->isConstatee())
-    <div class="encadre">
-        <div class="encadre-titre ok">Facture validée — dette fournisseur constatée</div>
+    <div class="suivi">
+        <div class="suivi-titre">Facture validée — dette fournisseur constatée</div>
         <div>
             Le {{ $facture->validee_at?->format('d/m/Y à H:i') }}
             @if($nom($facture->valideePar)) par {{ $nom($facture->valideePar) }} @endif
         </div>
     </div>
 @else
-    <div class="encadre">
-        <div class="encadre-titre attention">Brouillon</div>
+    <div class="suivi">
+        <div class="suivi-titre">Brouillon</div>
         <div>Aucune dette n'est constatée tant que la facture n'est pas validée.</div>
     </div>
 @endif
 
 <div class="mention">
-    @if($facture->estSansJustificatif())
-        Récapitulatif établi par {{ $organisation->name }} : achat enregistré sans justificatif du fournisseur.
-    @else
-        Récapitulatif établi par {{ $organisation->name }} à partir du document du fournisseur
-        ({{ $facture->designationDocument() }}). Ce document n’est pas l’original du fournisseur.
-    @endif
+    Récapitulatif établi par {{ $organisation->name }} de l’achat enregistré dans l’application
+    (document du fournisseur : {{ $facture->numero_facture_fournisseur ? 'n° '.$facture->numero_facture_fournisseur : 'sans numéro' }}).
+    Ce document n’est pas l’original du fournisseur.
+</div>
+
 </div>
 
 <div class="bas">
