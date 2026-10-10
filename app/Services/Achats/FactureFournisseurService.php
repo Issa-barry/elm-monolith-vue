@@ -29,7 +29,12 @@ use Illuminate\Validation\ValidationException;
  */
 class FactureFournisseurService
 {
-    public const PREFIXE_REFERENCE = 'FAF';
+    /**
+     * Référence interne `FAC-JJMMAA-NNN` (décision du 10/10/2026), à ne pas confondre avec le numéro
+     * du document du fournisseur (`numero_facture_fournisseur`, facultatif). Les factures émises
+     * avant cette date gardent leur référence `FAF-…` : aucune renumérotation.
+     */
+    public const PREFIXE_REFERENCE = 'FAC';
 
     public function __construct(
         private readonly ReferenceNumeroService $references,

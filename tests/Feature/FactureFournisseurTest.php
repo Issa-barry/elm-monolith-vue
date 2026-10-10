@@ -219,7 +219,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame($this->commande->id, $facture->commande_achat_id);
         $this->assertSame($this->fournisseur->id, $facture->fournisseur_id);
         $this->assertSame($this->site->id, $facture->site_id);
-        $this->assertStringStartsWith('FAF-', $facture->reference);
+        $this->assertMatchesRegularExpression('/^FAC-\d{6}-\d{3}$/', $facture->reference);
         $this->assertSame(60_000.0, (float) $facture->montant_ht);
         $this->assertSame(0.0, $facture->resteDu());
         $this->assertSame('Préformes 500 ml', $facture->lignes()->first()->libelle_snapshot);
@@ -794,6 +794,56 @@ class FactureFournisseurTest extends TestCase
         // Bon annulé : pas de frise.
         $aValider->update(['statut' => StatutCommandeAchat::ANNULEE]);
         $this->assertTrue(app(JalonsCommandeAchat::class)->pour($aValider->fresh())['annule']);
+    }
+
+    // ── Référence interne FAC-JJMMAA-NNN (décision du 10/10/2026) ──────────────
+
+    public function test_les_nouvelles_factures_sont_referencees_fac_et_les_anciennes_gardent_faf(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 30]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+        $jour = now()->format('dmy');
+
+        // Facture émise avant le changement de préfixe, le même jour.
+        $ancienne = FactureFournisseur::create([
+            'organization_id' => $this->org->id, 'commande_achat_id' => $this->commande->id, 'fournisseur_id' => $this->fournisseur->id,
+            'site_id' => $this->site->id, 'reference' => "FAF-{$jour}-001", 'numero' => 1, 'numero_facture_fournisseur' => 'ANC-1',
+            'cle_numero_unique' => 'ANC-1', 'date_facture' => now()->toDateString(), 'created_by' => $this->user->id,
+        ]);
+
+        // La référence interne ne reprend jamais le numéro du document du fournisseur.
+        // (Relues par leur numéro fournisseur : l'ancienne porte elle aussi le numéro d'ordre 1.)
+        $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'FOUR-2026-77']));
+        $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => null]));
+        $premiere = FactureFournisseur::where('numero_facture_fournisseur', 'FOUR-2026-77')->firstOrFail();
+        $seconde = FactureFournisseur::whereNull('numero_facture_fournisseur')->firstOrFail();
+        $this->assertSame("FAC-{$jour}-001", $premiere->reference);
+        $this->assertSame("FAC-{$jour}-002", $seconde->reference);
+        $this->assertSame('FOUR-2026-77', $premiere->numero_facture_fournisseur);
+        $this->assertNull($seconde->numero_facture_fournisseur);
+
+        // L'ancienne facture n'est ni renumérotée ni perdue : fiche, liste, recherche et PDF.
+        $this->assertSame("FAF-{$jour}-001", $ancienne->fresh()->reference);
+        $this->actingAs($this->user)->get(route('achats.factures.show', $ancienne))
+            ->assertInertia(fn ($page) => $page->where('facture.reference', "FAF-{$jour}-001"));
+        $this->actingAs($this->user)->get(route('achats.factures.index', ['numero' => 'FAF-']))
+            ->assertInertia(fn ($page) => $page->has('factures.data', 1)->where('factures.data.0.reference', "FAF-{$jour}-001"));
+        $this->actingAs($this->user)->get(route('achats.factures.index', ['numero' => 'FAC-']))
+            ->assertInertia(fn ($page) => $page->has('factures.data', 2));
+        $this->actingAs($this->user)->get(route('achats.factures.pdf', $ancienne))->assertOk();
+    }
+
+    public function test_une_ancienne_facture_faf_se_valide_et_se_comptabilise_sous_sa_reference(): void
+    {
+        $this->mapperCompteAchat();
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['numero_facture_fournisseur' => 'ANC-2']));
+        $facture->update(['reference' => 'FAF-081026-004']);
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+
+        $this->assertSame('FAF-081026-004', $facture->fresh()->reference);
+        $this->assertSame('Facture d’achat n° ANC-2 — FAF-081026-004', $this->piece($facture)->libelle);
     }
 
     // ── Numéro du document facultatif, sans type de justificatif (décision du 10/10/2026) ──

@@ -73,7 +73,7 @@ const filterFields = computed<FilterField[]>(() => [
         label: 'Numéro',
         type: 'text',
         inline: true,
-        placeholder: 'FAF-… ou n° fournisseur',
+        placeholder: 'FAC-… ou n° fournisseur',
     },
 ]);
 
