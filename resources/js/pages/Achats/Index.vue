@@ -46,6 +46,7 @@ interface Commande {
     qte_commandee: number;
     qte_recue: number;
     is_annulee: boolean;
+    supprimable: boolean;
     annulable: boolean;
     peut_valider: boolean;
 }
@@ -395,7 +396,7 @@ function confirmDelete(c: Commande) {
                                         </DropdownMenuItem>
                                         <template
                                             v-if="
-                                                c.is_annulee &&
+                                                c.supprimable &&
                                                 can('achats.delete')
                                             "
                                         >

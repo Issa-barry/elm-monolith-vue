@@ -686,10 +686,14 @@ class CommandeAchatTest extends TestCase
             ->assertSessionHasNoErrors();
         $commande = CommandeAchat::latest('created_at')->firstOrFail();
 
-        // L'agent de Cba (livraison seulement) voit le bon, dans la liste comme sur la fiche…
+        // L'agent de Cba (livraison seulement) voit le bon, dans la liste comme sur la fiche, sans
+        // aucune action proposée que le serveur refuserait…
         $agentCba = $this->makeAcheteur('agent_cba', [$cba], ['achats.read', 'achats.create', 'achats.update', 'achats.annuler']);
         $this->actingAs($agentCba)->get(route('achats.index'))
-            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)->where('commandes.data.0.site_payeur_nom', $this->site->nom));
+            ->assertInertia(fn ($page) => $page->where('commandes.total', 1)
+                ->where('commandes.data.0.site_payeur_nom', $this->site->nom)
+                ->where('commandes.data.0.annulable', false)
+                ->where('commandes.data.0.supprimable', false));
         $this->actingAs($agentCba)->get(route('achats.show', $commande))
             ->assertInertia(fn ($page) => $page->where('actions.peut_modifier', false)->where('actions.peut_annuler', false));
 
@@ -727,6 +731,25 @@ class CommandeAchatTest extends TestCase
         $this->assertSame(StatutCommandeAchat::VALIDEE, $commande->statut);
         $this->assertSame($this->site->nom, $commande->site_payeur_nom_snapshot);
         $this->assertSame('valideur_deux', $commande->validation_regle_snapshot['role']);
+    }
+
+    public function test_un_bon_sans_agence_reste_annulable_par_qui_couvre_toutes_les_agences(): void
+    {
+        // Bon antérieur à l'ajout des agences : ni agence de livraison ni agence payeuse.
+        $commande = $this->creerCommande(1);
+        DB::table('commandes_achats')->where('id', $commande->id)->update(['site_id' => null, 'site_payeur_id' => null]);
+
+        // Périmètre limité à une agence : pas d'action proposée, refus serveur.
+        $limite = $this->makeAcheteur('acheteur_limite', [$this->site], ['achats.read', 'achats.annuler']);
+        $this->actingAs($limite)->patch(route('achats.annuler', $commande), ['motif_annulation' => 'Test'])->assertForbidden();
+
+        // Périmètre « toutes les agences » ($this->user) : action proposée et acceptée.
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data.0.annulable', true));
+        $this->actingAs($this->user)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_annuler', true));
+        $this->actingAs($this->user)->patch(route('achats.annuler', $commande), ['motif_annulation' => 'Saisi par erreur'])->assertSessionHasNoErrors();
+        $this->assertSame(StatutCommandeAchat::ANNULEE, $commande->fresh()->statut);
     }
 
     public function test_la_migration_initialise_l_agence_payeuse_des_bons_existants(): void
