@@ -13,6 +13,7 @@ use App\Http\Controllers\Achats\Factures\ComptabiliserFactureFournisseurControll
 use App\Http\Controllers\Achats\Factures\CreateFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\EditFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\IndexFactureFournisseurController;
+use App\Http\Controllers\Achats\Factures\PdfFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\ShowFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\StoreFactureFournisseurController;
 use App\Http\Controllers\Achats\Factures\StorePaiementFournisseurController;
@@ -502,6 +503,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('achats/factures/{facture}', ShowFactureFournisseurController::class)->name('achats.factures.show');
             Route::get('achats/factures/{facture}/edit', EditFactureFournisseurController::class)->name('achats.factures.edit');
             Route::put('achats/factures/{facture}', UpdateFactureFournisseurController::class)->name('achats.factures.update');
+            Route::get('achats/factures/{facture}/pdf', PdfFactureFournisseurController::class)->name('achats.factures.pdf');
             Route::patch('achats/factures/{facture}/valider', ValiderFactureFournisseurController::class)->name('achats.factures.valider');
             Route::patch('achats/factures/{facture}/annuler', AnnulerFactureFournisseurController::class)->name('achats.factures.annuler');
             Route::post('achats/factures/{facture}/comptabiliser', ComptabiliserFactureFournisseurController::class)->name('achats.factures.comptabiliser');

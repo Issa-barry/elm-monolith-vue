@@ -61,7 +61,7 @@ class PaiementFournisseurService
         }
         // checkPermissionTo() lit les permissions réelles des rôles — jamais le Gate::before.
         if (! $user->checkPermissionTo('factures-fournisseurs.payer')) {
-            return "Vous n'avez pas la permission de payer les factures fournisseurs.";
+            return "Vous n'avez pas la permission de payer les factures d’achat.";
         }
         if (! $this->perimetre->couvreSite($user, $facture->site_id)) {
             return "L'agence de cette facture n'est pas dans votre périmètre d'achat.";

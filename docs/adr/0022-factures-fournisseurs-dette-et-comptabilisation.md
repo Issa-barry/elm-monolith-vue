@@ -1,5 +1,7 @@
 # ADR 0022 — Factures fournisseurs : dette à la validation, comptabilisation par mapping
 
+> Terminologie : depuis le 10/10/2026, ces factures s’affichent « Factures d’achat » dans l’application (noms techniques inchangés).
+
 - **Date** : 2026-10-08
 - **Statut** : **accepté le 2026-10-08** pour le mécanisme ; **comptes d'achat et TVA en attente de
   validation par le comptable** (voir « Décisions en attente »)
@@ -43,7 +45,10 @@ servi.
 5. **Validation** : permission `factures-fournisseurs.valider` + agence du bon couverte par le
    périmètre « Peut acheter pour » + ni l'auteur de la saisie ni le dernier modificateur. Aucun
    passe-droit de rôle (super administrateur compris) ; contrôle de périmètre explicite dans les
-   contrôleurs (Gate::before).
+   contrôleurs (Gate::before). **Révisé le 2026-10-10** : la séparation saisie/validation devient
+   un réglage par rôle (« Peut valider ses propres factures d’achat », Paramètres → Achats),
+   activé par défaut pour le super administrateur (règle de départ et migration), désactivé pour
+   les autres rôles — donnée de configuration, jamais une condition sur le rôle dans le code.
 6. **Comptabilisation par le moteur commun, à la validation**, événement
    `facture_fournisseur_validee`, journal résolu par mapping :
    - Débit `achat_{code du type de produit}`, repli `achat` — montant HT ;

@@ -13,6 +13,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
+    Download,
     HandCoins,
     Info,
     Pencil,
@@ -113,7 +114,7 @@ const page = usePage();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Achats', href: '/backoffice/achats' },
-    { title: 'Factures fournisseurs', href: '/backoffice/achats/factures' },
+    { title: 'Factures d’achat', href: '/backoffice/achats/factures' },
     { title: props.facture.reference, href: '#' },
 ];
 
@@ -302,6 +303,15 @@ function relancerComptabilite() {
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <a
+                        :href="`/backoffice/achats/factures/${facture.id}/pdf`"
+                        title="Récapitulatif de la facture enregistrée (pas l’original du fournisseur)"
+                    >
+                        <Button variant="outline" size="sm">
+                            <Download class="mr-2 h-4 w-4" />
+                            PDF
+                        </Button>
+                    </a>
                     <Link
                         v-if="actions.peut_modifier"
                         :href="`/backoffice/achats/factures/${facture.id}/edit`"

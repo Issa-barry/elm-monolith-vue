@@ -47,6 +47,10 @@ class FactureFournisseurTest extends TestCase
 
     private const PERMISSIONS_SAISIE = ['achats.read', 'factures-fournisseurs.read', 'factures-fournisseurs.create', 'factures-fournisseurs.update', 'factures-fournisseurs.annuler'];
 
+    private const MOTIF_SAISIE = 'Vous avez saisi cette facture : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.';
+
+    private const MOTIF_MODIFICATION = 'Vous avez modifié cette facture en dernier : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.';
+
     private Site $site;
 
     private Fournisseur $fournisseur;
@@ -343,7 +347,7 @@ class FactureFournisseurTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('achats.factures.valider', $facture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez saisi cette facture : elle doit être validée par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
         $this->assertSame(StatutFactureFournisseur::BROUILLON, $facture->fresh()->statut);
     }
 
@@ -358,7 +362,7 @@ class FactureFournisseurTest extends TestCase
         $this->actingAs($validateur)->put(route('achats.factures.update', $facture), $this->payload([$this->ligne($ligne, 8)]))->assertSessionHasNoErrors();
         $this->actingAs($validateur)
             ->patch(route('achats.factures.valider', $facture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez modifié cette facture en dernier : elle doit être validée par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_MODIFICATION]);
     }
 
     public function test_facture_validee_non_modifiable(): void
@@ -650,15 +654,77 @@ class FactureFournisseurTest extends TestCase
         $this->actingAs($superAdmin)->get(route('achats.factures.show', $facture))->assertForbidden();
         $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $facture))->assertForbidden();
 
-        // Avec sa règle par défaut : valide la facture d'un autre, jamais la sienne.
+        // Avec sa règle par défaut : valide la facture d'un autre, et la sienne (décision du 10/10/2026).
         RegleValidationRole::provisionnerAchatsParDefaut($this->org->id);
         $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
         $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
 
-        $saFacture = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'F-SA']), $superAdmin);
+        $saFacture = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-SA']), $superAdmin);
+        $this->actingAs($superAdmin)->get(route('achats.factures.show', $saFacture))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_valider', true)->where('actions.motif_non_validable', null));
+        $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $saFacture))->assertSessionHasNoErrors();
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $saFacture->fresh()->statut);
+
+        // Réglage retiré dans Paramètres → Achats : la séparation s'applique à lui aussi.
+        RegleValidationRole::where('role_name', 'super_admin')->update(['peut_valider_ses_propres_factures' => false]);
+        $sonAutreFacture = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-SA-2']), $superAdmin);
         $this->actingAs($superAdmin)
-            ->patch(route('achats.factures.valider', $saFacture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez saisi cette facture : elle doit être validée par une autre personne.']);
+            ->patch(route('achats.factures.valider', $sonAutreFacture))
+            ->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
+    }
+
+    public function test_un_role_autorise_a_valider_ses_propres_factures_le_fait_les_autres_restent_bloques(): void
+    {
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.valider', 'guard_name' => 'web']));
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Réglage désactivé (défaut des rôles autres que super_admin) : séparation des tâches.
+        $facture = $this->saisir($this->payload([$this->ligne($ligne, 5)]));
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
+
+        // Réglage activé sur le rôle : il valide sa propre facture.
+        RegleValidationRole::where('role_name', 'admin_entreprise')->update(['peut_valider_ses_propres_factures' => true]);
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
+
+        // Ni une facture déjà validée, ni une facture annulée ne se valide.
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasErrors('validation');
+        $annulee = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-ANN']));
+        $this->actingAs($this->user)->patch(route('achats.factures.annuler', $annulee), ['motif_annulation' => 'Erreur'])->assertSessionHasNoErrors();
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $annulee))->assertSessionHasErrors('validation');
+    }
+
+    public function test_pdf_recapitulatif_de_la_facture(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['numero_facture_fournisseur' => 'FR-123']));
+
+        $reponse = $this->actingAs($this->user)->get(route('achats.factures.pdf', $facture));
+        $reponse->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
+
+        $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas la facture originale du fournisseur'] as $attendu) {
+            $this->assertStringContainsString($attendu, $html);
+        }
+
+        // Hors périmètre : refus, comme la fiche.
+        $autreSite = Site::factory()->for($this->org)->create();
+        RegleValidationRole::where('role_name', 'admin_entreprise')->update(['perimetre' => 'agences_selectionnees', 'sites' => json_encode([$autreSite->id])]);
+        $intrus = User::factory()->create(['organization_id' => $this->org->id]);
+        $intrus->assignRole('admin_entreprise');
+        $intrus->givePermissionTo(self::PERMISSIONS_SAISIE);
+        $this->actingAs($intrus)->get(route('achats.factures.pdf', $facture))->assertForbidden();
+    }
+
+    public function test_migration_autorise_l_auto_validation_des_factures_pour_les_regles_super_admin_seulement(): void
+    {
+        $this->regle('super_admin');
+        (require database_path('migrations/2026_10_10_100000_add_peut_valider_ses_propres_factures_to_regles_validation_roles_table.php'))->up();
+
+        $this->assertTrue(RegleValidationRole::where('role_name', 'super_admin')->firstOrFail()->peut_valider_ses_propres_factures);
+        $this->assertFalse(RegleValidationRole::where('role_name', 'admin_entreprise')->firstOrFail()->peut_valider_ses_propres_factures);
     }
 
     public function test_pages_liste_saisie_et_fiche(): void

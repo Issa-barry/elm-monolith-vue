@@ -77,9 +77,9 @@ final class PermissionCatalog
         'tresorerie.exporter' => 'Trésorerie — exporter',
         'achats.valider' => 'Achats — valider un bon de commande (dans la limite du plafond du rôle, Paramètres → Achats)',
         'achats.annuler' => 'Achats — annuler un bon de commande ou clôturer son reliquat',
-        'factures-fournisseurs.valider' => 'Factures fournisseurs — valider (constate la dette fournisseur)',
-        'factures-fournisseurs.annuler' => 'Factures fournisseurs — annuler (contrepassation si validée)',
-        'factures-fournisseurs.payer' => "Factures fournisseurs — payer (décaissement depuis la trésorerie de l'agence)",
+        'factures-fournisseurs.valider' => 'Factures d’achat — valider (constate la dette fournisseur)',
+        'factures-fournisseurs.annuler' => 'Factures d’achat — annuler (contrepassation si validée)',
+        'factures-fournisseurs.payer' => "Factures d’achat — payer (décaissement depuis la trésorerie de l'agence)",
         'depenses.soumettre' => 'Dépenses — soumettre',
         'depenses.valider' => 'Dépenses — valider',
         'depenses.rejeter' => 'Dépenses — rejeter',
@@ -160,7 +160,7 @@ final class PermissionCatalog
             'resources' => ['achats', 'factures-fournisseurs', 'fournisseurs'],
             'standalone' => [
                 'Bons de commande' => ['achats.valider', 'achats.annuler'],
-                'Factures fournisseurs' => ['factures-fournisseurs.valider', 'factures-fournisseurs.annuler', 'factures-fournisseurs.payer'],
+                'Factures d’achat' => ['factures-fournisseurs.valider', 'factures-fournisseurs.annuler', 'factures-fournisseurs.payer'],
             ],
         ],
         'contacts' => [

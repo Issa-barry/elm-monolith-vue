@@ -574,7 +574,7 @@ function supprimer() {
                 </div>
             </div>
 
-            <!-- Factures fournisseurs -->
+            <!-- Factures d’achat -->
             <div
                 v-if="commande.factures.length > 0"
                 class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
@@ -582,7 +582,7 @@ function supprimer() {
                 <h3
                     class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                 >
-                    Factures fournisseurs
+                    Factures d’achat
                 </h3>
                 <div class="divide-y rounded-lg border">
                     <Link

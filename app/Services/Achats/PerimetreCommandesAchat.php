@@ -36,6 +36,12 @@ class PerimetreCommandesAchat
         return $this->regles->couvreSite($user, RegleValidationRole::DOMAINE_ACHATS, $siteId);
     }
 
+    /** Une règle du rôle couvrant l'agence autorise à valider ses propres factures d'achat (Paramètres → Achats). */
+    public function peutValiderSesPropresFactures(User $user, ?string $siteId): bool
+    {
+        return $this->regles->autoriseSurSite($user, RegleValidationRole::DOMAINE_ACHATS, $siteId, 'peut_valider_ses_propres_factures');
+    }
+
     /** Agences pour lesquelles l'utilisateur peut créer un bon (formulaire, filtre Agence). */
     public function sites(User $user): Collection
     {

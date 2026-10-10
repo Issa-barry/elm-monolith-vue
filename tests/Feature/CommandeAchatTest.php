@@ -549,14 +549,18 @@ class CommandeAchatTest extends TestCase
         // Base pas encore déployée (production, formation) : 200400 tourne avant que 200000 n'ajoute
         // la colonne. Elle ne doit pas échouer, et le super administrateur doit finir autorisé.
         RegleValidationRole::query()->delete();
+        Schema::table('regles_validation_roles', fn (Blueprint $t) => $t->dropColumn('peut_valider_ses_propres_factures'));
         Schema::table('regles_validation_roles', fn (Blueprint $t) => $t->dropColumn('peut_valider_ses_propres_bons'));
 
         (require database_path('migrations/2026_10_07_200400_provisionner_regles_achats_par_defaut.php'))->up();
         (require database_path('migrations/2026_10_09_200000_add_peut_valider_ses_propres_bons_to_regles_validation_roles_table.php'))->up();
+        (require database_path('migrations/2026_10_10_100000_add_peut_valider_ses_propres_factures_to_regles_validation_roles_table.php'))->up();
 
         $regles = RegleValidationRole::where('organization_id', $this->org->id)->get()->keyBy('role_name');
         $this->assertTrue($regles['super_admin']->peut_valider_ses_propres_bons);
+        $this->assertTrue($regles['super_admin']->peut_valider_ses_propres_factures);
         $this->assertFalse($regles['admin_entreprise']->peut_valider_ses_propres_bons);
+        $this->assertFalse($regles['admin_entreprise']->peut_valider_ses_propres_factures);
     }
 
     public function test_un_role_autorise_a_valider_ses_propres_bons_le_fait_dans_la_limite_de_son_plafond(): void

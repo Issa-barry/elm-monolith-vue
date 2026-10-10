@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const achats: NavItem[] = [
     { title: 'Bons de commande', href: '/backoffice/achats' },
-    { title: 'Factures fournisseurs', href: '/backoffice/achats/factures' },
+    { title: 'Factures d’achat', href: '/backoffice/achats/factures' },
 ];
 
 const actifs = (pageUrl: string) =>
@@ -13,15 +13,15 @@ const actifs = (pageUrl: string) =>
         .map((item) => item.title);
 
 describe('lienActif', () => {
-    it('un seul sous-menu actif sur la liste des factures fournisseurs', () => {
+    it('un seul sous-menu actif sur la liste des factures d’achat', () => {
         expect(actifs('/backoffice/achats/factures')).toEqual([
-            'Factures fournisseurs',
+            'Factures d’achat',
         ]);
         expect(actifs('/backoffice/achats/factures?statut=validee')).toEqual([
-            'Factures fournisseurs',
+            'Factures d’achat',
         ]);
         expect(actifs('/backoffice/achats/factures/12')).toEqual([
-            'Factures fournisseurs',
+            'Factures d’achat',
         ]);
     });
 

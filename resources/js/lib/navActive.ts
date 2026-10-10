@@ -14,7 +14,7 @@ export function urlCorrespond(href: NavItem['href'], pageUrl: string): boolean {
 
 /**
  * Un lien frère plus précis l'emporte : sur /backoffice/achats/factures, seul
- * « Factures fournisseurs » est actif, pas « Bons de commande » (/backoffice/achats).
+ * « Factures d’achat » est actif, pas « Bons de commande » (/backoffice/achats).
  */
 export function lienActif(
     href: NavItem['href'],
