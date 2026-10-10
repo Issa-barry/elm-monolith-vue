@@ -32,6 +32,7 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -1122,11 +1123,35 @@ class FactureFournisseurTest extends TestCase
         $reponse = $this->actingAs($this->user)->get(route('achats.factures.pdf', $facture));
         $reponse->assertOk()->assertHeader('content-type', 'application/pdf');
         $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
+        $this->assertStringStartsWith('attachment;', (string) $reponse->headers->get('content-disposition'));
+
+        $apercu = $this->actingAs($this->user)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]));
+        $apercu->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('inline;', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringContainsString($facture->reference.'.pdf', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringStartsWith('%PDF-', $apercu->getContent());
 
         $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
         foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
+
+        // Le logo par défaut reste visible sans fichier d'organisation.
+        $this->assertStringContainsString('data:image/svg+xml;base64,', $html);
+
+        // Un logo personnalisé de cette organisation remplace le logo par défaut.
+        Storage::fake('public');
+        $logoPng = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=');
+        Storage::disk('public')->put('organizations/logo-test.png', $logoPng);
+        $this->org->logo_path = 'organizations/logo-test.png';
+        $htmlPersonnalise = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('data:image/png;base64,'.base64_encode($logoPng), $htmlPersonnalise);
+        $this->assertStringNotContainsString('data:image/svg+xml;base64,', $htmlPersonnalise);
+
+        // Un ancien chemin dont le fichier manque conserve un logo visible.
+        $this->org->logo_path = 'organizations/logo-absent.png';
+        $htmlSansFichier = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('data:image/svg+xml;base64,', $htmlSansFichier);
 
         // Hors périmètre : refus, comme la fiche.
         $autreSite = Site::factory()->for($this->org)->create();
@@ -1135,6 +1160,7 @@ class FactureFournisseurTest extends TestCase
         $intrus->assignRole('admin_entreprise');
         $intrus->givePermissionTo(self::PERMISSIONS_SAISIE);
         $this->actingAs($intrus)->get(route('achats.factures.pdf', $facture))->assertForbidden();
+        $this->actingAs($intrus)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]))->assertForbidden();
     }
 
     public function test_migration_autorise_l_auto_validation_des_factures_pour_les_regles_super_admin_seulement(): void

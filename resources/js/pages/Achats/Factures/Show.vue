@@ -13,7 +13,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
-    Download,
+    Eye,
     HandCoins,
     Info,
     Pencil,
@@ -308,15 +308,17 @@ function relancerComptabilite() {
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <a
-                        :href="`/backoffice/achats/factures/${facture.id}/pdf`"
-                        title="Récapitulatif de la facture enregistrée (pas l’original du fournisseur)"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Download class="mr-2 h-4 w-4" />
-                            PDF
-                        </Button>
-                    </a>
+                    <Button as-child variant="outline" size="sm">
+                        <a
+                            :href="`/backoffice/achats/factures/${facture.id}/pdf?preview=1`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Voir le récapitulatif de la facture dans un nouvel onglet"
+                        >
+                            <Eye class="mr-2 h-4 w-4" />
+                            Voir la facture
+                        </a>
+                    </Button>
                     <Link
                         v-if="actions.peut_modifier"
                         :href="`/backoffice/achats/factures/${facture.id}/edit`"

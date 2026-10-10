@@ -10,7 +10,8 @@
     $filigrane = $estAnnulee ? 'ANNULÉE' : ($facture->isBrouillon() ? 'BROUILLON' : null);
     $fournisseur = $facture->fournisseur;
     $taux = rtrim(rtrim(number_format((float) $facture->taux_tva, 2, ',', ' '), '0'), ',');
-    $logo = null;
+    $logoSvg = str_replace(['#fafafa', '#1a1a1a'], ['#2563eb', '#ffffff'], file_get_contents(public_path('favicon-dark.svg')));
+    $logo = 'data:image/svg+xml;base64,'.base64_encode($logoSvg);
     if ($organisation->logo_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($organisation->logo_path)) {
         $chemin = \Illuminate\Support\Facades\Storage::disk('public')->path($organisation->logo_path);
         $logo = 'data:'.mime_content_type($chemin).';base64,'.base64_encode(file_get_contents($chemin));
@@ -58,7 +59,7 @@
     .entete > tbody > tr > td { vertical-align: middle; padding: 0 0 28px; }
     .logo-cadre { width: 48px; height: 50px; }
     .logo { max-width: 48px; max-height: 50px; }
-    .org-nom { margin: 14px 0; font-size: 31.5px; line-height: 35px; font-weight: 700; color: #2563eb; }
+    .org-nom { margin: 14px 0; font-size: 31.5px; line-height: 35px; font-weight: 700; color: #0f172a; }
     .adresse { margin-bottom: 7px; }
     .doc-titre { margin: 0 0 14px; font-size: 21px; line-height: 28px; font-weight: 600; text-align: right; }
     .meta { width: auto; margin-left: auto; }

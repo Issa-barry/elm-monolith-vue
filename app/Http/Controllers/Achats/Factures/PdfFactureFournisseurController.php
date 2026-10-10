@@ -7,6 +7,7 @@ use App\Models\FactureFournisseur;
 use App\Models\Organization;
 use App\Services\Achats\PerimetreCommandesAchat;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
@@ -15,7 +16,7 @@ use Illuminate\Http\Response;
  */
 class PdfFactureFournisseurController extends Controller
 {
-    public function __invoke(FactureFournisseur $facture, PerimetreCommandesAchat $perimetre): Response
+    public function __invoke(Request $request, FactureFournisseur $facture, PerimetreCommandesAchat $perimetre): Response
     {
         $this->authorize('view', $facture);
         $perimetre->autoriserConsultationFacture($facture, auth()->user());
@@ -25,13 +26,16 @@ class PdfFactureFournisseurController extends Controller
             'lignes.receptionLigne.reception',
         ]);
 
-        return Pdf::loadView('pdf.facture_achat', [
+        $pdf = Pdf::loadView('pdf.facture_achat', [
             'facture' => $facture,
             'organisation' => Organization::findOrFail($facture->organization_id),
         ])->setPaper('a4', 'portrait')
             // Poppins : ascender 1.05 + descender 0.35. DomPDF multiplie l'interligne CSS
             // par la hauteur de la fonte ; ce ratio conserve les interlignes d'Apollo.
-            ->setOption('fontHeightRatio', 1 / 1.4)
-            ->download($facture->reference.'.pdf');
+            ->setOption('fontHeightRatio', 1 / 1.4);
+
+        return $request->boolean('preview')
+            ? $pdf->stream($facture->reference.'.pdf')
+            : $pdf->download($facture->reference.'.pdf');
     }
 }
