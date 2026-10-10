@@ -4,7 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Site;
+use App\Models\User;
+use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -36,6 +39,60 @@ class SiteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('sites.index'))
             ->assertStatus(200);
+    }
+
+    public function test_index_returns_member_and_vehicle_counts_for_each_site(): void
+    {
+        $site = $this->makeSite($this->org);
+        $emptySite = Site::factory()->create(['organization_id' => $this->org->id]);
+        $otherOrg = Organization::factory()->create();
+        $otherSite = $this->makeSite($otherOrg);
+
+        // Un membre peut appartenir à plusieurs sites ; seuls les rattachements comptent.
+        $this->user->sites()->attach($site->id, ['role' => 'employe']);
+        $member = User::factory()->create(['organization_id' => $this->org->id]);
+        $member->sites()->attach($site->id, ['role' => 'employe']);
+        User::factory()->create(['organization_id' => $this->org->id]);
+        User::factory()->create(['organization_id' => $otherOrg->id])
+            ->sites()->attach($otherSite->id, ['role' => 'employe']);
+
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+        ]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+            'is_active' => false,
+        ]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+        ])->delete();
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => null,
+        ]);
+        Vehicule::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'site_id' => $otherSite->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('sites.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Sites/Index')
+                ->has('sites', 3)
+                ->where('sites', function ($sites) use ($site, $emptySite) {
+                    $sites = collect($sites)->keyBy('id');
+
+                    return $sites[$site->id]['membres_count'] === 2
+                        && $sites[$site->id]['vehicules_count'] === 2
+                        && $sites[$emptySite->id]['membres_count'] === 0
+                        && $sites[$emptySite->id]['vehicules_count'] === 0;
+                })
+            );
     }
 
     public function test_index_redirects_unauthenticated_user(): void
