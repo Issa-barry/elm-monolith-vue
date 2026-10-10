@@ -42,7 +42,9 @@ interface Ligne {
 interface Facture {
     id: string;
     reference: string;
-    numero_facture_fournisseur: string;
+    numero_facture_fournisseur: string | null;
+    type_justificatif_label: string;
+    sans_justificatif: boolean;
     date_facture: string;
     date_echeance: string | null;
     taux_tva: number;
@@ -294,8 +296,17 @@ function relancerComptabilite() {
                             class="text-foreground"
                         />
                         <span
-                            >· N° fournisseur
-                            {{ facture.numero_facture_fournisseur }}</span
+                            v-if="facture.sans_justificatif"
+                            class="font-medium text-amber-600 dark:text-amber-400"
+                            >· Sans justificatif</span
+                        >
+                        <span v-else
+                            >· {{ facture.type_justificatif_label }}
+                            {{
+                                facture.numero_facture_fournisseur
+                                    ? `n° ${facture.numero_facture_fournisseur}`
+                                    : 'sans numéro'
+                            }}</span
                         >
                         <span v-if="facture.created_by"
                             >· saisie par {{ facture.created_by }}</span
@@ -689,8 +700,10 @@ function relancerComptabilite() {
             :info-rows="[
                 { label: 'Fournisseur', value: facture.fournisseur_nom ?? '—' },
                 {
-                    label: 'N° fournisseur',
-                    value: facture.numero_facture_fournisseur,
+                    label: 'Justificatif',
+                    value: facture.sans_justificatif
+                        ? 'Aucun document'
+                        : `${facture.type_justificatif_label} ${facture.numero_facture_fournisseur ? 'n° ' + facture.numero_facture_fournisseur : 'sans numéro'}`,
                 },
                 { label: 'Montant TTC', value: formatGNF(facture.montant_ttc) },
                 { label: 'Déjà payé', value: formatGNF(facture.montant_paye) },

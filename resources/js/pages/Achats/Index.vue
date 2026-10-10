@@ -43,6 +43,7 @@ interface Commande {
     site_nom: string | null;
     site_payeur_nom: string | null;
     created_at: string;
+    date_achat: string;
     qte_commandee: number;
     qte_recue: number;
     is_annulee: boolean;
@@ -320,7 +321,7 @@ function confirmDelete(c: Commande) {
                             <td
                                 class="px-4 py-3 text-muted-foreground tabular-nums"
                             >
-                                {{ c.created_at }}
+                                {{ c.date_achat }}
                             </td>
                             <td class="px-4 py-3">
                                 {{ c.fournisseur_nom ?? '—' }}
@@ -464,7 +465,7 @@ function confirmDelete(c: Commande) {
                         <span
                             class="text-xs text-muted-foreground tabular-nums"
                         >
-                            {{ c.created_at }}
+                            {{ c.date_achat }}
                         </span>
                     </div>
                 </Link>

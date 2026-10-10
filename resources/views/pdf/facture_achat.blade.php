@@ -92,8 +92,9 @@
             <div class="doc-titre">FACTURE D’ACHAT</div>
             <table class="meta">
                 <tr><td class="cle">RÉFÉRENCE</td><td class="val">{{ $facture->reference }}</td></tr>
-                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur }}</td></tr>
-                <tr><td class="cle">DATE</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
+                <tr><td class="cle">JUSTIFICATIF</td><td class="val">{{ ($facture->type_justificatif ?? \App\Enums\TypeJustificatifAchat::FACTURE)->label() }}</td></tr>
+                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur ?: '—' }}</td></tr>
+                <tr><td class="cle">{{ $facture->estSansJustificatif() ? "DATE D'ACHAT" : 'DATE' }}</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
                 <tr><td class="cle">ÉCHÉANCE</td><td class="val">{{ $facture->date_echeance?->format('d/m/Y') ?? '—' }}</td></tr>
                 <tr><td class="cle">STATUT</td><td class="val">{{ $facture->statut?->label() }}</td></tr>
             </table>
@@ -203,8 +204,12 @@
 @endif
 
 <div class="mention">
-    Récapitulatif établi par {{ $organisation->name }} à partir de la facture n° {{ $facture->numero_facture_fournisseur }}
-    du fournisseur. Ce document n’est pas la facture originale du fournisseur.
+    @if($facture->estSansJustificatif())
+        Récapitulatif établi par {{ $organisation->name }} : achat enregistré sans justificatif du fournisseur.
+    @else
+        Récapitulatif établi par {{ $organisation->name }} à partir du document du fournisseur
+        ({{ $facture->designationDocument() }}). Ce document n’est pas l’original du fournisseur.
+    @endif
 </div>
 
 <div class="bas">

@@ -701,6 +701,78 @@ class FactureFournisseurTest extends TestCase
         $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
     }
 
+    // ── Achats sans facture ou sans numéro (décision du 10/10/2026) ───────────
+
+    public function test_facture_sans_numero_acceptee_et_plusieurs_peuvent_coexister(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 20]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Reçu sans numéro : aucun numéro n'est inventé, aucune clé de doublon.
+        $recu = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => null, 'type_justificatif' => 'recu']));
+        $this->assertNull($recu->numero_facture_fournisseur);
+        $this->assertNull($recu->cle_numero_unique);
+        $this->assertSame('recu', $recu->type_justificatif->value);
+        $this->assertSame('Reçu sans numéro', $recu->designationDocument());
+
+        // Un second document sans numéro du même fournisseur n'est pas un doublon.
+        $ticket = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => '   ', 'type_justificatif' => 'ticket']));
+        $this->assertNull($ticket->numero_facture_fournisseur);
+        $this->assertSame(2, FactureFournisseur::count());
+
+        // Le contrôle de doublon reste actif dès qu'un numéro est saisi.
+        $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-77']));
+        $this->actingAs($this->user)
+            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-77']))
+            ->assertSessionHasErrors(['numero_facture_fournisseur' => 'Une facture de ce fournisseur porte déjà ce numéro.']);
+
+        // Sans type précisé : « facture », comme avant.
+        $this->assertSame('facture', FactureFournisseur::where('numero_facture_fournisseur', 'F-77')->firstOrFail()->type_justificatif->value);
+    }
+
+    public function test_achat_sans_justificatif_enregistre_valide_et_trace_dans_l_ecriture(): void
+    {
+        $this->mapperCompteAchat();
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Sans document, un numéro n'a pas de sens.
+        $this->actingAs($this->user)
+            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'aucun', 'numero_facture_fournisseur' => 'F-1']))
+            ->assertSessionHasErrors('numero_facture_fournisseur');
+        $this->actingAs($this->user)
+            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'inconnu']))
+            ->assertSessionHasErrors('type_justificatif');
+
+        $facture = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['type_justificatif' => 'aucun', 'numero_facture_fournisseur' => null]));
+        $this->assertTrue($facture->estSansJustificatif());
+        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
+            ->assertInertia(fn ($page) => $page->where('facture.sans_justificatif', true)->where('facture.numero_facture_fournisseur', null));
+        $this->actingAs($this->user)->get(route('achats.factures.index'))
+            ->assertInertia(fn ($page) => $page->where('factures.data.0.sans_justificatif', true));
+
+        // Validée comme les autres : la dette naît et l'écriture mentionne l'absence de justificatif.
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+        $piece = $this->piece($facture);
+        $this->assertNotNull($piece);
+        $this->assertSame('Achat sans justificatif — '.$facture->reference, $piece->libelle);
+        $this->assertSame(10_000.0, $facture->fresh()->resteDu());
+
+        // Le PDF le dit aussi.
+        $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('achat enregistré sans justificatif du fournisseur', $html);
+        $this->assertStringContainsString('Aucun document', $html);
+    }
+
+    public function test_la_saisie_propose_la_date_d_achat_du_bon(): void
+    {
+        $this->commande->update(['date_achat' => '2026-09-28']);
+        $this->receptionner($this->commande, [$this->ligneA->id => 10], '2026-09-29');
+
+        $this->actingAs($this->user)->get(route('achats.factures.create', ['commande' => $this->commande->id]))
+            ->assertInertia(fn ($page) => $page->where('commande.date_achat', '2026-09-28'));
+    }
+
     // ── Achat centralisé : la facture relève de l'agence payeuse ──────────────
 
     public function test_la_facture_d_un_achat_centralise_appartient_a_l_agence_payeuse(): void
@@ -848,7 +920,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
 
         $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
-        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas la facture originale du fournisseur'] as $attendu) {
+        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
 

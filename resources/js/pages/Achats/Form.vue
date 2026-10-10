@@ -29,6 +29,7 @@ interface CommandeEdition {
     reference: string;
     site_id: string | null;
     site_payeur_id: string | null;
+    date_achat: string | null;
     fournisseur_id: string | null;
     note: string | null;
     lignes: LigneForm[];
@@ -75,9 +76,16 @@ function sitePayeurInitial(): string | null {
     return props.site_payeur_par_defaut ?? siteInitial();
 }
 
+function aujourdhui(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const form = useForm({
     site_id: siteInitial(),
     site_payeur_id: sitePayeurInitial(),
+    // Date réelle de l'achat, distincte de la date de saisie.
+    date_achat: props.commande?.date_achat ?? aujourdhui(),
     fournisseur_id: props.commande?.fournisseur_id ?? null,
     note: props.commande?.note ?? '',
     lignes: (props.commande?.lignes.length
@@ -151,6 +159,7 @@ const canSubmit = computed(
         !form.processing &&
         !!form.site_id &&
         !!form.site_payeur_id &&
+        !!form.date_achat &&
         !!form.fournisseur_id &&
         form.lignes.length > 0 &&
         form.lignes.every((l) => l.variante_id && l.qte > 0),
@@ -265,6 +274,28 @@ function submit() {
                             >
                                 La facture et le paiement seront rattachés à
                                 cette agence.
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="achat-date"
+                                class="mb-1.5 block text-sm"
+                            >
+                                Date d’achat
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <input
+                                id="achat-date"
+                                v-model="form.date_achat"
+                                type="date"
+                                :max="aujourdhui()"
+                                class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                            <p
+                                v-if="form.errors.date_achat"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.date_achat }}
                             </p>
                         </div>
                         <div>

@@ -154,6 +154,22 @@ class ReceptionAchatTest extends TestCase
         $this->assertSame(1, $commande->receptions()->count());
     }
 
+    public function test_une_reception_ne_peut_pas_preceder_la_date_d_achat(): void
+    {
+        $commande = $this->commandeValidee(10);
+        $commande->update(['date_achat' => now()->toDateString()]);
+
+        $this->actingAs($this->magasinier)->post(route('achats.receptions.store', $commande), [
+            'date_reception' => now()->subDay()->toDateString(),
+            'lignes' => [['id' => $commande->lignes()->first()->id, 'qte_recue' => 5]],
+        ])->assertSessionHasErrors('date_reception');
+        $this->assertSame(0, $this->stock($this->agenceCommande));
+
+        // Le jour de l'achat : acceptée.
+        $this->receptionner($commande, 5)->assertSessionHasNoErrors();
+        $this->assertSame(5, $this->stock($this->agenceCommande));
+    }
+
     public function test_une_commande_non_validee_ne_peut_pas_etre_receptionnee(): void
     {
         $commande = $this->commandeValidee(10, 1000, StatutCommandeAchat::A_VALIDER);

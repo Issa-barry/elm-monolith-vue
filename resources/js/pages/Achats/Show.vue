@@ -56,6 +56,7 @@ interface CommandeData {
     paye_par_autre_agence: boolean;
     note: string | null;
     created_at: string;
+    date_achat: string;
     created_by: string | null;
     validee_at: string | null;
     validee_par: string | null;
@@ -76,7 +77,7 @@ interface CommandeData {
     factures: {
         id: string;
         reference: string;
-        numero_facture_fournisseur: string;
+        numero_facture_fournisseur: string | null;
         date_facture: string;
         montant_ttc: number;
         reste_du: number;
@@ -277,7 +278,7 @@ function supprimer() {
                                 :label="commande.statut_label"
                                 class="text-foreground"
                             />
-                            <span>· créé le {{ commande.created_at }}</span>
+                            <span>· acheté le {{ commande.date_achat }}</span>
                             <span v-if="commande.created_by"
                                 >par {{ commande.created_by }}</span
                             >
@@ -607,8 +608,13 @@ function supprimer() {
                                 f.reference
                             }}</span>
                             <span class="text-muted-foreground">
-                                · N° {{ f.numero_facture_fournisseur }} ·
-                                {{ f.date_facture }}</span
+                                ·
+                                {{
+                                    f.numero_facture_fournisseur
+                                        ? `N° ${f.numero_facture_fournisseur}`
+                                        : 'Sans numéro'
+                                }}
+                                · {{ f.date_facture }}</span
                             >
                         </span>
                         <span class="flex items-center gap-4">

@@ -60,6 +60,7 @@ class IndexFactureFournisseurController extends Controller
                 'id' => $f->id,
                 'reference' => $f->reference,
                 'numero_facture_fournisseur' => $f->numero_facture_fournisseur,
+                'sans_justificatif' => $f->estSansJustificatif(),
                 'date_facture' => $f->date_facture?->format('d/m/Y'),
                 'fournisseur_nom' => $f->fournisseurNom(),
                 'site_nom' => $f->site?->nom,

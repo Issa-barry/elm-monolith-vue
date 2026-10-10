@@ -93,7 +93,7 @@
         <td style="width: 42%;">
             <div class="doc-titre">BON DE COMMANDE</div>
             <table class="meta">
-                <tr><td class="cle">DATE</td><td class="val">{{ $commande->created_at->format('d/m/Y') }}</td></tr>
+                <tr><td class="cle">DATE</td><td class="val">{{ $commande->dateAchat()?->format('d/m/Y') }}</td></tr>
                 <tr><td class="cle">BON N°</td><td class="val">{{ $commande->reference }}</td></tr>
                 <tr><td class="cle">STATUT</td><td class="val">{{ $commande->statut_label }}</td></tr>
             </table>

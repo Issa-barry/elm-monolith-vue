@@ -79,6 +79,7 @@ class ShowCommandeAchatController extends Controller
                 'paye_par_autre_agence' => $achat->estPayeParUneAutreAgence(),
                 'note' => $achat->note,
                 'created_at' => $achat->created_at?->format('d/m/Y'),
+                'date_achat' => $achat->dateAchat()?->format('d/m/Y'),
                 'created_by' => $this->nom($achat->createdBy),
                 'validee_at' => $achat->validee_at?->format('d/m/Y H:i'),
                 'validee_par' => $this->nom($achat->valideePar),

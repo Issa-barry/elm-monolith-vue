@@ -77,7 +77,8 @@ class FactureFournisseurComptabilisationService
             source: $facture,
             organizationId: $facture->organization_id,
             dateComptable: Carbon::parse($facture->date_facture),
-            libelle: "Facture d’achat {$facture->numero_facture_fournisseur} — {$facture->reference}",
+            // Le libellé dit quel document justifie l'achat, y compris quand il n'y en a aucun.
+            libelle: "{$facture->designationDocument()} — {$facture->reference}",
             lignes: $lignes,
             siteId: $facture->site_id,
             createdBy: $facture->validee_par,
@@ -128,7 +129,7 @@ class FactureFournisseurComptabilisationService
             source: $paiement,
             organizationId: $paiement->organization_id,
             dateComptable: Carbon::parse($paiement->date_paiement),
-            libelle: "Paiement facture {$paiement->facture->numero_facture_fournisseur} — {$paiement->facture->reference}",
+            libelle: "Paiement {$paiement->facture->designationDocument()} — {$paiement->facture->reference}",
             lignes: [
                 [
                     'role' => 'fournisseur',

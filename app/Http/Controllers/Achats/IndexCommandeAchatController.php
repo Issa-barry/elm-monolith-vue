@@ -78,6 +78,7 @@ class IndexCommandeAchatController extends Controller
                 'site_nom' => $c->siteNom(),
                 'site_payeur_nom' => $c->estPayeParUneAutreAgence() ? $c->sitePayeurNom() : null,
                 'created_at' => $c->created_at?->format('d/m/Y'),
+                'date_achat' => $c->dateAchat()?->format('d/m/Y'),
                 'qte_commandee' => (int) $c->qte_commandee,
                 'qte_recue' => (int) $c->qte_recue,
                 'is_annulee' => $c->isAnnulee(),
