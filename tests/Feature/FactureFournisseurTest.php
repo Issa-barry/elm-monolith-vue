@@ -23,8 +23,10 @@ use App\Models\RegleValidationRole;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Achats\FactureFournisseurService;
+use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
+use App\Services\Comptabilite\PlanComptableBootstrapService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -47,6 +49,10 @@ class FactureFournisseurTest extends TestCase
 
     private const PERMISSIONS_SAISIE = ['achats.read', 'factures-fournisseurs.read', 'factures-fournisseurs.create', 'factures-fournisseurs.update', 'factures-fournisseurs.annuler'];
 
+    private const MOTIF_SAISIE = 'Vous avez saisi cette facture : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.';
+
+    private const MOTIF_MODIFICATION = 'Vous avez modifié cette facture en dernier : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.';
+
     private Site $site;
 
     private Fournisseur $fournisseur;
@@ -64,6 +70,15 @@ class FactureFournisseurTest extends TestCase
         Feature::for($this->org)->activate(ModuleFeature::ACHATS);
         $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
         $this->regle('admin_entreprise');
+
+        // Point de départ de ces tests : comptes d'achat et de TVA NON paramétrés (organisation dont
+        // le comptable a retiré les comptes provisoires du plan par défaut). Les tests qui en ont
+        // besoin les paramètrent avec mapperCompteAchat() / mapperTva() ; ceux du plan par défaut
+        // les rétablissent avec PlanComptableBootstrapService.
+        CompteMapping::where('organization_id', $this->org->id)
+            ->where('evenement', EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value)
+            ->whereIn('role', ['achat', 'tva_deductible'])
+            ->delete();
 
         $this->fournisseur = $this->makeFournisseur($this->org, 'FOURNISSEUR A');
         [$this->commande, $this->ligneA, $this->ligneB] = $this->commandeValidee($this->org, $this->site, $this->fournisseur);
@@ -343,7 +358,7 @@ class FactureFournisseurTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('achats.factures.valider', $facture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez saisi cette facture : elle doit être validée par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
         $this->assertSame(StatutFactureFournisseur::BROUILLON, $facture->fresh()->statut);
     }
 
@@ -358,7 +373,7 @@ class FactureFournisseurTest extends TestCase
         $this->actingAs($validateur)->put(route('achats.factures.update', $facture), $this->payload([$this->ligne($ligne, 8)]))->assertSessionHasNoErrors();
         $this->actingAs($validateur)
             ->patch(route('achats.factures.valider', $facture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez modifié cette facture en dernier : elle doit être validée par une autre personne.']);
+            ->assertSessionHasErrors(['validation' => self::MOTIF_MODIFICATION]);
     }
 
     public function test_facture_validee_non_modifiable(): void
@@ -596,6 +611,130 @@ class FactureFournisseurTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('comptabilite.statut', 'comptabilisee')->where('comptabilite.erreur', null));
     }
 
+    // ── Comptes d'achat et de TVA provisoires du plan par défaut ──────────────
+
+    /** @return array<string, array{compte: string, journal: ?string}> correspondances achat/TVA d'une organisation, par rôle */
+    private function correspondancesAchat(string $organizationId): array
+    {
+        return CompteMapping::where('organization_id', $organizationId)
+            ->where('evenement', EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value)
+            ->whereIn('role', ['achat', 'tva_deductible'])
+            ->get()
+            ->mapWithKeys(fn (CompteMapping $m) => [$m->role => [
+                'compte' => CompteComptable::find($m->compte_comptable_id)->numero,
+                'journal' => $m->journal_comptable_id ? JournalComptable::find($m->journal_comptable_id)->code : null,
+            ]])
+            ->all();
+    }
+
+    public function test_une_nouvelle_organisation_recoit_les_comptes_d_achat_et_de_tva_provisoires(): void
+    {
+        $nouvelle = Organization::factory()->create();
+
+        $this->assertSame(
+            ['achat' => ['compte' => '601000', 'journal' => 'AC'], 'tva_deductible' => ['compte' => '445200', 'journal' => null]],
+            $this->correspondancesAchat($nouvelle->id),
+        );
+        $this->assertSame('Achats de marchandises', CompteComptable::where('organization_id', $nouvelle->id)->where('numero', '601000')->value('libelle'));
+        // Aucun compte par type de produit n'est créé.
+        $this->assertFalse(CompteMapping::where('organization_id', $nouvelle->id)->where('role', 'like', 'achat\_%')->exists());
+        // Isolation : rien n'est créé pour l'organisation de référence, dont les comptes ont été retirés.
+        $this->assertSame([], $this->correspondancesAchat($this->org->id));
+    }
+
+    public function test_la_migration_complete_une_organisation_existante_sans_doublon_ni_ecrasement(): void
+    {
+        // Correspondance d'achat personnalisée par le comptable ; TVA absente.
+        $personnalise = CompteComptable::create(['organization_id' => $this->org->id, 'numero' => '602000', 'libelle' => 'Achats de matières (choix du comptable)', 'actif' => true]);
+        CompteMapping::create([
+            'organization_id' => $this->org->id, 'evenement' => EvenementComptable::FACTURE_FOURNISSEUR_VALIDEE->value,
+            'role' => 'achat', 'compte_comptable_id' => $personnalise->id, 'journal_comptable_id' => null, 'actif' => true,
+        ]);
+
+        $migration = require database_path('migrations/2026_10_10_400000_bootstrap_comptes_achat_et_tva_provisoires.php');
+        $migration->up();
+        $comptesApres = CompteComptable::where('organization_id', $this->org->id)->count();
+        $mappingsApres = CompteMapping::where('organization_id', $this->org->id)->count();
+        $migration->up();
+
+        // Personnalisation conservée, TVA manquante créée, deuxième passage sans effet.
+        $this->assertSame(
+            ['achat' => ['compte' => '602000', 'journal' => null], 'tva_deductible' => ['compte' => '445200', 'journal' => null]],
+            $this->correspondancesAchat($this->org->id),
+        );
+        $this->assertSame($comptesApres, CompteComptable::where('organization_id', $this->org->id)->count());
+        $this->assertSame($mappingsApres, CompteMapping::where('organization_id', $this->org->id)->count());
+        $this->assertSame(1, CompteComptable::where('organization_id', $this->org->id)->where('numero', '601000')->count());
+    }
+
+    public function test_avec_les_comptes_par_defaut_la_validation_passe_l_ecriture_ht_tva_ttc(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['taux_tva' => 18]));
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+
+        $piece = $this->piece($facture);
+        $this->assertNotNull($piece);
+        $parCompte = EcritureComptable::where('piece_comptable_id', $piece->id)->get()
+            ->mapWithKeys(fn ($e) => [CompteComptable::find($e->compte_comptable_id)->numero => (float) $e->debit - (float) $e->credit]);
+        $this->assertSame(['601000' => 10_000.0, '445200' => 1_800.0, '401000' => -11_800.0], $parCompte->all());
+    }
+
+    public function test_la_migration_ne_rattrape_rien_le_paiement_reste_bloque_jusqu_a_la_relance(): void
+    {
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.payer', 'guard_name' => 'web']));
+        $paiements = app(PaiementFournisseurService::class);
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHas('warning');
+
+        // La migration crée les comptes mais ne passe aucune écriture : facture toujours impayable.
+        (require database_path('migrations/2026_10_10_400000_bootstrap_comptes_achat_et_tva_provisoires.php'))->up();
+        $this->assertNull($this->piece($facture));
+        $this->assertStringStartsWith('Paiement impossible', (string) $paiements->motifNonPayable($facture->fresh(), $this->user));
+
+        // Relance volontaire depuis la fiche : écriture passée, facture payable.
+        $this->actingAs($this->makeValidateur())->post(route('achats.factures.comptabiliser', $facture))->assertSessionHas('success');
+        $this->assertNotNull($this->piece($facture));
+        $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
+    }
+
+    // ── Achat centralisé : la facture relève de l'agence payeuse ──────────────
+
+    public function test_la_facture_d_un_achat_centralise_appartient_a_l_agence_payeuse(): void
+    {
+        // Bon livré à Cba, payé par l'agence principale ($this->site).
+        $cba = Site::factory()->for($this->org)->create(['nom' => 'Cba']);
+        $this->commande->update(['site_id' => $cba->id, 'site_payeur_id' => $this->site->id]);
+        $r = $this->receptionner($this->commande->fresh(), [$this->ligneA->id => 10]);
+        $payload = $this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]);
+
+        // Un utilisateur dont le périmètre ne couvre que l'agence de livraison ne peut pas la saisir.
+        foreach (self::PERMISSIONS_SAISIE as $p) {
+            Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
+        }
+        $role = Role::firstOrCreate(['name' => 'agent_cba', 'guard_name' => 'web']);
+        $role->givePermissionTo(self::PERMISSIONS_SAISIE);
+        $this->regle('agent_cba', 'agences_selectionnees', [$cba->id]);
+        $agentCba = User::factory()->create(['organization_id' => $this->org->id]);
+        $agentCba->assignRole($role);
+        $agentCba->sites()->attach($cba->id, ['role' => 'employe', 'is_default' => true]);
+        $this->actingAs($agentCba)->post(route('achats.factures.store'), $payload)->assertSessionHasErrors('commande');
+        $this->assertSame(0, FactureFournisseur::count());
+
+        // L'acheteur central (toutes agences) la saisit : elle est rattachée à l'agence payeuse.
+        $facture = $this->saisir($payload);
+        $this->assertSame($this->site->id, $facture->site_id);
+
+        // Elle se valide et se paie donc dans le périmètre de l'agence payeuse, pas de Cba.
+        $this->assertStringContainsString("n'est pas dans votre périmètre", (string) app(FactureFournisseurService::class)->motifNonValidable(
+            $facture,
+            tap($agentCba, fn (User $u) => $role->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.valider', 'guard_name' => 'web'])))->fresh(),
+        ));
+    }
+
     // ── Isolation et périmètre ────────────────────────────────────────────────
 
     public function test_isolation_organisationnelle(): void
@@ -646,19 +785,89 @@ class FactureFournisseurTest extends TestCase
         $ligne = $this->ligneRecue($r, $this->ligneA);
         $facture = $this->saisir($this->payload([$this->ligne($ligne, 10)]));
 
-        // Sans règle « Peut acheter pour » : ni fiche ni validation, malgré le Gate::before.
-        $this->actingAs($superAdmin)->get(route('achats.factures.show', $facture))->assertForbidden();
+        // Sans règle « Peut acheter pour » : aucune action, malgré le Gate::before. Seule la
+        // CONSULTATION lui reste ouverte (ADR 0025) : il détient toutes les permissions, dont
+        // « consulter les données de toutes les agences » — la fiche s'ouvre, sans action proposée.
+        $this->actingAs($superAdmin)->get(route('achats.factures.show', $facture))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('actions.peut_valider', false)
+                ->where('actions.peut_modifier', false)
+                ->where('actions.peut_annuler', false)
+                ->where('actions.peut_payer', false));
         $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $facture))->assertForbidden();
 
-        // Avec sa règle par défaut : valide la facture d'un autre, jamais la sienne.
+        // Avec sa règle par défaut : valide la facture d'un autre, et la sienne (décision du 10/10/2026).
         RegleValidationRole::provisionnerAchatsParDefaut($this->org->id);
         $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
         $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
 
-        $saFacture = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'F-SA']), $superAdmin);
+        $saFacture = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-SA']), $superAdmin);
+        $this->actingAs($superAdmin)->get(route('achats.factures.show', $saFacture))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_valider', true)->where('actions.motif_non_validable', null));
+        $this->actingAs($superAdmin)->patch(route('achats.factures.valider', $saFacture))->assertSessionHasNoErrors();
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $saFacture->fresh()->statut);
+
+        // Réglage retiré dans Paramètres → Achats : la séparation s'applique à lui aussi.
+        RegleValidationRole::where('role_name', 'super_admin')->update(['peut_valider_ses_propres_factures' => false]);
+        $sonAutreFacture = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-SA-2']), $superAdmin);
         $this->actingAs($superAdmin)
-            ->patch(route('achats.factures.valider', $saFacture))
-            ->assertSessionHasErrors(['validation' => 'Vous avez saisi cette facture : elle doit être validée par une autre personne.']);
+            ->patch(route('achats.factures.valider', $sonAutreFacture))
+            ->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
+    }
+
+    public function test_un_role_autorise_a_valider_ses_propres_factures_le_fait_les_autres_restent_bloques(): void
+    {
+        $this->user->givePermissionTo(Permission::firstOrCreate(['name' => 'factures-fournisseurs.valider', 'guard_name' => 'web']));
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Réglage désactivé (défaut des rôles autres que super_admin) : séparation des tâches.
+        $facture = $this->saisir($this->payload([$this->ligne($ligne, 5)]));
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasErrors(['validation' => self::MOTIF_SAISIE]);
+
+        // Réglage activé sur le rôle : il valide sa propre facture.
+        RegleValidationRole::where('role_name', 'admin_entreprise')->update(['peut_valider_ses_propres_factures' => true]);
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
+
+        // Ni une facture déjà validée, ni une facture annulée ne se valide.
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $facture))->assertSessionHasErrors('validation');
+        $annulee = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-ANN']));
+        $this->actingAs($this->user)->patch(route('achats.factures.annuler', $annulee), ['motif_annulation' => 'Erreur'])->assertSessionHasNoErrors();
+        $this->actingAs($this->user)->patch(route('achats.factures.valider', $annulee))->assertSessionHasErrors('validation');
+    }
+
+    public function test_pdf_recapitulatif_de_la_facture(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['numero_facture_fournisseur' => 'FR-123']));
+
+        $reponse = $this->actingAs($this->user)->get(route('achats.factures.pdf', $facture));
+        $reponse->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
+
+        $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas la facture originale du fournisseur'] as $attendu) {
+            $this->assertStringContainsString($attendu, $html);
+        }
+
+        // Hors périmètre : refus, comme la fiche.
+        $autreSite = Site::factory()->for($this->org)->create();
+        RegleValidationRole::where('role_name', 'admin_entreprise')->update(['perimetre' => 'agences_selectionnees', 'sites' => json_encode([$autreSite->id])]);
+        $intrus = User::factory()->create(['organization_id' => $this->org->id]);
+        $intrus->assignRole('admin_entreprise');
+        $intrus->givePermissionTo(self::PERMISSIONS_SAISIE);
+        $this->actingAs($intrus)->get(route('achats.factures.pdf', $facture))->assertForbidden();
+    }
+
+    public function test_migration_autorise_l_auto_validation_des_factures_pour_les_regles_super_admin_seulement(): void
+    {
+        $this->regle('super_admin');
+        (require database_path('migrations/2026_10_10_100000_add_peut_valider_ses_propres_factures_to_regles_validation_roles_table.php'))->up();
+
+        $this->assertTrue(RegleValidationRole::where('role_name', 'super_admin')->firstOrFail()->peut_valider_ses_propres_factures);
+        $this->assertFalse(RegleValidationRole::where('role_name', 'admin_entreprise')->firstOrFail()->peut_valider_ses_propres_factures);
     }
 
     public function test_pages_liste_saisie_et_fiche(): void

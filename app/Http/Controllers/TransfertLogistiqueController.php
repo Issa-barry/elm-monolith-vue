@@ -69,8 +69,9 @@ class TransfertLogistiqueController extends Controller
         $search = $request->input('search');
         $departSiteIds = array_values(array_filter((array) $request->input('depart_site_ids', [])));
         $arriveeSiteIds = array_values(array_filter((array) $request->input('arrivee_site_ids', [])));
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
-        $siteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
+        // Liste = consultation : toutes les agences pour un admin ou la vision 360° (ADR 0025).
+        $toutesAgences = $user->voitToutesLesAgences();
+        $siteIds = $toutesAgences ? collect() : $user->sites()->pluck('sites.id');
         $sites = Site::where('organization_id', $orgId)
             ->select('id', 'nom')
             ->orderBy('nom')
@@ -102,8 +103,8 @@ class TransfertLogistiqueController extends Controller
             $query->when($statut, fn ($q) => $q->where('statut', $statut))
                 ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
 
-            if (! $isAdmin) {
-                // Non-admin : destination verrouillée sur ses sites, peut filtrer le départ
+            if (! $toutesAgences) {
+                // Périmètre limité à ses agences : destination verrouillée sur ses sites, peut filtrer le départ
                 $query->whereIn('site_destination_id', $siteIds);
                 if (! empty($departSiteIds)) {
                     $query->whereIn('site_source_id', $departSiteIds);
@@ -129,8 +130,8 @@ class TransfertLogistiqueController extends Controller
             $query->when($statut, fn ($q) => $q->where('statut', $statut))
                 ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
 
-            if (! $isAdmin) {
-                // Non-admin : départ verrouillé sur ses sites, peut filtrer l'arrivée
+            if (! $toutesAgences) {
+                // Périmètre limité à ses agences : départ verrouillé sur ses sites, peut filtrer l'arrivée
                 $query->whereIn('site_source_id', $siteIds);
                 if (! empty($arriveeSiteIds)) {
                     $query->whereIn('site_destination_id', $arriveeSiteIds);
@@ -173,7 +174,7 @@ class TransfertLogistiqueController extends Controller
                 ->where('statut', StatutTransfert::CLOTURE->value)
                 ->whereYear('updated_at', now()->year)
                 ->whereMonth('updated_at', now()->month);
-            if (! $isAdmin && $siteIds->isNotEmpty()) {
+            if (! $toutesAgences && $siteIds->isNotEmpty()) {
                 $clotureQuery->whereIn('site_destination_id', $siteIds);
             }
             $kpis = [
@@ -209,8 +210,8 @@ class TransfertLogistiqueController extends Controller
             'filtre_depart_site_ids' => $departSiteIds,
             'filtre_arrivee_site_ids' => $arriveeSiteIds,
             'vue' => $vue,
-            'is_admin' => $isAdmin,
-            'user_site_ids' => $isAdmin ? [] : $siteIds->values()->map(fn ($id) => (string) $id)->all(),
+            'is_admin' => $toutesAgences,
+            'user_site_ids' => $toutesAgences ? [] : $siteIds->values()->map(fn ($id) => (string) $id)->all(),
             'can_create' => auth()->user()->can('create', TransfertLogistique::class),
             'types_ecart' => TypeEcartLogistique::options(),
         ]);
@@ -416,9 +417,9 @@ class TransfertLogistiqueController extends Controller
         // Contexte de navigation : transferts ou réceptions
         $user = auth()->user();
         $statut = $transfert_logistique->statut;
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+        $toutesAgences = $user->voitToutesLesAgences();
 
-        if ($isAdmin) {
+        if ($toutesAgences) {
             $contexte = in_array($statut, [StatutTransfert::RECEPTION, StatutTransfert::CLOTURE])
                 ? 'receptions' : 'transferts';
         } else {

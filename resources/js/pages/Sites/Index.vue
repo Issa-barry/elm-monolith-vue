@@ -54,6 +54,8 @@ interface Site {
     parent_id: number | null;
     parent_nom: string | null;
     enfants_count: number;
+    membres_count: number;
+    vehicules_count: number;
     telephone: string | null;
     is_central_tresorerie: boolean;
 }
@@ -213,6 +215,8 @@ function exportExcel(): void {
         { label: 'description', value: (s) => s.description },
         { label: 'site_parent', value: (s) => s.parent_nom },
         { label: 'sites_enfants', value: (s) => s.enfants_count },
+        { label: 'membres', value: (s) => s.membres_count },
+        { label: 'vehicules', value: (s) => s.vehicules_count },
     ];
 
     const header = columns
@@ -376,6 +380,16 @@ function confirmDelete(s: Site) {
                                 Trésorerie principale
                             </span>
                         </div>
+                        <p
+                            class="mt-1 text-xs text-muted-foreground tabular-nums"
+                        >
+                            {{ s.membres_count }} membre{{
+                                s.membres_count !== 1 ? 's' : ''
+                            }}
+                            · {{ s.vehicules_count }} véhicule{{
+                                s.vehicules_count !== 1 ? 's' : ''
+                            }}
+                        </p>
                     </div>
 
                     <!-- Status dot -->
@@ -619,6 +633,34 @@ function confirmDelete(s: Site) {
                                 class="whitespace-nowrap text-muted-foreground tabular-nums"
                                 >{{ formatPhoneDisplay(data.telephone) }}</span
                             >
+                        </template>
+                    </Column>
+
+                    <!-- Membres -->
+                    <Column
+                        field="membres_count"
+                        header="Membres"
+                        sortable
+                        style="width: 120px"
+                    >
+                        <template #body="{ data }">
+                            <span class="font-medium tabular-nums">{{
+                                data.membres_count
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Véhicules -->
+                    <Column
+                        field="vehicules_count"
+                        header="Véhicules"
+                        sortable
+                        style="width: 130px"
+                    >
+                        <template #body="{ data }">
+                            <span class="font-medium tabular-nums">{{
+                                data.vehicules_count
+                            }}</span>
                         </template>
                     </Column>
 

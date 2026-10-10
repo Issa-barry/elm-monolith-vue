@@ -183,7 +183,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     if (canSee('factures-fournisseurs.read', 'achats'))
         achatsSousItems.push({
-            title: 'Factures fournisseurs',
+            title: 'Factures d’achat',
             href: '/backoffice/achats/factures',
         });
     if (achatsSousItems.length > 0) {

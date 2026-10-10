@@ -16,7 +16,7 @@ class EditCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatFormOptions $options): Response|RedirectResponse
     {
         $this->authorize('update', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserAction($achat, auth()->user());
 
         if (! $achat->isAValider()) {
             return redirect()->route('achats.show', $achat)
@@ -30,6 +30,7 @@ class EditCommandeAchatController extends Controller
                 'id' => $achat->id,
                 'reference' => $achat->reference,
                 'site_id' => $achat->site_id,
+                'site_payeur_id' => $achat->sitePayeurId(),
                 'fournisseur_id' => $achat->fournisseur_id,
                 'note' => $achat->note,
                 'lignes' => $achat->lignes

@@ -28,6 +28,7 @@ interface CommandeEdition {
     id: string;
     reference: string;
     site_id: string | null;
+    site_payeur_id: string | null;
     fournisseur_id: string | null;
     note: string | null;
     lignes: LigneForm[];
@@ -39,6 +40,7 @@ const props = defineProps<{
     fournisseurs: { id: string; nom: string }[];
     sites: { id: string; nom: string }[];
     site_par_defaut: string | null;
+    site_payeur_par_defaut: string | null;
 }>();
 
 const enEdition = computed(() => props.commande !== null);
@@ -67,8 +69,15 @@ function siteInitial(): string | null {
     return props.sites.length === 1 ? props.sites[0].id : null;
 }
 
+// « Payé par » : la trésorerie principale si l'utilisateur peut l'engager, sinon l'agence de livraison.
+function sitePayeurInitial(): string | null {
+    if (props.commande) return props.commande.site_payeur_id;
+    return props.site_payeur_par_defaut ?? siteInitial();
+}
+
 const form = useForm({
     site_id: siteInitial(),
+    site_payeur_id: sitePayeurInitial(),
     fournisseur_id: props.commande?.fournisseur_id ?? null,
     note: props.commande?.note ?? '',
     lignes: (props.commande?.lignes.length
@@ -141,6 +150,7 @@ const canSubmit = computed(
     () =>
         !form.processing &&
         !!form.site_id &&
+        !!form.site_payeur_id &&
         !!form.fournisseur_id &&
         form.lignes.length > 0 &&
         form.lignes.every((l) => l.variante_id && l.qte > 0),
@@ -223,6 +233,38 @@ function submit() {
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.site_id }}
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="achat-site-payeur"
+                                class="mb-1.5 block text-sm"
+                            >
+                                Payé par
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <Select
+                                v-model="form.site_payeur_id"
+                                input-id="achat-site-payeur"
+                                :options="sites"
+                                option-label="nom"
+                                option-value="id"
+                                placeholder="Agence qui paie"
+                                class="w-full"
+                                :invalid="!!form.errors.site_payeur_id"
+                            />
+                            <p
+                                v-if="form.errors.site_payeur_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.site_payeur_id }}
+                            </p>
+                            <p
+                                v-else
+                                class="mt-1 text-xs text-muted-foreground"
+                            >
+                                La facture et le paiement seront rattachés à
+                                cette agence.
                             </p>
                         </div>
                         <div>

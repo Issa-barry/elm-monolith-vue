@@ -35,7 +35,8 @@ un paramètre).
 - **Ma situation** : agent = utilisateur connecté, quoi qu'envoie le navigateur ; toutes les agences
   de l'organisation (ce sont ses propres opérations). Ni filtre Agence ni filtre Agent.
 - **Rapport d'activité** : agences = `SiteScopeService` (le même mécanisme que la trésorerie : toute
-  l'organisation pour un administrateur, ses agences `user_sites` sinon). Une agence demandée hors de
+  l'organisation pour un administrateur ou un rôle ayant la permission `sites.lecture_toutes_agences`
+  — ADR 0025 —, ses agences `user_sites` sinon). Une agence demandée hors de
   ce périmètre est ignorée. Filtre Agent = utilisateurs rattachés à ces agences **ou** qui y ont créé
   une vente / enregistré un encaissement ; un agent hors périmètre est ignoré.
 - Toujours limité à l'organisation de l'utilisateur.

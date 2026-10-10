@@ -27,6 +27,7 @@ class UpdateAchatParametrageController extends Controller
             'config.*.actif' => ['required', 'boolean'],
             'config.*.plafond_illimite' => ['required', 'boolean'],
             'config.*.peut_valider_ses_propres_bons' => ['sometimes', 'boolean'],
+            'config.*.peut_valider_ses_propres_factures' => ['sometimes', 'boolean'],
             'config.*.plafond' => ['nullable', 'numeric', 'min:0'],
             'config.*.perimetre' => ['required', Rule::in(RegleValidationRole::PERIMETRES)],
             'config.*.sites' => ['array'],
@@ -66,6 +67,7 @@ class UpdateAchatParametrageController extends Controller
                     'plafond_illimite' => $item['plafond_illimite'],
                     'plafond' => $item['plafond_illimite'] ? null : $item['plafond'],
                     'peut_valider_ses_propres_bons' => (bool) ($item['peut_valider_ses_propres_bons'] ?? false),
+                    'peut_valider_ses_propres_factures' => (bool) ($item['peut_valider_ses_propres_factures'] ?? false),
                     'perimetre' => $item['perimetre'],
                     'sites' => $item['perimetre'] === 'agences_selectionnees'
                         ? array_values(array_unique($item['sites'] ?? []))

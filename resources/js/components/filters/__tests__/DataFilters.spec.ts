@@ -10,11 +10,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 const routerGet = vi.hoisted(() => vi.fn());
+const auth = vi.hoisted(() => ({
+    valeur: {
+        roles: ['admin_entreprise'],
+        voit_toutes_agences: true,
+    } as Record<string, unknown>,
+}));
 
 vi.mock('@inertiajs/vue3', () => ({
     router: { get: routerGet },
     usePage: () => ({
-        props: { auth: { roles: ['admin_entreprise'] }, org_sites: [] },
+        props: { auth: auth.valeur, org_sites: [] },
     }),
 }));
 
@@ -83,6 +89,47 @@ describe('DataFilters — bouton seul', () => {
             { site_ids: ['cba'] },
             expect.anything(),
         );
+    });
+
+    it('verrouille le filtre Agence sur le périmètre serveur, quel que soit le nom du rôle', async () => {
+        routerGet.mockClear();
+        const precedent = auth.valeur;
+        // Seul auth.voit_toutes_agences ouvre le filtre (ADR 0025) : un nom de rôle ne suffit pas.
+        auth.valeur = {
+            roles: ['admin_entreprise'],
+            voit_toutes_agences: false,
+            user_sites: [{ id: 'matoto', nom: 'Matoto' }],
+        };
+        try {
+            const wrapper = shallowMount(DataFilters, {
+                props: {
+                    url: '/liste',
+                    fields: [],
+                    values: { site_ids: ['cba'] },
+                    triggerOnly: true,
+                    sites: [
+                        { id: 'cba', nom: 'Cba' },
+                        { id: 'matoto', nom: 'Matoto' },
+                    ],
+                    resultCount: 0,
+                },
+                global: { renderStubDefaultSlot: true },
+            });
+            const agence = wrapper.getComponent(FilterMultiSelect);
+            expect(agence.props('options')).toEqual([
+                { value: 'matoto', label: 'Matoto' },
+            ]);
+            expect(agence.props('modelValue')).toEqual(['matoto']);
+            wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+            await nextTick();
+            expect(routerGet).toHaveBeenCalledWith(
+                '/liste',
+                {},
+                expect.anything(),
+            );
+        } finally {
+            auth.valeur = precedent;
+        }
     });
 
     it('ne crée pas de tiroir sans aucun filtre disponible', () => {

@@ -190,7 +190,7 @@ class RapportPerimetreResolver
      */
     private function sitesAutorises(User $user): ?array
     {
-        if ($user->isAdmin()) {
+        if ($user->voitToutesLesAgences()) {
             return null;
         }
 

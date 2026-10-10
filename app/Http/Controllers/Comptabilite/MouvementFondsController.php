@@ -35,9 +35,9 @@ class MouvementFondsController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
-        $query = $this->mouvementsVisibles($orgId, $user, $isAdmin)
+        $query = $this->mouvementsVisibles($orgId, $user, $toutesAgences)
             ->with([
                 'siteOrigine:id,nom', 'siteDestination:id,nom',
                 'compteTresorerieOrigine:id,libelle', 'compteTresorerieDestination:id,libelle,agent_id', 'compteTresorerieDestination.agent.personne',
@@ -53,7 +53,7 @@ class MouvementFondsController extends Controller
             $query->where('nature', $nature->value);
         }
 
-        if ($isAdmin && $siteIds = array_filter((array) $request->input('site_ids', []))) {
+        if ($toutesAgences && $siteIds = array_filter((array) $request->input('site_ids', []))) {
             $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
         }
 
@@ -167,8 +167,8 @@ class MouvementFondsController extends Controller
             'nature_options' => NatureMouvementFonds::options(),
             'sites' => $this->sitesDisponibles($orgId, $user),
             'sites_mouvements' => $this->sitesOrganisation($orgId),
-            'caisses_filtre' => $this->caissesFiltre($orgId, $user, $isAdmin),
-            'is_admin' => $isAdmin,
+            'caisses_filtre' => $this->caissesFiltre($orgId, $user, $toutesAgences),
+            'is_admin' => $toutesAgences,
             'peut_creer' => $user->can('create', MouvementFonds::class),
             // Nécessaire pour choisir le support de destination au moment de
             // « Confirmer réception » (cf. MouvementFondsService::recevoir()) —
@@ -184,7 +184,7 @@ class MouvementFondsController extends Controller
         $orgId = auth()->user()->organization_id;
 
         return Inertia::render('Comptabilite/MouvementsFonds/Create', [
-            'sites' => $this->sitesDisponibles($orgId, auth()->user()),
+            'sites' => $this->sitesDisponibles($orgId, auth()->user(), pourCreation: true),
             'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->agence()->get(['id', 'site_id', 'libelle', 'type']),
             'site_prerempli' => $request->input('site_id'),
             'montant_prerempli' => $request->input('montant'),
@@ -315,12 +315,21 @@ class MouvementFondsController extends Controller
         ];
     }
 
-    /** @return list<array{value:string,label:string}> */
-    private function sitesDisponibles(string $orgId, $user): array
+    /**
+     * Agences proposées : celles que l'utilisateur consulte (filtre de la liste), ou — pour le
+     * formulaire de création — celles auxquelles il est rattaché (la vision 360° n'élargit pas l'écriture).
+     *
+     * @return list<array{value:string,label:string}>
+     */
+    private function sitesDisponibles(string $orgId, $user, bool $pourCreation = false): array
     {
         $query = Site::where('organization_id', $orgId)->orderBy('nom');
 
-        if (! $user->isAdmin()) {
+        if ($pourCreation) {
+            if (! $user->isAdmin()) {
+                $query->whereIn('id', $this->siteScope->assignedSiteIds($user));
+            }
+        } elseif (! $user->voitToutesLesAgences()) {
             $query->whereIn('id', $this->siteScope->accessibleSiteIds($user));
         }
 
@@ -340,12 +349,12 @@ class MouvementFondsController extends Controller
             ->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])->all();
     }
 
-    /** Mouvements de l'organisation que l'utilisateur a le droit de voir (un non-admin : ceux qui touchent ses agences). */
-    private function mouvementsVisibles(string $orgId, $user, bool $isAdmin): Builder
+    /** Mouvements de l'organisation que l'utilisateur a le droit de voir (périmètre limité à ses agences : ceux qui les touchent). */
+    private function mouvementsVisibles(string $orgId, $user, bool $toutesAgences): Builder
     {
         $query = MouvementFonds::where('organization_id', $orgId);
 
-        if (! $isAdmin) {
+        if (! $toutesAgences) {
             $siteIds = $this->siteScope->accessibleSiteIds($user);
             $query->where(fn ($q) => $q->whereIn('site_origine_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
         }
@@ -360,9 +369,9 @@ class MouvementFondsController extends Controller
      *
      * @return list<array{value: string, label: string}>
      */
-    private function caissesFiltre(string $orgId, $user, bool $isAdmin): array
+    private function caissesFiltre(string $orgId, $user, bool $toutesAgences): array
     {
-        $visibles = $this->mouvementsVisibles($orgId, $user, $isAdmin);
+        $visibles = $this->mouvementsVisibles($orgId, $user, $toutesAgences);
 
         $ids = (clone $visibles)->whereNotNull('compte_tresorerie_origine_id')->distinct()->pluck('compte_tresorerie_origine_id')
             ->merge((clone $visibles)->whereNotNull('compte_tresorerie_destination_id')->distinct()->pluck('compte_tresorerie_destination_id'))

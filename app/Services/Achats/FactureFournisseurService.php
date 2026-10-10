@@ -127,7 +127,8 @@ class FactureFournisseurService
                 'organization_id' => $commande->organization_id,
                 'commande_achat_id' => $commande->id,
                 'fournisseur_id' => $commande->fournisseur_id,
-                'site_id' => $commande->site_id,
+                // Agence PAYEUSE du bon : la facture, la dette et le paiement lui appartiennent.
+                'site_id' => $commande->sitePayeurId(),
                 'reference' => $reference,
                 'numero' => $numero,
                 'statut' => StatutFactureFournisseur::BROUILLON,
@@ -173,16 +174,20 @@ class FactureFournisseurService
         }
         // checkPermissionTo() lit les permissions réelles des rôles — jamais le Gate::before.
         if (! $user->checkPermissionTo('factures-fournisseurs.valider')) {
-            return "Vous n'avez pas la permission de valider les factures fournisseurs.";
+            return "Vous n'avez pas la permission de valider les factures d’achat.";
         }
         if (! $this->perimetre->couvreSite($user, $facture->site_id)) {
             return "L'agence de cette facture n'est pas dans votre périmètre d'achat.";
         }
-        if ($facture->created_by !== null && $facture->created_by === $user->id) {
-            return 'Vous avez saisi cette facture : elle doit être validée par une autre personne.';
-        }
-        if ($facture->contenu_modifie_par !== null && $facture->contenu_modifie_par === $user->id) {
-            return 'Vous avez modifié cette facture en dernier : elle doit être validée par une autre personne.';
+
+        // Séparation saisie/validation, sauf si une règle du rôle couvrant l'agence autorise à valider
+        // ses propres factures (Paramètres → Achats ; activé par défaut pour le super administrateur).
+        $estAuteur = $facture->created_by !== null && $facture->created_by === $user->id;
+        $estModificateur = $facture->contenu_modifie_par !== null && $facture->contenu_modifie_par === $user->id;
+        if (($estAuteur || $estModificateur) && ! $this->perimetre->peutValiderSesPropresFactures($user, $facture->site_id)) {
+            return $estAuteur
+                ? 'Vous avez saisi cette facture : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.'
+                : 'Vous avez modifié cette facture en dernier : votre rôle ne permet pas de valider vos propres factures, elle doit être validée par une autre personne.';
         }
 
         return null;
@@ -328,8 +333,8 @@ class FactureFournisseurService
         if (! $facturable) {
             throw ValidationException::withMessages(['commande' => 'Seul un bon de commande validé peut être facturé.']);
         }
-        if (! $this->perimetre->couvreSite($user, $commande->site_id)) {
-            throw ValidationException::withMessages(['commande' => "L'agence de ce bon de commande n'est pas dans votre périmètre d'achat."]);
+        if (! $this->perimetre->couvreSite($user, $commande->sitePayeurId())) {
+            throw ValidationException::withMessages(['commande' => "L'agence qui paie ce bon de commande n'est pas dans votre périmètre d'achat."]);
         }
     }
 

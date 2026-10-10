@@ -18,7 +18,7 @@ class ValiderCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatService $service): RedirectResponse
     {
         $this->authorize('valider', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserAction($achat, auth()->user());
 
         $service->valider($achat, $request->user());
 

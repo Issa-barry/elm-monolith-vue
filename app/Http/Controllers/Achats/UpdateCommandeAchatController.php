@@ -14,7 +14,7 @@ class UpdateCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatService $service): RedirectResponse
     {
         $this->authorize('update', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserAction($achat, auth()->user());
 
         $data = $request->validate(CommandeAchatService::reglesSaisie(), CommandeAchatService::messagesSaisie());
 

@@ -324,7 +324,7 @@ Construction des params :
 
 ## Agence / Site (admin)
 
-Le filtre Agence/Site est dans la **barre principale** (pas dans le drawer), visible uniquement pour les admins.
+Le filtre Agence/Site est dans la **barre principale** (pas dans le drawer). Il est libre pour qui consulte toutes les agences — administrateur ou rôle ayant la permission `sites.lecture_toutes_agences` (ADR 0025) — et verrouillé sur ses agences pour les autres. `DataFilters.vue` lit `auth.voit_toutes_agences` (calculé par le serveur), jamais le nom d'un rôle ; le serveur reste l'autorité et ignore toute agence demandée hors périmètre.
 
 ```vue
 <DataFilters

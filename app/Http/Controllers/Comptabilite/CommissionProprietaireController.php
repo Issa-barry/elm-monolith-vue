@@ -80,10 +80,10 @@ class CommissionProprietaireController extends Controller
         // et CommissionProcessusFilter).
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom',
@@ -101,9 +101,9 @@ class CommissionProprietaireController extends Controller
 
         // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
         // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
-        if ($isAdmin && ! empty($filtreSiteIds)) {
+        if ($toutesAgences && ! empty($filtreSiteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
-        } elseif (! $isAdmin) {
+        } elseif (! $toutesAgences) {
             // Pour un non-admin, une collection vide signifie qu'aucun site n'est accessible ;
             // l'absence de restriction reste exclusivement reservee aux administrateurs.
             CommissionSiteResponsableFilter::appliquer($query, $siteIds);
@@ -697,10 +697,10 @@ class CommissionProprietaireController extends Controller
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
-        $filtreSiteIds = $user->isAdmin()
+        $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
@@ -750,10 +750,10 @@ class CommissionProprietaireController extends Controller
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
-        $filtreSiteIds = $user->isAdmin()
+        $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(

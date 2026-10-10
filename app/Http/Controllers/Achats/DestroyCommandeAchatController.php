@@ -12,7 +12,7 @@ class DestroyCommandeAchatController extends Controller
     public function __invoke(CommandeAchat $achat): RedirectResponse
     {
         $this->authorize('delete', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserAction($achat, auth()->user());
         abort_unless($achat->isAnnulee(), 403, 'Seules les commandes annulées peuvent être supprimées.');
 
         $achat->delete();

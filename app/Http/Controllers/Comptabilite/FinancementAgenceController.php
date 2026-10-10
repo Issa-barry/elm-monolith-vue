@@ -34,7 +34,7 @@ class FinancementAgenceController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
@@ -43,12 +43,12 @@ class FinancementAgenceController extends Controller
             $echeance = 'mensuel';
         }
 
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $rows = $this->financement->calculerPourEcheance($orgId, $annee, $mois, $echeance);
         $rows = $this->restreindreAuxSitesAccessibles($rows, $user);
 
-        if ($isAdmin && $filtreSiteIds !== []) {
+        if ($toutesAgences && $filtreSiteIds !== []) {
             $rows = array_values(array_filter(
                 $rows,
                 fn (array $row) => $row['site_id'] !== null && in_array($row['site_id'], $filtreSiteIds, true),
@@ -68,10 +68,10 @@ class FinancementAgenceController extends Controller
             ],
             'echeance_debut' => $echeanceDebut->toDateString(),
             'echeance_fin' => $echeanceFin->toDateString(),
-            'sites' => $isAdmin
+            'sites' => $toutesAgences
                 ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
                 : collect(),
-            'is_admin' => $isAdmin,
+            'is_admin' => $toutesAgences,
         ]);
     }
 
@@ -83,7 +83,7 @@ class FinancementAgenceController extends Controller
         $orgId = $user->organization_id;
         $siteId = $site === 'sans-agence' ? null : $site;
 
-        if ($siteId !== null && ! $user->isAdmin() && ! $this->siteScope->accessibleSiteIds($user)->contains($siteId)) {
+        if ($siteId !== null && ! $user->voitToutesLesAgences() && ! $this->siteScope->accessibleSiteIds($user)->contains($siteId)) {
             abort(403, "Vous n'avez pas accès à cette agence.");
         }
 
@@ -105,7 +105,7 @@ class FinancementAgenceController extends Controller
     /** @param  list<array<string, mixed>>  $rows */
     private function restreindreAuxSitesAccessibles(array $rows, User $user): array
     {
-        if ($user->isAdmin()) {
+        if ($user->voitToutesLesAgences()) {
             return $rows;
         }
 

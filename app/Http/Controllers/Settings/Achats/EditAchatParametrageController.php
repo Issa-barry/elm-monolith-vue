@@ -45,7 +45,7 @@ class EditAchatParametrageController extends Controller
                 'plafond' => $regle?->plafond !== null ? (float) $regle->plafond : null,
                 'plafond_illimite' => (bool) ($regle?->plafond_illimite ?? false),
                 'peut_valider_ses_propres_bons' => (bool) ($regle?->peut_valider_ses_propres_bons ?? false),
-                'perimetre' => $regle?->perimetre ?? 'toutes_agences',
+                'peut_valider_ses_propres_factures' => (bool) ($regle?->peut_valider_ses_propres_factures ?? false),                'perimetre' => $regle?->perimetre ?? 'toutes_agences',
                 'sites' => $regle?->sites ?? [],
             ];
         })->values();

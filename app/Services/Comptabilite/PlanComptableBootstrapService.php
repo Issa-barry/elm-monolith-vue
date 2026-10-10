@@ -93,11 +93,14 @@ class PlanComptableBootstrapService
             '561500' => 'Mobile Money — PayCard',
             '561600' => 'Mobile Money — Soutra Money',
             '628800' => 'Charges diverses de gestion courante',
-            // Dette fournisseur (ADR 0022) : créditée à la validation d'une facture fournisseur. Les
-            // comptes d'achat (charge) et de TVA déductible ne sont volontairement PAS provisionnés :
-            // leur choix attend la validation du comptable (rôles `achat`, `achat_{type produit}`,
-            // `tva_deductible` de l'événement facture_fournisseur_validee).
+            // Dette fournisseur (ADR 0022) : créditée à la validation d'une facture d'achat.
             '401000' => 'Fournisseurs',
+            // Comptes d'achat et de TVA PROVISOIRES (décision du 10/10/2026), à valider par le
+            // comptable comme le reste de ce plan : compte d'achat par défaut de toutes les factures
+            // d'achat, et TVA traitée comme récupérable. Aucun compte par type de produit
+            // (`achat_{type}`) n'est créé : le moteur se replie sur le compte par défaut.
+            '601000' => 'Achats de marchandises',
+            '445200' => 'TVA récupérable sur achats',
             // Chantier Financement des agences (2026-08) — cf. docblock de
             // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
             '588000' => 'Virements de fonds internes (en transit)',
@@ -266,8 +269,12 @@ class PlanComptableBootstrapService
             ['encaissement_vente_pour_compte', 'liaison', null, '181000', 'OD'],
             ['encaissement_vente_pour_compte', 'client', null, '411000', null],
 
-            // Facture fournisseur validée (ADR 0022) : crédit de la dette fournisseur, journal Achats.
+            // Facture d'achat validée (ADR 0022) : crédit de la dette fournisseur, journal Achats ;
+            // débit du compte d'achat par défaut (HT) et de la TVA récupérable — comptes provisoires,
+            // à valider par le comptable. Une correspondance déjà configurée n'est jamais écrasée.
             ['facture_fournisseur_validee', 'fournisseur', null, '401000', 'AC'],
+            ['facture_fournisseur_validee', 'achat', null, '601000', 'AC'],
+            ['facture_fournisseur_validee', 'tva_deductible', null, '445200', null],
 
             // Paiement d'une facture fournisseur (ADR 0024) : débit de la dette fournisseur. Le crédit
             // vise le compte du support réellement débité ; seul le journal est résolu par ces lignes

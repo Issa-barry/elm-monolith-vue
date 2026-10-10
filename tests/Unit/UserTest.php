@@ -94,7 +94,10 @@ class UserTest extends TestCase
      * `ventes.precommander` (04/10/2026, création d'une précommande — cf. ADR 0019) = 205, puis les cinq
      * permissions du cycle de vie des précommandes (préparer, valider le retrait, rembourser, annuler
      * avant et après préparation — ADR 0019 lot 2) = 210, puis `ventes.changer_mode_remise`
-     * (05/10/2026, retrait ↔ livraison avant le chargement — ADR 0019, D16) = 211.
+     * (05/10/2026, retrait ↔ livraison avant le chargement — ADR 0019, D16) = 211. Achats et factures
+     * fournisseurs (ADR 0021, 0022, 0024) portent ensuite le total à 220, puis
+     * `sites.lecture_toutes_agences` (10/10/2026, consultation des données de toutes les agences —
+     * cf. User::voitToutesLesAgences(), ADR 0025) = 221.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -104,7 +107,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(220, $map);
+        $this->assertCount(221, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

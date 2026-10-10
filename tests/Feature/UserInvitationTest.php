@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\OtpPurpose;
+use App\Models\Client;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\UserInvitation;
@@ -534,6 +536,81 @@ class UserInvitationTest extends TestCase
         // Purpose INVITATION fait partie de la clé depuis le chantier OTP agnostique
         // du canal (27/08/2026) — cf. OtpService::challengeCacheKey().
         $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.OtpPurpose::INVITATION->value.'|'.$context)));
+    }
+
+    public function test_check_phone_prefills_trimmed_identity_of_known_client(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $token = $this->plainToken($this->makeInvitation($site));
+
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000020',
+            'prenom' => ' Mamadou ',
+            'nom' => 'DIALLO',
+        ]);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000020',
+        ])->assertOk()
+            ->assertExactJson([
+                'status' => 'prefill_available',
+                'prefill' => ['prenom' => 'Mamadou', 'nom' => 'DIALLO'],
+                'cooldown_seconds' => 30,
+            ]);
+    }
+
+    public function test_check_phone_does_not_prefill_client_with_incomplete_identity(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $token = $this->plainToken($this->makeInvitation($site));
+
+        // Régression 10/10 : un prénom null renvoyé en prefill faisait planter l'étape
+        // Identité (null.trim()) et laissait une page blanche à l'invité.
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000021',
+            'prenom' => null,
+            'nom' => 'SOCIETE XYZ',
+        ]);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000021',
+        ])->assertOk()
+            ->assertJson(['status' => 'not_found', 'prefill' => null]);
+    }
+
+    public function test_check_phone_prefills_client_identity_from_its_personne(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $token = $this->plainToken($this->makeInvitation($site));
+
+        // Cas réel de prod (10/10) : client créé par l'interface, nom/prenom de la table
+        // clients vides, identité portée par la Personne rattachée.
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000022',
+            'prenom' => 'Rayanatou',
+            'nom' => 'SYLLA',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224620000022',
+            'prenom' => null,
+            'nom' => null,
+        ]);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000022',
+        ])->assertOk()
+            ->assertJson([
+                'status' => 'prefill_available',
+                'prefill' => ['prenom' => 'Rayanatou', 'nom' => 'SYLLA'],
+            ]);
     }
 
     // ── Auth\AcceptInvitation\VerifyOtpAcceptInvitationController ─────────────

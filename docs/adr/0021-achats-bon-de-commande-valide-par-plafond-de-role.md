@@ -24,7 +24,8 @@ annulation et réception sous la même permission `achats.update`.
    les agences. Il gouverne les TROIS actions :
    - **créer** = `achats.create` + une règle d'un des rôles de l'utilisateur couvrant l'agence ;
    - **voir** = `achats.read` + règle couvrant l'agence (le créateur et le validateur d'un bon le
-     voient toujours) ;
+     voient toujours) ; *amendé le 2026-10-10 par l'[ADR 0025](0025-vision-360-consultation-de-toutes-les-agences.md) :
+     la permission `sites.lecture_toutes_agences` ouvre aussi la consultation, et elle seule* ;
    - **valider** = `achats.valider` + règle couvrant l'agence + montant ≤ plafond de cette règle
      (égalité autorisée ; règle sans plafond = ne valide rien ; « sans limite » explicite ; plusieurs
      rôles : le plafond le plus élevé parmi les règles couvrant l'agence, sans hiérarchie de rôles).
@@ -59,6 +60,23 @@ annulation et réception sous la même permission `achats.update`.
 9. **Notifications** (base + push, après commit, en file) : création → validateurs potentiels et
    super administrateurs ; validation → créateur et réceptionnaires de l'agence ; annulation →
    créateur.
+10. **Deux agences par bon** (ajouté le 2026-10-10, décision de l'utilisateur : les achats sont le
+    plus souvent faits par la trésorerie principale pour les autres agences, parfois délégués) :
+    - **agence de livraison** (`site_id`) : elle réceptionne et reçoit le stock (points 7 et 8) ;
+    - **agence payeuse** (`site_payeur_id`) : elle porte la facture, la dette fournisseur, le
+      paiement, les écritures et l'obligation du Financement des agences. Proposée par défaut : la
+      trésorerie principale (ADR 0017) si le périmètre de l'utilisateur la couvre, sinon l'agence de
+      livraison. Choisie sur chaque bon, figée à la validation.
+    Périmètre « Peut acheter pour » (point 2), sans nouveau réglage :
+    - **créer, modifier, valider, annuler, clôturer, supprimer** : le périmètre doit couvrir LES
+      DEUX agences — pouvoir acheter pour une agence ne permet pas d'engager la trésorerie d'une
+      autre. Le plafond de validation est celui d'une règle couvrant l'agence payeuse ;
+    - **voir** : une des deux agences suffit (plus créateur et validateur, et ADR 0025), sans
+      donner le droit d'agir.
+    Un achat délégué (l'agence commande, réceptionne et paie, au besoin après un financement par
+    mouvement de fonds) est un bon dont les deux agences sont la même. Les bons antérieurs sont
+    migrés avec agence payeuse = agence de livraison : aucun changement pour eux. Pas de dette
+    entre agences : la charge reste à l'agence payeuse.
 
 ## Conséquences
 

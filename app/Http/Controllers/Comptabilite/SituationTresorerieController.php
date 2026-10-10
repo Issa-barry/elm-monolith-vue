@@ -35,15 +35,15 @@ class SituationTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
         $date = $request->filled('date') ? Carbon::parse($request->input('date')) : now();
 
         $sitesQuery = Site::where('organization_id', $orgId)->orderBy('nom');
-        if (! $isAdmin) {
+        if (! $toutesAgences) {
             $sitesQuery->whereIn('id', $this->siteScope->accessibleSiteIds($user));
         }
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
         if ($filtreSiteIds !== []) {
             $sitesQuery->whereIn('id', $filtreSiteIds);
         }
@@ -95,10 +95,10 @@ class SituationTresorerieController extends Controller
                 'date' => $date->toDateString(),
                 'site_ids' => $filtreSiteIds,
             ],
-            'sites' => $isAdmin
+            'sites' => $toutesAgences
                 ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])->map(fn (Site $s) => ['value' => $s->id, 'label' => $s->nom])
                 : collect(),
-            'is_admin' => $isAdmin,
+            'is_admin' => $toutesAgences,
         ]);
     }
 
@@ -109,7 +109,7 @@ class SituationTresorerieController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        if (! $user->isAdmin() && ! $this->siteScope->accessibleSiteIds($user)->contains($site)) {
+        if (! $user->voitToutesLesAgences() && ! $this->siteScope->accessibleSiteIds($user)->contains($site)) {
             abort(403, "Vous n'avez pas accès à cette agence.");
         }
 

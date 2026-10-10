@@ -18,6 +18,7 @@ interface RegleRole {
     plafond: number | null;
     plafond_illimite: boolean;
     peut_valider_ses_propres_bons: boolean;
+    peut_valider_ses_propres_factures: boolean;
     perimetre: Perimetre;
     sites: string[];
 }
@@ -94,6 +95,8 @@ function enregistrer() {
                 plafond: l.plafond_illimite ? null : l.plafond,
                 plafond_illimite: l.plafond_illimite,
                 peut_valider_ses_propres_bons: l.peut_valider_ses_propres_bons,
+                peut_valider_ses_propres_factures:
+                    l.peut_valider_ses_propres_factures,
                 perimetre: l.perimetre,
                 sites: l.perimetre === 'agences_selectionnees' ? l.sites : [],
             })),
@@ -352,6 +355,36 @@ function enregistrer() {
                                         />
                                     </span>
                                     Peut valider ses propres bons
+                                </button>
+                                <button
+                                    type="button"
+                                    class="flex items-center gap-2 text-left text-xs text-muted-foreground hover:text-foreground"
+                                    :title="
+                                        l.peut_valider_ses_propres_factures
+                                            ? 'Ses utilisateurs peuvent valider une facture d’achat qu’ils ont saisie ou modifiée en dernier.'
+                                            : 'Une facture d’achat saisie ou modifiée en dernier par un utilisateur de ce rôle doit être validée par une autre personne.'
+                                    "
+                                    @click="
+                                        l.peut_valider_ses_propres_factures =
+                                            !l.peut_valider_ses_propres_factures
+                                    "
+                                >
+                                    <span
+                                        class="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2"
+                                        :class="
+                                            l.peut_valider_ses_propres_factures
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border'
+                                        "
+                                    >
+                                        <Check
+                                            v-if="
+                                                l.peut_valider_ses_propres_factures
+                                            "
+                                            class="h-3 w-3"
+                                        />
+                                    </span>
+                                    Peut valider ses propres factures d’achat
                                 </button>
                             </div>
                         </div>

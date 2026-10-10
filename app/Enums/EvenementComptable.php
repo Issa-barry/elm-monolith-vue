@@ -119,7 +119,7 @@ enum EvenementComptable: string
             self::REMBOURSEMENT_CLIENT => 'Remboursement client',
             self::FICHE_REAFFECTEE_SORTIE => "Fiche réaffectée — sortie de l'agence d'origine",
             self::FICHE_REAFFECTEE_ENTREE => 'Fiche réaffectée — entrée dans la nouvelle agence',
-            self::FACTURE_FOURNISSEUR_VALIDEE => 'Facture fournisseur validée',
+            self::FACTURE_FOURNISSEUR_VALIDEE => 'Facture d’achat validée',
             self::PAIEMENT_FOURNISSEUR => 'Paiement fournisseur',
         };
     }
