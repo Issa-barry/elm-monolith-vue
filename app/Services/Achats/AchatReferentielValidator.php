@@ -14,16 +14,17 @@ use Illuminate\Validation\ValidationException;
  * Contrôle d'appartenance des référentiels d'un bon de commande fournisseur (ADR 0021) : agence,
  * fournisseur et variantes doivent appartenir à l'organisation de l'utilisateur — `exists:` seul ne
  * le garantissait pas (une requête forgée pouvait rattacher une variante d'une autre organisation,
- * puis créer du stock dessus à la réception). L'agence doit en plus être couverte par le périmètre
- * « Peut acheter pour » d'un des rôles de l'utilisateur (PerimetreCommandesAchat).
+ * puis créer du stock dessus à la réception). L'agence de livraison ET l'agence payeuse doivent en
+ * plus être couvertes par le périmètre « Peut acheter pour » d'un des rôles de l'utilisateur
+ * (PerimetreCommandesAchat).
  */
 class AchatReferentielValidator
 {
     public function __construct(private readonly PerimetreCommandesAchat $perimetre) {}
 
     /**
-     * @param  array{site_id: string, fournisseur_id: string, lignes: list<array{variante_id: string}>}  $data
-     * @return array{site: Site, fournisseur: Fournisseur, variantes: Collection<string, ProduitVariante>}
+     * @param  array{site_id: string, site_payeur_id?: ?string, fournisseur_id: string, lignes: list<array{variante_id: string}>}  $data
+     * @return array{site: Site, site_payeur: Site, fournisseur: Fournisseur, variantes: Collection<string, ProduitVariante>}
      *
      * @throws ValidationException
      */
@@ -37,6 +38,17 @@ class AchatReferentielValidator
             $erreurs['site_id'] = 'Agence introuvable.';
         } elseif (! $this->perimetre->couvreSite($user, $site->id)) {
             $erreurs['site_id'] = "Votre rôle ne permet pas d'acheter pour cette agence.";
+        }
+
+        // Agence payeuse (facture, dette, paiement) : à défaut, l'agence de livraison. Elle doit
+        // elle aussi être dans le périmètre : pouvoir acheter pour une agence ne suffit pas à
+        // engager la trésorerie d'une autre.
+        $payeurId = ($data['site_payeur_id'] ?? null) ?: ($data['site_id'] ?? null);
+        $sitePayeur = $payeurId === $site?->id ? $site : Site::where('organization_id', $orgId)->find($payeurId);
+        if ($sitePayeur === null) {
+            $erreurs['site_payeur_id'] = 'Agence payeuse introuvable.';
+        } elseif ($sitePayeur->id !== $site?->id && ! $this->perimetre->couvreSite($user, $sitePayeur->id)) {
+            $erreurs['site_payeur_id'] = "Votre rôle ne permet pas d'engager la trésorerie de cette agence.";
         }
 
         $fournisseur = Fournisseur::where('organization_id', $orgId)->find($data['fournisseur_id']);
@@ -69,7 +81,7 @@ class AchatReferentielValidator
             throw ValidationException::withMessages($erreurs);
         }
 
-        return ['site' => $site, 'fournisseur' => $fournisseur, 'variantes' => $variantes];
+        return ['site' => $site, 'site_payeur' => $sitePayeur, 'fournisseur' => $fournisseur, 'variantes' => $variantes];
     }
 
     public function libelle(ProduitVariante $variante): string

@@ -88,10 +88,10 @@ class CommissionVenteController extends Controller
         // "Processus" dédiée.
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation,type_vehicule_id,proprietaire_id',
@@ -117,9 +117,9 @@ class CommissionVenteController extends Controller
 
         // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
         // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
-        if ($isAdmin && ! empty($filtreSiteIds)) {
+        if ($toutesAgences && ! empty($filtreSiteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
-        } elseif (! $isAdmin && ! empty($siteIds)) {
+        } elseif (! $toutesAgences && ! empty($siteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $siteIds);
         }
 
@@ -720,12 +720,12 @@ class CommissionVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
-        $filtreSiteIds = $isAdmin
+        $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
@@ -772,12 +772,12 @@ class CommissionVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
-        $filtreSiteIds = $isAdmin
+        $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 

@@ -55,7 +55,7 @@ class ComptabiliteRattrapageCommand extends Command
         {--jusqua= : date de fin (YYYY-MM-DD), filtre sur la date métier}
         {--dry-run : simule sans rien écrire en base}';
 
-    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/retours de livraison/encaissements/factures fournisseurs historiques éligibles. Idempotent.';
+    protected $description = 'Rattrape la comptabilisation des dépenses/fiches/paiements/ventes/retours de livraison/encaissements/factures d’achat historiques éligibles. Idempotent.';
 
     private const TYPES_VALIDES = ['depense', 'fiche', 'paiement-fiche', 'vente', 'retour', 'encaissement', 'facture-fournisseur'];
 
@@ -348,7 +348,7 @@ class ComptabiliteRattrapageCommand extends Command
             }
         });
 
-        return $this->ligneRapport('Factures fournisseurs', $compteurs, $dryRun);
+        return $this->ligneRapport('Factures d’achat', $compteurs, $dryRun);
     }
 
     private function traiterUn(

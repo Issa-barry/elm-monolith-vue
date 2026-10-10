@@ -77,7 +77,7 @@ class FactureFournisseurComptabilisationService
             source: $facture,
             organizationId: $facture->organization_id,
             dateComptable: Carbon::parse($facture->date_facture),
-            libelle: "Facture fournisseur {$facture->numero_facture_fournisseur} — {$facture->reference}",
+            libelle: "Facture d’achat {$facture->numero_facture_fournisseur} — {$facture->reference}",
             lignes: $lignes,
             siteId: $facture->site_id,
             createdBy: $facture->validee_par,
@@ -157,7 +157,7 @@ class FactureFournisseurComptabilisationService
         $piece = $this->pieceDe($facture);
 
         return $piece && $piece->isValidee()
-            ? $this->ecritures->contrepasser($piece, "Facture fournisseur annulée : {$motif}", $userId)
+            ? $this->ecritures->contrepasser($piece, "Facture d’achat annulée : {$motif}", $userId)
             : null;
     }
 

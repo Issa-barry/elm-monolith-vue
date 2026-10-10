@@ -14,7 +14,7 @@ class CloturerCommandeAchatController extends Controller
     public function __invoke(Request $request, CommandeAchat $achat, CommandeAchatService $service): RedirectResponse
     {
         $this->authorize('annuler', $achat);
-        app(PerimetreCommandesAchat::class)->autoriser($achat, auth()->user());
+        app(PerimetreCommandesAchat::class)->autoriserAction($achat, auth()->user());
 
         $data = $request->validate([
             'motif_cloture' => 'required|string|max:2000',

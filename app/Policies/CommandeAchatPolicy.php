@@ -22,7 +22,7 @@ class CommandeAchatPolicy
 
     public function view(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.read') && $this->visible($user, $commande);
+        return $user->can('achats.read') && app(PerimetreCommandesAchat::class)->estConsultable($commande, $user);
     }
 
     public function create(User $user): bool
@@ -32,17 +32,17 @@ class CommandeAchatPolicy
 
     public function update(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.update') && $this->visible($user, $commande);
+        return $user->can('achats.update') && $this->peutAgir($user, $commande);
     }
 
     public function valider(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.valider') && $this->visible($user, $commande);
+        return $user->can('achats.valider') && $this->peutAgir($user, $commande);
     }
 
     public function annuler(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.annuler') && $this->visible($user, $commande);
+        return $user->can('achats.annuler') && $this->peutAgir($user, $commande);
     }
 
     /** Réceptionner (Logistique) : permission + utilisateur rattaché à l'agence de la commande. */
@@ -61,11 +61,12 @@ class CommandeAchatPolicy
 
     public function delete(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('achats.delete') && $this->visible($user, $commande);
+        return $user->can('achats.delete') && $this->peutAgir($user, $commande);
     }
 
-    private function visible(User $user, CommandeAchat $commande): bool
+    /** Les deux agences du bon (livraison et paiement) sont dans le périmètre de l'utilisateur. */
+    private function peutAgir(User $user, CommandeAchat $commande): bool
     {
-        return app(PerimetreCommandesAchat::class)->estVisible($commande, $user);
+        return app(PerimetreCommandesAchat::class)->peutAgir($commande, $user);
     }
 }

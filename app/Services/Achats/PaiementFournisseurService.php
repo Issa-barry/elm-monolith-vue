@@ -61,10 +61,15 @@ class PaiementFournisseurService
         }
         // checkPermissionTo() lit les permissions réelles des rôles — jamais le Gate::before.
         if (! $user->checkPermissionTo('factures-fournisseurs.payer')) {
-            return "Vous n'avez pas la permission de payer les factures fournisseurs.";
+            return "Vous n'avez pas la permission de payer les factures d’achat.";
         }
         if (! $this->perimetre->couvreSite($user, $facture->site_id)) {
             return "L'agence de cette facture n'est pas dans votre périmètre d'achat.";
+        }
+        // Révision du 10/10/2026 (ADR 0024) : pas de paiement tant que l'écriture de la facture
+        // n'est pas passée, sinon le 401 deviendrait débiteur en attendant le rattrapage.
+        if (! $this->comptabilisation->pieceDe($facture)?->isValidee()) {
+            return "Paiement impossible : l'écriture comptable de cette facture est en attente (compte d'achat ou de TVA non paramétré). Faites paramétrer les comptes, relancez la comptabilisation de la facture, puis payez-la.";
         }
 
         return null;

@@ -69,10 +69,10 @@ class CommissionLogistiqueController extends Controller
             $filtrePeriode = '';
         }
 
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $rows = CommissionPaymentService::soldesParLivreur(
             $orgId,
@@ -129,11 +129,11 @@ class CommissionLogistiqueController extends Controller
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
-            ->when($isAdmin && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
+            ->when($toutesAgences && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
                 'commission.transfert',
                 fn ($t) => $t->whereIn('site_source_id', $filtreSiteIds)->orWhereIn('site_destination_id', $filtreSiteIds)
             ))
-            ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
+            ->when(! $toutesAgences && ! empty($siteIds), fn ($q) => $q->whereHas(
                 'commission.transfert',
                 fn ($t) => $t->whereIn('site_source_id', $siteIds)->orWhereIn('site_destination_id', $siteIds)
             ))
@@ -212,7 +212,7 @@ class CommissionLogistiqueController extends Controller
             ];
         });
 
-        if (! $isAdmin) {
+        if (! $toutesAgences) {
             $allowedIds = $partsParLivreur->keys()->all();
             $livreurs = $livreurs->filter(fn ($r) => in_array($r['livreur_id'], $allowedIds));
         }
@@ -537,8 +537,8 @@ class CommissionLogistiqueController extends Controller
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
-        $isAdmin = $user->isAdmin();
-        $filtreSiteIds = $isAdmin
+        $toutesAgences = $user->voitToutesLesAgences();
+        $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
@@ -580,8 +580,8 @@ class CommissionLogistiqueController extends Controller
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
-        $isAdmin = $user->isAdmin();
-        $filtreSiteIds = $isAdmin
+        $toutesAgences = $user->voitToutesLesAgences();
+        $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 

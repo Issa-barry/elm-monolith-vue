@@ -44,6 +44,7 @@ class CommandeAchatService
     {
         return [
             'site_id' => ['required', 'string'],
+            'site_payeur_id' => ['nullable', 'string'],
             'fournisseur_id' => ['required', 'string'],
             'note' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
@@ -79,6 +80,7 @@ class CommandeAchatService
             $commande = CommandeAchat::create([
                 'organization_id' => $user->organization_id,
                 'site_id' => $ref['site']->id,
+                'site_payeur_id' => $ref['site_payeur']->id,
                 'fournisseur_id' => $ref['fournisseur']->id,
                 'reference' => $reference,
                 'numero' => $numero,
@@ -112,6 +114,7 @@ class CommandeAchatService
 
             $commande->update([
                 'site_id' => $ref['site']->id,
+                'site_payeur_id' => $ref['site_payeur']->id,
                 'fournisseur_id' => $ref['fournisseur']->id,
                 'note' => $data['note'] ?? null,
                 'contenu_modifie_par' => $user->id,
@@ -143,17 +146,23 @@ class CommandeAchatService
             return "Renseignez l'agence et le fournisseur de la commande avant de la valider.";
         }
 
+        // Deux agences (décision du 10/10/2026) : le plafond est celui d'une règle couvrant l'agence
+        // PAYEUSE, dont la trésorerie est engagée ; l'agence de livraison doit aussi être couverte.
+        $payeur = $commande->sitePayeurId();
         $montant = $this->montant($commande);
-        $refus = $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant);
+        $refus = $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $payeur, $montant);
         if ($refus !== null) {
             return $refus;
+        }
+        if ($payeur !== $commande->site_id && ! $this->plafonds->couvreSite($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id)) {
+            return "L'agence de livraison de ce bon n'est pas dans votre périmètre d'achat.";
         }
 
         // Séparation des tâches, sauf si une règle du rôle autorise à valider ses propres bons
         // (Paramètres → Achats) pour cette agence et ce montant.
         $estAuteur = $this->estAuteur($commande, $user);
         if ($estAuteur !== null
-            && $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant, sonPropreBon: true) !== null) {
+            && $this->plafonds->motifRefus($user, RegleValidationRole::DOMAINE_ACHATS, $payeur, $montant, sonPropreBon: true) !== null) {
             return $estAuteur === 'createur'
                 ? 'Vous avez créé ce bon de commande : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.'
                 : 'Vous avez modifié ce bon de commande en dernier : votre rôle ne permet pas de valider vos propres bons, il doit être validé par une autre personne.';
@@ -205,7 +214,7 @@ class CommandeAchatService
     {
         return DB::transaction(function () use ($commande, $user) {
             $commande = $this->verrouiller($commande);
-            $commande->load(['lignes', 'fournisseur.personne', 'fournisseur.entrepriseTierce', 'site']);
+            $commande->load(['lignes', 'fournisseur.personne', 'fournisseur.entrepriseTierce', 'site', 'sitePayeur']);
 
             if ($commande->lignes->isEmpty()) {
                 throw ValidationException::withMessages(['validation' => 'La commande ne contient aucune ligne.']);
@@ -218,7 +227,7 @@ class CommandeAchatService
 
             $montant = $this->montant($commande);
             $sonPropreBon = $this->estAuteur($commande, $user) !== null;
-            $regle = $this->plafonds->regleAppliquee($user, RegleValidationRole::DOMAINE_ACHATS, $commande->site_id, $montant, $sonPropreBon);
+            $regle = $this->plafonds->regleAppliquee($user, RegleValidationRole::DOMAINE_ACHATS, $commande->sitePayeurId(), $montant, $sonPropreBon);
 
             $this->figerLignes($commande);
 
@@ -230,6 +239,7 @@ class CommandeAchatService
                 'validee_par' => $user->id,
                 'fournisseur_nom_snapshot' => $commande->fournisseur?->nom_complet,
                 'site_nom_snapshot' => $commande->site?->nom,
+                'site_payeur_nom_snapshot' => $commande->estPayeParUneAutreAgence() ? $commande->sitePayeur?->nom : $commande->site?->nom,
                 'validation_regle_snapshot' => [
                     'role' => $regle->role_name,
                     'role_label' => Role::where('name', $regle->role_name)->value('label') ?: $regle->role_name,

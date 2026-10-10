@@ -299,6 +299,24 @@ class User extends Authenticatable
     }
 
     /**
+     * Permission « vision 360° » (ADR 0025) : consulter les données de toutes les agences. Portée par
+     * le rôle et cochée dans /backoffice/roles — jamais déduite du nom ou du trinôme d'un rôle.
+     */
+    public const PERMISSION_LECTURE_TOUTES_AGENCES = 'sites.lecture_toutes_agences';
+
+    /**
+     * Périmètre de CONSULTATION : l'utilisateur voit-il les données de toutes les agences de son
+     * organisation ? Un administrateur, toujours ; sinon la permission ci-dessus. N'ouvre aucun
+     * écran (la permission « Lire » de chaque ressource reste requise) et ne concerne jamais
+     * l'écriture : créer, modifier, supprimer, valider, payer… restent gouvernés par isAdmin() et le
+     * rattachement `user_sites`. Seule définition de cette règle — ne pas la recopier.
+     */
+    public function voitToutesLesAgences(): bool
+    {
+        return $this->isAdmin() || $this->can(self::PERMISSION_LECTURE_TOUTES_AGENCES);
+    }
+
+    /**
      * Accès en lecture aux écrans Commissions (vente/livreurs, propriétaires, sites,
      * consultants, logistique). `commissions.read` est la permission dédiée de la matrice de
      * rôles ; `comptabilite.read`, plus large (dépenses/trésorerie/salaires/journal financier

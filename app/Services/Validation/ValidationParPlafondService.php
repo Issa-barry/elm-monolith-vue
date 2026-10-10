@@ -88,6 +88,18 @@ class ValidationParPlafondService
         return array_values(array_unique($sites));
     }
 
+    /**
+     * Une règle d'un des rôles de l'utilisateur couvre l'agence ET active ce réglage d'auto-validation
+     * (RegleValidationRole::REGLAGES_AUTO_VALIDATION). Sans notion de plafond : sert aux documents
+     * validés sans plafond (factures d'achat).
+     */
+    public function autoriseSurSite(User $user, string $domaine, ?string $siteId, string $reglage): bool
+    {
+        return $siteId !== null
+            && in_array($reglage, RegleValidationRole::REGLAGES_AUTO_VALIDATION, true)
+            && $this->reglesDe($user, $domaine)->contains(fn (RegleValidationRole $r) => $r->{$reglage} && $this->regleCouvreSite($r, $user, $siteId));
+    }
+
     public function couvreSite(User $user, string $domaine, ?string $siteId): bool
     {
         return $siteId !== null

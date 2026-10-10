@@ -24,6 +24,7 @@ class CommandeAchat extends Model
         'organization_id',
         'fournisseur_id',
         'site_id',
+        'site_payeur_id',
         'reference',
         'numero',
         'note',
@@ -36,6 +37,7 @@ class CommandeAchat extends Model
         'montant_valide',
         'fournisseur_nom_snapshot',
         'site_nom_snapshot',
+        'site_payeur_nom_snapshot',
         'validation_regle_snapshot',
         'motif_annulation',
         'annulee_at',
@@ -107,9 +109,16 @@ class CommandeAchat extends Model
         return $this->belongsTo(Fournisseur::class);
     }
 
+    /** Agence de livraison : elle réceptionne et reçoit le stock. */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** Agence payeuse : elle porte la facture, la dette et le paiement (cf. sitePayeurId()). */
+    public function sitePayeur(): BelongsTo
+    {
+        return $this->belongsTo(Site::class, 'site_payeur_id');
     }
 
     public function lignes(): HasMany
@@ -196,6 +205,27 @@ class CommandeAchat extends Model
     public function siteNom(): ?string
     {
         return $this->site_nom_snapshot ?? $this->site?->nom;
+    }
+
+    /** Agence payeuse ; à défaut (bon antérieur au 10/10/2026 non migré), l'agence de livraison. */
+    public function sitePayeurId(): ?string
+    {
+        return $this->site_payeur_id ?? $this->site_id;
+    }
+
+    public function sitePayeurNom(): ?string
+    {
+        if ($this->site_payeur_id === null || $this->site_payeur_id === $this->site_id) {
+            return $this->site_payeur_nom_snapshot ?? $this->siteNom();
+        }
+
+        return $this->site_payeur_nom_snapshot ?? $this->sitePayeur?->nom;
+    }
+
+    /** Vrai quand l'agence qui paie n'est pas celle qui réceptionne (achat centralisé). */
+    public function estPayeParUneAutreAgence(): bool
+    {
+        return $this->site_payeur_id !== null && $this->site_payeur_id !== $this->site_id;
     }
 
     public function isReceptionnable(): bool

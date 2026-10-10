@@ -136,7 +136,7 @@ export function usePhoneOtpForm() {
         try {
             const data = await apiFetch<{
                 status: string;
-                prefill?: { prenom: string; nom: string };
+                prefill?: { prenom: string | null; nom: string | null } | null;
             }>('/register/lookup', { telephone: fullPhone.value });
 
             if (data.status === 'user_exists') {
@@ -145,15 +145,11 @@ export function usePhoneOtpForm() {
                 return;
             }
 
-            if (data.prefill) {
-                formPrenom.value = data.prefill.prenom;
-                formNom.value = data.prefill.nom;
-                isPrefilled.value = true;
-            } else {
-                formPrenom.value = '';
-                formNom.value = '';
-                isPrefilled.value = false;
-            }
+            // Identité incomplète (ex. client entreprise sans prénom) : champs laissés
+            // modifiables, sinon l'utilisateur resterait bloqué sur un champ vide verrouillé.
+            formPrenom.value = data.prefill?.prenom?.trim() ?? '';
+            formNom.value = data.prefill?.nom?.trim() ?? '';
+            isPrefilled.value = formPrenom.value !== '' && formNom.value !== '';
 
             step.value = 'otp';
         } catch (e: unknown) {

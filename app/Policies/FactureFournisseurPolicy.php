@@ -20,7 +20,7 @@ class FactureFournisseurPolicy
 
     public function view(User $user, FactureFournisseur $facture): bool
     {
-        return $user->can('factures-fournisseurs.read') && $this->visible($user, $facture);
+        return $user->can('factures-fournisseurs.read') && app(PerimetreCommandesAchat::class)->factureConsultable($facture, $user);
     }
 
     public function create(User $user): bool

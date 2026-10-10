@@ -57,7 +57,7 @@ const props = defineProps<{
 const titre = computed(() =>
     props.facture
         ? `Modifier ${props.facture.reference}`
-        : 'Saisir une facture fournisseur',
+        : 'Saisir une facture d’achat',
 );
 
 const breadcrumbs: BreadcrumbItem[] = [

@@ -140,7 +140,7 @@ final class FicheLivreurStaffData
             ->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q->where('livreur_id', $livreur->id));
 
         // Même restriction d'agence que la liste des factures pour un non-admin.
-        if (! $user->isAdmin()) {
+        if (! $user->voitToutesLesAgences()) {
             $siteIds = $user->sites()->pluck('sites.id');
             if ($siteIds->isNotEmpty()) {
                 $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $siteIds));

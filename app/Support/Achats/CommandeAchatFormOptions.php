@@ -9,10 +9,11 @@ use App\Models\ProduitVariante;
 use App\Models\User;
 use App\Services\Achats\AchatReferentielValidator;
 use App\Services\Achats\PerimetreCommandesAchat;
+use App\Services\Tresorerie\SiteCentralTresorerieResolver;
 
 /**
  * Options des formulaires de création et de modification d'un bon de commande fournisseur :
- * agences du périmètre « Peut acheter pour », fournisseurs actifs, et une option par VARIANTE active
+ * agences du périmètre « Peut acheter pour » (livraison et paiement), fournisseurs actifs, et une option par VARIANTE active
  * d'un produit actif achetable (un produit à plusieurs déclinaisons ne pouvait pas être commandé
  * avant ADR 0021, faute de sélecteur de variante).
  */
@@ -60,11 +61,16 @@ class CommandeAchatFormOptions
 
         $siteParDefaut = $user->sites()->wherePivot('is_default', true)->value('sites.id');
 
+        // « Payé par » : la trésorerie principale par défaut (achats centralisés), si le périmètre
+        // de l'utilisateur la couvre — sinon le formulaire retombe sur l'agence de livraison.
+        $central = app(SiteCentralTresorerieResolver::class)->centralOuNull($orgId)?->id;
+
         return [
             'variantes' => $variantes,
             'fournisseurs' => $fournisseurs,
             'sites' => $sites->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values(),
             'site_par_defaut' => $siteParDefaut,
+            'site_payeur_par_defaut' => $central !== null && $sites->contains('id', $central) ? $central : null,
         ];
     }
 }

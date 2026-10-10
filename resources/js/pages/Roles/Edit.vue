@@ -71,7 +71,7 @@ const resourceLabels: Record<string, string> = {
     packings: 'Packings',
     ventes: 'Ventes',
     achats: 'Achats',
-    'factures-fournisseurs': 'Factures fournisseurs',
+    'factures-fournisseurs': 'Factures d’achat',
     fournisseurs: 'Fournisseurs',
     factures: 'Factures',
     commissions: 'Commissions',

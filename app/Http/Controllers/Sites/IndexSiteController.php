@@ -15,11 +15,15 @@ class IndexSiteController extends Controller
         $this->authorize('viewAny', Site::class);
 
         $sites = Site::with(['parent'])
-            ->withCount(['enfants'])
+            ->withCount(['enfants', 'users as membres_count', 'vehicules'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
-            ->map(fn (Site $s) => SiteDataFormatter::pour($s));
+            ->map(fn (Site $s) => [
+                ...SiteDataFormatter::pour($s),
+                'membres_count' => (int) $s->membres_count,
+                'vehicules_count' => (int) $s->vehicules_count,
+            ]);
 
         return Inertia::render('Sites/Index', [
             'sites' => $sites,

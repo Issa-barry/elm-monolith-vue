@@ -235,24 +235,41 @@ class UserInvitationService
     public function phonePrefill(string $normalizedPhone): ?array
     {
         $client = Client::where('telephone', $normalizedPhone)->whereNull('user_id')->first();
-        if ($client) {
-            return ['prenom' => $client->prenom, 'nom' => $client->nom];
+        // L'identité civile d'un client vit sur sa Personne : clients.nom/prenom ne sont
+        // jamais saisis par l'interface (seul nom_complet l'est).
+        if ($prefill = $this->identitePrefill(
+            $client?->personne?->prenom ?? $client?->prenom,
+            $client?->personne?->nom ?? $client?->nom,
+        )) {
+            return $prefill;
         }
 
         $normalise = Personne::normaliserTelephone($normalizedPhone);
 
         $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
-        if ($livreur) {
-            return ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
+        if ($prefill = $this->identitePrefill($livreur?->prenom, $livreur?->nom)) {
+            return $prefill;
         }
 
         $proprietaire = Proprietaire::whereNull('user_id')
             ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->first();
-        if ($proprietaire) {
-            return ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
-        }
 
-        return null;
+        return $this->identitePrefill($proprietaire?->prenom, $proprietaire?->nom);
+    }
+
+    /**
+     * Le pré-remplissage verrouille les champs Prénom/Nom côté écran : une identité
+     * incomplète (ex. client entreprise sans prénom) bloquerait l'invité sur un champ
+     * vide non modifiable, on ne la propose donc pas.
+     *
+     * @return array{prenom: string, nom: string}|null
+     */
+    private function identitePrefill(?string $prenom, ?string $nom): ?array
+    {
+        $prenom = trim((string) $prenom);
+        $nom = trim((string) $nom);
+
+        return $prenom !== '' && $nom !== '' ? ['prenom' => $prenom, 'nom' => $nom] : null;
     }
 }

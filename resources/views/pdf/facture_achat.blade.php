@@ -1,14 +1,16 @@
 @php
     /*
-     * Bon de commande fournisseur — mise en page du modèle « Invoice » Apollo (ADR 0021), traduite
-     * en tableaux : DomPDF ne gère pas flexbox. Filigrane « NON VALIDÉ » tant que le bon n'a pas
-     * été validé, « ANNULÉ » s'il est annulé. Une fois validé, fournisseur, agence et libellés
-     * viennent du snapshot figé à la validation.
+     * Facture d'achat — récapitulatif de la facture enregistrée dans l'application, même mise en
+     * page « Invoice » Apollo que le bon de commande (tableaux : DomPDF ne gère pas flexbox).
+     * Ce n'est PAS la facture originale du fournisseur : la mention figure sur le document.
+     * Filigrane « BROUILLON » tant que la facture n'est pas validée, « ANNULÉE » si elle est annulée.
      */
     $montant = fn ($v) => number_format((float) $v, 0, ',', ' ').' GNF';
-    $filigrane = $commande->isAnnulee() ? 'ANNULÉ' : ($commande->isValidee() ? null : 'NON VALIDÉ');
-    $fournisseur = $commande->fournisseur;
-    $regle = $commande->validation_regle_snapshot;
+    $estAnnulee = $facture->statut === \App\Enums\StatutFactureFournisseur::ANNULEE;
+    $filigrane = $estAnnulee ? 'ANNULÉE' : ($facture->isBrouillon() ? 'BROUILLON' : null);
+    $fournisseur = $facture->fournisseur;
+    $taux = rtrim(rtrim(number_format((float) $facture->taux_tva, 2, ',', ' '), '0'), ',');
+    $nom = fn ($u) => $u ? trim($u->prenom.' '.$u->nom) : null;
     $logo = null;
     if ($organisation->logo_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($organisation->logo_path)) {
         $chemin = \Illuminate\Support\Facades\Storage::disk('public')->path($organisation->logo_path);
@@ -19,7 +21,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>{{ $commande->reference }}</title>
+<title>{{ $facture->reference }}</title>
 <style>
     @page { margin: 40px 48px; }
     * { margin: 0; padding: 0; }
@@ -66,16 +68,15 @@
     .ok { color: #047857; }
     .attention { color: #b45309; }
     .danger { color: #b91c1c; }
+    .mention { margin-top: 18px; font-size: 8.5px; color: #64748b; }
 
     .bas { position: fixed; bottom: -20px; left: 0; right: 0; font-size: 8.5px; color: #94a3b8; }
 </style>
 </head>
 <body>
-
 @if($filigrane)
     <div class="filigrane">{{ $filigrane }}</div>
 @endif
-
 <table class="entete">
     <tr>
         <td class="gauche" style="width: 58%;">
@@ -83,30 +84,28 @@
                 <img src="{{ $logo }}" alt="" style="max-height: 50px; max-width: 160px;" />
             @endif
             <div class="org-nom">{{ strtoupper($organisation->name) }}</div>
-            @if($commande->siteNom())
-                <div class="muted">Agence de livraison : {{ $commande->siteNom() }}</div>
-                @if($commande->estPayeParUneAutreAgence())
-                    <div class="muted">Payé par : {{ $commande->sitePayeurNom() }}</div>
-                @endif
+            @if($facture->site)
+                <div class="muted">Agence : {{ $facture->site->nom }}</div>
             @endif
         </td>
         <td style="width: 42%;">
-            <div class="doc-titre">BON DE COMMANDE</div>
+            <div class="doc-titre">FACTURE D’ACHAT</div>
             <table class="meta">
-                <tr><td class="cle">DATE</td><td class="val">{{ $commande->created_at->format('d/m/Y') }}</td></tr>
-                <tr><td class="cle">BON N°</td><td class="val">{{ $commande->reference }}</td></tr>
-                <tr><td class="cle">STATUT</td><td class="val">{{ $commande->statut_label }}</td></tr>
+                <tr><td class="cle">RÉFÉRENCE</td><td class="val">{{ $facture->reference }}</td></tr>
+                <tr><td class="cle">N° FOURNISSEUR</td><td class="val">{{ $facture->numero_facture_fournisseur }}</td></tr>
+                <tr><td class="cle">DATE</td><td class="val">{{ $facture->date_facture?->format('d/m/Y') }}</td></tr>
+                <tr><td class="cle">ÉCHÉANCE</td><td class="val">{{ $facture->date_echeance?->format('d/m/Y') ?? '—' }}</td></tr>
+                <tr><td class="cle">STATUT</td><td class="val">{{ $facture->statut?->label() }}</td></tr>
             </table>
         </td>
     </tr>
 </table>
-
 <table class="parties">
     <tr>
         <td>
             <div class="partie-titre">FOURNISSEUR</div>
             <table class="partie">
-                <tr><td class="strong">{{ $commande->fournisseurNom() ?? '—' }}</td></tr>
+                <tr><td class="strong">{{ $facture->fournisseurNom() ?? '—' }}</td></tr>
                 @if($fournisseur?->phone)
                     <tr><td>{{ trim(($fournisseur->code_phone_pays ? $fournisseur->code_phone_pays.' ' : '').$fournisseur->phone) }}</td></tr>
                 @endif
@@ -116,89 +115,102 @@
             </table>
         </td>
         <td>
-            <div class="partie-titre">LIVRER À</div>
+            <div class="partie-titre">BON DE COMMANDE</div>
             <table class="partie">
-                <tr><td class="strong">{{ $commande->siteNom() ?? '—' }}</td></tr>
-                <tr><td>{{ $organisation->name }}</td></tr>
-                <tr><td class="muted">Émis par {{ $createdBy }}</td></tr>
+                <tr><td class="strong">{{ $facture->commande?->reference ?? '—' }}</td></tr>
+                <tr><td>Livré à {{ $facture->site?->nom ?? '—' }}</td></tr>
+                @if($nom($facture->createdBy))
+                    <tr><td class="muted">Saisie par {{ $nom($facture->createdBy) }}</td></tr>
+                @endif
             </table>
         </td>
     </tr>
 </table>
-
 <table class="lignes">
     <thead>
         <tr>
             <th>Désignation</th>
+            <th>Réception</th>
             <th class="droite">Quantité</th>
-            <th class="droite">Prix unitaire</th>
-            <th class="droite">Total ligne</th>
+            <th class="droite">Prix unitaire HT</th>
+            <th class="droite">Total HT</th>
         </tr>
     </thead>
     <tbody>
-        @foreach($commande->lignes as $ligne)
+        @foreach($facture->lignes as $ligne)
+            @php $reception = $ligne->receptionLigne?->reception; @endphp
             <tr>
                 <td>
-                    {{ $ligne->libelle_snapshot ?? $ligne->variante?->produit?->nom ?? '—' }}
+                    {{ $ligne->libelle_snapshot ?? '—' }}
                     @if($ligne->reference_snapshot)
                         <span class="ref">Réf. {{ $ligne->reference_snapshot }}</span>
                     @endif
                 </td>
-                <td class="droite">{{ $ligne->qte }}</td>
-                <td class="droite">{{ $montant($ligne->prix_achat_snapshot) }}</td>
-                <td class="droite">{{ $montant($ligne->total_ligne) }}</td>
+                <td>
+                    {{ $reception?->reference ?? '—' }}
+                    @if($reception?->date_reception)
+                        <span class="ref">{{ $reception->date_reception->format('d/m/Y') }}</span>
+                    @endif
+                </td>
+                <td class="droite">{{ $ligne->qte_facturee }}</td>
+                <td class="droite">{{ $montant($ligne->prix_unitaire) }}</td>
+                <td class="droite">{{ $montant($ligne->total_ht) }}</td>
             </tr>
         @endforeach
     </tbody>
 </table>
-
 <table class="pied">
     <tr>
         <td style="width: 55%; padding-right: 24px;">
             <div class="notes-titre">NOTES</div>
-            <div>{{ $commande->note ?: '—' }}</div>
+            <div>{{ $facture->note ?: '—' }}</div>
         </td>
         <td style="width: 45%;">
             <table class="totaux">
-                <tr><td class="cle">SOUS-TOTAL</td><td class="val">{{ $montant($commande->total_commande) }}</td></tr>
-                <tr><td class="cle">TVA</td><td class="val">0</td></tr>
-                <tr class="total"><td class="cle">TOTAL</td><td class="val strong">{{ $montant($commande->total_commande) }}</td></tr>
+                <tr><td class="cle">TOTAL HT</td><td class="val">{{ $montant($facture->montant_ht) }}</td></tr>
+                <tr><td class="cle">TVA ({{ $taux }} %)</td><td class="val">{{ $montant($facture->montant_tva) }}</td></tr>
+                <tr class="total"><td class="cle">TOTAL TTC</td><td class="val strong">{{ $montant($facture->montant_ttc) }}</td></tr>
+                @if($facture->isConstatee())
+                    <tr><td class="cle">DÉJÀ PAYÉ</td><td class="val">{{ $montant($facture->montant_paye) }}</td></tr>
+                    <tr><td class="cle">RESTE DÛ</td><td class="val strong">{{ $montant($facture->resteDu()) }}</td></tr>
+                @endif
             </table>
         </td>
     </tr>
 </table>
 
-@if($commande->isAnnulee())
+@if($estAnnulee)
     <div class="encadre">
-        <div class="encadre-titre danger">Bon de commande annulé</div>
-        <div>{{ $commande->motif_annulation }}</div>
-        @if($commande->annulee_at)
-            <div class="muted">Le {{ $commande->annulee_at->format('d/m/Y à H:i') }}</div>
+        <div class="encadre-titre danger">Facture annulée</div>
+        <div>{{ $facture->motif_annulation }}</div>
+        @if($facture->annulee_at)
+            <div class="muted">Le {{ $facture->annulee_at->format('d/m/Y à H:i') }}</div>
         @endif
     </div>
-@elseif($commande->isValidee())
+@elseif($facture->isConstatee())
     <div class="encadre">
-        <div class="encadre-titre ok">Bon de commande validé</div>
+        <div class="encadre-titre ok">Facture validée — dette fournisseur constatée</div>
         <div>
-            Le {{ $commande->validee_at->format('d/m/Y à H:i') }}
-            @if($commande->valideePar) par {{ trim($commande->valideePar->prenom.' '.$commande->valideePar->nom) }} @endif
-            @if($regle)
-                — rôle {{ $regle['role_label'] ?? $regle['role'] ?? '' }},
-                {{ ($regle['plafond_illimite'] ?? false) ? 'sans limite' : 'plafond '.$montant($regle['plafond'] ?? 0) }}
-            @endif
+            Le {{ $facture->validee_at?->format('d/m/Y à H:i') }}
+            @if($nom($facture->valideePar)) par {{ $nom($facture->valideePar) }} @endif
         </div>
     </div>
 @else
     <div class="encadre">
-        <div class="encadre-titre attention">En attente de validation</div>
-        <div>Ce document n'engage pas l'entreprise tant qu'il n'a pas été validé.</div>
+        <div class="encadre-titre attention">Brouillon</div>
+        <div>Aucune dette n'est constatée tant que la facture n'est pas validée.</div>
     </div>
 @endif
+
+<div class="mention">
+    Récapitulatif établi par {{ $organisation->name }} à partir de la facture n° {{ $facture->numero_facture_fournisseur }}
+    du fournisseur. Ce document n’est pas la facture originale du fournisseur.
+</div>
 
 <div class="bas">
     <table>
         <tr>
-            <td>{{ $organisation->name }} — {{ $commande->reference }}</td>
+            <td>{{ $organisation->name }} — {{ $facture->reference }}</td>
             <td style="text-align: right;">Généré le {{ now()->format('d/m/Y à H:i') }}</td>
         </tr>
     </table>

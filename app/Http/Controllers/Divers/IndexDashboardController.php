@@ -59,7 +59,7 @@ class IndexDashboardController extends Controller
         // Périmètre d'agence : même mécanisme que la trésorerie et les rapports (SiteScopeService) —
         // toute l'organisation pour un administrateur, ses agences (user_sites) sinon. Une facture sans
         // agence n'est comptée que dans la vue organisation (cf. docs/rapports.md, tableau de bord).
-        $siteIds = $user->isAdmin()
+        $siteIds = $user->voitToutesLesAgences()
             ? null
             : $this->siteScope->accessibleSiteIds($user)->map(fn ($id) => (string) $id)->all();
         $perimetre = fn ($query, string $colonne) => $siteIds === null ? $query : $query->whereIn($colonne, $siteIds);

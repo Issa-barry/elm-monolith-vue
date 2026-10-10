@@ -35,19 +35,19 @@ class IndexProduitController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
         $filters = $request->only(['search', 'produit_type_id', 'statut', 'categorie_id', 'stock']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        if (empty($siteIds) && ! $isAdmin) {
+        if (empty($siteIds) && ! $toutesAgences) {
             $siteIds = $user->sites()->pluck('sites.id')->map(fn ($id) => (string) $id)->toArray();
         }
 
-        $allowedSiteIds = $isAdmin
+        $allowedSiteIds = $toutesAgences
             ? Site::where('organization_id', $orgId)->pluck('id')->all()
             : $user->sites()->where('sites.organization_id', $orgId)->pluck('sites.id')->all();
-        abort_if((! $isAdmin && empty($allowedSiteIds)) || count(array_diff($siteIds, $allowedSiteIds)) > 0, 403);
+        abort_if((! $toutesAgences && empty($allowedSiteIds)) || count(array_diff($siteIds, $allowedSiteIds)) > 0, 403);
 
         $query = Produit::where('organization_id', $orgId)
             ->with([

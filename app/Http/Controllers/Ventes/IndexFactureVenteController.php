@@ -27,10 +27,10 @@ class IndexFactureVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $toutesAgences = $user->voitToutesLesAgences();
 
-        // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
-        $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
+        // Sites auxquels l'utilisateur a accès (vide = tous : administrateur ou vision 360°, ADR 0025)
+        $authorizedSiteIds = $toutesAgences ? collect() : $user->sites()->pluck('sites.id');
 
         $periode = $request->input('periode') ?? 'month';
         $statut = $request->input('statut') ?? 'tous';
@@ -58,7 +58,7 @@ class IndexFactureVenteController extends Controller
 
         // Liste des sites accessibles à l'utilisateur pour le filtre
         $sitesQuery = Site::where('organization_id', $orgId);
-        if (! $isAdmin && $authorizedSiteIds->isNotEmpty()) {
+        if (! $toutesAgences && $authorizedSiteIds->isNotEmpty()) {
             $sitesQuery->whereIn('id', $authorizedSiteIds);
         }
         $sites = $sitesQuery->orderBy('nom')
@@ -77,8 +77,8 @@ class IndexFactureVenteController extends Controller
         ])
             ->where('organization_id', $orgId);
 
-        // Un utilisateur non-admin ne voit que les factures des sites auxquels il est affecté
-        if (! $isAdmin && $authorizedSiteIds->isNotEmpty()) {
+        // Périmètre limité à ses agences : l'utilisateur ne voit que les factures des sites auxquels il est affecté
+        if (! $toutesAgences && $authorizedSiteIds->isNotEmpty()) {
             $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $authorizedSiteIds));
         }
 
@@ -97,7 +97,7 @@ class IndexFactureVenteController extends Controller
             $query->where('statut_facture', $statut);
         }
 
-        if ($isAdmin && ! empty($siteIds)) {
+        if ($toutesAgences && ! empty($siteIds)) {
             $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $siteIds));
         }
 

@@ -46,7 +46,7 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Achats', href: '/backoffice/achats' },
-    { title: 'Factures fournisseurs', href: '/backoffice/achats/factures' },
+    { title: 'Factures d’achat', href: '/backoffice/achats/factures' },
 ];
 
 const filterFields = computed<FilterField[]>(() => [
@@ -87,7 +87,7 @@ function paginationLabel(label: string): string {
 </script>
 
 <template>
-    <Head title="Factures fournisseurs" />
+    <Head title="Factures d’achat" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
@@ -96,7 +96,7 @@ function paginationLabel(label: string): string {
             >
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Factures fournisseurs
+                        Factures d’achat
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
                         Une facture se saisit depuis la fiche d'un bon de
@@ -207,7 +207,7 @@ function paginationLabel(label: string): string {
                                 <FileText
                                     class="mx-auto mb-3 h-10 w-10 opacity-30"
                                 />
-                                Aucune facture fournisseur.
+                                Aucune facture d’achat.
                             </td>
                         </tr>
                     </tbody>

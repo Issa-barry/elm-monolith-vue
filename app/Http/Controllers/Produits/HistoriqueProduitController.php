@@ -26,7 +26,7 @@ class HistoriqueProduitController extends Controller
         }
 
         $user = $request->user();
-        $sitesConsultables = $user->isAdmin()
+        $sitesConsultables = $user->voitToutesLesAgences()
             ? Site::where('organization_id', $produit->organization_id)->pluck('id')
             : $user->sites()->where('sites.organization_id', $produit->organization_id)->pluck('sites.id');
         $siteId = $request->string('site_id')->trim()->toString();

@@ -35,7 +35,7 @@ class IndexCommissionMonitoringController extends Controller
         abort_unless($user->canReadCommissions(), 403);
 
         $orgId = $user->organization_id;
-        $siteIdsAutorises = $user->isAdmin() ? null : $siteScope->accessibleSiteIds($user);
+        $siteIdsAutorises = $user->voitToutesLesAgences() ? null : $siteScope->accessibleSiteIds($user);
 
         $filtres = [
             'site_ids' => array_values(array_filter((array) $request->input('site_ids', []), 'is_string')),

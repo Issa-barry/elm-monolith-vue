@@ -59,8 +59,10 @@ class CompteTresorerieController extends Controller
 
         $orgId = $user->organization_id;
         $peutGerer = $user->can('tresorerie.gerer_soldes_ouverture');
-        // null = toutes les agences (admin) ; sinon uniquement celles de l'utilisateur.
-        $sitesAccessibles = $user->isAdmin() ? null : $this->siteScope->accessibleSiteIds($user)->all();
+        // null = toutes les agences (admin ou vision 360°) ; sinon uniquement celles de l'utilisateur.
+        $sitesAccessibles = $user->voitToutesLesAgences() ? null : $this->siteScope->accessibleSiteIds($user)->all();
+        // Données de création d'une caisse : agences de rattachement, la vision 360° ne les élargit pas.
+        $sitesEcriture = $user->isAdmin() ? null : $this->siteScope->assignedSiteIds($user)->all();
         $typesParCompte = $peutGerer ? $typeResolver->typesParCompte($orgId) : collect();
 
         $filters = [
@@ -213,10 +215,10 @@ class CompteTresorerieController extends Controller
             ])->values(),
             // Données de création : réservées à celui qui peut réellement créer une caisse — un
             // simple lecteur n'a pas à recevoir la liste des utilisateurs de l'organisation.
-            'agents' => $peutGerer ? $this->agentsAssignables($orgId, $sitesAccessibles) : collect(),
+            'agents' => $peutGerer ? $this->agentsAssignables($orgId, $sitesEcriture) : collect(),
             'caisses_dediees_actives' => $peutGerer
                 ? CompteTresorerie::forOrg($orgId)->dediees()->actifs()
-                    ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
+                    ->when($sitesEcriture !== null, fn ($q) => $q->whereIn('site_id', $sitesEcriture))
                     ->get(['agent_id', 'site_id'])
                     ->map(fn (CompteTresorerie $c) => ['agent_id' => $c->agent_id, 'site_id' => $c->site_id])
                     ->values()
