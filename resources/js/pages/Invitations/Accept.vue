@@ -319,7 +319,7 @@ async function submitPhoneLookup() {
     try {
         const data = await apiFetch<{
             status: string;
-            prefill?: { prenom: string; nom: string };
+            prefill?: { prenom: string | null; nom: string | null } | null;
             cooldown_seconds?: number;
         }>(`/invitations/accept/${props.token}/phone`, {
             telephone: fullPhone.value,
@@ -331,15 +331,9 @@ async function submitPhoneLookup() {
             return;
         }
 
-        if (data.prefill) {
-            formPrenom.value = data.prefill.prenom;
-            formNom.value = data.prefill.nom;
-            isPrefilled.value = true;
-        } else {
-            formPrenom.value = '';
-            formNom.value = '';
-            isPrefilled.value = false;
-        }
+        formPrenom.value = data.prefill?.prenom?.trim() ?? '';
+        formNom.value = data.prefill?.nom?.trim() ?? '';
+        isPrefilled.value = formPrenom.value !== '' && formNom.value !== '';
 
         otpError.value = '';
         resendSuccessMessage.value = '';
