@@ -81,9 +81,10 @@ class IndexCommandeAchatController extends Controller
                 'qte_commandee' => (int) $c->qte_commandee,
                 'qte_recue' => (int) $c->qte_recue,
                 'is_annulee' => $c->isAnnulee(),
+                'supprimable' => $c->isAnnulee() && $this->perimetre->peutAgir($c, $user),
                 // Un bon seulement consultable (vision 360°, ADR 0025) n'est jamais annulable depuis la liste.
                 'annulable' => ($c->isAValider() || $c->statut === StatutCommandeAchat::VALIDEE) && (int) $c->qte_recue === 0
-                    && $this->perimetre->estVisible($c, $user),
+                    && $this->perimetre->peutAgir($c, $user),
                 // Même règle que la fiche (permission, périmètre, plafond, séparation des tâches) :
                 // l'action « Valider » de la liste n'apparaît que si le serveur l'accepterait.
                 'peut_valider' => $c->isAValider()

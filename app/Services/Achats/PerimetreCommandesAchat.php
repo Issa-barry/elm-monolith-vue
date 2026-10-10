@@ -105,8 +105,17 @@ class PerimetreCommandesAchat
     public function peutAgir(CommandeAchat $commande, User $user): bool
     {
         return $commande->organization_id === $user->organization_id
-            && $this->couvreSite($user, $commande->site_id)
-            && $this->couvreSite($user, $commande->sitePayeurId());
+            && $this->couvreAgenceDuBon($user, $commande->site_id)
+            && $this->couvreAgenceDuBon($user, $commande->sitePayeurId());
+    }
+
+    /**
+     * Un bon sans agence (antérieur à l'ADR 0021) n'engage aucune agence précise : seul un périmètre
+     * « toutes les agences » permet d'agir dessus, comme avant l'ajout de l'agence payeuse.
+     */
+    private function couvreAgenceDuBon(User $user, ?string $siteId): bool
+    {
+        return $siteId === null ? $this->sitesCouverts($user) === null : $this->couvreSite($user, $siteId);
     }
 
     /** 403 si l'utilisateur ne peut pas agir sur ce bon — à appeler après authorize(). */
