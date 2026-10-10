@@ -144,6 +144,7 @@ class ImportFlotteExecutor
                 'type_vehicule_id' => $vData['type_vehicule_id'],
                 'livraison_vente' => $vData['livraison_vente'],
                 'livraison_logistique' => $vData['livraison_logistique'],
+                'livraison_grossiste' => $vData['livraison_grossiste'] ?? false,
                 'site_id' => $vData['site_id'],
                 'categorie' => $vData['categorie'],
                 // Propriété indépendante de l'usage : propriétaire tiers si résolu depuis le

@@ -23,13 +23,26 @@ class CommandeAchat extends Model
     protected $fillable = [
         'organization_id',
         'fournisseur_id',
+        'site_id',
         'reference',
+        'numero',
         'note',
         'total_commande',
         'statut',
+        'contenu_modifie_par',
+        'contenu_modifie_at',
+        'validee_at',
+        'validee_par',
+        'montant_valide',
+        'fournisseur_nom_snapshot',
+        'site_nom_snapshot',
+        'validation_regle_snapshot',
         'motif_annulation',
         'annulee_at',
         'annulee_par',
+        'cloturee_at',
+        'cloturee_par',
+        'motif_cloture',
         'created_by',
         'updated_by',
     ];
@@ -41,7 +54,12 @@ class CommandeAchat extends Model
         return [
             'total_commande' => 'decimal:2',
             'statut' => StatutCommandeAchat::class,
+            'contenu_modifie_at' => 'datetime',
+            'validee_at' => 'datetime',
+            'montant_valide' => 'decimal:2',
+            'validation_regle_snapshot' => 'array',
             'annulee_at' => 'datetime',
+            'cloturee_at' => 'datetime',
         ];
     }
 
@@ -52,7 +70,7 @@ class CommandeAchat extends Model
                 $c->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($c->statut)) {
-                $c->statut = StatutCommandeAchat::EN_COURS;
+                $c->statut = StatutCommandeAchat::A_VALIDER;
             }
             if (Auth::check()) {
                 $c->created_by = Auth::id();
@@ -89,9 +107,39 @@ class CommandeAchat extends Model
         return $this->belongsTo(Fournisseur::class);
     }
 
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
     public function lignes(): HasMany
     {
         return $this->hasMany(CommandeAchatLigne::class);
+    }
+
+    public function receptions(): HasMany
+    {
+        return $this->hasMany(ReceptionAchat::class);
+    }
+
+    public function factures(): HasMany
+    {
+        return $this->hasMany(FactureFournisseur::class);
+    }
+
+    public function valideePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validee_par');
+    }
+
+    public function contenuModifiePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'contenu_modifie_par');
+    }
+
+    public function clotureePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cloturee_par');
     }
 
     public function createdBy(): BelongsTo
@@ -126,5 +174,32 @@ class CommandeAchat extends Model
     public function isReceptionnee(): bool
     {
         return $this->statut === StatutCommandeAchat::RECEPTIONNEE;
+    }
+
+    public function isAValider(): bool
+    {
+        return $this->statut instanceof StatutCommandeAchat && $this->statut->estAValider();
+    }
+
+    public function isValidee(): bool
+    {
+        return $this->validee_at !== null;
+    }
+
+    /** Nom du fournisseur figé à la validation, ou nom actuel tant que la commande n'est pas validée. */
+    public function fournisseurNom(): ?string
+    {
+        return $this->fournisseur_nom_snapshot ?? $this->fournisseur?->nom_complet;
+    }
+
+    /** Nom de l'agence figé à la validation, ou nom actuel tant que la commande n'est pas validée. */
+    public function siteNom(): ?string
+    {
+        return $this->site_nom_snapshot ?? $this->site?->nom;
+    }
+
+    public function isReceptionnable(): bool
+    {
+        return $this->statut instanceof StatutCommandeAchat && $this->statut->estReceptionnable();
     }
 }

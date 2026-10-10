@@ -5,6 +5,11 @@ Configuré dans **Paramètres → Validation des dépenses** (`settings/DepenseP
 une ligne par `(organization_id, role_name)` dans la table `droit_creation_depenses` (nom
 historique — cette table porte aussi le droit de création de dépense, hors périmètre de ce doc).
 
+> Les achats (ADR 0021, [achats.md](achats.md)) utilisent un mécanisme voisin mais générique,
+> `ValidationParPlafondService` (table `regles_validation_roles`, colonne `domaine`), **sans**
+> l'exception DEPVAL-001 du super administrateur. Les règles des dépenses ci-dessous ne changent
+> pas ; leur refonte pourra se brancher sur ce service.
+
 ## Règles métier (IDs)
 
 - **DEPVAL-001** — Seul **Super Admin** valide n'importe quelle dépense de l'organisation, sans

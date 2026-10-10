@@ -34,6 +34,26 @@ class ProprietaireTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_index_expose_le_nombre_de_vehicules_du_proprietaire(): void
+    {
+        $avecVehicules = Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Aaa']);
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Zzz']);
+        Vehicule::factory()->count(2)->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $avecVehicules->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Proprietaires/Index')
+                ->where('proprietaires', fn ($proprietaires) => collect($proprietaires)
+                    ->pluck('vehicules_count', 'nom')
+                    ->only(['Aaa', 'Zzz'])
+                    ->all() === ['Aaa' => 2, 'Zzz' => 0])
+            );
+    }
+
     public function test_index_redirects_unauthenticated_user(): void
     {
         $this->get(route('proprietaires.index'))->assertRedirect(route('login'));

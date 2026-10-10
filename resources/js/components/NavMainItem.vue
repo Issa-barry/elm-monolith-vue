@@ -8,6 +8,7 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useSidebar } from '@/components/ui/sidebar/utils';
+import { lienActif } from '@/lib/navActive';
 import { toUrl } from '@/lib/utils';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -27,15 +28,8 @@ function closeMobileSidebar() {
 
 const openMenus = reactive<Record<string, boolean>>({});
 
-function isItemActive(href: NavItem['href']) {
-    const url = toUrl(href);
-    if (!url) return false;
-
-    return (
-        page.url === url ||
-        page.url.startsWith(`${url}/`) ||
-        page.url.startsWith(`${url}?`)
-    );
+function isItemActive(href: NavItem['href'], freres: NavItem[] = []) {
+    return lienActif(href, freres, page.url);
 }
 
 function isParentActive(item: NavItem): boolean {
@@ -165,7 +159,12 @@ function parentBadge(item: NavItem): number | undefined {
                                     as-child
                                     size="md"
                                     :class="[LIGNE, LIEN_ACTIF]"
-                                    :is-active="isItemActive(nestedItem.href)"
+                                    :is-active="
+                                        isItemActive(
+                                            nestedItem.href,
+                                            subItem.items,
+                                        )
+                                    "
                                 >
                                     <Link
                                         :href="nestedItem.href"
@@ -187,7 +186,7 @@ function parentBadge(item: NavItem): number | undefined {
                         v-else
                         as-child
                         :class="[LIGNE, LIEN_ACTIF]"
-                        :is-active="isItemActive(subItem.href)"
+                        :is-active="isItemActive(subItem.href, item.items)"
                     >
                         <Link :href="subItem.href" @click="closeMobileSidebar">
                             <span>{{ subItem.title }}</span>

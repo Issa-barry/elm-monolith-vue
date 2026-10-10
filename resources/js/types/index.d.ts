@@ -20,12 +20,14 @@ export type Resource =
     | 'packings'
     | 'ventes'
     | 'achats'
+    | 'factures-fournisseurs'
     | 'fournisseurs'
     | 'pdv'
     | 'depenses'
     | 'users'
     | 'parametres'
     | 'logistique'
+    | 'receptions'
     | 'comptabilite'
     | 'commissions'
     | 'tresorerie'
@@ -54,7 +56,12 @@ export type StandalonePermission =
     | 'rapports.read_own'
     | 'rapports.read'
     | 'factures.encaisser'
-    | 'factures.encaisser_autre_agence';
+    | 'factures.encaisser_autre_agence'
+    | 'achats.valider'
+    | 'achats.annuler'
+    | 'factures-fournisseurs.valider'
+    | 'factures-fournisseurs.annuler'
+    | 'factures-fournisseurs.payer';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

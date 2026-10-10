@@ -15,6 +15,7 @@ use App\Models\CommissionPayment;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\PieceComptable;
+use App\Models\ReceptionAchatLigne;
 use App\Models\VarianteStock;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -60,6 +61,7 @@ class PurgeTransactionsCommand extends Command
         CommandeVenteLigne::class,
         CommandeVenteRetourLigne::class,
         CommandeAchatLigne::class,
+        ReceptionAchatLigne::class,
     ];
 
     public function handle(): int
@@ -121,7 +123,7 @@ class PurgeTransactionsCommand extends Command
             $scoped(CommandeVente::query())->forceDelete();
 
             // forceDelete() impératif : CommandeAchat utilise aussi SoftDeletes (même raison).
-            // Cascade DB : commande_achat_lignes.
+            // Cascade DB : commande_achat_lignes, receptions_achats, reception_achat_lignes.
             $scoped(CommandeAchat::query())->forceDelete();
 
             // Cascade DB : commission_logistique_parts, versements_commission_logistique,

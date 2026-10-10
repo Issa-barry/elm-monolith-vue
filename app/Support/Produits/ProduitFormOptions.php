@@ -31,7 +31,7 @@ final class ProduitFormOptions
                 'gere_stock' => $t->gere_stock,
                 'required_prices' => $t->requiredPrices(),
                 // Applicabilité fonctionnelle (déjà utilisée pour filtrer les flux
-                // achat/vente, cf. CommandeAchatController/CommandeVenteFormBuilder/
+                // achat/vente, cf. CommandeAchatFormOptions/CommandeVenteFormBuilder/
                 // Ventes\IndexPdvController) — réutilisée ici pour piloter la visibilité des champs
                 // prix_achat/prix_vente dans le formulaire, distincte de l'obligation de
                 // saisie (*_requis, cf. required_prices ci-dessus).

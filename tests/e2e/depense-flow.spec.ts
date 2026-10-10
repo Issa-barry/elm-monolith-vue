@@ -5,6 +5,7 @@ import {
     getVisibleSearchInput,
     login,
     randomDigits,
+    selectOptionFromCombobox,
 } from './helpers';
 
 test.setTimeout(180_000);
@@ -44,7 +45,7 @@ async function createDepenseInterne(
     await expect(page.locator('#dep-type')).not.toBeDisabled({
         timeout: 5_000,
     });
-    await page.selectOption('#dep-type', { index: 1 });
+    await selectOptionFromCombobox(page, page.locator('#dep-type'));
 
     await expect(page.locator('#dep-montant')).toBeVisible({ timeout: 10_000 });
     await page.locator('#dep-montant').fill(String(montant));
@@ -71,20 +72,15 @@ async function createDepenseVehicule(
     await expect(page.locator('#dep-type')).not.toBeDisabled({
         timeout: 5_000,
     });
-    await page.selectOption('#dep-type', { index: 1 });
+    await selectOptionFromCombobox(page, page.locator('#dep-type'));
 
-    // Saisir véhicule via AutoComplete (PrimeVue 4 : clic sur le bouton dropdown du composant)
-    const vehiculeAutocomplete = page
-        .locator('#dep-vehicule')
-        .locator('xpath=..');
-    await vehiculeAutocomplete
-        .locator('button')
-        .first()
-        .click({ timeout: 5_000 });
-    const firstOption = page.locator('[role="option"]:visible').first();
-    if (await firstOption.isVisible({ timeout: 5_000 })) {
-        await firstOption.click({ timeout: 5_000 });
-    }
+    // Véhicule choisi dans la fenêtre de recherche (BeneficiairePickerDialog).
+    await page.locator('#dep-vehicule').click();
+    const picker = page.getByRole('dialog');
+    const firstVehicule = picker.getByRole('option').first();
+    await expect(firstVehicule).toBeVisible({ timeout: 10_000 });
+    await firstVehicule.click();
+    await expect(picker).toBeHidden({ timeout: 5_000 });
 
     await expect(page.locator('#dep-montant')).toBeVisible({ timeout: 10_000 });
     await page.locator('#dep-montant').fill(String(montant));
@@ -120,11 +116,11 @@ test('changer concerné réinitialise type et bénéficiaire', async ({ page }) 
     await expect(page.locator('#dep-type')).not.toBeDisabled({
         timeout: 5_000,
     });
-    await page.selectOption('#dep-type', { index: 1 });
+    await selectOptionFromCombobox(page, page.locator('#dep-type'));
 
     // Changer de concerné
     await selectConcerne(page, 'interne');
-    await expect(page.locator('#dep-type')).toHaveValue('');
+    await expect(page.locator('#dep-type')).toHaveText(/sélectionner un type/i);
 });
 
 test('create depense interne brouillon -> modifier -> supprimer', async ({

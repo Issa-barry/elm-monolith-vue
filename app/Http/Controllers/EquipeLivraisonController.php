@@ -587,8 +587,8 @@ class EquipeLivraisonController extends Controller
         // "Processus disponible" ≠ "processus obligatoire" (révisé le 31/08/2026) : un partage ne
         // peut être enregistré que pour un processus que l'USAGE du véhicule autorise réellement
         // (livraison_vente pour vente, livraison_logistique pour distribution_client/
-        // logistique_transfert/transfert_grossiste, ce dernier depuis le 05/09/2026 cf.
-        // docs/grossiste.md) — jamais uniquement filtré côté UI, une requête forgée avec
+        // logistique_transfert, livraison_grossiste pour transfert_grossiste depuis l'ADR 0023,
+        // cf. docs/grossiste.md) — jamais uniquement filtré côté UI, une requête forgée avec
         // processus_code=logistique_transfert sur un véhicule Vente-only doit être rejetée ici même
         // (cf. CommissionProcessusDefaults::codesApplicablesPourVehicule(), source unique partagée
         // avec VehiculeController). Si le véhicule n'est pas encore résolu (vehicule_id invalide),
@@ -723,6 +723,7 @@ class EquipeLivraisonController extends Controller
             'vehicule_type_label' => $e->vehicule?->type_label,
             'vehicule_livraison_vente' => $e->vehicule?->livraison_vente,
             'vehicule_livraison_logistique' => $e->vehicule?->livraison_logistique,
+            'vehicule_livraison_grossiste' => $e->vehicule?->livraison_grossiste,
             'vehicule_capacites' => $e->vehicule
                 ? $e->vehicule->capacites->map(fn (VehiculeCapacite $c) => [
                     'categorie_nom' => $c->categorie->nom,
@@ -772,6 +773,7 @@ class EquipeLivraisonController extends Controller
                 'immatriculation' => $v->immatriculation,
                 'livraison_vente' => $v->livraison_vente,
                 'livraison_logistique' => $v->livraison_logistique,
+                'livraison_grossiste' => $v->livraison_grossiste,
                 'type_label' => $v->type_label,
                 'proprietaire_id' => $v->proprietaire_id,
                 'proprietaire_nom' => $v->proprietaire ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}") : null,

@@ -24,6 +24,7 @@ use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionPdfFooter;
 use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSiteResponsableFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
@@ -777,7 +778,7 @@ class CommissionProprietaireController extends Controller
             'show_validation_columns' => true,
             'printed_by' => auth()->user()->name ?? '—',
             'generated_at' => now(),
-        ])->setPaper('a4', 'landscape');
+        ])->setPaper('a4', 'landscape')->setCallbacks(CommissionPdfFooter::callbacks());
 
         return $pdf->download('commissions-proprietaires-'.now()->format('Y-m-d').'.pdf');
     }

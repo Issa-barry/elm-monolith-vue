@@ -189,7 +189,6 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         float $montantEquipe = 300,
         ?float $montantSite = null,
         int $capacitePacks = 100,
-        bool $livraisonLogistique = false,
     ): Vehicule {
         $this->creerBaremeTransfertGrossiste($montantProprietaire, $montantEquipe, $montantSite);
 
@@ -198,7 +197,8 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => $capacitePacks,
-            'livraison_logistique' => $livraisonLogistique,
+            // Usage Grossiste (ADR 0023) : seul usage qui autorise la livraison d'un grossiste.
+            'livraison_grossiste' => true,
         ]);
 
         $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
@@ -223,13 +223,16 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         return $vehicule->fresh();
     }
 
-    private function creerVehiculeLivraisonLogistique(int $capacitePacks = 100): Vehicule
+    /** Grossiste seul (ni Vente ni Logistique) : l'usage Grossiste suffit à lui seul (ADR 0023). */
+    private function creerVehiculeLivraisonGrossiste(int $capacitePacks = 100): Vehicule
     {
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
             'capacite_packs' => $capacitePacks,
-            'livraison_logistique' => true,
+            'livraison_vente' => false,
+            'livraison_logistique' => false,
+            'livraison_grossiste' => true,
         ]);
     }
 
@@ -416,7 +419,6 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             montantEquipe: 200,
             montantSite: 200,
             capacitePacks: 1000,
-            livraisonLogistique: true,
         );
 
         $produit = $this->makeProduit();
@@ -514,7 +516,6 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             montantEquipe: 200,
             montantSite: 200,
             capacitePacks: 1000,
-            livraisonLogistique: true,
         );
 
         $produit = $this->makeProduit();
@@ -676,7 +677,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
         Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
         // $this->processusGrossisteLivraison existe (créé en setUp()) mais SANS AUCUNE
         // CommissionRegle active — exactement l'état d'une organisation qui vient de migrer.
-        $vehicule = $this->creerVehiculeLivraisonLogistique();
+        $vehicule = $this->creerVehiculeLivraisonGrossiste();
         $produit = $this->makeProduit();
         $variante = $produit->variantePrincipale()->first();
         $this->seedVarianteStockSuffisant($variante, $this->site);
@@ -712,7 +713,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
             'statut' => 'active',
         ]);
 
-        $vehicule = $this->creerVehiculeLivraisonLogistique();
+        $vehicule = $this->creerVehiculeLivraisonGrossiste();
         $produit = $this->makeProduit();
         $variante = $produit->variantePrincipale()->first();
         $this->seedVarianteStockSuffisant($variante, $this->site);
@@ -771,7 +772,7 @@ class CommandeVenteGrossisteCommissionTest extends TestCase
 
         // $this->processusGrossisteLivraison existe (créé en setUp()) mais SANS AUCUNE
         // CommissionRegle active — exactement le même état que le test de création équivalent.
-        $vehicule = $this->creerVehiculeLivraisonLogistique();
+        $vehicule = $this->creerVehiculeLivraisonGrossiste();
 
         $this->actingAs($this->user)
             ->put(route('ventes.update', $commande), [

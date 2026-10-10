@@ -40,6 +40,7 @@ const ligne = (surcharge: Record<string, unknown>) => ({
     livreurs_p2: 0,
     proprietaires: 0,
     salaires: 0,
+    fournisseurs: 0,
     total_a_regler: 1_500_000,
     arrieres: 0,
     a_conserver: 1_500_000,

@@ -25,10 +25,7 @@ async function navigateToVehiculeEquipeTab(page: Page) {
     await vehiculeRow.click();
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
 
-    await page
-        .locator('aside button')
-        .filter({ hasText: /equipe/i })
-        .click();
+    await page.getByTestId('equipe-tab-btn').click();
 }
 
 /** Ouvre le stepper modal depuis l'onglet Équipe. */
@@ -76,10 +73,7 @@ async function createVehiculeAvecEquipe(
         .click({ timeout: 10_000 });
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
 
-    await page
-        .locator('aside button')
-        .filter({ hasText: /equipe/i })
-        .click();
+    await page.getByTestId('equipe-tab-btn').click();
     const btn = page
         .getByRole('button', { name: /ajouter une équipe|gérer l'équipe/i })
         .first();
@@ -333,10 +327,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+(\?.*)?$/, {
         timeout: 15_000,
     });
-    await page
-        .locator('aside button')
-        .filter({ hasText: /equipe/i })
-        .click();
+    await page.getByTestId('equipe-tab-btn').click();
     await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
         timeout: 10_000,
     });
@@ -546,10 +537,7 @@ test('étape 1 : conflit de téléphone avec un livreur d\'un AUTRE véhicule d�
         .click({ timeout: 10_000 });
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
 
-    await page
-        .locator('aside button')
-        .filter({ hasText: /equipe/i })
-        .click();
+    await page.getByTestId('equipe-tab-btn').click();
     const btn = page
         .getByRole('button', { name: /ajouter une équipe|gérer l'équipe/i })
         .first();

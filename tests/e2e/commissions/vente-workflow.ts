@@ -83,7 +83,7 @@ export async function configurerPartageEquipe(
     await vehiculeRow.click();
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
 
-    await page.locator('aside button').filter({ hasText: /equipe/i }).click();
+    await page.getByTestId('equipe-tab-btn').click();
 
     const gererBtn = page.getByRole('button', { name: /gérer l'équipe/i }).first();
     await expect(gererBtn).toBeVisible({ timeout: 10_000 });

@@ -36,7 +36,8 @@ l'import de création.
 - **VEHMAJ-003** — Champs modifiables, liste fermée : `vehicule_site`,
   `capacite__<REFERENCE>` (une colonne dynamique par catégorie du catalogue produit ayant une
   `reference` — même convention que le gabarit flotte, cf. `CapaciteColonneResolver`),
-  `vehicule_livraison_vente`, `vehicule_livraison_logistique`. Toute autre colonne présente dans
+  `vehicule_livraison_vente`, `vehicule_livraison_logistique`, `vehicule_livraison_grossiste`
+  (depuis le 09/10/2026, ADR 0023). Toute autre colonne présente dans
   le fichier (nom, marque, modèle, type, catégorie interne/partenaire, propriétaire...) est
   **silencieusement ignorée** — jamais lue, jamais écrite. L'exécuteur applique une whitelist
   explicite (`array_intersect_key`) au lieu d'un `fill()`/`update()` sur la ligne brute :

@@ -19,7 +19,7 @@ class ExportCsvDepenseController extends Controller
         $this->authorize('viewAny', Depense::class);
 
         $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $depenses = $this->listing->query($filters, $orgId, $siteIds)

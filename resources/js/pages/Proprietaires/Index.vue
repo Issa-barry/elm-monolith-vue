@@ -65,6 +65,7 @@ interface Proprietaire {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
+    vehicules_count: number;
 }
 
 const props = defineProps<{ proprietaires: Proprietaire[] }>();
@@ -300,6 +301,12 @@ function confirmDelete(p: Proprietaire) {
                             class="truncate text-xs text-muted-foreground"
                         >
                             {{ p.email }}
+                        </div>
+                        <div class="text-xs text-muted-foreground">
+                            {{ p.vehicules_count }}
+                            {{
+                                p.vehicules_count > 1 ? 'véhicules' : 'véhicule'
+                            }}
                         </div>
                         <div
                             v-if="p.adresse || p.ville"
@@ -568,6 +575,20 @@ function confirmDelete(p: Proprietaire) {
                                     }}
                                 </span>
                             </div>
+                        </template>
+                    </Column>
+
+                    <!-- Véhicules -->
+                    <Column
+                        field="vehicules_count"
+                        header="Véhicules"
+                        sortable
+                        style="width: 120px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground tabular-nums">
+                                {{ data.vehicules_count }}
+                            </span>
                         </template>
                     </Column>
 

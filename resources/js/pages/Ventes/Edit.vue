@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { vehiculeEstDansPool } from '@/composables/useDistributionVehiculePool';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -103,6 +104,8 @@ const props = defineProps<{
     commande: CommandeExistante;
     produits: ProduitOption[];
     vehicules: VehiculeOption[];
+    // Véhicules d'usage Grossiste (ADR 0023) — seuls proposés quand le client est grossiste.
+    vehicules_grossiste: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
     can_modifier_qte: boolean;
@@ -161,21 +164,30 @@ const form = useForm({
 });
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
+// Union des deux listes : sert seulement à retrouver par id le véhicule sélectionné
+// (capacités, tarification), quelle que soit la liste proposée à la saisie.
+const vehiculesPourLookup = computed<VehiculeOption[]>(() => [
+    ...props.vehicules,
+    ...props.vehicules_grossiste,
+]);
+
 const vehiculeSelected = ref<VehiculeOption | null>(
-    props.vehicules.find((v) => v.id === props.commande.vehicule_id) ?? null,
+    vehiculesPourLookup.value.find(
+        (v) => v.id === props.commande.vehicule_id,
+    ) ?? null,
 );
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
 
 function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     vehiculeSuggests.value = q
-        ? props.vehicules.filter(
+        ? vehiculesDisponibles.value.filter(
               (v) =>
                   v.nom_vehicule.toLowerCase().includes(q) ||
                   v.immatriculation.toLowerCase().includes(q) ||
                   (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
           )
-        : [...props.vehicules];
+        : [...vehiculesDisponibles.value];
 }
 
 function onVehiculeSelect(v: VehiculeOption | null) {
@@ -211,7 +223,7 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // serveur.
 const { modeTarification, commissionEligible } =
     useVehiculeCommandeTarification(
-        () => props.vehicules,
+        () => vehiculesPourLookup.value,
         () => form.vehicule_id,
         () => props.clients,
         () => form.client_id,
@@ -376,6 +388,19 @@ function clientLabel(c: ClientOption): string {
 // calcule le serveur (cf. CommandeVenteFormBuilder::deriverModeRemiseGrossiste()).
 const isGrossiste = computed(() => clientSelected.value?.type === 'grossiste');
 
+// Liste proposée à la saisie : un client grossiste ne peut être livré que par un véhicule d'usage
+// Grossiste (ADR 0023), tout autre client garde la liste Vente. Un véhicule déjà choisi qui sort
+// de la liste (changement de client) est désélectionné, jamais gardé avec un usage non autorisé.
+const vehiculesDisponibles = computed<VehiculeOption[]>(() =>
+    isGrossiste.value ? props.vehicules_grossiste : props.vehicules,
+);
+
+watch(vehiculesDisponibles, (pool) => {
+    if (!vehiculeEstDansPool(form.vehicule_id, pool)) {
+        onVehiculeClear();
+    }
+});
+
 const modeRemiseGrossiste = computed<'enlevement' | 'livraison'>(() =>
     form.vehicule_id ? 'livraison' : 'enlevement',
 );
@@ -512,7 +537,9 @@ const vehiculeSelectionne = computed(() => {
         return null;
     }
 
-    return props.vehicules.find((v) => v.id === form.vehicule_id) ?? null;
+    return (
+        vehiculesPourLookup.value.find((v) => v.id === form.vehicule_id) ?? null
+    );
 });
 
 // Plafonds par catégorie de produit du véhicule sélectionné — vide si aucune capacité n'est

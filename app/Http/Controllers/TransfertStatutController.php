@@ -108,12 +108,14 @@ class TransfertStatutController extends Controller
     {
         $this->authorize('annuler', $transfert_logistique);
 
-        // Garde API : annulation interdite dès TRANSIT (ne devrait pas passer la policy, mais double sécurité)
-        abort_unless(
-            in_array($transfert_logistique->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT]),
-            422,
-            'L\'annulation n\'est possible qu\'en phase de brouillon ou de chargement.'
-        );
+        // Gate::before laisse passer le super admin quel que soit le statut : l'état est
+        // revérifié ici, et renvoyé comme erreur de formulaire (pas un 422 brut qu'Inertia
+        // afficherait en page d'erreur).
+        if (! $transfert_logistique->isAnnulable()) {
+            return back()->withErrors([
+                'statut' => 'L\'annulation n\'est possible qu\'en phase de brouillon ou de chargement : la marchandise est déjà partie.',
+            ]);
+        }
 
         TransfertLogistiqueService::annuler($transfert_logistique);
         TransfertActiviteService::log($transfert_logistique, 'annule');

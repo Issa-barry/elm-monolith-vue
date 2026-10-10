@@ -23,6 +23,7 @@ use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
+use App\Support\Commission\CommissionPdfFooter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -599,7 +600,7 @@ class CommissionLogistiqueController extends Controller
             'sites' => $siteGroups,
             'printed_by' => auth()->user()->name ?? '—',
             'generated_at' => now(),
-        ])->setPaper('a4', 'landscape');
+        ])->setPaper('a4', 'landscape')->setCallbacks(CommissionPdfFooter::callbacks());
 
         return $pdf->download('commissions-logistique-'.now()->format('Y-m-d').'.pdf');
     }

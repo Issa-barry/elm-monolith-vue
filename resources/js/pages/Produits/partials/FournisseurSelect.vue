@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import CreateFournisseurModal from '@/components/fournisseurs/CreateFournisseurModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { Plus } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import { ref } from 'vue';
-import CreateFournisseurModal from './CreateFournisseurModal.vue';
 
 export interface FournisseurOption {
     id: string;

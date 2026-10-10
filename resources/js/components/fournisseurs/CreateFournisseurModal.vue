@@ -6,7 +6,7 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 // Même liste pays/indicatif que Prestataires/Proprietaires (resources/js/lib/pays.ts) —
 // pas de deuxième logique téléphone, cf. PrestataireForm.vue pour le patron d'origine.
@@ -18,6 +18,8 @@ function flagUrl(code: string) {
 
 const props = defineProps<{
     visible: boolean;
+    /** Texte recherché dans le sélecteur appelant, repris comme nom à l'ouverture. */
+    nomInitial?: string;
 }>();
 
 const emit = defineEmits<{
@@ -39,6 +41,15 @@ const form = useForm({
     ville: null as string | null,
     adresse: null as string | null,
 });
+
+watch(
+    () => props.visible,
+    (ouvert) => {
+        if (ouvert && props.nomInitial && !form.raison_sociale) {
+            form.raison_sociale = props.nomInitial;
+        }
+    },
+);
 
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === form.code_pays),
@@ -101,7 +112,7 @@ function submit() {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-            // Flashé par PrestataireController::storeRapide().
+            // Flashé par FournisseurController::storeRapide().
             const page = usePage();
             const createdId = (page.props as any).flash
                 ?.created_fournisseur_id as string | undefined;

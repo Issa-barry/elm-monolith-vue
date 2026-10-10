@@ -438,7 +438,8 @@ class TransfertLogistiqueController extends Controller
             'types_ecart' => TypeEcartLogistique::options(),
             'can_avancer' => $user->can('avancerStatut', $transfert_logistique),
             'can_valider_reception' => $user->can('validerReception', $transfert_logistique),
-            'can_annuler' => $user->can('annuler', $transfert_logistique),
+            // État revérifié ici : Gate::before laisse passer le super admin quel que soit le statut.
+            'can_annuler' => $transfert_logistique->isAnnulable() && $user->can('annuler', $transfert_logistique),
             'can_update' => $user->can('update', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
             'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
@@ -626,7 +627,7 @@ class TransfertLogistiqueController extends Controller
             'is_terminal' => $t->isTerminal(),
             'is_annule' => $t->isAnnule(),
             'is_editable' => $t->isEditable(),
-            'can_annuler' => $user->can('annuler', $t),
+            'can_annuler' => $t->isAnnulable() && $user->can('annuler', $t),
             'can_valider_reception' => $user->can('validerReception', $t),
             'created_at' => $t->created_at?->format(self::DATE_DISPLAY_FORMAT),
             // Quantité la plus avancée connue par ligne (reçue > chargée > demandée), sommée sur

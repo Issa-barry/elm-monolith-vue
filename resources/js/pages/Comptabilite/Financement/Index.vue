@@ -18,6 +18,7 @@ interface Row {
     livreurs_p2: number;
     proprietaires: number;
     salaires: number;
+    fournisseurs: number;
     total_a_regler: number;
     /** Obligations échues encore impayées (mois précédents, 1re quinzaine vue en fin de mois). */
     arrieres: number;
@@ -152,8 +153,19 @@ function changerEcheance(echeance: 'p1' | 'p2' | 'mensuel') {
 const colonnesVisibles = computed(() => {
     if (props.filters.echeance === 'p1') return ['livreurs_p1'] as const;
     if (props.filters.echeance === 'p2')
-        return ['livreurs_p2', 'proprietaires', 'salaires'] as const;
-    return ['livreurs_p1', 'livreurs_p2', 'proprietaires', 'salaires'] as const;
+        return [
+            'livreurs_p2',
+            'proprietaires',
+            'salaires',
+            'fournisseurs',
+        ] as const;
+    return [
+        'livreurs_p1',
+        'livreurs_p2',
+        'proprietaires',
+        'salaires',
+        'fournisseurs',
+    ] as const;
 });
 
 const labelsColonnes: Record<string, string> = {
@@ -161,6 +173,7 @@ const labelsColonnes: Record<string, string> = {
     livreurs_p2: 'Livreurs P2',
     proprietaires: 'Propriétaires',
     salaires: 'Salaires',
+    fournisseurs: 'Fournisseurs',
 };
 
 function detailHref(row: Row): string {

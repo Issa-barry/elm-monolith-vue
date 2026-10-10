@@ -3,15 +3,22 @@
 namespace Tests\Feature;
 
 use App\Enums\ClientType;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionUniteCalcul;
 use App\Enums\ModeRemiseGrossiste;
 use App\Models\Categorie;
 use App\Models\CategorieTarifGrossiste;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -44,6 +51,22 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Bouteille d\'eau',
             'statut' => 'actif',
+        ]);
+
+        // Une livraison grossiste exige au moins un barème « Transfert grossiste » actif
+        // (ensureTransfertGrossisteBaremeConfigure()) : barème Site seul, qui ne demande aucune
+        // équipe — ce fichier teste le mode et le tarif, pas les commissions.
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_TRANSFERT_GROSSISTE)->id,
+            'libelle' => 'Site — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_SITE,
+            'mode' => CommissionMode::DIRECT->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
         ]);
     }
 
@@ -88,6 +111,8 @@ class CommandeVenteGrossisteModeEtFallbackTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
             'is_active' => true,
             'livraison_vente' => true,
+            // Livrer un grossiste exige l'usage Grossiste (ADR 0023).
+            'livraison_grossiste' => true,
         ]);
     }
 

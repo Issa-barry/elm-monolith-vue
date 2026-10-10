@@ -29,6 +29,7 @@ class VehiculeFactory extends Factory
             'categorie' => CategorieVehicule::PARTENAIRE,
             'livraison_vente' => true,
             'livraison_logistique' => false,
+            'livraison_grossiste' => false,
             'is_active' => true,
         ];
     }

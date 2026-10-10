@@ -13,9 +13,10 @@ import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
+const page = usePage();
 const { can, hasRole } = usePermissions();
 
 const isAdmin = computed(
@@ -63,6 +64,11 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
         gestionItems.push(
             { title: 'Produits', href: '/settings/produits' },
             { title: 'Validation des dépenses', href: '/settings/depenses' },
+            ...(((page.props as any).module_flags?.achats as
+                | boolean
+                | undefined) !== false
+                ? [{ title: 'Achats', href: '/settings/achats' }]
+                : []),
             { title: 'Ventes', href: '/settings/ventes' },
             { title: 'Logistique', href: '/settings/logistique' },
             { title: 'Commissions', href: '/settings/commissions' },

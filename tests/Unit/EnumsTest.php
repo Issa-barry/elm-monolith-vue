@@ -142,12 +142,27 @@ class EnumsTest extends TestCase
         $this->assertSame('En cours', StatutCommandeAchat::EN_COURS->label());
         $this->assertSame('Réceptionnée', StatutCommandeAchat::RECEPTIONNEE->label());
         $this->assertSame('Annulée', StatutCommandeAchat::ANNULEE->label());
+        $this->assertSame('À valider', StatutCommandeAchat::A_VALIDER->label());
+        $this->assertSame('Partiellement réceptionnée', StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE->label());
+        $this->assertSame('Clôturée', StatutCommandeAchat::CLOTUREE->label());
+    }
+
+    public function test_statut_commande_achat_en_cours_historique_est_a_valider(): void
+    {
+        $this->assertTrue(StatutCommandeAchat::EN_COURS->estAValider());
+        $this->assertTrue(StatutCommandeAchat::A_VALIDER->estAValider());
+        $this->assertFalse(StatutCommandeAchat::VALIDEE->estAValider());
+        $this->assertTrue(StatutCommandeAchat::VALIDEE->estReceptionnable());
+        $this->assertTrue(StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE->estReceptionnable());
+        $this->assertFalse(StatutCommandeAchat::EN_COURS->estReceptionnable());
     }
 
     public function test_statut_commande_achat_options(): void
     {
         $options = StatutCommandeAchat::options();
-        $this->assertCount(3, $options);
+        // `en_cours` (commandes historiques) n'est pas proposé : il est regroupé sous « À valider ».
+        $this->assertCount(6, $options);
+        $this->assertNotContains('en_cours', array_column($options, 'value'));
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);

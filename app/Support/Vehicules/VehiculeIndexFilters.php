@@ -23,7 +23,8 @@ final class VehiculeIndexFilters
             $usage = $filters['usage'] ?? '';
             if (($usage === 'vente' && ! $v['livraison_vente'])
                 || ($usage === 'logistique' && ! $v['livraison_logistique'])
-                || ($usage === 'aucun' && ($v['livraison_vente'] || $v['livraison_logistique']))) {
+                || ($usage === 'grossiste' && ! $v['livraison_grossiste'])
+                || ($usage === 'aucun' && ($v['livraison_vente'] || $v['livraison_logistique'] || $v['livraison_grossiste']))) {
                 return false;
             }
             $agence = $filters['agence_proprietaire_id'] ?? '';

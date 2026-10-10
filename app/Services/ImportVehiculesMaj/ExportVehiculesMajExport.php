@@ -44,6 +44,7 @@ class ExportVehiculesMajExport implements FromArray, WithHeadings, WithTitle
             ...$this->colonnesCapacite(),
             'vehicule_livraison_vente',
             'vehicule_livraison_logistique',
+            'vehicule_livraison_grossiste',
         ];
     }
 
@@ -63,6 +64,7 @@ class ExportVehiculesMajExport implements FromArray, WithHeadings, WithTitle
                     ...$colonnesCapacite,
                     $v->livraison_vente ? 'oui' : 'non',
                     $v->livraison_logistique ? 'oui' : 'non',
+                    $v->livraison_grossiste ? 'oui' : 'non',
                 ];
             })
             ->values()

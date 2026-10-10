@@ -26,7 +26,7 @@ final class PermissionCatalog
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
-        'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
+        'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'factures-fournisseurs', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
@@ -75,6 +75,11 @@ final class PermissionCatalog
         'tresorerie.valider_supports' => 'Trésorerie — valider un support (caisse, banque, Mobile Money)',
         'tresorerie.designer_principale' => 'Trésorerie — désigner la trésorerie principale (site central des flux inter-agences)',
         'tresorerie.exporter' => 'Trésorerie — exporter',
+        'achats.valider' => 'Achats — valider un bon de commande (dans la limite du plafond du rôle, Paramètres → Achats)',
+        'achats.annuler' => 'Achats — annuler un bon de commande ou clôturer son reliquat',
+        'factures-fournisseurs.valider' => 'Factures fournisseurs — valider (constate la dette fournisseur)',
+        'factures-fournisseurs.annuler' => 'Factures fournisseurs — annuler (contrepassation si validée)',
+        'factures-fournisseurs.payer' => "Factures fournisseurs — payer (décaissement depuis la trésorerie de l'agence)",
         'depenses.soumettre' => 'Dépenses — soumettre',
         'depenses.valider' => 'Dépenses — valider',
         'depenses.rejeter' => 'Dépenses — rejeter',
@@ -152,8 +157,11 @@ final class PermissionCatalog
         ],
         'achats' => [
             'label' => 'Achats & Fournisseurs',
-            'resources' => ['achats', 'fournisseurs'],
-            'standalone' => [],
+            'resources' => ['achats', 'factures-fournisseurs', 'fournisseurs'],
+            'standalone' => [
+                'Bons de commande' => ['achats.valider', 'achats.annuler'],
+                'Factures fournisseurs' => ['factures-fournisseurs.valider', 'factures-fournisseurs.annuler', 'factures-fournisseurs.payer'],
+            ],
         ],
         'contacts' => [
             'label' => 'Clients & Contacts',

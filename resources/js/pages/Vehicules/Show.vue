@@ -130,6 +130,7 @@ interface VehiculeData {
     equipe_membres: EquipeMembre[];
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    livraison_grossiste: boolean;
     photo_url: string | null;
     is_active: boolean;
     derogation_impayes_autorisee: boolean;
@@ -637,9 +638,15 @@ function formatGNF(val: number): string {
                                             >Logistique</span
                                         >
                                         <span
+                                            v-if="vehicule.livraison_grossiste"
+                                            class="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                                            >Grossiste</span
+                                        >
+                                        <span
                                             v-if="
                                                 !vehicule.livraison_vente &&
-                                                !vehicule.livraison_logistique
+                                                !vehicule.livraison_logistique &&
+                                                !vehicule.livraison_grossiste
                                             "
                                             class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
                                         >
@@ -650,7 +657,8 @@ function formatGNF(val: number): string {
                                     <p
                                         v-if="
                                             !vehicule.livraison_vente &&
-                                            !vehicule.livraison_logistique
+                                            !vehicule.livraison_logistique &&
+                                            !vehicule.livraison_grossiste
                                         "
                                         class="mt-1.5 text-xs text-muted-foreground"
                                     >

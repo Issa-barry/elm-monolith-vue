@@ -32,6 +32,9 @@ class CreateCommandeVenteController extends Controller
             // l'inverse (cf. règle métier distribution client du 31/08/2026). Le frontend choisit
             // la liste à interroger selon le type de client sélectionné.
             'vehicules_distribution' => $this->formBuilder->vehiculesLogistiques($orgId),
+            // Troisième pool (ADR 0023) : véhicules d'usage Grossiste, proposés seuls dès qu'un client
+            // grossiste est sélectionné.
+            'vehicules_grossiste' => $this->formBuilder->vehiculesGrossistes($orgId),
             'clients' => $this->formBuilder->clientsActifs($orgId),
             'user_site' => $this->formBuilder->getUserSite(),
             'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),
