@@ -366,7 +366,7 @@ function confirmerMotif() {
     <Head title="Mouvements de fonds" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-4 sm:p-6">
+        <div class="w-full min-w-0 space-y-6 p-4 sm:p-6">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex flex-col gap-1">
                     <h1 class="flex items-center gap-2 text-xl font-semibold">
@@ -441,8 +441,13 @@ function confirmerMotif() {
                 </ListPageActions>
             </div>
 
-            <div class="overflow-x-auto rounded-xl border bg-card">
-                <table class="w-full min-w-[960px] text-sm">
+            <div
+                class="w-full max-w-full min-w-0 overflow-x-auto rounded-xl border bg-card"
+                role="region"
+                aria-label="Tableau des mouvements de fonds"
+                tabindex="0"
+            >
+                <table class="w-full min-w-[960px] text-sm whitespace-nowrap">
                     <thead>
                         <tr class="border-b bg-muted/40 text-left">
                             <th class="px-4 py-3 font-medium">Référence</th>

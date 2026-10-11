@@ -438,7 +438,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Date / échéance
                             </p>
-                            <p class="font-medium">
+                            <p class="text-sm font-medium">
                                 {{ formatDate(facture.date_facture) }} /
                                 {{ formatDate(facture.date_echeance) }}
                             </p>
