@@ -13,7 +13,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
-    Download,
+    Eye,
     HandCoins,
     Info,
     Pencil,
@@ -42,7 +42,7 @@ interface Ligne {
 interface Facture {
     id: string;
     reference: string;
-    numero_facture_fournisseur: string;
+    numero_facture_fournisseur: string | null;
     date_facture: string;
     date_echeance: string | null;
     taux_tva: number;
@@ -53,6 +53,7 @@ interface Facture {
     reste_du: number;
     statut: string;
     statut_label: string;
+    statut_affichage: string;
     note: string | null;
     fournisseur_nom: string | null;
     created_by: string | null;
@@ -289,13 +290,17 @@ function relancerComptabilite() {
                         class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
                     >
                         <StatusDot
-                            :status="facture.statut"
+                            :status="facture.statut_affichage"
                             :label="facture.statut_label"
                             class="text-foreground"
                         />
                         <span
-                            >· N° fournisseur
-                            {{ facture.numero_facture_fournisseur }}</span
+                            >·
+                            {{
+                                facture.numero_facture_fournisseur
+                                    ? `N° fournisseur ${facture.numero_facture_fournisseur}`
+                                    : 'Sans numéro de document'
+                            }}</span
                         >
                         <span v-if="facture.created_by"
                             >· saisie par {{ facture.created_by }}</span
@@ -303,15 +308,17 @@ function relancerComptabilite() {
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <a
-                        :href="`/backoffice/achats/factures/${facture.id}/pdf`"
-                        title="Récapitulatif de la facture enregistrée (pas l’original du fournisseur)"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Download class="mr-2 h-4 w-4" />
-                            PDF
-                        </Button>
-                    </a>
+                    <Button as-child variant="outline" size="sm">
+                        <a
+                            :href="`/backoffice/achats/factures/${facture.id}/pdf?preview=1`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Voir le récapitulatif de la facture dans un nouvel onglet"
+                        >
+                            <Eye class="mr-2 h-4 w-4" />
+                            Voir la facture
+                        </a>
+                    </Button>
                     <Link
                         v-if="actions.peut_modifier"
                         :href="`/backoffice/achats/factures/${facture.id}/edit`"
@@ -431,7 +438,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Date / échéance
                             </p>
-                            <p class="font-medium">
+                            <p class="text-sm font-medium">
                                 {{ formatDate(facture.date_facture) }} /
                                 {{ formatDate(facture.date_echeance) }}
                             </p>
@@ -690,7 +697,7 @@ function relancerComptabilite() {
                 { label: 'Fournisseur', value: facture.fournisseur_nom ?? '—' },
                 {
                     label: 'N° fournisseur',
-                    value: facture.numero_facture_fournisseur,
+                    value: facture.numero_facture_fournisseur ?? 'Sans numéro',
                 },
                 { label: 'Montant TTC', value: formatGNF(facture.montant_ttc) },
                 { label: 'Déjà payé', value: formatGNF(facture.montant_paye) },

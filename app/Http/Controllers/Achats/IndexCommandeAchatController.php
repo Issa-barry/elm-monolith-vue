@@ -9,7 +9,9 @@ use App\Models\Fournisseur;
 use App\Models\RegleValidationRole;
 use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\PerimetreCommandesAchat;
+use App\Services\SavedFilterService;
 use App\Services\Validation\ValidationParPlafondService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,9 +30,12 @@ class IndexCommandeAchatController extends Controller
     {
         $this->authorize('viewAny', CommandeAchat::class);
 
+        $request->validate(['saved_view' => ['nullable', 'ulid'], 'recherche' => ['nullable', 'string', 'max:255']]);
+        $savedView = app(SavedFilterService::class)->applyToRequest($request, 'achats');
+
         $user = $request->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['statut', 'fournisseur_id', 'reference', 'a_valider_par_moi']);
+        $filters = $request->only(['statut', 'fournisseur_id', 'reference', 'recherche', 'a_valider_par_moi']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $query = $this->perimetre->appliquerConsultation(CommandeAchat::query(), $user)
@@ -50,11 +55,28 @@ class IndexCommandeAchatController extends Controller
             ->when($filters['fournisseur_id'] ?? null, fn (Builder $q, string $id) => $q->where('fournisseur_id', $id))
             ->when(trim((string) ($filters['reference'] ?? '')) !== '', fn (Builder $q) => $q->where('reference', 'like', '%'.trim($filters['reference']).'%'));
 
+        $recherche = trim((string) ($filters['recherche'] ?? ''));
+        if ($recherche !== '') {
+            $like = '%'.$recherche.'%';
+            // Regrouper les OR : la recherche ne doit jamais élargir le périmètre autorisé.
+            $query->where(fn (Builder $q) => $q
+                ->where('reference', 'like', $like)
+                ->orWhere('fournisseur_nom_snapshot', 'like', $like)
+                ->orWhereHas('fournisseur.entrepriseTierce', fn (Builder $q) => $q->where('raison_sociale', 'like', $like))
+                ->orWhereHas('fournisseur.personne', fn (Builder $q) => $q
+                    ->where('nom_complet', 'like', $like)
+                    ->orWhere('nom', 'like', $like)
+                    ->orWhere('prenom', 'like', $like)));
+        }
+
         if (filter_var($filters['a_valider_par_moi'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             $this->restreindreAValiderPar($query, $user);
         }
 
         $paginator = $query->orderByDesc('created_at')->paginate(30)->withQueryString();
+        // Prochaine action et statut de facturation de chaque bon de la page, calculés par lot
+        // (même source que la frise de la fiche).
+        $jalons = app(JalonsCommandeAchat::class)->pourCommandes(collect($paginator->items()));
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->with(['personne', 'entrepriseTierce'])
@@ -69,6 +91,10 @@ class IndexCommandeAchatController extends Controller
         return Inertia::render('Achats/Index', [
             'peut_creer' => $user->can('create', CommandeAchat::class) && $this->perimetre->sites($user)->isNotEmpty(),
             'commandes' => $paginator->through(fn (CommandeAchat $c) => [
+                // Sous le statut du bon : seulement ce qui le concerne (à réceptionner, reliquat).
+                'prochaine_action' => ($jalons[$c->id]['resume_domaine'] ?? null) === 'commande' ? $jalons[$c->id]['resume'] : null,
+                'statut_facture' => $jalons[$c->id]['statut_facture']['statut'] ?? null,
+                'statut_facture_label' => $jalons[$c->id]['statut_facture']['label'] ?? null,
                 'id' => $c->id,
                 'reference' => $c->reference,
                 'statut' => $c->statut?->value,
@@ -78,6 +104,7 @@ class IndexCommandeAchatController extends Controller
                 'site_nom' => $c->siteNom(),
                 'site_payeur_nom' => $c->estPayeParUneAutreAgence() ? $c->sitePayeurNom() : null,
                 'created_at' => $c->created_at?->format('d/m/Y'),
+                'date_achat' => $c->dateAchat()?->format('d/m/Y'),
                 'qte_commandee' => (int) $c->qte_commandee,
                 'qte_recue' => (int) $c->qte_recue,
                 'is_annulee' => $c->isAnnulee(),
@@ -91,6 +118,7 @@ class IndexCommandeAchatController extends Controller
                     && $user->can('valider', $c)
                     && $this->service->motifNonValidable($c, $user) === null,
             ]),
+            'saved_view' => $savedView,
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),
             'statuts' => StatutCommandeAchat::options(),
             'fournisseurs' => $fournisseurs,

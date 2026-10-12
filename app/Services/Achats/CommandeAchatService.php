@@ -45,6 +45,7 @@ class CommandeAchatService
         return [
             'site_id' => ['required', 'string'],
             'site_payeur_id' => ['nullable', 'string'],
+            'date_achat' => ['required', 'date', 'before_or_equal:today'],
             'fournisseur_id' => ['required', 'string'],
             'note' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
@@ -58,6 +59,8 @@ class CommandeAchatService
     {
         return [
             'site_id.required' => "L'agence est obligatoire.",
+            'date_achat.required' => "La date d'achat est obligatoire.",
+            'date_achat.before_or_equal' => "La date d'achat ne peut pas être dans le futur.",
             'fournisseur_id.required' => 'Le fournisseur est obligatoire.',
             'lignes.required' => 'Au moins une ligne est requise.',
             'lignes.min' => 'Au moins une ligne est requise.',
@@ -81,6 +84,7 @@ class CommandeAchatService
                 'organization_id' => $user->organization_id,
                 'site_id' => $ref['site']->id,
                 'site_payeur_id' => $ref['site_payeur']->id,
+                'date_achat' => $data['date_achat'],
                 'fournisseur_id' => $ref['fournisseur']->id,
                 'reference' => $reference,
                 'numero' => $numero,
@@ -115,6 +119,7 @@ class CommandeAchatService
             $commande->update([
                 'site_id' => $ref['site']->id,
                 'site_payeur_id' => $ref['site_payeur']->id,
+                'date_achat' => $data['date_achat'],
                 'fournisseur_id' => $ref['fournisseur']->id,
                 'note' => $data['note'] ?? null,
                 'contenu_modifie_par' => $user->id,

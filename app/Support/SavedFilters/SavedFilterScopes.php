@@ -5,6 +5,7 @@ namespace App\Support\SavedFilters;
 use App\Enums\NatureMouvementFonds;
 use App\Enums\ProduitStatut;
 use App\Enums\SiteType;
+use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -13,12 +14,14 @@ use App\Enums\StatutSupportTresorerie;
 use App\Enums\StockStatut;
 use App\Enums\TypeSupportTresorerie;
 use App\Models\CashbackTransaction;
+use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
 use App\Models\MouvementFonds;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Achats\PerimetreCommandesAchat;
 use App\Support\Commission\CommissionProcessusFilter;
 use Illuminate\Validation\Rule;
 
@@ -30,6 +33,7 @@ use Illuminate\Validation\Rule;
  * - authorize : [ability, modèle] ou callback reprenant l'autorisation de la page Index ;
  * - share     : permission requise pour publier une vue partagée ;
  * - sites     : la liste accepte le filtre Agence (site_ids + « mes agences ») ;
+ * - allowed_sites (optionnel) : agences consultables selon le périmètre métier de la liste ;
  * - criteria  : critères propres à la liste => règles de validation de leur valeur.
  */
 final class SavedFilterScopes
@@ -77,6 +81,19 @@ final class SavedFilterScopes
                     'type' => [Rule::enum(TypeSupportTresorerie::class)],
                     'nature' => [Rule::in(['agence', 'dediee'])],
                     'agent_id' => ['ulid', Rule::exists('users', 'id')->where('organization_id', $org)],
+                ],
+            ],
+            'achats' => [
+                'authorize' => ['viewAny', CommandeAchat::class],
+                'share' => 'achats.update',
+                'sites' => true,
+                'allowed_sites' => fn (User $user): array => app(PerimetreCommandesAchat::class)->sitesConsultables($user)->pluck('id')->all(),
+                'criteria' => [
+                    'statut' => [Rule::enum(StatutCommandeAchat::class)],
+                    'recherche' => $search,
+                    'reference' => $search,
+                    'fournisseur_id' => ['ulid', Rule::exists('fournisseurs', 'id')->where('organization_id', $org)],
+                    'a_valider_par_moi' => ['boolean'],
                 ],
             ],
             'ventes' => [

@@ -31,6 +31,7 @@ class EditCommandeAchatController extends Controller
                 'reference' => $achat->reference,
                 'site_id' => $achat->site_id,
                 'site_payeur_id' => $achat->sitePayeurId(),
+                'date_achat' => $achat->dateAchat()?->format('Y-m-d'),
                 'fournisseur_id' => $achat->fournisseur_id,
                 'note' => $achat->note,
                 'lignes' => $achat->lignes

@@ -408,6 +408,7 @@ Listes activées :
 
 | Scope | Page | Critères enregistrables | Partage |
 |---|---|---|---|
+| `achats` | `/backoffice/achats` | `statut`, `recherche`, `reference`, `fournisseur_id`, `a_valider_par_moi`, `site_ids`, `site_scope` | `achats.update` |
 | `precommandes` | `/backoffice/precommandes` | `statuts`, `en_retard`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `site_ids`, `site_scope` | `ventes.update` |
 | `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
 | `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
@@ -416,6 +417,12 @@ Listes activées :
 Les supports de trésorerie reprennent l'accès de leur liste : `tresorerie.read` **ou**
 `tresorerie.gerer_soldes_ouverture`. Les vues filtrent les supports et leurs cartes de synthèse ;
 la portée des agences reste contrôlée côté serveur, et l'agent est enregistré par identifiant.
+
+Les achats utilisent la policy de leur liste et les agences retournées par
+`PerimetreCommandesAchat::sitesConsultables()` via la configuration optionnelle `allowed_sites`.
+La recherche `recherche` porte sur la référence et le fournisseur avant pagination ; le critère
+historique `reference` garde son comportement. La barre mobile et le drawer utilisent les mêmes
+filtres serveur. Les vues sont indépendantes de celles des ventes.
 
 Règles (garanties par `SavedFilterService`) :
 

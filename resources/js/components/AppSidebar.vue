@@ -433,7 +433,7 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Sites',
             href: '/backoffice/sites',
             icon: Building2,
-            group: 'Opérations',
+            group: 'Organisation',
         });
 
     if (rhItems.value.length > 0) {

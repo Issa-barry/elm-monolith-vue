@@ -11,6 +11,7 @@ use App\Models\ReceptionAchatLigne;
 use App\Models\User;
 use App\Services\MouvementStockService;
 use App\Services\ReferenceNumeroService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -47,6 +48,13 @@ class ReceptionAchatService
             }
             if ($commande->site_id === null) {
                 throw ValidationException::withMessages(['reception' => "Cette commande n'a pas d'agence de réception."]);
+            }
+            // Une marchandise ne se reçoit pas avant d'avoir été achetée.
+            $dateAchat = $commande->dateAchat()?->toDateString();
+            if ($dateAchat !== null && Carbon::parse($data['date_reception'])->toDateString() < $dateAchat) {
+                throw ValidationException::withMessages([
+                    'date_reception' => "La date de réception ne peut pas précéder la date d'achat (".$commande->dateAchat()->format('d/m/Y').').',
+                ]);
             }
 
             $lignes = CommandeAchatLigne::where('commande_achat_id', $commande->id)

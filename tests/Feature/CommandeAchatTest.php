@@ -121,6 +121,7 @@ class CommandeAchatTest extends TestCase
         return array_merge([
             'site_id' => $this->site->id,
             'fournisseur_id' => $this->fournisseur->id,
+            'date_achat' => now()->toDateString(),
             'note' => 'Réassort',
             'lignes' => [['variante_id' => $this->varianteId(), 'qte' => 10, 'prix_achat' => 1000]],
         ], $overrides);
@@ -616,6 +617,43 @@ class CommandeAchatTest extends TestCase
             ->patch(route('achats.valider', $commande))
             ->assertSessionHasErrors('validation');
         $this->assertSame(StatutCommandeAchat::A_VALIDER, $commande->fresh()->statut);
+    }
+
+    // ── Date d'achat (décision du 10/10/2026) ─────────────────────────────────
+
+    public function test_la_date_d_achat_est_obligatoire_jamais_future_et_distincte_de_la_saisie(): void
+    {
+        $this->actingAs($this->user)->post(route('achats.store'), $this->payload(['date_achat' => null]))
+            ->assertSessionHasErrors(['date_achat' => "La date d'achat est obligatoire."]);
+        $this->actingAs($this->user)->post(route('achats.store'), $this->payload(['date_achat' => now()->addDay()->toDateString()]))
+            ->assertSessionHasErrors(['date_achat' => "La date d'achat ne peut pas être dans le futur."]);
+        $this->assertSame(0, CommandeAchat::count());
+
+        // Achat fait il y a trois jours, saisi aujourd'hui.
+        $ilYATroisJours = now()->subDays(3);
+        $this->actingAs($this->user)->post(route('achats.store'), $this->payload(['date_achat' => $ilYATroisJours->toDateString()]))->assertSessionHasNoErrors();
+        $commande = CommandeAchat::firstOrFail();
+        $this->assertSame($ilYATroisJours->toDateString(), $commande->date_achat->toDateString());
+        $this->assertSame(now()->toDateString(), $commande->created_at->toDateString());
+
+        $this->actingAs($this->user)->get(route('achats.show', $commande))
+            ->assertInertia(fn ($page) => $page->where('commande.date_achat', $ilYATroisJours->format('d/m/Y')));
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data.0.date_achat', $ilYATroisJours->format('d/m/Y')));
+
+        // Modifiable tant que le bon n'est pas validé.
+        $this->actingAs($this->user)->put(route('achats.update', $commande), $this->payload(['date_achat' => now()->subDay()->toDateString()]))->assertSessionHasNoErrors();
+        $this->assertSame(now()->subDay()->toDateString(), $commande->fresh()->date_achat->toDateString());
+    }
+
+    public function test_la_migration_donne_aux_bons_existants_leur_date_de_saisie_comme_date_d_achat(): void
+    {
+        $commande = $this->creerCommande(1);
+        DB::table('commandes_achats')->where('id', $commande->id)->update(['date_achat' => null, 'created_at' => '2026-09-15 08:30:00']);
+
+        (require database_path('migrations/2026_10_10_600000_add_date_achat_et_type_justificatif_aux_achats.php'))->up();
+
+        $this->assertSame('2026-09-15', $commande->fresh()->date_achat->toDateString());
     }
 
     // ── Deux agences : livraison et paiement (décision du 10/10/2026) ─────────

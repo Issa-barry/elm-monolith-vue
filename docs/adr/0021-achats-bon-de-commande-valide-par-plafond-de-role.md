@@ -77,6 +77,11 @@ annulation et réception sous la même permission `achats.update`.
     mouvement de fonds) est un bon dont les deux agences sont la même. Les bons antérieurs sont
     migrés avec agence payeuse = agence de livraison : aucun changement pour eux. Pas de dette
     entre agences : la charge reste à l'agence payeuse.
+11. **Date d'achat** (ajouté le 2026-10-10) : `date_achat`, obligatoire, jamais dans le futur,
+    distincte de la date de saisie — un achat fait lundi et saisi mercredi reste daté du lundi.
+    Modifiable tant que le bon n'est pas validé. Affichée dans la liste, la fiche et le PDF. Une
+    réception ne peut pas la précéder. Elle préremplit la date de la facture d'achat (ADR 0022),
+    sans jamais être écrasée par elle. Bons antérieurs : date d'achat = date de saisie.
 
 ## Conséquences
 

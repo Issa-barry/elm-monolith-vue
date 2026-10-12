@@ -23,6 +23,8 @@ class FactureFournisseurPresenter
             'fournisseur_id' => $commande->fournisseur_id,
             'fournisseur_nom' => $commande->fournisseurNom(),
             'site_nom' => $commande->siteNom(),
+            // Date proposée à la saisie de la facture : celle de l'achat.
+            'date_achat' => $commande->dateAchat()?->format('Y-m-d'),
         ];
     }
 
@@ -74,6 +76,7 @@ class FactureFournisseurPresenter
             'reste_du' => $facture->resteDu(),
             'statut' => $facture->statut?->value,
             'statut_label' => $facture->statut?->label(),
+            'statut_affichage' => $facture->statut?->statutAffichage(),
             'note' => $facture->note,
             'fournisseur_nom' => $facture->fournisseurNom(),
             'created_by' => $this->nom($facture->createdBy),
