@@ -113,6 +113,13 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partiellement_receptionnee: 'bg-orange-500',
     // Facture fournisseur réglée en partie (StatutFactureFournisseur, lot 4).
     partiellement_payee: 'bg-orange-500',
+    // Facture d'achat validée et pas encore payée, affichée « Impayée » comme une facture de vente
+    // (StatutFactureFournisseur::statutAffichage()) : à régler, pas une erreur.
+    facture_impayee: 'bg-amber-500',
+    // Statut de facturation d'un bon de commande (liste des achats) : quantités reçues sans
+    // facture, ou facturées en partie — à faire, pas une erreur.
+    a_facturer: 'bg-orange-500',
+    partiellement_facturee: 'bg-orange-500',
     // MessageLog.status — cf. commentaire "sent" ci-dessus.
     pending: 'bg-orange-500',
     a_reverifier: 'bg-orange-500',

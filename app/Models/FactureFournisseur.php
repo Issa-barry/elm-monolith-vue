@@ -115,6 +115,16 @@ class FactureFournisseur extends Model
         return $this->isConstatee() ? max(0.0, (float) $this->montant_ttc - (float) $this->montant_paye) : 0.0;
     }
 
+    /**
+     * Désignation du document dans les libellés : « Facture d’achat n° F-12 » ou « Facture d’achat
+     * sans numéro ». Un numéro vide ne dit rien de plus : le document peut exister sans numéro, ou ne
+     * pas exister — l'application ne le déduit pas (décision du 10/10/2026).
+     */
+    public function designationDocument(): string
+    {
+        return 'Facture d’achat '.(filled($this->numero_facture_fournisseur) ? 'n° '.$this->numero_facture_fournisseur : 'sans numéro');
+    }
+
     public function fournisseurNom(): ?string
     {
         return $this->fournisseur_nom_snapshot ?? $this->fournisseur?->nom_complet;

@@ -15,6 +15,7 @@ use App\Models\EntrepriseTierce;
 use App\Models\FactureFournisseur;
 use App\Models\Fournisseur;
 use App\Models\JournalComptable;
+use App\Models\Organization;
 use App\Models\PaiementFournisseur;
 use App\Models\PieceComptable;
 use App\Models\ReceptionAchat;
@@ -37,8 +38,9 @@ use Tests\TestCase;
 
 /**
  * Paiement des factures fournisseurs (ADR 0024) : décaissement réel depuis un support de l'agence
- * de la facture, partiel ou total, reste dû relu sous verrou, solde garanti, écriture 401 / support
- * indissociable du paiement, dette intégrée à l'argent que l'agence conserve (ADR 0016).
+ * de la facture — ou d'une autre agence du périmètre du payeur (révision du 12/10/2026) —, partiel
+ * ou total, reste dû relu sous verrou, solde garanti, écriture 401 / support indissociable du
+ * paiement, dette intégrée à l'argent que l'agence de la facture conserve (ADR 0016).
  */
 class PaiementFournisseurTest extends TestCase
 {
@@ -296,6 +298,178 @@ class PaiementFournisseurTest extends TestCase
         RegleValidationRole::provisionnerAchatsParDefaut($this->org->id);
         $this->payer($facture, ['montant' => 10_000, 'mode_paiement' => 'especes'], $superAdmin)->assertSessionHasNoErrors();
         $this->assertSame(10_000.0, (float) $facture->fresh()->montant_paye);
+    }
+
+    // ── Paiement depuis une autre agence que celle de la facture (révision du 12/10/2026) ──
+
+    /** Agence de l'organisation avec un compte bancaire approvisionné (virement et chèque). */
+    private function agenceAvecBanque(string $nom, float $solde = 1_000_000): array
+    {
+        $site = Site::create(['organization_id' => $this->org->id, 'nom' => $nom, 'type' => 'depot', 'localisation' => 'Conakry']);
+        $banque = $this->creerSupportAgence($site->id, 'banque', '521000', null, 'UBA '.$nom);
+        $this->alimenterCaisse($banque, $solde);
+
+        return [$site, $banque];
+    }
+
+    /** Payeur dont le périmètre « Peut acheter pour » se limite aux agences données. */
+    private function payeurLimiteA(array $sites): User
+    {
+        $role = Role::firstOrCreate(['name' => 'tresorier_agence', 'guard_name' => 'web']);
+        $role->givePermissionTo(['achats.read', 'factures-fournisseurs.read', 'factures-fournisseurs.payer']);
+        RegleValidationRole::create([
+            'organization_id' => $this->org->id, 'domaine' => RegleValidationRole::DOMAINE_ACHATS,
+            'role_name' => 'tresorier_agence', 'perimetre' => 'agences_selectionnees', 'sites' => array_map(fn (Site $s) => $s->id, $sites),
+        ]);
+        $payeur = User::factory()->create(['organization_id' => $this->org->id]);
+        $payeur->assignRole($role);
+        $payeur->sites()->attach($sites[0]->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $payeur;
+    }
+
+    public function test_une_autre_agence_paie_par_virement_puis_par_cheque_et_la_dette_reste_unique(): void
+    {
+        [$matoto, $banque] = $this->agenceAvecBanque('Matoto');
+        $facture = $this->facture(300_000, echeance: now()->startOfMonth()->addDays(20)->toDateString());
+
+        $this->payer($facture, [
+            'montant' => 200_000, 'mode_paiement' => 'virement', 'compte_tresorerie_id' => $banque->id,
+            'reference_paiement' => 'VIR-MATOTO-1', 'site_paiement_id' => $matoto->id,
+        ])->assertSessionHasNoErrors();
+
+        // Une seule dette, portée par la facture et son agence ; le paiement garde l'agence réelle.
+        $facture->refresh();
+        $this->assertSame($this->agence->id, $facture->site_id);
+        $this->assertSame(StatutFactureFournisseur::PARTIELLEMENT_PAYEE, $facture->statut);
+        $this->assertSame(100_000.0, $facture->resteDu());
+        $paiement = PaiementFournisseur::firstOrFail();
+        $this->assertSame($matoto->id, $paiement->site_id);
+        $this->assertSame($banque->id, $paiement->compte_tresorerie_id);
+        $this->assertSame(800_000.0, $this->solde($banque));
+
+        // Écriture : 401 débité, compte de la banque de Matoto crédité, rattachée à Matoto.
+        $piece = PieceComptable::where('source_id', $paiement->id)->where('type_evenement', EvenementComptable::PAIEMENT_FOURNISSEUR->value)->firstOrFail();
+        $lignes = EcritureComptable::where('piece_comptable_id', $piece->id)->get();
+        $this->assertSame('401000', CompteComptable::find($lignes->firstWhere('debit', '>', 0)->compte_comptable_id)->numero);
+        $this->assertSame($banque->compte_comptable_id, $lignes->firstWhere('credit', '>', 0)->compte_comptable_id);
+        $this->assertSame([$matoto->id], $lignes->pluck('site_id')->unique()->values()->all());
+
+        // Financement des agences : le reste dû n'est compté qu'une fois, chez l'agence de la facture.
+        $obligations = collect(app(ObligationsAgenceService::class)->calculerPourMois($this->org->id, now()->year, now()->month));
+        $this->assertSame(100_000.0, (float) $obligations->firstWhere('site_id', $this->agence->id)['fournisseurs']);
+        $this->assertSame(0.0, (float) ($obligations->firstWhere('site_id', $matoto->id)['fournisseurs'] ?? 0));
+
+        // La fiche nomme l'agence qui a réellement payé.
+        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
+            ->assertInertia(fn ($page) => $page->where('paiements.0.autre_agence_nom', 'Matoto'));
+
+        // Solde par chèque de la même agence (sans référence) : facture payée, toujours une seule dette.
+        $this->payer($facture, [
+            'montant' => 100_000, 'mode_paiement' => 'cheque', 'compte_tresorerie_id' => $banque->id, 'site_paiement_id' => $matoto->id,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(StatutFactureFournisseur::PAYEE, $facture->fresh()->statut);
+        $this->assertSame(700_000.0, $this->solde($banque));
+        $this->assertSame(2, PaiementFournisseur::where('site_id', $matoto->id)->count());
+    }
+
+    public function test_le_support_d_une_autre_agence_est_refuse_si_elle_n_est_pas_choisie(): void
+    {
+        [, $banque] = $this->agenceAvecBanque('Matoto');
+        $facture = $this->facture(100_000);
+
+        // Sans agence choisie, l'argent sort de l'agence de la facture : la banque de Matoto n'en est pas.
+        $this->payer($facture, [
+            'montant' => 50_000, 'mode_paiement' => 'virement', 'compte_tresorerie_id' => $banque->id, 'reference_paiement' => 'VIR-X',
+        ])->assertSessionHasErrors('compte_tresorerie_id');
+
+        $this->assertSame(0, PaiementFournisseur::count());
+        $this->assertSame(1_000_000.0, $this->solde($banque));
+        $this->assertSame(0.0, (float) $facture->fresh()->montant_paye);
+    }
+
+    public function test_refus_de_payer_depuis_une_agence_hors_perimetre_ou_d_une_autre_organisation(): void
+    {
+        [$matoto, $banque] = $this->agenceAvecBanque('Matoto');
+        $facture = $this->facture(100_000);
+        $message = "Vous ne pouvez pas payer depuis cette agence : elle n'est pas dans votre périmètre d'achat.";
+
+        // Périmètre limité à l'agence de la facture : la trésorerie de Matoto reste hors d'atteinte,
+        // même en nommant son support.
+        $limite = $this->payeurLimiteA([$this->agence]);
+        $this->payer($facture, [
+            'montant' => 50_000, 'mode_paiement' => 'virement', 'compte_tresorerie_id' => $banque->id,
+            'reference_paiement' => 'VIR-X', 'site_paiement_id' => $matoto->id,
+        ], $limite)->assertSessionHasErrors(['site_paiement_id' => $message]);
+
+        // Périmètre « toutes agences » : jamais une agence d'une autre organisation.
+        $etrangere = Site::create(['organization_id' => Organization::factory()->create()->id, 'nom' => 'Ailleurs', 'type' => 'depot', 'localisation' => 'Kindia']);
+        $this->payer($facture, ['montant' => 50_000, 'mode_paiement' => 'especes', 'site_paiement_id' => $etrangere->id])
+            ->assertSessionHasErrors(['site_paiement_id' => $message]);
+
+        $this->assertSame(0, PaiementFournisseur::count());
+        $this->assertSame(1_000_000.0, $this->solde($banque));
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $facture->fresh()->statut);
+    }
+
+    public function test_couvrir_l_agence_qui_paie_ne_suffit_pas_il_faut_aussi_celle_de_la_facture(): void
+    {
+        [$matoto, $banque] = $this->agenceAvecBanque('Matoto');
+        $facture = $this->facture(100_000);
+
+        $payeurDeMatoto = $this->payeurLimiteA([$matoto]);
+        $this->payer($facture, [
+            'montant' => 50_000, 'mode_paiement' => 'virement', 'compte_tresorerie_id' => $banque->id,
+            'reference_paiement' => 'VIR-X', 'site_paiement_id' => $matoto->id,
+        ], $payeurDeMatoto)->assertForbidden();
+
+        $this->assertSame(0, PaiementFournisseur::count());
+    }
+
+    public function test_especes_depuis_une_autre_agence_caisse_dediee_du_payeur_dans_cette_agence(): void
+    {
+        $cba = Site::create(['organization_id' => $this->org->id, 'nom' => 'Cba', 'type' => 'depot', 'localisation' => 'Conakry']);
+        $kindia = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
+        // L'agent a reçu des espèces dans sa caisse dédiée de Cba ; il n'a aucune caisse ailleurs.
+        $this->user->sites()->attach($cba->id, ['role' => 'employe', 'is_default' => false]);
+        $caisse = $this->equiperPayeurEspeces($this->user, $cba->id, 200_000);
+        $facture = $this->facture(100_000);
+
+        // Pas de caisse dans l'agence de la facture, ni à Kindia : refus, comme partout ailleurs.
+        $this->payer($facture, ['montant' => 60_000, 'mode_paiement' => 'especes'])->assertSessionHasErrors('mode_paiement');
+        $this->payer($facture, ['montant' => 60_000, 'mode_paiement' => 'especes', 'site_paiement_id' => $kindia->id])->assertSessionHasErrors('mode_paiement');
+        $this->assertSame(0, PaiementFournisseur::count());
+
+        // Depuis Cba : l'argent sort de sa caisse dédiée.
+        $this->payer($facture, ['montant' => 60_000, 'mode_paiement' => 'especes', 'site_paiement_id' => $cba->id])->assertSessionHasNoErrors();
+        $paiement = PaiementFournisseur::firstOrFail();
+        $this->assertSame($caisse->id, $paiement->compte_tresorerie_id);
+        $this->assertSame($cba->id, $paiement->site_id);
+        $this->assertSame(140_000.0, $this->solde($caisse));
+        $this->assertSame(40_000.0, $facture->fresh()->resteDu());
+    }
+
+    public function test_fiche_propose_les_agences_du_perimetre_ou_un_paiement_est_possible(): void
+    {
+        [$matoto, $banque] = $this->agenceAvecBanque('Matoto', 750_000);
+        Site::create(['organization_id' => $this->org->id, 'nom' => 'Sans moyens', 'type' => 'depot', 'localisation' => 'Boké']);
+        $facture = $this->facture(100_000);
+
+        // L'agence de la facture en tête (choix par défaut), puis Matoto ; l'agence sans moyen ni caisse est omise.
+        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('paiement.agence_facture.id', $this->agence->id)
+                ->has('paiement.agences', 2)
+                ->where('paiement.agences.0.site_id', $this->agence->id)
+                ->where('paiement.agences.0.peut_encaisser_especes', false)
+                ->where('paiement.agences.1.site_id', $matoto->id)
+                ->where('paiement.agences.1.nom', 'Matoto')
+                ->where('paiement.agences.1.moyens.0.compte_tresorerie_id', $banque->id)
+                ->where('paiement.agences.1.moyens.0.solde_disponible', 750_000));
+
+        // Périmètre limité à l'agence de la facture : aucune autre agence n'est proposée.
+        $this->actingAs($this->payeurLimiteA([$this->agence]))->get(route('achats.factures.show', $facture))
+            ->assertInertia(fn ($page) => $page->where('actions.peut_payer', true)->has('paiement.agences', 1));
     }
 
     // ── Fiche et obligations de l'agence ──────────────────────────────────────

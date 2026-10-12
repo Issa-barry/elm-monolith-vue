@@ -14,6 +14,7 @@ use App\Services\Achats\CommandeAchatService;
 use App\Services\Achats\FactureFournisseurService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Validation\ValidationParPlafondService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -79,6 +80,7 @@ class ShowCommandeAchatController extends Controller
                 'paye_par_autre_agence' => $achat->estPayeParUneAutreAgence(),
                 'note' => $achat->note,
                 'created_at' => $achat->created_at?->format('d/m/Y'),
+                'date_achat' => $achat->dateAchat()?->format('d/m/Y'),
                 'created_by' => $this->nom($achat->createdBy),
                 'validee_at' => $achat->validee_at?->format('d/m/Y H:i'),
                 'validee_par' => $this->nom($achat->valideePar),
@@ -121,8 +123,11 @@ class ShowCommandeAchatController extends Controller
                     'reste_du' => $f->resteDu(),
                     'statut' => $f->statut?->value,
                     'statut_label' => $f->statut?->label(),
+                    'statut_affichage' => $f->statut?->statutAffichage(),
                 ])->values() : [],
             ],
+            // Frise d'avancement et prochaine action, dérivées des données du bon (aucun nouveau statut).
+            'jalons' => app(JalonsCommandeAchat::class)->pour($achat),
             'actions' => [
                 'peut_modifier' => $aValider && $peutAgir && $user->can('update', $achat),
                 'peut_valider' => $peutValider,

@@ -27,9 +27,13 @@ use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
+use App\Support\Achats\JalonsCommandeAchat;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -217,7 +221,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame($this->commande->id, $facture->commande_achat_id);
         $this->assertSame($this->fournisseur->id, $facture->fournisseur_id);
         $this->assertSame($this->site->id, $facture->site_id);
-        $this->assertStringStartsWith('FAF-', $facture->reference);
+        $this->assertMatchesRegularExpression('/^FAC-\d{6}-\d{3}$/', $facture->reference);
         $this->assertSame(60_000.0, (float) $facture->montant_ht);
         $this->assertSame(0.0, $facture->resteDu());
         $this->assertSame('Préformes 500 ml', $facture->lignes()->first()->libelle_snapshot);
@@ -701,6 +705,280 @@ class FactureFournisseurTest extends TestCase
         $this->assertNull($paiements->motifNonPayable($facture->fresh(), $this->user));
     }
 
+    // ── Frise d'avancement et prochaine action ───────────────────────────────
+
+    /** @return array{0: array<string, string>, 1: ?string, 2: list<string>, 3: string} états par étape, prochaine action, autres actions, résumé */
+    private function jalons(CommandeAchat $commande): array
+    {
+        $j = app(JalonsCommandeAchat::class)->pour($commande->fresh());
+
+        return [collect($j['etapes'])->pluck('etat', 'cle')->all(), $j['prochaine_action'], $j['autres_actions'], $j['resume']];
+    }
+
+    /** Statut de facturation du bon (colonne « Statut facture » de la liste), ou null. */
+    private function statutFacture(CommandeAchat $commande): ?string
+    {
+        return app(JalonsCommandeAchat::class)->pour($commande->fresh())['statut_facture']['statut'] ?? null;
+    }
+
+    public function test_la_frise_suit_les_donnees_reelles_du_bon_jusqu_au_paiement(): void
+    {
+        // À valider : seule la création est faite.
+        [$aValider] = $this->commandeValidee($this->org, $this->site, $this->fournisseur, StatutCommandeAchat::A_VALIDER);
+        [$etats, $action, , $resume] = $this->jalons($aValider);
+        $this->assertSame(['creation' => 'fait', 'validation' => 'en_cours', 'reception' => 'a_venir', 'facture' => 'a_venir', 'paiement' => 'a_venir', 'termine' => 'a_venir'], $etats);
+        $this->assertSame('Faire valider le bon de commande', $action);
+        $this->assertSame('À valider', $resume);
+        $this->assertNull($this->statutFacture($aValider));
+
+        // Validé, rien reçu.
+        [$etats, $action, $autres] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['reception']);
+        $this->assertStringStartsWith('Réceptionner les marchandises', $action);
+        $this->assertSame([], $autres);
+        // Rien de reçu : rien à facturer, la colonne « Statut facture » reste vide ; la liste
+        // rappelle sous le statut du bon ce qui le concerne.
+        $this->assertNull($this->statutFacture($this->commande));
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', function ($data) {
+                $ligne = collect($data)->firstWhere('id', $this->commande->id);
+
+                return $ligne['prochaine_action'] === 'À réceptionner' && $ligne['statut_facture'] === null && $ligne['statut_facture_label'] === null;
+            }));
+
+        // Réception partielle (40 sur 200) : le reliquat d'abord, facturer le déjà reçu est possible.
+        $r1 = $this->receptionner($this->commande, [$this->ligneA->id => 40]);
+        $this->commande->update(['statut' => StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE]);
+        [$etats, $action, $autres, $resume] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['reception']);
+        $this->assertSame('a_venir', $etats['facture']);
+        $this->assertSame('Réceptionner le reliquat : 160 sur 200 restent à recevoir', $action);
+        $this->assertSame(["Saisir la facture d'achat des quantités déjà reçues"], $autres);
+        $this->assertSame('Reliquat à réceptionner', $resume);
+        $this->assertSame('a_facturer', $this->statutFacture($this->commande));
+
+        // Facture en brouillon sur le reçu : à valider, plus rien à saisir.
+        $f1 = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r1, $this->ligneA), 40)]));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Valider la facture {$f1->reference}"], $autres);
+        $this->assertSame('brouillon', $this->statutFacture($this->commande));
+
+        // Validée sans compte d'achat : écriture en attente, donc pas encore payable.
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $f1));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Relancer la comptabilisation de la facture {$f1->reference} avant de la payer"], $autres);
+        $this->assertSame('facture_impayee', $this->statutFacture($this->commande));
+        // Même libellé que les factures de vente ; la valeur enregistrée reste « validee ».
+        $this->assertSame(StatutFactureFournisseur::VALIDEE, $f1->fresh()->statut);
+        $this->actingAs($this->user)->get(route('achats.factures.show', $f1))
+            ->assertInertia(fn ($page) => $page->where('facture.statut', 'validee')->where('facture.statut_label', 'Impayée')->where('facture.statut_affichage', 'facture_impayee'));
+        $this->actingAs($this->user)->get(route('achats.factures.index'))
+            ->assertInertia(fn ($page) => $page->where('factures.data.0.statut_label', 'Impayée')->where('factures.data.0.statut_affichage', 'facture_impayee'));
+
+        // Écriture passée : payable.
+        $this->mapperCompteAchat();
+        $this->actingAs($this->makeValidateur())->post(route('achats.factures.comptabiliser', $f1));
+        [, , $autres] = $this->jalons($this->commande);
+        $this->assertSame(["Payer la facture {$f1->reference} (reste dû 40 000 GNF)"], $autres);
+
+        // Réception terminée : la facture devient l'étape courante, le reste est à facturer.
+        $r2 = $this->receptionner($this->commande, [$this->ligneA->id => 60, $this->ligneB->id => 100]);
+        $this->commande->update(['statut' => StatutCommandeAchat::RECEPTIONNEE]);
+        [$etats, $action, $autres] = $this->jalons($this->commande);
+        $this->assertSame(['fait', 'en_cours', 'a_venir'], [$etats['reception'], $etats['facture'], $etats['paiement']]);
+        $this->assertSame("Saisir la facture d'achat", $action);
+        $this->assertSame(["Payer la facture {$f1->reference} (reste dû 40 000 GNF)"], $autres);
+
+        // Tout facturé et validé, encore dû : le paiement est l'étape courante — jamais « Terminé ».
+        $f2 = $this->saisir($this->payload([
+            $this->ligne($this->ligneRecue($r2, $this->ligneA), 60),
+            $this->ligne($this->ligneRecue($r2, $this->ligneB), 100, 500),
+        ], ['numero_facture_fournisseur' => 'F-2026-002']));
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $f2));
+        [$etats, , , $resume] = $this->jalons($this->commande);
+        $this->assertSame(['fait', 'en_cours', 'a_venir'], [$etats['facture'], $etats['paiement'], $etats['termine']]);
+        $this->assertSame('À payer', $resume);
+
+        // Fiche et liste exposent la même chose.
+        $this->actingAs($this->user)->get(route('achats.show', $this->commande))
+            ->assertInertia(fn ($page) => $page->where('jalons.etapes.4.etat', 'en_cours')->where('jalons.termine', false));
+        // Dans la liste, la facturation a sa colonne : plus de rappel sous le statut du bon.
+        $this->actingAs($this->user)->get(route('achats.index'))
+            ->assertInertia(fn ($page) => $page->where('commandes.data', function ($data) {
+                $ligne = collect($data)->firstWhere('id', $this->commande->id);
+
+                return $ligne['statut'] === 'receptionnee' && $ligne['prochaine_action'] === null
+                    && $ligne['statut_facture'] === 'facture_impayee' && $ligne['statut_facture_label'] === 'Impayée';
+            }));
+
+        // Paiement partiel puis total : terminé seulement quand plus rien n'est dû.
+        $f1->update(['montant_paye' => 40_000, 'statut' => StatutFactureFournisseur::PAYEE]);
+        $f2->update(['montant_paye' => 10_000, 'statut' => StatutFactureFournisseur::PARTIELLEMENT_PAYEE]);
+        [$etats, $action] = $this->jalons($this->commande);
+        $this->assertSame('en_cours', $etats['paiement']);
+        $this->assertSame("Payer la facture {$f2->reference} (reste dû 100 000 GNF)", $action);
+        $this->assertSame('partiellement_payee', $this->statutFacture($this->commande));
+
+        $f2->update(['montant_paye' => 110_000, 'statut' => StatutFactureFournisseur::PAYEE]);
+        $j = app(JalonsCommandeAchat::class)->pour($this->commande->fresh());
+        $this->assertTrue($j['termine']);
+        $this->assertNull($j['prochaine_action']);
+        $this->assertSame(['fait'], collect($j['etapes'])->pluck('etat')->unique()->values()->all());
+        $this->assertSame(['statut' => 'payee', 'label' => 'Payée'], $j['statut_facture']);
+
+        // Bon annulé : pas de frise.
+        $aValider->update(['statut' => StatutCommandeAchat::ANNULEE]);
+        $this->assertTrue(app(JalonsCommandeAchat::class)->pour($aValider->fresh())['annule']);
+        $this->assertNull($this->statutFacture($aValider));
+    }
+
+    public function test_statut_facture_du_bon_la_situation_la_moins_avancee_l_emporte(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 30]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Une facture payée sur 10 des 30 reçus : il reste du reçu à facturer.
+        $payee = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'P-1']));
+        $payee->update(['statut' => StatutFactureFournisseur::PAYEE, 'montant_paye' => 10_000]);
+        $this->assertSame('partiellement_facturee', $this->statutFacture($this->commande));
+
+        // Une seconde facture en brouillon passe devant la facture payée.
+        $brouillon = $this->saisir($this->payload([$this->ligne($ligne, 20)], ['numero_facture_fournisseur' => 'P-2']));
+        $this->assertSame('brouillon', $this->statutFacture($this->commande));
+
+        // Validée et pas encore payée, alors qu'une autre l'est : payé en partie à l'échelle du bon.
+        $brouillon->update(['statut' => StatutFactureFournisseur::VALIDEE]);
+        $this->assertSame('partiellement_payee', $this->statutFacture($this->commande));
+
+        // Une facture annulée ne compte pas.
+        $brouillon->update(['statut' => StatutFactureFournisseur::ANNULEE]);
+        $this->assertSame('partiellement_facturee', $this->statutFacture($this->commande));
+        $payee->update(['statut' => StatutFactureFournisseur::ANNULEE]);
+        $this->assertSame('a_facturer', $this->statutFacture($this->commande));
+    }
+
+    // ── Référence interne FAC-JJMMAA-NNN (décision du 10/10/2026) ──────────────
+
+    public function test_les_nouvelles_factures_sont_referencees_fac_et_les_anciennes_gardent_faf(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 30]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+        $jour = now()->format('dmy');
+
+        // Facture émise avant le changement de préfixe, le même jour.
+        $ancienne = FactureFournisseur::create([
+            'organization_id' => $this->org->id, 'commande_achat_id' => $this->commande->id, 'fournisseur_id' => $this->fournisseur->id,
+            'site_id' => $this->site->id, 'reference' => "FAF-{$jour}-001", 'numero' => 1, 'numero_facture_fournisseur' => 'ANC-1',
+            'cle_numero_unique' => 'ANC-1', 'date_facture' => now()->toDateString(), 'created_by' => $this->user->id,
+        ]);
+
+        // La référence interne ne reprend jamais le numéro du document du fournisseur.
+        // (Relues par leur numéro fournisseur : l'ancienne porte elle aussi le numéro d'ordre 1.)
+        $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'FOUR-2026-77']));
+        $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => null]));
+        $premiere = FactureFournisseur::where('numero_facture_fournisseur', 'FOUR-2026-77')->firstOrFail();
+        $seconde = FactureFournisseur::whereNull('numero_facture_fournisseur')->firstOrFail();
+        $this->assertSame("FAC-{$jour}-001", $premiere->reference);
+        $this->assertSame("FAC-{$jour}-002", $seconde->reference);
+        $this->assertSame('FOUR-2026-77', $premiere->numero_facture_fournisseur);
+        $this->assertNull($seconde->numero_facture_fournisseur);
+
+        // L'ancienne facture n'est ni renumérotée ni perdue : fiche, liste, recherche et PDF.
+        $this->assertSame("FAF-{$jour}-001", $ancienne->fresh()->reference);
+        $this->actingAs($this->user)->get(route('achats.factures.show', $ancienne))
+            ->assertInertia(fn ($page) => $page->where('facture.reference', "FAF-{$jour}-001"));
+        $this->actingAs($this->user)->get(route('achats.factures.index', ['numero' => 'FAF-']))
+            ->assertInertia(fn ($page) => $page->has('factures.data', 1)->where('factures.data.0.reference', "FAF-{$jour}-001"));
+        $this->actingAs($this->user)->get(route('achats.factures.index', ['numero' => 'FAC-']))
+            ->assertInertia(fn ($page) => $page->has('factures.data', 2));
+        $this->actingAs($this->user)->get(route('achats.factures.pdf', $ancienne))->assertOk();
+    }
+
+    public function test_une_ancienne_facture_faf_se_valide_et_se_comptabilise_sous_sa_reference(): void
+    {
+        $this->mapperCompteAchat();
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)], ['numero_facture_fournisseur' => 'ANC-2']));
+        $facture->update(['reference' => 'FAF-081026-004']);
+
+        $this->actingAs($this->makeValidateur())->patch(route('achats.factures.valider', $facture))->assertSessionHasNoErrors();
+
+        $this->assertSame('FAF-081026-004', $facture->fresh()->reference);
+        $this->assertSame('Facture d’achat n° ANC-2 — FAF-081026-004', $this->piece($facture)->libelle);
+    }
+
+    // ── Numéro du document facultatif, sans type de justificatif (décision du 10/10/2026) ──
+
+    public function test_facture_sans_numero_acceptee_et_plusieurs_peuvent_coexister(): void
+    {
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 20]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Numéro absent : aucun numéro n'est inventé, aucune clé de doublon.
+        $premiere = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => null]));
+        $this->assertNull($premiere->numero_facture_fournisseur);
+        $this->assertNull($premiere->cle_numero_unique);
+
+        // Une seconde saisie sans numéro (espaces seuls compris) du même fournisseur n'est pas un doublon.
+        $seconde = $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => '   ']));
+        $this->assertNull($seconde->numero_facture_fournisseur);
+        $this->assertSame(2, FactureFournisseur::count());
+
+        // Le contrôle de doublon reste actif dès qu'un numéro est saisi.
+        $this->saisir($this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-77']));
+        $this->actingAs($this->user)
+            ->post(route('achats.factures.store'), $this->payload([$this->ligne($ligne, 5)], ['numero_facture_fournisseur' => 'F-77']))
+            ->assertSessionHasErrors(['numero_facture_fournisseur' => 'Une facture de ce fournisseur porte déjà ce numéro.']);
+    }
+
+    public function test_un_numero_vide_ne_fait_jamais_dire_sans_justificatif(): void
+    {
+        $this->mapperCompteAchat();
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 20]);
+        $ligne = $this->ligneRecue($r, $this->ligneA);
+
+        // Aucun type de document n'est demandé ni conservé.
+        $this->assertFalse(Schema::hasColumn('factures_fournisseurs', 'type_justificatif'));
+
+        $sansNumero = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => null]));
+        $avecNumero = $this->saisir($this->payload([$this->ligne($ligne, 10)], ['numero_facture_fournisseur' => 'F-88']));
+        $this->assertSame('Facture d’achat sans numéro', $sansNumero->designationDocument());
+        $this->assertSame('Facture d’achat n° F-88', $avecNumero->designationDocument());
+
+        // Fiche et liste : le numéro tel quel, sans indicateur de justificatif.
+        $this->actingAs($this->user)->get(route('achats.factures.show', $sansNumero))
+            ->assertInertia(fn ($page) => $page
+                ->where('facture.numero_facture_fournisseur', null)
+                ->missing('facture.sans_justificatif')
+                ->missing('facture.type_justificatif'));
+        $this->actingAs($this->user)->get(route('achats.factures.index'))
+            ->assertInertia(fn ($page) => $page->missing('factures.data.0.sans_justificatif'));
+
+        // Validées et comptabilisées de la même façon : seul le libellé reprend le numéro s'il existe.
+        $validateur = $this->makeValidateur();
+        $this->actingAs($validateur)->patch(route('achats.factures.valider', $sansNumero))->assertSessionHasNoErrors();
+        $this->actingAs($validateur)->patch(route('achats.factures.valider', $avecNumero))->assertSessionHasNoErrors();
+        $this->assertSame('Facture d’achat sans numéro — '.$sansNumero->reference, $this->piece($sansNumero)->libelle);
+        $this->assertSame('Facture d’achat n° F-88 — '.$avecNumero->reference, $this->piece($avecNumero)->libelle);
+        $this->assertSame(10_000.0, $sansNumero->fresh()->resteDu());
+
+        // PDF : « Sans numéro », jamais « sans justificatif » ni « aucun document ».
+        $html = view('pdf.facture_achat', ['facture' => $sansNumero->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('Sans numéro', $html);
+        $this->assertStringContainsString('n’est pas l’original du fournisseur', $html);
+        $this->assertStringNotContainsStringIgnoringCase('justificatif', $html);
+        $this->assertStringNotContainsStringIgnoringCase('aucun document', $html);
+    }
+
+    public function test_la_saisie_propose_la_date_d_achat_du_bon(): void
+    {
+        $this->commande->update(['date_achat' => '2026-09-28']);
+        $this->receptionner($this->commande, [$this->ligneA->id => 10], '2026-09-29');
+
+        $this->actingAs($this->user)->get(route('achats.factures.create', ['commande' => $this->commande->id]))
+            ->assertInertia(fn ($page) => $page->where('commande.date_achat', '2026-09-28'));
+    }
+
     // ── Achat centralisé : la facture relève de l'agence payeuse ──────────────
 
     public function test_la_facture_d_un_achat_centralise_appartient_a_l_agence_payeuse(): void
@@ -846,11 +1124,35 @@ class FactureFournisseurTest extends TestCase
         $reponse = $this->actingAs($this->user)->get(route('achats.factures.pdf', $facture));
         $reponse->assertOk()->assertHeader('content-type', 'application/pdf');
         $this->assertStringContainsString($facture->reference.'.pdf', (string) $reponse->headers->get('content-disposition'));
+        $this->assertStringStartsWith('attachment;', (string) $reponse->headers->get('content-disposition'));
+
+        $apercu = $this->actingAs($this->user)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]));
+        $apercu->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('inline;', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringContainsString($facture->reference.'.pdf', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringStartsWith('%PDF-', $apercu->getContent());
 
         $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
-        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', $this->commande->reference ?? '—', $r->reference, 'Préformes 500 ml', 'BROUILLON', 'n’est pas la facture originale du fournisseur'] as $attendu) {
+        foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
+
+        // Le logo par défaut reste visible sans fichier d'organisation.
+        $this->assertStringContainsString('data:image/svg+xml;base64,', $html);
+
+        // Un logo personnalisé de cette organisation remplace le logo par défaut.
+        Storage::fake('public');
+        $logoPng = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=');
+        Storage::disk('public')->put('organizations/logo-test.png', $logoPng);
+        $this->org->logo_path = 'organizations/logo-test.png';
+        $htmlPersonnalise = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('data:image/png;base64,'.base64_encode($logoPng), $htmlPersonnalise);
+        $this->assertStringNotContainsString('data:image/svg+xml;base64,', $htmlPersonnalise);
+
+        // Un ancien chemin dont le fichier manque conserve un logo visible.
+        $this->org->logo_path = 'organizations/logo-absent.png';
+        $htmlSansFichier = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $this->assertStringContainsString('data:image/svg+xml;base64,', $htmlSansFichier);
 
         // Hors périmètre : refus, comme la fiche.
         $autreSite = Site::factory()->for($this->org)->create();
@@ -859,6 +1161,28 @@ class FactureFournisseurTest extends TestCase
         $intrus->assignRole('admin_entreprise');
         $intrus->givePermissionTo(self::PERMISSIONS_SAISIE);
         $this->actingAs($intrus)->get(route('achats.factures.pdf', $facture))->assertForbidden();
+        $this->actingAs($intrus)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]))->assertForbidden();
+    }
+
+    public function test_pdf_se_genere_quand_le_dossier_des_polices_n_existe_pas_encore(): void
+    {
+        // Serveur dont storage/ n'est pas déployé : storage/fonts est absent au premier PDF.
+        $dossier = storage_path('framework/testing/fonts-'.uniqid());
+        config(['dompdf.options.font_dir' => $dossier, 'dompdf.options.font_cache' => $dossier]);
+        $this->assertDirectoryDoesNotExist($dossier);
+
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+
+        try {
+            $apercu = $this->actingAs($this->user)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]));
+
+            $apercu->assertOk()->assertHeader('content-type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF-', $apercu->getContent());
+            $this->assertNotEmpty(File::glob($dossier.'/poppinsinvoice_*.ufm'));
+        } finally {
+            File::deleteDirectory($dossier);
+        }
     }
 
     public function test_migration_autorise_l_auto_validation_des_factures_pour_les_regles_super_admin_seulement(): void

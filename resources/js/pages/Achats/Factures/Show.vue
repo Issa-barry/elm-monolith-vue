@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+    AgenceEncaissement,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -13,7 +14,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
-    Download,
+    Eye,
     HandCoins,
     Info,
     Pencil,
@@ -23,7 +24,7 @@ import {
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Ligne {
     reception_ligne_id: string;
@@ -42,7 +43,7 @@ interface Ligne {
 interface Facture {
     id: string;
     reference: string;
-    numero_facture_fournisseur: string;
+    numero_facture_fournisseur: string | null;
     date_facture: string;
     date_echeance: string | null;
     taux_tva: number;
@@ -53,6 +54,7 @@ interface Facture {
     reste_du: number;
     statut: string;
     statut_label: string;
+    statut_affichage: string;
     note: string | null;
     fournisseur_nom: string | null;
     created_by: string | null;
@@ -72,6 +74,8 @@ interface Paiement {
     montant: number;
     mode_paiement: string;
     support: string | null;
+    /** Agence d'où l'argent est sorti, si ce n'est pas celle de la facture. */
+    autre_agence_nom: string | null;
     reference_paiement: string | null;
     created_by: string | null;
 }
@@ -96,6 +100,9 @@ const props = defineProps<{
         moyens: MoyenEncaissement[];
         especes_disponibles: boolean;
         solde_especes: number | null;
+        /** Agences d'où le payeur peut régler (son périmètre d'achat), celle de la facture en tête. */
+        agences: AgenceEncaissement[];
+        agence_facture: { id: string; nom: string };
     } | null;
     actions: {
         peut_modifier: boolean;
@@ -215,12 +222,25 @@ function dateDuJour(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Le choix « Agence qui paie » n'apparaît que si le payeur peut régler depuis une autre agence que
+// celle de la facture ; sinon le dialogue reste celui d'une seule agence.
+const agencesDePaiement = computed(() =>
+    props.paiement && props.paiement.agences.length > 1
+        ? props.paiement.agences
+        : [],
+);
+
 function payer(payload: EncaissementPayload) {
     paiementEnCours.value = true;
     erreursPaiement.value = {};
+    const { site_encaissement_id: sitePaiementId, ...reste } = payload;
     router.post(
         `/backoffice/achats/factures/${props.facture.id}/paiements`,
-        { ...payload, date_paiement: dateDuJour() },
+        {
+            ...reste,
+            site_paiement_id: sitePaiementId,
+            date_paiement: dateDuJour(),
+        },
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -232,12 +252,21 @@ function payer(payload: EncaissementPayload) {
                 });
             },
             onError: (e) => {
-                erreursPaiement.value = e as Record<string, string>;
+                const erreurs = e as Record<string, string>;
+                // La carte de paiement affiche l'erreur d'agence sous la clé de son propre champ.
+                erreursPaiement.value = erreurs.site_paiement_id
+                    ? {
+                          ...erreurs,
+                          site_encaissement_id: erreurs.site_paiement_id,
+                      }
+                    : erreurs;
                 const affichees = [
                     'montant',
                     'mode_paiement',
                     'compte_tresorerie_id',
                     'reference_paiement',
+                    'site_paiement_id',
+                    'site_encaissement_id',
                 ];
                 const autres = Object.entries(erreursPaiement.value)
                     .filter(([cle]) => !affichees.includes(cle))
@@ -289,13 +318,17 @@ function relancerComptabilite() {
                         class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
                     >
                         <StatusDot
-                            :status="facture.statut"
+                            :status="facture.statut_affichage"
                             :label="facture.statut_label"
                             class="text-foreground"
                         />
                         <span
-                            >· N° fournisseur
-                            {{ facture.numero_facture_fournisseur }}</span
+                            >·
+                            {{
+                                facture.numero_facture_fournisseur
+                                    ? `N° fournisseur ${facture.numero_facture_fournisseur}`
+                                    : 'Sans numéro de document'
+                            }}</span
                         >
                         <span v-if="facture.created_by"
                             >· saisie par {{ facture.created_by }}</span
@@ -303,15 +336,17 @@ function relancerComptabilite() {
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <a
-                        :href="`/backoffice/achats/factures/${facture.id}/pdf`"
-                        title="Récapitulatif de la facture enregistrée (pas l’original du fournisseur)"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Download class="mr-2 h-4 w-4" />
-                            PDF
-                        </Button>
-                    </a>
+                    <Button as-child variant="outline" size="sm">
+                        <a
+                            :href="`/backoffice/achats/factures/${facture.id}/pdf?preview=1`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Voir le récapitulatif de la facture dans un nouvel onglet"
+                        >
+                            <Eye class="mr-2 h-4 w-4" />
+                            Voir la facture
+                        </a>
+                    </Button>
                     <Link
                         v-if="actions.peut_modifier"
                         :href="`/backoffice/achats/factures/${facture.id}/edit`"
@@ -431,7 +466,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Date / échéance
                             </p>
-                            <p class="font-medium">
+                            <p class="text-xs font-medium">
                                 {{ formatDate(facture.date_facture) }} /
                                 {{ formatDate(facture.date_echeance) }}
                             </p>
@@ -455,7 +490,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Validation
                             </p>
-                            <p class="font-medium">
+                            <p class="text-xs font-medium">
                                 {{ facture.validee_at }} par
                                 {{ facture.validee_par ?? '—' }}
                             </p>
@@ -491,7 +526,9 @@ function relancerComptabilite() {
                         </div>
                         <div v-if="facture.note" class="sm:col-span-2">
                             <p class="text-xs text-muted-foreground">Note</p>
-                            <p>{{ facture.note }}</p>
+                            <p class="text-xs font-medium">
+                                {{ facture.note }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -568,6 +605,12 @@ function relancerComptabilite() {
                             </td>
                             <td class="px-3 py-2">
                                 {{ p.support ?? p.mode_paiement }}
+                                <span
+                                    v-if="p.autre_agence_nom"
+                                    class="block text-xs text-muted-foreground"
+                                >
+                                    Payé par {{ p.autre_agence_nom }}
+                                </span>
                             </td>
                             <td class="px-3 py-2 font-mono text-xs">
                                 {{ p.reference_paiement ?? '—' }}
@@ -690,7 +733,7 @@ function relancerComptabilite() {
                 { label: 'Fournisseur', value: facture.fournisseur_nom ?? '—' },
                 {
                     label: 'N° fournisseur',
-                    value: facture.numero_facture_fournisseur,
+                    value: facture.numero_facture_fournisseur ?? 'Sans numéro',
                 },
                 { label: 'Montant TTC', value: formatGNF(facture.montant_ttc) },
                 { label: 'Déjà payé', value: formatGNF(facture.montant_paye) },
@@ -701,6 +744,9 @@ function relancerComptabilite() {
             :moyens="paiement.moyens"
             :especes-disponibles="paiement.especes_disponibles"
             :solde-especes="paiement.solde_especes"
+            :agences="agencesDePaiement"
+            :agence-defaut="paiement.agence_facture.id"
+            :agence-commande="paiement.agence_facture"
             :processing="paiementEnCours"
             :errors="erreursPaiement"
             @submit="payer"

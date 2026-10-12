@@ -189,7 +189,7 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'reference',
         label: 'Référence',
         type: 'text',
-        placeholder: 'FAC-…',
+        placeholder: 'VTE-…, DST-…',
         inline: true,
     },
     { key: 'periode', label: 'Période', type: 'select', options: periodes },

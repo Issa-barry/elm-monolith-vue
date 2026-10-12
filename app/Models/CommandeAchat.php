@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
@@ -26,6 +27,7 @@ class CommandeAchat extends Model
         'site_id',
         'site_payeur_id',
         'reference',
+        'date_achat',
         'numero',
         'note',
         'total_commande',
@@ -55,6 +57,7 @@ class CommandeAchat extends Model
     {
         return [
             'total_commande' => 'decimal:2',
+            'date_achat' => 'date',
             'statut' => StatutCommandeAchat::class,
             'contenu_modifie_at' => 'datetime',
             'validee_at' => 'datetime',
@@ -205,6 +208,12 @@ class CommandeAchat extends Model
     public function siteNom(): ?string
     {
         return $this->site_nom_snapshot ?? $this->site?->nom;
+    }
+
+    /** Date réelle de l'achat ; à défaut (bon non migré), la date de saisie. */
+    public function dateAchat(): ?Carbon
+    {
+        return $this->date_achat ?? $this->created_at;
     }
 
     /** Agence payeuse ; à défaut (bon antérieur au 10/10/2026 non migré), l'agence de livraison. */

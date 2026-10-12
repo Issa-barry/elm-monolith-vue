@@ -114,15 +114,26 @@ final class SavedFilterService
             // Une vue « mes agences » sans affectation ne doit jamais devenir « toutes ».
             abort_if(empty($filters['site_ids']), 422, 'Aucune agence ne vous est affectée pour cette vue.');
         } elseif (! empty($filters['site_ids'])) {
-            $allowed = $user->voitToutesLesAgences()
-                ? Site::where('organization_id', $user->organization_id)->pluck('id')->all()
-                : $user->sites()->where('sites.organization_id', $user->organization_id)->pluck('sites.id')->all();
+            $allowed = $this->allowedSiteIds($user, $scope);
             abort_if(count(array_diff($filters['site_ids'], $allowed)) > 0, 403, 'Cette vue contient une agence à laquelle vous n’avez plus accès.');
         }
         // Les critères de la vue remplacent ceux de l'URL ; la liste reste l'autorité métier.
         $request->merge([...array_fill_keys($keys, null), ...$filters]);
 
         return $this->payload($view, $user);
+    }
+
+    /** Certaines listes, dont les achats, ont un périmètre de consultation métier dédié. */
+    private function allowedSiteIds(User $user, string $scope): array
+    {
+        $config = $this->config($user, $scope);
+        if (isset($config['allowed_sites'])) {
+            return $config['allowed_sites']($user);
+        }
+
+        return $user->voitToutesLesAgences()
+            ? Site::where('organization_id', $user->organization_id)->pluck('id')->all()
+            : $user->sites()->where('sites.organization_id', $user->organization_id)->pluck('sites.id')->all();
     }
 
     public function validate(Request $request, string $scope, ?SavedFilter $savedFilter = null): array
@@ -157,8 +168,8 @@ final class SavedFilterService
                 $rules['filters.site_scope'] = ['sometimes', Rule::in(['mine'])];
                 $rules['filters.site_ids'] = ['sometimes', 'array', 'max:100'];
                 $rules['filters.site_ids.*'] = ['required', 'ulid', 'distinct', Rule::exists('sites', 'id')->where('organization_id', $user->organization_id)];
-                if (! $user->voitToutesLesAgences()) {
-                    $rules['filters.site_ids.*'][] = Rule::in($user->sites()->pluck('sites.id')->all());
+                if (isset($config['allowed_sites']) || ! $user->voitToutesLesAgences()) {
+                    $rules['filters.site_ids.*'][] = Rule::in($this->allowedSiteIds($user, $scope));
                 }
             }
         }

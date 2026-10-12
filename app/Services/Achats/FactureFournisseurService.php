@@ -29,7 +29,12 @@ use Illuminate\Validation\ValidationException;
  */
 class FactureFournisseurService
 {
-    public const PREFIXE_REFERENCE = 'FAF';
+    /**
+     * Référence interne `FAC-JJMMAA-NNN` (décision du 10/10/2026), à ne pas confondre avec le numéro
+     * du document du fournisseur (`numero_facture_fournisseur`, facultatif). Les factures émises
+     * avant cette date gardent leur référence `FAF-…` : aucune renumérotation.
+     */
+    public const PREFIXE_REFERENCE = 'FAC';
 
     public function __construct(
         private readonly ReferenceNumeroService $references,
@@ -41,7 +46,8 @@ class FactureFournisseurService
     {
         return [
             'fournisseur_id' => ['required', 'string'],
-            'numero_facture_fournisseur' => ['required', 'string', 'max:100'],
+            // Facultatif : certains fournisseurs ne remettent aucun document, ou un document sans numéro.
+            'numero_facture_fournisseur' => ['nullable', 'string', 'max:100'],
             'date_facture' => ['required', 'date', 'before_or_equal:today'],
             'date_echeance' => ['nullable', 'date', 'after_or_equal:date_facture'],
             'taux_tva' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -56,7 +62,6 @@ class FactureFournisseurService
     public static function messagesSaisie(): array
     {
         return [
-            'numero_facture_fournisseur.required' => 'Le numéro de la facture du fournisseur est obligatoire.',
             'date_facture.before_or_equal' => 'La date de facture ne peut pas être dans le futur.',
             'date_echeance.after_or_equal' => "L'échéance ne peut pas précéder la date de facture.",
             'lignes.required' => 'Sélectionnez au moins une ligne reçue à facturer.',
@@ -119,7 +124,7 @@ class FactureFournisseurService
 
         return $this->sansDoublonDeNumero(fn () => DB::transaction(function () use ($commande, $user, $data) {
             $lignes = $this->lignesSaisies($commande, $data, null);
-            $this->verifierNumeroUnique($commande, $data['numero_facture_fournisseur'], null);
+            $this->verifierNumeroUnique($commande, self::numero($data), null);
 
             [$reference, $numero] = $this->references->generer($commande->organization_id, self::PREFIXE_REFERENCE);
 
@@ -156,7 +161,7 @@ class FactureFournisseurService
             }
 
             $lignes = $this->lignesSaisies($commande, $data, $facture->id);
-            $this->verifierNumeroUnique($commande, $data['numero_facture_fournisseur'], $facture->id);
+            $this->verifierNumeroUnique($commande, self::numero($data), $facture->id);
 
             $facture->update(['contenu_modifie_par' => $user->id, 'contenu_modifie_at' => now()] + $this->entete($data));
             $facture->lignes()->delete();
@@ -345,8 +350,20 @@ class FactureFournisseurService
         }
     }
 
-    private function verifierNumeroUnique(CommandeAchat $commande, string $numero, ?string $exclure): void
+    /** Numéro du fournisseur saisi, ou null s'il n'y en a pas. */
+    private static function numero(array $data): ?string
     {
+        $numero = trim((string) ($data['numero_facture_fournisseur'] ?? ''));
+
+        return $numero === '' ? null : $numero;
+    }
+
+    private function verifierNumeroUnique(CommandeAchat $commande, ?string $numero, ?string $exclure): void
+    {
+        if ($numero === null) {
+            return;
+        }
+
         $doublon = FactureFournisseur::where('organization_id', $commande->organization_id)
             ->where('fournisseur_id', $commande->fournisseur_id)
             ->where('numero_facture_fournisseur', trim($numero))
@@ -389,9 +406,13 @@ class FactureFournisseurService
 
     private function entete(array $data): array
     {
+        $numero = self::numero($data);
+
         return [
-            'numero_facture_fournisseur' => trim($data['numero_facture_fournisseur']),
-            'cle_numero_unique' => trim($data['numero_facture_fournisseur']),
+            'numero_facture_fournisseur' => $numero,
+            // Clé du contrôle de doublon : absente sans numéro (plusieurs achats sans numéro
+            // coexistent), présente dès qu'un numéro est saisi.
+            'cle_numero_unique' => $numero,
             'date_facture' => $data['date_facture'],
             'date_echeance' => $data['date_echeance'] ?? null,
             'taux_tva' => (float) ($data['taux_tva'] ?? 0),

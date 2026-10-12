@@ -71,6 +71,28 @@ servi.
    comme comptabilisée sans pièce. Le rattrapage est idempotent (une pièce par facture et par
    événement, garantie par `compta_pieces_idempotency_unique`).
 8. **TVA** : taux saisi par facture, 0 par défaut (l'application ne gérait aucune TVA jusqu'ici).
+9. **Numéro du document fournisseur facultatif** (ajouté le 2026-10-10, décision de l'utilisateur :
+   certains fournisseurs ne remettent aucun document, ou un document sans numéro) :
+   - le **numéro du fournisseur est facultatif** ; aucun numéro n'est inventé. Le contrôle de doublon
+     (clé technique + index unique) ne s'applique que lorsqu'un numéro est saisi : plusieurs achats
+     sans numéro coexistent ;
+   - **aucun type de justificatif n'est saisi ni conservé** (révisé le même jour : un premier jet
+     demandait de choisir facture / reçu / ticket / aucun document ; l'utilisateur a retiré ce
+     choix pour simplifier la saisie). Conséquence assumée : l'application **ne distingue pas** un
+     document sans numéro d'une absence de document, et ne déduit jamais « sans justificatif » d'un
+     numéro vide. Les deux cas s'affichent « Sans numéro » (fiche, liste, PDF) et donnent le libellé
+     d'écriture « Facture d’achat sans numéro — FAC-… » ; avec un numéro : « Facture d’achat n° X —
+     FAC-… ». La distinction reviendra avec le chantier des pièces jointes (document joint ou non) ;
+   - la **date du document reste obligatoire**, préremplie avec la date d'achat du bon (ADR 0021,
+     point 11) — c'est la date de l'écriture et l'échéance par défaut ;
+   - une facture sans numéro **se valide et se paie comme les autres**. **À faire confirmer par le
+     comptable** (un achat sans pièce justificative est comptabilisé sans signalement particulier).
+10. **Référence interne `FAC-JJMMAA-NNN`** (révisé le 2026-10-10, décision de l'utilisateur : le
+    préfixe `FAF` initial est remplacé par `FAC`). Elle reste distincte du numéro du document du
+    fournisseur (point 9). Les factures déjà émises **gardent leur référence `FAF-…`** : aucune
+    renumérotation, car la référence figure dans les libellés des écritures validées et dans les
+    documents déjà remis. Le compteur étant tenu par préfixe et par jour, la numérotation `FAC`
+    repart de 001 ; les deux séries coexistent sans collision (références distinctes).
 
 ## Décisions en attente (comptable)
 

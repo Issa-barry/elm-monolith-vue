@@ -30,7 +30,7 @@ interface Reception {
 interface FactureEdition {
     id: string;
     reference: string;
-    numero_facture_fournisseur: string;
+    numero_facture_fournisseur: string | null;
     date_facture: string;
     date_echeance: string | null;
     taux_tva: number;
@@ -50,6 +50,7 @@ const props = defineProps<{
         fournisseur_id: string;
         fournisseur_nom: string | null;
         site_nom: string | null;
+        date_achat: string | null;
     };
     receptions: Reception[];
 }>();
@@ -103,7 +104,11 @@ const form = useForm({
     commande_achat_id: props.commande.id,
     fournisseur_id: props.commande.fournisseur_id,
     numero_facture_fournisseur: props.facture?.numero_facture_fournisseur ?? '',
-    date_facture: props.facture?.date_facture ?? aujourdhui(),
+    // Préremplie avec la date d'achat du bon : rien à ressaisir quand il n'y a pas de facture.
+    date_facture:
+        props.facture?.date_facture ??
+        props.commande.date_achat ??
+        aujourdhui(),
     date_echeance: props.facture?.date_echeance ?? '',
     taux_tva: props.facture?.taux_tva ?? 0,
     note: props.facture?.note ?? '',
@@ -140,7 +145,6 @@ function depasse(l: LigneRecue): boolean {
 const canSubmit = computed(
     () =>
         !form.processing &&
-        form.numero_facture_fournisseur.trim() !== '' &&
         lignesIncluses.value.length > 0 &&
         lignesIncluses.value.every((l) => saisie[l.id].qte > 0 && !depasse(l)),
 );
@@ -165,6 +169,8 @@ function submit() {
     if (!canSubmit.value) return;
     form.transform((data) => ({
         ...data,
+        numero_facture_fournisseur:
+            data.numero_facture_fournisseur.trim() || null,
         date_echeance: data.date_echeance || null,
         lignes: lignesIncluses.value.map((l) => ({
             reception_ligne_id: l.id,
@@ -220,13 +226,13 @@ function submit() {
                     </div>
                     <div>
                         <Label for="ff-numero" class="mb-1.5 block text-sm">
-                            N° de facture du fournisseur
-                            <span class="text-destructive">*</span>
+                            N° du document du fournisseur
                         </Label>
                         <InputText
                             id="ff-numero"
                             v-model="form.numero_facture_fournisseur"
                             class="w-full"
+                            placeholder="Facultatif — laisser vide s’il n’y en a pas"
                             :invalid="!!form.errors.numero_facture_fournisseur"
                         />
                         <p
@@ -238,7 +244,7 @@ function submit() {
                     </div>
                     <div>
                         <Label for="ff-date" class="mb-1.5 block text-sm"
-                            >Date de facture</Label
+                            >Date du document</Label
                         >
                         <input
                             id="ff-date"

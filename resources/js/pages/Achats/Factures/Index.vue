@@ -12,7 +12,7 @@ import { computed } from 'vue';
 interface Facture {
     id: string;
     reference: string;
-    numero_facture_fournisseur: string;
+    numero_facture_fournisseur: string | null;
     date_facture: string;
     fournisseur_nom: string | null;
     site_nom: string | null;
@@ -21,6 +21,7 @@ interface Facture {
     reste_du: number;
     statut: string;
     statut_label: string;
+    statut_affichage: string;
     comptabilite: { statut: string; label: string };
 }
 
@@ -73,7 +74,7 @@ const filterFields = computed<FilterField[]>(() => [
         label: 'Numéro',
         type: 'text',
         inline: true,
-        placeholder: 'FAF-… ou n° fournisseur',
+        placeholder: 'FAC-… ou n° fournisseur',
     },
 ]);
 
@@ -159,7 +160,11 @@ function paginationLabel(label: string): string {
                                 }}</span>
                                 <span
                                     class="block text-xs text-muted-foreground"
-                                    >N° {{ f.numero_facture_fournisseur }}</span
+                                    >{{
+                                        f.numero_facture_fournisseur
+                                            ? `N° ${f.numero_facture_fournisseur}`
+                                            : 'Sans numéro'
+                                    }}</span
                                 >
                             </td>
                             <td
@@ -186,7 +191,7 @@ function paginationLabel(label: string): string {
                             </td>
                             <td class="px-4 py-3">
                                 <StatusDot
-                                    :status="f.statut"
+                                    :status="f.statut_affichage"
                                     :label="f.statut_label"
                                     class="text-muted-foreground"
                                 />
