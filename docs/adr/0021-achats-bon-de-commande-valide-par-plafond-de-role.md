@@ -56,7 +56,7 @@ annulation et réception sous la même permission `achats.update`.
    `prix_achat` de la variante est mis à jour, sauf s'il atteindrait le prix de vente d'un produit
    soumis à la règle de marge (avertissement, réception jamais bloquée).
 8. **Réception** : réservée aux utilisateurs rattachés à l'agence de la commande (sans passe-droit
-   de rôle).
+   de rôle). *Révisé le 2026-10-12, voir le point 12.*
 9. **Notifications** (base + push, après commit, en file) : création → validateurs potentiels et
    super administrateurs ; validation → créateur et réceptionnaires de l'agence ; annulation →
    créateur.
@@ -82,6 +82,25 @@ annulation et réception sous la même permission `achats.update`.
     Modifiable tant que le bon n'est pas validé. Affichée dans la liste, la fiche et le PDF. Une
     réception ne peut pas la précéder. Elle préremplit la date de la facture d'achat (ADR 0022),
     sans jamais être écrasée par elle. Bons antérieurs : date d'achat = date de saisie.
+12. **« Peut réceptionner pour », réglage par rôle** (ajouté le 2026-10-12, décision de
+    l'utilisateur ; révise le point 8). Constat en production : un super administrateur rattaché à
+    une seule agence ne pouvait réceptionner aucun bon livré ailleurs, alors que les achats sont
+    centralisés. Deux voies étaient possibles — un passe-droit du super administrateur, ou un
+    réglage — et c'est le réglage qui est retenu, par cohérence avec le point 3 (aucune exception
+    de rôle dans le code) :
+    - réceptionner = `receptions.create` + agence de livraison **couverte** : l'utilisateur y est
+      rattaché (règle d'origine, conservée), OU une règle « Peut réceptionner pour » d'un de ses
+      rôles la couvre (agences sélectionnées, ou toutes les agences) ;
+    - la règle ne fait qu'**ajouter** des agences au rattachement : sans règle, rien ne change pour
+      un rôle, et aucun magasinier ne perd un droit ;
+    - règle de départ, simple donnée modifiable : **super administrateur = toutes les agences**
+      (migration `2026_10_12_100000` pour les organisations existantes, `InstallationService` pour
+      les nouvelles). Aucun autre rôle n'en reçoit ;
+    - stockage : `regles_validation_roles`, domaine `receptions_achats` (périmètre seul, sans
+      plafond), indépendant de « Peut acheter pour » ; écran Paramètres → Achats, bloc
+      « Réceptions — agences par rôle » ;
+    - inchangé : le stock entre toujours dans l'agence de livraison du bon, jamais dans celle du
+      réceptionnaire ; une agence d'une autre organisation n'est jamais couverte.
 
 ## Conséquences
 

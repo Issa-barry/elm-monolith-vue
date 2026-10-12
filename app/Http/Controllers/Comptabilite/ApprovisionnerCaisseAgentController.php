@@ -15,7 +15,8 @@ use Illuminate\Validation\Rule;
  * Supports (ADR 0018) : crée un mouvement de fonds `approvisionnement_caisse` et l'envoie (Envoyé) —
  * la caisse de l'agent n'augmente qu'à la confirmation de réception par l'agent lui-même. Toutes les
  * règles (type et état des caisses, même agence, envoyeur ≠ bénéficiaire, solde) sont garanties par
- * MouvementFondsService::approvisionnerCaisseAgent(), pas par ce contrôleur.
+ * MouvementFondsService::approvisionnerCaisseAgent(), pas par ce contrôleur. Second point d'entrée :
+ * « Nouveau mouvement de fonds » avec la même agence des deux côtés (MouvementFondsController::store()).
  */
 class ApprovisionnerCaisseAgentController extends Controller
 {

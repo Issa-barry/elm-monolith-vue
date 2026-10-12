@@ -15,6 +15,7 @@ use App\Services\Tresorerie\MouvementFondsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -181,11 +182,31 @@ class MouvementFondsController extends Controller
     {
         $this->authorize('create', MouvementFonds::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $sites = $this->sitesDisponibles($orgId, $user, pourCreation: true);
+        // Même agence en origine et en destination = approvisionnement de la caisse d'un agent
+        // (ADR 0018), réservé à `tresorerie.envoyer` (CompteTresoreriePolicy::approvisionner()).
+        $peutApprovisionner = $user->can('tresorerie.envoyer');
 
         return Inertia::render('Comptabilite/MouvementsFonds/Create', [
-            'sites' => $this->sitesDisponibles($orgId, auth()->user(), pourCreation: true),
+            'sites' => $sites,
             'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->agence()->get(['id', 'site_id', 'libelle', 'type']),
+            'peut_approvisionner' => $peutApprovisionner,
+            'caisses_agents' => $peutApprovisionner
+                ? CompteTresorerie::forOrg($orgId)->approvisionnablesPar($user)
+                    ->whereIn('site_id', array_column($sites, 'value'))
+                    ->with('agent.personne')
+                    ->orderBy('libelle')
+                    ->get(['id', 'site_id', 'libelle', 'agent_id'])
+                    ->map(fn (CompteTresorerie $c) => [
+                        'id' => $c->id,
+                        'site_id' => $c->site_id,
+                        'libelle' => $c->libelle,
+                        'agent' => $c->agent?->name,
+                        'est_ma_caisse' => $c->agent_id === $user->id,
+                    ])->values()
+                : [],
             'site_prerempli' => $request->input('site_id'),
             'montant_prerempli' => $request->input('montant'),
             'echeance_debut_prerempli' => $request->input('echeance_debut'),
@@ -199,11 +220,18 @@ class MouvementFondsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
+        // Même agence des deux côtés : ce n'est pas un transfert entre agences mais
+        // l'approvisionnement de la caisse d'un agent (ADR 0018), avec ses propres règles.
+        $siteOrigineId = $request->input('site_origine_id');
+        if (is_string($siteOrigineId) && $siteOrigineId !== '' && $siteOrigineId === $request->input('site_destination_id')) {
+            return $this->approvisionnerCaisseAgent($request);
+        }
+
         $data = $request->validate([
             'site_origine_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'site_destination_id' => ['required', 'different:site_origine_id', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'compte_tresorerie_origine_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],
-            // Le support de destination n'est plus saisi à la création : c'est le
+            // Entre agences, le support de destination n'est pas saisi à la création : c'est le
             // destinataire qui le choisit au moment de « Confirmer réception »
             // (cf. docblock de MouvementFondsService), il ne peut donc pas être
             // connu avec certitude par l'émetteur.
@@ -226,6 +254,52 @@ class MouvementFondsController extends Controller
 
         return redirect()->route('comptabilite.tresorerie.mouvements.index')
             ->with('success', "Mouvement {$mouvement->reference} créé en brouillon.");
+    }
+
+    /**
+     * « Nouveau mouvement de fonds » avec la même agence en origine et en destination :
+     * approvisionnement de la caisse d'un agent (ADR 0018), second point d'entrée de celui de
+     * l'écran Supports — même droit (CompteTresoreriePolicy::approvisionner()) et mêmes règles
+     * (MouvementFondsService::approvisionnerCaisseAgent()). La caisse de destination est choisie
+     * ici, le mouvement est créé ET envoyé (pas de brouillon), et seul l'agent titulaire en
+     * confirme la réception.
+     */
+    private function approvisionnerCaisseAgent(Request $request)
+    {
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $support = Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId);
+
+        $data = $request->validate([
+            'site_origine_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            'compte_tresorerie_origine_id' => ['required', $support],
+            'compte_tresorerie_destination_id' => ['required', $support],
+            'montant' => ['required', 'numeric', 'min:0.01'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ], [
+            'compte_tresorerie_destination_id.required' => 'Choisissez la caisse de l\'agent à approvisionner.',
+            'compte_tresorerie_destination_id.exists' => 'Caisse de l\'agent introuvable.',
+        ]);
+
+        $source = CompteTresorerie::forOrg($orgId)->findOrFail($data['compte_tresorerie_origine_id']);
+        if ($source->site_id !== $data['site_origine_id']) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_origine_id' => 'Le support de trésorerie choisi ne correspond pas au site sélectionné.',
+            ]);
+        }
+        $this->authorize('approvisionner', $source);
+
+        $mouvement = $this->service->approvisionnerCaisseAgent(
+            $orgId,
+            $source,
+            $data['compte_tresorerie_destination_id'],
+            (float) $data['montant'],
+            $data['commentaire'] ?? null,
+            $user->id,
+        );
+
+        return redirect()->route('comptabilite.tresorerie.mouvements.index')
+            ->with('success', "Approvisionnement {$mouvement->reference} envoyé : en attente de confirmation de réception par l'agent.");
     }
 
     public function envoyer(MouvementFonds $mouvement)

@@ -44,6 +44,18 @@ un transfert depuis la caisse de l'agence », jamais construit.
    exactement comme l'auto-confirmation d'un versement (ADR 0001). Règle par permission, jamais par
    nom de rôle. Sans `tresorerie.recevoir`, l'envoi vers sa propre caisse est refusé (l'argent
    resterait bloqué en transit). L'auto-confirmation est tracée (« Confirmé par l'expéditeur »).
+9. **Second point d'entrée : « Nouveau mouvement de fonds » (ajout du 12/10/2026)**. L'écran
+   Mouvements → Nouveau acceptait la même agence en origine et en destination puis échouait sans
+   explication (constaté en formation le 12/10/2026). Désormais, **la même agence des deux côtés
+   déclenche cet approvisionnement** : l'écran affiche « Support de trésorerie de destination »
+   (caisses d'agents actives de l'agence) et le mouvement est créé et envoyé en une action. Aucune
+   règle nouvelle : même service, même droit (`tresorerie.envoyer` sur l'agence, en plus de
+   `tresorerie.create` qui ouvre l'écran), même réception réservée au titulaire. Sans
+   `tresorerie.envoyer`, l'agence d'origine n'est pas proposée en destination.
+   **Écarté** (avis externe du 12/10/2026) : rendre le support de destination obligatoire à la
+   création de **tout** mouvement. Entre agences, il reste choisi par le destinataire à la
+   confirmation de réception (revue produit du 13/09/2026 : l'émetteur ne sait pas dans quelle
+   caisse ou quel compte l'argent arrive réellement).
 
 ## Conséquences
 
@@ -57,4 +69,7 @@ un transfert depuis la caisse de l'agence », jamais construit.
   constaté par l'agence libère l'argent. Aucun mécanisme d'expiration automatique.
 - Pas d'approvisionnement direct entre deux caisses d'agents : l'argent repasse par la caisse de
   l'agence (versement puis approvisionnement).
+- Non couvert : un mouvement entre deux supports **de l'agence elle-même** (caisse → banque ou
+  Mobile Money de la même agence). Depuis « Nouveau mouvement de fonds », la même agence ne propose
+  que les caisses d'agents ; une banque en origine y est refusée avec un message explicite.
 - Les mouvements antérieurs au 04/10/2026 n'ont pas d'heure d'envoi ni de réception (colonnes nulles).

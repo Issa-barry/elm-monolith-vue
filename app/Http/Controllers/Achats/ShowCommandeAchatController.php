@@ -135,7 +135,7 @@ class ShowCommandeAchatController extends Controller
                 'peut_annuler' => ($aValider || $achat->statut === StatutCommandeAchat::VALIDEE) && ! $dejaRecu && $peutAgir && $user->can('annuler', $achat),
                 'peut_cloturer' => $achat->statut === StatutCommandeAchat::PARTIELLEMENT_RECEPTIONNEE && $peutAgir && $user->can('annuler', $achat),
                 // La réception se fait uniquement dans Logistique → Réceptions : la fiche y renvoie.
-                'lien_reception' => $achat->isReceptionnable() && $user->can('receptionner', $achat) && CommandeAchatPolicy::estRattacheAgence($user, $achat)
+                'lien_reception' => $achat->isReceptionnable() && $user->can('receptionner', $achat) && CommandeAchatPolicy::couvreAgenceDeReception($user, $achat)
                     ? route('logistique.receptions-fournisseurs.index', ['reference' => $achat->reference])
                     : null,
                 'peut_supprimer' => $achat->isAnnulee() && $peutAgir && $user->can('delete', $achat),

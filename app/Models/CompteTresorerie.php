@@ -204,4 +204,16 @@ class CompteTresorerie extends Model
     {
         return $query->whereNotNull('agent_id');
     }
+
+    /**
+     * Caisses d'agents qu'un utilisateur peut approvisionner depuis une caisse de l'agence (ADR 0018) :
+     * dédiées et actives ; la sienne seulement si son rôle lui permet d'en confirmer lui-même la
+     * réception (`tresorerie.recevoir`), sinon l'argent resterait bloqué en transit. Liste proposée
+     * par les écrans — MouvementFondsService::approvisionnerCaisseAgent() revérifie chaque règle.
+     */
+    public function scopeApprovisionnablesPar($query, User $user)
+    {
+        return $query->dediees()->actifs()
+            ->when(! $user->can('tresorerie.recevoir'), fn ($q) => $q->where('agent_id', '!=', $user->id));
+    }
 }

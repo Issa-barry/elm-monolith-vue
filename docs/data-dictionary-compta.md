@@ -454,6 +454,17 @@ caisse dédiée du payeur).
   `approvisionnement_caisse` (« Approvisionnement de caisse »), distincte du versement pour ne jamais
   mélanger les calculs qui supposent un versement agent → agence (en cours de versement, Financement,
   remises ADR 0016).
+- **Aussi depuis Mouvements → Nouveau** (ajout du 12/10/2026, ADR 0018 point 9) : choisir la **même
+  agence** en origine et en destination affiche « Support de trésorerie de destination » (caisses
+  d'agents actives de l'agence, mêmes règles de proposition que Supports) et envoie cet
+  approvisionnement — bouton « Approvisionner la caisse », pas de brouillon ; la période de
+  financement, le moyen de transfert, la référence externe et le justificatif ne s'appliquent pas
+  (le commentaire devient le motif). Il faut `tresorerie.create` (accès à l'écran) **et**
+  `tresorerie.envoyer` sur l'agence ; sans `tresorerie.envoyer`, l'agence d'origine n'est pas
+  proposée en destination. Si l'agence n'a aucune caisse d'agent active, ou si le support d'origine
+  n'est pas une caisse, l'écran l'explique et bloque la validation. **Entre agences, rien ne
+  change** : le support de destination est choisi par le destinataire à « Confirmer réception »,
+  et un support transmis à la création est ignoré (`MouvementFondsController::store()`).
 - **Règles (serveur, `MouvementFondsService::approvisionnerCaisseAgent()`)** : source = caisse (type
   Caisse) **d'agence** active — jamais une banque, un Mobile Money ni la caisse d'un agent ;
   destination = caisse dédiée **active** du **même site** ; l'envoyeur n'approvisionne **sa propre

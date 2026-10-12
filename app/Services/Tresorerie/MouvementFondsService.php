@@ -27,11 +27,12 @@ use Illuminate\Validation\ValidationException;
  * compta_pieces_idempotency_unique).
  *
  * Le support de trésorerie d'ORIGINE est toujours choisi à la création
- * (l'émetteur sait d'où part l'argent). Le support de DESTINATION, lui, est
- * choisi à la réception par `recevoir()`, pas à la création par
+ * (l'émetteur sait d'où part l'argent). Entre agences, le support de DESTINATION
+ * est choisi à la réception par `recevoir()`, pas à la création par
  * `creerBrouillon()` — le site destinataire est connu à l'avance, mais pas
  * forcément la caisse/wallet précis qui recevra réellement les fonds tant que
- * le destinataire ne l'a pas confirmé (revue produit du 2026-09-13).
+ * le destinataire ne l'a pas confirmé (revue produit du 2026-09-13). Au sein
+ * d'une même agence (versement, approvisionnement), il est fixé à l'envoi.
  *
  * Deux natures (NatureMouvementFonds). Le versement d'une caisse dédiée à un agent vers la caisse
  * de l'agence (`interne_caisses`, même site, cf. verserCaisseAgent()) suit le même workflow et les

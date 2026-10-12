@@ -115,9 +115,8 @@ class CompteTresorerieController extends Controller
 
         // Caisses d'agents actives pouvant être approvisionnées par une caisse de l'agence (ADR 0018),
         // Sa propre caisse seulement si son rôle lui permet d'en confirmer lui-même la réception.
-        $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->dediees()->actifs()
+        $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->approvisionnablesPar($user)
             ->with('agent.personne')
-            ->when(! $user->can('tresorerie.recevoir'), fn ($q) => $q->where('agent_id', '!=', $user->id))
             ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
             ->orderBy('libelle')
             ->get(['id', 'site_id', 'libelle', 'agent_id']);
