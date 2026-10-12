@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+    AgenceEncaissement,
     EncaissementPayload,
     MoyenEncaissement,
 } from '@/components/payment/moyensEncaissement';
@@ -23,7 +24,7 @@ import {
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Ligne {
     reception_ligne_id: string;
@@ -73,6 +74,8 @@ interface Paiement {
     montant: number;
     mode_paiement: string;
     support: string | null;
+    /** Agence d'où l'argent est sorti, si ce n'est pas celle de la facture. */
+    autre_agence_nom: string | null;
     reference_paiement: string | null;
     created_by: string | null;
 }
@@ -97,6 +100,9 @@ const props = defineProps<{
         moyens: MoyenEncaissement[];
         especes_disponibles: boolean;
         solde_especes: number | null;
+        /** Agences d'où le payeur peut régler (son périmètre d'achat), celle de la facture en tête. */
+        agences: AgenceEncaissement[];
+        agence_facture: { id: string; nom: string };
     } | null;
     actions: {
         peut_modifier: boolean;
@@ -216,12 +222,25 @@ function dateDuJour(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Le choix « Agence qui paie » n'apparaît que si le payeur peut régler depuis une autre agence que
+// celle de la facture ; sinon le dialogue reste celui d'une seule agence.
+const agencesDePaiement = computed(() =>
+    props.paiement && props.paiement.agences.length > 1
+        ? props.paiement.agences
+        : [],
+);
+
 function payer(payload: EncaissementPayload) {
     paiementEnCours.value = true;
     erreursPaiement.value = {};
+    const { site_encaissement_id: sitePaiementId, ...reste } = payload;
     router.post(
         `/backoffice/achats/factures/${props.facture.id}/paiements`,
-        { ...payload, date_paiement: dateDuJour() },
+        {
+            ...reste,
+            site_paiement_id: sitePaiementId,
+            date_paiement: dateDuJour(),
+        },
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -233,12 +252,21 @@ function payer(payload: EncaissementPayload) {
                 });
             },
             onError: (e) => {
-                erreursPaiement.value = e as Record<string, string>;
+                const erreurs = e as Record<string, string>;
+                // La carte de paiement affiche l'erreur d'agence sous la clé de son propre champ.
+                erreursPaiement.value = erreurs.site_paiement_id
+                    ? {
+                          ...erreurs,
+                          site_encaissement_id: erreurs.site_paiement_id,
+                      }
+                    : erreurs;
                 const affichees = [
                     'montant',
                     'mode_paiement',
                     'compte_tresorerie_id',
                     'reference_paiement',
+                    'site_paiement_id',
+                    'site_encaissement_id',
                 ];
                 const autres = Object.entries(erreursPaiement.value)
                     .filter(([cle]) => !affichees.includes(cle))
@@ -577,6 +605,12 @@ function relancerComptabilite() {
                             </td>
                             <td class="px-3 py-2">
                                 {{ p.support ?? p.mode_paiement }}
+                                <span
+                                    v-if="p.autre_agence_nom"
+                                    class="block text-xs text-muted-foreground"
+                                >
+                                    Payé par {{ p.autre_agence_nom }}
+                                </span>
                             </td>
                             <td class="px-3 py-2 font-mono text-xs">
                                 {{ p.reference_paiement ?? '—' }}
@@ -710,6 +744,9 @@ function relancerComptabilite() {
             :moyens="paiement.moyens"
             :especes-disponibles="paiement.especes_disponibles"
             :solde-especes="paiement.solde_especes"
+            :agences="agencesDePaiement"
+            :agence-defaut="paiement.agence_facture.id"
+            :agence-commande="paiement.agence_facture"
             :processing="paiementEnCours"
             :errors="erreursPaiement"
             @submit="payer"

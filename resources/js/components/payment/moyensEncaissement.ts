@@ -64,6 +64,9 @@ export interface AgenceEncaissement {
     nom: string;
     moyens: MoyenEncaissement[];
     peut_encaisser_especes: boolean;
+    /** Décaissement uniquement (paiement d'une facture d'achat depuis une agence au choix) : solde
+     * de la caisse dédiée du payeur dans cette agence, null = inconnu ou pas de caisse. */
+    solde_especes?: number | null;
 }
 
 /**

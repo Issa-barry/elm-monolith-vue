@@ -140,10 +140,17 @@ const pourAutreAgence = computed(
         agenceActive.value.site_id !== agenceDeLaCommande.value.id,
 );
 
+// Solde de la caisse du payeur : celui de l'agence choisie quand l'écran propose un choix d'agence.
+const soldeEspecesEffectif = computed(() =>
+    avecChoixAgence.value
+        ? (agenceActive.value?.solde_especes ?? null)
+        : props.soldeEspeces,
+);
+
 const modeOptions = computed(() =>
     construireOptions(moyensEffectifs.value).map((option) =>
         option.requiresCaisse
-            ? { ...option, soldeDisponible: props.soldeEspeces }
+            ? { ...option, soldeDisponible: soldeEspecesEffectif.value }
             : option,
     ),
 );
@@ -365,7 +372,8 @@ function handleSubmit() {
             <!-- Agence d'encaissement (ADR 0012) : toujours l'une des agences de l'utilisateur. -->
             <div v-if="avecChoixAgence" data-testid="agence-encaissement">
                 <Label class="mb-1.5 block text-sm"
-                    >Agence <span class="text-destructive">*</span></Label
+                    >{{ decaissement ? 'Agence qui paie' : 'Agence' }}
+                    <span class="text-destructive">*</span></Label
                 >
                 <Select
                     v-if="agencesProposees.length > 1"
@@ -390,14 +398,21 @@ function handleSubmit() {
                 >
                     {{ errors.site_encaissement_id }}
                 </p>
-                <!-- Rappel court du reversement à l'agence de la commande. -->
+                <!-- Rappel court : reversement à l'agence de la commande (encaissement), ou
+                     sortie d'argent d'une autre agence que celle prévue (décaissement). -->
                 <p
                     v-if="pourAutreAgence"
                     class="mt-2 text-sm leading-relaxed text-foreground"
                     data-testid="bandeau-autre-agence"
                 >
-                    {{ agenceActive?.nom }} devra reverser à
-                    {{ agenceDeLaCommande?.nom }}.
+                    <template v-if="decaissement">
+                        L'argent sort de {{ agenceActive?.nom }} ; le paiement
+                        était prévu à {{ agenceDeLaCommande?.nom }}.
+                    </template>
+                    <template v-else>
+                        {{ agenceActive?.nom }} devra reverser à
+                        {{ agenceDeLaCommande?.nom }}.
+                    </template>
                 </p>
             </div>
 
