@@ -438,7 +438,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Date / échéance
                             </p>
-                            <p class="text-sm font-medium">
+                            <p class="text-xs font-medium">
                                 {{ formatDate(facture.date_facture) }} /
                                 {{ formatDate(facture.date_echeance) }}
                             </p>
@@ -462,7 +462,7 @@ function relancerComptabilite() {
                             <p class="text-xs text-muted-foreground">
                                 Validation
                             </p>
-                            <p class="font-medium">
+                            <p class="text-xs font-medium">
                                 {{ facture.validee_at }} par
                                 {{ facture.validee_par ?? '—' }}
                             </p>
@@ -498,7 +498,9 @@ function relancerComptabilite() {
                         </div>
                         <div v-if="facture.note" class="sm:col-span-2">
                             <p class="text-xs text-muted-foreground">Note</p>
-                            <p>{{ facture.note }}</p>
+                            <p class="text-xs font-medium">
+                                {{ facture.note }}
+                            </p>
                         </div>
                     </div>
                 </div>
