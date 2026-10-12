@@ -193,8 +193,8 @@ jobs:
           # donc sur un site tout neuf ces sous-dossiers n'existent pas encore.
           # Sans eux, config('view.compiled') se résout sur un chemin inexistant
           # et `artisan optimize:clear`/`optimize` plantent (ViewClearCommand:
-          # "View path not found.").
-          mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing storage/logs
+          # "View path not found."). storage/fonts : cache des polices des PDF (DomPDF).
+          mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing storage/logs storage/fonts
           chmod -R 775 storage bootstrap/cache
 
           "$PHP_BIN" "$COMPOSER_PATH" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress

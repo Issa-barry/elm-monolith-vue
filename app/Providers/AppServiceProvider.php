@@ -21,6 +21,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
@@ -82,6 +83,19 @@ class AppServiceProvider extends ServiceProvider
         // une exception à coup sûr. Ne dépend que de APP_ENV=production sur le
         // serveur, indépendant de qui/quoi lance la commande (SSH manuel, script).
         DB::prohibitDestructiveCommands($this->app->isProduction());
+
+        // DomPDF écrit les métriques des polices @font-face (Poppins des PDF) dans son
+        // dossier de polices sans jamais le créer. storage/ n'étant pas déployé (exclu du
+        // rsync), ce dossier manque sur un serveur neuf et le premier PDF part en 500.
+        $this->app->extend('dompdf.options', function (array $options): array {
+            foreach (['font_dir', 'font_cache'] as $cle) {
+                if (! empty($options[$cle])) {
+                    File::ensureDirectoryExists($options[$cle]);
+                }
+            }
+
+            return $options;
+        });
 
         Password::defaults(function () {
             return Password::min(8)

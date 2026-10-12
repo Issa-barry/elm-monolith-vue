@@ -31,6 +31,7 @@ use App\Support\Achats\JalonsCommandeAchat;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Pennant\Feature;
@@ -1161,6 +1162,27 @@ class FactureFournisseurTest extends TestCase
         $intrus->givePermissionTo(self::PERMISSIONS_SAISIE);
         $this->actingAs($intrus)->get(route('achats.factures.pdf', $facture))->assertForbidden();
         $this->actingAs($intrus)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]))->assertForbidden();
+    }
+
+    public function test_pdf_se_genere_quand_le_dossier_des_polices_n_existe_pas_encore(): void
+    {
+        // Serveur dont storage/ n'est pas déployé : storage/fonts est absent au premier PDF.
+        $dossier = storage_path('framework/testing/fonts-'.uniqid());
+        config(['dompdf.options.font_dir' => $dossier, 'dompdf.options.font_cache' => $dossier]);
+        $this->assertDirectoryDoesNotExist($dossier);
+
+        $r = $this->receptionner($this->commande, [$this->ligneA->id => 10]);
+        $facture = $this->saisir($this->payload([$this->ligne($this->ligneRecue($r, $this->ligneA), 10)]));
+
+        try {
+            $apercu = $this->actingAs($this->user)->get(route('achats.factures.pdf', ['facture' => $facture, 'preview' => 1]));
+
+            $apercu->assertOk()->assertHeader('content-type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF-', $apercu->getContent());
+            $this->assertNotEmpty(File::glob($dossier.'/poppinsinvoice_*.ufm'));
+        } finally {
+            File::deleteDirectory($dossier);
+        }
     }
 
     public function test_migration_autorise_l_auto_validation_des_factures_pour_les_regles_super_admin_seulement(): void
