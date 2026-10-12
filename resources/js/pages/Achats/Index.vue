@@ -372,7 +372,7 @@ function confirmDelete(c: Commande) {
             </div>
             <ListPageActions>
                 <template #filters>
-                    <div class="hidden sm:block">
+                    <div class="hidden flex-wrap items-center gap-2 sm:flex">
                         <DataFilters
                             trigger-only
                             url="/backoffice/achats"
@@ -386,7 +386,7 @@ function confirmDelete(c: Commande) {
                 </template>
                 <template #primary>
                     <Link v-if="peut_creer" href="/backoffice/achats/create">
-                        <Button size="sm" class="h-9 px-3 sm:h-10 sm:px-4">
+                        <Button size="sm" class="h-9 px-3 sm:px-4">
                             <Plus class="mr-1 h-4 w-4 sm:mr-2" />
                             <span class="sm:hidden">Nouveau</span>
                             <span class="hidden sm:inline"

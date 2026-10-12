@@ -460,6 +460,54 @@ describe('PaymentCard — agence d’encaissement (ADR 0012)', () => {
         ]);
     });
 
+    it('en décaissement, annonce l’agence qui paie et suit le solde de sa caisse', async () => {
+        const wrapper = monter({
+            sens: 'decaissement',
+            agences: [
+                { ...AGENCES[0], solde_especes: 40_000 },
+                {
+                    ...AGENCES[1],
+                    peut_encaisser_especes: true,
+                    solde_especes: 250_000,
+                },
+            ],
+            agenceDefaut: 'site-a',
+            agenceCommande: AGENCE_COMMANDE,
+        });
+
+        // Agence prévue : sa caisse (40 000) ne couvre pas les 100 000 dus.
+        expect(
+            wrapper.get('[data-testid="agence-encaissement"]').text(),
+        ).toContain('Agence qui paie');
+        expect(
+            wrapper.get('[data-testid="solde-disponible"]').text(),
+        ).toContain('Solde insuffisant');
+
+        selectAgence(wrapper).vm.$emit('update:modelValue', 'site-b');
+        await nextTick();
+
+        // Autre agence : le solde affiché est celui de la caisse du payeur dans cette agence, et
+        // le rappel ne parle pas de reversement.
+        expect(
+            wrapper.get('[data-testid="solde-disponible"]').text(),
+        ).toContain('Disponible');
+        expect(wrapper.get('[data-testid="bandeau-autre-agence"]').text()).toBe(
+            "L'argent sort de Kindia ; le paiement était prévu à Matoto.",
+        );
+        await confirmer(wrapper).trigger('click');
+        expect(wrapper.emitted('submit')).toEqual([
+            [
+                {
+                    montant: 100_000,
+                    mode_paiement: 'especes',
+                    compte_tresorerie_id: undefined,
+                    reference_paiement: undefined,
+                    site_encaissement_id: 'site-b',
+                },
+            ],
+        ]);
+    });
+
     it('affiche l’unique agence possible sans liste déroulante', () => {
         const wrapper = monter({
             agences: [AGENCES[1]],

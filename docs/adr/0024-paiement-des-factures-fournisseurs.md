@@ -54,3 +54,41 @@ payeur en espèces, solde contrôlé sous verrou au grand livre, écriture indis
   facture d'achat ne peut être payée.
   *Avant le 10/10/2026 : le paiement était accepté et le 401000 restait temporairement débiteur
   jusqu'au rattrapage — règle remplacée.*
+
+## Révision du 2026-10-12 — l'agence qui paie se choisit au moment du règlement
+
+**Décision de l'utilisateur.** Sur le terrain, l'agence prévue pour payer et celle qui règle
+réellement ne sont pas toujours les mêmes : un virement ou un chèque part de la trésorerie
+principale, des espèces sont remises à un agent d'une autre agence, un bon créé dans une agence est
+réceptionné dans une deuxième et réglé par une troisième. Les points 2, 5 et 7 ci-dessus sont
+remplacés comme suit ; le reste de l'ADR est inchangé.
+
+1. **« Payé par » reste sur le bon, comme agence PRÉVUE** (ADR 0021, ACH-015) : elle fixe le plafond
+   de validation, le droit de saisir et valider la facture, et l'agence de la facture. Elle n'est
+   plus une contrainte au moment de payer.
+2. **Au paiement, le payeur choisit l'agence d'où sort l'argent** parmi celles de son périmètre
+   « Peut acheter pour » ; par défaut, l'agence de la facture. Les supports proposés et acceptés sont
+   ceux de l'agence choisie (`DecaissementSupportResolver`, inchangé) : un support d'une agence non
+   choisie est refusé. *Remplace le point 2 (« l'argent sort de l'agence de la facture ») et lève
+   l'exclusion du point 7 (paiement depuis la trésorerie principale).*
+3. **Droits** : `factures-fournisseurs.payer` + périmètre couvrant **l'agence de la facture ET
+   l'agence qui paie**. Choisir un support n'élargit aucun droit ; une agence d'une autre
+   organisation est toujours refusée. *Complète le point 5.*
+4. **Espèces : la caisse dédiée reste obligatoire, sans exception.** L'argent sort de la caisse
+   dédiée active du payeur **dans l'agence qui paie**. Quand la trésorerie principale remet des
+   espèces à un agent, le circuit existant s'applique avant le paiement : transfert de fonds,
+   confirmation par l'agent, fonds dans sa caisse dédiée (ADR 0018), puis règlement depuis cette
+   caisse. Aucun paiement en espèces « direct ».
+5. **Une seule dette.** La facture garde son agence et son reste dû ; chaque paiement le diminue.
+   Le paiement enregistre l'agence d'où l'argent est réellement sorti (`paiements_fournisseurs.site_id`,
+   affichée sur la fiche quand elle diffère) ; son écriture (débit 401000, crédit du support) est
+   rattachée à cette agence.
+6. **Financement des agences (ADR 0016)** : le reste dû reste une obligation de l'agence de la
+   facture tant qu'il n'est pas réglé, et d'elle seule — ce qu'une autre agence a payé n'est plus
+   dû et n'est compté nulle part ailleurs.
+7. **Pas de dette entre agences en V1** : l'agence qui paie supporte le coût. Aucune créance n'est
+   créée sur l'agence prévue (pas de compte de liaison, contrairement à l'encaissement inter-agences
+   de l'ADR 0012). **À confirmer par le comptable** ; l'agence réellement payeuse étant tracée sur
+   chaque paiement, une refacturation pourra être dérivée plus tard sans reprise de données.
+
+Aucune migration : `paiements_fournisseurs.site_id` existait déjà et valait l'agence de la facture.

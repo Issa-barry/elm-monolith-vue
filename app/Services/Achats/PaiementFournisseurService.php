@@ -6,6 +6,7 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutFactureFournisseur;
 use App\Models\FactureFournisseur;
 use App\Models\PaiementFournisseur;
+use App\Models\Site;
 use App\Models\User;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Tresorerie\DecaissementSupportResolver;
@@ -17,12 +18,17 @@ use Illuminate\Validation\ValidationException;
  * Paiement d'une facture fournisseur (ADR 0024) = décaissement réel, sur le modèle du paiement des
  * fiches (ADR 0009), sans règle parallèle :
  * - facture validée ou partiellement payée ; montant ≤ reste dû, relu SOUS VERROU de la facture ;
- * - argent sortant d'un support de l'AGENCE DE LA FACTURE (DecaissementSupportResolver : caisse
- *   dédiée du payeur en espèces, sinon un moyen actif de l'agence), solde garanti sous verrou ;
+ * - argent sortant d'un support de l'AGENCE QUI PAIE (DecaissementSupportResolver : caisse dédiée
+ *   du payeur en espèces, sinon un moyen actif de cette agence), solde garanti sous verrou. Par
+ *   défaut c'est l'agence de la facture (« Payé par » du bon) ; depuis la révision du 12/10/2026 le
+ *   payeur peut en choisir une autre de son périmètre d'achat (virement ou chèque de la trésorerie
+ *   principale, espèces remises à un agent d'une autre agence). La dette reste unique, portée par
+ *   la facture ; chaque paiement garde l'agence d'où l'argent est réellement sorti (`site_id`) ;
  * - paiement, statut de la facture et pièce comptable dans UNE transaction : si l'écriture échoue,
  *   rien n'est enregistré (le solde du support est lu au grand livre) ;
- * - permission `factures-fournisseurs.payer` + agence couverte par « Peut acheter pour », sans
- *   passe-droit de rôle (vérifié ici, jamais seulement par la policy : Gate::before).
+ * - permission `factures-fournisseurs.payer` + agence de la facture ET agence qui paie couvertes
+ *   par « Peut acheter pour », sans passe-droit de rôle (vérifié ici, jamais seulement par la
+ *   policy : Gate::before). Choisir un support n'élargit aucun droit.
  */
 class PaiementFournisseurService
 {
@@ -39,6 +45,8 @@ class PaiementFournisseurService
             'montant' => ['required', 'numeric', 'min:1'],
             'mode_paiement' => ['required', 'in:'.implode(',', array_column(ModePaiement::cases(), 'value'))],
             'compte_tresorerie_id' => ['nullable', 'string', 'required_unless:mode_paiement,'.ModePaiement::ESPECES->value],
+            // Agence d'où sort l'argent ; absente = l'agence de la facture.
+            'site_paiement_id' => ['nullable', 'string'],
             'reference_paiement' => ['nullable', 'string', 'max:190'],
             'date_paiement' => ['required', 'date', 'before_or_equal:today'],
             'note' => ['nullable', 'string', 'max:1000'],
@@ -75,6 +83,33 @@ class PaiementFournisseurService
         return null;
     }
 
+    /**
+     * Agences d'où cet utilisateur peut payer cette facture, pour le dialogue de paiement : celles
+     * de son périmètre d'achat, avec leurs moyens et sa caisse dédiée sur chacune. L'agence de la
+     * facture vient en premier (choix par défaut) ; les autres ne sont listées que si un paiement y
+     * est réellement possible (un moyen actif ou une caisse du payeur).
+     *
+     * @return list<array{site_id: string, nom: string, moyens: list<array<string, mixed>>, peut_encaisser_especes: bool, solde_especes: ?float}>
+     */
+    public function agencesDePaiement(FactureFournisseur $facture, User $user): array
+    {
+        $sites = $this->perimetre->sites($user);
+        $options = $this->supports->optionsPourSites($facture->organization_id, $sites->pluck('id'), $user);
+
+        return $sites
+            ->map(fn (Site $site) => [
+                'site_id' => $site->id,
+                'nom' => $site->nom,
+                'moyens' => $options[$site->id]['moyens'] ?? [],
+                'peut_encaisser_especes' => $options[$site->id]['especes_disponibles'] ?? false,
+                'solde_especes' => $options[$site->id]['solde_especes'] ?? null,
+            ])
+            ->filter(fn (array $a) => $a['site_id'] === $facture->site_id || $a['moyens'] !== [] || $a['peut_encaisser_especes'])
+            ->sortBy(fn (array $a) => $a['site_id'] === $facture->site_id ? 0 : 1)
+            ->values()
+            ->all();
+    }
+
     public function payer(FactureFournisseur $facture, User $user, array $data): PaiementFournisseur
     {
         $refus = $this->motifNonPayable($facture, $user);
@@ -82,13 +117,14 @@ class PaiementFournisseurService
             throw ValidationException::withMessages(['paiement' => $refus]);
         }
 
-        $support = $this->supports->supportPour($facture->organization_id, $facture->site_id, $user, $data['mode_paiement'], $data['compte_tresorerie_id'] ?? null);
+        $sitePaiementId = $this->sitePaiementId($facture, $user, $data);
+        $support = $this->supports->supportPour($facture->organization_id, $sitePaiementId, $user, $data['mode_paiement'], $data['compte_tresorerie_id'] ?? null);
 
-        if ($this->supports->referenceRequise($facture->organization_id, $facture->site_id, $data['mode_paiement'], $support->id) && blank($data['reference_paiement'] ?? null)) {
+        if ($this->supports->referenceRequise($facture->organization_id, $sitePaiementId, $data['mode_paiement'], $support->id) && blank($data['reference_paiement'] ?? null)) {
             throw ValidationException::withMessages(['reference_paiement' => 'La référence du paiement est obligatoire pour ce mode de paiement.']);
         }
 
-        return DB::transaction(function () use ($facture, $user, $data, $support) {
+        return DB::transaction(function () use ($facture, $user, $data, $support, $sitePaiementId) {
             // Sous verrou : deux paiements concurrents de la même facture relisent le reste dû déjà
             // diminué (lecture verrouillante, dernière version validée).
             $facture = FactureFournisseur::whereKey($facture->id)->lockForUpdate()->firstOrFail();
@@ -113,7 +149,8 @@ class PaiementFournisseurService
                 'organization_id' => $facture->organization_id,
                 'facture_fournisseur_id' => $facture->id,
                 'fournisseur_id' => $facture->fournisseur_id,
-                'site_id' => $facture->site_id,
+                // Agence d'où l'argent est sorti — pas forcément celle de la facture.
+                'site_id' => $sitePaiementId,
                 'montant' => $montant,
                 'mode_paiement' => $data['mode_paiement'],
                 'moyen_paiement_detail' => $support->operateur_mobile_money?->value,
@@ -136,5 +173,28 @@ class PaiementFournisseurService
 
             return $paiement;
         });
+    }
+
+    /**
+     * Agence d'où sort l'argent : celle de la facture par défaut, sinon une agence de l'organisation
+     * que le périmètre d'achat du payeur couvre. Contrôle serveur, indépendant de la liste affichée.
+     *
+     * @throws ValidationException
+     */
+    private function sitePaiementId(FactureFournisseur $facture, User $user, array $data): string
+    {
+        $siteId = $data['site_paiement_id'] ?? null;
+        if (blank($siteId) || $siteId === $facture->site_id) {
+            return $facture->site_id;
+        }
+
+        $dansOrganisation = Site::where('organization_id', $facture->organization_id)->whereKey($siteId)->exists();
+        if (! $dansOrganisation || ! $this->perimetre->couvreSite($user, $siteId)) {
+            throw ValidationException::withMessages([
+                'site_paiement_id' => "Vous ne pouvez pas payer depuis cette agence : elle n'est pas dans votre périmètre d'achat.",
+            ]);
+        }
+
+        return $siteId;
     }
 }

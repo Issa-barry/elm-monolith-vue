@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Paiement (partiel ou total) d'une facture fournisseur validée — décaissement réel depuis un support
- * de trésorerie de l'agence de la facture (ADR 0024). Toujours accompagné de sa pièce comptable.
+ * de trésorerie (ADR 0024). Toujours accompagné de sa pièce comptable. `site_id` = agence d'où
+ * l'argent est sorti : celle de la facture par défaut, une autre agence du périmètre du payeur
+ * depuis le 12/10/2026.
  */
 class PaiementFournisseur extends Model
 {
@@ -37,6 +39,12 @@ class PaiementFournisseur extends Model
     public function fournisseur(): BelongsTo
     {
         return $this->belongsTo(Fournisseur::class);
+    }
+
+    /** Agence d'où l'argent est sorti. */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     public function compteTresorerie(): BelongsTo

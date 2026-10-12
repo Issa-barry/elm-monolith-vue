@@ -10,7 +10,6 @@ use App\Services\Achats\FactureFournisseurService;
 use App\Services\Achats\PaiementFournisseurService;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
-use App\Services\Tresorerie\DecaissementSupportResolver;
 use App\Support\Achats\FactureFournisseurPresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -26,7 +25,6 @@ class ShowFactureFournisseurController extends Controller
         FactureFournisseurPresenter $presenter,
         FactureFournisseurComptabilisationService $comptabilisation,
         PaiementFournisseurService $paiements,
-        DecaissementSupportResolver $supports,
     ): Response {
         $this->authorize('view', $facture);
         $user = $request->user();
@@ -35,11 +33,12 @@ class ShowFactureFournisseurController extends Controller
         // du périmètre d'achat — contrôle explicite (Gate::before du super administrateur).
         $dansPerimetre = $perimetre->factureVisible($facture, $user);
 
-        $facture->load(['commande', 'paiements' => fn ($q) => $q->orderByDesc('date_paiement')->orderByDesc('created_at'), 'paiements.compteTresorerie', 'paiements.createdBy']);
+        $facture->load(['commande', 'site:id,nom', 'paiements' => fn ($q) => $q->orderByDesc('date_paiement')->orderByDesc('created_at'), 'paiements.compteTresorerie', 'paiements.createdBy', 'paiements.site:id,nom']);
 
         // Bouton Payer : seulement si le serveur accepterait (mêmes règles que
-        // PaiementFournisseurService::payer()) ; options du dialogue = moyens et caisse de l'AGENCE
-        // DE LA FACTURE (DecaissementSupportResolver, comme pour les fiches).
+        // PaiementFournisseurService::payer()). Le dialogue propose l'agence de la facture par
+        // défaut, et les autres agences du périmètre d'achat du payeur où un paiement est possible
+        // (moyens et caisse dédiée de chacune, comme pour les fiches).
         $motifNonPayable = null;
         $peutPayer = false;
         $optionsPaiement = null;
@@ -47,7 +46,15 @@ class ShowFactureFournisseurController extends Controller
             $motifNonPayable = $paiements->motifNonPayable($facture, $user);
             $peutPayer = $motifNonPayable === null;
             if ($peutPayer) {
-                $optionsPaiement = $supports->optionsPourSites($facture->organization_id, [$facture->site_id], $user)[$facture->site_id] ?? null;
+                $agences = $paiements->agencesDePaiement($facture, $user);
+                $prevue = collect($agences)->firstWhere('site_id', $facture->site_id);
+                $optionsPaiement = [
+                    'moyens' => $prevue['moyens'] ?? [],
+                    'especes_disponibles' => $prevue['peut_encaisser_especes'] ?? false,
+                    'solde_especes' => $prevue['solde_especes'] ?? null,
+                    'agences' => $agences,
+                    'agence_facture' => ['id' => $facture->site_id, 'nom' => $facture->site?->nom ?? '—'],
+                ];
             }
         }
 
@@ -75,6 +82,8 @@ class ShowFactureFournisseurController extends Controller
                 'montant' => (float) $p->montant,
                 'mode_paiement' => $p->mode_paiement,
                 'support' => $p->compteTresorerie?->libelle,
+                // Renseignée seulement quand l'argent est sorti d'une autre agence que celle de la facture.
+                'autre_agence_nom' => $p->site_id !== $facture->site_id ? $p->site?->nom : null,
                 'reference_paiement' => $p->reference_paiement,
                 'created_by' => $p->createdBy ? trim($p->createdBy->prenom.' '.$p->createdBy->nom) : null,
             ])->values(),
