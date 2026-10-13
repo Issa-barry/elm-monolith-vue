@@ -127,12 +127,14 @@ Ce document distingue deux couches, volontairement séparées :
   validé ne peut pas devenir actif (garde du modèle). Tous les supports antérieurs au workflow ont
   été **repris comme validés à leur date de création** (`valide_par_id` NULL), avec leur état
   actif/inactif inchangé.
-- **`agent_id`** (nullable, depuis le 2026-09-19) : responsable d'une **caisse dédiée à un agent**.
-  `NULL` = support de l'agence (tous les supports historiques) ; renseigné = caisse dédiée. La
-  « nature » est **dérivée** de cette colonne, jamais stockée. Voir la section « Caisses dédiées à
-  un agent » ci-dessous.
+- **`agent_id`** (nullable, depuis le 2026-09-19) : agent auquel le support est **dédié**.
+  `NULL` = support de l'agence (tous les supports historiques) ; renseigné = support dédié : sa
+  **caisse en espèces** (type Caisse) ou, depuis le 2026-10-13, son **compte Mobile Money** (type
+  Mobile Money, ADR 0027). La « nature » est **dérivée** de cette colonne, jamais stockée. Voir
+  « Caisses dédiées à un agent » et « Compte Mobile Money dédié à un agent » ci-dessous.
 - **`numero`** (nullable, depuis le 2026-10-02) : numéro du compte (numéro marchand Mobile Money,
   numéro bancaire), affiché à l'encaissement pour que l'agent choisisse le compte réellement payé.
+  **Obligatoire** pour le compte Mobile Money d'un agent, où il est le numéro du portefeuille.
 - **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
   (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
 - **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour
@@ -291,6 +293,8 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
 - **Caisse dédiée** : à la validation, le service revérifie les conditions de la création — agent
   actif et rattaché à l'agence, **une seule caisse dédiée active par (agent, site)**. Créer un
   brouillon reste refusé tant qu'une caisse active existe pour le même (agent, site).
+- **Compte Mobile Money d'un agent** (ADR 0027) : même revérification à la validation — agent,
+  **un seul compte actif par (agent, site, opérateur)**, numéro que ne porte aucun autre support.
 - **Un brouillon ne s'active jamais par une simple modification** : `update` avec `actif = true`
   est refusé (erreur sur `actif`), et le modèle lève une `LogicException` en dernier recours. Sa
   modification (libellé, type, compte) reste possible.
@@ -299,8 +303,8 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
   destination, réception, versement) ; pas de solde d'ouverture avant validation
   (`SoldeOuvertureTresorerieService::enregistrer()`) ; ne reçoit aucun encaissement
   (`CaisseAgentResolver`, qui date la mise en service à `valide_le`, pas à la création).
-- **Suppression d'un utilisateur** responsable d'une caisse dédiée en **brouillon** ou active :
-  refusée (sinon la FK `nullOnDelete` la transformerait en support d'agence).
+- **Suppression d'un utilisateur** titulaire d'un support dédié (caisse ou compte Mobile Money) en
+  **brouillon** ou actif : refusée (sinon la FK `nullOnDelete` le transformerait en support d'agence).
 - **Reprise de l'existant** : la migration marque tout support existant comme validé à sa date de
   création. Aucun changement d'usage ni d'état pour l'existant. Un support créé directement actif
   par du code (hors écran, ex. tests) est réputé validé — les deux seuls points de création
@@ -370,7 +374,8 @@ du compte comptable du support, colonne dédiée) / Nature / Responsable / Solde
 solde calculé depuis le grand livre (y compris pour un support désactivé),
 filtres serveur (agence `site_ids[]`, statut, type, nature, agent) via `DataFilters` en
 `trigger-only`, création dans un dialogue « Créer une caisse » avec choix de la nature dans une
-liste déroulante (« Caisse de l'agence » ou « Caisse dédiée à un agent »). Depuis la phase 3,
+liste déroulante (« Caisse de l'agence » ou « Dédié à un agent », ce dernier demandant ensuite le
+type : caisse en espèces ou compte Mobile Money, ADR 0027). Depuis la phase 3,
 **lecture ouverte à `tresorerie.read`**, limitée aux agences de l'utilisateur (admins : toutes) ;
 création, modification et soldes d'ouverture restent sous `tresorerie.gerer_soldes_ouverture` (les
 données de gestion — utilisateurs, comptes comptables — ne sont même pas envoyées à un simple
@@ -555,6 +560,76 @@ Le calcul existe depuis le 26/09/2026 : `FicheCaisseService` (tableau de caisse 
 versements, écritures) et le composant `components/tresorerie/CaisseFiche.vue`, utilisés par l'onglet
 Caisse du rapport d'activité ([rapports.md](rapports.md), RAP-008) — la fiche caisse doit les
 réutiliser, pas recalculer.
+
+## Compte Mobile Money dédié à un agent (ADR 0027)
+
+Lot 1 de l'ADR [0027](adr/0027-compte-mobile-money-dedie-agent.md), livré le 2026-10-13 : le
+compte existe, se crée, se valide et s'affiche. **Rien ne l'alimente encore** : l'encaissement
+Mobile Money arrive toujours sur le compte de l'agence (ADR 0005), et le transfert de l'agent vers
+l'agence n'existe pas — ce sont les lots suivants.
+
+**Règles garanties côté serveur** (`CaisseAgentService::creerCompteMobileMoney()`) :
+
+- Support de type **Mobile Money** rattaché à un agent (`agent_id`), une agence et un **opérateur**
+  (`operateur_mobile_money`, hors « Autre »). Le **numéro du portefeuille** (`numero`) est obligatoire.
+- **Un seul compte actif par (agent, site, opérateur).** La caisse en espèces de l'agent est un
+  support distinct : un agent peut avoir sa caisse **et** un compte par opérateur dans la même agence.
+- **Un portefeuille = un seul compte** : le numéro n'est celui d'aucun autre support Mobile Money
+  **non désactivé** (brouillon ou actif, d'agent ou d'agence) du même opérateur, **dans
+  l'organisation**. La comparaison (`CompteTresorerie::memeNumero()`) ignore espaces et ponctuation
+  (« 620 00 00 01 » = « 620-000-001 ») et reconnaît le même portefeuille **avec ou sans indicatif**
+  (« +224 620 00 00 01 » = « 00224 620 00 00 01 » = « 620 00 00 01 ») : deux numéros en chiffres
+  sont identiques si l'un est l'autre précédé de 1 à 3 chiffres, le plus court en comptant au moins
+  8. Aucun indicatif n'est codé en dur. Le numéro est conservé tel que saisi. Un compte désactivé
+  libère son numéro ; deux organisations peuvent enregistrer le même. Dans l'autre sens, un compte
+  de l'agence ne peut pas prendre le numéro du compte d'un agent ; les supports d'agence ne sont pas
+  comparés entre eux.
+- **Un sous-compte comptable propre**, créé automatiquement sous le compte de l'opérateur :
+  numéro du compte de l'opérateur suivi de 3 chiffres (561100001, 561100002… sous 561100), soit
+  999 comptes par opérateur et par organisation. Le compte de l'opérateur est lu dans
+  `compta_mappings` (`mobile_money:<détail>`, rôle `tresorerie`) — jamais un numéro codé en dur ;
+  sans paramétrage pour l'opérateur, la création est refusée.
+- Créé en **brouillon**, validé comme tout support ; **aucune écriture** à la création, **pas de
+  solde d'ouverture** (refusé) : il démarre à 0.
+- Agent, agence, opérateur et sous-compte sont **figés**. Le libellé et l'activation se modifient ;
+  le **numéro se corrige tant que le compte est en brouillon**, plus après sa validation.
+- Il ne se désactive que vide ; sa réactivation revérifie les deux unicités.
+- **Créations simultanées** : la transaction prend ses verrous (agent, puis compte de l'opérateur)
+  **avant toute lecture ordinaire**. Sous MySQL (`REPEATABLE READ`), une transaction fige ce qu'elle
+  voit à sa première lecture non verrouillante : lue avant l'attente du verrou, elle ignorerait le
+  compte qu'une création concurrente vient d'enregistrer. Les créations d'un même opérateur sont
+  donc sérialisées, numérotées à la suite, et un même portefeuille demandé deux fois au même
+  instant n'est accepté qu'une fois. Filets de sécurité : la contrainte unique
+  (`organization_id`, `numero`) de `compta_comptes`, et la validation, qui refuse deux brouillons
+  portant le même numéro. Aucun index unique ne porte sur le numéro du portefeuille.
+
+**Étanchéité avec les caisses en espèces** — un support dédié de type Mobile Money n'est jamais
+traité comme une caisse (`CompteTresorerie::caissesDediees()` / `isCaisseDediee()`, à utiliser pour
+tout ce qui concerne les espèces d'un agent, au lieu de `dediees()` / `isDediee()`) :
+
+| Sujet | Comportement |
+|---|---|
+| Routage et autorisation des espèces (`CaisseAgentResolver`) | Ignoré : sans caisse en espèces, l'agent ne peut toujours pas encaisser en espèces. |
+| Versement vers la caisse de l'agence, approvisionnement, dépôt en banque | Refusé comme origine et comme destination ; aucun bouton « Verser ». |
+| Mouvements de fonds entre agences | Interdit en origine comme en destination. |
+| Encaissement et paiements sortants (`MoyensEncaissementResolver`) | Jamais proposé ni accepté : le circuit actuel est inchangé. |
+| Disponible et position fiable du Financement | Exclu, comme tout support dédié. |
+| « Espèces dues encore chez les agents » (ADR 0016) | Exclu : seules les caisses en espèces comptent. |
+| Situation de trésorerie | Inclus, dans la colonne Mobile Money de son agence. |
+| Rapport d'activité, onglet Caisse | Exclu : ce n'est pas une caisse. |
+| Suppression de l'utilisateur titulaire | Refusée tant que le compte est actif ou en brouillon. |
+
+**Écran** : Trésorerie → Supports → « Nouvelle caisse » → nature « Dédié à un agent » → type
+« Compte Mobile Money » (opérateur, numéro, agent). Badge de nature « {Opérateur} dédié » ; la
+carte « Caisses dédiées » ne compte que les caisses en espèces.
+
+**Tests** : `CompteMobileMoneyAgentTest`, `CompteTresorerieMobileMoneyAgentControllerTest`,
+`CompteTresorerieNumeroTest` (comparaison des numéros), les cas ajoutés à
+`FinancementAgenceServiceTest` et `RapportActiviteTest`, le parcours E2E « créer le compte Mobile
+Money dédié à un agent » (`tresorerie-financement-flow.spec.ts`) et
+`CompteMobileMoneyAgentConcurrenceTest` — créations réellement simultanées, un processus PHP et une
+connexion MySQL par création, sur la base dédiée `elm_monolithe_concurrency_test` (il se saute si
+elle est absente, comme `VarianteStockConcurrenceTest`).
 
 ## Notification — mouvements de fonds à confirmer
 

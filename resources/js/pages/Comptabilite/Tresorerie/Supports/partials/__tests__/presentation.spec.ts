@@ -31,6 +31,20 @@ describe('natureAffichee', () => {
         expect(nature.variante).toBe('secondary');
     });
 
+    it("présente le compte Mobile Money d'un agent comme un compte dédié, pas comme une caisse", () => {
+        const nature = natureAffichee({
+            nature: 'dediee',
+            type: 'mobile_money',
+            type_label: 'Mobile Money',
+            operateur_label: 'Orange Money',
+        });
+
+        expect(nature.label).toBe('Orange Money dédié');
+        expect(nature.titre).toBe('Compte Orange Money dédié à un agent');
+        expect(nature.icone).toBe(Smartphone);
+        expect(nature.variante).toBe('secondary');
+    });
+
     it.each([
         ['caisse', 'Caisse agence', Wallet],
         ['banque', 'Banque', Landmark],
@@ -196,11 +210,25 @@ describe('resumeSupports', () => {
         solde: number,
         enCours = 0,
         versements = 0,
+        type = 'caisse',
     ) => ({
         nature,
+        type,
         solde,
         en_cours_versement: enCours,
         versements_en_cours: versements,
+    });
+
+    it("ne compte pas le compte Mobile Money d'un agent parmi les caisses dédiées", () => {
+        const resume = resumeSupports([
+            ligne('dediee', 1_000_000),
+            ligne('dediee', 250_000, 0, 0, 'mobile_money'),
+            ligne('agence', 0, 0, 0, 'mobile_money'),
+        ]);
+
+        expect(resume.total).toBe(3);
+        expect(resume.caissesAgents).toBe(1);
+        expect(resume.soldeTotal).toBe(1_250_000);
     });
 
     it('compte les supports, les caisses dédiées et additionne les soldes', () => {

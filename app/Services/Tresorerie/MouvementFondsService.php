@@ -129,7 +129,8 @@ class MouvementFondsService
      * de la caisse d'agence n'augmente qu'à la confirmation de réception par un autre utilisateur.
      *
      * Règles garanties ici, sous verrou sur la caisse source :
-     *  - source = caisse dédiée ACTIVE de l'organisation ;
+     *  - source = caisse dédiée (espèces) ACTIVE de l'organisation — jamais le compte Mobile Money
+     *    d'un agent (ADR 0027) ;
      *  - destination = caisse (type Caisse) d'AGENCE active, du même site — jamais une banque, un
      *    compte Mobile Money, ni la caisse d'un agent ;
      *  - montant > 0 et au plus égal au solde de la caisse source au grand livre.
@@ -144,7 +145,7 @@ class MouvementFondsService
             // relit le solde déjà diminué par le premier (cf. garantirSoldeSuffisant()).
             $caisse = CompteTresorerie::forOrg($organizationId)->whereKey($source->id)->lockForUpdate()->first();
 
-            if (! $caisse || ! $caisse->isDediee()) {
+            if (! $caisse || ! $caisse->isCaisseDediee()) {
                 throw ValidationException::withMessages([
                     'compte_tresorerie_id' => 'Seule une caisse dédiée à un agent peut être versée à la caisse de l\'agence.',
                 ]);
@@ -320,7 +321,7 @@ class MouvementFondsService
         if (! $destination) {
             throw ValidationException::withMessages([$champ => 'Caisse de l\'agent introuvable.']);
         }
-        if (! $destination->isDediee()) {
+        if (! $destination->isCaisseDediee()) {
             throw ValidationException::withMessages([$champ => "« {$destination->libelle} » n'est pas la caisse d'un agent : un approvisionnement va vers la caisse dédiée d'un agent."]);
         }
         if (! $destination->actif) {
@@ -342,7 +343,8 @@ class MouvementFondsService
             throw ValidationException::withMessages([$champ => 'Caisse de destination introuvable.']);
         }
         if ($destination->isDediee()) {
-            throw ValidationException::withMessages([$champ => "« {$destination->libelle} » est la caisse d'un agent : un versement va vers une caisse de l'agence."]);
+            $nature = $destination->isMobileMoneyDedie() ? "le compte Mobile Money d'un agent" : "la caisse d'un agent";
+            throw ValidationException::withMessages([$champ => "« {$destination->libelle} » est {$nature} : un versement va vers une caisse de l'agence."]);
         }
         if ($destination->type !== TypeSupportTresorerie::CAISSE) {
             throw ValidationException::withMessages([$champ => "« {$destination->libelle} » n'est pas une caisse : un versement d'espèces va vers une caisse de l'agence."]);
@@ -387,13 +389,19 @@ class MouvementFondsService
     }
 
     /**
-     * Un mouvement entre agences ne part jamais d'une caisse dédiée à un agent
-     * et n'y arrive jamais : cet argent transite d'abord par un versement vers la
-     * caisse de l'agence. Garde serveur, indépendante des listes proposées par
-     * l'écran qui, elles, excluent déjà ces caisses.
+     * Un mouvement entre agences ne part jamais d'un support dédié à un agent (caisse ou compte
+     * Mobile Money) et n'y arrive jamais : l'argent d'une caisse transite d'abord par un versement
+     * vers la caisse de l'agence. Garde serveur, indépendante des listes proposées par
+     * l'écran qui, elles, excluent déjà ces supports.
      */
     private function refuserCaisseDediee(CompteTresorerie $support, string $champ): void
     {
+        if ($support->isMobileMoneyDedie()) {
+            throw ValidationException::withMessages([
+                $champ => "« {$support->libelle} » est le compte Mobile Money d'un agent : il ne peut pas être utilisé pour un mouvement entre agences.",
+            ]);
+        }
+
         if ($support->isDediee()) {
             throw ValidationException::withMessages([
                 $champ => "« {$support->libelle} » est une caisse dédiée à un agent : elle ne peut pas être utilisée pour un mouvement entre agences. Versez d'abord son solde à la caisse de l'agence.",

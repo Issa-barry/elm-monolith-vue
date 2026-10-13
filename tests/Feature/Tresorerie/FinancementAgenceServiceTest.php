@@ -312,6 +312,26 @@ class FinancementAgenceServiceTest extends TestCase
         $this->assertSame(200_000.0, $row['remise_obligatoire']);
     }
 
+    /**
+     * Le compte Mobile Money d'un agent (ADR 0027) n'est pas une caisse en espèces : son solde n'est
+     * ni dans le disponible de l'agence, ni compté comme des espèces dues encore chez les agents.
+     */
+    public function test_le_compte_mobile_money_d_un_agent_n_est_pas_compte_comme_des_especes_chez_les_agents(): void
+    {
+        $this->travelTo(Carbon::parse('2026-08-10'));
+        $this->validerSoldeOuverture(500_000);
+        $compte = $this->creerCompteMobileMoneyActif($this->agence->id, $this->creerAgent($this->agence)->id);
+        $this->alimenterCaisse($compte, 300_000);
+        $this->encaisserPourUneAutreAgence(200_000);
+
+        $row = collect($this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1'))->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame(700_000.0, $row['disponible'], 'le compte de l\'agent n\'entre pas dans le disponible');
+        $this->assertSame(200_000.0, $row['fonds_autres_agences'], 'les espèces dues sont dans la caisse de l\'agence, pas chez un agent');
+        $this->assertSame(500_000.0, $row['disponible_propre']);
+        $this->assertSame(200_000.0, $row['remise_obligatoire']);
+    }
+
     /** Les obligations des mois précédents encore impayées sont conservées avant toute remise. */
     public function test_les_obligations_impayees_des_mois_precedents_sont_conservees(): void
     {

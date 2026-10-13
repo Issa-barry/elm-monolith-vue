@@ -305,7 +305,9 @@ class RapportActiviteService
 
         $fiches = CompteTresorerie::query()
             ->forOrg($p->organizationId)
-            ->dediees()
+            // Caisses en espèces seulement : le compte Mobile Money d'un agent (ADR 0027) n'est pas
+            // une caisse et n'entre pas dans ce tableau.
+            ->caissesDediees()
             ->when($p->siteIds !== null, fn ($q) => $q->whereIn('site_id', $p->siteIds))
             ->when($p->agentId !== null, fn ($q) => $q->where('agent_id', $p->agentId))
             ->get()

@@ -4,6 +4,7 @@ namespace App\Services\Tresorerie;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutFinancementAgence;
+use App\Enums\TypeSupportTresorerie;
 use App\Models\CompteTresorerie;
 use App\Services\PeriodePaiementService;
 use App\Services\Tresorerie\Obligations\ObligationAccumulator;
@@ -242,11 +243,16 @@ class FinancementAgenceService
         return $parSite;
     }
 
-    /** @return array<string, float> solde des caisses dédiées aux agents, par agence */
+    /**
+     * Solde des caisses EN ESPÈCES dédiées aux agents, par agence : il sert à estimer les espèces
+     * dues encore chez les agents, le compte Mobile Money d'un agent (ADR 0027) n'en fait pas partie.
+     *
+     * @return array<string, float>
+     */
     private function soldeCaissesAgentsParSite(string $organizationId, Carbon $fin): array
     {
         return $this->disponibilite->situationParSupport($organizationId, $fin)
-            ->filter(fn (array $support) => $support['agent_id'] !== null)
+            ->filter(fn (array $support) => $support['agent_id'] !== null && $support['type'] === TypeSupportTresorerie::CAISSE->value)
             ->groupBy('site_id')
             ->map(fn ($supports) => max(0.0, (float) $supports->sum('solde')))
             ->all();

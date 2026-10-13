@@ -515,6 +515,22 @@ class RapportActiviteTest extends TestCase
         $this->assertSame([], $caisse['fiches']);
     }
 
+    /** Le compte Mobile Money d'un agent (ADR 0027) n'est pas une caisse : il n'entre pas dans ce tableau. */
+    public function test_le_compte_mobile_money_d_un_agent_n_apparait_pas_dans_le_tableau_de_caisse(): void
+    {
+        $this->alimenterCaisse($this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentB->id), 250_000);
+        $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money', '620000002');
+
+        $sansCaisse = $this->props($this->agentB, 'ma-situation')['rapport']['caisse'];
+        $this->assertTrue($sansCaisse['aucune_caisse']);
+        $this->assertSame([], $sansCaisse['fiches']);
+
+        $agence = $this->props($this->user, 'rapports.activite', ['site_ids' => [$this->siteA->id]])['rapport']['caisse'];
+        $this->assertSame(['Moussa Sidibé'], array_column(array_column($agence['fiches'], 'caisse'), 'agent_nom'));
+        $this->assertEquals(0, $agence['resume']['solde_fin']);
+    }
+
     public function test_la_vue_agence_liste_une_caisse_par_agent_sans_le_detail_des_ecritures(): void
     {
         $this->creerCaisseActive($this->siteA->id, $this->agentA->id);

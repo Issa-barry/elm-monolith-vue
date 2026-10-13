@@ -137,6 +137,7 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             destinations_approvisionnement: [],
             agents: [],
             caisses_dediees_actives: [],
+            comptes_mobile_money_agents_actifs: [],
             agents_filtre: [],
             comptes_comptables: [],
         },
@@ -852,5 +853,111 @@ describe('Supports de trésorerie — dialogue « Modifier le support »', () =>
         const wrapper = await ouvrir(compte({}));
 
         expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
+    });
+});
+
+describe('Supports de trésorerie — compte Mobile Money dédié à un agent', () => {
+    type Ouvrable = { ouvrirEdition: (c: CompteTresorerie) => void };
+
+    const MOBILE_MONEY_AGENT = compte({
+        id: 'c-om-agent',
+        libelle: 'Orange Money — Moussa sidibé',
+        type: 'mobile_money',
+        type_label: 'Mobile Money',
+        operateur_mobile_money: 'orange_money',
+        operateur_label: 'Orange Money',
+        numero: '620 00 00 01',
+        nature: 'dediee',
+        agent: { id: 'u1', nom: 'Moussa sidibé' },
+        compte_numero: '561100001',
+        solde: 0,
+    });
+
+    beforeEach(() => {
+        etat.permissions = ['tresorerie.gerer_soldes_ouverture'];
+    });
+
+    it('affiche le compte avec son opérateur, son numéro et son titulaire, sans « Verser »', () => {
+        const wrapper = monter([MOBILE_MONEY_AGENT]);
+        const ligne = lignes(wrapper)[0];
+
+        expect(ligne.find('[data-testid="support-nature"]').text()).toBe(
+            'Orange Money dédié',
+        );
+        expect(ligne.find('[data-testid="support-numero"]').text()).toContain(
+            '620 00 00 01',
+        );
+        expect(ligne.find('[data-testid="support-compte"]').text()).toBe(
+            '561100001',
+        );
+        expect(ligne.findAll('td')[4].text()).toBe('Moussa sidibé');
+        expect(ligne.text()).not.toContain("Verser à l'agence");
+    });
+
+    it('ne le compte pas dans la carte « Caisses dédiées »', () => {
+        const wrapper = monter([MOBILE_MONEY_AGENT, ...COMPTES]);
+        const carte = wrapper.find(
+            '[data-testid="support-kpi-caisses-dediees"]',
+        );
+
+        expect(carte.text()).toContain('1');
+        expect(carte.text()).not.toContain('2');
+    });
+
+    it("demande l'opérateur et le numéro du portefeuille à la création", async () => {
+        const wrapper = monter([]);
+
+        await wrapper.find('#sup-nature').setValue('dediee');
+        expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(false);
+        expect(wrapper.text()).toContain('Créer la caisse');
+
+        await wrapper.find('#sup-type-dedie').setValue('mobile_money');
+
+        expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(true);
+        expect(wrapper.find('#sup-numero-dedie').exists()).toBe(true);
+        expect(wrapper.text()).toContain(
+            "Ce compte n'est pas encore proposé à l'encaissement",
+        );
+        expect(wrapper.text()).toContain('Créer le compte');
+        // Le choix d'un compte comptable reste réservé aux supports de l'agence.
+        expect(wrapper.find('#sup-compte').exists()).toBe(false);
+    });
+
+    it('laisse corriger le numéro en brouillon et le fige après la validation', async () => {
+        const ouvrir = async (c: CompteTresorerie) => {
+            const wrapper = monter([c]);
+            (wrapper.vm as unknown as Ouvrable).ouvrirEdition(c);
+            await nextTick();
+
+            return wrapper;
+        };
+
+        const brouillon = await ouvrir(
+            compte({
+                ...MOBILE_MONEY_AGENT,
+                actif: false,
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                valide_le: null,
+            }),
+        );
+        expect(
+            brouillon.find('[data-testid="edit-mobile-money-dedie"]').text(),
+        ).toContain('Orange Money');
+        // Le champ factice rend l'attribut en toutes lettres : « false » = modifiable.
+        expect(
+            brouillon.find('#edit-numero-dedie').attributes('disabled'),
+        ).toBe('false');
+
+        const valide = await ouvrir(MOBILE_MONEY_AGENT);
+        expect(valide.find('#edit-numero-dedie').attributes('disabled')).toBe(
+            'true',
+        );
+        expect(valide.text()).toContain(
+            "Le numéro d'un compte validé ne peut plus être modifié",
+        );
+        expect(
+            valide.find('[data-testid="edit-solde-ouverture"]').exists(),
+        ).toBe(false);
     });
 });

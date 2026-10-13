@@ -47,7 +47,8 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        if (! $caisse->isDediee()) {
+        // Caisse en espèces d'un agent seulement : son compte Mobile Money ne se « verse » pas.
+        if (! $caisse->isCaisseDediee()) {
             return false;
         }
 
