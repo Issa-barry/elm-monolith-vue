@@ -17,7 +17,8 @@ use App\Models\User;
  * depuis le 27/09/2026 (ADR 0001), il n'y a plus de séparation par personne — confirmer ou
  * contester dépend uniquement de la permission du rôle (`tresorerie.recevoir`,
  * `tresorerie.rejeter`), y compris pour l'envoyeur ; une auto-confirmation reste tracée
- * (MouvementFonds::confirmeParExpediteur()).
+ * (MouvementFonds::confirmeParExpediteur()). Même règle pour un dépôt en banque (`depot_banque`,
+ * ADR 0026), lui aussi interne à une agence.
  *
  * Approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018) : seul l'agent
  * titulaire de la caisse destinataire confirme ou conteste, sans permission requise et sans

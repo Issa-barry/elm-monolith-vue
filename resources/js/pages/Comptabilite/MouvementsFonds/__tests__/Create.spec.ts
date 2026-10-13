@@ -49,6 +49,12 @@ const PROPS = {
             type: 'banque',
         },
         {
+            id: 'orange-principale',
+            site_id: 'principale',
+            libelle: 'Orange Money de Agence Principale',
+            type: 'mobile_money',
+        },
+        {
             id: 'caisse-matoto',
             site_id: 'matoto',
             libelle: 'Caisse Matoto',
@@ -106,7 +112,9 @@ describe('Nouveau mouvement de fonds', () => {
         expect(valider(page).attributes('disabled')).toBeUndefined();
     });
 
-    it("même agence : propose les caisses d'agents de cette agence et envoie un approvisionnement", async () => {
+    // Depuis l'ADR 0026, la même agence propose aussi ses banques (dépôt en banque) : la liste, la
+    // note et le libellé du bouton dépendent désormais du support de destination choisi.
+    it("même agence depuis une caisse : propose les banques et les caisses d'agents de cette agence", async () => {
         const page = monter();
         await choisir(page, 0, 'principale');
         await choisir(page, 1, 'caisse-principale');
@@ -116,22 +124,98 @@ describe('Nouveau mouvement de fonds', () => {
             .findAll('option')
             .map((o) => o.text());
         expect(options).toEqual([
-            "Sélectionner la caisse d'un agent…",
+            'Sélectionner le support de destination…',
+            'UBA',
             'Moussa SIDIBE — Caisse Moussa',
             'Bakary CAMARA — Caisse Bakary',
         ]);
         expect(
-            page.get('[data-testid="mouvement-note-approvisionnement"]').text(),
-        ).toContain("réception par l'agent");
+            supportDestination(page)
+                .findAll('optgroup')
+                .map((g) => g.attributes('label')),
+        ).toEqual(["Banques de l'agence", "Caisses d'agents"]);
+        expect(
+            page.find('[data-testid="mouvement-note-meme-agence"]').exists(),
+        ).toBe(true);
         expect(page.text()).not.toContain('Période de financement visée');
         expect(page.text()).not.toContain('Moyen de transfert');
-        expect(valider(page).text()).toBe('Approvisionner la caisse');
+        expect(valider(page).text()).toBe('Envoyer le mouvement');
         expect(valider(page).attributes('disabled')).toBeUndefined();
+    });
+
+    it("même agence vers la caisse d'un agent : approvisionnement, sans référence ni justificatif", async () => {
+        const page = monter();
+        await choisir(page, 0, 'principale');
+        await choisir(page, 1, 'caisse-principale');
+        await choisir(page, 2, 'principale');
+
+        await supportDestination(page).setValue('agent-bakary');
+        expect(
+            page.get('[data-testid="mouvement-note-approvisionnement"]').text(),
+        ).toContain("réception par l'agent");
+        expect(valider(page).text()).toBe('Approvisionner la caisse');
+        expect(page.text()).not.toContain('Référence externe');
+        expect(page.text()).not.toContain('Justificatif');
 
         await supportDestination(page).setValue('agent-moussa');
         expect(
             page.get('[data-testid="mouvement-note-approvisionnement"]').text(),
         ).toContain('réception par vous-même');
+    });
+
+    it('même agence vers une banque : dépôt en banque, avec référence et justificatif du bordereau', async () => {
+        const page = monter();
+        await choisir(page, 0, 'principale');
+        await choisir(page, 1, 'caisse-principale');
+        await choisir(page, 2, 'principale');
+        await supportDestination(page).setValue('banque-principale');
+
+        expect(
+            page.get('[data-testid="mouvement-note-depot-banque"]').text(),
+        ).toContain('dépôt en banque');
+        expect(valider(page).text()).toBe('Déposer en banque');
+        expect(valider(page).attributes('disabled')).toBeUndefined();
+        expect(page.text()).toContain('Référence externe');
+        expect(page.text()).toContain('Justificatif');
+        expect(page.text()).not.toContain('Moyen de transfert');
+        expect(page.text()).not.toContain('Période de financement visée');
+    });
+
+    it("même agence depuis un Mobile Money : seules les banques sont proposées, jamais les caisses d'agents", async () => {
+        const page = monter();
+        await choisir(page, 0, 'principale');
+        await choisir(page, 1, 'orange-principale');
+        await choisir(page, 2, 'principale');
+
+        expect(
+            supportDestination(page)
+                .findAll('option')
+                .map((o) => o.text()),
+        ).toEqual(['Sélectionner le support de destination…', 'UBA']);
+
+        await supportDestination(page).setValue('banque-principale');
+        expect(valider(page).text()).toBe('Déposer en banque');
+    });
+
+    it("réinitialise la destination quand le support d'origine ne peut plus l'alimenter", async () => {
+        const page = monter();
+        await choisir(page, 0, 'principale');
+        await choisir(page, 1, 'caisse-principale');
+        await choisir(page, 2, 'principale');
+        await supportDestination(page).setValue('agent-bakary');
+
+        // Un Mobile Money n'approvisionne pas un agent : la caisse choisie n'est plus proposée.
+        await choisir(page, 1, 'orange-principale');
+        expect(
+            (supportDestination(page).element as HTMLSelectElement).value,
+        ).toBe('');
+
+        // Une banque choisie reste valable d'une caisse à un Mobile Money.
+        await supportDestination(page).setValue('banque-principale');
+        await choisir(page, 1, 'caisse-principale');
+        expect(
+            (supportDestination(page).element as HTMLSelectElement).value,
+        ).toBe('banque-principale');
     });
 
     it("réinitialise la caisse choisie quand la destination n'est plus la même agence", async () => {
@@ -150,28 +234,29 @@ describe('Nouveau mouvement de fonds', () => {
         ).toBe('');
     });
 
-    it("même agence sans caisse d'agent : message explicite et validation bloquée", async () => {
+    it("même agence sans banque ni caisse d'agent : message explicite et validation bloquée", async () => {
         const page = monter();
         await choisir(page, 0, 'matoto');
         await choisir(page, 1, 'caisse-matoto');
         await choisir(page, 2, 'matoto');
 
         expect(
-            page.get('[data-testid="mouvement-aucune-caisse-agent"]').text(),
-        ).toContain("Aucune caisse d'agent active");
+            page.get('[data-testid="mouvement-aucune-destination"]').text(),
+        ).toContain("Aucune banque ni caisse d'agent active");
         expect(supportDestination(page).attributes('disabled')).toBeDefined();
         expect(valider(page).attributes('disabled')).toBeDefined();
     });
 
-    it("même agence depuis une banque : seule une caisse de l'agence approvisionne", async () => {
+    it("même agence depuis une banque : refusé, l'origine doit être une caisse ou un Mobile Money", async () => {
         const page = monter();
         await choisir(page, 0, 'principale');
         await choisir(page, 1, 'banque-principale');
         await choisir(page, 2, 'principale');
 
         expect(
-            page.find('[data-testid="mouvement-origine-non-caisse"]').exists(),
+            page.find('[data-testid="mouvement-origine-banque"]').exists(),
         ).toBe(true);
+        expect(supportDestination(page).attributes('disabled')).toBeDefined();
         expect(valider(page).attributes('disabled')).toBeDefined();
     });
 

@@ -152,6 +152,22 @@ describe('Mouvements de fonds — versement en attente de confirmation', () => {
         expect(enAttente(recu).exists()).toBe(false);
         expect(enAttente(entreAgences).exists()).toBe(false);
     });
+
+    it('traite un dépôt en banque comme un mouvement support → support en attente de confirmation (ADR 0026)', () => {
+        const ligne = monter([
+            mouvement({
+                nature: 'depot_banque',
+                nature_label: 'Dépôt en banque',
+                compte_origine: 'Orange Money de Matoto',
+                compte_destination: 'UBA',
+            }),
+        ]).find('tbody tr');
+
+        expect(ligne.text()).toContain('Dépôt en banque');
+        expect(ligne.text()).toContain('Orange Money de Matoto');
+        expect(ligne.text()).toContain('UBA');
+        expect(enAttente(ligne).text()).toBe('En attente de confirmation');
+    });
 });
 
 // Chaque information a sa propre colonne (Référence / Type / Origine / Destination / Montant /

@@ -455,16 +455,18 @@ caisse dédiée du payeur).
   mélanger les calculs qui supposent un versement agent → agence (en cours de versement, Financement,
   remises ADR 0016).
 - **Aussi depuis Mouvements → Nouveau** (ajout du 12/10/2026, ADR 0018 point 9) : choisir la **même
-  agence** en origine et en destination affiche « Support de trésorerie de destination » (caisses
-  d'agents actives de l'agence, mêmes règles de proposition que Supports) et envoie cet
+  agence** en origine et en destination affiche « Support de trésorerie de destination » ; y choisir
+  la **caisse d'un agent** (caisses d'agents actives de l'agence, mêmes règles de proposition que
+  Supports, proposées seulement si le support d'origine est une caisse) envoie cet
   approvisionnement — bouton « Approvisionner la caisse », pas de brouillon ; la période de
   financement, le moyen de transfert, la référence externe et le justificatif ne s'appliquent pas
   (le commentaire devient le motif). Il faut `tresorerie.create` (accès à l'écran) **et**
   `tresorerie.envoyer` sur l'agence ; sans `tresorerie.envoyer`, l'agence d'origine n'est pas
-  proposée en destination. Si l'agence n'a aucune caisse d'agent active, ou si le support d'origine
-  n'est pas une caisse, l'écran l'explique et bloque la validation. **Entre agences, rien ne
-  change** : le support de destination est choisi par le destinataire à « Confirmer réception »,
-  et un support transmis à la création est ignoré (`MouvementFondsController::store()`).
+  proposée en destination. La même liste propose aussi les **banques de l'agence** : c'est alors un
+  dépôt en banque (section suivante). Si l'agence n'a ni banque ni caisse d'agent active, ou si le
+  support d'origine est une banque, l'écran l'explique et bloque la validation. **Entre agences,
+  rien ne change** : le support de destination est choisi par le destinataire à « Confirmer
+  réception », et un support transmis à la création est ignoré (`MouvementFondsController::store()`).
 - **Règles (serveur, `MouvementFondsService::approvisionnerCaisseAgent()`)** : source = caisse (type
   Caisse) **d'agence** active — jamais une banque, un Mobile Money ni la caisse d'un agent ;
   destination = caisse dédiée **active** du **même site** ; l'envoyeur n'approvisionne **sa propre
@@ -512,6 +514,42 @@ caisse dédiée du payeur).
   par la caisse de l'agence). Le solde de la caisse source est contrôlé à l'envoi pour **toutes** les
   natures de mouvement (`MouvementFondsService::envoyer()`).
 
+### Dépôt en banque (ADR 0026)
+
+Une agence dépose sur **sa banque** les espèces de **sa caisse** ou le solde d'un de **ses comptes
+Mobile Money** (livré le 13/10/2026, [ADR 0026](adr/0026-depot-en-banque-depuis-caisse-ou-mobile-money.md)).
+Entre deux agences, rien de nouveau : caisse → banque y passait déjà par un mouvement ordinaire, la
+banque étant choisie par le destinataire à la réception.
+
+- **Où** : Mouvements → Nouveau, **même agence** en origine et en destination, puis une banque dans
+  « Support de trésorerie de destination » (groupe « Banques de l'agence », au-dessus des « Caisses
+  d'agents »). Bouton « Déposer en banque », pas de brouillon. La référence externe (n° de
+  bordereau) et le justificatif sont proposés, facultatifs ; la période de financement et le moyen
+  de transfert ne s'appliquent pas. Nature du mouvement : `depot_banque` (« Dépôt en banque »).
+- **Règles (serveur, `MouvementFondsService::deposerEnBanque()`)** : source = caisse (type Caisse)
+  ou Mobile Money **d'agence** actif — jamais une banque, jamais la caisse d'un agent (elle se verse
+  d'abord à la caisse de l'agence) ; destination = banque **active** du **même site** ; montant > 0
+  et au plus égal au solde du support source au grand livre (sous verrou). `moyen_transfert` est
+  déduit de la source (`especes` ou `mobile_money`). Un Mobile Money n'approvisionne jamais la
+  caisse d'un agent.
+- **Droit d'envoyer** : `tresorerie.create` (accès à l'écran) et `tresorerie.envoyer` + rattachement
+  à l'agence (admins : toutes) — `CompteTresoreriePolicy::deposerEnBanque()`.
+- **Réception** : `tresorerie.recevoir` sur l'agence, **l'envoyeur compris** — même règle que le
+  versement (ADR 0001), auto-confirmation tracée (« Confirmé par l'expéditeur »). La banque est
+  fixée à l'envoi : « Confirmer réception » ne demande aucun choix et le service refuse tout autre
+  support. Contestation (`tresorerie.rejeter`) et retour (`tresorerie.confirmer_retour`, qui
+  recrédite le support source) : réutilisés tels quels.
+- **Soldes et écritures** : envoi — débit 588000 (transit) / crédit compte du support source ;
+  réception — débit compte de la banque (521000…) / crédit 588000. Tant que le dépôt n'est pas
+  confirmé, le montant n'est dans **aucun** solde ; le disponible de l'agence (Financement) baisse
+  d'autant jusqu'à la confirmation. Les frais éventuels ne sont pas saisis ici.
+- **Affichages** : Mouvements — affiché support → support, « En attente de confirmation » tant
+  qu'Envoyé ; compté dans le badge « mouvements à confirmer » (section suivante). Les calculs propres
+  aux autres natures (en cours de versement, approvisionnements à confirmer, fonds en transit,
+  remises) ne le comptent pas.
+- **Non traité** : retrait banque → caisse, caisse ↔ Mobile Money, dépôt direct depuis la caisse
+  d'un agent, bouton dédié sur l'écran Supports.
+
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
 Le calcul existe depuis le 26/09/2026 : `FicheCaisseService` (tableau de caisse tiré du grand livre,
 versements, écritures) et le composant `components/tresorerie/CaisseFiche.vue`, utilisés par l'onglet
@@ -528,7 +566,9 @@ que le site destinataire ait à consulter la liste : mêmes deux surfaces que
 nouveau mécanisme de notification.
 
 - **Calcul** : `HandleInertiaRequests::mouvementsFondsAConfirmer()` — compte les `MouvementFonds`
-  `organization_id` de l'utilisateur, `nature = inter_sites`, `statut = envoye`, pour un
+  `organization_id` de l'utilisateur, `nature = inter_sites`, `reglement_agences` (ADR 0012) ou
+  `depot_banque` (ADR 0026, depuis le 13/10/2026 : la destination est alors l'agence elle-même),
+  `statut = envoye`, pour un
   utilisateur ayant la permission **`tresorerie.recevoir`** (celle vérifiée par
   `MouvementFondsPolicy::recevoir()`). Un **admin** (`isAdmin()`) voit le compteur **org-wide**,
   sans filtre de site ; un **non-admin** ne voit que les mouvements dont `site_destination_id` est

@@ -77,4 +77,15 @@ class CompteTresoreriePolicy
 
         return $user->isAdmin() || $user->isAssignedToSite($caisse->site_id);
     }
+
+    /**
+     * Déposer en banque depuis ce support de l'agence (caisse ou Mobile Money, ADR 0026) : même
+     * droit que l'approvisionnement — c'est une sortie de fonds d'un support de l'agence
+     * (`tresorerie.envoyer`, agence de l'utilisateur). Type, état et solde sont revérifiés par
+     * MouvementFondsService::deposerEnBanque().
+     */
+    public function deposerEnBanque(User $user, CompteTresorerie $support): bool
+    {
+        return $this->approvisionner($user, $support);
+    }
 }

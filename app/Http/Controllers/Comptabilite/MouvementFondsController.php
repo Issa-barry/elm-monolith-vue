@@ -14,6 +14,7 @@ use App\Services\SiteScopeService;
 use App\Services\Tresorerie\MouvementFondsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -186,7 +187,9 @@ class MouvementFondsController extends Controller
         $orgId = $user->organization_id;
         $sites = $this->sitesDisponibles($orgId, $user, pourCreation: true);
         // Même agence en origine et en destination = approvisionnement de la caisse d'un agent
-        // (ADR 0018), réservé à `tresorerie.envoyer` (CompteTresoreriePolicy::approvisionner()).
+        // (ADR 0018) ou dépôt en banque (ADR 0026), réservés à `tresorerie.envoyer`
+        // (CompteTresoreriePolicy::approvisionner() / deposerEnBanque()). Les banques proposées
+        // sont celles de `comptes_tresorerie` (supports actifs de l'agence, avec leur type).
         $peutApprovisionner = $user->can('tresorerie.envoyer');
 
         return Inertia::render('Comptabilite/MouvementsFonds/Create', [
@@ -220,11 +223,12 @@ class MouvementFondsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        // Même agence des deux côtés : ce n'est pas un transfert entre agences mais
-        // l'approvisionnement de la caisse d'un agent (ADR 0018), avec ses propres règles.
+        // Même agence des deux côtés : ce n'est pas un transfert entre agences mais un mouvement
+        // interne — approvisionnement de la caisse d'un agent (ADR 0018) ou dépôt en banque
+        // (ADR 0026) — avec ses propres règles.
         $siteOrigineId = $request->input('site_origine_id');
         if (is_string($siteOrigineId) && $siteOrigineId !== '' && $siteOrigineId === $request->input('site_destination_id')) {
-            return $this->approvisionnerCaisseAgent($request);
+            return $this->mouvementDansLaMemeAgence($request);
         }
 
         $data = $request->validate([
@@ -257,14 +261,17 @@ class MouvementFondsController extends Controller
     }
 
     /**
-     * « Nouveau mouvement de fonds » avec la même agence en origine et en destination :
-     * approvisionnement de la caisse d'un agent (ADR 0018), second point d'entrée de celui de
-     * l'écran Supports — même droit (CompteTresoreriePolicy::approvisionner()) et mêmes règles
-     * (MouvementFondsService::approvisionnerCaisseAgent()). La caisse de destination est choisie
-     * ici, le mouvement est créé ET envoyé (pas de brouillon), et seul l'agent titulaire en
-     * confirme la réception.
+     * « Nouveau mouvement de fonds » avec la même agence en origine et en destination. Le support
+     * de destination est choisi ici, le mouvement est créé ET envoyé (pas de brouillon), et c'est
+     * ce support qui décide de l'opération :
+     *  - caisse d'un agent : approvisionnement (ADR 0018), second point d'entrée de celui de
+     *    l'écran Supports — CompteTresoreriePolicy::approvisionner(),
+     *    MouvementFondsService::approvisionnerCaisseAgent(), réception réservée à l'agent titulaire ;
+     *  - tout autre support : dépôt en banque (ADR 0026) depuis une caisse ou un Mobile Money de
+     *    l'agence — CompteTresoreriePolicy::deposerEnBanque(),
+     *    MouvementFondsService::deposerEnBanque(), qui refuse une destination autre qu'une banque.
      */
-    private function approvisionnerCaisseAgent(Request $request)
+    private function mouvementDansLaMemeAgence(Request $request)
     {
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -276,9 +283,12 @@ class MouvementFondsController extends Controller
             'compte_tresorerie_destination_id' => ['required', $support],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'commentaire' => ['nullable', 'string', 'max:500'],
+            // Bordereau de dépôt : sans objet pour un approvisionnement, qui les ignore.
+            'reference_externe' => ['nullable', 'string', 'max:100'],
+            'justificatif' => ['nullable', 'file', 'max:10240'],
         ], [
-            'compte_tresorerie_destination_id.required' => 'Choisissez la caisse de l\'agent à approvisionner.',
-            'compte_tresorerie_destination_id.exists' => 'Caisse de l\'agent introuvable.',
+            'compte_tresorerie_destination_id.required' => 'Choisissez le support de destination : une banque de l\'agence ou la caisse d\'un agent.',
+            'compte_tresorerie_destination_id.exists' => 'Support de destination introuvable.',
         ]);
 
         $source = CompteTresorerie::forOrg($orgId)->findOrFail($data['compte_tresorerie_origine_id']);
@@ -287,19 +297,47 @@ class MouvementFondsController extends Controller
                 'compte_tresorerie_origine_id' => 'Le support de trésorerie choisi ne correspond pas au site sélectionné.',
             ]);
         }
-        $this->authorize('approvisionner', $source);
 
-        $mouvement = $this->service->approvisionnerCaisseAgent(
-            $orgId,
-            $source,
-            $data['compte_tresorerie_destination_id'],
-            (float) $data['montant'],
-            $data['commentaire'] ?? null,
-            $user->id,
-        );
+        $versCaisseAgent = CompteTresorerie::forOrg($orgId)->findOrFail($data['compte_tresorerie_destination_id'])->isDediee();
+        $this->authorize($versCaisseAgent ? 'approvisionner' : 'deposerEnBanque', $source);
+
+        if ($versCaisseAgent) {
+            $mouvement = $this->service->approvisionnerCaisseAgent(
+                $orgId,
+                $source,
+                $data['compte_tresorerie_destination_id'],
+                (float) $data['montant'],
+                $data['commentaire'] ?? null,
+                $user->id,
+            );
+
+            return redirect()->route('comptabilite.tresorerie.mouvements.index')
+                ->with('success', "Approvisionnement {$mouvement->reference} envoyé : en attente de confirmation de réception par l'agent.");
+        }
+
+        $justificatif = $request->file('justificatif')?->store('tresorerie/justificatifs', 'public');
+
+        try {
+            $mouvement = $this->service->deposerEnBanque(
+                $orgId,
+                $source,
+                $data['compte_tresorerie_destination_id'],
+                (float) $data['montant'],
+                $data['commentaire'] ?? null,
+                $user->id,
+                ['reference_externe' => $data['reference_externe'] ?? null, 'justificatif_path' => $justificatif ?: null],
+            );
+        } catch (ValidationException $e) {
+            // Dépôt refusé (solde, support) : le bordereau déjà enregistré ne doit pas rester orphelin.
+            if ($justificatif) {
+                Storage::disk('public')->delete($justificatif);
+            }
+
+            throw $e;
+        }
 
         return redirect()->route('comptabilite.tresorerie.mouvements.index')
-            ->with('success', "Approvisionnement {$mouvement->reference} envoyé : en attente de confirmation de réception par l'agent.");
+            ->with('success', "Dépôt en banque {$mouvement->reference} envoyé : en attente de confirmation de réception.");
     }
 
     public function envoyer(MouvementFonds $mouvement)
@@ -317,9 +355,10 @@ class MouvementFondsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        // Un versement ou un approvisionnement de caisse a sa destination fixée à l'envoi : la
-        // confirmation ne demande aucun choix (le service refuse de toute façon un autre support).
-        $destinationId = $mouvement->isInterne() || $mouvement->isApprovisionnement()
+        // Un mouvement interne à une agence (versement, approvisionnement, dépôt en banque) a sa
+        // destination fixée à l'envoi : la confirmation ne demande aucun choix (le service refuse
+        // de toute façon un autre support).
+        $destinationId = $mouvement->destinationFixeeALEnvoi()
             ? $mouvement->compte_tresorerie_destination_id
             : $request->validate([
                 'compte_tresorerie_destination_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],

@@ -69,7 +69,10 @@ un transfert depuis la caisse de l'agence », jamais construit.
   constaté par l'agence libère l'argent. Aucun mécanisme d'expiration automatique.
 - Pas d'approvisionnement direct entre deux caisses d'agents : l'argent repasse par la caisse de
   l'agence (versement puis approvisionnement).
-- Non couvert : un mouvement entre deux supports **de l'agence elle-même** (caisse → banque ou
-  Mobile Money de la même agence). Depuis « Nouveau mouvement de fonds », la même agence ne propose
-  que les caisses d'agents ; une banque en origine y est refusée avec un message explicite.
+- Mouvement entre deux supports **de l'agence elle-même** : non couvert par cet ADR. Depuis le
+  13/10/2026, le **dépôt en banque** (caisse ou Mobile Money de l'agence → banque de la même agence)
+  est couvert par l'[ADR 0026](0026-depot-en-banque-depuis-caisse-ou-mobile-money.md) : « Nouveau
+  mouvement de fonds » propose alors, pour la même agence, ses banques en plus des caisses d'agents.
+  Une banque en origine y reste refusée avec un message explicite ; les autres couples (caisse ↔
+  Mobile Money, retrait banque → caisse) ne sont pas couverts.
 - Les mouvements antérieurs au 04/10/2026 n'ont pas d'heure d'envoi ni de réception (colonnes nulles).
