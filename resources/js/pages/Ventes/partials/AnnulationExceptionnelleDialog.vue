@@ -24,6 +24,8 @@ interface EncaissementRecap {
     auteur: string | null;
     caisse: string | null;
     caisse_dediee: boolean;
+    /** Compte Mobile Money de l'agent (ADR 0027) : support dédié, mais pas une caisse. */
+    compte_mobile_money_dedie?: boolean;
 }
 
 interface LigneStockRecap {
@@ -487,7 +489,11 @@ function onUpdateVisible(value: boolean): void {
                                     <span
                                         v-if="e.caisse_dediee"
                                         class="font-normal text-muted-foreground"
-                                        >(caisse dédiée)</span
+                                        >{{
+                                            e.compte_mobile_money_dedie
+                                                ? "(compte de l'agent)"
+                                                : '(caisse dédiée)'
+                                        }}</span
                                     >
                                 </p>
                                 <p class="mt-0.5 text-muted-foreground">

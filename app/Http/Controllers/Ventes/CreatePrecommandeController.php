@@ -54,7 +54,7 @@ class CreatePrecommandeController extends Controller
                 'acompte_min_pct' => Parametre::getPrecommandeAcompteMinPct($orgId),
                 // L'acompte est toujours reçu par l'agence de la précommande (décision D11) : moyens
                 // et caisse dédiée de CETTE agence, mêmes sources que l'écran d'encaissement.
-                'moyens_encaissement' => $this->moyens->pourSite($orgId, $userSite->id),
+                'moyens_encaissement' => $this->moyens->pourSitePourEncaisseur($user, $orgId, $userSite->id),
                 'peut_encaisser_especes' => $this->caisses->caisseActive($orgId, (string) $user->id, $userSite->id) !== null,
             ],
         ]);

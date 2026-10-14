@@ -921,7 +921,7 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(true);
         expect(wrapper.find('#sup-numero-dedie').exists()).toBe(true);
         expect(wrapper.text()).toContain(
-            "Ce compte n'est pas encore proposé à l'encaissement",
+            "Les encaissements Mobile Money de l'agent arriveront sur ce compte",
         );
         expect(wrapper.text()).toContain('Créer le compte');
         // Le choix d'un compte comptable reste réservé aux supports de l'agence.

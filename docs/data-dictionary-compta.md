@@ -565,8 +565,10 @@ réutiliser, pas recalculer.
 
 ADR [0027](adr/0027-compte-mobile-money-dedie-agent.md). Lot 1 (2026-10-13) : le compte existe, se
 crée, se valide et s'affiche. Lot 2 (2026-10-14) : il se transfère au Mobile Money de l'agence (cf.
-« Transfert vers le Mobile Money de l'agence » ci-dessous). **Rien ne l'alimente encore** :
-l'encaissement Mobile Money arrive toujours sur le compte de l'agence (ADR 0005) — c'est le lot 3.
+« Transfert vers le Mobile Money de l'agence » ci-dessous). Lot 3 (2026-10-14) : **tout
+encaissement Mobile Money arrive sur ce compte**, jamais directement sur celui de l'agence ; sans
+compte actif pour l'opérateur, l'agent ne peut pas encaisser en Mobile Money (cf.
+[encaissements.md](encaissements.md), « Mobile Money : sur le compte de l'agent »).
 
 **Règles garanties côté serveur** (`CaisseAgentService::creerCompteMobileMoney()`) :
 
@@ -612,7 +614,9 @@ tout ce qui concerne les espèces d'un agent, au lieu de `dediees()` / `isDediee
 | Routage et autorisation des espèces (`CaisseAgentResolver`) | Ignoré : sans caisse en espèces, l'agent ne peut toujours pas encaisser en espèces. |
 | Versement vers la caisse de l'agence, approvisionnement, dépôt en banque | Refusé comme origine et comme destination ; aucun bouton « Verser ». |
 | Mouvements de fonds entre agences | Interdit en origine comme en destination. |
-| Encaissement et paiements sortants (`MoyensEncaissementResolver`) | Jamais proposé ni accepté : le circuit actuel est inchangé. |
+| Encaissement (`MoyensEncaissementResolver::*PourEncaisseur`) | Depuis le lot 3 : seul support Mobile Money proposé et accepté à l'encaissement, et uniquement à son titulaire. |
+| Paiements sortants (`MoyensEncaissementResolver::parSite()`, `DecaissementSupportResolver`) | Jamais proposé : on paie depuis les supports de l'agence. |
+| « Mobile Money dû encore chez les agents » (ADR 0016, depuis le lot 3) | Le Mobile Money dû à d'autres agences et encore sur les comptes des agents n'est pas déduit une deuxième fois du disponible. |
 | Disponible et position fiable du Financement | Exclu, comme tout support dédié. |
 | « Espèces dues encore chez les agents » (ADR 0016) | Exclu : seules les caisses en espèces comptent. |
 | Situation de trésorerie | Inclus, dans la colonne Mobile Money de son agence. |

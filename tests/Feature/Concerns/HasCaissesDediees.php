@@ -69,6 +69,24 @@ trait HasCaissesDediees
     }
 
     /**
+     * Compte Mobile Money actif de cet agent (ADR 0027), sans dépendre de `$this->org`/`$this->user` :
+     * depuis le lot 3, c'est le seul support sur lequel il peut encaisser en Mobile Money. L'agent
+     * valide son propre compte — le service ne contrôle pas « créateur ≠ validateur » (ADR 0002).
+     */
+    private function creerCompteMobileMoneyActifPour(User $agent, string $siteId, string $operateur = 'orange_money', ?string $numero = null): CompteTresorerie
+    {
+        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney(
+            $agent->organization_id,
+            $siteId,
+            $agent->id,
+            $operateur,
+            $numero ?? '6'.str_pad((string) random_int(0, 99_999_999), 8, '0', STR_PAD_LEFT),
+        );
+
+        return app(SupportTresorerieValidationService::class)->valider($brouillon, $agent);
+    }
+
+    /**
      * Support d'AGENCE actif (Mobile Money, Banque, Caisse) sur le compte du plan par défaut donné —
      * c'est lui qui rend un moyen de paiement proposable à l'encaissement dans cette agence (cf.
      * MoyensEncaissementResolver). Ne dépend pas de `$this->org` : l'organisation est celle du site.

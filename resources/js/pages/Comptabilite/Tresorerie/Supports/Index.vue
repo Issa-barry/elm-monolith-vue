@@ -1998,7 +1998,8 @@ const selectClass =
                         </p>
                         <p>Compte comptable créé automatiquement.</p>
                         <p>
-                            Ce compte n'est pas encore proposé à l'encaissement.
+                            Les encaissements Mobile Money de l'agent arriveront
+                            sur ce compte.
                         </p>
                     </div>
                     <div

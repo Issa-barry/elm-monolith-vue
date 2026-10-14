@@ -393,46 +393,21 @@ class CompteMobileMoneyAgentTest extends TestCase
 
     // ── Le circuit d'encaissement Mobile Money actuel est inchangé ───────────
 
-    public function test_le_compte_d_un_agent_n_est_propose_a_aucun_encaissement_et_ne_remplace_pas_celui_de_l_agence(): void
+    /**
+     * Les moyens de l'AGENCE (paiements sortants) ne proposent jamais le compte d'un agent. Depuis le lot
+     * 3 de l'ADR 0027, l'encaissement, lui, passe par ce compte : cf. EncaissementMobileMoneyCompteAgentTest.
+     */
+    public function test_le_compte_d_un_agent_n_est_jamais_propose_parmi_les_moyens_de_l_agence(): void
     {
         $moyens = app(MoyensEncaissementResolver::class);
-        $encaisseur = $this->encaisseur();
-        $compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $encaisseur->id, 'orange_money', '620000001');
+        $compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $this->encaisseur()->id, 'orange_money', '620000001');
 
         $this->assertSame([], $moyens->pourSite($this->org->id, $this->site->id), 'sans support d\'agence, aucun moyen Mobile Money');
 
         $compteAgence = $this->creerSupportAgence($this->site->id, 'mobile_money', '561100', 'orange_money');
-        $proposes = array_column($moyens->pourSite($this->org->id, $this->site->id), 'compte_tresorerie_id');
 
-        $this->assertSame([$compteAgence->id], $proposes);
+        $this->assertSame([$compteAgence->id], array_column($moyens->pourSite($this->org->id, $this->site->id), 'compte_tresorerie_id'));
         $this->assertNull($moyens->supportPour($this->org->id, $this->site->id, $compteAgent->id, 'mobile_money'));
-
-        // Un encaissement Mobile Money continue d'arriver sur le compte de l'agence.
-        $facture = $this->facture();
-        $this->actingAs($encaisseur)
-            ->post(route('encaissements.store', $facture), [
-                'montant' => 5_000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'mobile_money',
-                'compte_tresorerie_id' => $compteAgence->id,
-                'reference_paiement' => 'OM-REF-001',
-            ])
-            ->assertSessionHasNoErrors();
-
-        $disponibilite = app(TresorerieDisponibiliteService::class);
-        $this->assertSame(5_000.0, $disponibilite->soldePourSupport($compteAgence));
-        $this->assertSame(0.0, $disponibilite->soldePourSupport($compteAgent));
-
-        // Et le compte d'un agent, envoyé de force, est refusé.
-        $this->actingAs($encaisseur)
-            ->post(route('encaissements.store', $this->facture()), [
-                'montant' => 5_000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'mobile_money',
-                'compte_tresorerie_id' => $compteAgent->id,
-                'reference_paiement' => 'OM-REF-002',
-            ])
-            ->assertSessionHasErrors('compte_tresorerie_id');
     }
 
     // ── Étanchéité : jamais une caisse en espèces ────────────────────────────

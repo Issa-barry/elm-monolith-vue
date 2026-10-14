@@ -22,8 +22,9 @@ use Illuminate\Validation\ValidationException;
  *  - plusieurs agences possibles : agence de la commande si elle en fait partie, sinon l'agence par
  *    défaut de l'utilisateur, modifiable dans la fenêtre de paiement.
  *
- * Les espèces vont ensuite dans la caisse dédiée de l'agent DANS cette agence (CaisseAgentResolver) :
- * une caisse d'une autre agence n'est jamais utilisée.
+ * Les espèces vont ensuite dans la caisse dédiée de l'agent DANS cette agence (CaisseAgentResolver),
+ * le Mobile Money dans son compte Mobile Money de cette agence (ADR 0027) : un support d'une autre
+ * agence n'est jamais utilisé.
  */
 class AgenceEncaissementResolver
 {
@@ -117,7 +118,8 @@ class AgenceEncaissementResolver
         $affectes = $this->sitesAffectes($user, $organizationId);
         $peutAutreAgence = $user->can(self::PERMISSION);
         $defaut = $this->siteParDefaut($user);
-        $moyensParSite = $this->moyens->parSite($organizationId, $affectes->pluck('id'));
+        // Mobile Money : les comptes de l'utilisateur, jamais ceux de l'agence (ADR 0027).
+        $moyensParSite = $this->moyens->parSitePourEncaisseur($user, $organizationId, $affectes->pluck('id'));
         $caisses = $this->caisses->sitesAvecCaisseActive($organizationId, (string) $user->id);
         $nomsCommande = Site::where('organization_id', $organizationId)
             ->whereIn('id', $factures->pluck('site_id')->filter()->unique()->values())

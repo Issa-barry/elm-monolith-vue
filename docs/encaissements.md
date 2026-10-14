@@ -32,16 +32,17 @@ comme de l'espèce en caisse. C'est l'erreur qu'a faite une première implément
 (2026-09-15, corrigée le jour même) — la piste "un seul enum fusionné" doit être écartée pour
 cette raison, indépendamment de toute préférence UX.
 
-## Moyens de paiement = supports de trésorerie de l'agence (décision du 24/09/2026)
+## Moyens de paiement = supports de trésorerie (décision du 24/09/2026, Mobile Money : ADR 0027)
 
 **Règle** : un moyen de paiement n'est proposé — et accepté — que si un **support de trésorerie
-actif de l'agence de la facture** peut le recevoir. Aucune liste fixe d'opérateurs : un opérateur
+actif** peut le recevoir : la caisse ou le compte Mobile Money **de l'utilisateur qui encaisse**,
+ou la banque de l'agence d'encaissement. Aucune liste fixe d'opérateurs : un opérateur
 sans support dans l'agence n'apparaît pas. Chaque support représente un compte financier réel.
 
 | Moyen | D'où vient-il ? | Compte débité |
 |---|---|---|
 | Espèces | Caisse dédiée **active** de l'utilisateur connecté sur le site de la facture (règle propre à l'utilisateur, cf. plus bas) | Sous-compte de SA caisse (571001, 571002...) |
-| Mobile Money | Un support **Mobile Money** actif de l'agence, par opérateur (`operateur_mobile_money` du support) | Compte du support (561100 Orange Money, 561400 Kulu...) |
+| Mobile Money | Un **compte Mobile Money actif de l'utilisateur** dans l'agence d'encaissement, par opérateur (depuis le 14/10/2026, ADR 0027). **Jamais un compte de l'agence**, sans repli sur lui | Sous-compte du compte de l'agent (561100001, 561100002...) |
 | Virement / Chèque | Un support **Banque** actif de l'agence (chaque banque ouvre les deux) | Compte du support (521000...) |
 
 - **Chaque Mobile Money est un compte à part.** Un support Mobile Money porte obligatoirement son
@@ -69,12 +70,33 @@ dans la fenêtre de paiement (« N° … »). Quand une agence a plusieurs compt
 l'agent choisit celui sur lequel le client a réellement payé — jamais de routage automatique ni de
 Mobile Money présélectionné.
 
-**Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste
-(`pourSite()`/`parSite()`), exposée par les écrans sous `moyens_encaissement`, et
-`StoreEncaissementVenteController` la rejoue (`supportPour()`) : le `compte_tresorerie_id` envoyé
-doit y figurer avec le même mode, sinon 422 sur `compte_tresorerie_id` (support d'une autre agence
-ou organisation, inactif, brouillon, type incohérent, Mobile Money sans opérateur).
-**L'opérateur enregistré est celui du support**, jamais une valeur envoyée par le navigateur.
+**Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste de
+l'encaisseur (`pourSitePourEncaisseur()`/`parSitePourEncaisseur()`), exposée par les écrans sous
+`moyens_encaissement`, et `SaisieEncaissementVente` la rejoue (`supportPourEncaisseur()`) : le
+`compte_tresorerie_id` envoyé doit y figurer avec le même mode, sinon 422 sur `compte_tresorerie_id`
+(compte de l'agence, d'un autre agent, d'une autre agence ou organisation, inactif, brouillon, type
+incohérent, Mobile Money sans opérateur). **L'opérateur enregistré est celui du support**, jamais une
+valeur envoyée par le navigateur.
+
+### Mobile Money : sur le compte de l'agent, jamais sur celui de l'agence (ADR 0027, 14/10/2026)
+
+- L'encaissement Mobile Money d'une vente ou d'un acompte de précommande crédite **le compte Mobile
+  Money de l'utilisateur qui encaisse**, pour l'opérateur choisi, dans l'agence d'encaissement. Il
+  ne crédite **jamais** directement un compte Mobile Money de l'agence, même envoyé de force.
+- **Sans compte actif pour l'opérateur, l'encaissement est refusé** (`compte_tresorerie_id` :
+  « Vous n'avez pas de compte Mobile Money actif pour cet opérateur dans cette agence… »), pour
+  tous les rôles. La fenêtre de paiement ne propose que les opérateurs pour lesquels l'utilisateur a
+  un compte, et affiche en ambre « Mobile Money indisponible » quand il n'en a aucun.
+- Un portefeuille n'encaisse que dans son agence de rattachement : pour une commande d'une autre
+  agence, l'agent encaisse « à son agence » (ADR 0012), la dette inter-agences étant tracée comme
+  avant — elle ne dépend pas du support qui reçoit l'argent.
+- L'argent rejoint ensuite le Mobile Money de l'agence par un **transfert** (Trésorerie → Supports →
+  « Transférer à l'agence », cf. `data-dictionary-compta.md`).
+- **Paiements sortants inchangés** : fiches, factures fournisseurs, remboursements partent des
+  supports de l'agence (`parSite()`/`pourSite()`/`supportPour()`, `DecaissementSupportResolver`).
+- La référence d'un encaissement ne peut pas être celle d'un transfert déjà enregistré.
+- **Historique non reclassé** : les encaissements Mobile Money enregistrés avant le 14/10/2026 sur
+  un compte de l'agence y restent ; leur éventuelle régularisation est une décision distincte.
 
 ### Opérateur Mobile Money — `App\Enums\OperateurMobileMoney` (champ séparé)
 

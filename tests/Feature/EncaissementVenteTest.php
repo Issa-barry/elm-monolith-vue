@@ -224,8 +224,9 @@ class EncaissementVenteTest extends TestCase
     // ── Moyens hors espèces : un support actif de l'agence (décision du 24/09/2026) ──────────
     // mode_paiement reste l'une des 4 valeurs stables attendues par la comptabilisation
     // (especes/mobile_money/virement/cheque). Hors espèces, l'utilisateur choisit un SUPPORT de
-    // trésorerie de l'agence de la facture (`compte_tresorerie_id`) : un moyen sans support actif
-    // n'existe pas, et l'opérateur Mobile Money est celui du support, jamais une saisie libre.
+    // trésorerie (`compte_tresorerie_id`) : un moyen sans support actif n'existe pas, et l'opérateur
+    // Mobile Money est celui du support, jamais une saisie libre. Depuis le lot 3 de l'ADR 0027, le
+    // Mobile Money ne s'encaisse que sur un compte Mobile Money de l'utilisateur, jamais de l'agence.
 
     /** @param  array<string, mixed>  $donnees */
     private function poster(User $user, FactureVente $facture, array $donnees)
@@ -295,7 +296,7 @@ class EncaissementVenteTest extends TestCase
     public function test_l_operateur_enregistre_est_celui_du_support_jamais_la_saisie(): void
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
-        $kulu = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561400', 'kulu');
+        $kulu = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'kulu');
 
         // Requête forgée : l'opérateur envoyé contredit le support choisi — il est ignoré.
         $this->poster($user, $facture, [
@@ -515,8 +516,8 @@ class EncaissementVenteTest extends TestCase
     {
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
         $facture->update(['montant_net' => 10_000_000]);
-        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
-        $kulu = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561400', 'kulu');
+        $orange = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'orange_money');
+        $kulu = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'kulu');
         $soldes = app(TresorerieDisponibiliteService::class);
 
         $this->encaisserSur($user, $facture, 1_000_000, $orange);
@@ -527,7 +528,9 @@ class EncaissementVenteTest extends TestCase
 
         $dernier = EncaissementVente::where('facture_vente_id', $facture->id)->where('operateur_mobile_money', 'kulu')->firstOrFail();
         $lignes = PieceComptable::where('source_id', $dernier->id)->firstOrFail()->lignes()->with('compte')->get();
-        $this->assertEqualsWithDelta(500_000.0, (float) $lignes->firstWhere('compte.numero', '561400')->debit, 0.01);
+        $this->assertSame('561400001', $kulu->compte->numero, 'sous-compte de l\'agent sous le compte Kulu');
+        $this->assertEqualsWithDelta(500_000.0, (float) $lignes->firstWhere('compte.numero', '561400001')->debit, 0.01);
+        $this->assertNull($lignes->firstWhere('compte.numero', '561400'), 'jamais le compte Kulu de l\'agence');
         $this->assertEqualsWithDelta(500_000.0, (float) $lignes->firstWhere('compte.numero', '411000')->credit, 0.01);
         $this->assertNull($lignes->firstWhere('compte.numero', '561000'), 'Plus jamais de repli sur le Mobile Money générique');
     }
@@ -547,7 +550,7 @@ class EncaissementVenteTest extends TestCase
         $this->assertEqualsWithDelta(3000.0, app(TresorerieDisponibiliteService::class)->soldePourSupport($banque), 0.01);
     }
 
-    // ── Moyens proposés à l'écran : uniquement les supports actifs de l'agence ──────────
+    // ── Moyens proposés à l'écran : comptes Mobile Money de l'utilisateur, banques de l'agence ──
 
     public function test_la_fiche_vente_ne_propose_que_les_moyens_des_supports_actifs_de_l_agence(): void
     {
@@ -556,9 +559,11 @@ class EncaissementVenteTest extends TestCase
         Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
         $user->givePermissionTo('ventes.read');
 
-        $orange = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
+        $orange = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'orange_money', '620000001');
         $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000', null, 'UBA');
-        // Ni un support d'une autre agence, ni un support inactif, ni un Mobile Money sans opérateur.
+        // Ni le Mobile Money de l'agence (ADR 0027), ni un support d'une autre agence, ni un support
+        // inactif, ni un Mobile Money sans opérateur.
+        $this->creerSupportAgence($facture->site_id, 'mobile_money', '561100', 'orange_money');
         $autreAgence = Site::create(['organization_id' => $org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
         $this->creerSupportAgence($autreAgence->id, 'mobile_money', '561400', 'kulu');
         $this->creerSupportAgence($facture->site_id, 'mobile_money', '561200', 'momo')->update(['actif' => false]);
@@ -575,7 +580,7 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => 'orange_money',
                         'compte_tresorerie_id' => $orange->id,
                         'reference_requise' => true,
-                        'numero' => null,
+                        'numero' => '620000001',
                     ],
                     [
                         'key' => "virement:{$banque->id}",

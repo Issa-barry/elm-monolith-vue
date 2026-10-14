@@ -332,6 +332,41 @@ class FinancementAgenceServiceTest extends TestCase
         $this->assertSame(200_000.0, $row['remise_obligatoire']);
     }
 
+    /**
+     * Lot 3 de l'ADR 0027 : le Mobile Money encaissé pour une autre agence arrive sur le compte de
+     * l'agent, hors du disponible de l'agence — il n'est donc pas déduit une deuxième fois du disponible
+     * propre, mais reste intégralement à remettre.
+     */
+    public function test_le_mobile_money_du_encore_sur_le_compte_d_un_agent_n_est_pas_deduit_deux_fois(): void
+    {
+        $this->travelTo(Carbon::parse('2026-08-10'));
+        $this->validerSoldeOuverture(500_000);
+        $agent = $this->creerAgent($this->agence);
+        $compte = $this->creerCompteMobileMoneyActif($this->agence->id, $agent->id);
+
+        $autre = Site::create(['organization_id' => $this->org->id, 'nom' => 'Cba', 'type' => 'usine', 'localisation' => 'Cba']);
+        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'site_id' => $autre->id, 'statut' => 'livree', 'total_commande' => 200_000]);
+        $facture = FactureVente::factory()->create(['organization_id' => $this->org->id, 'commande_vente_id' => $commande->id, 'site_id' => $autre->id, 'montant_net' => 200_000]);
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'site_encaissement_id' => $this->agence->id,
+            'montant' => 200_000,
+            'date_encaissement' => '2026-08-03',
+            'mode_paiement' => 'mobile_money',
+            'operateur_mobile_money' => 'orange_money',
+            'compte_tresorerie_id' => $compte->id,
+            'reference_paiement' => 'OM-CBA-1',
+            'created_by' => $agent->id,
+        ]);
+
+        $row = collect($this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1'))->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame(500_000.0, $row['disponible'], 'le compte de l\'agent n\'est pas dans le disponible');
+        $this->assertSame(0.0, $row['fonds_autres_agences'], 'le Mobile Money dû est encore chez l\'agent');
+        $this->assertSame(500_000.0, $row['disponible_propre']);
+        $this->assertSame(200_000.0, $row['remise_obligatoire'], 'mais il reste entièrement à remettre');
+    }
+
     /** Les obligations des mois précédents encore impayées sont conservées avant toute remise. */
     public function test_les_obligations_impayees_des_mois_precedents_sont_conservees(): void
     {

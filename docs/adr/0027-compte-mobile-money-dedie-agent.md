@@ -1,8 +1,8 @@
 # ADR 0027 — Compte Mobile Money dédié à l'agent et transfert vers l'agence
 
 - **Date** : 2026-10-13
-- **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13, lot 2 livré le
-  2026-10-14** ; lots 3 et 4 non développés, chacun après validation du précédent
+- **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13, lots 2 et 3
+  livrés le 2026-10-14** ; lot 4 non développé
 - **Périmètre** : encaissements de vente, supports de trésorerie, mouvements de fonds, financement
   et remises des agences, rapport d'activité
 - **Amendera, à la livraison du lot concerné** : [ADR 0005](0005-moyens-de-paiement-derives-des-supports.md)
@@ -163,6 +163,18 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
 - **Lot 3 — bascule de l'encaissement** (point 2) : séparation des listes encaissement /
   décaissement, adaptation du calcul de remise (ADR 0016 point 4 : distinguer, par mode, ce qui est
   encore chez les agents), tests et jeu de données E2E.
+  **Livré le 2026-10-14**, engagé à la demande expresse de l'utilisateur (« on ne doit plus encaisser
+  directement sur le compte OM de l'agence ») :
+  - `MoyensEncaissementResolver` : listes d'encaissement propres à l'utilisateur
+    (`*PourEncaisseur`), listes de l'agence conservées pour les paiements sortants ;
+  - `SaisieEncaissementVente` (vente et acompte) refuse tout compte qui n'est pas un compte Mobile
+    Money actif de l'utilisateur dans l'agence d'encaissement, avec un message explicite ; il refuse
+    aussi une référence déjà utilisée par un transfert ;
+  - calcul de remise : le Mobile Money dû à d'autres agences et encore sur les comptes des agents
+    n'est plus déduit une deuxième fois du disponible ;
+  - annulation exceptionnelle : le blocage « fonds déjà sortis » vaut aussi pour le compte de l'agent ;
+  - **non fait** : jeu de données E2E (aucun compte d'agent n'est créé dans les bases de l'utilisateur,
+    qui les crée depuis l'écran) ; historique non reclassé.
 - **Lot 4 — transfert direct** (point 5) et rapports : fiche du compte Mobile Money, « Ma
   situation », rapport d'activité.
 
@@ -183,7 +195,5 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
 
 ## Points à préciser au lot concerné
 
-- Lot 3 : refuser un encaissement Mobile Money dont la référence est déjà celle d'un transfert
-  (sens inverse du contrôle livré au lot 2).
 - Lot 4 : nom de la permission et rôles qui la reçoivent (ADR 0011) ; rattachement des
   encaissements d'une autre agence au transfert direct.
