@@ -15,6 +15,7 @@ use App\Services\PhoneCountryInfo;
 use App\Services\Rh\EmployeAffectationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -54,8 +55,9 @@ class EmployeController extends Controller
      * `$employe->personne->update()` sur la contrainte unique (organization_id,
      * telephone_normalise) avec une QueryException brute (500) plutôt qu'une erreur de formulaire
      * — cf. personnes table. Pas de garde équivalente côté store() : Personne::resoudreOuCreer()
-     * gère déjà ce cas en RATTACHANT la Personne existante (comportement intentionnel déjà en
-     * place, une même personne pouvant cumuler plusieurs rôles), jamais en le rejetant.
+     * gère déjà ce cas en RATTACHANT la Personne existante (une même personne pouvant cumuler
+     * plusieurs rôles), seul un second Employe sur cette Personne est rejeté
+     * (cf. assertPasDejaEmploye()).
      */
     private function assertTelephoneUniqueInOrg(string $telephone, string $orgId, string $ignorePersonneId): void
     {
@@ -165,6 +167,9 @@ class EmployeController extends Controller
             return;
         }
 
+        // Même forme que Personne::setEmailAttribute() — ne pas dépendre de la collation SGBD.
+        $email = strtolower(trim($email));
+
         $exists = Employe::where('organization_id', $orgId)
             ->whereHas('personne', fn ($q) => $q->where('email', $email))
             ->when($ignoreEmployeId, fn ($q) => $q->where('id', '!=', $ignoreEmployeId))
@@ -174,6 +179,44 @@ class EmployeController extends Controller
             throw ValidationException::withMessages([
                 'email' => 'Cette adresse e-mail est déjà utilisée.',
             ]);
+        }
+    }
+
+    /**
+     * Une Personne porte au plus un Employe actif (Personne::employe() est un hasOne, et
+     * AccountValidationService rattache le compte au premier trouvé) : un second dossier RH
+     * dédoublerait la paie et l'historique d'affectation. Un employé supprimé (soft delete)
+     * ne bloque pas une réembauche.
+     */
+    private function assertPasDejaEmploye(Personne $personne, string $orgId): void
+    {
+        $existant = Employe::where('organization_id', $orgId)
+            ->where('personne_id', $personne->id)
+            ->first();
+
+        if ($existant !== null) {
+            throw ValidationException::withMessages([
+                'telephone' => "Cette personne est déjà enregistrée comme employé ({$existant->nom_complet}, matricule {$existant->matricule}).",
+            ]);
+        }
+    }
+
+    /**
+     * Personne réutilisée depuis un autre rôle (livreur créé au seul téléphone, client avec
+     * nom_complet uniquement...) : on complète seulement les champs vides avec la saisie RH,
+     * jamais d'écrasement d'une valeur déjà connue — l'employé n'existerait sinon que par un
+     * nom vide.
+     */
+    private function completerIdentiteManquante(Personne $personne, array $identite): void
+    {
+        $manquants = array_filter(
+            $identite,
+            fn ($valeur, $champ) => filled($valeur) && blank($personne->getAttribute($champ)),
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        if ($manquants !== []) {
+            $personne->update($manquants);
         }
     }
 
@@ -190,7 +233,7 @@ class EmployeController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'telephone' => 'nullable|string|max:50',
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
-            'site_id' => 'nullable|exists:sites,id',
+            'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
             'statut' => ['required', Rule::in(StatutEmploye::values())],
         ], $this->messages());
@@ -199,34 +242,46 @@ class EmployeController extends Controller
 
         $telephoneInfo = filled($data['telephone'] ?? null) ? $this->resolveTelephone($data['telephone']) : null;
 
-        $matricule = app(MatriculeService::class)->generate($orgId, Employe::class);
-
-        $personne = Personne::resoudreOuCreer($orgId, [
+        $identite = [
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
             'email' => $data['email'] ?? null,
-            'telephone' => $telephoneInfo['telephone'] ?? null,
-            'code_pays' => $telephoneInfo['code_pays'] ?? null,
-            'pays' => $telephoneInfo['pays'] ?? null,
-            'code_phone_pays' => $telephoneInfo['code_phone_pays'] ?? null,
-        ]);
+        ];
 
-        $employe = Employe::create([
-            'organization_id' => $orgId,
-            'personne_id' => $personne->id,
-            'matricule' => $matricule,
-            'type_employe' => $data['type_employe'],
-            'statut' => $data['statut'],
-        ]);
+        $employe = DB::transaction(function () use ($orgId, $data, $identite, $telephoneInfo) {
+            $personne = Personne::resoudreOuCreer($orgId, [
+                ...$identite,
+                'telephone' => $telephoneInfo['telephone'] ?? null,
+                'code_pays' => $telephoneInfo['code_pays'] ?? null,
+                'pays' => $telephoneInfo['pays'] ?? null,
+                'code_phone_pays' => $telephoneInfo['code_phone_pays'] ?? null,
+            ]);
 
-        // Le site/la fonction passent TOUJOURS par EmployeAffectationService — jamais une écriture
-        // directe de employes.site_id ici, sans quoi le cache et l'historique divergeraient dès la
-        // création (cf. plan §2).
-        $site = isset($data['site_id']) ? Site::find($data['site_id']) : null;
-        $fonction = isset($data['fonction_rh_id']) ? FonctionRh::find($data['fonction_rh_id']) : null;
-        if ($site !== null) {
-            app(EmployeAffectationService::class)->definir($employe, $site, $fonction, auth()->user());
-        }
+            // Verrou sur la Personne : deux créations simultanées avec le même téléphone ne
+            // peuvent pas toutes les deux passer assertPasDejaEmploye().
+            $personne = Personne::whereKey($personne->id)->lockForUpdate()->firstOrFail();
+            $this->assertPasDejaEmploye($personne, $orgId);
+            $this->completerIdentiteManquante($personne, $identite);
+
+            $employe = Employe::create([
+                'organization_id' => $orgId,
+                'personne_id' => $personne->id,
+                'matricule' => app(MatriculeService::class)->generate($orgId, Employe::class),
+                'type_employe' => $data['type_employe'],
+                'statut' => $data['statut'],
+            ]);
+
+            // Le site/la fonction passent TOUJOURS par EmployeAffectationService — jamais une
+            // écriture directe de employes.site_id ici, sans quoi le cache et l'historique
+            // divergeraient dès la création (cf. plan §2).
+            $site = isset($data['site_id']) ? Site::find($data['site_id']) : null;
+            $fonction = isset($data['fonction_rh_id']) ? FonctionRh::find($data['fonction_rh_id']) : null;
+            if ($site !== null) {
+                app(EmployeAffectationService::class)->definir($employe, $site, $fonction, auth()->user());
+            }
+
+            return $employe;
+        });
 
         return redirect()->route('employes.edit', $employe)
             ->with('success', "{$employe->nom_complet} a été créé avec succès.");
@@ -304,7 +359,7 @@ class EmployeController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'telephone' => 'nullable|string|max:50',
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
-            'site_id' => 'nullable|exists:sites,id',
+            'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
             'statut' => ['required', Rule::in(StatutEmploye::values())],
         ], $this->messages());
@@ -449,6 +504,7 @@ class EmployeController extends Controller
             'type_employe.in' => 'Type d\'employé invalide.',
             'statut.required' => 'Le statut est obligatoire.',
             'statut.in' => 'Statut invalide.',
+            'site_id.exists' => 'Site invalide.',
         ];
     }
 }
