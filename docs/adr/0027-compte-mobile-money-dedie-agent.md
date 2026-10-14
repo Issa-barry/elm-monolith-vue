@@ -1,8 +1,8 @@
 # ADR 0027 — Compte Mobile Money dédié à l'agent et transfert vers l'agence
 
 - **Date** : 2026-10-13
-- **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13** ; lots 2 à 4
-  non développés, chacun après validation du précédent
+- **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13, lot 2 livré le
+  2026-10-14** ; lots 3 et 4 non développés, chacun après validation du précédent
 - **Périmètre** : encaissements de vente, supports de trésorerie, mouvements de fonds, financement
   et remises des agences, rapport d'activité
 - **Amendera, à la livraison du lot concerné** : [ADR 0005](0005-moyens-de-paiement-derives-des-supports.md)
@@ -147,6 +147,18 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
   - détail et tableau des effets : [data-dictionary-compta.md](../data-dictionary-compta.md),
     « Compte Mobile Money dédié à un agent ».
 - **Lot 2 — transfert agent → agence** (point 3) avec les frais (point 4).
+  **Livré le 2026-10-14** :
+  - nature `transfert_mobile_money`, `MouvementFondsService::transfererMobileMoneyAgent()`, bouton
+    « Transférer à l'agence » de l'écran Supports ;
+  - colonnes `mouvements_fonds.frais` et `cle_reference_transfert` (index unique) ; compte de
+    charge 631800 et mapping `frais_transfert_fonds` ajoutés au plan par défaut et aux
+    organisations existantes ;
+  - les frais ont leur propre pièce comptable : un retour de fonds rend le montant, pas les frais ;
+  - la référence d'un transfert ne peut pas être celle d'un encaissement Mobile Money déjà
+    enregistré. Le contrôle inverse (un encaissement reprenant la référence d'un transfert) n'est
+    pas fait : il toucherait le circuit d'encaissement, à voir au lot 3 ;
+  - détail : [data-dictionary-compta.md](../data-dictionary-compta.md), « Transfert vers le
+    Mobile Money de l'agence ».
 - **Préparation en production** : créer et valider les comptes des agents.
 - **Lot 3 — bascule de l'encaissement** (point 2) : séparation des listes encaissement /
   décaissement, adaptation du calcul de remise (ADR 0016 point 4 : distinguer, par mode, ce qui est
@@ -171,9 +183,7 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
 
 ## Points à préciser au lot concerné
 
-- Lot 2 : un compte ne se désactive aujourd'hui que vide ; ajouter le blocage « transfert en cours »,
-  comme pour les versements de caisse.
-- Lot 2 : contrôle croisé de la référence d'un transfert avec les références d'encaissement
-  (ADR 0014).
+- Lot 3 : refuser un encaissement Mobile Money dont la référence est déjà celle d'un transfert
+  (sens inverse du contrôle livré au lot 2).
 - Lot 4 : nom de la permission et rôles qui la reçoivent (ADR 0011) ; rattachement des
   encaissements d'une autre agence au transfert direct.

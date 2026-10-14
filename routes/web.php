@@ -84,6 +84,7 @@ use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
+use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
@@ -877,6 +878,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
                 Route::post('supports/{compteTresorerie}/approvisionner', ApprovisionnerCaisseAgentController::class)->name('supports.approvisionner');
+                Route::post('supports/{compteTresorerie}/transferer', TransfererMobileMoneyAgentController::class)->name('supports.transferer');
 
                 // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
                 // et leur règlement (création + envoi en une opération).

@@ -305,6 +305,18 @@ class CaisseAgentService
             ]);
         }
 
+        // Même raison pour un compte Mobile Money (ADR 0027) : un transfert retourné le recréditerait.
+        $transfertEnCours = MouvementFonds::where('organization_id', $support->organization_id)
+            ->where('compte_tresorerie_origine_id', $support->id)
+            ->where('nature', NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value)
+            ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value])
+            ->exists();
+        if ($transfertEnCours) {
+            throw ValidationException::withMessages([
+                'actif' => 'Un transfert de ce compte est en cours (envoyé ou contesté) : attendez sa réception ou son retour avant de le désactiver.',
+            ]);
+        }
+
         // Sens inverse (ADR 0018) : un approvisionnement en attente créditerait une caisse
         // désactivée à sa confirmation.
         $approvisionnementEnCours = MouvementFonds::where('organization_id', $support->organization_id)

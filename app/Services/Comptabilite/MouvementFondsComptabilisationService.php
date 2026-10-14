@@ -70,6 +70,41 @@ class MouvementFondsComptabilisationService
         );
     }
 
+    /**
+     * Frais de transfert facturés par l'opérateur (ADR 0027) : charge de l'agence qui envoie, payée
+     * par le support d'origine en plus du montant transféré. Pièce DISTINCTE de l'envoi : si les
+     * fonds reviennent (contestation puis retour), l'envoi est contrepassé mais les frais, eux,
+     * restent dus à l'opérateur. Sans frais, aucune pièce.
+     */
+    public function comptabiliserFrais(MouvementFonds $mouvement): ?PieceComptable
+    {
+        $frais = (float) ($mouvement->frais ?? 0);
+        if ($frais <= 0) {
+            return null;
+        }
+
+        $origine = $mouvement->compteTresorerieOrigine;
+
+        return $this->ecritures->comptabiliser(
+            evenement: EvenementComptable::FRAIS_TRANSFERT_FONDS,
+            source: $mouvement,
+            organizationId: $mouvement->organization_id,
+            dateComptable: Carbon::parse($mouvement->date_envoi ?? now()),
+            libelle: "Mouvement de fonds {$mouvement->reference} — frais de transfert",
+            lignes: [
+                ['role' => 'charge_frais_transfert', 'sens' => 'debit', 'montant' => $frais],
+                [
+                    'compte_comptable_id' => $origine->compte_comptable_id,
+                    'sens' => 'credit',
+                    'montant' => $frais,
+                    'libelle' => "Frais de transfert {$mouvement->reference} — {$origine->libelle}",
+                ],
+            ],
+            siteId: $mouvement->site_origine_id,
+            createdBy: $mouvement->sent_by,
+        );
+    }
+
     public function comptabiliserReception(MouvementFonds $mouvement): PieceComptable
     {
         $destination = $mouvement->compteTresorerieDestination;

@@ -563,10 +563,10 @@ réutiliser, pas recalculer.
 
 ## Compte Mobile Money dédié à un agent (ADR 0027)
 
-Lot 1 de l'ADR [0027](adr/0027-compte-mobile-money-dedie-agent.md), livré le 2026-10-13 : le
-compte existe, se crée, se valide et s'affiche. **Rien ne l'alimente encore** : l'encaissement
-Mobile Money arrive toujours sur le compte de l'agence (ADR 0005), et le transfert de l'agent vers
-l'agence n'existe pas — ce sont les lots suivants.
+ADR [0027](adr/0027-compte-mobile-money-dedie-agent.md). Lot 1 (2026-10-13) : le compte existe, se
+crée, se valide et s'affiche. Lot 2 (2026-10-14) : il se transfère au Mobile Money de l'agence (cf.
+« Transfert vers le Mobile Money de l'agence » ci-dessous). **Rien ne l'alimente encore** :
+l'encaissement Mobile Money arrive toujours sur le compte de l'agence (ADR 0005) — c'est le lot 3.
 
 **Règles garanties côté serveur** (`CaisseAgentService::creerCompteMobileMoney()`) :
 
@@ -630,6 +630,62 @@ Money dédié à un agent » (`tresorerie-financement-flow.spec.ts`) et
 `CompteMobileMoneyAgentConcurrenceTest` — créations réellement simultanées, un processus PHP et une
 connexion MySQL par création, sur la base dédiée `elm_monolithe_concurrency_test` (il se saute si
 elle est absente, comme `VarianteStockConcurrenceTest`).
+
+### Transfert vers le Mobile Money de l'agence (ADR 0027, lot 2)
+
+L'agent a transféré, sur son téléphone, l'argent de son portefeuille vers celui de son agence.
+L'application **constate** ce transfert : elle ne l'exécute pas et ne le vérifie pas auprès de
+l'opérateur — la confirmation de réception par l'agence est le contrôle.
+
+- **Mouvement de fonds de nature `transfert_mobile_money`** (« Transfert Mobile Money »), créé et
+  envoyé en une seule action (`MouvementFondsService::transfererMobileMoneyAgent()`), même circuit
+  que le versement de caisse : Envoyé → Reçu, ou Contesté → Retour confirmé.
+- **Origine** : compte Mobile Money dédié **actif**. **Destination** : compte Mobile Money **de
+  l'agence**, actif, de la même agence et du **même opérateur**, fixé à l'envoi (la réception le
+  confirme sans le choisir).
+- **Montant et frais** — une seule formulation, celle de l'ADR 0016 point 6 :
+
+  | Champ | Sens |
+  |---|---|
+  | `montant` | ce que l'agence reçoit |
+  | `frais` | frais de l'opérateur, **en sus**, charge de l'agence de l'agent |
+  | sortie du compte de l'agent | `montant` + `frais` (`MouvementFonds::sortieTotale()`) |
+
+  Les frais se saisissent **à chaque transfert** : 0 est accepté, l'absence de saisie est refusée.
+  Le solde du compte de l'agent doit couvrir montant + frais (contrôle sous verrou, à l'envoi).
+- **Référence de la transaction** obligatoire, normalisée (espaces retirés, majuscules) et **unique
+  dans l'organisation** parmi les transferts : colonne technique
+  `mouvements_fonds.cle_reference_transfert` (`organisation|RÉFÉRENCE`) + index unique, comme
+  l'ADR 0014. Elle ne peut pas non plus être celle d'un encaissement Mobile Money déjà enregistré.
+  Un transfert retourné garde sa référence : elle ne se réutilise pas.
+- **Écritures** (site de l'agence) :
+
+  | Moment | Pièce | Débit | Crédit |
+  |---|---|---|---|
+  | Envoi | `mouvement_fonds_envoye` | 588000 transit (montant) | sous-compte de l'agent (montant) |
+  | Envoi, si frais > 0 | `frais_transfert_fonds` | charge `charge_frais_transfert` — 631800 (frais) | sous-compte de l'agent (frais) |
+  | Réception | `mouvement_fonds_recu` | compte Mobile Money de l'agence (montant) | 588000 transit (montant) |
+
+  Les frais ont leur **propre pièce** : un transfert contesté puis retourné contrepasse l'envoi (le
+  montant revient sur le compte de l'agent), jamais les frais, qui restent une charge. Le compte
+  631800 « Frais de transfert de fonds » est provisoire, à valider par le comptable ; il se
+  reparamètre dans `compta_mappings` (événement `frais_transfert_fonds`, rôle
+  `charge_frais_transfert`).
+- **Droits**, ceux du versement de caisse : enregistrer = `tresorerie.verser` sur son propre
+  compte, ou avec `tresorerie.envoyer` celui d'un autre agent de l'agence
+  (`CompteTresoreriePolicy::transfererMobileMoney()`) ; confirmer = `tresorerie.recevoir` sur
+  l'agence, l'envoyeur compris (« Confirmé par l'expéditeur ») ; contester = `tresorerie.rejeter` ;
+  constater le retour = `tresorerie.confirmer_retour`.
+- **Ne solde jamais une dette inter-agences** : aucun encaissement n'est rattaché au mouvement, et
+  la contrepartie est le transit, jamais la liaison 181000.
+- **Suivi** : tant qu'il n'est pas reçu, le montant est « En cours de transfert » sous le solde du
+  compte de l'agent (jamais additionné au solde) et compte dans le badge « Mouvements à confirmer »
+  de l'agence. Un compte ne se désactive pas pendant un transfert envoyé ou contesté.
+- **Écran** : Trésorerie → Supports → « Transférer à l'agence » sur la ligne du compte (indicateur
+  serveur `peut_transferer`) ; la liste des Mouvements affiche la référence et les frais.
+- **Migrations** : `2026_10_14_100000` (colonnes `frais` et `cle_reference_transfert`, facultatives)
+  et `2026_10_14_100100` (compte 631800 et mapping pour les organisations existantes).
+- **Tests** : `TransfertMobileMoneyAgentTest`.
 
 ## Notification — mouvements de fonds à confirmer
 

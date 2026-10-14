@@ -169,8 +169,9 @@ class TresorerieDisponibiliteService
     }
 
     /**
-     * Versements d'une caisse dédiée vers la caisse de l'agence (`interne_caisses`) ENVOYÉS mais pas
-     * encore reçus, par caisse source — information de SUIVI pour l'interface, jamais du solde : ce
+     * Versements d'une caisse dédiée vers la caisse de l'agence (`interne_caisses`) et transferts du
+     * compte Mobile Money d'un agent vers celui de l'agence (`transfert_mobile_money`, ADR 0027,
+     * montant hors frais) ENVOYÉS mais pas encore reçus, par support source — information de SUIVI pour l'interface, jamais du solde : ce
      * montant a déjà quitté la caisse de l'agent (débit du compte de transit 588000) et n'est pas
      * encore crédité à la caisse de l'agence, il n'est donc dans aucun solde de support. Lecture
      * seule des mouvements : aucun calcul comptable n'est modifié, le grand livre reste la source
@@ -189,7 +190,7 @@ class TresorerieDisponibiliteService
         $jour = ($date ?? now())->toDateString();
 
         return MouvementFonds::where('organization_id', $organizationId)
-            ->where('nature', NatureMouvementFonds::INTERNE_CAISSES->value)
+            ->whereIn('nature', [NatureMouvementFonds::INTERNE_CAISSES->value, NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value])
             ->whereNotNull('compte_tresorerie_origine_id')
             ->whereDate('date_envoi', '<=', $jour)
             ->where(fn ($q) => $q

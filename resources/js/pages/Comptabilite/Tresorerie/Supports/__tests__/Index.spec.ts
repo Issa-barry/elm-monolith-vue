@@ -119,7 +119,11 @@ const BROUILLON = compte({
     solde: 0,
 });
 
-const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
+const monter = (
+    comptes: CompteTresorerie[] = COMPTES,
+    filtre = false,
+    supplement: Record<string, unknown> = {},
+) =>
     shallowMount(SupportsIndex, {
         props: {
             comptes,
@@ -140,6 +144,7 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             comptes_mobile_money_agents_actifs: [],
             agents_filtre: [],
             comptes_comptables: [],
+            ...supplement,
         },
         global: {
             renderStubDefaultSlot: true,
@@ -959,5 +964,154 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         expect(
             valide.find('[data-testid="edit-solde-ouverture"]').exists(),
         ).toBe(false);
+    });
+});
+
+describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () => {
+    type Ouvrable = { ouvrirTransfert: (c: CompteTresorerie) => void };
+    type AvecFormulaire = { transfertForm: { reference_externe: string } };
+
+    const COMPTE_AGENT = compte({
+        id: 'c-om-agent',
+        libelle: 'Orange Money — Moussa sidibé',
+        type: 'mobile_money',
+        type_label: 'Mobile Money',
+        operateur_mobile_money: 'orange_money',
+        operateur_label: 'Orange Money',
+        nature: 'dediee',
+        agent: { id: 'u1', nom: 'Moussa sidibé' },
+        compte_numero: '561100001',
+        solde: 500_000,
+        peut_transferer: true,
+    });
+
+    const DESTINATIONS = [
+        {
+            id: 'd-om',
+            site_id: 's1',
+            libelle: 'Orange Money de Matoto',
+            numero: '611 00 00 00',
+            operateur_mobile_money: 'orange_money',
+        },
+        {
+            id: 'd-momo',
+            site_id: 's1',
+            libelle: 'MoMo de Matoto',
+            numero: null,
+            operateur_mobile_money: 'momo',
+        },
+        {
+            id: 'd-kouria',
+            site_id: 's2',
+            libelle: 'Orange Money de Kouria',
+            numero: null,
+            operateur_mobile_money: 'orange_money',
+        },
+    ];
+
+    const ouvrir = async () => {
+        const wrapper = monter([COMPTE_AGENT], false, {
+            destinations_transfert: DESTINATIONS,
+        });
+        (wrapper.vm as unknown as Ouvrable).ouvrirTransfert(COMPTE_AGENT);
+        await nextTick();
+
+        return wrapper;
+    };
+
+    const saisir = async (
+        wrapper: Awaited<ReturnType<typeof ouvrir>>,
+        testid: string,
+        valeur: string,
+    ) => {
+        const champ = wrapper.find(`[data-testid="${testid}"]`);
+        (champ.element as HTMLInputElement).value = valeur;
+        await champ.trigger('input');
+    };
+
+    const envoyer = (wrapper: Awaited<ReturnType<typeof ouvrir>>) =>
+        wrapper.find('[data-testid="transfert-envoyer"]');
+
+    beforeEach(() => {
+        etat.permissions = [];
+    });
+
+    it("propose « Transférer à l'agence » selon le seul indicateur serveur peut_transferer", () => {
+        const [agent, sans] = lignes(
+            monter([
+                COMPTE_AGENT,
+                compte({ ...COMPTE_AGENT, id: 'c-2', peut_transferer: false }),
+            ]),
+        );
+
+        expect(agent.find('[data-testid="support-transferer"]').exists()).toBe(
+            true,
+        );
+        expect(agent.find('[data-testid="support-verser"]').exists()).toBe(
+            false,
+        );
+        expect(sans.find('[data-testid="support-transferer"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it("ne propose que les comptes de l'agence du même opérateur, et présélectionne le seul possible", async () => {
+        const wrapper = await ouvrir();
+        const options = wrapper.findAll('#transfert-dest option');
+
+        expect(options.map((o) => o.attributes('value'))).toEqual(['', 'd-om']);
+        expect(options[1].text()).toContain('Orange Money de Matoto');
+        expect(options[1].text()).toContain('611 00 00 00');
+        expect(
+            (wrapper.find('#transfert-dest').element as HTMLSelectElement)
+                .value,
+        ).toBe('d-om');
+    });
+
+    it("exige les frais, même nuls, et la référence avant d'activer l'envoi", async () => {
+        const wrapper = await ouvrir();
+
+        await saisir(wrapper, 'transfert-montant', '495000');
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+
+        // Frais saisis à 0 : acceptés, mais la référence manque encore.
+        await saisir(wrapper, 'transfert-frais', '0');
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+
+        (
+            wrapper.vm as unknown as AvecFormulaire
+        ).transfertForm.reference_externe = 'OM-TR-001';
+        await nextTick();
+        expect(envoyer(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('montre ce qui sort du compte : montant reçu par l’agence plus frais', async () => {
+        const wrapper = await ouvrir();
+
+        await saisir(wrapper, 'transfert-montant', '495000');
+        await saisir(wrapper, 'transfert-frais', '5000');
+
+        expect(wrapper.find('[data-testid="transfert-sortie"]').text()).toMatch(
+            /500\s000/,
+        );
+        expect(
+            wrapper.find('[data-testid="transfert-depassement"]').exists(),
+        ).toBe(false);
+
+        await saisir(wrapper, 'transfert-frais', '5001');
+        expect(
+            wrapper.find('[data-testid="transfert-depassement"]').exists(),
+        ).toBe(true);
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('nomme « En cours de transfert » le montant envoyé par un compte Mobile Money', () => {
+        const ligne = lignes(
+            monter([compte({ ...COMPTE_AGENT, en_cours_versement: 300_000 })]),
+        )[0];
+
+        expect(
+            ligne.find('[data-testid="support-en-cours-versement"]').text(),
+        ).toContain('En cours de transfert');
     });
 });

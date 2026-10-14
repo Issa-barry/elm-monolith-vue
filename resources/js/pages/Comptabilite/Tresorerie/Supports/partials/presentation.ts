@@ -45,6 +45,8 @@ export interface CompteTresorerie {
     en_cours_versement: number;
     versements_en_cours: number;
     peut_verser: boolean;
+    /** Compte Mobile Money d'un agent pouvant être transféré à l'agence (ADR 0027) : permission, état, solde, destination. */
+    peut_transferer?: boolean;
     /**
      * Approvisionnements envoyés vers cette caisse d'agent, pas encore confirmés par l'agent (ADR
      * 0018) : sortis de la caisse de l'agence, pas encore dans `solde`. Jamais disponible.

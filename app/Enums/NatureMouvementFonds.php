@@ -37,6 +37,13 @@ enum NatureMouvementFonds: string
      */
     case DEPOT_BANQUE = 'depot_banque';
 
+    /**
+     * Transfert Mobile Money (ADR 0027) : le compte Mobile Money dédié d'un agent transfère vers le
+     * compte Mobile Money de son agence, même opérateur. Référence de transaction et frais
+     * obligatoires ; ne solde jamais une dette inter-agences.
+     */
+    case TRANSFERT_MOBILE_MONEY = 'transfert_mobile_money';
+
     public function label(): string
     {
         return match ($this) {
@@ -45,6 +52,7 @@ enum NatureMouvementFonds: string
             self::REGLEMENT_AGENCES => 'Règlement inter-agences',
             self::APPROVISIONNEMENT_CAISSE => 'Approvisionnement de caisse',
             self::DEPOT_BANQUE => 'Dépôt en banque',
+            self::TRANSFERT_MOBILE_MONEY => 'Transfert Mobile Money',
         };
     }
 

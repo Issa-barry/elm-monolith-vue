@@ -41,6 +41,9 @@ interface Mouvement {
     compte_destination: string | null;
     compte_destination_id: string | null;
     montant: number;
+    /** Frais de l'opérateur, en sus du montant (transfert Mobile Money, ADR 0027) — null ailleurs. */
+    frais?: number | null;
+    reference_externe?: string | null;
     statut: string;
     statut_label: string;
     date_envoi: string | null;
@@ -193,8 +196,18 @@ function estDepotBanque(m: Mouvement): boolean {
     return m.nature === 'depot_banque';
 }
 
+// Transfert du compte Mobile Money d'un agent vers celui de son agence (ADR 0027).
+function estTransfertMobileMoney(m: Mouvement): boolean {
+    return m.nature === 'transfert_mobile_money';
+}
+
 function entreCaisses(m: Mouvement): boolean {
-    return estVersement(m) || estApprovisionnement(m) || estDepotBanque(m);
+    return (
+        estVersement(m) ||
+        estApprovisionnement(m) ||
+        estDepotBanque(m) ||
+        estTransfertMobileMoney(m)
+    );
 }
 
 function dateFr(date: string): string {
@@ -498,6 +511,16 @@ function confirmerMotif() {
                                     }}
                                 </button>
                                 <div
+                                    v-if="
+                                        estTransfertMobileMoney(m) &&
+                                        m.reference_externe
+                                    "
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-reference-transfert"
+                                >
+                                    Réf. {{ m.reference_externe }}
+                                </div>
+                                <div
                                     v-if="m.commentaire"
                                     class="text-xs text-muted-foreground"
                                 >
@@ -532,6 +555,14 @@ function confirmerMotif() {
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(m.montant) }}
+                                <!-- Frais de l'opérateur : en sus du montant reçu, charge de l'agence qui envoie. -->
+                                <div
+                                    v-if="m.frais != null"
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-frais"
+                                >
+                                    Frais : {{ formatGNF(m.frais) }}
+                                </div>
                             </td>
                             <td
                                 class="px-4 py-3"
@@ -590,7 +621,8 @@ function confirmerMotif() {
                                 <div
                                     v-if="
                                         (estVersement(m) ||
-                                            estDepotBanque(m)) &&
+                                            estDepotBanque(m) ||
+                                            estTransfertMobileMoney(m)) &&
                                         m.statut === 'envoye'
                                     "
                                     class="mt-0.5 text-xs text-muted-foreground"

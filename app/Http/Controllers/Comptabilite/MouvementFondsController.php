@@ -121,6 +121,9 @@ class MouvementFondsController extends Controller
             'compte_destination' => $m->compteTresorerieDestination?->libelle,
             'compte_destination_id' => $m->compte_tresorerie_destination_id,
             'montant' => (float) $m->montant,
+            // Frais de l'opérateur, en sus du montant (transfert Mobile Money, ADR 0027) — null ailleurs.
+            'frais' => $m->frais !== null ? (float) $m->frais : null,
+            'reference_externe' => $m->reference_externe,
             'statut' => $m->statut->value,
             'statut_label' => $m->statut->label(),
             'date_envoi' => $m->date_envoi?->toDateString(),

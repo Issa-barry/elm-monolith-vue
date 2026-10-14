@@ -7,10 +7,12 @@ use App\Enums\StatutMouvementFonds;
 use App\Enums\TypeSupportTresorerie;
 use App\Exceptions\Tresorerie\TransitionMouvementFondsInvalideException;
 use App\Models\CompteTresorerie;
+use App\Models\EncaissementVente;
 use App\Models\MouvementFonds;
 use App\Models\User;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\MouvementFondsComptabilisationService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -52,12 +54,19 @@ use Illuminate\Validation\ValidationException;
  * l'agence vers une banque de la même agence, même workflow et mêmes écritures que le versement,
  * confirmé par permission (`tresorerie.recevoir`), l'envoyeur compris.
  *
+ * Transfert Mobile Money (`transfert_mobile_money`, ADR 0027, cf. transfererMobileMoneyAgent()) : le
+ * compte Mobile Money dédié d'un agent vers le compte Mobile Money de son agence, même opérateur.
+ * Même workflow et mêmes droits que le versement de caisse ; référence de transaction obligatoire et
+ * unique, frais de l'opérateur saisis à chaque transfert et comptabilisés à part de l'envoi.
+ *
  * Solde suffisant contrôlé sous verrou À L'ENVOI, pour TOUTES les natures (garantirSoldeSuffisant(),
  * revue produit du 22/09/2026) : une caisse dont le solde disponible est nul ou insuffisant ne
  * peut envoyer aucun montant.
  */
 class MouvementFondsService
 {
+    public const MESSAGE_REFERENCE_TRANSFERT_UTILISEE = 'Cette référence de transaction a déjà été utilisée pour un autre transfert.';
+
     public function __construct(
         private readonly MouvementFondsComptabilisationService $comptabilisation,
         private readonly TresorerieDisponibiliteService $disponibilite,
@@ -296,6 +305,126 @@ class MouvementFondsService
         });
     }
 
+    /**
+     * Transfert du compte Mobile Money dédié d'un agent vers le compte Mobile Money de son agence
+     * (ADR 0027) : crée le mouvement (nature `transfert_mobile_money`) ET l'envoie en une seule
+     * opération, comme verserCaisseAgent(). L'application CONSTATE un transfert fait sur le
+     * téléphone : elle ne l'exécute pas, et c'est la confirmation de réception par l'agence qui le
+     * contrôle. Ne touche jamais une dette inter-agences.
+     *
+     * Règles garanties ici, sous verrou sur le compte source :
+     *  - source = compte Mobile Money dédié ACTIF — jamais une caisse, ni un compte de l'agence ;
+     *  - destination = compte Mobile Money d'AGENCE actif, de la même agence et du MÊME opérateur,
+     *    fixée à l'envoi ;
+     *  - `$montant` = ce que l'agence reçoit ; `$frais` = frais de l'opérateur, en sus, toujours
+     *    renseignés (0 accepté) ; le compte de l'agent sort montant + frais, et son solde doit les
+     *    couvrir (envoyer()) ;
+     *  - référence de transaction obligatoire, unique dans l'organisation parmi les transferts
+     *    (clé + index unique, comme ADR 0014) et jamais celle d'un encaissement Mobile Money.
+     *
+     * @param  array{justificatif_path?:?string}  $pieces
+     */
+    public function transfererMobileMoneyAgent(string $organizationId, CompteTresorerie $source, string $destinationId, float $montant, float $frais, ?string $reference, ?string $motif, string $userId, array $pieces = []): MouvementFonds
+    {
+        return DB::transaction(function () use ($organizationId, $source, $destinationId, $montant, $frais, $reference, $motif, $userId, $pieces) {
+            $compte = CompteTresorerie::forOrg($organizationId)->whereKey($source->id)->lockForUpdate()->first();
+
+            if (! $compte || ! $compte->isMobileMoneyDedie()) {
+                throw ValidationException::withMessages([
+                    'compte_tresorerie_id' => 'Seul le compte Mobile Money dédié à un agent peut être transféré au Mobile Money de l\'agence.',
+                ]);
+            }
+            if (! $compte->actif) {
+                throw ValidationException::withMessages([
+                    'compte_tresorerie_id' => $this->supportInactif($compte, 'aucun transfert ne peut en partir'),
+                ]);
+            }
+
+            $destination = CompteTresorerie::forOrg($organizationId)->find($destinationId);
+            $this->verifierDestinationDuTransfertMobileMoney($compte, $destination);
+
+            if ($montant <= 0) {
+                throw ValidationException::withMessages(['montant' => 'Le montant du transfert doit être positif.']);
+            }
+            if ($frais < 0) {
+                throw ValidationException::withMessages(['frais' => 'Les frais ne peuvent pas être négatifs : saisissez 0 si l\'opérateur n\'en a pas facturé.']);
+            }
+
+            $reference = EncaissementVente::normaliserReference($reference);
+            $this->garantirReferenceDeTransfertLibre($organizationId, $reference);
+
+            try {
+                $mouvement = MouvementFonds::create([
+                    'organization_id' => $organizationId,
+                    'nature' => NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value,
+                    'site_origine_id' => $compte->site_id,
+                    'site_destination_id' => $compte->site_id,
+                    'compte_tresorerie_origine_id' => $compte->id,
+                    'compte_tresorerie_destination_id' => $destination->id,
+                    'montant' => $montant,
+                    'frais' => $frais,
+                    'moyen_transfert' => 'mobile_money',
+                    'reference_externe' => $reference,
+                    'cle_reference_transfert' => MouvementFonds::cleReferenceTransfert($organizationId, $reference),
+                    'justificatif_path' => $pieces['justificatif_path'] ?? null,
+                    'commentaire' => $motif !== null && trim($motif) !== '' ? trim($motif) : null,
+                    'statut' => StatutMouvementFonds::BROUILLON->value,
+                    'created_by' => $userId,
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                // Deux saisies simultanées de la même référence : l'index unique tranche.
+                throw ValidationException::withMessages(['reference_externe' => self::MESSAGE_REFERENCE_TRANSFERT_UTILISEE]);
+            }
+
+            return $this->envoyer($mouvement, $userId);
+        });
+    }
+
+    private function verifierDestinationDuTransfertMobileMoney(CompteTresorerie $source, ?CompteTresorerie $destination): void
+    {
+        $champ = 'compte_tresorerie_destination_id';
+
+        if (! $destination) {
+            throw ValidationException::withMessages([$champ => 'Compte Mobile Money de destination introuvable.']);
+        }
+        if ($destination->isDediee() || $destination->type !== TypeSupportTresorerie::MOBILE_MONEY) {
+            throw ValidationException::withMessages([$champ => "« {$destination->libelle} » n'est pas un compte Mobile Money de l'agence : un transfert va vers le Mobile Money de l'agence."]);
+        }
+        if (! $destination->actif) {
+            throw ValidationException::withMessages([$champ => $this->supportInactif($destination)]);
+        }
+        if ($destination->site_id !== $source->site_id) {
+            throw ValidationException::withMessages([$champ => 'Le compte de destination doit appartenir à la même agence que le compte de l\'agent.']);
+        }
+        if ($destination->operateur_mobile_money !== $source->operateur_mobile_money) {
+            throw ValidationException::withMessages([$champ => "« {$destination->libelle} » n'est pas un compte {$source->operateur_mobile_money?->label()} : un transfert se fait entre deux comptes du même opérateur."]);
+        }
+    }
+
+    /**
+     * Une référence de transaction ne justifie qu'un transfert, et jamais un encaissement déjà
+     * enregistré (une même preuve ne sert qu'une fois, ADR 0014). Ce contrôle donne le message ;
+     * l'index unique de `cle_reference_transfert` tranche entre deux saisies simultanées.
+     */
+    private function garantirReferenceDeTransfertLibre(string $organizationId, ?string $reference): void
+    {
+        $cle = MouvementFonds::cleReferenceTransfert($organizationId, $reference);
+        if ($cle === null) {
+            throw ValidationException::withMessages(['reference_externe' => 'La référence de la transaction est obligatoire.']);
+        }
+
+        if (MouvementFonds::where('cle_reference_transfert', $cle)->exists()) {
+            throw ValidationException::withMessages(['reference_externe' => self::MESSAGE_REFERENCE_TRANSFERT_UTILISEE]);
+        }
+
+        $facture = EncaissementVente::factureUtilisantReferenceMobileMoney($organizationId, $reference);
+        if ($facture !== null) {
+            throw ValidationException::withMessages([
+                'reference_externe' => "Cette référence est déjà celle d'un encaissement (facture {$facture}) : saisissez la référence du transfert vers l'agence.",
+            ]);
+        }
+    }
+
     private function verifierDestinationDuDepotEnBanque(CompteTresorerie $source, ?CompteTresorerie $destination): void
     {
         $champ = 'compte_tresorerie_destination_id';
@@ -381,9 +510,10 @@ class MouvementFondsService
             ]);
         }
 
+        // Frais compris : ils sortent du même support, en plus du montant transféré.
         $this->disponibilite->garantirSoldeSuffisant(
             $source->id,
-            (float) $mouvement->montant,
+            $mouvement->sortieTotale(),
             Carbon::instance($dateEnvoi ?? now()),
         );
     }
@@ -452,6 +582,7 @@ class MouvementFondsService
 
             $piece = $this->comptabilisation->comptabiliserEnvoi($verrouille->fresh());
             $verrouille->update(['piece_comptable_envoi_id' => $piece->id]);
+            $this->comptabilisation->comptabiliserFrais($verrouille->fresh());
 
             return $verrouille->fresh();
         });

@@ -149,11 +149,12 @@ class HandleInertiaRequests extends Middleware
 
         // Mouvements entre agences ET règlements inter-agences (ADR 0012) : l'agence destinataire doit
         // confirmer la réception des deux. Dépôts en banque (ADR 0026) : la banque n'est créditée
-        // qu'à la confirmation, par l'agence elle-même. Les versements de caisse (même agence)
+        // qu'à la confirmation, par l'agence elle-même. Transferts Mobile Money d'un agent (ADR 0027) :
+        // le compte de l'agence n'est crédité qu'à sa confirmation. Les versements de caisse (même agence)
         // restent à part, de même que les approvisionnements, réservés à l'agent
         // (approvisionnementsAConfirmer()).
         $query = MouvementFonds::where('organization_id', $user->organization_id)
-            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value, NatureMouvementFonds::DEPOT_BANQUE->value])
+            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value, NatureMouvementFonds::DEPOT_BANQUE->value, NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value])
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
 
         if (! $user->isAdmin()) {

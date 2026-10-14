@@ -75,6 +75,13 @@ const props = defineProps<{
     type_options: { value: string; label: string }[];
     operateur_options: { value: string; label: string }[];
     destinations_versement: { id: string; site_id: string; libelle: string }[];
+    destinations_transfert?: {
+        id: string;
+        site_id: string;
+        libelle: string;
+        numero: string | null;
+        operateur_mobile_money: string;
+    }[];
     destinations_approvisionnement: {
         id: string;
         site_id: string;
@@ -724,6 +731,99 @@ function envoyerApprovisionnement() {
     );
 }
 
+// ── Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) ──
+// L'agent a fait le transfert sur son téléphone : l'écran le CONSTATE (montant reçu par l'agence,
+// frais de l'opérateur en sus, référence de la transaction). Le compte de l'agent baisse tout de
+// suite du montant et des frais ; celui de l'agence n'augmente qu'à sa confirmation de réception.
+
+const transfertCible = ref<CompteTresorerie | null>(null);
+const transfertVisible = computed({
+    get: () => transfertCible.value !== null,
+    set: (visible: boolean) => {
+        if (!visible) transfertCible.value = null;
+    },
+});
+const transfertForm = useForm({
+    compte_tresorerie_destination_id: '',
+    montant: '',
+    // Vide tant que rien n'est saisi : les frais se saisissent à chaque transfert, 0 compris.
+    frais: '',
+    reference_externe: '',
+    motif: '',
+});
+const transfertMontantDisplay = ref('');
+const transfertFraisDisplay = ref('');
+const erreurCompteTransfert = computed(
+    () =>
+        (transfertForm.errors as Record<string, string | undefined>)
+            .compte_tresorerie_id,
+);
+
+// Comptes Mobile Money de la même agence et du même opérateur.
+const destinationsDuTransfert = computed(() =>
+    (props.destinations_transfert ?? []).filter(
+        (d) =>
+            d.site_id === transfertCible.value?.site_id &&
+            d.operateur_mobile_money ===
+                transfertCible.value?.operateur_mobile_money,
+    ),
+);
+const transfertMontant = computed(() => Number(transfertForm.montant || 0));
+const transfertFrais = computed(() => Number(transfertForm.frais || 0));
+const transfertSortie = computed(
+    () => transfertMontant.value + transfertFrais.value,
+);
+const soldeApresTransfert = computed(
+    () => (transfertCible.value?.solde ?? 0) - transfertSortie.value,
+);
+const transfertInvalide = computed(
+    () =>
+        transfertMontant.value <= 0 ||
+        transfertForm.frais === '' ||
+        soldeApresTransfert.value < 0 ||
+        !transfertForm.compte_tresorerie_destination_id ||
+        transfertForm.reference_externe.trim() === '',
+);
+
+function ouvrirTransfert(compte: CompteTresorerie) {
+    transfertForm.reset();
+    transfertForm.clearErrors();
+    transfertMontantDisplay.value = '';
+    transfertFraisDisplay.value = '';
+    transfertCible.value = compte;
+    if (destinationsDuTransfert.value.length === 1) {
+        transfertForm.compte_tresorerie_destination_id =
+            destinationsDuTransfert.value[0].id;
+    }
+}
+
+function handleTransfertMontantInput(e: Event) {
+    const { brut, affiche } = lireMontantSaisi(e);
+    transfertForm.montant = brut;
+    transfertMontantDisplay.value = affiche;
+}
+
+function handleTransfertFraisInput(e: Event) {
+    const { brut, affiche } = lireMontantSaisi(e);
+    transfertForm.frais = brut;
+    transfertFraisDisplay.value = affiche;
+}
+
+function envoyerTransfert() {
+    if (!transfertCible.value || transfertInvalide.value) return;
+
+    transfertForm.post(
+        `${URL_SUPPORTS}/${transfertCible.value.id}/transferer`,
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                transfertCible.value = null;
+            },
+        },
+    );
+}
+
 const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:opacity-50';
 </script>
@@ -915,7 +1015,11 @@ const selectClass =
                                     :title="`Envoyé, en attente de confirmation par la caisse de l'agence : ce montant n'est plus dans le solde de cette caisse et n'est pas encore crédité ailleurs.`"
                                     data-testid="support-en-cours-versement"
                                 >
-                                    En cours de versement :
+                                    {{
+                                        c.type === 'mobile_money'
+                                            ? 'En cours de transfert :'
+                                            : 'En cours de versement :'
+                                    }}
                                     {{ formatGNF(c.en_cours_versement) }}
                                 </div>
                                 <!-- Approvisionnement envoyé, pas encore confirmé par l'agent : pas encore dans le
@@ -973,6 +1077,19 @@ const selectClass =
                                             class="mr-1.5 h-3.5 w-3.5"
                                         />
                                         Verser à l'agence
+                                    </Button>
+                                    <Button
+                                        v-if="c.peut_transferer"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="support-transferer"
+                                        @click="ouvrirTransfert(c)"
+                                    >
+                                        <ArrowRightLeft
+                                            class="mr-1.5 h-3.5 w-3.5"
+                                        />
+                                        Transférer à l'agence
                                     </Button>
                                     <Button
                                         v-if="c.peut_approvisionner"
@@ -1438,6 +1555,220 @@ const selectClass =
                     {{
                         approvisionnementForm.processing ? 'Envoi…' : 'Envoyer'
                     }}
+                </Button>
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) -->
+    <Dialog
+        v-model:visible="transfertVisible"
+        modal
+        header="Transférer à l'agence"
+        :style="{ width: 'min(480px, 95vw)' }"
+        :dismissable-mask="true"
+    >
+        <form
+            v-if="transfertCible"
+            id="transfert-form"
+            class="space-y-4 pb-1"
+            data-testid="transfert-form"
+            @submit.prevent="envoyerTransfert"
+        >
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span class="text-muted-foreground">Depuis</span>
+                <span class="font-medium">{{ transfertCible.libelle }}</span>
+                <span class="text-muted-foreground">
+                    · {{ transfertCible.site }}
+                </span>
+            </div>
+
+            <div>
+                <Label
+                    for="transfert-dest"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Compte Mobile Money de l'agence
+                    <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="transfert-dest"
+                    v-model="transfertForm.compte_tresorerie_destination_id"
+                    :class="selectClass"
+                    data-testid="transfert-destination"
+                >
+                    <option value="" disabled>Choisir un compte…</option>
+                    <option
+                        v-for="d in destinationsDuTransfert"
+                        :key="d.id"
+                        :value="d.id"
+                    >
+                        {{ d.libelle }}{{ d.numero ? ` — N° ${d.numero}` : '' }}
+                    </option>
+                </select>
+                <p
+                    v-if="transfertForm.errors.compte_tresorerie_destination_id"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.compte_tresorerie_destination_id }}
+                </p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <Label
+                        for="transfert-montant"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
+                        Montant reçu par l'agence (GNF)
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <input
+                        id="transfert-montant"
+                        :value="transfertMontantDisplay"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="0"
+                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm tabular-nums shadow-sm"
+                        data-testid="transfert-montant"
+                        @input="handleTransfertMontantInput"
+                    />
+                    <p
+                        v-if="transfertForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ transfertForm.errors.montant }}
+                    </p>
+                </div>
+                <div>
+                    <Label
+                        for="transfert-frais"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
+                        Frais de l'opérateur (GNF)
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <input
+                        id="transfert-frais"
+                        :value="transfertFraisDisplay"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="0 si aucun"
+                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm tabular-nums shadow-sm"
+                        data-testid="transfert-frais"
+                        @input="handleTransfertFraisInput"
+                    />
+                    <p
+                        v-if="transfertForm.errors.frais"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ transfertForm.errors.frais }}
+                    </p>
+                </div>
+            </div>
+
+            <dl class="grid grid-cols-3 gap-3 text-xs">
+                <div>
+                    <dt class="text-muted-foreground">Disponible</dt>
+                    <dd class="mt-0.5 font-medium tabular-nums">
+                        {{ formatGNF(transfertCible.solde) }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Sort du compte</dt>
+                    <dd
+                        class="mt-0.5 font-medium tabular-nums"
+                        data-testid="transfert-sortie"
+                    >
+                        {{ formatGNF(transfertSortie) }}
+                    </dd>
+                </div>
+                <div class="text-right">
+                    <dt class="text-muted-foreground">Reste après envoi</dt>
+                    <dd
+                        class="mt-0.5 font-medium tabular-nums"
+                        :class="{ 'text-destructive': soldeApresTransfert < 0 }"
+                        aria-live="polite"
+                    >
+                        {{ formatGNF(soldeApresTransfert) }}
+                    </dd>
+                </div>
+            </dl>
+            <p
+                v-if="soldeApresTransfert < 0"
+                class="text-xs text-destructive"
+                data-testid="transfert-depassement"
+            >
+                Le montant et les frais dépassent le solde disponible du compte.
+            </p>
+
+            <div>
+                <Label
+                    for="transfert-reference"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Référence de la transaction
+                    <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                    id="transfert-reference"
+                    v-model="transfertForm.reference_externe"
+                    placeholder="Référence donnée par l'opérateur"
+                    data-testid="transfert-reference"
+                />
+                <p
+                    v-if="transfertForm.errors.reference_externe"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.reference_externe }}
+                </p>
+            </div>
+
+            <div>
+                <Label
+                    for="transfert-motif"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Motif</Label
+                >
+                <Input id="transfert-motif" v-model="transfertForm.motif" />
+                <p
+                    v-if="transfertForm.errors.motif"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.motif }}
+                </p>
+            </div>
+
+            <p v-if="erreurCompteTransfert" class="text-xs text-destructive">
+                {{ erreurCompteTransfert }}
+            </p>
+
+            <p
+                class="text-xs text-muted-foreground"
+                data-testid="transfert-confirmation"
+            >
+                Enregistrez ici un transfert déjà fait sur le téléphone. Le
+                compte de l'agence sera crédité quand elle aura confirmé la
+                réception (dans Mouvements).
+            </p>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="transfertCible = null"
+                    >Annuler</Button
+                >
+                <Button
+                    type="submit"
+                    form="transfert-form"
+                    size="sm"
+                    data-testid="transfert-envoyer"
+                    :disabled="transfertForm.processing || transfertInvalide"
+                >
+                    {{ transfertForm.processing ? 'Envoi…' : 'Enregistrer' }}
                 </Button>
             </div>
         </template>

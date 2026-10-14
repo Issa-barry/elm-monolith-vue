@@ -113,6 +113,18 @@ class CompteTresorerieController extends Controller
             ->get(['id', 'site_id', 'libelle']);
         $agencesAvecDestination = $destinationsVersement->pluck('site_id')->flip();
 
+        // Comptes Mobile Money d'agence (actifs, opérateur connu) pouvant recevoir le transfert du
+        // compte d'un agent (ADR 0027) : même agence et même opérateur.
+        $destinationsTransfert = CompteTresorerie::forOrg($orgId)->agence()->actifs()
+            ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
+            ->whereNotNull('operateur_mobile_money')
+            ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
+            ->orderBy('libelle')
+            ->get(['id', 'site_id', 'libelle', 'numero', 'operateur_mobile_money']);
+        $agencesEtOperateursAvecDestination = $destinationsTransfert
+            ->map(fn (CompteTresorerie $c) => $c->site_id.'|'.$c->operateur_mobile_money->value)
+            ->flip();
+
         // Caisses d'agents actives pouvant être approvisionnées par une caisse de l'agence (ADR 0018),
         // Sa propre caisse seulement si son rôle lui permet d'en confirmer lui-même la réception.
         $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->approvisionnablesPar($user)
@@ -135,7 +147,7 @@ class CompteTresorerieController extends Controller
         $comptes = $supportsListes
             ->sortBy(fn (CompteTresorerie $c) => mb_strtolower(($c->site?->nom ?? '').'|'.($c->isDediee() ? '1' : '0').'|'.$c->libelle))
             ->values()
-            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $approvisionnementsEnCours, $user, $agencesAvecDestination, $agencesAvecAgentAApprovisionner) {
+            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $approvisionnementsEnCours, $user, $agencesAvecDestination, $agencesAvecAgentAApprovisionner, $agencesEtOperateursAvecDestination) {
                 $solde = (float) ($soldes->get($c->id)['solde'] ?? 0);
 
                 return [
@@ -172,6 +184,14 @@ class CompteTresorerieController extends Controller
                         && $solde > 0
                         && $agencesAvecDestination->has($c->site_id)
                         && $user->can('verser', $c),
+                    // Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) :
+                    // mêmes vérifications explicites, revérifiées par
+                    // MouvementFondsService::transfererMobileMoneyAgent().
+                    'peut_transferer' => $c->isMobileMoneyDedie()
+                        && $c->actif
+                        && $solde > 0
+                        && $agencesEtOperateursAvecDestination->has($c->site_id.'|'.$c->operateur_mobile_money?->value)
+                        && $user->can('transfererMobileMoney', $c),
                     'en_cours_approvisionnement' => (float) ($approvisionnementsEnCours->get($c->id)['montant'] ?? 0),
                     'approvisionnements_en_cours' => (int) ($approvisionnementsEnCours->get($c->id)['nombre'] ?? 0),
                     // Mêmes vérifications explicites (Gate::before) ; revérifiées par
@@ -204,6 +224,13 @@ class CompteTresorerieController extends Controller
                 'id' => $c->id,
                 'site_id' => $c->site_id,
                 'libelle' => $c->libelle,
+            ])->values(),
+            'destinations_transfert' => $destinationsTransfert->map(fn (CompteTresorerie $c) => [
+                'id' => $c->id,
+                'site_id' => $c->site_id,
+                'libelle' => $c->libelle,
+                'numero' => $c->numero,
+                'operateur_mobile_money' => $c->operateur_mobile_money->value,
             ])->values(),
             'destinations_approvisionnement' => $destinationsApprovisionnement->map(fn (CompteTresorerie $c) => [
                 'id' => $c->id,

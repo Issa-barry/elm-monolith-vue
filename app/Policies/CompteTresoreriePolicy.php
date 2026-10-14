@@ -60,6 +60,30 @@ class CompteTresoreriePolicy
     }
 
     /**
+     * Transférer le compte Mobile Money dédié d'un agent vers le Mobile Money de l'agence (ADR
+     * 0027) : mêmes droits que le versement de caisse — `tresorerie.verser`, agence de
+     * l'utilisateur (admins : toutes), son propre compte seulement, sauf `tresorerie.envoyer` qui
+     * permet d'enregistrer le transfert d'un autre agent de l'agence. État et solde sont revérifiés
+     * par MouvementFondsService::transfererMobileMoneyAgent() (Gate::before du super admin).
+     */
+    public function transfererMobileMoney(User $user, CompteTresorerie $compte): bool
+    {
+        if (! $user->can('tresorerie.verser') || $user->organization_id !== $compte->organization_id) {
+            return false;
+        }
+
+        if (! $compte->isMobileMoneyDedie()) {
+            return false;
+        }
+
+        if (! $user->isAdmin() && ! $user->isAssignedToSite($compte->site_id)) {
+            return false;
+        }
+
+        return $compte->agent_id === $user->id || $user->can('tresorerie.envoyer');
+    }
+
+    /**
      * Approvisionner la caisse dédiée d'un agent depuis cette caisse de l'agence (ADR 0018) :
      * `tresorerie.envoyer` (sortie de fonds de la caisse de l'agence), même organisation, agence de
      * l'utilisateur (admins : toutes). Ce droit ne donne jamais celui de confirmer la réception,
