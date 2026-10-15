@@ -113,6 +113,7 @@ const composantsReels = {
     ListeFactures: false,
     ListeEncaissements: false,
     SectionCaisse: false,
+    CaisseFiche: false,
 };
 
 const monter = (
@@ -508,5 +509,111 @@ describe('Rapports/Activite', () => {
                 .get('[data-testid="encaissement-pour-autre-agence"]')
                 .text(),
         ).toBe('pour Matoto · à reverser');
+    });
+});
+
+describe('Rapports/Activite — compte Mobile Money de l’agent (ADR 0027)', () => {
+    const ficheMobileMoney = () => ({
+        caisse: {
+            id: 'mm1',
+            libelle: 'Orange Money — Moussa Sidibé',
+            actif: true,
+            site_id: 's1',
+            site_nom: 'Matoto',
+            agent_id: 'u1',
+            agent_nom: 'Moussa Sidibé',
+            type: 'mobile_money',
+            operateur_label: 'Orange Money',
+        },
+        solde_debut: 0,
+        solde_fin: 198_000,
+        total_entrees: 500_000,
+        total_sorties: 302_000,
+        mouvements: [
+            {
+                categorie: 'encaissements',
+                libelle: 'Encaissements Mobile Money',
+                entrees: 500_000,
+                sorties: 0,
+                nombre: 1,
+            },
+            {
+                categorie: 'versements_envoyes',
+                libelle: "Transferts envoyés à l'agence",
+                entrees: 0,
+                sorties: 300_000,
+                nombre: 1,
+            },
+            {
+                categorie: 'frais_transfert',
+                libelle: 'Frais de transfert',
+                entrees: 0,
+                sorties: 2_000,
+                nombre: 1,
+            },
+        ],
+        solde_actuel: 198_000,
+        en_cours: { nombre: 1, montant: 300_000 },
+        contestes: { nombre: 0, montant: 0 },
+        versements_periode: [],
+        dernier_versement: null,
+        ecritures: null,
+    });
+
+    const avecCompte = (aucun = false): RapportActivite => {
+        const rapport = rapportVide();
+        rapport.comptes_mobile_money = {
+            ...rapport.caisse,
+            aucune_caisse: aucun,
+            fiches: aucun ? [] : [ficheMobileMoney()],
+        };
+
+        return rapport;
+    };
+
+    it("affiche dans l'onglet Mobile Money ce que l'agent détient et ce qu'il a transféré", () => {
+        url.valeur = '/backoffice/ma-situation?tab=mobile_money';
+        const wrapper = monter('ma_situation', avecCompte());
+        const section = wrapper.find('[data-testid="comptes-mobile-money"]');
+
+        expect(section.exists()).toBe(true);
+        expect(section.text()).toContain('Mon compte Mobile Money');
+        expect(section.text()).toContain("À transférer à l'agence");
+        expect(section.text()).toContain('En cours de transfert');
+        expect(section.text()).toContain("à confirmer par l'agence");
+        expect(section.text()).toContain('Aucun transfert enregistré.');
+        expect(section.text()).not.toContain('versement');
+    });
+
+    it('parle de transfert, pas de remise, dans la vue agence', () => {
+        url.valeur = '/backoffice/rapports/activite?tab=mobile_money';
+        const rapport = avecCompte();
+        rapport.comptes_mobile_money!.detail = false;
+        const section = monter('rapport', rapport).find(
+            '[data-testid="comptes-mobile-money"]',
+        );
+
+        expect(section.text()).toContain('Comptes Mobile Money des agents');
+        expect(section.text()).toContain('À transférer');
+        expect(section.text()).toContain('Dernier transfert');
+        expect(section.text()).toContain('de son compte Mobile Money');
+        expect(section.text()).not.toContain('À remettre');
+        expect(section.text()).not.toContain('sa caisse');
+    });
+
+    it("dit à l'agent sans compte qu'il ne peut pas encaisser en Mobile Money, et ne montre rien dans la vue agence", () => {
+        url.valeur = '/backoffice/ma-situation?tab=mobile_money';
+        expect(
+            monter('ma_situation', avecCompte(true))
+                .find('[data-testid="comptes-mobile-money"]')
+                .text(),
+        ).toContain('vous ne pouvez pas encaisser en Mobile Money');
+
+        url.valeur = '/backoffice/rapports/activite?tab=mobile_money';
+        expect(
+            monter('rapport', avecCompte(true))
+                .find('[data-testid="comptes-mobile-money"]')
+                .exists(),
+        ).toBe(false);
     });
 });

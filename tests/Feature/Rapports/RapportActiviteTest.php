@@ -232,7 +232,7 @@ class RapportActiviteTest extends TestCase
             $titres = array_map(fn ($feuille) => $feuille->title(), $export->sheets());
 
             return count($ventes) === 1 && $ventes[0][3] === 'Moussa Sidibé'
-                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse'];
+                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents'];
         });
     }
 
@@ -529,6 +529,55 @@ class RapportActiviteTest extends TestCase
         $agence = $this->props($this->user, 'rapports.activite', ['site_ids' => [$this->siteA->id]])['rapport']['caisse'];
         $this->assertSame(['Moussa Sidibé'], array_column(array_column($agence['fiches'], 'caisse'), 'agent_nom'));
         $this->assertEquals(0, $agence['resume']['solde_fin']);
+    }
+
+    /**
+     * Lot 4 de l'ADR 0027 : le compte Mobile Money de l'agent a sa propre fiche — ce qu'il détient
+     * encore, ce qu'il a déjà transféré à l'agence, les frais — tirée du grand livre, comme la caisse.
+     */
+    public function test_le_compte_mobile_money_de_l_agent_montre_ce_qu_il_detient_et_ce_qu_il_a_transfere(): void
+    {
+        $compte = $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money', '620000001');
+        $compteAgence = $this->creerSupportAgence($this->siteA->id, 'mobile_money', '561100', 'orange_money');
+        $facture = $this->vente($this->siteA, $this->agentA, 500_000);
+        Auth::login($this->agentA);
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'montant' => 500_000,
+            'date_encaissement' => '2026-09-26',
+            'mode_paiement' => 'mobile_money',
+            'operateur_mobile_money' => 'orange_money',
+            'compte_tresorerie_id' => $compte->id,
+            'reference_paiement' => 'OM-RAP-1',
+        ]);
+        Auth::logout();
+        app(MouvementFondsService::class)->transfererMobileMoneyAgent($this->org->id, $compte, $compteAgence->id, 300_000, 2_000, 'OM-TR-RAP', null, $this->agentA->id);
+
+        $rapport = $this->props($this->agentA, 'ma-situation')['rapport'];
+        $fiche = $rapport['comptes_mobile_money']['fiches'][0];
+
+        $this->assertSame('mobile_money', $fiche['caisse']['type']);
+        $this->assertSame('Orange Money', $fiche['caisse']['operateur_label']);
+        $this->assertEquals(500_000, $fiche['total_entrees']);
+        $this->assertEquals(302_000, $fiche['total_sorties'], '300 000 transférés + 2 000 de frais');
+        $this->assertEquals(198_000, $fiche['solde_fin'], 'ce que l\'agent détient encore');
+        $this->assertEquals(198_000, $fiche['solde_actuel']);
+        $this->assertSame(['encaissements', 'versements_envoyes', 'frais_transfert'], array_column($fiche['mouvements'], 'categorie'));
+        $this->assertSame(['Encaissements Mobile Money', 'Transferts envoyés à l\'agence', 'Frais de transfert'], array_column($fiche['mouvements'], 'libelle'));
+        $this->assertSame(1, $fiche['en_cours']['nombre']);
+        $this->assertEquals(300_000, $fiche['en_cours']['montant'], 'montant transféré, hors frais');
+        $this->assertEquals(300_000, $fiche['versements_periode'][0]['montant']);
+        $this->assertSame('2026-09-26', $fiche['dernier_versement']['date_envoi']);
+        $this->assertNotNull($fiche['ecritures'], 'détail des écritures dans « Ma situation »');
+
+        // Ce n'est pas une caisse : rien dans le tableau de caisse.
+        $this->assertTrue($rapport['caisse']['aucune_caisse']);
+
+        // Vue agence : une ligne par compte, sans détail ; un agent sans compte n'a rien.
+        $agence = $this->props($this->user, 'rapports.activite', ['site_ids' => [$this->siteA->id]])['rapport']['comptes_mobile_money'];
+        $this->assertFalse($agence['detail']);
+        $this->assertSame(['Moussa Sidibé'], array_column(array_column($agence['fiches'], 'caisse'), 'agent_nom'));
+        $this->assertTrue($this->props($this->agentB, 'ma-situation')['rapport']['comptes_mobile_money']['aucune_caisse']);
     }
 
     public function test_la_vue_agence_liste_une_caisse_par_agent_sans_le_detail_des_ecritures(): void

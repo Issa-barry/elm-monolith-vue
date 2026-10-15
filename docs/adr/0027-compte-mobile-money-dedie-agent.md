@@ -2,7 +2,8 @@
 
 - **Date** : 2026-10-13
 - **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13, lots 2 et 3
-  livrés le 2026-10-14** ; lot 4 non développé
+  livrés le 2026-10-14** ; lot 4 : volet rapports livré le 2026-10-14, transfert direct vers la
+  trésorerie principale reporté le 2026-10-15 (cf. « Lot 4 » ci-dessous)
 - **Périmètre** : encaissements de vente, supports de trésorerie, mouvements de fonds, financement
   et remises des agences, rapport d'activité
 - **Amendera, à la livraison du lot concerné** : [ADR 0005](0005-moyens-de-paiement-derives-des-supports.md)
@@ -177,6 +178,19 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
     qui les crée depuis l'écran) ; historique non reclassé.
 - **Lot 4 — transfert direct** (point 5) et rapports : fiche du compte Mobile Money, « Ma
   situation », rapport d'activité.
+  - **Rapports, livrés le 2026-10-14** : `RapportActiviteService::comptesMobileMoney()` (même
+    `FicheCaisseService` que la caisse, libellés propres : encaissements Mobile Money, transferts
+    envoyés à l'agence, frais de transfert) ; bloc « Mon compte Mobile Money » / « Comptes Mobile
+    Money des agents » dans l'onglet Mobile Money du rapport et de « Ma situation » ; feuille
+    d'export « Mobile Money agents ». Cf. [rapports.md](../rapports.md).
+  - **Transfert direct vers la trésorerie principale : reporté (décision du 2026-10-15).** Il
+    suppose la remise d'une agence à la trésorerie principale avec écritures de liaison entre trois
+    agences (ADR 0016, point 5 et lot 2, jamais développé). En attendant, les agents transfèrent à
+    leur agence (lot 2), qui remet ensuite à la trésorerie principale. Décisions déjà prises pour la
+    reprise : le transfert solde **automatiquement** les encaissements « à verser » reçus sur le
+    compte, du plus ancien au plus récent, jusqu'au montant transféré ; la nouvelle permission est
+    préréglée pour les **administrateurs seuls**, les autres rôles la recevant quand un
+    administrateur la coche.
 
 ## Conséquences
 
@@ -195,5 +209,5 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
 
 ## Points à préciser au lot concerné
 
-- Lot 4 : nom de la permission et rôles qui la reçoivent (ADR 0011) ; rattachement des
-  encaissements d'une autre agence au transfert direct.
+- Transfert direct (reporté) : nom exact de la permission ; traitement d'un transfert dont la
+  trésorerie principale n'est pas l'agence créancière, à régler avec le lot 2 de l'ADR 0016.
