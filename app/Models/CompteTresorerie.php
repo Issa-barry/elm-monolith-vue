@@ -17,9 +17,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * Financement des agences. Aucun opérateur/numéro de compte codé en dur : une
  * organisation crée autant de supports qu'elle a de caisses/comptes réels.
  *
- * Un support sans `agent_id` appartient à l'agence ; avec `agent_id`, c'est une
- * caisse dédiée à cet agent (toujours de type Caisse, avec son propre sous-compte
- * comptable — cf. CaisseAgentService). La « nature » est donc dérivée d'`agent_id`.
+ * Un support sans `agent_id` appartient à l'agence ; avec `agent_id`, il est dédié à cet agent :
+ * sa caisse en espèces (type Caisse, ADR 0001) ou son compte Mobile Money (type Mobile Money, un
+ * par opérateur, ADR 0027), chacun avec son propre sous-compte comptable — cf. CaisseAgentService.
+ * La « nature » est donc dérivée d'`agent_id`, et tout ce qui concerne les ESPÈCES d'un agent passe
+ * par caissesDediees() / isCaisseDediee(), jamais par dediees() / isDediee() seuls.
  *
  * Cycle de vie : un support est créé en brouillon (inutilisable), validé par un utilisateur
  * habilité (`valide_le`, `valide_par_id` — cf. SupportTresorerieValidationService), puis actif ;
@@ -94,8 +96,9 @@ class CompteTresorerie extends Model
             $type = $support->type instanceof TypeSupportTresorerie
                 ? $support->type
                 : TypeSupportTresorerie::from((string) $support->type);
+            $operateurAgent = $type === TypeSupportTresorerie::MOBILE_MONEY ? $support->operateur_mobile_money : null;
             $base = $support->agent_id
-                ? self::libelleBaseAgent((string) User::with('personne')->find($support->agent_id)?->name)
+                ? self::libelleBaseAgent((string) User::with('personne')->find($support->agent_id)?->name, $operateurAgent)
                 : self::libelleBase($type, Site::whereKey($support->site_id)->value('nom') ?? '', $support->operateur_mobile_money);
 
             $candidat = $base;
@@ -128,10 +131,52 @@ class CompteTresorerie extends Model
         return trim("{$nom} de {$siteNom}");
     }
 
-    /** Libellé de base d'une caisse dédiée : « Caisse {nom de l'agent} ». */
-    public static function libelleBaseAgent(string $agentNom): string
+    /**
+     * Libellé de base d'un support dédié : « Caisse {nom de l'agent} », ou « {Opérateur} — {nom de
+     * l'agent} » pour son compte Mobile Money.
+     */
+    public static function libelleBaseAgent(string $agentNom, OperateurMobileMoney|string|null $operateur = null): string
     {
-        return trim("Caisse {$agentNom}");
+        $operateur = is_string($operateur) ? OperateurMobileMoney::tryFrom($operateur) : $operateur;
+
+        return $operateur ? trim("{$operateur->label()} — {$agentNom}") : trim("Caisse {$agentNom}");
+    }
+
+    /**
+     * Forme de comparaison d'un numéro de portefeuille : lettres et chiffres seulement, sans le
+     * préfixe international « 00 » — « 620 00 00 01 » et « 620-000-001 » désignent le même compte.
+     */
+    public static function normaliserNumero(?string $numero): string
+    {
+        $numero = mb_strtoupper((string) preg_replace('/[^\p{L}\p{N}]+/u', '', (string) $numero));
+
+        return (string) preg_replace('/^00(?=\d{9,}$)/', '', $numero);
+    }
+
+    /**
+     * Deux écritures du même portefeuille : identiques une fois normalisées, ou l'une est l'autre
+     * précédée d'un indicatif de pays (1 à 3 chiffres) — « +224 620 00 00 01 » et « 620 00 00 01 ».
+     * Aucun indicatif n'est codé en dur ; le numéro sans indicatif doit compter au moins 8 chiffres.
+     */
+    public static function memeNumero(?string $a, ?string $b): bool
+    {
+        $a = self::normaliserNumero($a);
+        $b = self::normaliserNumero($b);
+
+        if ($a === '' || $b === '') {
+            return false;
+        }
+        if ($a === $b) {
+            return true;
+        }
+
+        [$court, $long] = strlen($a) <= strlen($b) ? [$a, $b] : [$b, $a];
+        $indicatif = strlen($long) - strlen($court);
+
+        return ctype_digit($court) && ctype_digit($long)
+            && strlen($court) >= 8
+            && $indicatif >= 1 && $indicatif <= 3
+            && str_ends_with($long, $court);
     }
 
     public function organization(): BelongsTo
@@ -152,6 +197,18 @@ class CompteTresorerie extends Model
     public function isDediee(): bool
     {
         return $this->agent_id !== null;
+    }
+
+    /** Caisse en espèces d'un agent — la seule qui reçoit ses espèces et se verse à l'agence. */
+    public function isCaisseDediee(): bool
+    {
+        return $this->isDediee() && $this->type === TypeSupportTresorerie::CAISSE;
+    }
+
+    /** Compte Mobile Money d'un agent (ADR 0027). */
+    public function isMobileMoneyDedie(): bool
+    {
+        return $this->isDediee() && $this->type === TypeSupportTresorerie::MOBILE_MONEY;
     }
 
     public function validePar(): BelongsTo
@@ -200,8 +257,39 @@ class CompteTresorerie extends Model
         return $query->whereNull('agent_id');
     }
 
+    /** Tout support dédié à un agent, caisse ou compte Mobile Money. */
     public function scopeDediees($query)
     {
         return $query->whereNotNull('agent_id');
+    }
+
+    /** Caisses en espèces des agents — jamais leurs comptes Mobile Money. */
+    public function scopeCaissesDediees($query)
+    {
+        return $query->whereNotNull('agent_id')->where('type', TypeSupportTresorerie::CAISSE->value);
+    }
+
+    /** Comptes Mobile Money des agents (ADR 0027). */
+    public function scopeMobileMoneyDedies($query)
+    {
+        return $query->whereNotNull('agent_id')->where('type', TypeSupportTresorerie::MOBILE_MONEY->value);
+    }
+
+    /** Ni désactivé ni jamais mis en service : brouillon ou actif. */
+    public function scopeNonDesactives($query)
+    {
+        return $query->where(fn ($q) => $q->where('actif', true)->orWhereNull('valide_le'));
+    }
+
+    /**
+     * Caisses d'agents qu'un utilisateur peut approvisionner depuis une caisse de l'agence (ADR 0018) :
+     * caisses dédiées actives ; la sienne seulement si son rôle lui permet d'en confirmer lui-même la
+     * réception (`tresorerie.recevoir`), sinon l'argent resterait bloqué en transit. Liste proposée
+     * par les écrans — MouvementFondsService::approvisionnerCaisseAgent() revérifie chaque règle.
+     */
+    public function scopeApprovisionnablesPar($query, User $user)
+    {
+        return $query->caissesDediees()->actifs()
+            ->when(! $user->can('tresorerie.recevoir'), fn ($q) => $q->where('agent_id', '!=', $user->id));
     }
 }

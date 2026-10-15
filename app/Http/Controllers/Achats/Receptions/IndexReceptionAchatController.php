@@ -9,7 +9,7 @@ use App\Models\CommandeAchatLigne;
 use App\Models\Fournisseur;
 use App\Models\Site;
 use App\Models\User;
-use App\Policies\CommandeAchatPolicy;
+use App\Services\Achats\PerimetreReceptionsAchat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,7 +17,7 @@ use Inertia\Response;
 
 /**
  * Logistique → Réceptions fournisseurs (ADR 0021) : bons de commande validés à réceptionner dans
- * les agences de l'utilisateur. Rattaché au module Achats (pas au module Logistique) : l'écran
+ * les agences de l'utilisateur et celles que son rôle peut réceptionner. Rattaché au module Achats (pas au module Logistique) : l'écran
  * reste disponible quand seuls les Achats sont activés.
  */
 class IndexReceptionAchatController extends Controller
@@ -29,7 +29,7 @@ class IndexReceptionAchatController extends Controller
         StatutCommandeAchat::CLOTUREE,
     ];
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, PerimetreReceptionsAchat $perimetre): Response
     {
         $user = $request->user();
         abort_unless($user->can('receptions.read'), 403);
@@ -50,13 +50,16 @@ class IndexReceptionAchatController extends Controller
             ->whereIn('statut', $statuts)
             ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'lignes']);
 
-        // Réceptionnaire : uniquement les agences auxquelles il est rattaché, sans passe-droit de rôle.
-        // Seule la permission de consultation de toutes les agences (ADR 0025) élargit la LISTE ;
-        // réceptionner reste réservé au rattachement (`peut_receptionner`, CommandeAchatPolicy).
-        $toutesAgences = $user->can(User::PERMISSION_LECTURE_TOUTES_AGENCES);
+        // Réceptionnaire : les agences auxquelles il est rattaché, plus celles que couvre la règle
+        // « Peut réceptionner pour » de son rôle (PerimetreReceptionsAchat) — sans passe-droit de rôle.
+        // La permission de consultation de toutes les agences (ADR 0025) élargit seulement la LISTE :
+        // réceptionner reste réservé aux agences couvertes (`peut_receptionner`).
+        $receptionnables = $perimetre->sitesCouverts($user);
+        $toutesAgences = $receptionnables === null || $user->can(User::PERMISSION_LECTURE_TOUTES_AGENCES);
         if (! $toutesAgences) {
-            $query->whereIn('site_id', $user->sites()->pluck('sites.id'));
+            $query->whereIn('site_id', $receptionnables);
         }
+        $peutCreer = $user->can('receptions.create');
 
         $query
             ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
@@ -65,9 +68,10 @@ class IndexReceptionAchatController extends Controller
 
         $paginator = $query->orderBy('validee_at')->orderBy('created_at')->paginate(20)->withQueryString();
 
-        $sites = $toutesAgences
-            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
-            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+        $sites = Site::where('organization_id', $orgId)
+            ->when(! $toutesAgences, fn (Builder $q) => $q->whereIn('id', $receptionnables))
+            ->orderBy('nom')
+            ->get(['id', 'nom']);
 
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->with(['personne', 'entrepriseTierce'])
@@ -94,7 +98,9 @@ class IndexReceptionAchatController extends Controller
                     'qte_recue' => (int) $l->qte_recue,
                     'reliquat' => $l->reliquat(),
                 ])->values(),
-                'peut_receptionner' => $c->isReceptionnable() && $user->can('receptionner', $c) && CommandeAchatPolicy::estRattacheAgence($user, $c),
+                // Même règle que le serveur à l'enregistrement, calculée une fois pour la page.
+                'peut_receptionner' => $c->isReceptionnable() && $peutCreer
+                    && ($receptionnables === null || in_array($c->site_id, $receptionnables, true)),
             ]),
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),
             'statuts' => array_map(fn ($s) => ['value' => $s->value, 'label' => $s->label()], self::STATUTS_AFFICHES),

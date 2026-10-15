@@ -197,7 +197,7 @@ class EncaissementEspecesCaisseObligatoireTest extends TestCase
     public function test_les_autres_modes_restent_possibles_sans_caisse(): void
     {
         // Hors espèces, le moyen vient d'un support actif de l'agence (pas de la caisse de l'auteur).
-        $orange = $this->creerSupportAgence($this->site->id, 'mobile_money', '561100', 'orange_money');
+        $orange = $this->creerCompteMobileMoneyActifPour($this->user, $this->site->id, 'orange_money');
         $banque = $this->creerSupportAgence($this->site->id, 'banque', '521000');
 
         $this->encaisser($this->facture(), [

@@ -15,7 +15,11 @@ class StoreReceptionAchatController extends Controller
     {
         $this->authorize('receptionner', $achat);
         // Explicite : le Gate::before du super administrateur court-circuite la policy.
-        abort_unless(CommandeAchatPolicy::estRattacheAgence($request->user(), $achat), 403, "Vous n'êtes pas rattaché à l'agence de cette commande.");
+        abort_unless(
+            CommandeAchatPolicy::couvreAgenceDeReception($request->user(), $achat),
+            403,
+            "Vous ne pouvez pas réceptionner pour l'agence de cette commande : vous n'y êtes pas rattaché et votre rôle ne la couvre pas (Paramètres → Achats).",
+        );
 
         $data = $request->validate([
             'date_reception' => ['required', 'date', 'before_or_equal:today'],

@@ -171,6 +171,14 @@ const especesBloquees = computed(() =>
 
 const aucunAutreMoyen = computed(() => moyensEffectifs.value.length === 0);
 
+// Encaissement : le Mobile Money ne vient que des comptes de l'agent (ADR 0027). Sans aucun compte
+// actif dans l'agence, le dire plutôt que laisser chercher l'opérateur dans la liste.
+const mobileMoneyIndisponible = computed(
+    () =>
+        !decaissement.value &&
+        !moyensEffectifs.value.some((m) => m.mode_paiement === 'mobile_money'),
+);
+
 // Mode présélectionné à l'ouverture : le premier, sauf s'il est indisponible — jamais un autre mode
 // choisi à la place de l'utilisateur (un Mobile Money enregistré par erreur serait un encaissement
 // mal classé) : la liste reste vide et il choisit lui-même.
@@ -536,6 +544,15 @@ function handleSubmit() {
                         responsable.
                     </template>
                     <template v-else>{{ messageEspecesIndisponible }}</template>
+                </p>
+                <!-- Encaissement sans compte Mobile Money de l'agent : ambre, les autres modes restent possibles. -->
+                <p
+                    v-if="mobileMoneyIndisponible && !aucunAutreMoyen"
+                    class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950 dark:bg-amber-950/40 dark:text-amber-200"
+                    data-testid="mobile-money-indisponible"
+                >
+                    Mobile Money indisponible : vous n'avez aucun compte Mobile
+                    Money actif dans cette agence.
                 </p>
                 <!-- Décaissement : solde du support choisi ; rouge seulement s'il bloque le paiement. -->
                 <p

@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
 import { ArrowDown } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface CompteTresorerie {
     id: string;
@@ -13,9 +13,24 @@ interface CompteTresorerie {
     type: string;
 }
 
+interface CaisseAgent {
+    id: string;
+    site_id: string;
+    libelle: string;
+    agent: string | null;
+    est_ma_caisse: boolean;
+}
+
 const props = defineProps<{
     sites: { value: string; label: string }[];
     comptes_tresorerie: CompteTresorerie[];
+    /**
+     * `tresorerie.envoyer` : ouvre les mouvements au sein d'une même agence (approvisionnement d'un
+     * agent, dépôt en banque). Sans lui, la même agence n'est jamais proposée en destination.
+     */
+    peut_approvisionner: boolean;
+    /** Caisses d'agents actives que l'utilisateur peut approvisionner (ADR 0018). */
+    caisses_agents: CaisseAgent[];
     site_prerempli: string | null;
     montant_prerempli: string | null;
     echeance_debut_prerempli: string | null;
@@ -38,6 +53,7 @@ const form = useForm({
     site_origine_id: '',
     site_destination_id: props.site_prerempli ?? '',
     compte_tresorerie_origine_id: '',
+    compte_tresorerie_destination_id: '',
     montant: props.montant_prerempli ?? ('' as number | ''),
     moyen_transfert: '',
     reference_externe: '',
@@ -49,6 +65,120 @@ const form = useForm({
 
 const comptesOrigine = computed(() =>
     props.comptes_tresorerie.filter((c) => c.site_id === form.site_origine_id),
+);
+
+// ── Même agence des deux côtés : mouvement interne à l'agence ──
+// Entre agences, le support de destination est choisi par le destinataire à la réception.
+// Dans la même agence, il est choisi ici, et le mouvement est créé ET envoyé :
+//  - vers la caisse d'un agent : approvisionnement (ADR 0018), depuis une caisse de l'agence,
+//    confirmé par l'agent titulaire ;
+//  - vers une banque de l'agence : dépôt en banque (ADR 0026), depuis une caisse ou un compte
+//    Mobile Money, confirmé dans Mouvements.
+
+const sitesDestination = computed(() =>
+    props.peut_approvisionner
+        ? props.sites
+        : props.sites.filter((s) => s.value !== form.site_origine_id),
+);
+const memeAgence = computed(
+    () =>
+        form.site_origine_id !== '' &&
+        form.site_origine_id === form.site_destination_id,
+);
+const typeOrigine = computed(
+    () =>
+        comptesOrigine.value.find(
+            (c) => c.id === form.compte_tresorerie_origine_id,
+        )?.type,
+);
+const origineBanque = computed(
+    () => memeAgence.value && typeOrigine.value === 'banque',
+);
+// Seule une caisse approvisionne un agent ; tant que l'origine n'est pas choisie, tout est proposé.
+const caissesAgents = computed(() =>
+    memeAgence.value &&
+    (typeOrigine.value === undefined || typeOrigine.value === 'caisse')
+        ? props.caisses_agents.filter(
+              (c) => c.site_id === form.site_destination_id,
+          )
+        : [],
+);
+const banquesAgence = computed(() =>
+    memeAgence.value && !origineBanque.value
+        ? props.comptes_tresorerie.filter(
+              (c) =>
+                  c.site_id === form.site_destination_id && c.type === 'banque',
+          )
+        : [],
+);
+const aucuneDestination = computed(
+    () => caissesAgents.value.length === 0 && banquesAgence.value.length === 0,
+);
+const depotEnBanque = computed(() =>
+    banquesAgence.value.some(
+        (c) => c.id === form.compte_tresorerie_destination_id,
+    ),
+);
+const approvisionnement = computed(() =>
+    caissesAgents.value.some(
+        (c) => c.id === form.compte_tresorerie_destination_id,
+    ),
+);
+const versMaCaisse = computed(
+    () =>
+        caissesAgents.value.find(
+            (c) => c.id === form.compte_tresorerie_destination_id,
+        )?.est_ma_caisse === true,
+);
+const mouvementInterneImpossible = computed(
+    () => memeAgence.value && (origineBanque.value || aucuneDestination.value),
+);
+const libelleValidation = computed(() => {
+    if (!memeAgence.value) return 'Créer le brouillon';
+    if (depotEnBanque.value) return 'Déposer en banque';
+    if (approvisionnement.value) return 'Approvisionner la caisse';
+
+    return 'Envoyer le mouvement';
+});
+const erreurSupportOrigine = computed(
+    () =>
+        form.errors.compte_tresorerie_origine_id ??
+        (form.errors as Record<string, string | undefined>)
+            .compte_tresorerie_id,
+);
+
+watch(
+    () => form.site_origine_id,
+    () => {
+        if (
+            !comptesOrigine.value.some(
+                (c) => c.id === form.compte_tresorerie_origine_id,
+            )
+        ) {
+            form.compte_tresorerie_origine_id = '';
+        }
+        if (
+            form.site_destination_id !== '' &&
+            !sitesDestination.value.some(
+                (s) => s.value === form.site_destination_id,
+            )
+        ) {
+            form.site_destination_id = '';
+        }
+    },
+);
+// Les destinations proposées dépendent des deux agences ET du type du support d'origine.
+watch(
+    [
+        () => form.site_origine_id,
+        () => form.site_destination_id,
+        () => form.compte_tresorerie_origine_id,
+    ],
+    () => {
+        if (!depotEnBanque.value && !approvisionnement.value) {
+            form.compte_tresorerie_destination_id = '';
+        }
+    },
 );
 
 // ── Montant formaté (séparateur de milliers) ──────────────────────────────
@@ -99,7 +229,11 @@ function submit() {
                     Nouveau mouvement de fonds
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Transférer des fonds d'un site vers un autre.
+                    Transférer des fonds d'un site vers un autre<template
+                        v-if="peut_approvisionner"
+                        >, ou, dans la même agence, déposer en banque ou
+                        approvisionner la caisse d'un agent</template
+                    >.
                 </p>
             </div>
 
@@ -155,10 +289,10 @@ function submit() {
                                 </option>
                             </select>
                             <p
-                                v-if="form.errors.compte_tresorerie_origine_id"
+                                v-if="erreurSupportOrigine"
                                 class="text-xs text-red-600 dark:text-red-400"
                             >
-                                {{ form.errors.compte_tresorerie_origine_id }}
+                                {{ erreurSupportOrigine }}
                             </p>
                         </div>
                     </div>
@@ -177,7 +311,7 @@ function submit() {
                         >
                             <option value="" disabled>Sélectionner…</option>
                             <option
-                                v-for="s in sites"
+                                v-for="s in sitesDestination"
                                 :key="s.value"
                                 :value="s.value"
                             >
@@ -191,6 +325,122 @@ function submit() {
                             {{ form.errors.site_destination_id }}
                         </p>
                     </div>
+
+                    <template v-if="memeAgence">
+                        <div class="space-y-1.5">
+                            <label
+                                for="mouvement-support-destination"
+                                class="text-sm font-medium"
+                                >Support de trésorerie de destination</label
+                            >
+                            <select
+                                id="mouvement-support-destination"
+                                v-model="form.compte_tresorerie_destination_id"
+                                :disabled="mouvementInterneImpossible"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                data-testid="mouvement-support-destination"
+                            >
+                                <option value="" disabled>
+                                    Sélectionner le support de destination…
+                                </option>
+                                <optgroup
+                                    v-if="banquesAgence.length"
+                                    label="Banques de l'agence"
+                                >
+                                    <option
+                                        v-for="c in banquesAgence"
+                                        :key="c.id"
+                                        :value="c.id"
+                                    >
+                                        {{ c.libelle }}
+                                    </option>
+                                </optgroup>
+                                <optgroup
+                                    v-if="caissesAgents.length"
+                                    label="Caisses d'agents"
+                                >
+                                    <option
+                                        v-for="c in caissesAgents"
+                                        :key="c.id"
+                                        :value="c.id"
+                                    >
+                                        {{ c.agent ?? c.libelle }} —
+                                        {{ c.libelle }}
+                                    </option>
+                                </optgroup>
+                            </select>
+                            <p
+                                v-if="
+                                    form.errors.compte_tresorerie_destination_id
+                                "
+                                class="text-xs text-red-600 dark:text-red-400"
+                            >
+                                {{
+                                    form.errors.compte_tresorerie_destination_id
+                                }}
+                            </p>
+                        </div>
+                        <p
+                            v-if="origineBanque"
+                            class="text-xs text-red-600 dark:text-red-400"
+                            data-testid="mouvement-origine-banque"
+                        >
+                            Dans une même agence, un mouvement part d'une caisse
+                            ou d'un compte Mobile Money : choisissez-en un comme
+                            support d'origine.
+                        </p>
+                        <p
+                            v-else-if="aucuneDestination"
+                            class="text-xs text-red-600 dark:text-red-400"
+                            data-testid="mouvement-aucune-destination"
+                        >
+                            {{
+                                typeOrigine === 'mobile_money'
+                                    ? 'Aucune banque active dans cette agence.'
+                                    : "Aucune banque ni caisse d'agent active dans cette agence."
+                            }}
+                            Créez ou validez d'abord le support dans Trésorerie
+                            → Supports.
+                        </p>
+                        <p
+                            v-else-if="depotEnBanque"
+                            class="text-xs text-muted-foreground"
+                            data-testid="mouvement-note-depot-banque"
+                        >
+                            Même agence : dépôt en banque. L'envoi est immédiat,
+                            sans brouillon, et la banque n'est créditée qu'après
+                            confirmation de réception dans Mouvements.
+                        </p>
+                        <p
+                            v-else-if="approvisionnement"
+                            class="text-xs text-muted-foreground"
+                            data-testid="mouvement-note-approvisionnement"
+                        >
+                            Même agence : approvisionnement de la caisse d'un
+                            agent. L'envoi est immédiat, sans brouillon, et la
+                            caisse n'est créditée qu'après confirmation de
+                            réception par
+                            {{ versMaCaisse ? 'vous-même' : "l'agent" }}.
+                        </p>
+                        <p
+                            v-else
+                            class="text-xs text-muted-foreground"
+                            data-testid="mouvement-note-meme-agence"
+                        >
+                            Même agence : choisissez une banque pour un dépôt en
+                            banque, ou la caisse d'un agent pour
+                            l'approvisionner. L'envoi est immédiat, sans
+                            brouillon.
+                        </p>
+                    </template>
+                    <p
+                        v-else-if="form.site_destination_id"
+                        class="text-xs text-muted-foreground"
+                        data-testid="mouvement-note-reception"
+                    >
+                        Le support de trésorerie de destination est choisi par
+                        le destinataire au moment de confirmer la réception.
+                    </p>
                 </div>
 
                 <!-- Montant -->
@@ -224,13 +474,19 @@ function submit() {
                         {{ form.errors.montant }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Ce montant sera débité du support d'origine au moment de
-                        l'envoi.
+                        {{
+                            memeAgence
+                                ? "Ce montant est débité du support d'origine dès la validation."
+                                : "Ce montant sera débité du support d'origine au moment de l'envoi."
+                        }}
                     </p>
                 </div>
 
-                <!-- Période de financement visée -->
-                <div class="space-y-3 rounded-xl border bg-card p-4">
+                <!-- Période de financement visée (sans objet pour un approvisionnement) -->
+                <div
+                    v-if="!memeAgence"
+                    class="space-y-3 rounded-xl border bg-card p-4"
+                >
                     <h2
                         class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                     >
@@ -275,8 +531,12 @@ function submit() {
                         <span class="font-normal">(optionnel)</span>
                     </h2>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div class="space-y-1.5">
+                    <!-- Dépôt en banque : seule la référence du bordereau s'applique. -->
+                    <div
+                        v-if="!memeAgence || depotEnBanque"
+                        class="grid gap-4 sm:grid-cols-2"
+                    >
+                        <div v-if="!memeAgence" class="space-y-1.5">
                             <label class="text-sm font-medium"
                                 >Moyen de transfert</label
                             >
@@ -297,20 +557,37 @@ function submit() {
                                 placeholder="N° de reçu, de virement…"
                                 class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                             />
+                            <p
+                                v-if="form.errors.reference_externe"
+                                class="text-xs text-red-600 dark:text-red-400"
+                            >
+                                {{ form.errors.reference_externe }}
+                            </p>
                         </div>
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-sm font-medium">Commentaire</label>
+                        <label class="text-sm font-medium">{{
+                            memeAgence ? 'Motif' : 'Commentaire'
+                        }}</label>
                         <textarea
                             v-model="form.commentaire"
                             rows="3"
                             placeholder="Ajouter une remarque…"
                             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         />
+                        <p
+                            v-if="form.errors.commentaire"
+                            class="text-xs text-red-600 dark:text-red-400"
+                        >
+                            {{ form.errors.commentaire }}
+                        </p>
                     </div>
 
-                    <div class="space-y-1.5">
+                    <div
+                        v-if="!memeAgence || depotEnBanque"
+                        class="space-y-1.5"
+                    >
                         <label class="text-sm font-medium">Justificatif</label>
                         <input
                             type="file"
@@ -329,10 +606,13 @@ function submit() {
                     </a>
                     <button
                         type="submit"
-                        :disabled="form.processing"
+                        :disabled="
+                            form.processing || mouvementInterneImpossible
+                        "
                         class="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        data-testid="mouvement-valider"
                     >
-                        Créer le brouillon
+                        {{ libelleValidation }}
                     </button>
                 </div>
             </form>

@@ -30,6 +30,20 @@ enum NatureMouvementFonds: string
      */
     case APPROVISIONNEMENT_CAISSE = 'approvisionnement_caisse';
 
+    /**
+     * Dépôt en banque (ADR 0026) : une caisse (espèces) ou un compte Mobile Money de l'agence verse
+     * sur une banque de la MÊME agence. Nature distincte pour ne fausser aucun calcul propre aux
+     * caisses d'agents (versement, approvisionnement) ni au financement entre agences.
+     */
+    case DEPOT_BANQUE = 'depot_banque';
+
+    /**
+     * Transfert Mobile Money (ADR 0027) : le compte Mobile Money dédié d'un agent transfère vers le
+     * compte Mobile Money de son agence, même opérateur. Référence de transaction et frais
+     * obligatoires ; ne solde jamais une dette inter-agences.
+     */
+    case TRANSFERT_MOBILE_MONEY = 'transfert_mobile_money';
+
     public function label(): string
     {
         return match ($this) {
@@ -37,6 +51,8 @@ enum NatureMouvementFonds: string
             self::INTERNE_CAISSES => 'Versement de caisse',
             self::REGLEMENT_AGENCES => 'Règlement inter-agences',
             self::APPROVISIONNEMENT_CAISSE => 'Approvisionnement de caisse',
+            self::DEPOT_BANQUE => 'Dépôt en banque',
+            self::TRANSFERT_MOBILE_MONEY => 'Transfert Mobile Money',
         };
     }
 

@@ -133,6 +133,23 @@ Une autre utilisation n'est détaillée (facture, date) que si elle est dans le 
 l'utilisateur ; sinon elle est seulement comptée (« N hors de votre périmètre »). Aucun rapprochement
 automatique avec les relevés des opérateurs (hors lot 1).
 
+**Comptes Mobile Money des agents** (ADR 0027, lot 4, 14/10/2026) — sous la liste, dans le même
+onglet : fiche de chaque compte Mobile Money dédié à un agent, calculée comme une caisse
+(`RapportActiviteService::comptesMobileMoney()`, même `FicheCaisseService`, même composant) :
+
+- **Solde = ce que l'agent détient encore** sur son portefeuille, « à transférer à l'agence » ;
+  tiré du grand livre (solde de début + mouvements = solde de fin).
+- Mouvements : **Encaissements Mobile Money**, **Transferts envoyés à l'agence**, **Frais de
+  transfert** (pièce distincte), Transferts renvoyés à l'agent (retour), encaissements annulés,
+  remboursements, autres contrepassations.
+- Transferts : en cours (envoyés, pas encore reçus par l'agence, montant hors frais), contestés,
+  transferts de la période, dernier transfert — ce qui est **déjà reversé** n'est plus dans le solde.
+- Vue agence : une ligne par compte, sans détail ; détail dans « Ma situation » et avec le filtre
+  Agent. Un agent sans compte voit « Aucun compte Mobile Money dédié » dans Ma situation ; la vue
+  agence n'affiche le bloc que s'il existe au moins un compte.
+- Export : feuille « Mobile Money agents » (encaissements, transferts, frais, solde, en cours).
+- Un compte Mobile Money n'est jamais listé dans l'onglet Caisse (et inversement).
+
 ### Caisse (RAP-008)
 
 Fiche de chaque **caisse dédiée** du périmètre, calculée par `App\Services\Tresorerie\FicheCaisseService`

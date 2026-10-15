@@ -5,6 +5,7 @@ namespace App\Services\Ventes;
 use App\Enums\ModePaiement;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
+use App\Models\MouvementFonds;
 use App\Models\User;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Services\Tresorerie\CaisseAgentResolver;
@@ -19,9 +20,11 @@ use Illuminate\Validation\ValidationException;
  *
  * mode_paiement reste l'une des 4 valeurs génériques (especes/mobile_money/virement/cheque) attendues
  * par la comptabilisation — jamais un opérateur (cf. docs/encaissements.md). Hors espèces,
- * l'utilisateur choisit un SUPPORT de trésorerie de l'agence d'encaissement (`compte_tresorerie_id`,
- * décision du 24/09/2026) : c'est lui qui détermine le compte débité et, pour le Mobile Money,
- * l'opérateur — jamais une valeur libre venue du navigateur. Référence obligatoire pour Mobile Money
+ * l'utilisateur choisit un SUPPORT de trésorerie (`compte_tresorerie_id`, décision du 24/09/2026) :
+ * c'est lui qui détermine le compte débité et, pour le Mobile Money, l'opérateur — jamais une valeur
+ * libre venue du navigateur. Mobile Money : uniquement un compte Mobile Money ACTIF de l'utilisateur
+ * dans l'agence d'encaissement, jamais un compte de l'agence et sans repli sur lui (ADR 0027) ;
+ * virement et chèque : une banque de l'agence. Référence obligatoire pour Mobile Money
  * et Virement (rapprochement), unique dans l'organisation pour le Mobile Money (ADR 0014).
  */
 class SaisieEncaissementVente
@@ -91,11 +94,13 @@ class SaisieEncaissementVente
         if ($data['mode_paiement'] === ModePaiement::ESPECES->value) {
             $compteTresorerieId = null;
         } else {
-            $support = $this->moyens->supportPour($facture->organization_id, $siteEncaissementId, $compteTresorerieId, $data['mode_paiement']);
+            $support = $this->moyens->supportPourEncaisseur($user, $facture->organization_id, $siteEncaissementId, $compteTresorerieId, $data['mode_paiement']);
 
             if (! $support) {
                 throw ValidationException::withMessages([
-                    'compte_tresorerie_id' => "Ce moyen de paiement n'est pas disponible dans l'agence d'encaissement : aucun support de trésorerie actif ne peut le recevoir.",
+                    'compte_tresorerie_id' => $data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
+                        ? MoyensEncaissementResolver::MESSAGE_SANS_COMPTE_MOBILE_MONEY
+                        : "Ce moyen de paiement n'est pas disponible dans l'agence d'encaissement : aucun support de trésorerie actif ne peut le recevoir.",
                 ]);
             }
 
@@ -162,6 +167,14 @@ class SaisieEncaissementVente
         $factureUtilisatrice = EncaissementVente::factureUtilisantReferenceMobileMoney($facture->organization_id, $reference);
         if ($factureUtilisatrice !== null) {
             throw $this->referenceDejaUtilisee($factureUtilisatrice);
+        }
+
+        // Une preuve ne sert qu'une fois : ni celle d'un transfert de l'agent vers l'agence (ADR 0027).
+        $cleTransfert = MouvementFonds::cleReferenceTransfert($facture->organization_id, $reference);
+        if ($cleTransfert !== null && MouvementFonds::where('cle_reference_transfert', $cleTransfert)->exists()) {
+            throw ValidationException::withMessages([
+                'reference_paiement' => "Cette référence est celle d'un transfert vers l'agence : saisissez la référence du paiement du client.",
+            ]);
         }
 
         return $reference;

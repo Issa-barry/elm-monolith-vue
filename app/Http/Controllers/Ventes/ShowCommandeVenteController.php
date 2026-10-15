@@ -49,7 +49,7 @@ class ShowCommandeVenteController extends Controller
         if ($estAcompte) {
             $encaissementAgences = null;
             $agenceDefaut = [
-                'moyens' => app(MoyensEncaissementResolver::class)->pourSite($commande->organization_id, $commande->site_id),
+                'moyens' => app(MoyensEncaissementResolver::class)->pourSitePourEncaisseur($user, $commande->organization_id, $commande->site_id),
                 'peut_encaisser_especes' => app(CaisseAgentResolver::class)->caisseActive($commande->organization_id, (string) $user->id, $commande->site_id) !== null,
             ];
         }

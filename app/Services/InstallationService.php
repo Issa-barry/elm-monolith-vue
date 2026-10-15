@@ -440,6 +440,9 @@ class InstallationService
             // création, lecture et validation, sans passe-droit — règles de départ pour
             // admin_entreprise et super_admin, modifiables dans Paramètres → Achats.
             RegleValidationRole::provisionnerAchatsParDefaut($org->id);
+            // Réceptions fournisseurs : le super administrateur réceptionne pour toutes les agences
+            // (règle de départ « Peut réceptionner pour », modifiable au même endroit).
+            RegleValidationRole::provisionnerReceptionsParDefaut($org->id);
 
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —

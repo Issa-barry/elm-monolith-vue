@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\CommandeAchat;
 use App\Models\User;
 use App\Services\Achats\PerimetreCommandesAchat;
+use App\Services\Achats\PerimetreReceptionsAchat;
 
 /**
  * Permission + périmètre « Peut acheter pour » (PerimetreCommandesAchat : règles des rôles, plus le
@@ -45,18 +46,19 @@ class CommandeAchatPolicy
         return $user->can('achats.annuler') && $this->peutAgir($user, $commande);
     }
 
-    /** Réceptionner (Logistique) : permission + utilisateur rattaché à l'agence de la commande. */
+    /**
+     * Réceptionner (Logistique) : permission + agence de la commande couverte — l'utilisateur y est
+     * rattaché, ou une règle « Peut réceptionner pour » de son rôle la couvre.
+     */
     public function receptionner(User $user, CommandeAchat $commande): bool
     {
-        return $user->can('receptions.create') && self::estRattacheAgence($user, $commande);
+        return $user->can('receptions.create') && self::couvreAgenceDeReception($user, $commande);
     }
 
     /** Sans passe-droit de rôle : vérifié aussi par le contrôleur (Gate::before du super administrateur). */
-    public static function estRattacheAgence(User $user, CommandeAchat $commande): bool
+    public static function couvreAgenceDeReception(User $user, CommandeAchat $commande): bool
     {
-        return $commande->site_id !== null
-            && $user->organization_id === $commande->organization_id
-            && $user->sites()->where('sites.id', $commande->site_id)->exists();
+        return app(PerimetreReceptionsAchat::class)->couvre($user, $commande);
     }
 
     public function delete(User $user, CommandeAchat $commande): bool

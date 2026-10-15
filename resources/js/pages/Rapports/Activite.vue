@@ -732,6 +732,22 @@ const chiffresMobileMoney = computed(() =>
                     controle
                     vide="Aucun encaissement Mobile Money sur la période."
                 />
+                <!-- Comptes Mobile Money des agents (ADR 0027) : ce que l'agent détient encore, ce qu'il a
+                     déjà transféré à l'agence, les frais. Même fiche que la caisse en espèces. -->
+                <SectionCaisse
+                    v-if="
+                        rapport.comptes_mobile_money &&
+                        (maSituation ||
+                            !rapport.comptes_mobile_money.aucune_caisse)
+                    "
+                    nature="mobile_money"
+                    class="border-t pt-4"
+                    data-testid="comptes-mobile-money"
+                    :caisse="rapport.comptes_mobile_money"
+                    :ma-situation="maSituation"
+                    :debut="periode.date_debut"
+                    :fin="periode.date_fin"
+                />
                 <p
                     v-if="tronque(rapport.mobile_money)"
                     class="text-xs text-muted-foreground"

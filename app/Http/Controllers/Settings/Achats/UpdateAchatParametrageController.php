@@ -32,11 +32,23 @@ class UpdateAchatParametrageController extends Controller
             'config.*.perimetre' => ['required', Rule::in(RegleValidationRole::PERIMETRES)],
             'config.*.sites' => ['array'],
             'config.*.sites.*' => ['string', Rule::in($siteIds)],
+            // « Peut réceptionner pour » — facultatif : un envoi sans cette clé n'y touche pas.
+            'receptions' => ['sometimes', 'array'],
+            'receptions.*.role_name' => ['required', 'string', Rule::in($roles)],
+            'receptions.*.perimetre' => ['required', Rule::in(RegleValidationRole::PERIMETRES)],
+            'receptions.*.sites' => ['array'],
+            'receptions.*.sites.*' => ['string', Rule::in($siteIds)],
         ], [
             'config.*.role_name.in' => 'Rôle inconnu pour cette organisation.',
+            'receptions.*.role_name.in' => 'Rôle inconnu pour cette organisation.',
         ]);
 
         $erreurs = [];
+        foreach ($validated['receptions'] ?? [] as $i => $item) {
+            if ($item['perimetre'] === 'agences_selectionnees' && empty($item['sites'])) {
+                $erreurs["receptions.{$i}.sites"] = 'Sélectionnez au moins une agence.';
+            }
+        }
         foreach ($validated['config'] as $i => $item) {
             if (! $item['actif']) {
                 continue;
@@ -74,8 +86,32 @@ class UpdateAchatParametrageController extends Controller
                         : null,
                 ]);
             }
+
+            foreach ($validated['receptions'] ?? [] as $item) {
+                $cle = [
+                    'organization_id' => $orgId,
+                    'domaine' => RegleValidationRole::DOMAINE_RECEPTIONS_ACHATS,
+                    'role_name' => $item['role_name'],
+                ];
+
+                // « Ses agences uniquement » = comportement sans règle (rattachement seul).
+                if ($item['perimetre'] === 'son_agence') {
+                    RegleValidationRole::where($cle)->delete();
+
+                    continue;
+                }
+
+                RegleValidationRole::updateOrCreate($cle, [
+                    'plafond' => null,
+                    'plafond_illimite' => false,
+                    'perimetre' => $item['perimetre'],
+                    'sites' => $item['perimetre'] === 'agences_selectionnees'
+                        ? array_values(array_unique($item['sites'] ?? []))
+                        : null,
+                ]);
+            }
         });
 
-        return back()->with('success', 'Plafonds de validation des achats mis à jour.');
+        return back()->with('success', 'Paramètres des achats mis à jour.');
     }
 }

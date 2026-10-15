@@ -58,7 +58,7 @@ class EncaissementDestinationDiagnostic
 
     /** @var array<string, string> */
     public const LIBELLES = [
-        self::CAISSE_DEDIEE => 'Conforme — caisse dédiée de l\'agent',
+        self::CAISSE_DEDIEE => 'Conforme — caisse ou compte Mobile Money de l\'agent',
         self::SUPPORT_IDENTIFIE => 'Conforme — support de trésorerie identifié',
         self::ESPECES_HORS_CAISSE_DEDIEE => 'Espèces hors caisse dédiée (compte partagé)',
         self::SANS_PIECE => 'Aucun mouvement comptable',

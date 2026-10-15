@@ -41,6 +41,9 @@ interface Mouvement {
     compte_destination: string | null;
     compte_destination_id: string | null;
     montant: number;
+    /** Frais de l'opérateur, en sus du montant (transfert Mobile Money, ADR 0027) — null ailleurs. */
+    frais?: number | null;
+    reference_externe?: string | null;
     statut: string;
     statut_label: string;
     date_envoi: string | null;
@@ -178,8 +181,9 @@ const filterFields = computed<FilterField[]>(() => [
     },
 ]);
 
-// Versement (caisse d'agent → caisse de l'agence) et approvisionnement (sens inverse, ADR 0018) :
-// même agence, affichés caisse → caisse, caisse de destination fixée à l'envoi.
+// Versement (caisse d'agent → caisse de l'agence), approvisionnement (sens inverse, ADR 0018) et
+// dépôt en banque (caisse ou Mobile Money de l'agence → banque, ADR 0026) : même agence, affichés
+// support → support, support de destination fixé à l'envoi.
 function estVersement(m: Mouvement): boolean {
     return m.nature === 'interne_caisses';
 }
@@ -188,8 +192,22 @@ function estApprovisionnement(m: Mouvement): boolean {
     return m.nature === 'approvisionnement_caisse';
 }
 
+function estDepotBanque(m: Mouvement): boolean {
+    return m.nature === 'depot_banque';
+}
+
+// Transfert du compte Mobile Money d'un agent vers celui de son agence (ADR 0027).
+function estTransfertMobileMoney(m: Mouvement): boolean {
+    return m.nature === 'transfert_mobile_money';
+}
+
 function entreCaisses(m: Mouvement): boolean {
-    return estVersement(m) || estApprovisionnement(m);
+    return (
+        estVersement(m) ||
+        estApprovisionnement(m) ||
+        estDepotBanque(m) ||
+        estTransfertMobileMoney(m)
+    );
 }
 
 function dateFr(date: string): string {
@@ -493,6 +511,16 @@ function confirmerMotif() {
                                     }}
                                 </button>
                                 <div
+                                    v-if="
+                                        estTransfertMobileMoney(m) &&
+                                        m.reference_externe
+                                    "
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-reference-transfert"
+                                >
+                                    Réf. {{ m.reference_externe }}
+                                </div>
+                                <div
                                     v-if="m.commentaire"
                                     class="text-xs text-muted-foreground"
                                 >
@@ -527,6 +555,14 @@ function confirmerMotif() {
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(m.montant) }}
+                                <!-- Frais de l'opérateur : en sus du montant reçu, charge de l'agence qui envoie. -->
+                                <div
+                                    v-if="m.frais != null"
+                                    class="text-xs text-muted-foreground"
+                                    data-testid="mouvement-frais"
+                                >
+                                    Frais : {{ formatGNF(m.frais) }}
+                                </div>
                             </td>
                             <td
                                 class="px-4 py-3"
@@ -580,11 +616,14 @@ function confirmerMotif() {
                                     :status="m.statut"
                                     :label="m.statut_label"
                                 />
-                                <!-- Versement envoyé : l'argent a quitté la caisse de l'agent mais n'est pas encore
-                                     crédité à la caisse de l'agence. Visible de tous, pas seulement de l'envoyeur. -->
+                                <!-- Versement ou dépôt en banque envoyé : l'argent a quitté le support d'origine mais
+                                     n'est pas encore crédité à la destination. Visible de tous, pas seulement de l'envoyeur. -->
                                 <div
                                     v-if="
-                                        estVersement(m) && m.statut === 'envoye'
+                                        (estVersement(m) ||
+                                            estDepotBanque(m) ||
+                                            estTransfertMobileMoney(m)) &&
+                                        m.statut === 'envoye'
                                     "
                                     class="mt-0.5 text-xs text-muted-foreground"
                                     data-testid="mouvement-en-attente"
@@ -753,13 +792,13 @@ function confirmerMotif() {
                     data-testid="reception-versement"
                 >
                     <p class="text-sm">
-                        Caisse de destination :
+                        Support de destination :
                         <span class="font-medium">{{
                             receptionCible.compte_destination
                         }}</span>
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Cette caisse a été fixée à l'envoi. Confirmez que les
+                        Ce support a été fixé à l'envoi. Confirmez que les
                         {{ formatGNF(receptionCible.montant) }} envoyés par
                         {{ receptionCible.expediteur ?? "l'expéditeur" }} ont
                         bien été reçus.

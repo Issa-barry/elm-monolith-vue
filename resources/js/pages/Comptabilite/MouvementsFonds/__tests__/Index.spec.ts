@@ -152,6 +152,22 @@ describe('Mouvements de fonds — versement en attente de confirmation', () => {
         expect(enAttente(recu).exists()).toBe(false);
         expect(enAttente(entreAgences).exists()).toBe(false);
     });
+
+    it('traite un dépôt en banque comme un mouvement support → support en attente de confirmation (ADR 0026)', () => {
+        const ligne = monter([
+            mouvement({
+                nature: 'depot_banque',
+                nature_label: 'Dépôt en banque',
+                compte_origine: 'Orange Money de Matoto',
+                compte_destination: 'UBA',
+            }),
+        ]).find('tbody tr');
+
+        expect(ligne.text()).toContain('Dépôt en banque');
+        expect(ligne.text()).toContain('Orange Money de Matoto');
+        expect(ligne.text()).toContain('UBA');
+        expect(enAttente(ligne).text()).toBe('En attente de confirmation');
+    });
 });
 
 // Chaque information a sa propre colonne (Référence / Type / Origine / Destination / Montant /
@@ -751,6 +767,55 @@ describe('Mouvements de fonds — règlement inter-agences (ADR 0012)', () => {
         expect(
             ligne
                 .find('[data-testid="mouvement-encaissements-regles"]')
+                .exists(),
+        ).toBe(false);
+    });
+});
+
+describe('Mouvements de fonds — transfert Mobile Money (ADR 0027)', () => {
+    const TRANSFERT = mouvement({
+        nature: 'transfert_mobile_money',
+        nature_label: 'Transfert Mobile Money',
+        compte_origine: 'Orange Money — Moussa Sidibé',
+        compte_destination: 'Orange Money de Matoto',
+        montant: 495_000,
+        frais: 5_000,
+        reference_externe: 'OM-TR-001',
+    });
+
+    it('affiche les frais sous le montant, la référence, et les deux comptes', () => {
+        const wrapper = monter([TRANSFERT]);
+        const ligne = wrapper.get('tbody tr');
+
+        expect(ligne.get('[data-testid="mouvement-type"]').text()).toContain(
+            'Transfert Mobile Money',
+        );
+        expect(
+            ligne.get('[data-testid="mouvement-reference-transfert"]').text(),
+        ).toBe('Réf. OM-TR-001');
+        expect(ligne.get('[data-testid="mouvement-frais"]').text()).toMatch(
+            /Frais : 5\s000/,
+        );
+        expect(ligne.text()).toContain('Orange Money — Moussa Sidibé');
+        expect(ligne.text()).toContain('Orange Money de Matoto');
+        expect(ligne.get('[data-testid="mouvement-en-attente"]').text()).toBe(
+            'En attente de confirmation',
+        );
+    });
+
+    it('affiche des frais à zéro, et rien pour les autres mouvements', () => {
+        const sansFrais = monter([mouvement({ ...TRANSFERT, frais: 0 })]);
+        expect(sansFrais.get('[data-testid="mouvement-frais"]').text()).toMatch(
+            /Frais : 0/,
+        );
+
+        const versement = monter([mouvement()]);
+        expect(versement.find('[data-testid="mouvement-frais"]').exists()).toBe(
+            false,
+        );
+        expect(
+            versement
+                .find('[data-testid="mouvement-reference-transfert"]')
                 .exists(),
         ).toBe(false);
     });

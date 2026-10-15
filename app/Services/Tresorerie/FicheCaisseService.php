@@ -24,6 +24,10 @@ use Illuminate\Support\Collection;
  * mouvements sont regroupés selon l'événement réel de leur pièce — aucune catégorie inventée.
  *
  * Constat, pas contrôle : aucun comptage physique n'existe encore (écart de caisse = lot 3).
+ *
+ * Sert aussi le compte Mobile Money d'un agent (ADR 0027, lot 4) : même tableau tiré du grand livre,
+ * avec ses propres libellés (encaissements Mobile Money, transferts envoyés à l'agence, frais de
+ * transfert) et ses transferts (`transfert_mobile_money`) à la place des versements de caisse.
  */
 class FicheCaisseService
 {
@@ -33,6 +37,16 @@ class FicheCaisseService
         'encaissements_annules' => 'Encaissements annulés (contrepassés)',
         'versements_envoyes' => 'Versements envoyés',
         'versements_renvoyes' => "Versements renvoyés à l'agent",
+        'remboursements_clients' => 'Remboursements clients',
+        'contrepassations' => 'Autres contrepassations',
+    ];
+
+    public const CATEGORIES_MOBILE_MONEY = [
+        'encaissements' => 'Encaissements Mobile Money',
+        'encaissements_annules' => 'Encaissements annulés (contrepassés)',
+        'versements_envoyes' => 'Transferts envoyés à l\'agence',
+        'frais_transfert' => 'Frais de transfert',
+        'versements_renvoyes' => 'Transferts renvoyés à l\'agent',
         'remboursements_clients' => 'Remboursements clients',
         'contrepassations' => 'Autres contrepassations',
     ];
@@ -49,7 +63,8 @@ class FicheCaisseService
         $soldeDebut = $this->disponibilite->soldePourSupport($caisse, $debut->subDay()->toMutable());
         $soldeFin = $this->disponibilite->soldePourSupport($caisse, $fin->toMutable());
 
-        $ecritures = $this->ecritures($caisse, $debut, $fin);
+        $categories = $this->categories($caisse);
+        $ecritures = $this->ecritures($caisse, $debut, $fin, $categories);
 
         $mouvements = $ecritures
             ->groupBy('categorie')
@@ -60,9 +75,9 @@ class FicheCaisseService
                 'sorties' => round((float) $lignes->sum('sortie'), 2),
                 'nombre' => $lignes->count(),
             ])
-            ->sortBy(fn (array $m) => array_search($m['categorie'], array_keys(self::CATEGORIES), true) === false
+            ->sortBy(fn (array $m) => array_search($m['categorie'], array_keys($categories), true) === false
                 ? PHP_INT_MAX
-                : array_search($m['categorie'], array_keys(self::CATEGORIES), true))
+                : array_search($m['categorie'], array_keys($categories), true))
             ->values();
 
         $versements = $this->versements($caisse);
@@ -77,6 +92,9 @@ class FicheCaisseService
                 'site_nom' => $caisse->site?->nom,
                 'agent_id' => $caisse->agent_id,
                 'agent_nom' => $caisse->agent?->name,
+                // `caisse` (espèces) ou `mobile_money` (compte Mobile Money de l'agent, ADR 0027).
+                'type' => $caisse->type->value,
+                'operateur_label' => $caisse->operateur_mobile_money?->label(),
             ],
             'solde_debut' => $soldeDebut,
             'solde_fin' => $soldeFin,
@@ -106,7 +124,14 @@ class FicheCaisseService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function ecritures(CompteTresorerie $caisse, CarbonImmutable $debut, CarbonImmutable $fin): Collection
+    /** @return array<string, string> libellés des catégories, dans l'ordre d'affichage */
+    private function categories(CompteTresorerie $caisse): array
+    {
+        return $caisse->isMobileMoneyDedie() ? self::CATEGORIES_MOBILE_MONEY : self::CATEGORIES;
+    }
+
+    /** @param  array<string, string>  $categories */
+    private function ecritures(CompteTresorerie $caisse, CarbonImmutable $debut, CarbonImmutable $fin, array $categories): Collection
     {
         $mouvementMorph = (new MouvementFonds)->getMorphClass();
         $encaissementMorph = (new EncaissementVente)->getMorphClass();
@@ -126,7 +151,7 @@ class FicheCaisseService
                 'p.id as piece_id', 'p.numero', 'p.date_piece', 'p.libelle as piece_libelle',
                 'p.type_evenement', 'p.source_type',
             ])
-            ->map(function ($ligne) use ($mouvementMorph, $encaissementMorph) {
+            ->map(function ($ligne) use ($mouvementMorph, $encaissementMorph, $categories) {
                 $categorie = $this->categorie((string) $ligne->type_evenement, (string) $ligne->source_type, $mouvementMorph, $encaissementMorph);
 
                 return [
@@ -135,7 +160,7 @@ class FicheCaisseService
                     'date' => CarbonImmutable::parse($ligne->date_piece)->toDateString(),
                     'libelle' => $ligne->piece_libelle ?: $ligne->ligne_libelle,
                     'categorie' => $categorie,
-                    'categorie_libelle' => self::CATEGORIES[$categorie]
+                    'categorie_libelle' => $categories[$categorie]
                         ?? EvenementComptable::tryFrom((string) $ligne->type_evenement)?->label()
                         ?? (string) $ligne->type_evenement,
                     'entree' => round((float) $ligne->debit, 2),
@@ -159,6 +184,8 @@ class FicheCaisseService
             // Trop-perçu ou acomptes d'une précommande annulée rendus au client (ADR 0019).
             EvenementComptable::REMBOURSEMENT_CLIENT->value => 'remboursements_clients',
             EvenementComptable::MOUVEMENT_FONDS_ENVOYE->value => 'versements_envoyes',
+            // Compte Mobile Money d'un agent (ADR 0027) : frais de l'opérateur sur un transfert.
+            EvenementComptable::FRAIS_TRANSFERT_FONDS->value => 'frais_transfert',
             // Seul un approvisionnement (ADR 0018) crédite une caisse dédiée par un mouvement de fonds.
             EvenementComptable::MOUVEMENT_FONDS_RECU->value => 'approvisionnements_recus',
             default => $evenement,
@@ -181,7 +208,8 @@ class FicheCaisseService
     }
 
     /**
-     * Versements de la caisse vers l'agence (hors brouillons et annulés), du plus récent au plus ancien.
+     * Versements de la caisse vers l'agence — ou transferts du compte Mobile Money vers l'agence —
+     * hors brouillons et annulés, du plus récent au plus ancien.
      *
      * @return Collection<int, array<string, mixed>>
      */
@@ -189,7 +217,7 @@ class FicheCaisseService
     {
         return MouvementFonds::query()
             ->where('organization_id', $caisse->organization_id)
-            ->where('nature', NatureMouvementFonds::INTERNE_CAISSES->value)
+            ->where('nature', $caisse->isMobileMoneyDedie() ? NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value : NatureMouvementFonds::INTERNE_CAISSES->value)
             ->where('compte_tresorerie_origine_id', $caisse->id)
             ->whereNotIn('statut', [StatutMouvementFonds::BROUILLON->value, StatutMouvementFonds::ANNULE->value])
             ->whereNotNull('date_envoi')

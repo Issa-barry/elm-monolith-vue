@@ -3,11 +3,12 @@ import StatusDot from '@/components/StatusDot.vue';
 import { formatGNF } from '@/lib/utils';
 import type { FicheCaisse } from '@/types/rapports';
 import { ArrowRightLeft } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 // Fiche d'une caisse dédiée sur une période (FicheCaisseService) : même composant pour l'onglet
 // Caisse du rapport d'activité et la future fiche caisse (phase 4), pour n'avoir qu'un seul
 // affichage de caisse. Constat tiré du grand livre : aucun comptage physique n'est enregistré.
-withDefaults(
+const props = withDefaults(
     defineProps<{
         fiche: FicheCaisse;
         debut: string;
@@ -15,6 +16,28 @@ withDefaults(
         afficherAgent?: boolean;
     }>(),
     { afficherAgent: true },
+);
+
+// Compte Mobile Money de l'agent (ADR 0027) : il « transfère » à l'agence, il ne « verse » pas.
+const mobileMoney = computed(() => props.fiche.caisse.type === 'mobile_money');
+const mot = computed(() =>
+    mobileMoney.value
+        ? {
+              mouvement: 'transfert',
+              Mouvement: 'Transfert',
+              mouvements: 'Transferts',
+              inactif: 'compte inactif',
+              aRemettre: "À transférer à l'agence",
+              confirmation: "à confirmer par l'agence",
+          }
+        : {
+              mouvement: 'versement',
+              Mouvement: 'Versement',
+              mouvements: 'Versements',
+              inactif: 'caisse inactive',
+              aRemettre: 'À remettre — solde théorique',
+              confirmation: "à confirmer par la caisse de l'agence",
+          },
 );
 
 function dateFr(iso: string | null | undefined): string {
@@ -45,12 +68,12 @@ function anciennete(jours: number): string {
                         >{{ fiche.caisse.agent_nom }} ·
                     </span>
                     {{ fiche.caisse.site_nom ?? '—' }}
-                    <span v-if="!fiche.caisse.actif"> · caisse inactive</span>
+                    <span v-if="!fiche.caisse.actif"> · {{ mot.inactif }}</span>
                 </p>
             </div>
             <div class="text-right">
                 <p class="text-xs text-muted-foreground">
-                    À remettre — solde théorique
+                    {{ mot.aRemettre }}
                 </p>
                 <p
                     class="text-lg font-bold tabular-nums"
@@ -111,18 +134,18 @@ function anciennete(jours: number): string {
                 class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400"
             >
                 <ArrowRightLeft class="h-3.5 w-3.5" />
-                En cours de versement :
+                En cours de {{ mot.mouvement }} :
                 {{ formatGNF(fiche.en_cours.montant) }} ({{
                     fiche.en_cours.nombre
                 }}
-                à confirmer par la caisse de l'agence) — hors solde.
+                {{ mot.confirmation }}) — hors solde.
             </p>
             <p
                 v-if="fiche.contestes.nombre > 0"
                 class="text-amber-700 dark:text-amber-400"
             >
-                {{ fiche.contestes.nombre }} versement(s) contesté(s) :
-                {{ formatGNF(fiche.contestes.montant) }} en attente de
+                {{ fiche.contestes.nombre }} {{ mot.mouvement }}(s) contesté(s)
+                : {{ formatGNF(fiche.contestes.montant) }} en attente de
                 règlement.
             </p>
         </div>
@@ -130,7 +153,7 @@ function anciennete(jours: number): string {
         <div class="grid gap-4 md:grid-cols-2">
             <div class="space-y-1 text-sm">
                 <p class="text-xs font-medium text-muted-foreground">
-                    Dernier versement
+                    Dernier {{ mot.mouvement }}
                 </p>
                 <p v-if="fiche.dernier_versement" class="flex flex-wrap gap-2">
                     <span class="tabular-nums">{{
@@ -149,12 +172,12 @@ function anciennete(jours: number): string {
                     />
                 </p>
                 <p v-else class="text-muted-foreground">
-                    Aucun versement enregistré.
+                    Aucun {{ mot.mouvement }} enregistré.
                 </p>
             </div>
             <div v-if="fiche.versements_periode.length > 0" class="text-sm">
                 <p class="mb-1 text-xs font-medium text-muted-foreground">
-                    Versements de la période
+                    {{ mot.mouvements }} de la période
                 </p>
                 <ul class="space-y-1">
                     <li

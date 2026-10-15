@@ -104,6 +104,9 @@ class PlanComptableBootstrapService
             // Chantier Financement des agences (2026-08) — cf. docblock de
             // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
             '588000' => 'Virements de fonds internes (en transit)',
+            // Frais facturés par l'opérateur sur un transfert Mobile Money (ADR 0027). Compte
+            // PROVISOIRE, à valider par le comptable comme le reste de ce plan.
+            '631800' => 'Frais de transfert de fonds',
             // Dette/créance entre agences d'une même organisation (ADR 0012) : une agence qui
             // encaisse une commande d'une autre agence la crédite ici (tiers = agence de la
             // commande) jusqu'au règlement inter-agences. Soldé à 0 au niveau de l'organisation.
@@ -319,6 +322,9 @@ class PlanComptableBootstrapService
             // est la liaison, pas le transit — c'est elle qui solde la dette née des encaissements.
             ['mouvement_fonds_envoye', 'liaison', null, '181000', 'OD'],
             ['mouvement_fonds_recu', 'liaison', null, '181000', 'OD'],
+            // Frais d'un transfert Mobile Money (ADR 0027) : charge de l'agence qui envoie, la
+            // trésorerie débitée étant le compte du support d'origine (jamais ce mapping).
+            ['frais_transfert_fonds', 'charge_frais_transfert', null, '631800', 'OD'],
 
             // Solde d'ouverture d'un support de trésorerie — contrepartie technique, jamais
             // un vrai résultat/charge (cf. SoldeOuvertureTresorerieService).

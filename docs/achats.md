@@ -28,7 +28,7 @@ Factures d’achat et dette : lot 3 ([ADR 0022](adr/0022-factures-fournisseurs-d
 | ACH-006 | À la validation sont figés : montant, nom du fournisseur, nom de l'agence, libellé et référence des lignes, règle de plafond appliquée (rôle, plafond, agences). Fiche et PDF lisent ce snapshot. |
 | ACH-007 | Annuler (`achats.annuler`, motif obligatoire) est possible quel que soit le plafond, tant qu'aucune quantité n'a été reçue. |
 | ACH-008 | Une commande partiellement reçue peut être clôturée (`achats.annuler`, motif) : le reliquat n'est plus attendu. |
-| ACH-009 | Réception (`receptions.create`, utilisateur rattaché à l'agence de la commande) : uniquement depuis Logistique → Réceptions, sur une commande validée ou partiellement reçue. Chaque quantité ≤ reliquat, relu sous verrou ; sinon refus sans aucun effet. |
+| ACH-009 | Réception (`receptions.create` + agence de livraison couverte) : uniquement depuis Logistique → Réceptions, sur une commande validée ou partiellement reçue. Chaque quantité ≤ reliquat, relu sous verrou ; sinon refus sans aucun effet. **Agence couverte** (révisé le 12/10/2026) = l'utilisateur y est rattaché, OU une règle « Peut réceptionner pour » d'un de ses rôles la couvre (Paramètres → Achats : agences sélectionnées ou toutes les agences) — peu importe l'agence qui a créé le bon. Aucune exception de rôle dans le code : le super administrateur reçoit par défaut la règle « toutes les agences », modifiable ; les autres rôles gardent le rattachement seul tant qu'aucune règle ne leur est donnée. La liste Logistique → Réceptions montre les bons des agences couvertes. |
 | ACH-010 | Le stock entre dès l'enregistrement de la réception, sur l'agence de la commande. Le coût unitaire (prix de la commande) est figé sur la ligne de réception ; le mouvement de stock porte le motif « Réception achat — référence du bon ». |
 | ACH-011 | Le `prix_achat` de la variante prend le coût reçu, sauf pour un produit vendable dont la marge se calcule sur le prix d'achat si ce coût atteint le prix de vente : avertissement orange, réception non bloquée. |
 | ACH-012 | Lecture (`achats.read`) : bons dont l'agence de livraison OU l'agence payeuse est couverte par ACH-000, plus ceux que l'utilisateur a créés ou validés. Voir un bon ne donne pas le droit d'agir dessus (ACH-015). |
@@ -85,6 +85,13 @@ Une ligne par rôle (super administrateur compris, rien n'est verrouillé) : cas
 pour » (sans elle, aucun accès), agences couvertes, et plafond de validation en GNF ou « sans
 limite » (vide = le rôle ne valide rien), et cases « Peut valider ses propres bons » (ACH-005) et « Peut valider ses propres factures d’achat » (FAF-005). Les
 permissions `achats.*` se cochent dans l'écran Rôles.
+
+Second bloc, « Réceptions — agences par rôle » (12/10/2026, ACH-009) : pour chaque rôle, « Peut
+réceptionner pour » = Ses agences uniquement (défaut, aucune règle) / Ses agences + sélection /
+Toutes les agences. Indépendant de « Peut acheter pour » : un magasinier sans accès aux bons de
+commande peut recevoir un périmètre de réception. Stocké dans `regles_validation_roles`, domaine
+`receptions_achats` (périmètre seul, sans plafond).
+
 Permission de la page : `parametres.update`.
 
 ## Permissions

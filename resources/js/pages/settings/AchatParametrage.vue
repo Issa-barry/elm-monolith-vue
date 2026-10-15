@@ -23,8 +23,18 @@ interface RegleRole {
     sites: string[];
 }
 
+/** « Peut réceptionner pour » : agences où le rôle réceptionne, en plus de celles du rattachement. */
+interface RegleReception {
+    role_name: string;
+    role_label: string;
+    a_permission: boolean;
+    perimetre: Perimetre;
+    sites: string[];
+}
+
 const props = defineProps<{
     config: RegleRole[];
+    receptions: RegleReception[];
     sites: { id: string; nom: string; code: string | null }[];
 }>();
 
@@ -34,10 +44,21 @@ const lignes = ref<RegleRole[]>(
     props.config.map((c) => ({ ...c, sites: [...c.sites] })),
 );
 
+const receptions = ref<RegleReception[]>(
+    props.receptions.map((r) => ({ ...r, sites: [...r.sites] })),
+);
+
 const PERIMETRES: { value: Perimetre; label: string }[] = [
     { value: 'toutes_agences', label: 'Toutes les agences' },
     { value: 'son_agence', label: 'Son agence uniquement' },
     { value: 'agences_selectionnees', label: 'Agences sélectionnées' },
+];
+
+// Réception : le rattachement donne toujours ses agences ; la règle ne fait qu'en ajouter.
+const PERIMETRES_RECEPTION: { value: Perimetre; label: string }[] = [
+    { value: 'son_agence', label: 'Ses agences uniquement' },
+    { value: 'agences_selectionnees', label: 'Ses agences + sélection' },
+    { value: 'toutes_agences', label: 'Toutes les agences' },
 ];
 
 function formatMontant(val: number | null): string {
@@ -60,7 +81,7 @@ function onPlafondBlur(l: RegleRole) {
     affichage.value[l.role_name] = formatMontant(l.plafond);
 }
 
-function toggleSite(l: RegleRole, siteId: string) {
+function toggleSite(l: { sites: string[] }, siteId: string) {
     const i = l.sites.indexOf(siteId);
     if (i === -1) l.sites.push(siteId);
     else l.sites.splice(i, 1);
@@ -83,6 +104,10 @@ function erreur(index: number, champ: string): string | undefined {
     return erreurs.value[`config.${index}.${champ}`];
 }
 
+function erreurReception(index: number): string | undefined {
+    return erreurs.value[`receptions.${index}.sites`];
+}
+
 function enregistrer() {
     enregistrement.value = true;
     erreurs.value = {};
@@ -99,6 +124,11 @@ function enregistrer() {
                     l.peut_valider_ses_propres_factures,
                 perimetre: l.perimetre,
                 sites: l.perimetre === 'agences_selectionnees' ? l.sites : [],
+            })),
+            receptions: receptions.value.map((r) => ({
+                role_name: r.role_name,
+                perimetre: r.perimetre,
+                sites: r.perimetre === 'agences_selectionnees' ? r.sites : [],
             })),
         },
         {
@@ -386,6 +416,117 @@ function enregistrer() {
                                     </span>
                                     Peut valider ses propres factures d’achat
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <HeadingSmall
+                    title="Réceptions — agences par rôle"
+                    description="Un utilisateur réceptionne toujours les bons de commande livrés dans les agences auxquelles il est rattaché. Ce réglage ajoute, pour un rôle, d'autres agences ou toutes les agences. La permission « Réceptions — créer » reste nécessaire ; elle se donne dans l'écran Rôles."
+                />
+
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
+                    <div
+                        class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
+                    >
+                        <p class="text-sm font-medium">
+                            Peut réceptionner pour
+                        </p>
+                        <Button
+                            size="sm"
+                            :disabled="enregistrement"
+                            @click="enregistrer"
+                        >
+                            <i
+                                v-if="enregistrement"
+                                class="pi pi-spin pi-spinner mr-2"
+                            />
+                            <Save v-else class="mr-2 h-4 w-4" />
+                            Enregistrer
+                        </Button>
+                    </div>
+
+                    <div class="divide-y">
+                        <div
+                            v-for="(r, index) in receptions"
+                            :key="r.role_name"
+                            class="grid gap-3 px-6 py-4 lg:grid-cols-[240px_1fr]"
+                        >
+                            <div class="space-y-1">
+                                <p class="text-sm font-medium">
+                                    {{ r.role_label }}
+                                </p>
+                                <p
+                                    v-if="!r.a_permission"
+                                    class="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                >
+                                    <AlertTriangle
+                                        class="mt-0.5 h-3 w-3 shrink-0"
+                                    />
+                                    Sans la permission « Réceptions — créer »,
+                                    ce rôle ne réceptionne rien.
+                                </p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        v-for="p in PERIMETRES_RECEPTION"
+                                        :key="p.value"
+                                        type="button"
+                                        class="rounded-md border px-3 py-1 text-xs font-medium transition-colors"
+                                        :class="
+                                            r.perimetre === p.value
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border text-muted-foreground hover:text-foreground'
+                                        "
+                                        :aria-pressed="r.perimetre === p.value"
+                                        :aria-label="`${p.label} — ${r.role_label}`"
+                                        @click="r.perimetre = p.value"
+                                    >
+                                        {{ p.label }}
+                                    </button>
+                                </div>
+                                <div
+                                    v-if="
+                                        r.perimetre === 'agences_selectionnees'
+                                    "
+                                    class="grid grid-cols-2 gap-1 rounded-lg border border-dashed p-2 sm:grid-cols-3"
+                                >
+                                    <button
+                                        v-for="site in sites"
+                                        :key="site.id"
+                                        type="button"
+                                        class="flex items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-muted/50"
+                                        @click="toggleSite(r, site.id)"
+                                    >
+                                        <span
+                                            class="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2"
+                                            :class="
+                                                r.sites.includes(site.id)
+                                                    ? 'border-primary bg-primary text-primary-foreground'
+                                                    : 'border-border'
+                                            "
+                                        >
+                                            <Check
+                                                v-if="r.sites.includes(site.id)"
+                                                class="h-2.5 w-2.5"
+                                            />
+                                        </span>
+                                        <span class="truncate">{{
+                                            site.nom
+                                        }}</span>
+                                    </button>
+                                </div>
+                                <p
+                                    v-if="erreurReception(index)"
+                                    class="text-xs text-destructive"
+                                >
+                                    {{ erreurReception(index) }}
+                                </p>
                             </div>
                         </div>
                     </div>

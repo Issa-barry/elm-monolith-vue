@@ -31,6 +31,12 @@ class SoldeOuvertureTresorerieService
             throw new \InvalidArgumentException('Support de trésorerie hors organisation.');
         }
 
+        if ($compteTresorerie->isMobileMoneyDedie()) {
+            throw ValidationException::withMessages([
+                'compte_tresorerie_id' => "Le compte Mobile Money d'un agent n'a pas de solde d'ouverture : il démarre à 0.",
+            ]);
+        }
+
         if ($compteTresorerie->isDediee()) {
             throw ValidationException::withMessages([
                 'compte_tresorerie_id' => "Une caisse dédiée à un agent n'a pas de solde d'ouverture : elle démarre à 0 et s'alimente depuis la caisse de l'agence.",

@@ -287,6 +287,147 @@ class ApprovisionnementCaisseAgentTest extends TestCase
         $this->assertEquals(10_000_000, $this->solde($this->caisseAgence));
     }
 
+    // ── Depuis « Nouveau mouvement de fonds » : même agence des deux côtés ───
+
+    /** @return array<string, mixed> */
+    private function payloadMouvement(array $surcharge = []): array
+    {
+        return array_merge([
+            'site_origine_id' => $this->site->id,
+            'site_destination_id' => $this->site->id,
+            'compte_tresorerie_origine_id' => $this->caisseAgence->id,
+            'compte_tresorerie_destination_id' => $this->caisseAgent->id,
+            'montant' => 2_000_000,
+            'commentaire' => 'Paiement commissions',
+        ], $surcharge);
+    }
+
+    private function responsableAvecCreation(): User
+    {
+        Permission::firstOrCreate(['name' => 'tresorerie.create', 'guard_name' => 'web']);
+        $this->responsable->givePermissionTo('tresorerie.create');
+
+        return $this->responsable;
+    }
+
+    public function test_nouveau_mouvement_dans_la_meme_agence_approvisionne_la_caisse_choisie(): void
+    {
+        $autreAgent = $this->creerUtilisateurNonAdmin($this->site, ['rapports.read_own'], 'Bakary', 'Camara');
+        $autreCaisse = $this->creerCaisseActive($this->site->id, $autreAgent->id);
+
+        $this->actingAs($this->responsableAvecCreation())
+            ->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement(['compte_tresorerie_destination_id' => $autreCaisse->id]))
+            ->assertRedirect(route('comptabilite.tresorerie.mouvements.index'))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $mouvement = MouvementFonds::firstOrFail();
+        $this->assertSame(NatureMouvementFonds::APPROVISIONNEMENT_CAISSE, $mouvement->nature);
+        $this->assertSame(StatutMouvementFonds::ENVOYE, $mouvement->statut, 'créé et envoyé, sans brouillon');
+        $this->assertSame($this->caisseAgence->id, $mouvement->compte_tresorerie_origine_id);
+        $this->assertSame($autreCaisse->id, $mouvement->compte_tresorerie_destination_id, 'la caisse choisie, pas une caisse par défaut');
+        $this->assertSame('Paiement commissions', $mouvement->commentaire);
+        $this->assertSame($this->responsable->id, $mouvement->sent_by);
+
+        $this->assertEquals(8_000_000, $this->solde($this->caisseAgence));
+        $this->assertEquals(0, $this->solde($autreCaisse), "créditée seulement à la confirmation de l'agent");
+        $this->assertEquals(0, $this->solde($this->caisseAgent), "l'autre caisse d'agent n'est pas touchée");
+
+        // Seul le titulaire de la caisse choisie confirme, comme depuis Supports.
+        $this->actingAs($this->responsable)->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement))->assertForbidden();
+        $this->actingAs($autreAgent)->post(route('comptabilite.tresorerie.mouvements.recevoir', $mouvement))->assertSessionHasNoErrors();
+        $this->assertSame(StatutMouvementFonds::RECU, $mouvement->fresh()->statut);
+        $this->assertEquals(2_000_000, $this->solde($autreCaisse));
+    }
+
+    public function test_nouveau_mouvement_dans_la_meme_agence_exige_la_caisse_de_destination(): void
+    {
+        $this->actingAs($this->responsableAvecCreation())
+            ->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement(['compte_tresorerie_destination_id' => '']))
+            ->assertSessionHasErrors('compte_tresorerie_destination_id');
+
+        $this->assertSame(0, MouvementFonds::count());
+    }
+
+    public function test_nouveau_mouvement_dans_la_meme_agence_applique_les_regles_de_l_approvisionnement(): void
+    {
+        $responsable = $this->responsableAvecCreation();
+        $envoyer = fn (array $surcharge) => $this->actingAs($responsable)
+            ->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement($surcharge));
+
+        // Destination : jamais une caisse de l'agence, ni la caisse d'un agent d'une autre agence.
+        $autreCaisseAgence = $this->creerCaisseAgence($this->site, 'Caisse secondaire');
+        $envoyer(['compte_tresorerie_destination_id' => $autreCaisseAgence->id])->assertSessionHasErrors('compte_tresorerie_destination_id');
+        $envoyer(['compte_tresorerie_destination_id' => $this->caisseAgence->id])->assertSessionHasErrors('compte_tresorerie_destination_id');
+
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kouria', 'type' => 'agence', 'localisation' => 'Coyah']);
+        $caisseAilleurs = $this->creerCaisseActive($autreSite->id, $this->creerAgent($autreSite, 'Bakary', 'Camara')->id);
+        $envoyer(['compte_tresorerie_destination_id' => $caisseAilleurs->id])->assertSessionHasErrors('compte_tresorerie_destination_id');
+
+        // Origine : une caisse de l'agence, du site annoncé.
+        $banque = $this->creerCaisseAgence($this->site, 'UBA', '521000', 'banque');
+        $envoyer(['compte_tresorerie_origine_id' => $banque->id])->assertSessionHasErrors('compte_tresorerie_id');
+        $caisseKouria = $this->creerCaisseAgence($autreSite, 'Caisse Kouria');
+        $envoyer(['compte_tresorerie_origine_id' => $caisseKouria->id])->assertSessionHasErrors('compte_tresorerie_origine_id');
+        $envoyer(['compte_tresorerie_origine_id' => $this->caisseAgent->id])->assertForbidden();
+
+        // Solde de la caisse de l'agence contrôlé à l'envoi.
+        $envoyer(['montant' => 10_000_001])->assertSessionHasErrors('montant');
+
+        $this->assertSame(0, MouvementFonds::count());
+    }
+
+    public function test_nouveau_mouvement_dans_la_meme_agence_exige_le_droit_d_envoyer_sur_cette_agence(): void
+    {
+        $sansEnvoyer = $this->creerUtilisateurNonAdmin($this->site, ['tresorerie.read', 'tresorerie.create', 'tresorerie.recevoir'], 'Fodé', 'Créateur');
+        $this->actingAs($sansEnvoyer)->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement())->assertForbidden();
+
+        $sansCreer = $this->creerUtilisateurNonAdmin($this->site, ['tresorerie.read', 'tresorerie.envoyer'], 'Saa', 'Envoyeur');
+        $this->actingAs($sansCreer)->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement())->assertForbidden();
+
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kouria', 'type' => 'agence', 'localisation' => 'Coyah']);
+        $etranger = $this->creerUtilisateurNonAdmin($autreSite, ['tresorerie.read', 'tresorerie.create', 'tresorerie.envoyer'], 'Ibrahima', 'Ailleurs');
+        $this->actingAs($etranger)->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement())->assertForbidden();
+
+        $autreOrg = Organization::factory()->create();
+        $intrus = $this->makeUserWithPermissions($autreOrg, ['tresorerie.create', 'tresorerie.envoyer']);
+        $siteEtranger = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Étranger', 'type' => 'agence', 'localisation' => 'Labé']);
+        $intrus->sites()->attach($siteEtranger->id, ['role' => 'employe', 'is_default' => true]);
+        $this->actingAs($intrus)
+            ->post(route('comptabilite.tresorerie.mouvements.store'), $this->payloadMouvement())
+            ->assertSessionHasErrors(['site_origine_id', 'compte_tresorerie_origine_id', 'compte_tresorerie_destination_id']);
+
+        $this->assertSame(0, MouvementFonds::count());
+    }
+
+    public function test_l_ecran_nouveau_mouvement_propose_les_caisses_d_agents_a_approvisionner(): void
+    {
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kouria', 'type' => 'agence', 'localisation' => 'Coyah']);
+        $caisseAilleurs = $this->creerCaisseActive($autreSite->id, $this->creerAgent($autreSite, 'Bakary', 'Camara')->id);
+        $saCaisse = $this->creerCaisseActive($this->site->id, $this->responsable->id);
+
+        $props = $this->props($this->responsableAvecCreation(), 'comptabilite.tresorerie.mouvements.create');
+        $this->assertTrue($props['peut_approvisionner']);
+        $caisses = collect($props['caisses_agents'])->keyBy('id');
+        $this->assertEqualsCanonicalizing([$this->caisseAgent->id, $saCaisse->id], $caisses->keys()->all(), "uniquement les caisses d'agents de son agence");
+        $this->assertNotContains($caisseAilleurs->id, $caisses->keys()->all());
+        $this->assertSame($this->agent->name, $caisses[$this->caisseAgent->id]['agent']);
+        $this->assertSame($this->site->id, $caisses[$this->caisseAgent->id]['site_id']);
+        $this->assertFalse($caisses[$this->caisseAgent->id]['est_ma_caisse']);
+        $this->assertTrue($caisses[$saCaisse->id]['est_ma_caisse']);
+
+        // Sans `tresorerie.recevoir`, sa propre caisse n'est pas proposée (argent bloqué en transit).
+        $this->responsable->revokePermissionTo('tresorerie.recevoir');
+        $sansRecevoir = collect($this->props($this->responsable->fresh(), 'comptabilite.tresorerie.mouvements.create')['caisses_agents'])->pluck('id')->all();
+        $this->assertSame([$this->caisseAgent->id], $sansRecevoir);
+
+        // Sans `tresorerie.envoyer`, l'approvisionnement n'est pas proposé du tout.
+        $sansEnvoyer = $this->creerUtilisateurNonAdmin($this->site, ['tresorerie.read', 'tresorerie.create'], 'Fodé', 'Créateur');
+        $propsSansEnvoyer = $this->props($sansEnvoyer, 'comptabilite.tresorerie.mouvements.create');
+        $this->assertFalse($propsSansEnvoyer['peut_approvisionner']);
+        $this->assertSame([], $propsSansEnvoyer['caisses_agents']);
+    }
+
     // ── Réception : seul l'agent bénéficiaire ────────────────────────────────
 
     public function test_seul_l_agent_beneficiaire_confirme_la_reception_meme_sans_permission_de_tresorerie(): void

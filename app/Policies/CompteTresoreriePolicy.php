@@ -47,7 +47,8 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        if (! $caisse->isDediee()) {
+        // Caisse en espèces d'un agent seulement : son compte Mobile Money ne se « verse » pas.
+        if (! $caisse->isCaisseDediee()) {
             return false;
         }
 
@@ -56,6 +57,30 @@ class CompteTresoreriePolicy
         }
 
         return $caisse->agent_id === $user->id || $user->can('tresorerie.envoyer');
+    }
+
+    /**
+     * Transférer le compte Mobile Money dédié d'un agent vers le Mobile Money de l'agence (ADR
+     * 0027) : mêmes droits que le versement de caisse — `tresorerie.verser`, agence de
+     * l'utilisateur (admins : toutes), son propre compte seulement, sauf `tresorerie.envoyer` qui
+     * permet d'enregistrer le transfert d'un autre agent de l'agence. État et solde sont revérifiés
+     * par MouvementFondsService::transfererMobileMoneyAgent() (Gate::before du super admin).
+     */
+    public function transfererMobileMoney(User $user, CompteTresorerie $compte): bool
+    {
+        if (! $user->can('tresorerie.verser') || $user->organization_id !== $compte->organization_id) {
+            return false;
+        }
+
+        if (! $compte->isMobileMoneyDedie()) {
+            return false;
+        }
+
+        if (! $user->isAdmin() && ! $user->isAssignedToSite($compte->site_id)) {
+            return false;
+        }
+
+        return $compte->agent_id === $user->id || $user->can('tresorerie.envoyer');
     }
 
     /**
@@ -76,5 +101,16 @@ class CompteTresoreriePolicy
         }
 
         return $user->isAdmin() || $user->isAssignedToSite($caisse->site_id);
+    }
+
+    /**
+     * Déposer en banque depuis ce support de l'agence (caisse ou Mobile Money, ADR 0026) : même
+     * droit que l'approvisionnement — c'est une sortie de fonds d'un support de l'agence
+     * (`tresorerie.envoyer`, agence de l'utilisateur). Type, état et solde sont revérifiés par
+     * MouvementFondsService::deposerEnBanque().
+     */
+    public function deposerEnBanque(User $user, CompteTresorerie $support): bool
+    {
+        return $this->approvisionner($user, $support);
     }
 }

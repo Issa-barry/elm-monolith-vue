@@ -127,6 +127,12 @@ Le modèle existant ne le permet pas :
   reclassés (règle « jamais de reclassement rétroactif » maintenue) ; ils se lisent avec
   `php artisan encaissements:diagnostiquer-destination` (lecture seule), qui liste les espèces
   hors caisse dédiée par agent et indique lesquels n'ont toujours pas de caisse.
+- **Compte Mobile Money de l'agent (ADR [0027](0027-compte-mobile-money-dedie-agent.md), lot 1 du
+  2026-10-13)** : un support dédié peut désormais être de type Mobile Money. Le point 2 (« une
+  caisse dédiée est toujours de type Caisse ») et le point 3 (« une seule caisse dédiée active par
+  (agent, site) ») ne valent plus que pour les **caisses en espèces** : un agent peut avoir en plus
+  un compte Mobile Money par opérateur. Le point 4 (seules les espèces alimentent un support
+  d'agent) reste vrai tant que le lot 3 de l'ADR 0027 n'est pas livré.
 - **Points ouverts pour la suite** : sens inverse (fonds de caisse agence → agent), désactivation
   d'un utilisateur qui détient une caisse (non traitée), absence de contrôle de solde sur les
   mouvements entre agences, encaissements enregistrés par un utilisateur qui n'est pas l'agent (ils
