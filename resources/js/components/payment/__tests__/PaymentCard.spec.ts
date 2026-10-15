@@ -603,3 +603,41 @@ describe('PaymentCard — acompte de précommande (ADR 0019)', () => {
         });
     });
 });
+
+describe('PaymentCard — Mobile Money sur le compte de l’agent (ADR 0027)', () => {
+    const BANQUE_SEULE = MOYENS_AGENCE.filter(
+        (m) => m.mode_paiement !== 'mobile_money',
+    );
+
+    it('signale en ambre qu’aucun compte Mobile Money de l’agent n’est actif, sans bloquer les autres modes', () => {
+        const wrapper = monter({ moyens: BANQUE_SEULE });
+        const message = wrapper.find(
+            '[data-testid="mobile-money-indisponible"]',
+        );
+
+        expect(message.exists()).toBe(true);
+        expect(message.text()).toContain('Mobile Money indisponible');
+        expect(message.classes()).toContain('bg-amber-50');
+        expect(
+            (select(wrapper).props('options') as { key: string }[]).map(
+                (o) => o.key,
+            ),
+        ).toEqual(['especes', 'virement:s-uba', 'cheque:s-uba']);
+    });
+
+    it('ne dit rien quand l’agent a un compte Mobile Money', () => {
+        expect(
+            monter({ moyens: MOYENS_AGENCE })
+                .find('[data-testid="mobile-money-indisponible"]')
+                .exists(),
+        ).toBe(false);
+    });
+
+    it('ne le dit jamais pour un paiement sortant de l’agence', () => {
+        expect(
+            monter({ moyens: BANQUE_SEULE, sens: 'decaissement' })
+                .find('[data-testid="mobile-money-indisponible"]')
+                .exists(),
+        ).toBe(false);
+    });
+});

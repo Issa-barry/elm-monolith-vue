@@ -42,11 +42,14 @@ class CaisseAgentResolver
 
     public const MESSAGE_AVANT_MISE_EN_SERVICE = "La date d'encaissement est antérieure à la mise en service de votre caisse : impossible de l'encaisser en espèces à cette date.";
 
-    /** Caisse dédiée ACTIVE (donc validée, invariant du modèle) de cet agent sur ce site, s'il en a une. */
+    /**
+     * Caisse dédiée ACTIVE (donc validée, invariant du modèle) de cet agent sur ce site, s'il en a
+     * une. Caisse en espèces uniquement : son compte Mobile Money (ADR 0027) n'en est jamais une.
+     */
     public function caisseActive(string $organizationId, string $agentId, string $siteId): ?CompteTresorerie
     {
         return CompteTresorerie::forOrg($organizationId)
-            ->dediees()
+            ->caissesDediees()
             ->actifs()
             ->where('agent_id', $agentId)
             ->where('site_id', $siteId)
@@ -62,7 +65,7 @@ class CaisseAgentResolver
     public function sitesAvecCaisseActive(string $organizationId, string $agentId): array
     {
         return CompteTresorerie::forOrg($organizationId)
-            ->dediees()
+            ->caissesDediees()
             ->actifs()
             ->where('agent_id', $agentId)
             ->pluck('site_id')

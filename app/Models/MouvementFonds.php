@@ -22,7 +22,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * `nature` distingue le mouvement entre agences (`inter_sites`, historique), le versement d'une
  * caisse dédiée à un agent vers une caisse de l'agence (`interne_caisses`, même site), son sens
- * inverse, l'approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018) et le
+ * inverse, l'approvisionnement de la caisse d'un agent (`approvisionnement_caisse`, ADR 0018), le
+ * dépôt en banque d'une caisse ou d'un Mobile Money de l'agence (`depot_banque`, ADR 0026) et le
  * règlement inter-agences (`reglement_agences`, lié à des encaissements précis) — cf.
  * NatureMouvementFonds. `date_envoi`/`date_reception` sont des jours ; `sent_at`/`received_at`
  * portent l'heure réelle de chaque étape (renseignés depuis le 04/10/2026).
@@ -42,8 +43,10 @@ class MouvementFonds extends Model
         'compte_tresorerie_origine_id',
         'compte_tresorerie_destination_id',
         'montant',
+        'frais',
         'moyen_transfert',
         'reference_externe',
+        'cle_reference_transfert',
         'echeance_debut',
         'echeance_fin',
         'date_envoi',
@@ -66,6 +69,7 @@ class MouvementFonds extends Model
     {
         return [
             'montant' => 'decimal:2',
+            'frais' => 'decimal:2',
             'date_envoi' => 'date',
             'date_reception' => 'date',
             'sent_at' => 'datetime',
@@ -195,6 +199,43 @@ class MouvementFonds extends Model
         return $this->nature === NatureMouvementFonds::APPROVISIONNEMENT_CAISSE;
     }
 
+    public function isDepotBanque(): bool
+    {
+        return $this->nature === NatureMouvementFonds::DEPOT_BANQUE;
+    }
+
+    public function isTransfertMobileMoney(): bool
+    {
+        return $this->nature === NatureMouvementFonds::TRANSFERT_MOBILE_MONEY;
+    }
+
+    /**
+     * Mouvements au sein d'une même agence (versement, approvisionnement, dépôt en banque, transfert
+     * Mobile Money d'un agent) : le support de destination est fixé à l'envoi, la réception le
+     * confirme sans le choisir.
+     */
+    public function destinationFixeeALEnvoi(): bool
+    {
+        return $this->isInterne() || $this->isApprovisionnement() || $this->isDepotBanque() || $this->isTransfertMobileMoney();
+    }
+
+    /** Ce qui sort réellement du support d'origine : le montant transféré plus les frais éventuels. */
+    public function sortieTotale(): float
+    {
+        return round((float) $this->montant + (float) ($this->frais ?? 0), 2);
+    }
+
+    /**
+     * Clé d'unicité de la référence de transaction d'un transfert Mobile Money (ADR 0027) : unique
+     * dans l'organisation, même forme que les références d'encaissement (ADR 0014).
+     */
+    public static function cleReferenceTransfert(string $organizationId, ?string $reference): ?string
+    {
+        $reference = EncaissementVente::normaliserReference($reference);
+
+        return $reference === null || $reference === '' ? null : $organizationId.'|'.$reference;
+    }
+
     /** Agent titulaire de la caisse destinataire d'un approvisionnement (null pour toute autre nature). */
     public function beneficiaireId(): ?string
     {
@@ -220,14 +261,14 @@ class MouvementFonds extends Model
     }
 
     /**
-     * Versement ou approvisionnement de caisse dont la réception a été confirmée par la personne qui
-     * l'a envoyé — autorisé si son rôle a `tresorerie.recevoir` (ADR 0001, ADR 0018) : simple
-     * information de traçabilité affichée dans Mouvements (« Confirmé par l'expéditeur »), jamais
-     * un blocage.
+     * Versement, approvisionnement de caisse ou dépôt en banque dont la réception a été confirmée
+     * par la personne qui l'a envoyé — autorisé si son rôle a `tresorerie.recevoir` (ADR 0001, ADR
+     * 0018, ADR 0026) : simple information de traçabilité affichée dans Mouvements (« Confirmé par
+     * l'expéditeur »), jamais un blocage.
      */
     public function confirmeParExpediteur(): bool
     {
-        return ($this->isInterne() || $this->isApprovisionnement())
+        return $this->destinationFixeeALEnvoi()
             && $this->sent_by !== null
             && $this->received_by !== null
             && $this->sent_by === $this->received_by;

@@ -18,6 +18,13 @@ class RegleValidationRole extends Model
 
     public const DOMAINE_ACHATS = 'achats';
 
+    /**
+     * « Peut réceptionner pour » (décision du 12/10/2026) : agences, en plus de celles auxquelles
+     * l'utilisateur est rattaché, pour lesquelles un rôle peut réceptionner les bons de commande
+     * fournisseurs. Seul le périmètre compte : pas de plafond dans ce domaine.
+     */
+    public const DOMAINE_RECEPTIONS_ACHATS = 'receptions_achats';
+
     public const PERIMETRES = ['toutes_agences', 'son_agence', 'agences_selectionnees'];
 
     protected $table = 'regles_validation_roles';
@@ -46,6 +53,9 @@ class RegleValidationRole extends Model
         'admin_entreprise' => ['peut_valider_ses_propres_bons' => false, 'peut_valider_ses_propres_factures' => false],
         'super_admin' => ['peut_valider_ses_propres_bons' => true, 'peut_valider_ses_propres_factures' => true],
     ];
+
+    /** Rôles qui réceptionnent par défaut pour toutes les agences (décision du 12/10/2026). */
+    public const ROLES_PAR_DEFAUT_RECEPTIONS = ['super_admin'];
 
     protected $casts = [
         'plafond' => 'decimal:2',
@@ -79,6 +89,21 @@ class RegleValidationRole extends Model
             self::firstOrCreate(
                 ['organization_id' => $organizationId, 'domaine' => self::DOMAINE_ACHATS, 'role_name' => $role],
                 $valeurs,
+            );
+        }
+    }
+
+    /**
+     * Règle de départ « Peut réceptionner pour : toutes les agences » du super administrateur —
+     * une DONNÉE de configuration, modifiable ou supprimable dans Paramètres → Achats, jamais une
+     * exception de rôle dans le code. Une règle déjà configurée n'est jamais écrasée.
+     */
+    public static function provisionnerReceptionsParDefaut(string $organizationId): void
+    {
+        foreach (self::ROLES_PAR_DEFAUT_RECEPTIONS as $role) {
+            self::firstOrCreate(
+                ['organization_id' => $organizationId, 'domaine' => self::DOMAINE_RECEPTIONS_ACHATS, 'role_name' => $role],
+                ['plafond' => null, 'plafond_illimite' => false, 'perimetre' => 'toutes_agences', 'sites' => null],
             );
         }
     }

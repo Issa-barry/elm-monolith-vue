@@ -67,8 +67,10 @@ class EncaissementInterAgencesTest extends TestCase
             'Kindia',
         );
 
-        $this->orangeA = $this->creerSupportAgence($this->agenceA->id, 'mobile_money', '561100', 'orange_money');
-        $this->orangeB = $this->creerSupportAgence($this->agenceB->id, 'mobile_money', '561100', 'orange_money');
+        // Depuis le lot 3 de l'ADR 0027, le Mobile Money s'encaisse sur le compte de l'agent qui encaisse,
+        // dans son agence : celui de l'utilisateur à A, celui de l'agent à B.
+        $this->orangeA = $this->creerCompteMobileMoneyActifPour($this->user, $this->agenceA->id, 'orange_money');
+        $this->orangeB = $this->creerCompteMobileMoneyActifPour($this->agentB, $this->agenceB->id, 'orange_money');
     }
 
     private function creerSite(string $nom, ?Organization $org = null): Site
@@ -160,7 +162,7 @@ class EncaissementInterAgencesTest extends TestCase
         $this->assertFalse($encaissement->estPourAutreAgence());
 
         $lignes = $this->lignes($this->piece($encaissement, EvenementComptable::ENCAISSEMENT_VENTE_RECU));
-        $this->assertSame(100_000.0, $lignes['561100']['debit']);
+        $this->assertSame(100_000.0, $lignes[$this->orangeA->compte->numero]['debit']);
         $this->assertSame(100_000.0, $lignes['411000']['credit']);
         $this->assertSame($this->agenceA->id, $lignes['411000']['site_id']);
         $this->assertArrayNotHasKey('181000', $lignes);
@@ -332,8 +334,8 @@ class EncaissementInterAgencesTest extends TestCase
 
         // Pièce 1 — site B : débit trésorerie B / crédit liaison [A].
         $recu = $this->lignes($this->piece($encaissement, EvenementComptable::ENCAISSEMENT_VENTE_RECU));
-        $this->assertSame(100_000.0, $recu['561100']['debit']);
-        $this->assertSame($this->agenceB->id, $recu['561100']['site_id']);
+        $this->assertSame(100_000.0, $recu[$this->orangeB->compte->numero]['debit']);
+        $this->assertSame($this->agenceB->id, $recu[$this->orangeB->compte->numero]['site_id']);
         $this->assertSame(100_000.0, $recu['181000']['credit']);
         $this->assertSame($this->agenceA->id, $recu['181000']['tiers']);
         $this->assertArrayNotHasKey('411000', $recu, 'le client n\'est jamais crédité chez l\'agence qui encaisse');

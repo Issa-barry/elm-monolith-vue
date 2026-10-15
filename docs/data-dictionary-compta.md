@@ -127,12 +127,14 @@ Ce document distingue deux couches, volontairement séparées :
   validé ne peut pas devenir actif (garde du modèle). Tous les supports antérieurs au workflow ont
   été **repris comme validés à leur date de création** (`valide_par_id` NULL), avec leur état
   actif/inactif inchangé.
-- **`agent_id`** (nullable, depuis le 2026-09-19) : responsable d'une **caisse dédiée à un agent**.
-  `NULL` = support de l'agence (tous les supports historiques) ; renseigné = caisse dédiée. La
-  « nature » est **dérivée** de cette colonne, jamais stockée. Voir la section « Caisses dédiées à
-  un agent » ci-dessous.
+- **`agent_id`** (nullable, depuis le 2026-09-19) : agent auquel le support est **dédié**.
+  `NULL` = support de l'agence (tous les supports historiques) ; renseigné = support dédié : sa
+  **caisse en espèces** (type Caisse) ou, depuis le 2026-10-13, son **compte Mobile Money** (type
+  Mobile Money, ADR 0027). La « nature » est **dérivée** de cette colonne, jamais stockée. Voir
+  « Caisses dédiées à un agent » et « Compte Mobile Money dédié à un agent » ci-dessous.
 - **`numero`** (nullable, depuis le 2026-10-02) : numéro du compte (numéro marchand Mobile Money,
   numéro bancaire), affiché à l'encaissement pour que l'agent choisisse le compte réellement payé.
+  **Obligatoire** pour le compte Mobile Money d'un agent, où il est le numéro du portefeuille.
 - **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
   (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
 - **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour
@@ -291,6 +293,8 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
 - **Caisse dédiée** : à la validation, le service revérifie les conditions de la création — agent
   actif et rattaché à l'agence, **une seule caisse dédiée active par (agent, site)**. Créer un
   brouillon reste refusé tant qu'une caisse active existe pour le même (agent, site).
+- **Compte Mobile Money d'un agent** (ADR 0027) : même revérification à la validation — agent,
+  **un seul compte actif par (agent, site, opérateur)**, numéro que ne porte aucun autre support.
 - **Un brouillon ne s'active jamais par une simple modification** : `update` avec `actif = true`
   est refusé (erreur sur `actif`), et le modèle lève une `LogicException` en dernier recours. Sa
   modification (libellé, type, compte) reste possible.
@@ -299,8 +303,8 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
   destination, réception, versement) ; pas de solde d'ouverture avant validation
   (`SoldeOuvertureTresorerieService::enregistrer()`) ; ne reçoit aucun encaissement
   (`CaisseAgentResolver`, qui date la mise en service à `valide_le`, pas à la création).
-- **Suppression d'un utilisateur** responsable d'une caisse dédiée en **brouillon** ou active :
-  refusée (sinon la FK `nullOnDelete` la transformerait en support d'agence).
+- **Suppression d'un utilisateur** titulaire d'un support dédié (caisse ou compte Mobile Money) en
+  **brouillon** ou actif : refusée (sinon la FK `nullOnDelete` le transformerait en support d'agence).
 - **Reprise de l'existant** : la migration marque tout support existant comme validé à sa date de
   création. Aucun changement d'usage ni d'état pour l'existant. Un support créé directement actif
   par du code (hors écran, ex. tests) est réputé validé — les deux seuls points de création
@@ -370,7 +374,8 @@ du compte comptable du support, colonne dédiée) / Nature / Responsable / Solde
 solde calculé depuis le grand livre (y compris pour un support désactivé),
 filtres serveur (agence `site_ids[]`, statut, type, nature, agent) via `DataFilters` en
 `trigger-only`, création dans un dialogue « Créer une caisse » avec choix de la nature dans une
-liste déroulante (« Caisse de l'agence » ou « Caisse dédiée à un agent »). Depuis la phase 3,
+liste déroulante (« Caisse de l'agence » ou « Dédié à un agent », ce dernier demandant ensuite le
+type : caisse en espèces ou compte Mobile Money, ADR 0027). Depuis la phase 3,
 **lecture ouverte à `tresorerie.read`**, limitée aux agences de l'utilisateur (admins : toutes) ;
 création, modification et soldes d'ouverture restent sous `tresorerie.gerer_soldes_ouverture` (les
 données de gestion — utilisateurs, comptes comptables — ne sont même pas envoyées à un simple
@@ -454,6 +459,19 @@ caisse dédiée du payeur).
   `approvisionnement_caisse` (« Approvisionnement de caisse »), distincte du versement pour ne jamais
   mélanger les calculs qui supposent un versement agent → agence (en cours de versement, Financement,
   remises ADR 0016).
+- **Aussi depuis Mouvements → Nouveau** (ajout du 12/10/2026, ADR 0018 point 9) : choisir la **même
+  agence** en origine et en destination affiche « Support de trésorerie de destination » ; y choisir
+  la **caisse d'un agent** (caisses d'agents actives de l'agence, mêmes règles de proposition que
+  Supports, proposées seulement si le support d'origine est une caisse) envoie cet
+  approvisionnement — bouton « Approvisionner la caisse », pas de brouillon ; la période de
+  financement, le moyen de transfert, la référence externe et le justificatif ne s'appliquent pas
+  (le commentaire devient le motif). Il faut `tresorerie.create` (accès à l'écran) **et**
+  `tresorerie.envoyer` sur l'agence ; sans `tresorerie.envoyer`, l'agence d'origine n'est pas
+  proposée en destination. La même liste propose aussi les **banques de l'agence** : c'est alors un
+  dépôt en banque (section suivante). Si l'agence n'a ni banque ni caisse d'agent active, ou si le
+  support d'origine est une banque, l'écran l'explique et bloque la validation. **Entre agences,
+  rien ne change** : le support de destination est choisi par le destinataire à « Confirmer
+  réception », et un support transmis à la création est ignoré (`MouvementFondsController::store()`).
 - **Règles (serveur, `MouvementFondsService::approvisionnerCaisseAgent()`)** : source = caisse (type
   Caisse) **d'agence** active — jamais une banque, un Mobile Money ni la caisse d'un agent ;
   destination = caisse dédiée **active** du **même site** ; l'envoyeur n'approvisionne **sa propre
@@ -501,11 +519,177 @@ caisse dédiée du payeur).
   par la caisse de l'agence). Le solde de la caisse source est contrôlé à l'envoi pour **toutes** les
   natures de mouvement (`MouvementFondsService::envoyer()`).
 
+### Dépôt en banque (ADR 0026)
+
+Une agence dépose sur **sa banque** les espèces de **sa caisse** ou le solde d'un de **ses comptes
+Mobile Money** (livré le 13/10/2026, [ADR 0026](adr/0026-depot-en-banque-depuis-caisse-ou-mobile-money.md)).
+Entre deux agences, rien de nouveau : caisse → banque y passait déjà par un mouvement ordinaire, la
+banque étant choisie par le destinataire à la réception.
+
+- **Où** : Mouvements → Nouveau, **même agence** en origine et en destination, puis une banque dans
+  « Support de trésorerie de destination » (groupe « Banques de l'agence », au-dessus des « Caisses
+  d'agents »). Bouton « Déposer en banque », pas de brouillon. La référence externe (n° de
+  bordereau) et le justificatif sont proposés, facultatifs ; la période de financement et le moyen
+  de transfert ne s'appliquent pas. Nature du mouvement : `depot_banque` (« Dépôt en banque »).
+- **Règles (serveur, `MouvementFondsService::deposerEnBanque()`)** : source = caisse (type Caisse)
+  ou Mobile Money **d'agence** actif — jamais une banque, jamais la caisse d'un agent (elle se verse
+  d'abord à la caisse de l'agence) ; destination = banque **active** du **même site** ; montant > 0
+  et au plus égal au solde du support source au grand livre (sous verrou). `moyen_transfert` est
+  déduit de la source (`especes` ou `mobile_money`). Un Mobile Money n'approvisionne jamais la
+  caisse d'un agent.
+- **Droit d'envoyer** : `tresorerie.create` (accès à l'écran) et `tresorerie.envoyer` + rattachement
+  à l'agence (admins : toutes) — `CompteTresoreriePolicy::deposerEnBanque()`.
+- **Réception** : `tresorerie.recevoir` sur l'agence, **l'envoyeur compris** — même règle que le
+  versement (ADR 0001), auto-confirmation tracée (« Confirmé par l'expéditeur »). La banque est
+  fixée à l'envoi : « Confirmer réception » ne demande aucun choix et le service refuse tout autre
+  support. Contestation (`tresorerie.rejeter`) et retour (`tresorerie.confirmer_retour`, qui
+  recrédite le support source) : réutilisés tels quels.
+- **Soldes et écritures** : envoi — débit 588000 (transit) / crédit compte du support source ;
+  réception — débit compte de la banque (521000…) / crédit 588000. Tant que le dépôt n'est pas
+  confirmé, le montant n'est dans **aucun** solde ; le disponible de l'agence (Financement) baisse
+  d'autant jusqu'à la confirmation. Les frais éventuels ne sont pas saisis ici.
+- **Affichages** : Mouvements — affiché support → support, « En attente de confirmation » tant
+  qu'Envoyé ; compté dans le badge « mouvements à confirmer » (section suivante). Les calculs propres
+  aux autres natures (en cours de versement, approvisionnements à confirmer, fonds en transit,
+  remises) ne le comptent pas.
+- **Non traité** : retrait banque → caisse, caisse ↔ Mobile Money, dépôt direct depuis la caisse
+  d'un agent, bouton dédié sur l'écran Supports.
+
 **Phase suivante (non livrée)** : 4) fiche caisse (encaissements, versements, solde, historique).
 Le calcul existe depuis le 26/09/2026 : `FicheCaisseService` (tableau de caisse tiré du grand livre,
 versements, écritures) et le composant `components/tresorerie/CaisseFiche.vue`, utilisés par l'onglet
 Caisse du rapport d'activité ([rapports.md](rapports.md), RAP-008) — la fiche caisse doit les
 réutiliser, pas recalculer.
+
+## Compte Mobile Money dédié à un agent (ADR 0027)
+
+ADR [0027](adr/0027-compte-mobile-money-dedie-agent.md). Lot 1 (2026-10-13) : le compte existe, se
+crée, se valide et s'affiche. Lot 2 (2026-10-14) : il se transfère au Mobile Money de l'agence (cf.
+« Transfert vers le Mobile Money de l'agence » ci-dessous). Lot 3 (2026-10-14) : **tout
+encaissement Mobile Money arrive sur ce compte**, jamais directement sur celui de l'agence ; sans
+compte actif pour l'opérateur, l'agent ne peut pas encaisser en Mobile Money (cf.
+[encaissements.md](encaissements.md), « Mobile Money : sur le compte de l'agent »).
+
+**Règles garanties côté serveur** (`CaisseAgentService::creerCompteMobileMoney()`) :
+
+- Support de type **Mobile Money** rattaché à un agent (`agent_id`), une agence et un **opérateur**
+  (`operateur_mobile_money`, hors « Autre »). Le **numéro du portefeuille** (`numero`) est obligatoire.
+- **Un seul compte actif par (agent, site, opérateur).** La caisse en espèces de l'agent est un
+  support distinct : un agent peut avoir sa caisse **et** un compte par opérateur dans la même agence.
+- **Un portefeuille = un seul compte** : le numéro n'est celui d'aucun autre support Mobile Money
+  **non désactivé** (brouillon ou actif, d'agent ou d'agence) du même opérateur, **dans
+  l'organisation**. La comparaison (`CompteTresorerie::memeNumero()`) ignore espaces et ponctuation
+  (« 620 00 00 01 » = « 620-000-001 ») et reconnaît le même portefeuille **avec ou sans indicatif**
+  (« +224 620 00 00 01 » = « 00224 620 00 00 01 » = « 620 00 00 01 ») : deux numéros en chiffres
+  sont identiques si l'un est l'autre précédé de 1 à 3 chiffres, le plus court en comptant au moins
+  8. Aucun indicatif n'est codé en dur. Le numéro est conservé tel que saisi. Un compte désactivé
+  libère son numéro ; deux organisations peuvent enregistrer le même. Dans l'autre sens, un compte
+  de l'agence ne peut pas prendre le numéro du compte d'un agent ; les supports d'agence ne sont pas
+  comparés entre eux.
+- **Un sous-compte comptable propre**, créé automatiquement sous le compte de l'opérateur :
+  numéro du compte de l'opérateur suivi de 3 chiffres (561100001, 561100002… sous 561100), soit
+  999 comptes par opérateur et par organisation. Le compte de l'opérateur est lu dans
+  `compta_mappings` (`mobile_money:<détail>`, rôle `tresorerie`) — jamais un numéro codé en dur ;
+  sans paramétrage pour l'opérateur, la création est refusée.
+- Créé en **brouillon**, validé comme tout support ; **aucune écriture** à la création, **pas de
+  solde d'ouverture** (refusé) : il démarre à 0.
+- Agent, agence, opérateur et sous-compte sont **figés**. Le libellé et l'activation se modifient ;
+  le **numéro se corrige tant que le compte est en brouillon**, plus après sa validation.
+- Il ne se désactive que vide ; sa réactivation revérifie les deux unicités.
+- **Créations simultanées** : la transaction prend ses verrous (agent, puis compte de l'opérateur)
+  **avant toute lecture ordinaire**. Sous MySQL (`REPEATABLE READ`), une transaction fige ce qu'elle
+  voit à sa première lecture non verrouillante : lue avant l'attente du verrou, elle ignorerait le
+  compte qu'une création concurrente vient d'enregistrer. Les créations d'un même opérateur sont
+  donc sérialisées, numérotées à la suite, et un même portefeuille demandé deux fois au même
+  instant n'est accepté qu'une fois. Filets de sécurité : la contrainte unique
+  (`organization_id`, `numero`) de `compta_comptes`, et la validation, qui refuse deux brouillons
+  portant le même numéro. Aucun index unique ne porte sur le numéro du portefeuille.
+
+**Étanchéité avec les caisses en espèces** — un support dédié de type Mobile Money n'est jamais
+traité comme une caisse (`CompteTresorerie::caissesDediees()` / `isCaisseDediee()`, à utiliser pour
+tout ce qui concerne les espèces d'un agent, au lieu de `dediees()` / `isDediee()`) :
+
+| Sujet | Comportement |
+|---|---|
+| Routage et autorisation des espèces (`CaisseAgentResolver`) | Ignoré : sans caisse en espèces, l'agent ne peut toujours pas encaisser en espèces. |
+| Versement vers la caisse de l'agence, approvisionnement, dépôt en banque | Refusé comme origine et comme destination ; aucun bouton « Verser ». |
+| Mouvements de fonds entre agences | Interdit en origine comme en destination. |
+| Encaissement (`MoyensEncaissementResolver::*PourEncaisseur`) | Depuis le lot 3 : seul support Mobile Money proposé et accepté à l'encaissement, et uniquement à son titulaire. |
+| Paiements sortants (`MoyensEncaissementResolver::parSite()`, `DecaissementSupportResolver`) | Jamais proposé : on paie depuis les supports de l'agence. |
+| « Mobile Money dû encore chez les agents » (ADR 0016, depuis le lot 3) | Le Mobile Money dû à d'autres agences et encore sur les comptes des agents n'est pas déduit une deuxième fois du disponible. |
+| Disponible et position fiable du Financement | Exclu, comme tout support dédié. |
+| « Espèces dues encore chez les agents » (ADR 0016) | Exclu : seules les caisses en espèces comptent. |
+| Situation de trésorerie | Inclus, dans la colonne Mobile Money de son agence. |
+| Rapport d'activité, onglet Caisse | Exclu : ce n'est pas une caisse. |
+| Suppression de l'utilisateur titulaire | Refusée tant que le compte est actif ou en brouillon. |
+
+**Écran** : Trésorerie → Supports → « Nouvelle caisse » → nature « Dédié à un agent » → type
+« Compte Mobile Money » (opérateur, numéro, agent). Badge de nature « {Opérateur} dédié » ; la
+carte « Caisses dédiées » ne compte que les caisses en espèces.
+
+**Tests** : `CompteMobileMoneyAgentTest`, `CompteTresorerieMobileMoneyAgentControllerTest`,
+`CompteTresorerieNumeroTest` (comparaison des numéros), les cas ajoutés à
+`FinancementAgenceServiceTest` et `RapportActiviteTest`, le parcours E2E « créer le compte Mobile
+Money dédié à un agent » (`tresorerie-financement-flow.spec.ts`) et
+`CompteMobileMoneyAgentConcurrenceTest` — créations réellement simultanées, un processus PHP et une
+connexion MySQL par création, sur la base dédiée `elm_monolithe_concurrency_test` (il se saute si
+elle est absente, comme `VarianteStockConcurrenceTest`).
+
+### Transfert vers le Mobile Money de l'agence (ADR 0027, lot 2)
+
+L'agent a transféré, sur son téléphone, l'argent de son portefeuille vers celui de son agence.
+L'application **constate** ce transfert : elle ne l'exécute pas et ne le vérifie pas auprès de
+l'opérateur — la confirmation de réception par l'agence est le contrôle.
+
+- **Mouvement de fonds de nature `transfert_mobile_money`** (« Transfert Mobile Money »), créé et
+  envoyé en une seule action (`MouvementFondsService::transfererMobileMoneyAgent()`), même circuit
+  que le versement de caisse : Envoyé → Reçu, ou Contesté → Retour confirmé.
+- **Origine** : compte Mobile Money dédié **actif**. **Destination** : compte Mobile Money **de
+  l'agence**, actif, de la même agence et du **même opérateur**, fixé à l'envoi (la réception le
+  confirme sans le choisir).
+- **Montant et frais** — une seule formulation, celle de l'ADR 0016 point 6 :
+
+  | Champ | Sens |
+  |---|---|
+  | `montant` | ce que l'agence reçoit |
+  | `frais` | frais de l'opérateur, **en sus**, charge de l'agence de l'agent |
+  | sortie du compte de l'agent | `montant` + `frais` (`MouvementFonds::sortieTotale()`) |
+
+  Les frais se saisissent **à chaque transfert** : 0 est accepté, l'absence de saisie est refusée.
+  Le solde du compte de l'agent doit couvrir montant + frais (contrôle sous verrou, à l'envoi).
+- **Référence de la transaction** obligatoire, normalisée (espaces retirés, majuscules) et **unique
+  dans l'organisation** parmi les transferts : colonne technique
+  `mouvements_fonds.cle_reference_transfert` (`organisation|RÉFÉRENCE`) + index unique, comme
+  l'ADR 0014. Elle ne peut pas non plus être celle d'un encaissement Mobile Money déjà enregistré.
+  Un transfert retourné garde sa référence : elle ne se réutilise pas.
+- **Écritures** (site de l'agence) :
+
+  | Moment | Pièce | Débit | Crédit |
+  |---|---|---|---|
+  | Envoi | `mouvement_fonds_envoye` | 588000 transit (montant) | sous-compte de l'agent (montant) |
+  | Envoi, si frais > 0 | `frais_transfert_fonds` | charge `charge_frais_transfert` — 631800 (frais) | sous-compte de l'agent (frais) |
+  | Réception | `mouvement_fonds_recu` | compte Mobile Money de l'agence (montant) | 588000 transit (montant) |
+
+  Les frais ont leur **propre pièce** : un transfert contesté puis retourné contrepasse l'envoi (le
+  montant revient sur le compte de l'agent), jamais les frais, qui restent une charge. Le compte
+  631800 « Frais de transfert de fonds » est provisoire, à valider par le comptable ; il se
+  reparamètre dans `compta_mappings` (événement `frais_transfert_fonds`, rôle
+  `charge_frais_transfert`).
+- **Droits**, ceux du versement de caisse : enregistrer = `tresorerie.verser` sur son propre
+  compte, ou avec `tresorerie.envoyer` celui d'un autre agent de l'agence
+  (`CompteTresoreriePolicy::transfererMobileMoney()`) ; confirmer = `tresorerie.recevoir` sur
+  l'agence, l'envoyeur compris (« Confirmé par l'expéditeur ») ; contester = `tresorerie.rejeter` ;
+  constater le retour = `tresorerie.confirmer_retour`.
+- **Ne solde jamais une dette inter-agences** : aucun encaissement n'est rattaché au mouvement, et
+  la contrepartie est le transit, jamais la liaison 181000.
+- **Suivi** : tant qu'il n'est pas reçu, le montant est « En cours de transfert » sous le solde du
+  compte de l'agent (jamais additionné au solde) et compte dans le badge « Mouvements à confirmer »
+  de l'agence. Un compte ne se désactive pas pendant un transfert envoyé ou contesté.
+- **Écran** : Trésorerie → Supports → « Transférer à l'agence » sur la ligne du compte (indicateur
+  serveur `peut_transferer`) ; la liste des Mouvements affiche la référence et les frais.
+- **Migrations** : `2026_10_14_100000` (colonnes `frais` et `cle_reference_transfert`, facultatives)
+  et `2026_10_14_100100` (compte 631800 et mapping pour les organisations existantes).
+- **Tests** : `TransfertMobileMoneyAgentTest`.
 
 ## Notification — mouvements de fonds à confirmer
 
@@ -517,7 +701,9 @@ que le site destinataire ait à consulter la liste : mêmes deux surfaces que
 nouveau mécanisme de notification.
 
 - **Calcul** : `HandleInertiaRequests::mouvementsFondsAConfirmer()` — compte les `MouvementFonds`
-  `organization_id` de l'utilisateur, `nature = inter_sites`, `statut = envoye`, pour un
+  `organization_id` de l'utilisateur, `nature = inter_sites`, `reglement_agences` (ADR 0012) ou
+  `depot_banque` (ADR 0026, depuis le 13/10/2026 : la destination est alors l'agence elle-même),
+  `statut = envoye`, pour un
   utilisateur ayant la permission **`tresorerie.recevoir`** (celle vérifiée par
   `MouvementFondsPolicy::recevoir()`). Un **admin** (`isAdmin()`) voit le compteur **org-wide**,
   sans filtre de site ; un **non-admin** ne voit que les mouvements dont `site_destination_id` est

@@ -35,8 +35,8 @@ use Inertia\Response;
  * d'ouverture restent réservés à `tresorerie.gerer_soldes_ouverture`.
  *
  * `nature` (agence | dediee) est dérivée d'`agent_id` : un support sans agent
- * appartient à l'agence, une caisse dédiée est toujours de type Caisse et son
- * compte comptable est créé automatiquement (cf. CaisseAgentService).
+ * appartient à l'agence ; un support dédié est la caisse en espèces d'un agent ou son compte
+ * Mobile Money (ADR 0027), et son compte comptable est créé automatiquement (cf. CaisseAgentService).
  *
  * Un support est créé en brouillon (inutilisable) puis validé par `tresorerie.valider_supports`
  * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif.
@@ -113,11 +113,22 @@ class CompteTresorerieController extends Controller
             ->get(['id', 'site_id', 'libelle']);
         $agencesAvecDestination = $destinationsVersement->pluck('site_id')->flip();
 
+        // Comptes Mobile Money d'agence (actifs, opérateur connu) pouvant recevoir le transfert du
+        // compte d'un agent (ADR 0027) : même agence et même opérateur.
+        $destinationsTransfert = CompteTresorerie::forOrg($orgId)->agence()->actifs()
+            ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
+            ->whereNotNull('operateur_mobile_money')
+            ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
+            ->orderBy('libelle')
+            ->get(['id', 'site_id', 'libelle', 'numero', 'operateur_mobile_money']);
+        $agencesEtOperateursAvecDestination = $destinationsTransfert
+            ->map(fn (CompteTresorerie $c) => $c->site_id.'|'.$c->operateur_mobile_money->value)
+            ->flip();
+
         // Caisses d'agents actives pouvant être approvisionnées par une caisse de l'agence (ADR 0018),
         // Sa propre caisse seulement si son rôle lui permet d'en confirmer lui-même la réception.
-        $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->dediees()->actifs()
+        $destinationsApprovisionnement = CompteTresorerie::forOrg($orgId)->approvisionnablesPar($user)
             ->with('agent.personne')
-            ->when(! $user->can('tresorerie.recevoir'), fn ($q) => $q->where('agent_id', '!=', $user->id))
             ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
             ->orderBy('libelle')
             ->get(['id', 'site_id', 'libelle', 'agent_id']);
@@ -136,7 +147,7 @@ class CompteTresorerieController extends Controller
         $comptes = $supportsListes
             ->sortBy(fn (CompteTresorerie $c) => mb_strtolower(($c->site?->nom ?? '').'|'.($c->isDediee() ? '1' : '0').'|'.$c->libelle))
             ->values()
-            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $approvisionnementsEnCours, $user, $agencesAvecDestination, $agencesAvecAgentAApprovisionner) {
+            ->map(function (CompteTresorerie $c) use ($soldes, $enCours, $approvisionnementsEnCours, $user, $agencesAvecDestination, $agencesAvecAgentAApprovisionner, $agencesEtOperateursAvecDestination) {
                 $solde = (float) ($soldes->get($c->id)['solde'] ?? 0);
 
                 return [
@@ -168,11 +179,19 @@ class CompteTresorerieController extends Controller
                     // Conditions d'état vérifiées EXPLICITEMENT en plus de la policy : le Gate::before
                     // du super admin la passe toujours. MouvementFondsService::verserCaisseAgent()
                     // revérifie de toute façon chacune d'elles.
-                    'peut_verser' => $c->isDediee()
+                    'peut_verser' => $c->isCaisseDediee()
                         && $c->actif
                         && $solde > 0
                         && $agencesAvecDestination->has($c->site_id)
                         && $user->can('verser', $c),
+                    // Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) :
+                    // mêmes vérifications explicites, revérifiées par
+                    // MouvementFondsService::transfererMobileMoneyAgent().
+                    'peut_transferer' => $c->isMobileMoneyDedie()
+                        && $c->actif
+                        && $solde > 0
+                        && $agencesEtOperateursAvecDestination->has($c->site_id.'|'.$c->operateur_mobile_money?->value)
+                        && $user->can('transfererMobileMoney', $c),
                     'en_cours_approvisionnement' => (float) ($approvisionnementsEnCours->get($c->id)['montant'] ?? 0),
                     'approvisionnements_en_cours' => (int) ($approvisionnementsEnCours->get($c->id)['nombre'] ?? 0),
                     // Mêmes vérifications explicites (Gate::before) ; revérifiées par
@@ -206,6 +225,13 @@ class CompteTresorerieController extends Controller
                 'site_id' => $c->site_id,
                 'libelle' => $c->libelle,
             ])->values(),
+            'destinations_transfert' => $destinationsTransfert->map(fn (CompteTresorerie $c) => [
+                'id' => $c->id,
+                'site_id' => $c->site_id,
+                'libelle' => $c->libelle,
+                'numero' => $c->numero,
+                'operateur_mobile_money' => $c->operateur_mobile_money->value,
+            ])->values(),
             'destinations_approvisionnement' => $destinationsApprovisionnement->map(fn (CompteTresorerie $c) => [
                 'id' => $c->id,
                 'site_id' => $c->site_id,
@@ -217,10 +243,22 @@ class CompteTresorerieController extends Controller
             // simple lecteur n'a pas à recevoir la liste des utilisateurs de l'organisation.
             'agents' => $peutGerer ? $this->agentsAssignables($orgId, $sitesEcriture) : collect(),
             'caisses_dediees_actives' => $peutGerer
-                ? CompteTresorerie::forOrg($orgId)->dediees()->actifs()
+                ? CompteTresorerie::forOrg($orgId)->caissesDediees()->actifs()
                     ->when($sitesEcriture !== null, fn ($q) => $q->whereIn('site_id', $sitesEcriture))
                     ->get(['agent_id', 'site_id'])
                     ->map(fn (CompteTresorerie $c) => ['agent_id' => $c->agent_id, 'site_id' => $c->site_id])
+                    ->values()
+                : collect(),
+            // Comptes Mobile Money d'agents déjà actifs : un seul par (agent, agence, opérateur).
+            'comptes_mobile_money_agents_actifs' => $peutGerer
+                ? CompteTresorerie::forOrg($orgId)->mobileMoneyDedies()->actifs()
+                    ->when($sitesEcriture !== null, fn ($q) => $q->whereIn('site_id', $sitesEcriture))
+                    ->get(['agent_id', 'site_id', 'operateur_mobile_money'])
+                    ->map(fn (CompteTresorerie $c) => [
+                        'agent_id' => $c->agent_id,
+                        'site_id' => $c->site_id,
+                        'operateur_mobile_money' => $c->operateur_mobile_money?->value,
+                    ])
                     ->values()
                 : collect(),
             'agents_filtre' => $this->agentsAvecCaisse($orgId, $sitesAccessibles),
@@ -246,6 +284,25 @@ class CompteTresorerieController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $request->validate(['nature' => ['nullable', Rule::in(['agence', 'dediee'])]]);
+
+        // Compte Mobile Money dédié à un agent (ADR 0027) : opérateur et numéro du portefeuille
+        // obligatoires, compte comptable créé automatiquement — aucun compte venu de la requête.
+        if ($request->input('nature') === 'dediee' && $request->input('type') === TypeSupportTresorerie::MOBILE_MONEY->value) {
+            $data = $request->validate([
+                'site_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+                'agent_id' => ['required', Rule::exists('users', 'id')->where('organization_id', $orgId)],
+                'operateur_mobile_money' => ['required', Rule::in(array_map(fn (OperateurMobileMoney $o) => $o->value, OperateurMobileMoney::avecWallet()))],
+                'numero' => ['required', 'string', 'max:50'],
+                'libelle' => ['nullable', 'string', 'max:150'],
+            ], [
+                'operateur_mobile_money.required' => 'Choisissez l\'opérateur du portefeuille.',
+                'numero.required' => 'Le numéro du portefeuille est obligatoire.',
+            ]);
+
+            $support = $this->caisseAgent->creerCompteMobileMoney($orgId, $data['site_id'], $data['agent_id'], $data['operateur_mobile_money'], $data['numero'], $data['libelle'] ?? null);
+
+            return back()->with('success', "Compte « {$support->libelle} » créé en brouillon : il devra être validé avant d'être utilisable.");
+        }
 
         if ($request->input('nature') === 'dediee') {
             $data = $request->validate([
@@ -297,18 +354,20 @@ class CompteTresorerieController extends Controller
         abort_unless(auth()->user()->can('tresorerie.gerer_soldes_ouverture'), 403);
         abort_unless($compteTresorerie->organization_id === auth()->user()->organization_id, 403);
 
-        // Caisse dédiée : seuls le libellé et l'activation sont modifiables. Les autres
-        // champs éventuellement envoyés sont ignorés (validate() ne renvoie que ces deux
-        // clés) : un type ou un compte forgé ne peut jamais être appliqué.
+        // Support dédié : seuls le libellé et l'activation sont modifiables — et, pour un compte
+        // Mobile Money encore en brouillon, son numéro. Les autres champs éventuellement envoyés
+        // sont ignorés (validate() ne renvoie que ces clés) : un type ou un compte forgé ne peut
+        // jamais être appliqué.
         if ($compteTresorerie->isDediee()) {
             $data = $request->validate([
                 'libelle' => ['required', 'string', 'max:150'],
                 'actif' => ['required', 'boolean'],
+                ...($compteTresorerie->isMobileMoneyDedie() ? ['numero' => ['sometimes', 'nullable', 'string', 'max:50']] : []),
             ]);
 
             $this->caisseAgent->mettreAJour($compteTresorerie, $data);
 
-            return back()->with('success', 'Caisse mise à jour.');
+            return back()->with('success', $compteTresorerie->isMobileMoneyDedie() ? 'Compte mis à jour.' : 'Caisse mise à jour.');
         }
 
         $orgId = $compteTresorerie->organization_id;
@@ -480,6 +539,12 @@ class CompteTresorerieController extends Controller
             throw ValidationException::withMessages([
                 'compte_comptable_id' => "Ce compte est déjà celui du support « {$dejaPris->libelle} » dans cette agence : chaque Mobile Money doit avoir son propre compte.",
             ]);
+        }
+
+        // Un portefeuille réel ne porte qu'un seul compte (ADR 0027) : le numéro du compte d'un
+        // agent ne peut pas être repris par un compte de l'agence.
+        if (array_key_exists('numero', $data)) {
+            $this->caisseAgent->garantirNumeroNonPrisParUnAgent($orgId, $operateur, $data['numero'], $courant?->id);
         }
 
         return $operateur->value;

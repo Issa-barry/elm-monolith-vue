@@ -11,6 +11,7 @@ use App\Models\EncaissementVente;
 use App\Services\Tresorerie\FicheCaisseService;
 use App\Support\Rapports\RapportPerimetre;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +77,7 @@ class RapportActiviteService
             'creances' => $this->creances($p, $limite),
             'mobile_money' => $this->mobileMoney($p, $limite),
             'caisse' => $this->caisse($p),
+            'comptes_mobile_money' => $this->comptesMobileMoney($p),
         ];
     }
 
@@ -301,11 +303,38 @@ class RapportActiviteService
             return $this->caisseVide($p);
         }
 
+        return $this->synthese($p, CompteTresorerie::query()
+            ->forOrg($p->organizationId)
+            // Caisses en espèces seulement : le compte Mobile Money d'un agent (ADR 0027) a son
+            // propre bloc (comptesMobileMoney()).
+            ->caissesDediees());
+    }
+
+    /**
+     * Comptes Mobile Money des agents (ADR 0027, lot 4) : même synthèse que les caisses — fonds
+     * encore détenus par l'agent (solde), transferts envoyés à l'agence, en cours, frais — tirée du
+     * grand livre par FicheCaisseService. Mêmes clés que caisse() pour un seul affichage.
+     *
+     * @return array<string, mixed>
+     */
+    public function comptesMobileMoney(RapportPerimetre $p): array
+    {
+        if ($p->aucuneAgence()) {
+            return $this->caisseVide($p);
+        }
+
+        return $this->synthese($p, CompteTresorerie::query()->forOrg($p->organizationId)->mobileMoneyDedies());
+    }
+
+    /**
+     * @param  EloquentBuilder<CompteTresorerie>  $supports
+     * @return array<string, mixed>
+     */
+    private function synthese(RapportPerimetre $p, EloquentBuilder $supports): array
+    {
         $avecEcritures = $p->agentId !== null;
 
-        $fiches = CompteTresorerie::query()
-            ->forOrg($p->organizationId)
-            ->dediees()
+        $fiches = $supports
             ->when($p->siteIds !== null, fn ($q) => $q->whereIn('site_id', $p->siteIds))
             ->when($p->agentId !== null, fn ($q) => $q->where('agent_id', $p->agentId))
             ->get()

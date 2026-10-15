@@ -75,7 +75,7 @@ class EncaissementsDiagnostiquerDestinationCommand extends Command
         $supportsParCompte = CompteTresorerie::forOrg($organization->id)->get()->groupBy('compte_comptable_id');
         $sites = Site::where('organization_id', $organization->id)->pluck('nom', 'id');
         // Couples « agent|site » qui ont aujourd'hui une caisse dédiée active.
-        $caissesActives = CompteTresorerie::forOrg($organization->id)->dediees()->actifs()->get()
+        $caissesActives = CompteTresorerie::forOrg($organization->id)->caissesDediees()->actifs()->get()
             ->mapWithKeys(fn (CompteTresorerie $s) => [$s->agent_id.'|'.$s->site_id => true]);
 
         $total = ['nb' => 0, 'montant' => 0.0];

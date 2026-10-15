@@ -93,6 +93,27 @@ class MouvementFondsControllerTest extends TestCase
         ]);
     }
 
+    /**
+     * Entre agences, le support de destination reste choisi par le destinataire à la réception
+     * (revue produit du 13/09/2026) : un support transmis à la création n'est jamais enregistré.
+     * Seule la même agence des deux côtés le fixe à la création (approvisionnement, ADR 0018).
+     */
+    public function test_store_entre_agences_ignore_un_support_de_destination_transmis(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.tresorerie.mouvements.store'), [
+                ...$this->storePayload(),
+                'compte_tresorerie_destination_id' => $this->caisseAgence->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $mouvement = MouvementFonds::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertSame(StatutMouvementFonds::BROUILLON, $mouvement->statut);
+        $this->assertSame('inter_sites', $mouvement->nature->value);
+        $this->assertNull($mouvement->compte_tresorerie_destination_id);
+    }
+
     public function test_cycle_complet_envoyer_puis_recevoir(): void
     {
         $this->actingAs($this->user)->post(route('comptabilite.tresorerie.mouvements.store'), $this->storePayload());

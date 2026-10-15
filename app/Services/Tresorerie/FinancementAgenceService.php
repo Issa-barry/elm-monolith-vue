@@ -4,6 +4,7 @@ namespace App\Services\Tresorerie;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutFinancementAgence;
+use App\Enums\TypeSupportTresorerie;
 use App\Models\CompteTresorerie;
 use App\Services\PeriodePaiementService;
 use App\Services\Tresorerie\Obligations\ObligationAccumulator;
@@ -58,7 +59,8 @@ class FinancementAgenceService
             // Échéance de fin de mois : la 1re quinzaine du même mois est échue, ses restants sont conservés.
             'buckets_echus' => $echeance === 'p2' ? ['quinzaine_1'] : [],
             'fonds_tiers' => $this->fondsAutresAgencesParSite($organizationId, $fin),
-            'caisses_agents' => $this->soldeCaissesAgentsParSite($organizationId, $fin),
+            'caisses_agents' => $this->soldeSupportsAgentsParSite($organizationId, $fin, TypeSupportTresorerie::CAISSE),
+            'mobile_money_agents' => $this->soldeSupportsAgentsParSite($organizationId, $fin, TypeSupportTresorerie::MOBILE_MONEY),
         ];
 
         return array_map(
@@ -168,11 +170,14 @@ class FinancementAgenceService
             ];
         }
 
-        $tiers = $contexte['fonds_tiers'][$siteId] ?? ['especes' => 0.0, 'autres' => 0.0, 'a_verser' => 0.0];
+        $tiers = $contexte['fonds_tiers'][$siteId] ?? ['especes' => 0.0, 'mobile_money' => 0.0, 'autres' => 0.0, 'a_verser' => 0.0];
         // Espèces dues encore chez les agents : hors du disponible (caisses dédiées exclues), donc
         // jamais déduites une deuxième fois — elles sont réputées rester d'abord chez les agents.
         $especesEnAgence = max(0.0, $tiers['especes'] - (float) ($contexte['caisses_agents'][$siteId] ?? 0.0));
-        $fondsTiers = round($tiers['autres'] + $especesEnAgence, 2);
+        // Même règle pour le Mobile Money (ADR 0027) : encaissé sur les comptes des agents, il n'est dans
+        // les supports de l'agence qu'une fois transféré — réputé rester d'abord chez les agents.
+        $mobileMoneyEnAgence = max(0.0, $tiers['mobile_money'] - (float) ($contexte['mobile_money_agents'][$siteId] ?? 0.0));
+        $fondsTiers = round($tiers['autres'] + $especesEnAgence + $mobileMoneyEnAgence, 2);
         $disponiblePropre = round($disponible - $fondsTiers, 2);
 
         $enTransit = $this->disponibilite->fondsEnTransitVersSite($organizationId, $siteId, $debut, $fin);
@@ -217,7 +222,7 @@ class FinancementAgenceService
      * parti), séparés espèces / autres moyens ; `a_verser` = la part pas encore engagée dans un
      * règlement, c'est-à-dire la remise obligatoire. Encaissements postérieurs à $fin ignorés.
      *
-     * @return array<string, array{especes: float, autres: float, a_verser: float}>
+     * @return array<string, array{especes: float, mobile_money: float, autres: float, a_verser: float}>
      */
     private function fondsAutresAgencesParSite(string $organizationId, Carbon $fin): array
     {
@@ -232,8 +237,13 @@ class FinancementAgenceService
             }
 
             $site = $ligne['site_debiteur_id'];
-            $parSite[$site] ??= ['especes' => 0.0, 'autres' => 0.0, 'a_verser' => 0.0];
-            $parSite[$site][$ligne['mode_paiement'] === ModePaiement::ESPECES->value ? 'especes' : 'autres'] += $ligne['montant'];
+            $parSite[$site] ??= ['especes' => 0.0, 'mobile_money' => 0.0, 'autres' => 0.0, 'a_verser' => 0.0];
+            $poste = match ($ligne['mode_paiement']) {
+                ModePaiement::ESPECES->value => 'especes',
+                ModePaiement::MOBILE_MONEY->value => 'mobile_money',
+                default => 'autres',
+            };
+            $parSite[$site][$poste] += $ligne['montant'];
             if ($ligne['statut'] === DetteInterAgencesService::A_VERSER) {
                 $parSite[$site]['a_verser'] += $ligne['montant'];
             }
@@ -242,11 +252,17 @@ class FinancementAgenceService
         return $parSite;
     }
 
-    /** @return array<string, float> solde des caisses dédiées aux agents, par agence */
-    private function soldeCaissesAgentsParSite(string $organizationId, Carbon $fin): array
+    /**
+     * Solde des supports dédiés aux agents d'un type, par agence : caisses en espèces pour estimer les
+     * espèces dues encore chez les agents, comptes Mobile Money pour le Mobile Money (ADR 0027) — jamais
+     * l'un pour l'autre.
+     *
+     * @return array<string, float>
+     */
+    private function soldeSupportsAgentsParSite(string $organizationId, Carbon $fin, TypeSupportTresorerie $type): array
     {
         return $this->disponibilite->situationParSupport($organizationId, $fin)
-            ->filter(fn (array $support) => $support['agent_id'] !== null)
+            ->filter(fn (array $support) => $support['agent_id'] !== null && $support['type'] === $type->value)
             ->groupBy('site_id')
             ->map(fn ($supports) => max(0.0, (float) $supports->sum('solde')))
             ->all();

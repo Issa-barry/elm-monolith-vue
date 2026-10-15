@@ -45,6 +45,8 @@ export interface CompteTresorerie {
     en_cours_versement: number;
     versements_en_cours: number;
     peut_verser: boolean;
+    /** Compte Mobile Money d'un agent pouvant être transféré à l'agence (ADR 0027) : permission, état, solde, destination. */
+    peut_transferer?: boolean;
     /**
      * Approvisionnements envoyés vers cette caisse d'agent, pas encore confirmés par l'agent (ADR
      * 0018) : sortis de la caisse de l'agence, pas encore dans `solde`. Jamais disponible.
@@ -63,11 +65,25 @@ export interface NatureAffichee {
     variante: 'secondary' | 'outline';
 }
 
-/** Nature affichée en badge : la caisse dédiée à un agent d'abord, sinon le type du support d'agence. */
+/**
+ * Nature affichée en badge : le support dédié à un agent d'abord (sa caisse en espèces, ou son
+ * compte Mobile Money), sinon le type du support d'agence.
+ */
 export function natureAffichee(
     c: Pick<CompteTresorerie, 'nature' | 'type' | 'type_label'> &
         Partial<Pick<CompteTresorerie, 'operateur_label'>>,
 ): NatureAffichee {
+    if (c.nature === 'dediee' && c.type === 'mobile_money') {
+        const operateur = c.operateur_label ?? 'Mobile Money';
+
+        return {
+            label: `${operateur} dédié`,
+            titre: `Compte ${operateur} dédié à un agent`,
+            icone: Smartphone,
+            variante: 'secondary',
+        };
+    }
+
     if (c.nature === 'dediee') {
         return {
             label: 'Caisse dédiée',
@@ -190,16 +206,23 @@ export interface ResumeSupports {
 /**
  * Synthèse de la liste affichée : simple lecture des lignes déjà calculées par le serveur. Le
  * montant « en cours de versement » reste distinct du solde total : Solde ≠ en cours ≠ reçu.
+ * « Caisses dédiées » ne compte que les caisses en espèces des agents, pas leurs comptes Mobile Money.
  */
 export function resumeSupports(
     comptes: Pick<
         CompteTresorerie,
-        'nature' | 'solde' | 'en_cours_versement' | 'versements_en_cours'
+        | 'nature'
+        | 'type'
+        | 'solde'
+        | 'en_cours_versement'
+        | 'versements_en_cours'
     >[],
 ): ResumeSupports {
     return {
         total: comptes.length,
-        caissesAgents: comptes.filter((c) => c.nature === 'dediee').length,
+        caissesAgents: comptes.filter(
+            (c) => c.nature === 'dediee' && c.type === 'caisse',
+        ).length,
         soldeTotal: comptes.reduce((somme, c) => somme + c.solde, 0),
         enCoursVersement: comptes.reduce(
             (somme, c) => somme + c.en_cours_versement,

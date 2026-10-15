@@ -57,6 +57,9 @@ enum EvenementComptable: string
     // jamais les deux dans la même pièce (cf. MouvementFondsComptabilisationService).
     case MOUVEMENT_FONDS_ENVOYE = 'mouvement_fonds_envoye';
     case MOUVEMENT_FONDS_RECU = 'mouvement_fonds_recu';
+    // Frais facturés par l'opérateur sur un transfert Mobile Money (ADR 0027) : charge de l'agence
+    // qui envoie, dans SA propre pièce — un retour de fonds contrepasse l'envoi, jamais les frais.
+    case FRAIS_TRANSFERT_FONDS = 'frais_transfert_fonds';
     // Solde d'ouverture d'un support de trésorerie (App\Models\SoldeOuvertureTresorerie).
     case SOLDE_OUVERTURE_TRESORERIE = 'solde_ouverture_tresorerie';
     // Paiement direct d'une commission logistique (App\Models\CommissionPayment) — circuit
@@ -112,6 +115,7 @@ enum EvenementComptable: string
             self::PAIEMENT_SALAIRE => 'Paiement salaire',
             self::MOUVEMENT_FONDS_ENVOYE => 'Mouvement de fonds — envoi',
             self::MOUVEMENT_FONDS_RECU => 'Mouvement de fonds — réception',
+            self::FRAIS_TRANSFERT_FONDS => 'Mouvement de fonds — frais de transfert',
             self::SOLDE_OUVERTURE_TRESORERIE => 'Solde d\'ouverture trésorerie',
             self::PAIEMENT_COMMISSION_LOGISTIQUE_DIRECT => 'Paiement direct commission logistique',
             self::VERSEMENT_CASHBACK => 'Versement cashback',

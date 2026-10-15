@@ -119,7 +119,11 @@ const BROUILLON = compte({
     solde: 0,
 });
 
-const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
+const monter = (
+    comptes: CompteTresorerie[] = COMPTES,
+    filtre = false,
+    supplement: Record<string, unknown> = {},
+) =>
     shallowMount(SupportsIndex, {
         props: {
             comptes,
@@ -137,8 +141,10 @@ const monter = (comptes: CompteTresorerie[] = COMPTES, filtre = false) =>
             destinations_approvisionnement: [],
             agents: [],
             caisses_dediees_actives: [],
+            comptes_mobile_money_agents_actifs: [],
             agents_filtre: [],
             comptes_comptables: [],
+            ...supplement,
         },
         global: {
             renderStubDefaultSlot: true,
@@ -852,5 +858,260 @@ describe('Supports de trésorerie — dialogue « Modifier le support »', () =>
         const wrapper = await ouvrir(compte({}));
 
         expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
+    });
+});
+
+describe('Supports de trésorerie — compte Mobile Money dédié à un agent', () => {
+    type Ouvrable = { ouvrirEdition: (c: CompteTresorerie) => void };
+
+    const MOBILE_MONEY_AGENT = compte({
+        id: 'c-om-agent',
+        libelle: 'Orange Money — Moussa sidibé',
+        type: 'mobile_money',
+        type_label: 'Mobile Money',
+        operateur_mobile_money: 'orange_money',
+        operateur_label: 'Orange Money',
+        numero: '620 00 00 01',
+        nature: 'dediee',
+        agent: { id: 'u1', nom: 'Moussa sidibé' },
+        compte_numero: '561100001',
+        solde: 0,
+    });
+
+    beforeEach(() => {
+        etat.permissions = ['tresorerie.gerer_soldes_ouverture'];
+    });
+
+    it('affiche le compte avec son opérateur, son numéro et son titulaire, sans « Verser »', () => {
+        const wrapper = monter([MOBILE_MONEY_AGENT]);
+        const ligne = lignes(wrapper)[0];
+
+        expect(ligne.find('[data-testid="support-nature"]').text()).toBe(
+            'Orange Money dédié',
+        );
+        expect(ligne.find('[data-testid="support-numero"]').text()).toContain(
+            '620 00 00 01',
+        );
+        expect(ligne.find('[data-testid="support-compte"]').text()).toBe(
+            '561100001',
+        );
+        expect(ligne.findAll('td')[4].text()).toBe('Moussa sidibé');
+        expect(ligne.text()).not.toContain("Verser à l'agence");
+    });
+
+    it('ne le compte pas dans la carte « Caisses dédiées »', () => {
+        const wrapper = monter([MOBILE_MONEY_AGENT, ...COMPTES]);
+        const carte = wrapper.find(
+            '[data-testid="support-kpi-caisses-dediees"]',
+        );
+
+        expect(carte.text()).toContain('1');
+        expect(carte.text()).not.toContain('2');
+    });
+
+    it("demande l'opérateur et le numéro du portefeuille à la création", async () => {
+        const wrapper = monter([]);
+
+        await wrapper.find('#sup-nature').setValue('dediee');
+        expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(false);
+        expect(wrapper.text()).toContain('Créer la caisse');
+
+        await wrapper.find('#sup-type-dedie').setValue('mobile_money');
+
+        expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(true);
+        expect(wrapper.find('#sup-numero-dedie').exists()).toBe(true);
+        expect(wrapper.text()).toContain(
+            "Les encaissements Mobile Money de l'agent arriveront sur ce compte",
+        );
+        expect(wrapper.text()).toContain('Créer le compte');
+        // Le choix d'un compte comptable reste réservé aux supports de l'agence.
+        expect(wrapper.find('#sup-compte').exists()).toBe(false);
+    });
+
+    it('laisse corriger le numéro en brouillon et le fige après la validation', async () => {
+        const ouvrir = async (c: CompteTresorerie) => {
+            const wrapper = monter([c]);
+            (wrapper.vm as unknown as Ouvrable).ouvrirEdition(c);
+            await nextTick();
+
+            return wrapper;
+        };
+
+        const brouillon = await ouvrir(
+            compte({
+                ...MOBILE_MONEY_AGENT,
+                actif: false,
+                statut: 'brouillon',
+                statut_label: 'Brouillon',
+                valide_le: null,
+            }),
+        );
+        expect(
+            brouillon.find('[data-testid="edit-mobile-money-dedie"]').text(),
+        ).toContain('Orange Money');
+        // Le champ factice rend l'attribut en toutes lettres : « false » = modifiable.
+        expect(
+            brouillon.find('#edit-numero-dedie').attributes('disabled'),
+        ).toBe('false');
+
+        const valide = await ouvrir(MOBILE_MONEY_AGENT);
+        expect(valide.find('#edit-numero-dedie').attributes('disabled')).toBe(
+            'true',
+        );
+        expect(valide.text()).toContain(
+            "Le numéro d'un compte validé ne peut plus être modifié",
+        );
+        expect(
+            valide.find('[data-testid="edit-solde-ouverture"]').exists(),
+        ).toBe(false);
+    });
+});
+
+describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () => {
+    type Ouvrable = { ouvrirTransfert: (c: CompteTresorerie) => void };
+    type AvecFormulaire = { transfertForm: { reference_externe: string } };
+
+    const COMPTE_AGENT = compte({
+        id: 'c-om-agent',
+        libelle: 'Orange Money — Moussa sidibé',
+        type: 'mobile_money',
+        type_label: 'Mobile Money',
+        operateur_mobile_money: 'orange_money',
+        operateur_label: 'Orange Money',
+        nature: 'dediee',
+        agent: { id: 'u1', nom: 'Moussa sidibé' },
+        compte_numero: '561100001',
+        solde: 500_000,
+        peut_transferer: true,
+    });
+
+    const DESTINATIONS = [
+        {
+            id: 'd-om',
+            site_id: 's1',
+            libelle: 'Orange Money de Matoto',
+            numero: '611 00 00 00',
+            operateur_mobile_money: 'orange_money',
+        },
+        {
+            id: 'd-momo',
+            site_id: 's1',
+            libelle: 'MoMo de Matoto',
+            numero: null,
+            operateur_mobile_money: 'momo',
+        },
+        {
+            id: 'd-kouria',
+            site_id: 's2',
+            libelle: 'Orange Money de Kouria',
+            numero: null,
+            operateur_mobile_money: 'orange_money',
+        },
+    ];
+
+    const ouvrir = async () => {
+        const wrapper = monter([COMPTE_AGENT], false, {
+            destinations_transfert: DESTINATIONS,
+        });
+        (wrapper.vm as unknown as Ouvrable).ouvrirTransfert(COMPTE_AGENT);
+        await nextTick();
+
+        return wrapper;
+    };
+
+    const saisir = async (
+        wrapper: Awaited<ReturnType<typeof ouvrir>>,
+        testid: string,
+        valeur: string,
+    ) => {
+        const champ = wrapper.find(`[data-testid="${testid}"]`);
+        (champ.element as HTMLInputElement).value = valeur;
+        await champ.trigger('input');
+    };
+
+    const envoyer = (wrapper: Awaited<ReturnType<typeof ouvrir>>) =>
+        wrapper.find('[data-testid="transfert-envoyer"]');
+
+    beforeEach(() => {
+        etat.permissions = [];
+    });
+
+    it("propose « Transférer à l'agence » selon le seul indicateur serveur peut_transferer", () => {
+        const [agent, sans] = lignes(
+            monter([
+                COMPTE_AGENT,
+                compte({ ...COMPTE_AGENT, id: 'c-2', peut_transferer: false }),
+            ]),
+        );
+
+        expect(agent.find('[data-testid="support-transferer"]').exists()).toBe(
+            true,
+        );
+        expect(agent.find('[data-testid="support-verser"]').exists()).toBe(
+            false,
+        );
+        expect(sans.find('[data-testid="support-transferer"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it("ne propose que les comptes de l'agence du même opérateur, et présélectionne le seul possible", async () => {
+        const wrapper = await ouvrir();
+        const options = wrapper.findAll('#transfert-dest option');
+
+        expect(options.map((o) => o.attributes('value'))).toEqual(['', 'd-om']);
+        expect(options[1].text()).toContain('Orange Money de Matoto');
+        expect(options[1].text()).toContain('611 00 00 00');
+        expect(
+            (wrapper.find('#transfert-dest').element as HTMLSelectElement)
+                .value,
+        ).toBe('d-om');
+    });
+
+    it("exige les frais, même nuls, et la référence avant d'activer l'envoi", async () => {
+        const wrapper = await ouvrir();
+
+        await saisir(wrapper, 'transfert-montant', '495000');
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+
+        // Frais saisis à 0 : acceptés, mais la référence manque encore.
+        await saisir(wrapper, 'transfert-frais', '0');
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+
+        (
+            wrapper.vm as unknown as AvecFormulaire
+        ).transfertForm.reference_externe = 'OM-TR-001';
+        await nextTick();
+        expect(envoyer(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('montre ce qui sort du compte : montant reçu par l’agence plus frais', async () => {
+        const wrapper = await ouvrir();
+
+        await saisir(wrapper, 'transfert-montant', '495000');
+        await saisir(wrapper, 'transfert-frais', '5000');
+
+        expect(wrapper.find('[data-testid="transfert-sortie"]').text()).toMatch(
+            /500\s000/,
+        );
+        expect(
+            wrapper.find('[data-testid="transfert-depassement"]').exists(),
+        ).toBe(false);
+
+        await saisir(wrapper, 'transfert-frais', '5001');
+        expect(
+            wrapper.find('[data-testid="transfert-depassement"]').exists(),
+        ).toBe(true);
+        expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('nomme « En cours de transfert » le montant envoyé par un compte Mobile Money', () => {
+        const ligne = lignes(
+            monter([compte({ ...COMPTE_AGENT, en_cours_versement: 300_000 })]),
+        )[0];
+
+        expect(
+            ligne.find('[data-testid="support-en-cours-versement"]').text(),
+        ).toContain('En cours de transfert');
     });
 });

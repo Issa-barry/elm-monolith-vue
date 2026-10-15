@@ -4,36 +4,63 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { formatGNF } from '@/lib/utils';
 import type { RapportActivite } from '@/types/rapports';
 import { Info } from 'lucide-vue-next';
+import { computed } from 'vue';
 import EnTeteSection from './EnTeteSection.vue';
 import { dateFr } from './format';
 
 // Section Caisse : vue agence (une ligne par caisse dédiée) ou, quand un agent est ciblé,
 // fiche complète de chaque caisse (CaisseFiche, même composant que la future fiche caisse).
-defineProps<{
-    caisse: RapportActivite['caisse'];
-    maSituation: boolean;
-    debut: string;
-    fin: string;
-}>();
+const props = withDefaults(
+    defineProps<{
+        caisse: RapportActivite['caisse'];
+        maSituation: boolean;
+        debut: string;
+        fin: string;
+        /** `mobile_money` : comptes Mobile Money des agents (ADR 0027), mêmes données qu'une caisse. */
+        nature?: 'caisse' | 'mobile_money';
+    }>(),
+    { nature: 'caisse' },
+);
+
+const textes = computed(() =>
+    props.nature === 'mobile_money'
+        ? {
+              titre: props.maSituation
+                  ? 'Mon compte Mobile Money'
+                  : 'Comptes Mobile Money des agents',
+              aide: "Tiré du grand livre : solde de début + mouvements = solde de fin. Le solde est ce que l'agent détient encore ; les transferts envoyés sont déjà partis vers l'agence.",
+              aucunTitre: 'Aucun compte Mobile Money dédié',
+              aucunTexte: props.maSituation
+                  ? "Vous n'avez pas de compte Mobile Money : vous ne pouvez pas encaisser en Mobile Money."
+                  : 'Aucun compte Mobile Money dédié à un agent dans ce périmètre.',
+              solde: "à transférer à l'agence",
+              colonneSolde: 'À transférer',
+              dernier: 'Dernier transfert',
+              pied: 'Choisissez un agent pour voir le détail des écritures de son compte Mobile Money.',
+          }
+        : {
+              titre: props.maSituation ? 'Ma caisse' : 'Caisses dédiées',
+              aide: "Tiré du grand livre : solde de début + mouvements = solde de fin. « À remettre » est un solde théorique : aucun comptage physique n'est enregistré.",
+              aucunTitre: 'Aucune caisse dédiée',
+              aucunTexte: props.maSituation
+                  ? "Vous n'avez pas de caisse dédiée : vos encaissements en espèces ne peuvent pas être suivis ici."
+                  : 'Aucune caisse dédiée à un agent dans ce périmètre.',
+              solde: 'à remettre (théorique)',
+              colonneSolde: 'À remettre',
+              dernier: 'Dernier versement',
+              pied: 'Choisissez un agent pour voir le détail des écritures de sa caisse.',
+          },
+);
 </script>
 
 <template>
     <section class="space-y-3">
-        <EnTeteSection
-            :titre="maSituation ? 'Ma caisse' : 'Caisses dédiées'"
-            aide="Tiré du grand livre : solde de début + mouvements = solde de fin. « À remettre » est un solde théorique : aucun comptage physique n'est enregistré."
-        />
+        <EnTeteSection :titre="textes.titre" :aide="textes.aide" />
 
         <Alert v-if="caisse.aucune_caisse" data-testid="caisse-aucune">
             <Info class="text-blue-500" />
-            <AlertTitle>Aucune caisse dédiée</AlertTitle>
-            <AlertDescription>
-                {{
-                    maSituation
-                        ? "Vous n'avez pas de caisse dédiée : vos encaissements en espèces ne peuvent pas être suivis ici."
-                        : 'Aucune caisse dédiée à un agent dans ce périmètre.'
-                }}
-            </AlertDescription>
+            <AlertTitle>{{ textes.aucunTitre }}</AlertTitle>
+            <AlertDescription>{{ textes.aucunTexte }}</AlertDescription>
         </Alert>
 
         <template v-else-if="caisse.detail">
@@ -69,7 +96,7 @@ defineProps<{
                             class="flex justify-between gap-3 text-xs text-muted-foreground"
                         >
                             <span>{{ f.caisse.site_nom ?? '—' }}</span>
-                            <span>à remettre (théorique)</span>
+                            <span>{{ textes.solde }}</span>
                         </div>
                         <div class="text-xs text-muted-foreground">
                             Début {{ formatGNF(f.solde_debut) }} → fin
@@ -105,10 +132,10 @@ defineProps<{
                                     Solde fin
                                 </th>
                                 <th class="px-3 py-2 text-right font-medium">
-                                    À remettre
+                                    {{ textes.colonneSolde }}
                                 </th>
                                 <th class="px-3 py-2 font-medium">
-                                    Dernier versement
+                                    {{ textes.dernier }}
                                 </th>
                             </tr>
                         </thead>
@@ -194,10 +221,7 @@ defineProps<{
                     </table>
                 </div>
             </div>
-            <p class="text-xs text-muted-foreground">
-                Choisissez un agent pour voir le détail des écritures de sa
-                caisse.
-            </p>
+            <p class="text-xs text-muted-foreground">{{ textes.pied }}</p>
         </template>
     </section>
 </template>

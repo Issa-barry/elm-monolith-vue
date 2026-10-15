@@ -120,7 +120,8 @@ class HandleInertiaRequests extends Middleware
     /**
      * Mouvements de fonds ENVOYÉS entre agences (nature `inter_sites` — un versement de caisse
      * dédiée `interne_caisses` suit son propre workflow, déjà traité par sa page dédiée) destinés
-     * à un site de l'utilisateur et qu'il est habilité à confirmer. Affiché comme badge sur le
+     * à un site de l'utilisateur et qu'il est habilité à confirmer — ainsi que les règlements
+     * inter-agences et les dépôts en banque de son agence (ADR 0026). Affiché comme badge sur le
      * menu Mouvements (Comptabilité > Trésorerie). Le badge disparaît de lui-même dès la
      * confirmation (ENVOYE -> RECU) : ce compteur relit l'état réel du mouvement, il ne mémorise
      * aucun état de lecture séparé.
@@ -147,10 +148,13 @@ class HandleInertiaRequests extends Middleware
         }
 
         // Mouvements entre agences ET règlements inter-agences (ADR 0012) : l'agence destinataire doit
-        // confirmer la réception des deux. Les versements de caisse (même agence) restent à part, de
-        // même que les approvisionnements, réservés à l'agent (approvisionnementsAConfirmer()).
+        // confirmer la réception des deux. Dépôts en banque (ADR 0026) : la banque n'est créditée
+        // qu'à la confirmation, par l'agence elle-même. Transferts Mobile Money d'un agent (ADR 0027) :
+        // le compte de l'agence n'est crédité qu'à sa confirmation. Les versements de caisse (même agence)
+        // restent à part, de même que les approvisionnements, réservés à l'agent
+        // (approvisionnementsAConfirmer()).
         $query = MouvementFonds::where('organization_id', $user->organization_id)
-            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value])
+            ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value, NatureMouvementFonds::DEPOT_BANQUE->value, NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value])
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
 
         if (! $user->isAdmin()) {

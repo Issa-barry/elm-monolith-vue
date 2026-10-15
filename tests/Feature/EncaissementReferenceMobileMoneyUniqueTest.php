@@ -55,7 +55,8 @@ class EncaissementReferenceMobileMoneyUniqueTest extends TestCase
             'org' => $org,
             'facture' => $facture,
             'user' => $user,
-            'orange' => $this->creerSupportAgence($site->id, 'mobile_money', '561100', 'orange_money'),
+            // Depuis le lot 3 de l'ADR 0027, le Mobile Money s'encaisse sur le compte de l'agent.
+            'orange' => $this->creerCompteMobileMoneyActifPour($user, $site->id, 'orange_money'),
         ];
     }
 
@@ -145,7 +146,7 @@ class EncaissementReferenceMobileMoneyUniqueTest extends TestCase
     public function test_la_meme_reference_chez_un_autre_operateur_est_refusee(): void
     {
         ['facture' => $facture, 'user' => $user, 'orange' => $orange] = $this->contexte();
-        $kulu = $this->creerSupportAgence($facture->site_id, 'mobile_money', '561400', 'kulu');
+        $kulu = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'kulu');
 
         $this->encaisserMobileMoney($user, $facture, $orange, '123456')->assertSessionHasNoErrors();
         $this->encaisserMobileMoney($user, $facture, $kulu, '123456')

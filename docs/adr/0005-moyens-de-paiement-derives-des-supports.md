@@ -40,3 +40,10 @@ sur « Mobile Money de Matoto », puis 500 000 GNF Kulu invisibles.
   régularisation est une décision distincte (diagnostic : `encaissements:diagnostiquer-destination`).
 - Hors périmètre : `PaymentDialogCompact` (paiements sortants : commissions, paie, cashback) garde sa
   liste actuelle.
+
+## Amendement du 2026-10-14 (ADR 0027, lot 3)
+
+Le point 2 ne vaut plus pour le **Mobile Money à l'encaissement** : il est proposé et accepté
+uniquement sur les comptes Mobile Money actifs de l'utilisateur qui encaisse, jamais sur un compte
+de l'agence. Virement et chèque (banque de l'agence) et tous les paiements sortants restent régis par
+le point 2. Voir [ADR 0027](0027-compte-mobile-money-dedie-agent.md).

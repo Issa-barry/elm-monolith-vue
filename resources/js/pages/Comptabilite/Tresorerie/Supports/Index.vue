@@ -75,6 +75,13 @@ const props = defineProps<{
     type_options: { value: string; label: string }[];
     operateur_options: { value: string; label: string }[];
     destinations_versement: { id: string; site_id: string; libelle: string }[];
+    destinations_transfert?: {
+        id: string;
+        site_id: string;
+        libelle: string;
+        numero: string | null;
+        operateur_mobile_money: string;
+    }[];
     destinations_approvisionnement: {
         id: string;
         site_id: string;
@@ -84,6 +91,11 @@ const props = defineProps<{
     }[];
     agents: Agent[];
     caisses_dediees_actives: { agent_id: string; site_id: string }[];
+    comptes_mobile_money_agents_actifs: {
+        agent_id: string;
+        site_id: string;
+        operateur_mobile_money: string | null;
+    }[];
     agents_filtre: { value: string; label: string }[];
     comptes_comptables: {
         id: string;
@@ -142,7 +154,7 @@ const filterFields = computed((): FilterField[] => [
         type: 'select',
         options: [
             { value: 'agence', label: "Caisse de l'agence" },
-            { value: 'dediee', label: 'Caisse dédiée à un agent' },
+            { value: 'dediee', label: 'Dédié à un agent' },
         ],
     },
     {
@@ -201,6 +213,8 @@ const form = useForm({
     nature: 'agence' as Nature,
     site_id: '',
     agent_id: '',
+    // Support dédié à un agent : sa caisse en espèces ou son compte Mobile Money (ADR 0027).
+    type_dedie: 'caisse' as 'caisse' | 'mobile_money',
     type: 'caisse',
     operateur_mobile_money: '',
     compte_comptable_id: '',
@@ -226,24 +240,45 @@ function preselectionnerCompte() {
 
 watch(() => form.type, preselectionnerCompte, { immediate: true });
 
-// Agents proposés : rattachés à l'agence choisie et sans caisse dédiée active
-// sur cette agence. Le contrôle réel reste côté serveur (CaisseAgentService).
+const dedieMobileMoney = computed(
+    () => form.nature === 'dediee' && form.type_dedie === 'mobile_money',
+);
+
+// Agents proposés : rattachés à l'agence choisie et sans support actif du même genre sur cette
+// agence — une caisse dédiée, ou un compte Mobile Money du même opérateur. Le contrôle réel reste
+// côté serveur (CaisseAgentService).
 const agentsEligibles = computed(() => {
     if (!form.site_id) return [];
+    const dejaEquipe = (agentId: string) =>
+        dedieMobileMoney.value
+            ? props.comptes_mobile_money_agents_actifs.some(
+                  (c) =>
+                      c.agent_id === agentId &&
+                      c.site_id === form.site_id &&
+                      c.operateur_mobile_money === form.operateur_mobile_money,
+              )
+            : props.caisses_dediees_actives.some(
+                  (c) => c.agent_id === agentId && c.site_id === form.site_id,
+              );
+
     return props.agents.filter(
-        (a) =>
-            a.site_ids.includes(form.site_id) &&
-            !props.caisses_dediees_actives.some(
-                (c) => c.agent_id === a.id && c.site_id === form.site_id,
-            ),
+        (a) => a.site_ids.includes(form.site_id) && !dejaEquipe(a.id),
     );
 });
 
-watch([() => form.site_id, () => form.nature], () => {
-    if (!agentsEligibles.value.some((a) => a.id === form.agent_id)) {
-        form.agent_id = '';
-    }
-});
+watch(
+    [
+        () => form.site_id,
+        () => form.nature,
+        () => form.type_dedie,
+        () => form.operateur_mobile_money,
+    ],
+    () => {
+        if (!agentsEligibles.value.some((a) => a.id === form.agent_id)) {
+            form.agent_id = '';
+        }
+    },
+);
 
 function ouvrirCreation() {
     form.reset();
@@ -253,8 +288,19 @@ function ouvrirCreation() {
 }
 
 function creerSupport() {
-    form.transform((data) =>
-        data.nature === 'dediee'
+    form.transform((data) => {
+        if (data.nature === 'dediee' && data.type_dedie === 'mobile_money') {
+            return {
+                nature: data.nature,
+                type: data.type_dedie,
+                site_id: data.site_id,
+                agent_id: data.agent_id,
+                operateur_mobile_money: data.operateur_mobile_money,
+                numero: data.numero,
+            };
+        }
+
+        return data.nature === 'dediee'
             ? {
                   nature: data.nature,
                   site_id: data.site_id,
@@ -271,8 +317,8 @@ function creerSupport() {
                   compte_comptable_id: data.compte_comptable_id,
                   numero: data.numero,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
-              },
-    ).post(URL_SUPPORTS, {
+              };
+    }).post(URL_SUPPORTS, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
@@ -301,6 +347,15 @@ const editVisible = computed({
     },
 });
 const editEstDediee = computed(() => editDialogPour.value?.nature === 'dediee');
+const editEstMobileMoneyDedie = computed(
+    () => editEstDediee.value && editDialogPour.value?.type === 'mobile_money',
+);
+// Le numéro d'un compte Mobile Money d'agent se corrige tant qu'il est en brouillon, plus après.
+const editNumeroDedieModifiable = computed(
+    () =>
+        editEstMobileMoneyDedie.value &&
+        editDialogPour.value?.statut === 'brouillon',
+);
 
 // Une fois un solde d'ouverture saisi, le type et le compte comptable sont
 // figés côté serveur (cf. CompteTresorerieController::update()) — les selects
@@ -340,10 +395,15 @@ function ouvrirEdition(compte: CompteTresorerie) {
 function enregistrerEdition() {
     if (!editDialogPour.value) return;
     const dediee = editEstDediee.value;
+    const numeroDedie = editNumeroDedieModifiable.value;
     editForm
         .transform((data) =>
             dediee
-                ? { libelle: data.libelle, actif: data.actif }
+                ? {
+                      libelle: data.libelle,
+                      actif: data.actif,
+                      ...(numeroDedie ? { numero: data.numero } : {}),
+                  }
                 : {
                       ...data,
                       operateur_mobile_money:
@@ -671,6 +731,99 @@ function envoyerApprovisionnement() {
     );
 }
 
+// ── Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) ──
+// L'agent a fait le transfert sur son téléphone : l'écran le CONSTATE (montant reçu par l'agence,
+// frais de l'opérateur en sus, référence de la transaction). Le compte de l'agent baisse tout de
+// suite du montant et des frais ; celui de l'agence n'augmente qu'à sa confirmation de réception.
+
+const transfertCible = ref<CompteTresorerie | null>(null);
+const transfertVisible = computed({
+    get: () => transfertCible.value !== null,
+    set: (visible: boolean) => {
+        if (!visible) transfertCible.value = null;
+    },
+});
+const transfertForm = useForm({
+    compte_tresorerie_destination_id: '',
+    montant: '',
+    // Vide tant que rien n'est saisi : les frais se saisissent à chaque transfert, 0 compris.
+    frais: '',
+    reference_externe: '',
+    motif: '',
+});
+const transfertMontantDisplay = ref('');
+const transfertFraisDisplay = ref('');
+const erreurCompteTransfert = computed(
+    () =>
+        (transfertForm.errors as Record<string, string | undefined>)
+            .compte_tresorerie_id,
+);
+
+// Comptes Mobile Money de la même agence et du même opérateur.
+const destinationsDuTransfert = computed(() =>
+    (props.destinations_transfert ?? []).filter(
+        (d) =>
+            d.site_id === transfertCible.value?.site_id &&
+            d.operateur_mobile_money ===
+                transfertCible.value?.operateur_mobile_money,
+    ),
+);
+const transfertMontant = computed(() => Number(transfertForm.montant || 0));
+const transfertFrais = computed(() => Number(transfertForm.frais || 0));
+const transfertSortie = computed(
+    () => transfertMontant.value + transfertFrais.value,
+);
+const soldeApresTransfert = computed(
+    () => (transfertCible.value?.solde ?? 0) - transfertSortie.value,
+);
+const transfertInvalide = computed(
+    () =>
+        transfertMontant.value <= 0 ||
+        transfertForm.frais === '' ||
+        soldeApresTransfert.value < 0 ||
+        !transfertForm.compte_tresorerie_destination_id ||
+        transfertForm.reference_externe.trim() === '',
+);
+
+function ouvrirTransfert(compte: CompteTresorerie) {
+    transfertForm.reset();
+    transfertForm.clearErrors();
+    transfertMontantDisplay.value = '';
+    transfertFraisDisplay.value = '';
+    transfertCible.value = compte;
+    if (destinationsDuTransfert.value.length === 1) {
+        transfertForm.compte_tresorerie_destination_id =
+            destinationsDuTransfert.value[0].id;
+    }
+}
+
+function handleTransfertMontantInput(e: Event) {
+    const { brut, affiche } = lireMontantSaisi(e);
+    transfertForm.montant = brut;
+    transfertMontantDisplay.value = affiche;
+}
+
+function handleTransfertFraisInput(e: Event) {
+    const { brut, affiche } = lireMontantSaisi(e);
+    transfertForm.frais = brut;
+    transfertFraisDisplay.value = affiche;
+}
+
+function envoyerTransfert() {
+    if (!transfertCible.value || transfertInvalide.value) return;
+
+    transfertForm.post(
+        `${URL_SUPPORTS}/${transfertCible.value.id}/transferer`,
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                transfertCible.value = null;
+            },
+        },
+    );
+}
+
 const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:opacity-50';
 </script>
@@ -702,7 +855,8 @@ const selectClass =
                                 <li>Les <strong>banques</strong>.</li>
                                 <li>
                                     Les comptes
-                                    <strong>Mobile Money</strong>.
+                                    <strong>Mobile Money</strong> de l'agence et
+                                    des agents.
                                 </li>
                             </ul>
                             <p class="mt-3">
@@ -861,7 +1015,11 @@ const selectClass =
                                     :title="`Envoyé, en attente de confirmation par la caisse de l'agence : ce montant n'est plus dans le solde de cette caisse et n'est pas encore crédité ailleurs.`"
                                     data-testid="support-en-cours-versement"
                                 >
-                                    En cours de versement :
+                                    {{
+                                        c.type === 'mobile_money'
+                                            ? 'En cours de transfert :'
+                                            : 'En cours de versement :'
+                                    }}
                                     {{ formatGNF(c.en_cours_versement) }}
                                 </div>
                                 <!-- Approvisionnement envoyé, pas encore confirmé par l'agent : pas encore dans le
@@ -919,6 +1077,19 @@ const selectClass =
                                             class="mr-1.5 h-3.5 w-3.5"
                                         />
                                         Verser à l'agence
+                                    </Button>
+                                    <Button
+                                        v-if="c.peut_transferer"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="support-transferer"
+                                        @click="ouvrirTransfert(c)"
+                                    >
+                                        <ArrowRightLeft
+                                            class="mr-1.5 h-3.5 w-3.5"
+                                        />
+                                        Transférer à l'agence
                                     </Button>
                                     <Button
                                         v-if="c.peut_approvisionner"
@@ -1389,6 +1560,220 @@ const selectClass =
         </template>
     </Dialog>
 
+    <!-- Transfert du compte Mobile Money d'un agent vers celui de l'agence (ADR 0027) -->
+    <Dialog
+        v-model:visible="transfertVisible"
+        modal
+        header="Transférer à l'agence"
+        :style="{ width: 'min(480px, 95vw)' }"
+        :dismissable-mask="true"
+    >
+        <form
+            v-if="transfertCible"
+            id="transfert-form"
+            class="space-y-4 pb-1"
+            data-testid="transfert-form"
+            @submit.prevent="envoyerTransfert"
+        >
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span class="text-muted-foreground">Depuis</span>
+                <span class="font-medium">{{ transfertCible.libelle }}</span>
+                <span class="text-muted-foreground">
+                    · {{ transfertCible.site }}
+                </span>
+            </div>
+
+            <div>
+                <Label
+                    for="transfert-dest"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Compte Mobile Money de l'agence
+                    <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="transfert-dest"
+                    v-model="transfertForm.compte_tresorerie_destination_id"
+                    :class="selectClass"
+                    data-testid="transfert-destination"
+                >
+                    <option value="" disabled>Choisir un compte…</option>
+                    <option
+                        v-for="d in destinationsDuTransfert"
+                        :key="d.id"
+                        :value="d.id"
+                    >
+                        {{ d.libelle }}{{ d.numero ? ` — N° ${d.numero}` : '' }}
+                    </option>
+                </select>
+                <p
+                    v-if="transfertForm.errors.compte_tresorerie_destination_id"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.compte_tresorerie_destination_id }}
+                </p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <Label
+                        for="transfert-montant"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
+                        Montant reçu par l'agence (GNF)
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <input
+                        id="transfert-montant"
+                        :value="transfertMontantDisplay"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="0"
+                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm tabular-nums shadow-sm"
+                        data-testid="transfert-montant"
+                        @input="handleTransfertMontantInput"
+                    />
+                    <p
+                        v-if="transfertForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ transfertForm.errors.montant }}
+                    </p>
+                </div>
+                <div>
+                    <Label
+                        for="transfert-frais"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
+                        Frais de l'opérateur (GNF)
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <input
+                        id="transfert-frais"
+                        :value="transfertFraisDisplay"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="0 si aucun"
+                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm tabular-nums shadow-sm"
+                        data-testid="transfert-frais"
+                        @input="handleTransfertFraisInput"
+                    />
+                    <p
+                        v-if="transfertForm.errors.frais"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ transfertForm.errors.frais }}
+                    </p>
+                </div>
+            </div>
+
+            <dl class="grid grid-cols-3 gap-3 text-xs">
+                <div>
+                    <dt class="text-muted-foreground">Disponible</dt>
+                    <dd class="mt-0.5 font-medium tabular-nums">
+                        {{ formatGNF(transfertCible.solde) }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Sort du compte</dt>
+                    <dd
+                        class="mt-0.5 font-medium tabular-nums"
+                        data-testid="transfert-sortie"
+                    >
+                        {{ formatGNF(transfertSortie) }}
+                    </dd>
+                </div>
+                <div class="text-right">
+                    <dt class="text-muted-foreground">Reste après envoi</dt>
+                    <dd
+                        class="mt-0.5 font-medium tabular-nums"
+                        :class="{ 'text-destructive': soldeApresTransfert < 0 }"
+                        aria-live="polite"
+                    >
+                        {{ formatGNF(soldeApresTransfert) }}
+                    </dd>
+                </div>
+            </dl>
+            <p
+                v-if="soldeApresTransfert < 0"
+                class="text-xs text-destructive"
+                data-testid="transfert-depassement"
+            >
+                Le montant et les frais dépassent le solde disponible du compte.
+            </p>
+
+            <div>
+                <Label
+                    for="transfert-reference"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Référence de la transaction
+                    <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                    id="transfert-reference"
+                    v-model="transfertForm.reference_externe"
+                    placeholder="Référence donnée par l'opérateur"
+                    data-testid="transfert-reference"
+                />
+                <p
+                    v-if="transfertForm.errors.reference_externe"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.reference_externe }}
+                </p>
+            </div>
+
+            <div>
+                <Label
+                    for="transfert-motif"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Motif</Label
+                >
+                <Input id="transfert-motif" v-model="transfertForm.motif" />
+                <p
+                    v-if="transfertForm.errors.motif"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ transfertForm.errors.motif }}
+                </p>
+            </div>
+
+            <p v-if="erreurCompteTransfert" class="text-xs text-destructive">
+                {{ erreurCompteTransfert }}
+            </p>
+
+            <p
+                class="text-xs text-muted-foreground"
+                data-testid="transfert-confirmation"
+            >
+                Enregistrez ici un transfert déjà fait sur le téléphone. Le
+                compte de l'agence sera crédité quand elle aura confirmé la
+                réception (dans Mouvements).
+            </p>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="transfertCible = null"
+                    >Annuler</Button
+                >
+                <Button
+                    type="submit"
+                    form="transfert-form"
+                    size="sm"
+                    data-testid="transfert-envoyer"
+                    :disabled="transfertForm.processing || transfertInvalide"
+                >
+                    {{ transfertForm.processing ? 'Envoi…' : 'Enregistrer' }}
+                </Button>
+            </div>
+        </template>
+    </Dialog>
+
     <!-- Création -->
     <Dialog
         v-model:visible="createOpen"
@@ -1433,7 +1818,7 @@ const selectClass =
                     :class="selectClass"
                 >
                     <option value="agence">Caisse de l'agence</option>
-                    <option value="dediee">Caisse dédiée à un agent</option>
+                    <option value="dediee">Dédié à un agent</option>
                 </select>
                 <p
                     v-if="form.nature === 'agence'"
@@ -1450,6 +1835,80 @@ const selectClass =
             </div>
 
             <template v-if="form.nature === 'dediee'">
+                <div>
+                    <Label
+                        for="sup-type-dedie"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
+                        Type <span class="text-destructive">*</span>
+                    </Label>
+                    <select
+                        id="sup-type-dedie"
+                        v-model="form.type_dedie"
+                        :class="selectClass"
+                        data-testid="support-type-dedie"
+                    >
+                        <option value="caisse">Caisse en espèces</option>
+                        <option value="mobile_money">
+                            Compte Mobile Money
+                        </option>
+                    </select>
+                </div>
+
+                <template v-if="dedieMobileMoney">
+                    <div>
+                        <Label
+                            for="sup-operateur-dedie"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
+                            Opérateur <span class="text-destructive">*</span>
+                        </Label>
+                        <select
+                            id="sup-operateur-dedie"
+                            v-model="form.operateur_mobile_money"
+                            :class="selectClass"
+                        >
+                            <option value="" disabled>Opérateur…</option>
+                            <option
+                                v-for="o in operateur_options"
+                                :key="o.value"
+                                :value="o.value"
+                            >
+                                {{ o.label }}
+                            </option>
+                        </select>
+                        <p
+                            v-if="form.errors.operateur_mobile_money"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.operateur_mobile_money }}
+                        </p>
+                    </div>
+                    <div>
+                        <Label
+                            for="sup-numero-dedie"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
+                            Numéro du portefeuille
+                            <span class="text-destructive">*</span>
+                        </Label>
+                        <Input
+                            id="sup-numero-dedie"
+                            v-model="form.numero"
+                            placeholder="Ex. 6XX XX XX XX"
+                        />
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Un numéro ne peut porter qu'un seul compte.
+                        </p>
+                        <p
+                            v-if="form.errors.numero"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.numero }}
+                        </p>
+                    </div>
+                </template>
+
                 <div>
                     <Label
                         for="sup-agent"
@@ -1497,7 +1956,11 @@ const selectClass =
                             class="space-y-1 text-sm leading-relaxed font-normal"
                         >
                             <p class="font-semibold">Aucun agent disponible</p>
-                            <p>
+                            <p v-if="dedieMobileMoney">
+                                L'agent doit être rattaché à cette agence et ne
+                                pas avoir de compte actif chez cet opérateur.
+                            </p>
+                            <p v-else>
                                 L'agent doit être rattaché à cette agence et ne
                                 pas avoir de caisse dédiée active.
                             </p>
@@ -1526,7 +1989,23 @@ const selectClass =
                             aria-hidden="true"
                         />
                     </template>
-                    <div class="space-y-1 text-sm leading-relaxed font-normal">
+                    <div
+                        v-if="dedieMobileMoney"
+                        class="space-y-1 text-sm leading-relaxed font-normal"
+                    >
+                        <p class="font-semibold">
+                            Compte Mobile Money · 0 GNF au départ
+                        </p>
+                        <p>Compte comptable créé automatiquement.</p>
+                        <p>
+                            Les encaissements Mobile Money de l'agent arriveront
+                            sur ce compte.
+                        </p>
+                    </div>
+                    <div
+                        v-else
+                        class="space-y-1 text-sm leading-relaxed font-normal"
+                    >
                         <p class="font-semibold">
                             Caisse en espèces · 0 GNF au départ
                         </p>
@@ -1666,7 +2145,13 @@ const selectClass =
                     >Annuler</Button
                 >
                 <Button type="submit" size="sm" :disabled="form.processing">
-                    {{ form.processing ? 'Création…' : 'Créer la caisse' }}
+                    {{
+                        form.processing
+                            ? 'Création…'
+                            : dedieMobileMoney
+                              ? 'Créer le compte'
+                              : 'Créer la caisse'
+                    }}
                 </Button>
             </div>
         </form>
@@ -1704,7 +2189,47 @@ const selectClass =
                 </p>
             </div>
 
-            <template v-if="editEstDediee">
+            <template v-if="editEstMobileMoneyDedie">
+                <p
+                    class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground"
+                    data-testid="edit-mobile-money-dedie"
+                >
+                    Compte
+                    {{ editDialogPour.operateur_label ?? 'Mobile Money' }}
+                    dédié à
+                    <span class="font-medium text-foreground">{{
+                        editDialogPour.agent?.nom
+                    }}</span>
+                    · {{ editDialogPour.site }} · compte
+                    {{ editDialogPour.compte_numero }}. L'agent, l'opérateur et
+                    le compte ne peuvent pas être modifiés.
+                </p>
+                <div>
+                    <Label
+                        for="edit-numero-dedie"
+                        class="mb-1.5 block text-xs font-medium"
+                        >Numéro du portefeuille</Label
+                    >
+                    <Input
+                        id="edit-numero-dedie"
+                        v-model="editForm.numero"
+                        :disabled="!editNumeroDedieModifiable"
+                    />
+                    <p
+                        v-if="!editNumeroDedieModifiable"
+                        class="mt-1 text-xs text-muted-foreground"
+                    >
+                        Le numéro d'un compte validé ne peut plus être modifié.
+                    </p>
+                    <p
+                        v-if="editForm.errors.numero"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ editForm.errors.numero }}
+                    </p>
+                </div>
+            </template>
+            <template v-else-if="editEstDediee">
                 <p
                     class="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground"
                 >
@@ -1875,6 +2400,17 @@ const selectClass =
                 </label>
                 <p
                     v-if="
+                        editEstMobileMoneyDedie &&
+                        editDialogPour.actif &&
+                        editDialogPour.solde !== 0
+                    "
+                    class="mt-1 text-xs text-muted-foreground"
+                >
+                    Ce compte détient {{ formatGNF(editDialogPour.solde) }} : il
+                    doit être vide avant de pouvoir être désactivé.
+                </p>
+                <p
+                    v-else-if="
                         editEstDediee &&
                         editDialogPour.actif &&
                         editDialogPour.solde !== 0

@@ -95,6 +95,9 @@ export interface FicheCaisse {
         site_nom: string | null;
         agent_id: string | null;
         agent_nom: string | null;
+        /** `caisse` (espèces) ou `mobile_money` (compte Mobile Money de l'agent, ADR 0027). */
+        type?: string;
+        operateur_label?: string | null;
     };
     solde_debut: number;
     solde_fin: number;
@@ -168,19 +171,24 @@ export interface RapportActivite {
         lignes: LigneMobileMoney[];
         total_lignes: number;
     };
-    caisse: {
-        aucune_caisse: boolean;
-        detail: boolean;
-        resume: {
-            solde_debut: number;
-            entrees: number;
-            sorties: number;
-            solde_fin: number;
-            solde_actuel: number;
-            en_cours_montant: number;
-            en_cours_nombre: number;
-            contestes_nombre: number;
-        };
-        fiches: FicheCaisse[];
+    caisse: SyntheseSupportsAgents;
+    /** Comptes Mobile Money des agents (ADR 0027) : même synthèse que les caisses. */
+    comptes_mobile_money?: SyntheseSupportsAgents;
+}
+
+/** RapportActiviteService::caisse() / comptesMobileMoney() — supports dédiés aux agents. */
+export interface SyntheseSupportsAgents {
+    aucune_caisse: boolean;
+    detail: boolean;
+    resume: {
+        solde_debut: number;
+        entrees: number;
+        sorties: number;
+        solde_fin: number;
+        solde_actuel: number;
+        en_cours_montant: number;
+        en_cours_nombre: number;
+        contestes_nombre: number;
     };
+    fiches: FicheCaisse[];
 }

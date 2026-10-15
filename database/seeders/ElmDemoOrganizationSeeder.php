@@ -26,5 +26,6 @@ class ElmDemoOrganizationSeeder extends Seeder
         // Comme InstallationService : sans règle « Peut acheter pour » (ADR 0021), même le super
         // administrateur ne se voit proposer aucune agence sur le formulaire de bon de commande.
         RegleValidationRole::provisionnerAchatsParDefaut($org->id);
+        RegleValidationRole::provisionnerReceptionsParDefaut($org->id);
     }
 }

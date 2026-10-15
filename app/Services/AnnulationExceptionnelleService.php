@@ -131,6 +131,8 @@ class AnnulationExceptionnelleService
                 'caisse' => $support?->libelle,
                 'caisse_id' => $support?->id,
                 'caisse_dediee' => (bool) $support?->isDediee(),
+                // Compte Mobile Money de l'agent (ADR 0027) : support dédié, mais pas une caisse.
+                'compte_mobile_money_dedie' => (bool) $support?->isMobileMoneyDedie(),
             ];
         })->values();
 
@@ -435,8 +437,9 @@ class AnnulationExceptionnelleService
             $blocages[] = 'Le cashback généré par cette commande a déjà été validé ou versé au client.';
         }
 
-        // Espèces encore dans la caisse dédiée de l'agent : si elles en sont déjà sorties
-        // (versement à l'agence), contrepasser l'encaissement rendrait sa caisse négative.
+        // Fonds encore sur le support dédié de l'agent (caisse, ou compte Mobile Money — ADR 0027) : s'ils
+        // en sont déjà sortis (versement ou transfert à l'agence), contrepasser l'encaissement rendrait
+        // ce support négatif.
         $parCaisse = collect($recap['encaissements'])->filter(fn ($e) => $e['caisse_dediee'])->groupBy('caisse_id');
         foreach ($parCaisse as $caisseId => $lignes) {
             $caisse = CompteTresorerie::find($caisseId);
@@ -445,7 +448,9 @@ class AnnulationExceptionnelleService
 
             if ($solde + 0.005 < $montant) {
                 $blocages[] = sprintf(
-                    'Les espèces encaissées (%s GNF) ont déjà quitté la caisse « %s » (solde actuel : %s GNF). Annulez d\'abord le versement correspondant.',
+                    $caisse?->isMobileMoneyDedie()
+                        ? 'Les fonds encaissés (%s GNF) ont déjà quitté le compte « %s » (solde actuel : %s GNF). Annulez d\'abord le transfert correspondant.'
+                        : 'Les espèces encaissées (%s GNF) ont déjà quitté la caisse « %s » (solde actuel : %s GNF). Annulez d\'abord le versement correspondant.',
                     number_format($montant, 0, ',', ' '),
                     $caisse?->libelle ?? '—',
                     number_format($solde, 0, ',', ' '),

@@ -232,26 +232,18 @@ jobs:
     # sur une vraie base MySQL isolée (elm_monolithe_e2e), pas sqlite — sans ce service le
     # serveur E2E n'a aucune base à joindre : soit 500 immédiat sur /login (connexion
     # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
-    # flow local `npm run e2e:db:reset` (voir package.json). Un service par job de matrix :
+    # flow local `npm run e2e:db:reset` (voir package.json). Une base par job de matrix :
     # chaque shard a la sienne, aucun partage de données entre shards.
-    # Image officielle tirée du miroir ECR Public et non de Docker Hub : les 4 shards + le
-    # smoke tirent en parallèle depuis des IP de runners partagées, et la limite anonyme de
-    # Docker Hub (toomanyrequests) faisait échouer le job avant même le checkout.
-    services:
-      mysql:
-        image: public.ecr.aws/docker/library/mysql:8.0
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: elm_monolithe_e2e
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-
+    # MySQL 8.0 préinstallé sur l'image ubuntu-latest (service désactivé par défaut) et non
+    # un conteneur `services:` : les 4 shards + le smoke tiraient l'image en parallèle depuis
+    # des IP de runners partagées, et Docker Hub puis le miroir ECR Public ont tous deux
+    # refusé le pull (toomanyrequests / Data limit exceeded, run #1312) avant même le checkout.
     steps:
+      - name: Start MySQL (preinstalled on runner)
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY ''; CREATE DATABASE IF NOT EXISTS elm_monolithe_e2e;"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -305,9 +297,9 @@ jobs:
           touch database/database.sqlite
           php artisan migrate --seed --force
 
-      # Base dédiée à `php artisan serve --env=e2e` (cf. .env.e2e) — le service
-      # mysql ci-dessus est vide au démarrage à part la DB elm_monolithe_e2e créée
-      # par MYSQL_DATABASE ; il faut encore la migrer/seeder avant que Playwright
+      # Base dédiée à `php artisan serve --env=e2e` (cf. .env.e2e) — le MySQL
+      # démarré au 1er step est vide à part la DB elm_monolithe_e2e créée
+      # par CREATE DATABASE ; il faut encore la migrer/seeder avant que Playwright
       # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local — y compris
       # le seeder ElmV2DemoSeeder (organisation "Eau La Maman V2 Demo", cf. son commentaire),
       # absent du DatabaseSeeder par défaut et donc jamais rejoué par --seed seul. Sans cette
@@ -381,21 +373,13 @@ jobs:
     if: github.base_ref == 'production' && needs.changes.outputs.non_docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      mysql:
-        image: public.ecr.aws/docker/library/mysql:8.0
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: elm_monolithe_e2e
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-
+    # MySQL préinstallé sur le runner plutôt qu'un conteneur `services:`, cf. e2e-full.
     steps:
+      - name: Start MySQL (preinstalled on runner)
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY ''; CREATE DATABASE IF NOT EXISTS elm_monolithe_e2e;"
+
       - name: Checkout
         uses: actions/checkout@v4
 

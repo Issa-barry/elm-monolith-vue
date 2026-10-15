@@ -19,8 +19,10 @@ use Illuminate\Validation\ValidationException;
  * un autre profil que celui qui gère les supports. Le solde d'ouverture reste un acte distinct
  * (SoldeOuvertureTresorerieService), sans lien de dépendance avec la validation du support.
  *
- * Une caisse dédiée revérifie, à la validation, les conditions de sa création (agent actif et
- * rattaché à l'agence, une seule caisse dédiée active par agent et par agence).
+ * Un support dédié à un agent revérifie, à la validation, les conditions de sa création : agent
+ * actif et rattaché à l'agence ; une seule caisse dédiée active par agent et par agence ; pour un
+ * compte Mobile Money (ADR 0027), un seul compte actif par agent, agence et opérateur, et un
+ * numéro que ne porte aucun autre support.
  */
 class SupportTresorerieValidationService
 {
@@ -28,7 +30,7 @@ class SupportTresorerieValidationService
         private readonly CaisseAgentService $caissesAgents,
     ) {}
 
-    /** @throws ValidationException si le support n'est pas un brouillon ou si une règle propre à la caisse dédiée échoue */
+    /** @throws ValidationException si le support n'est pas un brouillon ou si une règle propre au support dédié échoue */
     public function valider(CompteTresorerie $support, User $par): CompteTresorerie
     {
         return DB::transaction(function () use ($support, $par) {

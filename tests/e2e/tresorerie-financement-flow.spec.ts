@@ -356,7 +356,7 @@ test('créer une caisse dédiée à un agent : solde à 0, responsable affiché,
     await creation.locator('#sup-site').selectOption({ label: 'Matoto' });
     await creation
         .locator('#sup-nature')
-        .selectOption({ label: 'Caisse dédiée à un agent' });
+        .selectOption({ label: 'Dédié à un agent' });
 
     // Le premier agent proposé (l'option 0 est le placeholder).
     const agentSelect = creation.locator('#sup-agent');
@@ -395,10 +395,96 @@ test('créer une caisse dédiée à un agent : solde à 0, responsable affiché,
     await reouverture.locator('#sup-site').selectOption({ label: 'Matoto' });
     await reouverture
         .locator('#sup-nature')
-        .selectOption({ label: 'Caisse dédiée à un agent' });
+        .selectOption({ label: 'Dédié à un agent' });
     await expect(
         reouverture.locator('#sup-agent option', { hasText: nomAgent }),
     ).toHaveCount(0);
+});
+
+/**
+ * Compte Mobile Money dédié à un agent (ADR 0027, lot 1) : création depuis l'écran avec opérateur
+ * et numéro du portefeuille, compte comptable créé automatiquement, aucun versement proposé, et un
+ * même portefeuille refusé une seconde fois même écrit avec l'indicatif. Les règles (unicités,
+ * sous-compte, étanchéité avec les caisses en espèces) sont verrouillées côté Feature.
+ */
+test('créer le compte Mobile Money dédié à un agent : opérateur, numéro, solde à 0, portefeuille refusé une seconde fois', async ({
+    page,
+}) => {
+    await page.goto(SUPPORTS_URL);
+    await expect(
+        page.getByRole('heading', { name: /supports de trésorerie/i }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const choisirCompteMobileMoney = async (dialog: Locator) => {
+        await dialog.locator('#sup-site').selectOption({ label: 'Matoto' });
+        await dialog
+            .locator('#sup-nature')
+            .selectOption({ label: 'Dédié à un agent' });
+        await dialog
+            .locator('#sup-type-dedie')
+            .selectOption({ label: 'Compte Mobile Money' });
+        await dialog
+            .locator('#sup-operateur-dedie')
+            .selectOption({ label: 'Orange Money' });
+    };
+    const premierAgent = async (dialog: Locator) =>
+        (
+            (await dialog.locator('#sup-agent option').nth(1).textContent()) ??
+            ''
+        ).trim();
+
+    const creation = await ouvrirCreation(page);
+    await choisirCompteMobileMoney(creation);
+    await creation.locator('#sup-numero-dedie').fill('620 11 22 33');
+    const nomAgent = await premierAgent(creation);
+    expect(nomAgent, 'au moins un agent rattaché à Matoto').not.toBe('');
+    await creation.locator('#sup-agent').selectOption({ label: nomAgent });
+
+    // Aucun choix de compte comptable : il est créé automatiquement sous celui de l'opérateur.
+    await expect(creation.locator('#sup-compte')).toHaveCount(0);
+
+    await creation.getByRole('button', { name: /créer le compte/i }).click();
+
+    const ligne = page
+        .locator('tbody tr', { hasText: `Orange Money — ${nomAgent}` })
+        .first();
+    await expect(ligne).toBeVisible({ timeout: 10_000 });
+    await expect(ligne.getByTestId('support-nature')).toHaveText(
+        'Orange Money dédié',
+    );
+    await expect(ligne.getByTestId('support-numero')).toContainText(
+        '620 11 22 33',
+    );
+    await expect(ligne.getByTestId('support-compte')).toHaveText(/^5611\d+$/);
+    await expect(ligne.getByTestId('support-solde')).toHaveText(/^0\b/);
+    await expect(ligne.getByTestId('support-statut')).toHaveText(
+        /^brouillon$/i,
+    );
+    await validerSupport(ligne);
+    // Ce n'est pas une caisse en espèces : ni versement, ni solde d'ouverture.
+    await expect(ligne.getByTestId('support-verser')).toHaveCount(0);
+    await ligne.getByTestId('support-actions').click();
+    await expect(
+        page.getByRole('menuitem', { name: /solde d'ouverture/i }),
+    ).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // L'agent a son compte Orange Money actif à Matoto : il n'est plus proposé pour cet opérateur.
+    const seconde = await ouvrirCreation(page);
+    await choisirCompteMobileMoney(seconde);
+    await expect(
+        seconde.locator('#sup-agent option', { hasText: nomAgent }),
+    ).toHaveCount(0);
+
+    // Le même portefeuille, écrit avec l'indicatif, pour un autre agent : refusé.
+    const autreAgent = await premierAgent(seconde);
+    expect(autreAgent, 'un deuxième agent rattaché à Matoto').not.toBe('');
+    await seconde.locator('#sup-agent').selectOption({ label: autreAgent });
+    await seconde.locator('#sup-numero-dedie').fill('+224 620 11 22 33');
+    await seconde.getByRole('button', { name: /créer le compte/i }).click();
+    await expect(
+        seconde.getByText(/un portefeuille ne porte qu'un seul compte/i),
+    ).toBeVisible({ timeout: 10_000 });
 });
 
 test('le filtre Nature de l’URL n’affiche que les caisses dédiées', async ({

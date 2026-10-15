@@ -40,6 +40,7 @@ class RapportActiviteExport implements WithMultipleSheets
             $this->creances(),
             $this->mobileMoney(),
             $this->caisse(),
+            $this->comptesMobileMoney(),
         ];
     }
 
@@ -150,6 +151,33 @@ class RapportActiviteExport implements WithMultipleSheets
         return new RapportFeuille(
             'Caisse',
             ['Agent', 'Agence', 'Caisse', 'Solde début', 'Encaissements espèces', 'Versements envoyés', 'Autres mouvements (net)', 'Solde fin', 'Solde actuel', 'En cours de versement', 'Dernier versement'],
+            $lignes,
+        );
+    }
+
+    /** Comptes Mobile Money des agents (ADR 0027) : même lecture que la caisse, frais à part. */
+    private function comptesMobileMoney(): RapportFeuille
+    {
+        $lignes = [];
+        foreach ($this->rapport['comptes_mobile_money']['fiches'] ?? [] as $f) {
+            $autres = array_filter($f['mouvements'], fn (array $m) => ! in_array($m['categorie'], ['encaissements', 'versements_envoyes', 'frais_transfert'], true));
+            $lignes[] = [
+                $f['caisse']['agent_nom'], $f['caisse']['site_nom'], $f['caisse']['libelle'],
+                $f['solde_debut'],
+                $this->montantCategorie($f, 'encaissements', 'entrees'),
+                $this->montantCategorie($f, 'versements_envoyes', 'sorties'),
+                $this->montantCategorie($f, 'frais_transfert', 'sorties'),
+                round(array_sum(array_column($autres, 'entrees')) - array_sum(array_column($autres, 'sorties')), 2),
+                $f['solde_fin'],
+                $f['solde_actuel'],
+                $f['en_cours']['montant'],
+                $f['dernier_versement']['date_envoi'] ?? '',
+            ];
+        }
+
+        return new RapportFeuille(
+            'Mobile Money agents',
+            ['Agent', 'Agence', 'Compte', 'Solde début', 'Encaissements Mobile Money', 'Transferts envoyés', 'Frais de transfert', 'Autres mouvements (net)', 'Solde fin', 'Solde actuel', 'En cours de transfert', 'Dernier transfert'],
             $lignes,
         );
     }
