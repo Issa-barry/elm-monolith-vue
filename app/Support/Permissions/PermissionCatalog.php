@@ -73,6 +73,7 @@ final class PermissionCatalog
         'tresorerie.verser' => "Trésorerie — déclencher un versement de caisse vers l'agence",
         'tresorerie.gerer_soldes_ouverture' => "Trésorerie — gérer les soldes d'ouverture",
         'tresorerie.valider_supports' => 'Trésorerie — valider un support (caisse, banque, Mobile Money)',
+        'tresorerie.supprimer_supports' => 'Trésorerie — supprimer un support resté en brouillon (jamais validé)',
         'tresorerie.designer_principale' => 'Trésorerie — désigner la trésorerie principale (site central des flux inter-agences)',
         'tresorerie.exporter' => 'Trésorerie — exporter',
         'achats.valider' => 'Achats — valider un bon de commande (dans la limite du plafond du rôle, Paramètres → Achats)',
@@ -217,8 +218,8 @@ final class PermissionCatalog
                     'tresorerie.annuler', 'tresorerie.confirmer_retour',
                 ],
                 'Trésorerie' => [
-                    'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
-                    'tresorerie.designer_principale',
+                    'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.supprimer_supports',
+                    'tresorerie.exporter', 'tresorerie.designer_principale',
                 ],
                 'Comptabilité' => ['comptabilite.payer'],
                 'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter'],

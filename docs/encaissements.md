@@ -86,7 +86,14 @@ valeur envoyée par le navigateur.
 - **Sans compte actif pour l'opérateur, l'encaissement est refusé** (`compte_tresorerie_id` :
   « Vous n'avez pas de compte Mobile Money actif pour cet opérateur dans cette agence… »), pour
   tous les rôles. La fenêtre de paiement ne propose que les opérateurs pour lesquels l'utilisateur a
-  un compte, et affiche en ambre « Mobile Money indisponible » quand il n'en a aucun.
+  un compte, et affiche en ambre « Mobile Money indisponible : vous n'avez aucun compte Mobile Money
+  actif à {agence}. Demandez à votre responsable de vous en créer un. » quand il n'en a aucun —
+  y compris quand les espèces sont le seul mode possible (révisé le 15/10/2026 : l'ancienne simple
+  mention « Espèces uniquement. » ne disait pas pourquoi l'opérateur manquait). Quand **aucun**
+  mode n'est utilisable (ni caisse, ni compte Mobile Money, ni banque de l'agence), l'encaissement
+  est bloqué et l'alerte passe en **rouge** : « Encaissement impossible à {agence} : vous n'avez ni
+  caisse ni compte Mobile Money actif, et l'agence n'a aucun compte bancaire actif. » En paiement
+  sortant (fiches, factures d'achat), rien ne change hormis le rouge du cas bloquant.
 - Un portefeuille n'encaisse que dans son agence de rattachement : pour une commande d'une autre
   agence, l'agent encaisse « à son agence » (ADR 0012), la dette inter-agences étant tracée comme
   avant — elle ne dépend pas du support qui reçoit l'argent.

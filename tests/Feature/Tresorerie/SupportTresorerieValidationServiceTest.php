@@ -14,6 +14,7 @@ use App\Services\Tresorerie\SupportTresorerieValidationService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -209,11 +210,36 @@ class SupportTresorerieValidationServiceTest extends TestCase
         $this->assertSame(StatutSupportTresorerie::BROUILLON, $brouillon->fresh()->statut());
     }
 
-    public function test_deux_brouillons_du_meme_agent_ne_peuvent_pas_etre_valides_tous_les_deux(): void
+    public function test_un_second_brouillon_du_meme_agent_et_de_la_meme_agence_est_refuse_des_sa_creation(): void
     {
         $agent = $this->creerAgent($this->site);
         $premier = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
-        $second = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
+
+        try {
+            $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
+            $this->fail('Un second brouillon aurait dû être refusé.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('en brouillon', $e->errors()['agent_id'][0]);
+            $this->assertStringContainsString($premier->libelle, $e->errors()['agent_id'][0]);
+        }
+
+        $this->assertSame(1, CompteTresorerie::caissesDediees()->where('agent_id', $agent->id)->count());
+        // Une autre agence de l'agent n'est pas concernée.
+        $kouria = $this->siteSecondaire();
+        $agent->sites()->attach($kouria->id, ['role' => 'employe', 'is_default' => false]);
+        $this->assertNotNull($this->caisses->creer($this->org->id, $kouria->id, $agent->id));
+    }
+
+    public function test_deux_brouillons_anterieurs_du_meme_agent_ne_peuvent_pas_etre_valides_tous_les_deux(): void
+    {
+        $agent = $this->creerAgent($this->site);
+        $premier = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
+        // Doublon créé avant l'ADR 0028 (la création ne le permet plus) : la validation reste le garde-fou.
+        $second = CompteTresorerie::create([
+            ...$premier->only(['organization_id', 'site_id', 'agent_id', 'compte_comptable_id', 'type', 'moyen_paiement_defaut']),
+            'libelle' => 'Doublon antérieur',
+            'actif' => false,
+        ]);
 
         $this->validation->valider($premier, $this->user);
 
@@ -225,13 +251,12 @@ class SupportTresorerieValidationServiceTest extends TestCase
     public function test_une_caisse_dediee_peut_etre_validee_une_fois_l_autre_desactivee(): void
     {
         $agent = $this->creerAgent($this->site);
-        $ancienne = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
-        $nouvelle = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
-        $ancienne = $this->validation->valider($ancienne, $this->user);
+        $ancienne = $this->validation->valider($this->caisses->creer($this->org->id, $this->site->id, $agent->id), $this->user);
 
-        $this->assertErreurValidationSur('statut', fn () => $this->validation->valider($nouvelle, $this->user));
+        $this->assertErreurValidationSur('agent_id', fn () => $this->caisses->creer($this->org->id, $this->site->id, $agent->id));
 
         $this->caisses->mettreAJour($ancienne, ['libelle' => $ancienne->libelle, 'actif' => false]);
+        $nouvelle = $this->caisses->creer($this->org->id, $this->site->id, $agent->id);
         $valide = $this->validation->valider($nouvelle, $this->user);
 
         $this->assertSame(StatutSupportTresorerie::ACTIF, $valide->statut());

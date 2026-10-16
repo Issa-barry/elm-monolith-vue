@@ -36,6 +36,8 @@ export interface CompteTresorerie {
     valide_par: string | null;
     /** Permission, agence et état (brouillon) vérifiés côté serveur. */
     peut_valider: boolean;
+    /** Brouillon supprimable (ADR 0028) : permission dédiée, agence et état vérifiés côté serveur. */
+    peut_supprimer?: boolean;
     solde: number;
     /**
      * Versements envoyés par cette caisse, pas encore reçus par la caisse de l'agence : argent déjà
@@ -132,7 +134,8 @@ export type ActionSupport =
     | 'saisir_solde_ouverture'
     | 'valider_solde_ouverture'
     | 'desactiver'
-    | 'reactiver';
+    | 'reactiver'
+    | 'supprimer';
 
 /**
  * Actions du menu ⋮ d'une ligne. Elles reprennent exactement les conditions déjà en vigueur sur
@@ -141,20 +144,27 @@ export type ActionSupport =
  * hors du menu : ce sont les actions principales d'une ligne, pilotées par `peut_verser` et
  * `peut_valider` (permission, portée et état calculés côté serveur).
  *
- * Un brouillon est inutilisable : seule sa modification est proposée (ni solde d'ouverture, ni
- * désactivation) ; il ne devient actif que par sa validation, jamais par « Réactiver ».
+ * Un brouillon est inutilisable : seules sa modification et sa suppression sont proposées (ni
+ * solde d'ouverture, ni désactivation) ; il ne devient actif que par sa validation, jamais par
+ * « Réactiver ». La suppression dépend de sa propre permission (`peut_supprimer`, calculé côté
+ * serveur), indépendante de la gestion des supports ; un support validé ne se supprime jamais.
  */
 export function actionsMenu(
-    c: Pick<CompteTresorerie, 'nature' | 'statut' | 'solde_ouverture'>,
+    c: Pick<CompteTresorerie, 'nature' | 'statut' | 'solde_ouverture'> &
+        Partial<Pick<CompteTresorerie, 'peut_supprimer'>>,
     peutGerer: boolean,
 ): ActionSupport[] {
-    if (!peutGerer) {
-        return [];
-    }
-
-    const actions: ActionSupport[] = ['modifier'];
+    const actions: ActionSupport[] = peutGerer ? ['modifier'] : [];
 
     if (c.statut === 'brouillon') {
+        if (c.peut_supprimer) {
+            actions.push('supprimer');
+        }
+
+        return actions;
+    }
+
+    if (!peutGerer) {
         return actions;
     }
 

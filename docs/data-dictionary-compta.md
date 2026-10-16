@@ -279,7 +279,10 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
 |---|---|---|
 | **Brouillon** | Créé (écran Supports ou `CaisseAgentService::creer()`), jamais validé. | **Non**, nulle part. |
 | **Actif** | Validé par un utilisateur habilité, en service. | Oui. |
-| **Inactif** | Validé, puis désactivé. Se réactive (règles de désactivation inchangées). | Non. |
+| **Inactif** | Validé, puis désactivé (vide et sans mouvement en transit, cf. ci-dessous). Se réactive. | Non. |
+
+Un **brouillon** se **supprime** définitivement ; un support **validé** (actif ou inactif) ne se
+supprime jamais, il se désactive (ADR [0028](adr/0028-suppression-brouillon-et-desactivation-controlee-des-supports.md)).
 
 - **Validation** (`SupportTresorerieValidationService::valider()`, route
   `POST comptabilite/tresorerie/supports/{support}/valider`) : brouillon → actif, avec la trace
@@ -292,7 +295,9 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
   l'indicateur `peut_valider` de l'écran).
 - **Caisse dédiée** : à la validation, le service revérifie les conditions de la création — agent
   actif et rattaché à l'agence, **une seule caisse dédiée active par (agent, site)**. Créer un
-  brouillon reste refusé tant qu'une caisse active existe pour le même (agent, site).
+  brouillon est refusé tant qu'une caisse active **ou un brouillon** existe pour le même (agent,
+  site) — depuis le 2026-10-15 (ADR 0028) ; le message nomme le brouillon à valider ou supprimer.
+  Même règle pour un compte Mobile Money d'agent, par opérateur.
 - **Compte Mobile Money d'un agent** (ADR 0027) : même revérification à la validation — agent,
   **un seul compte actif par (agent, site, opérateur)**, numéro que ne porte aucun autre support.
 - **Un brouillon ne s'active jamais par une simple modification** : `update` avec `actif = true`
@@ -314,9 +319,28 @@ caisse, banque, Mobile Money, caisse dédiée à un agent — suit le même cycl
   deux rôles qui gèrent les supports). Le super admin la possède implicitement.
 - **Solde d'ouverture** : acte distinct, sans dépendance avec la validation du support. Il n'est
   proposé qu'à partir d'un support validé.
+- **Suppression d'un brouillon** (depuis le 2026-10-15, ADR 0028 —
+  `SupportTresorerieSuppressionService::supprimer()`, route
+  `DELETE comptabilite/tresorerie/supports/{support}`) : définitive, réservée à la permission
+  **`tresorerie.supprimer_supports`** (portée : organisation + agence de l'utilisateur, admins :
+  toutes ; préréglages et rattrapage : `admin_entreprise`, `comptable`). Refusée pour un support
+  validé (actif ou inactif) — super admin compris — et pour un brouillon que référencerait une
+  opération (mouvement, encaissement, paiement de fiche ou fournisseur, remboursement, solde
+  d'ouverture). Le **sous-compte propre** d'un support dédié est supprimé avec lui s'il ne porte
+  aucune écriture et n'est référencé nulle part ; un compte partagé (571000…) n'est jamais touché.
+  Trace `deleted` au journal d'audit : auteur, date, fiche du support, motif facultatif.
+- **Désactivation** : un support dédié ne se désactive que vide et sans versement, transfert ou
+  approvisionnement en transit (ADR 0001, 0018, 0027). **Depuis le 2026-10-15 (ADR 0028), un
+  support d'agence aussi** (`SupportAgenceDesactivationService`) : aucun mouvement de fonds Envoyé
+  ou Contesté qui en part ou y arrive, et solde nul au grand livre (positif ou négatif) — sauf si
+  un autre support actif de la même agence porte le même compte comptable (solde indiscernable,
+  resté visible sur l'autre). La réactivation n'est pas contrôlée côté solde. Désactivation et
+  réactivation sont tracées (`status_changed` au journal d'audit).
 
 **Écran** : une seule colonne **Statut** (`StatusDot` : Brouillon, Actif, Inactif) ; bouton
-« Valider » (avec confirmation) sur un brouillon, pour qui a la permission dans le périmètre ; le
+« Valider » (avec confirmation) sur un brouillon, pour qui a la permission dans le périmètre ;
+« Supprimer le brouillon » dans le menu ⋮ (indicateur serveur `peut_supprimer`, fenêtre rappelant
+support, agence, responsable et compte, motif facultatif) ; le
 solde d'ouverture n'est plus un second statut dans la liste — il n'y apparaît qu'en **alerte
 ambre** quand une action est requise sur un support actif d'agence (« à saisir », ou « à valider ·
 montant · non compté dans le solde »), et son détail (montant, état) est en lecture seule dans

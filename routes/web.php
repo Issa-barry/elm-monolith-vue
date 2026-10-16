@@ -877,6 +877,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
+                Route::delete('supports/{compteTresorerie}', [CompteTresorerieController::class, 'destroy'])->name('supports.destroy');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
                 Route::post('supports/{compteTresorerie}/approvisionner', ApprovisionnerCaisseAgentController::class)->name('supports.approvisionner');
                 Route::post('supports/{compteTresorerie}/transferer', TransfererMobileMoneyAgentController::class)->name('supports.transferer');

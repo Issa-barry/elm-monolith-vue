@@ -97,9 +97,10 @@ class UserTest extends TestCase
      * (05/10/2026, retrait ↔ livraison avant le chargement — ADR 0019, D16) = 211. Achats et factures
      * fournisseurs (ADR 0021, 0022, 0024) portent ensuite le total à 220, puis
      * `sites.lecture_toutes_agences` (10/10/2026, consultation des données de toutes les agences —
-     * cf. User::voitToutesLesAgences(), ADR 0025) = 221, puis `logistique.enregistrer_retour` (16/10/2026,
-     * retour au site source d'une marchandise transférée — cf. TransfertLogistiquePolicy::
-     * enregistrerRetour(), ADR 0029) = 222.
+     * cf. User::voitToutesLesAgences(), ADR 0025) = 221, puis `tresorerie.supprimer_supports` (15/10/2026,
+     * suppression d'un support resté en brouillon — cf. CompteTresoreriePolicy::supprimer(), ADR 0028) = 222,
+     * puis `logistique.enregistrer_retour` (16/10/2026, retour au site source d'une marchandise
+     * transférée — cf. TransfertLogistiquePolicy::enregistrerRetour(), ADR 0029) = 223.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -109,7 +110,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(222, $map);
+        $this->assertCount(223, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

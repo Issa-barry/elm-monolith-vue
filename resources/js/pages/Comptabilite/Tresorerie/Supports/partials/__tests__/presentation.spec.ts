@@ -110,6 +110,50 @@ describe('actionsMenu', () => {
         ).toEqual(['modifier']);
     });
 
+    it('propose « Supprimer » pour un brouillon seulement quand le serveur le permet', () => {
+        expect(
+            actionsMenu(
+                { ...agence({ statut: 'brouillon' }), peut_supprimer: true },
+                true,
+            ),
+        ).toEqual(['modifier', 'supprimer']);
+        expect(
+            actionsMenu(
+                { ...agence({ statut: 'brouillon' }), peut_supprimer: false },
+                true,
+            ),
+        ).toEqual(['modifier']);
+    });
+
+    it('propose « Supprimer » sans la gestion des supports : la permission est distincte', () => {
+        expect(
+            actionsMenu(
+                {
+                    nature: 'dediee',
+                    statut: 'brouillon',
+                    solde_ouverture: null,
+                    peut_supprimer: true,
+                },
+                false,
+            ),
+        ).toEqual(['supprimer']);
+    });
+
+    it('ne propose jamais « Supprimer » pour un support validé', () => {
+        expect(
+            actionsMenu({ ...agence(), peut_supprimer: true }, true),
+        ).not.toContain('supprimer');
+        expect(
+            actionsMenu(
+                { ...agence({ statut: 'inactif' }), peut_supprimer: true },
+                true,
+            ),
+        ).not.toContain('supprimer');
+        expect(
+            actionsMenu({ ...agence(), peut_supprimer: true }, false),
+        ).toEqual([]);
+    });
+
     it("propose de saisir le solde d'ouverture tant qu'il n'existe pas", () => {
         expect(actionsMenu(agence(), true)).toEqual([
             'modifier',

@@ -230,7 +230,16 @@ class CompteMobileMoneyAgentTest extends TestCase
         $validation = app(SupportTresorerieValidationService::class);
         $agent = $this->creerAgent($this->site);
         $premier = $this->service->creerCompteMobileMoney($this->org->id, $this->site->id, $agent->id, 'orange_money', '620000001');
-        $doublon = $this->service->creerCompteMobileMoney($this->org->id, $this->site->id, $agent->id, 'orange_money', '620000002');
+
+        // Depuis l'ADR 0028, un second brouillon du même genre est refusé dès sa création…
+        $this->assertErreurValidationSur('agent_id', fn () => $this->service->creerCompteMobileMoney($this->org->id, $this->site->id, $agent->id, 'orange_money', '620000002'));
+        // … mais des doublons antérieurs existent en base : la validation reste le garde-fou.
+        $doublon = CompteTresorerie::create([
+            ...$premier->only(['organization_id', 'site_id', 'agent_id', 'compte_comptable_id', 'type', 'operateur_mobile_money', 'moyen_paiement_defaut']),
+            'numero' => '620000002',
+            'libelle' => 'Doublon antérieur',
+            'actif' => false,
+        ]);
 
         $actif = $validation->valider($premier, $this->user);
         $this->assertTrue($actif->actif);

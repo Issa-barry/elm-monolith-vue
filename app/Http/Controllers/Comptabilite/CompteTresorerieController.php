@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\AuditEvent;
 use App\Enums\OperateurMobileMoney;
 use App\Enums\TypeSupportTresorerie;
 use App\Http\Controllers\Controller;
@@ -10,14 +11,18 @@ use App\Models\CompteMapping;
 use App\Models\CompteTresorerie;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\AuditLogService;
 use App\Services\Comptabilite\SupportTresorerieTypeResolver;
 use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\CaisseAgentService;
+use App\Services\Tresorerie\SupportAgenceDesactivationService;
+use App\Services\Tresorerie\SupportTresorerieSuppressionService;
 use App\Services\Tresorerie\SupportTresorerieValidationService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -39,7 +44,10 @@ use Inertia\Response;
  * Mobile Money (ADR 0027), et son compte comptable est créé automatiquement (cf. CaisseAgentService).
  *
  * Un support est créé en brouillon (inutilisable) puis validé par `tresorerie.valider_supports`
- * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif.
+ * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif. Un brouillon
+ * se supprime (`tresorerie.supprimer_supports`, SupportTresorerieSuppressionService) ; un support
+ * validé ne se désactive que vide et sans mouvement en transit (ADR 0028). Désactivation,
+ * réactivation et suppression sont tracées dans le journal d'audit.
  */
 class CompteTresorerieController extends Controller
 {
@@ -47,6 +55,8 @@ class CompteTresorerieController extends Controller
         private readonly CaisseAgentService $caisseAgent,
         private readonly TresorerieDisponibiliteService $disponibilite,
         private readonly SiteScopeService $siteScope,
+        private readonly SupportAgenceDesactivationService $desactivationAgence,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request, SupportTresorerieTypeResolver $typeResolver, SavedFilterService $savedFilters): Response
@@ -173,6 +183,8 @@ class CompteTresorerieController extends Controller
                     // Politique + état vérifiés EXPLICITEMENT (le Gate::before du super admin passe
                     // toujours) ; SupportTresorerieValidationService::valider() revérifie l'état.
                     'peut_valider' => ! $c->estValide() && $user->can('valider', $c),
+                    // Même principe : SupportTresorerieSuppressionService revérifie l'état.
+                    'peut_supprimer' => ! $c->estValide() && $user->can('supprimer', $c),
                     'solde' => $solde,
                     'en_cours_versement' => (float) ($enCours->get($c->id)['montant'] ?? 0),
                     'versements_en_cours' => (int) ($enCours->get($c->id)['nombre'] ?? 0),
@@ -365,7 +377,9 @@ class CompteTresorerieController extends Controller
                 ...($compteTresorerie->isMobileMoneyDedie() ? ['numero' => ['sometimes', 'nullable', 'string', 'max:50']] : []),
             ]);
 
-            $this->caisseAgent->mettreAJour($compteTresorerie, $data);
+            $actifAvant = $compteTresorerie->actif;
+            $support = $this->caisseAgent->mettreAJour($compteTresorerie, $data);
+            $this->tracerChangementActivation($support, $actifAvant);
 
             return back()->with('success', $compteTresorerie->isMobileMoneyDedie() ? 'Compte mis à jour.' : 'Caisse mise à jour.');
         }
@@ -412,7 +426,16 @@ class CompteTresorerieController extends Controller
             ]);
         }
 
-        $compteTresorerie->update($data);
+        DB::transaction(function () use ($compteTresorerie, $data) {
+            $actifAvant = (bool) CompteTresorerie::whereKey($compteTresorerie->id)->lockForUpdate()->value('actif');
+
+            if ($actifAvant && ! $data['actif']) {
+                $this->desactivationAgence->garantirDesactivable($compteTresorerie);
+            }
+
+            $compteTresorerie->update($data);
+            $this->tracerChangementActivation($compteTresorerie, $actifAvant);
+        });
 
         return back()->with('success', 'Support de trésorerie mis à jour.');
     }
@@ -428,6 +451,34 @@ class CompteTresorerieController extends Controller
         $support = $validation->valider($compteTresorerie, $user);
 
         return back()->with('success', "« {$support->libelle} » validé : le support est maintenant actif.");
+    }
+
+    /** Brouillon supprimé définitivement. Les règles d'état sont dans SupportTresorerieSuppressionService. */
+    public function destroy(Request $request, CompteTresorerie $compteTresorerie, SupportTresorerieSuppressionService $suppression)
+    {
+        $user = auth()->user();
+
+        abort_unless($compteTresorerie->organization_id === $user->organization_id, 403);
+        $this->authorize('supprimer', $compteTresorerie);
+
+        $data = $request->validate(['motif' => ['nullable', 'string', 'max:500']]);
+
+        $suppression->supprimer($compteTresorerie, $user, $data['motif'] ?? null);
+
+        return back()->with('success', "« {$compteTresorerie->libelle} » supprimé.");
+    }
+
+    /** Qui a désactivé ou réactivé un support, et quand (journal d'audit). */
+    private function tracerChangementActivation(CompteTresorerie $support, bool $actifAvant): void
+    {
+        if ($support->actif === $actifAvant) {
+            return;
+        }
+
+        $this->audit->record($support, AuditEvent::STATUS_CHANGED, auth()->user(),
+            ['actif' => $actifAvant],
+            ['actif' => $support->actif],
+        );
     }
 
     /**

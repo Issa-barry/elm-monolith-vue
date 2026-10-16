@@ -52,6 +52,7 @@ export type StandalonePermission =
     | 'tresorerie.verser'
     | 'tresorerie.gerer_soldes_ouverture'
     | 'tresorerie.valider_supports'
+    | 'tresorerie.supprimer_supports'
     | 'tresorerie.designer_principale'
     | 'rapports.read_own'
     | 'rapports.read'

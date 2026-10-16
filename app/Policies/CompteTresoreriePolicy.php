@@ -41,6 +41,21 @@ class CompteTresoreriePolicy
         return $user->isAdmin() || $user->isAssignedToSite($support->site_id);
     }
 
+    /**
+     * Supprime un support resté en brouillon (ADR 0028). Permission dédiée
+     * `tresorerie.supprimer_supports`, même portée que la validation. L'état (jamais validé, aucune
+     * opération) est garanti par SupportTresorerieSuppressionService — le Gate::before du super
+     * admin passe avant cette policy.
+     */
+    public function supprimer(User $user, CompteTresorerie $support): bool
+    {
+        if (! $user->can('tresorerie.supprimer_supports') || $user->organization_id !== $support->organization_id) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($support->site_id);
+    }
+
     public function verser(User $user, CompteTresorerie $caisse): bool
     {
         if (! $user->can('tresorerie.verser') || $user->organization_id !== $caisse->organization_id) {

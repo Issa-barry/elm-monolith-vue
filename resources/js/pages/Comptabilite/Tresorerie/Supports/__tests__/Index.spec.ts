@@ -1,6 +1,7 @@
 import StatusDot from '@/components/StatusDot.vue';
 import SupportsIndex from '@/pages/Comptabilite/Tresorerie/Supports/Index.vue';
 import type { CompteTresorerie } from '@/pages/Comptabilite/Tresorerie/Supports/partials/presentation';
+import { router } from '@inertiajs/vue3';
 import { shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
@@ -34,7 +35,7 @@ vi.mock('@inertiajs/vue3', async () => {
 
     return {
         Head: defineComponent({ setup: () => () => null }),
-        router: { put: vi.fn(), post: vi.fn(), get: vi.fn() },
+        router: { put: vi.fn(), post: vi.fn(), get: vi.fn(), delete: vi.fn() },
         useForm: (donnees: Record<string, unknown>) => {
             const formulaire = reactive({
                 ...donnees,
@@ -1105,6 +1106,24 @@ describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () 
         expect(envoyer(wrapper).attributes('disabled')).toBeDefined();
     });
 
+    it('rend visible une erreur serveur sur le motif facultatif replié', async () => {
+        const wrapper = await ouvrir();
+        const form = wrapper.get('[data-testid="transfert-form"]');
+        const details = form.get('details');
+        expect((details.element as HTMLDetailsElement).open).toBe(false);
+
+        const { transfertForm } = wrapper.vm as unknown as {
+            transfertForm: { motif: string; errors: { motif?: string } };
+        };
+        transfertForm.motif = 'Versement du jour';
+        transfertForm.errors.motif = 'Le motif est trop long.';
+        await nextTick();
+
+        expect((details.element as HTMLDetailsElement).open).toBe(true);
+        expect(details.text()).toContain('Le motif est trop long.');
+        expect(transfertForm.motif).toBe('Versement du jour');
+    });
+
     it('nomme « En cours de transfert » le montant envoyé par un compte Mobile Money', () => {
         const ligne = lignes(
             monter([compte({ ...COMPTE_AGENT, en_cours_versement: 300_000 })]),
@@ -1113,5 +1132,146 @@ describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () 
         expect(
             ligne.find('[data-testid="support-en-cours-versement"]').text(),
         ).toContain('En cours de transfert');
+    });
+});
+
+describe("Supports de trésorerie — suppression d'un brouillon", () => {
+    type Suppression = {
+        ouvrirSuppression: (c: CompteTresorerie) => void;
+        supprimerSupport: () => void;
+        suppressionVisible: boolean;
+    };
+
+    const BROUILLON_AGENT = compte({
+        ...BROUILLON,
+        id: 'c-doublon',
+        libelle: 'Caisse Dalanda CONDÉ (2)',
+        nature: 'dediee',
+        agent: { id: 'u9', nom: 'Dalanda CONDÉ' },
+        compte_numero: '571011',
+        peut_valider: false,
+        peut_supprimer: true,
+    });
+
+    const ouvrir = async (c: CompteTresorerie = BROUILLON_AGENT) => {
+        const wrapper = monter([c]);
+        (wrapper.vm as unknown as Suppression).ouvrirSuppression(c);
+        await nextTick();
+
+        return wrapper;
+    };
+
+    beforeEach(() => {
+        etat.permissions = [];
+        vi.mocked(router.delete).mockReset();
+    });
+
+    it('propose « Supprimer le brouillon » selon le seul indicateur serveur, même sans gérer les supports', () => {
+        const [avec, sans] = lignes(
+            monter([
+                BROUILLON_AGENT,
+                compte({
+                    ...BROUILLON_AGENT,
+                    id: 'c-3',
+                    peut_supprimer: false,
+                }),
+            ]),
+        );
+
+        expect(avec.find('[data-testid="support-supprimer"]').exists()).toBe(
+            true,
+        );
+        expect(sans.find('[data-testid="support-supprimer"]').exists()).toBe(
+            false,
+        );
+        expect(sans.find('[data-testid="support-actions"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it('ne propose jamais la suppression pour un support validé', () => {
+        etat.permissions = ['tresorerie.gerer_soldes_ouverture'];
+        const [actif, inactif] = lignes(
+            monter([
+                compte({ peut_supprimer: true }),
+                compte({
+                    id: 'c-4',
+                    actif: false,
+                    statut: 'inactif',
+                    statut_label: 'Inactif',
+                    peut_supprimer: true,
+                }),
+            ]),
+        );
+
+        expect(actif.find('[data-testid="support-supprimer"]').exists()).toBe(
+            false,
+        );
+        expect(inactif.find('[data-testid="support-supprimer"]').exists()).toBe(
+            false,
+        );
+    });
+
+    it('rappelle le support, son agence et son responsable, puis envoie le motif', async () => {
+        const wrapper = await ouvrir();
+        const formulaire = wrapper.find('[data-testid="suppression-form"]');
+
+        expect(formulaire.text()).toContain('Caisse Dalanda CONDÉ (2)');
+        expect(formulaire.text()).toContain('Matoto');
+        expect(formulaire.text()).toContain('Dalanda CONDÉ');
+        expect(formulaire.text()).toContain('571011');
+        expect(formulaire.text()).toContain('avec son sous-compte comptable');
+
+        wrapper
+            .findAllComponents({ name: 'Input' })
+            .find((c) => c.attributes('id') === 'suppression-motif')
+            ?.vm.$emit('update:modelValue', '  Doublon créé par erreur  ');
+        await nextTick();
+        await formulaire.trigger('submit');
+
+        expect(router.delete).toHaveBeenCalledTimes(1);
+        const [url, options] = vi.mocked(router.delete).mock.calls[0];
+        expect(url).toBe(
+            '/backoffice/comptabilite/tresorerie/supports/c-doublon',
+        );
+        expect(options?.data).toEqual({ motif: 'Doublon créé par erreur' });
+    });
+
+    it('envoie un motif vide comme absent', async () => {
+        const wrapper = await ouvrir();
+
+        await wrapper
+            .find('[data-testid="suppression-form"]')
+            .trigger('submit');
+
+        expect(vi.mocked(router.delete).mock.calls[0][1]?.data).toEqual({
+            motif: null,
+        });
+    });
+
+    it('ignore un second envoi et garde la fenêtre ouverte pendant la requête', async () => {
+        const wrapper = await ouvrir();
+        const vm = wrapper.vm as unknown as Suppression;
+
+        vm.supprimerSupport();
+        vm.supprimerSupport();
+        expect(router.delete).toHaveBeenCalledTimes(1);
+
+        vm.suppressionVisible = false;
+        await nextTick();
+        expect(wrapper.find('[data-testid="suppression-form"]').exists()).toBe(
+            true,
+        );
+        const confirmer = wrapper.find('[data-testid="suppression-confirmer"]');
+        expect(confirmer.attributes('disabled')).toBeDefined();
+        expect(confirmer.text()).toContain('Suppression…');
+
+        const options = vi.mocked(router.delete).mock.calls[0][1];
+        options?.onSuccess?.({} as never);
+        options?.onFinish?.({} as never);
+        await nextTick();
+        expect(wrapper.find('[data-testid="suppression-form"]').exists()).toBe(
+            false,
+        );
     });
 });

@@ -142,7 +142,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.create',        'tresorerie.read',        'tresorerie.update',        'tresorerie.delete',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
             'tresorerie.confirmer_retour', 'tresorerie.verser',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.supprimer_supports',
+            'tresorerie.exporter',
             // Rapports
             'rapports.read_own',        'rapports.read',
             // RH
@@ -268,7 +269,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.create',      'tresorerie.read',        'tresorerie.update',
             'tresorerie.envoyer',     'tresorerie.recevoir',    'tresorerie.annuler',     'tresorerie.rejeter',
             'tresorerie.confirmer_retour', 'tresorerie.verser',
-            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.exporter',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.supprimer_supports',
+            'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
             'rapports.read_own',      'rapports.read',
