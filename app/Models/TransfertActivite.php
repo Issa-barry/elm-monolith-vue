@@ -49,6 +49,8 @@ class TransfertActivite extends Model
         'validation_admin_accord' => 'a approuvé la réception (commission générée)',
         'validation_admin_refus' => 'a refusé la réception',
         'validation_admin_auto' => 'a réceptionné le transfert (commission générée automatiquement, approbation non requise)',
+        'retour_enregistre' => 'a enregistré un retour au site source',
+        'retourne' => 'a enregistré le retour total au site source (transfert retourné)',
     ];
 
     public function getActionLabelAttribute(): string

@@ -84,6 +84,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     annulee: 'bg-red-500',
     // Vente annulée exceptionnellement (saisie par erreur) — cf. StatutCommandeVente::ANNULEE_ERREUR_SAISIE.
     annulee_erreur_saisie: 'bg-red-500',
+    // Mouvement de fonds retourné. Le transfert logistique « retourné » (StatutTransfert::RETOURNE,
+    // orange, ADR 0029) partage la même valeur : ses écrans passent `dot-class` (statut_dot_class
+    // calculé côté serveur), jamais `status`.
     retourne: 'bg-red-500',
     ko: 'bg-red-500',
     expiree: 'bg-red-500',

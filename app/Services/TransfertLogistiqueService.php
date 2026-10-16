@@ -12,26 +12,32 @@ use Illuminate\Validation\ValidationException;
 class TransfertLogistiqueService
 {
     /**
-     * Workflow : BROUILLON → CHARGEMENT → TRANSIT → RECEPTION → CLOTURE
+     * Workflow : BROUILLON → CHARGEMENT → TRANSIT → RECEPTION → CLOTURE (TRANSIT → RETOURNE quand
+     * toute la marchandise revient au site source, cf. TransfertRetourService).
      *
      * @throws ValidationException si les pré-conditions ne sont pas satisfaites
      */
     public static function avancerStatut(TransfertLogistique $transfert): TransfertLogistique
     {
-        $suivant = match ($transfert->statut) {
-            StatutTransfert::BROUILLON => StatutTransfert::CHARGEMENT,
-            StatutTransfert::CHARGEMENT => StatutTransfert::TRANSIT,
-            StatutTransfert::TRANSIT => StatutTransfert::RECEPTION,
-            default => null,
-        };
+        $resultat = DB::transaction(function () use ($transfert) {
+            // Relecture sous verrou (ADR 0029) : un retour concurrent (TransfertRetourService) et
+            // une double soumission de la même étape se sérialisent. Le statut, les lignes et les
+            // quantités retournées contrôlés ci-dessous sont ceux écrits par l'opération précédente.
+            $transfert = TransfertLogistique::whereKey($transfert->id)->lockForUpdate()->firstOrFail();
 
-        if ($suivant === null) {
-            return $transfert;
-        }
+            $suivant = match ($transfert->statut) {
+                StatutTransfert::BROUILLON => StatutTransfert::CHARGEMENT,
+                StatutTransfert::CHARGEMENT => StatutTransfert::TRANSIT,
+                StatutTransfert::TRANSIT => StatutTransfert::RECEPTION,
+                default => null,
+            };
 
-        self::validerPreconditions($transfert, $suivant);
+            if ($suivant === null) {
+                return $transfert;
+            }
 
-        DB::transaction(function () use ($transfert, $suivant) {
+            self::validerPreconditions($transfert, $suivant);
+
             $updates = ['statut' => $suivant->value];
 
             // Départ réel enregistré quand le camion part (TRANSIT)
@@ -81,9 +87,15 @@ class TransfertLogistiqueService
                     TransfertActiviteService::log($transfert, 'validation_admin_auto');
                 }
             }
+
+            return $transfert->fresh();
         });
 
-        return $transfert->fresh();
+        // Les appelants relisent l'instance qu'ils ont passée (statut, lignes) : elle reflète l'état
+        // écrit sous verrou, comme avant que la transition ne travaille sur une copie verrouillée.
+        $transfert->refresh();
+
+        return $resultat;
     }
 
     /**
@@ -261,11 +273,13 @@ class TransfertLogistiqueService
     }
 
     /**
-     * TRANSIT → RECEPTION : toutes les quantités reçues et types d'écart requis.
+     * TRANSIT → RECEPTION : toutes les quantités reçues et types d'écart requis. Une ligne déjà
+     * partiellement revenue au site source ne peut recevoir plus que chargé − retourné (ADR 0029,
+     * A1) ; sans retour, un surplus reste permis (écart SURPLUS).
      */
     private static function checkReception(TransfertLogistique $t, array &$errors): void
     {
-        $t->loadMissing('lignes');
+        $t->loadMissing('lignes.variante.produit');
 
         $incompletes = $t->lignes->filter(
             fn ($l) => $l->quantite_recue === null || $l->ecart_type === null
@@ -273,6 +287,16 @@ class TransfertLogistiqueService
 
         if ($incompletes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité reçue et un type d\'écart renseigné.';
+
+            return;
+        }
+
+        foreach ($t->lignes as $ligne) {
+            $max = $ligne->quantite_recevable_max;
+            if ($max !== null && $ligne->quantite_recue > $max) {
+                $nom = $ligne->variante?->produit?->nom ?? 'Produit';
+                $errors[] = "« {$nom} » : {$ligne->quantite_recue} reçus, mais seulement {$max} peuvent l'être (chargé : {$ligne->quantite_chargee}, retourné au site source : {$ligne->quantite_retournee}).";
+            }
         }
     }
 

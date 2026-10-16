@@ -30,6 +30,10 @@ class SaisirReceptionController extends Controller
         $lignesData = collect($request->validated()['lignes'])->keyBy('id');
 
         DB::transaction(function () use ($transfert, $lignesData) {
+            // Même verrou que le retour et la validation de réception (ADR 0029) ; la borne
+            // chargé − retourné est contrôlée à la validation (TransfertLogistiqueService::checkReception()).
+            TransfertLogistique::whereKey($transfert->id)->lockForUpdate()->firstOrFail();
+
             $transfert->lignes()->each(function (TransfertLigne $ligne) use ($lignesData) {
                 if ($lignesData->has($ligne->id)) {
                     $data = $lignesData[$ligne->id];

@@ -10,6 +10,7 @@ use App\Services\MouvementStockService;
 use App\Services\TransfertActiviteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ReceptionValidationAdminController extends Controller
 {
@@ -83,17 +84,35 @@ class ReceptionValidationAdminController extends Controller
                 ->with('info', 'Réception refusée.');
         }
 
-        // decision = invalider : remettre en TRANSIT pour permettre une nouvelle réception
-        MouvementStockService::supprimerEntreeDestination($transfert_logistique);
+        // decision = invalider : remettre en TRANSIT pour permettre une nouvelle réception. Les
+        // retours déjà enregistrés restent acquis (ADR 0029, A2) : la nouvelle réception est bornée
+        // à chargé − retourné (TransfertLogistiqueService::checkReception()). Sous le verrou du
+        // transfert, comme la réception et le retour ; statut revérifié (Gate::before du super admin).
+        $invalide = DB::transaction(function () use ($transfert_logistique) {
+            $transfert = TransfertLogistique::whereKey($transfert_logistique->id)->lockForUpdate()->firstOrFail();
+            if (! $transfert->isReception()) {
+                return false;
+            }
 
-        $transfert_logistique->update([
-            'statut' => StatutTransfert::TRANSIT,
-            'date_arrivee_reelle' => null,
-            'validation_reception' => null,
-            'validated_by' => null,
-            'validated_at' => null,
-            'validation_motif' => null,
-        ]);
+            MouvementStockService::supprimerEntreeDestination($transfert);
+
+            $transfert->update([
+                'statut' => StatutTransfert::TRANSIT,
+                'date_arrivee_reelle' => null,
+                'validation_reception' => null,
+                'validated_by' => null,
+                'validated_at' => null,
+                'validation_motif' => null,
+            ]);
+
+            return true;
+        });
+
+        if (! $invalide) {
+            return back()->withErrors([
+                'decision' => 'Seule une réception enregistrée peut être renvoyée en livraison.',
+            ]);
+        }
 
         TransfertActiviteService::log($transfert_logistique, 'reception_invalidee');
 

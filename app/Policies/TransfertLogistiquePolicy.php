@@ -121,6 +121,34 @@ class TransfertLogistiquePolicy
             && $user->isAssignedToSite($transfert->site_source_id);
     }
 
+    /**
+     * Enregistrer le retour au site source de tout ou partie de la marchandise (ADR 0029, cf.
+     * TransfertRetourService). Permission dédiée `logistique.enregistrer_retour` ; c'est le site
+     * SOURCE qui constate le retour physique et dont le stock est réintégré — les administrateurs
+     * ont autorité sur toute l'organisation, comme pour annuler(). Les conditions métier sont
+     * portées par TransfertLogistique::isRetournable(), aussi relue par le service (le
+     * Gate::before du super admin contourne cette Policy, jamais le service).
+     */
+    public function enregistrerRetour(User $user, TransfertLogistique $transfert): bool
+    {
+        if (! $user->can('logistique.enregistrer_retour')) {
+            return false;
+        }
+        if (! $this->sameOrganization($user, $transfert)) {
+            return false;
+        }
+        if (! $transfert->isRetournable()) {
+            return false;
+        }
+
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        return $transfert->site_source_id !== null
+            && $user->isAssignedToSite($transfert->site_source_id);
+    }
+
     public function validerReceptionAdmin(User $user, TransfertLogistique $transfert): bool
     {
         return $this->sameOrganization($user, $transfert)

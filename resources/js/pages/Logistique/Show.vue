@@ -738,8 +738,8 @@ function activiteDotClass(action: string): string {
                                 {{ contexteLabel }}
                             </h1>
                             <StatusDot
-                                :status="transfert.statut"
                                 :label="transfert.statut_label"
+                                :dot-class="transfert.statut_dot_class"
                             />
                         </div>
                         <p class="mt-0.5 text-xs text-muted-foreground">
@@ -788,8 +788,8 @@ function activiteDotClass(action: string): string {
             >
                 <span class="text-muted-foreground">État du transfert</span
                 ><StatusDot
-                    :status="transfert.statut"
                     :label="transfert.statut_label"
+                    :dot-class="transfert.statut_dot_class"
                 />
             </div>
 

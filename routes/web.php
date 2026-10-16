@@ -131,6 +131,7 @@ use App\Http\Controllers\InstallWizard\VerifyEmailCodeInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\Livreurs\UpdateLivreurController;
+use App\Http\Controllers\Logistique\EnregistrerRetourTransfertController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
@@ -1048,6 +1049,9 @@ Route::prefix('backoffice')->group(function () {
             // Transitions de statut
             Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
             Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
+
+            // Retour au site source de tout ou partie de la marchandise (ADR 0029)
+            Route::post('logistique/{transfert_logistique}/retour', EnregistrerRetourTransfertController::class)->name('logistique.retour.store');
 
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');

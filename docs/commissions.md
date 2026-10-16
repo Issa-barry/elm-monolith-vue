@@ -157,6 +157,13 @@ même principe de barème dynamique au transfert logistique interne.
   tables `commissions_logistiques`/`commission_logistique_parts`/`versements_commission_logistique`
   ne reçoivent donc plus jamais de nouvelle ligne — conservées uniquement pour un éventuel
   historique antérieur (cf. section Historique/héritage).
+  - **Retour au site source** (16/10/2026, [ADR 0029](adr/0029-retour-au-site-source-sur-transfert-logistique.md),
+    cf. [retour-transfert.md](retour-transfert.md)) — COMM-007 maintenue : un retour ne recalcule ni
+    n'annule jamais une commission de transfert. Sous `RECEPTION_EFFECTUEE`, la base (quantité reçue)
+    est déjà nette des retours et un transfert `retourne` ne génère rien. Sous `CHARGEMENT_VALIDE`,
+    la commission générée au départ sur la quantité chargée **reste due, même si toute la
+    marchandise revient** — conséquence assumée par le propriétaire du produit, provisoire. Le
+    monitoring traite `retourne` comme `annule` (aucune génération manquante relancée).
 
 ## Modèle
 

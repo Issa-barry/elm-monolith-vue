@@ -5014,13 +5014,15 @@
             },
             "StatutTransfert": {
                 "type": "string",
+                "description": "| |\n|---|\n| `brouillon` <br/>  |\n| `chargement` <br/>  |\n| `transit` <br/>  |\n| `reception` <br/>  |\n| `cloture` <br/>  |\n| `annule` <br/>  |\n| `retourne` <br/> Toute la marchandise charg\u00e9e est revenue au site source avant r\u00e9ception (ADR 0029). |",
                 "enum": [
                     "brouillon",
                     "chargement",
                     "transit",
                     "reception",
                     "cloture",
-                    "annule"
+                    "annule",
+                    "retourne"
                 ],
                 "title": "StatutTransfert"
             },
@@ -5155,6 +5157,9 @@
                             "null"
                         ]
                     },
+                    "quantite_retournee": {
+                        "type": "integer"
+                    },
                     "ecart_type": {
                         "type": [
                             "string",
@@ -5187,6 +5192,7 @@
                     "quantite_demandee",
                     "quantite_chargee",
                     "quantite_recue",
+                    "quantite_retournee",
                     "ecart_type",
                     "ecart_label",
                     "ecart",

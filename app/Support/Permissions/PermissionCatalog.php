@@ -108,6 +108,7 @@ final class PermissionCatalog
         'commissions.exporter' => 'Commissions — exporter',
         'logistique.valider_chargement' => 'Logistique — valider le chargement',
         'logistique.valider_reception' => 'Logistique — valider la réception',
+        'logistique.enregistrer_retour' => 'Logistique — enregistrer un retour au site source',
         'logistique.cloturer' => 'Logistique — clôturer',
         'rapports.read_own' => 'Rapports — consulter « Ma situation » (ses propres ventes, encaissements et caisse)',
         'rapports.read' => "Rapports — consulter le rapport d'activité de ses agences (tous les agents)",
@@ -194,7 +195,7 @@ final class PermissionCatalog
             'label' => 'Logistique',
             'resources' => ['logistique', 'transferts', 'receptions', 'equipes-livraison'],
             'standalone' => [
-                'Chargement / Réception' => ['logistique.valider_chargement', 'logistique.valider_reception'],
+                'Chargement / Réception' => ['logistique.valider_chargement', 'logistique.valider_reception', 'logistique.enregistrer_retour'],
                 'Commissions' => ['logistique.commission.verser', 'logistique.cloturer'],
             ],
         ],

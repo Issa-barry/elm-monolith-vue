@@ -89,6 +89,9 @@ class ValidationAdminController extends Controller
     private function handleInvalider(TransfertLogistique $transfert, User $user): void
     {
         DB::transaction(function () use ($transfert) {
+            // Même verrou que la réception et le retour (ADR 0029) ; les retours restent acquis.
+            TransfertLogistique::whereKey($transfert->id)->lockForUpdate()->firstOrFail();
+
             $transfert->update([
                 'validation_reception' => null,
                 'validation_motif' => null,

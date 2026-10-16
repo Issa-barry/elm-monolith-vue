@@ -130,7 +130,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Opérations
             'logistique.create',        'logistique.read',        'logistique.update',        'logistique.delete',
             'logistique.commission.verser',
-            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
+            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.enregistrer_retour', 'logistique.cloturer',
             'transferts.create',        'transferts.read',        'transferts.update',        'transferts.delete',
             'receptions.create',        'receptions.read',        'receptions.update',        'receptions.delete',
             // Finances
@@ -202,7 +202,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Opérations
             'logistique.create',        'logistique.read',        'logistique.update',
             'logistique.commission.verser',
-            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
+            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.enregistrer_retour', 'logistique.cloturer',
             'transferts.create',        'transferts.read',        'transferts.update',
             'receptions.create',        'receptions.read',        'receptions.update',
             // Finances

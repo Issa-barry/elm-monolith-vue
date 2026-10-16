@@ -22,6 +22,7 @@ class TransfertLigneResource extends JsonResource
             'quantite_demandee' => $this->quantite_demandee,
             'quantite_chargee' => $this->quantite_chargee,
             'quantite_recue' => $this->quantite_recue,
+            'quantite_retournee' => (int) $this->quantite_retournee,
             'ecart_type' => $this->ecart_type?->value,
             'ecart_label' => $this->ecart_label,
             'ecart' => $this->ecart,
