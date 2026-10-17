@@ -2,6 +2,7 @@ import CommandeCarburantField, {
     type CommandeCandidate,
 } from '@/components/Depenses/CommandeCarburantField.vue';
 import { flushPromises, mount } from '@vue/test-utils';
+import PrimeVue from 'primevue/config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const vente: CommandeCandidate = {
@@ -46,12 +47,11 @@ function monter(props: Record<string, unknown> = {}) {
             dateDepense: '2026-10-16',
             siteId: 'site-1',
             selection: null,
-            sansCommande: false,
-            motif: '',
             ...props,
         },
         attachTo: document.body,
         global: {
+            plugins: [PrimeVue],
             stubs: {
                 IconField: { template: '<div><slot /></div>' },
                 InputIcon: { template: '<span><slot /></span>' },
@@ -149,7 +149,7 @@ describe('CommandeCarburantField', () => {
         ]);
     });
 
-    it('affiche le message du serveur quand le véhicule n’a aucune commande', async () => {
+    it('affiche une aide courte quand le véhicule n’a aucune commande', async () => {
         repondre(
             [],
             'Aucune commande de ce véhicule le 17/10/2026 pour l’agence Matoto.',
@@ -159,7 +159,7 @@ describe('CommandeCarburantField', () => {
 
         expect(
             wrapper.find('[data-testid="commande-carburant-message"]').text(),
-        ).toContain('Aucune commande de ce véhicule');
+        ).toContain('Aucune commande ne correspond à cette sélection.');
     });
 
     it('conserve la commande déjà rattachée à l’ouverture de la modification', async () => {
@@ -208,15 +208,15 @@ describe('CommandeCarburantField', () => {
         expect(fetchMock.mock.calls[0][0]).not.toContain('site_id');
     });
 
-    it('déclarer une exception retire la commande et demande le motif', async () => {
-        repondre([vente]);
-        const wrapper = monter({ selection: vente });
+    it('ne propose aucune option « sans commande » : la commande est obligatoire', async () => {
+        repondre([]);
+        const wrapper = monter();
         await flushPromises();
 
-        await wrapper.setProps({ sansCommande: true });
-        await flushPromises();
-
-        expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([null]);
-        expect(wrapper.find('#dep-motif-sans-commande').exists()).toBe(true);
+        expect(wrapper.find('#dep-sans-commande').exists()).toBe(false);
+        expect(wrapper.find('#dep-motif-sans-commande').exists()).toBe(false);
+        expect(
+            wrapper.find('[data-testid="commande-carburant-message"]').text(),
+        ).toContain('Vérifiez le véhicule, la date et l’agence.');
     });
 });

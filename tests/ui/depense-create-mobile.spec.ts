@@ -10,6 +10,8 @@ async function ouvrir(
         longOptions?: boolean;
         noClientTypes?: boolean;
         canChangeSite?: boolean;
+        carburant?: 'empty' | 'available';
+        proprietaire?: boolean;
     } = {},
 ) {
     const manifest = JSON.parse(
@@ -62,11 +64,30 @@ async function ouvrir(
                 impact_message: '',
                 commentaire_obligatoire: false,
                 justificatif_obligatoire: false,
+                commande_obligatoire:
+                    !!options.carburant && c.value === 'vehicule',
             })),
             sites: [{ id: 'site-matoto', nom: 'Matoto' }],
             default_site_id: 'site-matoto',
             can_change_site: options.canChangeSite ?? false,
-            vehicules: [],
+            vehicules: options.carburant
+                ? [
+                      {
+                          id: 'vehicule-1',
+                          nom_vehicule: 'Abarry',
+                          immatriculation: 'RC-1234',
+                          categorie: 'camion',
+                          site_nom: 'Matoto',
+                          proprietaire_nom: options.proprietaire
+                              ? 'Mamadou Diallo'
+                              : null,
+                          proprietaire_telephone: options.proprietaire
+                              ? '+224620112233'
+                              : null,
+                          has_proprietaire: !!options.proprietaire,
+                      },
+                  ]
+                : [],
             employes: [],
             proprietaires: [],
             prestataires: [],
@@ -110,6 +131,33 @@ async function ouvrir(
     await page.route('**/*', async (route) => {
         const request = route.request();
         const pathname = new URL(request.url()).pathname;
+        if (pathname === '/backoffice/depenses/commandes-carburant') {
+            const site = new URL(request.url()).searchParams.get('site_id');
+            const commandeDisponible =
+                options.carburant === 'available' && site === 'site-matoto';
+            return route.fulfill({
+                json: {
+                    candidats: commandeDisponible
+                        ? [
+                              {
+                                  type: 'vente',
+                                  id: 'commande-1',
+                                  reference: 'VTE-171026-002',
+                                  code_abrege: '17-002',
+                                  nature_label: 'Vente',
+                                  date: '2026-10-17',
+                                  detail: 'Mamadou Diallo',
+                                  statut: 'livree',
+                                  statut_label: 'Livrée',
+                              },
+                          ]
+                        : [],
+                    message: commandeDisponible
+                        ? null
+                        : 'Aucune commande de ce véhicule le 17/10/2026 pour l’agence Matoto (commandes annulées exclues).',
+                },
+            });
+        }
         if (
             pathname === '/backoffice/depenses' &&
             request.method() === 'POST'
@@ -159,6 +207,107 @@ async function choisir(page: Page, categorie = 'interne') {
     await page.getByRole('option').first().click();
     await expect(page.getByRole('listbox')).toHaveCount(0);
 }
+
+async function choisirVehicule(page: Page) {
+    await choisir(page, 'vehicule');
+    await page.locator('#dep-vehicule').click();
+    await page.getByRole('option', { name: /Abarry/ }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+}
+
+for (const width of [390, 768, 1440]) {
+    test(`détails carburant ${width} : disposition et commande obligatoire`, async ({
+        page,
+    }, info) => {
+        await page.setViewportSize({ width, height: 900 });
+        const payloads = await ouvrir(page, {}, { carburant: 'empty' });
+        await choisirVehicule(page);
+        await page.locator('#dep-montant').fill('150000');
+        await expect(
+            page.getByTestId('commande-carburant-message'),
+        ).toContainText('Aucune commande ne correspond à cette sélection.');
+        const details = page.getByTestId('depense-details');
+        const montant = (await page.locator('#dep-montant').boundingBox())!;
+        const date = (await page.locator('#dep-date').boundingBox())!;
+        const agence = (await page.locator('#dep-site').boundingBox())!;
+        if (width >= 640) expect(montant.y).toBe(date.y);
+        else expect(date.y).toBeGreaterThan(montant.y);
+        expect(agence.y).toBeLessThan(montant.y);
+        expect(agence.y).toBeLessThan(date.y);
+        expect(
+            (await page.locator('#dep-commande').boundingBox())!.y,
+        ).toBeGreaterThan(agence.y);
+        await details.scrollIntoViewIfNeeded();
+        await details.screenshot({ path: info.outputPath('details.png') });
+        const brouillon = page.getByRole('button', {
+            name: width < 640 ? 'Brouillon' : 'Enregistrer comme brouillon',
+            exact: true,
+        });
+        // Commande obligatoire sans exception (ADR 0031, 17/10/2026) : sans commande trouvée,
+        // aucune option « sans commande » et rien ne peut être enregistré.
+        await expect(brouillon).toBeDisabled();
+        await expect(page.locator('#dep-sans-commande')).toHaveCount(0);
+        await expect(page.getByLabel('Motif', { exact: false })).toHaveCount(0);
+        await expect(
+            page.getByTestId('commande-carburant-message'),
+        ).toContainText('Vérifiez le véhicule, la date et l’agence.');
+        expect(
+            await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+        ).toBe(true);
+        expect(payloads).toHaveLength(0);
+    });
+}
+
+test('commande liée : recherche par client et retrait après changement d’agence', async ({
+    page,
+}, info) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await ouvrir(
+        page,
+        {},
+        { carburant: 'available', canChangeSite: true, longOptions: true },
+    );
+    await choisirVehicule(page);
+    const commande = page.getByRole('combobox', { name: 'Commande liée' });
+    await commande.fill('Diallo');
+    await page.getByRole('option', { name: /VTE-171026-002/ }).click();
+    await expect(
+        page.getByTestId('commande-carburant-selection'),
+    ).toContainText('VTE-171026-002');
+    await expect(
+        page.getByRole('button', {
+            name: 'Enregistrer comme brouillon',
+            exact: true,
+        }),
+    ).toBeEnabled();
+    await page
+        .getByTestId('depense-details')
+        .screenshot({ path: info.outputPath('details-selection.png') });
+    await page.locator('#dep-site').click();
+    await page.getByRole('option').last().click();
+    await expect(page.getByTestId('commande-carburant-selection')).toHaveCount(
+        0,
+    );
+    await expect(commande).toBeVisible();
+    await expect(
+        page.getByRole('button', {
+            name: 'Enregistrer comme brouillon',
+            exact: true,
+        }),
+    ).toBeDisabled();
+});
+
+test('détails carburant en thème sombre', async ({ page }, info) => {
+    await page.addInitScript(() => localStorage.setItem('appearance', 'dark'));
+    await ouvrir(page, {}, { carburant: 'empty' });
+    await choisirVehicule(page);
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await page
+        .getByTestId('depense-details')
+        .screenshot({ path: info.outputPath('details-sombre.png') });
+});
 
 for (const width of [360, 390, 413, 440]) {
     test(`mobile ${width} : actions accessibles et saisie sans débordement`, async ({
@@ -397,6 +546,45 @@ test('soumission : récapitulatif défilant, retour à la saisie et confirmation
         depense_type_id: 'type-interne',
         site_id: 'site-matoto',
         montant: 5000,
+    });
+});
+
+test('soumission carburant : la confirmation montre la commande et le propriétaire', async ({
+    page,
+}, info) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const payloads = await ouvrir(
+        page,
+        {},
+        { carburant: 'available', proprietaire: true },
+    );
+    await choisirVehicule(page);
+    await page.locator('#dep-montant').fill('15000');
+    await page.getByRole('combobox', { name: 'Commande liée' }).focus();
+    await page.getByRole('option', { name: /VTE-171026-002/ }).click();
+    await page
+        .getByRole('button', { name: 'Soumettre pour validation', exact: true })
+        .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByTestId('confirm-commande')).toContainText(
+        'VTE-171026-002',
+    );
+    const proprietaire = dialog.getByTestId('confirm-proprietaire');
+    await expect(proprietaire).toContainText('Mamadou Diallo');
+    await expect(proprietaire).toContainText('+224 620 11 22 33');
+    await expect(proprietaire.getByRole('link')).toHaveAttribute(
+        'href',
+        'tel:+224620112233',
+    );
+    await page.screenshot({
+        path: info.outputPath('confirmation-carburant.png'),
+    });
+    await dialog.getByRole('button', { name: "Confirmer l'envoi" }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+        statut: 'soumis',
+        commande_vente_id: 'commande-1',
+        montant: 15000,
     });
 });
 

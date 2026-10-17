@@ -1,7 +1,7 @@
 # ADR 0031 — Rattachement d'une dépense de carburant à sa commande
 
 - **Date** : 2026-10-16
-- **Statut** : accepté et livré le 2026-10-16
+- **Statut** : accepté et livré le 2026-10-16, amendé le 2026-10-17 (exception retirée, filtre jour + agence, champ de recherche)
 - **Périmètre** : Dépenses (saisie, modification, soumission, liste, détail) et types de dépense
 - **Doc métier** : [depenses-carburant-commande.md](../depenses-carburant-commande.md)
 
@@ -24,9 +24,12 @@ l'agent. Confrontée au code :
 
 1. **Une commande de référence par dépense** (vente/distribution **ou** transfert), pas de
    répartition du coût entre les commandes d'une tournée.
-2. **Exception motivée** autorisée quand il n'y a pas de commande (plein de début de semaine,
-   retour à vide, garage), validée par le **valideur habituel** — pas de circuit parallèle —, et
-   signalée « Sans commande » dans la liste et le détail.
+2. **Commande obligatoire, sans exception** (décision du 17/10/2026). Une première version
+   (16/10) autorisait une exception motivée (plein de début de semaine, retour à vide, garage),
+   validée par le valideur habituel et signalée « Sans commande » ; elle a été retirée : un plein
+   sans commande ne se saisit plus comme dépense de carburant. Les dépenses enregistrées sans
+   commande pendant ces deux jours restent affichées telles quelles (colonne `motif_sans_commande`
+   conservée, plus jamais écrite).
 3. Commandes **annulées exclues** (`annulee`, `annulee_erreur_saisie`, transfert `annule`).
 4. **Module Dépenses seulement** ; les frais de la fiche véhicule ne sont pas concernés.
 5. **Historique intact** : aucune dépense existante modifiée ; seules les nouvelles saisies (et les
@@ -53,7 +56,8 @@ l'agent. Confrontée au code :
 - Une organisation dont le type carburant porte un autre nom doit cocher « Commande obligatoire »
   dans Dépenses → Types.
 - Un plein acheté un autre jour que celui de la commande (veille du départ, plein pour plusieurs
-  jours) ou par une autre agence ne trouve pas sa commande : il passe par l'exception motivée, ou
-  la date/l'agence de la dépense est corrigée.
+  jours) ou par une autre agence ne trouve pas sa commande : la date ou l'agence de la dépense
+  doit être corrigée ; un plein sans aucune commande (garage, retour à vide…) ne peut plus être
+  saisi comme dépense de carburant.
 - La comptabilisation des dépenses véhicule (déduction de la commission du propriétaire) est
   inchangée.

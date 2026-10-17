@@ -9,8 +9,8 @@ use Illuminate\Validation\Validator;
 
 /**
  * Rattachement à une commande des dépenses dont le type a `commande_obligatoire` (ADR 0031) —
- * partagé par StoreDepenseRequest et UpdateDepenseRequest. Exige soit une commande de vente, soit
- * un transfert logistique (jamais les deux), soit une exception (`sans_commande`) avec motif. La
+ * partagé par StoreDepenseRequest et UpdateDepenseRequest. Exige une commande de vente ou un
+ * transfert logistique, jamais les deux, sans exception possible (décision du 17/10/2026). La
  * commande est revérifiée côté serveur : la sélection faite à l'écran n'est jamais crue telle quelle.
  */
 trait ValideRattachementCommande
@@ -31,52 +31,33 @@ trait ValideRattachementCommande
         }
 
         return [
-            'sans_commande' => ['boolean'],
-            'motif_sans_commande' => ['nullable', 'required_if_accepted:sans_commande', 'string', 'min:5', 'max:500'],
             'commande_vente_id' => ['nullable', 'ulid'],
             'transfert_logistique_id' => ['nullable', 'ulid'],
         ];
     }
 
-    /** @return array<string, string> */
-    protected function rattachementCommandeMessages(): array
-    {
-        return [
-            'motif_sans_commande.required_if_accepted' => 'Indiquez le motif de la dépense sans commande.',
-            'motif_sans_commande.min' => 'Le motif doit faire au moins 5 caractères.',
-            'motif_sans_commande.max' => 'Le motif ne peut pas dépasser 500 caractères.',
-        ];
-    }
-
     /**
-     * Attributs à enregistrer sur la dépense : tout à null si le type n'exige pas de commande
-     * (changement de type compris), sinon soit la commande, soit le motif d'exception.
+     * Attributs à enregistrer sur la dépense : la commande si le type l'exige, sinon rien. Le motif
+     * d'une ancienne exception (`motif_sans_commande`, avant le 17/10/2026) est effacé dès que la
+     * dépense est réenregistrée : elle porte alors une commande, ou n'en exige plus.
      *
-     * @return array{commande_vente_id: ?string, transfert_logistique_id: ?string, motif_sans_commande: ?string}
+     * @return array{commande_vente_id: ?string, transfert_logistique_id: ?string, motif_sans_commande: null}
      */
     public function rattachementCommandeAttributs(): array
     {
-        $aucun = ['commande_vente_id' => null, 'transfert_logistique_id' => null, 'motif_sans_commande' => null];
-
-        if (! $this->typeExigeCommande()) {
-            return $aucun;
-        }
-
-        if ($this->boolean('sans_commande')) {
-            return [...$aucun, 'motif_sans_commande' => trim((string) $this->motif_sans_commande)];
-        }
+        $exige = $this->typeExigeCommande();
 
         return [
-            ...$aucun,
-            'commande_vente_id' => $this->input('commande_vente_id') ?: null,
-            'transfert_logistique_id' => $this->input('transfert_logistique_id') ?: null,
+            'commande_vente_id' => $exige ? ($this->input('commande_vente_id') ?: null) : null,
+            'transfert_logistique_id' => $exige ? ($this->input('transfert_logistique_id') ?: null) : null,
+            'motif_sans_commande' => null,
         ];
     }
 
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $v) {
-            if (! $this->typeExigeCommande() || $this->boolean('sans_commande')) {
+            if (! $this->typeExigeCommande()) {
                 return;
             }
 
@@ -93,7 +74,7 @@ trait ValideRattachementCommande
         $transfertId = $this->input('transfert_logistique_id') ?: null;
 
         if ($venteId === null && $transfertId === null) {
-            return 'Rattachez cette dépense à une commande de vente ou à un transfert logistique, ou déclarez une dépense sans commande avec son motif.';
+            return 'Une dépense de carburant doit être rattachée à une commande de vente ou à un transfert logistique.';
         }
         if ($venteId !== null && $transfertId !== null) {
             return 'Une dépense ne peut être rattachée qu\'à une seule commande.';

@@ -249,7 +249,7 @@ class DepenseCarburantCommandeTest extends TestCase
 
     // ── Enregistrement ────────────────────────────────────────────────────────
 
-    public function test_carburant_sans_commande_ni_exception_est_refuse(): void
+    public function test_carburant_sans_commande_est_refuse(): void
     {
         $this->post(route('depenses.store'), $this->payload())
             ->assertSessionHasErrors('commande');
@@ -371,26 +371,26 @@ class DepenseCarburantCommandeTest extends TestCase
             ->assertSessionHasErrors('commande');
     }
 
-    public function test_exception_sans_motif_est_refusee(): void
+    public function test_une_depense_sans_commande_n_est_plus_acceptee_meme_motivee(): void
     {
-        $this->post(route('depenses.store'), $this->payload(['sans_commande' => true, 'motif_sans_commande' => '']))
-            ->assertSessionHasErrors('motif_sans_commande');
+        $this->post(route('depenses.store'), $this->payload([
+            'sans_commande' => true,
+            'motif_sans_commande' => 'Plein de début de semaine',
+        ]))->assertSessionHasErrors('commande');
+
+        $this->assertDatabaseCount('depenses', 0);
     }
 
-    public function test_exception_motivee_est_enregistree_sans_commande(): void
+    public function test_un_motif_envoye_avec_une_commande_est_ignore(): void
     {
         $commande = $this->vente('VTE-161026-001', '2026-10-16');
 
         $this->post(route('depenses.store'), $this->payload([
-            'sans_commande' => true,
-            'motif_sans_commande' => 'Plein de début de semaine',
             'commande_vente_id' => $commande->id,
+            'motif_sans_commande' => 'ignoré',
         ]))->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('depenses', [
-            'motif_sans_commande' => 'Plein de début de semaine',
-            'commande_vente_id' => null,
-        ]);
+        $this->assertDatabaseHas('depenses', ['commande_vente_id' => $commande->id, 'motif_sans_commande' => null]);
     }
 
     public function test_type_sans_commande_obligatoire_ignore_le_rattachement(): void
@@ -453,7 +453,7 @@ class DepenseCarburantCommandeTest extends TestCase
         $this->assertSame(StatutDepense::BROUILLON, $depense->fresh()->statut);
     }
 
-    public function test_soumettre_un_brouillon_avec_exception_est_accepte(): void
+    public function test_soumettre_un_ancien_brouillon_avec_exception_est_refuse(): void
     {
         $depense = Depense::factory()->brouillon()->create([
             'organization_id' => $this->org->id,
@@ -465,14 +465,14 @@ class DepenseCarburantCommandeTest extends TestCase
             'motif_sans_commande' => 'Trajet au garage',
         ]);
 
-        $this->patch(route('depenses.soumettre', $depense))->assertSessionHasNoErrors();
+        $this->patch(route('depenses.soumettre', $depense))->assertSessionHasErrors('commande');
 
-        $this->assertSame(StatutDepense::SOUMIS, $depense->fresh()->statut);
+        $this->assertSame(StatutDepense::BROUILLON, $depense->fresh()->statut);
     }
 
     // ── Affichage ─────────────────────────────────────────────────────────────
 
-    public function test_detail_et_liste_identifient_la_depense_sans_commande(): void
+    public function test_detail_et_liste_identifient_une_ancienne_depense_sans_commande(): void
     {
         $depense = Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,

@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { onClickOutside } from '@vueuse/core';
-import { AlertTriangle, Check, Loader2, Search } from 'lucide-vue-next';
+import { Check, Info, Loader2, Search } from 'lucide-vue-next';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
 import { computed, nextTick, ref, watch } from 'vue';
 
 /**
  * Commande de référence d'une dépense de carburant (ADR 0031) : champ de recherche (comme la
  * recherche globale) sur les commandes rattachables du véhicule, du jour et de l'agence de la
- * dépense — par référence, code abrégé `JJ-NNN` ou client —, ou exception motivée. Le serveur
- * revérifie toujours le rattachement à l'enregistrement.
+ * dépense — par référence, code abrégé `JJ-NNN` ou client. La commande est obligatoire, sans
+ * exception (décision du 17/10/2026) ; le serveur revérifie le rattachement à l'enregistrement.
  */
 export interface CommandeCandidate {
     type: 'vente' | 'transfert';
@@ -35,14 +35,11 @@ const props = defineProps<{
     /** Agence de la dépense ; vide = toutes les agences. */
     siteId: string;
     error?: string;
-    motifError?: string;
 }>();
 
 const selection = defineModel<CommandeCandidate | null>('selection', {
     required: true,
 });
-const sansCommande = defineModel<boolean>('sansCommande', { required: true });
-const motif = defineModel<string>('motif', { required: true });
 
 const candidats = ref<CommandeCandidate[]>([]);
 const message = ref<string | null>(null);
@@ -113,7 +110,10 @@ async function charger(conserverSelection: boolean) {
             message: string | null;
         };
         candidats.value = data.candidats;
-        message.value = data.message;
+        message.value =
+            data.candidats.length === 0
+                ? 'Aucune commande ne correspond à cette sélection. Vérifiez le véhicule, la date et l’agence.'
+                : data.message;
         // Véhicule, date ou agence modifiés : une commande qui n'est plus rattachable est retirée.
         if (
             !conserverSelection &&
@@ -136,10 +136,6 @@ watch(
     (_nouveau, ancien) => charger(ancien === undefined),
     { immediate: true },
 );
-
-watch(sansCommande, (actifSansCommande) => {
-    if (actifSansCommande) selection.value = null;
-});
 
 function choisir(c: CommandeCandidate) {
     selection.value = c;
@@ -173,19 +169,20 @@ function formatDate(iso?: string) {
 </script>
 
 <template>
-    <div class="space-y-3" data-testid="commande-carburant-field">
+    <div class="min-w-0 space-y-3" data-testid="commande-carburant-field">
         <div>
-            <Label
-                for="dep-commande"
-                class="block text-sm font-medium sm:text-xs"
-            >
-                Commande de référence
+            <Label for="dep-commande" class="block text-sm font-medium">
+                Commande liée
                 <span class="text-destructive">*</span>
             </Label>
-            <p class="mt-0.5 text-xs text-muted-foreground">
-                Vente ou transfert logistique de ce véhicule, du jour et de
-                l'agence de la dépense. Recherchez par code (16-002), référence
-                (VTE-161026-002) ou client.
+            <p
+                id="dep-commande-aide"
+                class="mt-1 text-xs text-muted-foreground"
+            >
+                Ventes et transferts du véhicule à la date choisie<template
+                    v-if="siteId"
+                    >, dans cette agence</template
+                >.
             </p>
         </div>
 
@@ -193,16 +190,18 @@ function formatDate(iso?: string) {
             Sélectionnez d'abord le véhicule.
         </p>
 
-        <template v-else-if="!sansCommande">
+        <template v-else>
             <div
                 v-if="selection"
-                class="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/30"
+                class="flex items-start justify-between gap-3 rounded-lg border p-3"
                 data-testid="commande-carburant-selection"
             >
                 <div class="min-w-0">
                     <p class="flex items-center gap-1.5 text-sm font-semibold">
-                        <Check class="h-4 w-4 shrink-0 text-emerald-600" />
-                        <span class="font-mono">{{ selection.reference }}</span>
+                        <Check class="h-4 w-4 shrink-0 text-primary" />
+                        <span class="font-mono break-all">{{
+                            selection.reference
+                        }}</span>
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
                         {{ selection.nature_label }}
@@ -218,7 +217,7 @@ function formatDate(iso?: string) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    class="shrink-0"
+                    class="min-h-11 shrink-0 sm:min-h-0"
                     @click="changer"
                 >
                     Changer
@@ -237,12 +236,14 @@ function formatDate(iso?: string) {
                     <InputText
                         id="dep-commande"
                         v-model="recherche"
-                        placeholder="Rechercher une commande…"
+                        placeholder="Code, référence ou client…"
                         autocomplete="off"
-                        class="w-full"
+                        class="w-full min-w-0 max-sm:min-h-11 max-sm:text-base"
                         :invalid="!!error"
                         role="combobox"
                         aria-autocomplete="list"
+                        aria-describedby="dep-commande-aide"
+                        aria-controls="dep-commande-resultats"
                         :aria-expanded="ouvert"
                         @focus="ouvert = true"
                         @input="ouvert = true"
@@ -255,6 +256,7 @@ function formatDate(iso?: string) {
 
                 <div
                     v-if="ouvert"
+                    id="dep-commande-resultats"
                     class="absolute top-full right-0 left-0 z-50 mt-1 max-h-[min(20rem,50dvh)] overflow-y-auto rounded-lg border bg-background shadow-lg"
                     role="listbox"
                     data-testid="commande-carburant-resultats"
@@ -286,7 +288,7 @@ function formatDate(iso?: string) {
                             role="option"
                             :aria-selected="i === actif"
                             :data-cle="cle(c)"
-                            class="flex w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                            class="flex min-h-11 w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted/50"
                             :class="{ 'bg-muted/50': i === actif }"
                             @mouseenter="actif = i"
                             @click="choisir(c)"
@@ -323,55 +325,18 @@ function formatDate(iso?: string) {
                 </div>
             </div>
 
-            <p
+            <Message
                 v-if="message && !chargement && !ouvert"
-                class="text-xs text-amber-700 dark:text-amber-400"
+                severity="secondary"
+                variant="simple"
+                size="small"
                 data-testid="commande-carburant-message"
             >
+                <template #icon><Info class="size-4 shrink-0" /></template>
                 {{ message }}
-            </p>
+            </Message>
         </template>
 
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
-
-        <div v-if="vehiculeId" class="space-y-2 border-t pt-3">
-            <div class="flex items-center gap-2">
-                <Checkbox
-                    id="dep-sans-commande"
-                    :model-value="sansCommande"
-                    @update:model-value="sansCommande = $event === true"
-                />
-                <Label
-                    for="dep-sans-commande"
-                    class="cursor-pointer text-sm font-medium sm:text-xs"
-                >
-                    Pas de commande (exception)
-                </Label>
-            </div>
-            <template v-if="sansCommande">
-                <p
-                    class="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400"
-                >
-                    <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    Plein de début de semaine, retour à vide, trajet au garage…
-                    La dépense sera signalée au valideur comme « sans commande
-                    ».
-                </p>
-                <Label for="dep-motif-sans-commande" class="sr-only"
-                    >Motif</Label
-                >
-                <textarea
-                    id="dep-motif-sans-commande"
-                    v-model="motif"
-                    rows="2"
-                    placeholder="Motif de la dépense sans commande *"
-                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-                    :class="{ 'border-destructive': motifError }"
-                />
-                <p v-if="motifError" class="text-xs text-destructive">
-                    {{ motifError }}
-                </p>
-            </template>
-        </div>
     </div>
 </template>

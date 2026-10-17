@@ -72,7 +72,6 @@ class StoreDepenseRequest extends FormRequest
     public function messages(): array
     {
         return [
-            ...$this->rattachementCommandeMessages(),
             'depense_type_id.required' => 'Le type de dépense est obligatoire.',
             'depense_type_id.exists' => 'Ce type de dépense est invalide ou inactif.',
             'beneficiaire_id.required' => 'Le bénéficiaire est obligatoire pour ce type de dépense.',
