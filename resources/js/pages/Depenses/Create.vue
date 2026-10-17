@@ -15,13 +15,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Lock, Search, X } from 'lucide-vue-next';
+import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
+import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -1107,36 +1108,30 @@ function submitBrouillon() {
                     <!-- Détails -->
                     <div
                         v-if="selectedType"
-                        class="space-y-4 rounded-xl border bg-card p-4"
+                        data-testid="depense-details"
+                        class="min-w-0 space-y-5 rounded-xl border bg-card p-4 sm:p-5"
                     >
-                        <h2
-                            class="text-sm font-semibold sm:text-xs sm:tracking-wide sm:text-muted-foreground sm:uppercase"
-                        >
-                            Détails
-                        </h2>
+                        <h2 class="text-base font-semibold">Détails</h2>
 
                         <div
-                            class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-3"
+                            class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2"
                         >
                             <div>
                                 <Label
                                     for="dep-montant"
-                                    class="mb-1.5 block text-sm font-medium sm:text-xs"
+                                    class="mb-2 block text-sm font-medium"
                                 >
                                     Montant (GNF)
                                     <span class="text-destructive">*</span>
                                 </Label>
-                                <input
+                                <InputText
                                     id="dep-montant"
                                     :value="montantDisplay"
                                     type="text"
                                     inputmode="numeric"
                                     placeholder="0"
-                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-bold tabular-nums shadow-sm transition-colors placeholder:font-normal placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                    :class="{
-                                        'border-destructive':
-                                            form.errors.montant,
-                                    }"
+                                    class="w-full min-w-0 font-semibold tabular-nums"
+                                    :invalid="!!form.errors.montant"
                                     @input="handleMontantInput"
                                 />
                                 <p
@@ -1149,19 +1144,17 @@ function submitBrouillon() {
                             <div>
                                 <Label
                                     for="dep-date"
-                                    class="mb-1.5 block text-sm font-medium sm:text-xs"
+                                    class="mb-2 block text-sm font-medium"
                                 >
                                     Date
                                     <span class="text-destructive">*</span>
                                 </Label>
-                                <Input
+                                <InputText
                                     id="dep-date"
                                     v-model="form.date_depense"
                                     type="date"
-                                    :class="{
-                                        'border-destructive':
-                                            form.errors.date_depense,
-                                    }"
+                                    class="w-full min-w-0"
+                                    :invalid="!!form.errors.date_depense"
                                 />
                                 <DateRaccourcis v-model="form.date_depense" />
                                 <p
@@ -1171,12 +1164,12 @@ function submitBrouillon() {
                                     {{ form.errors.date_depense }}
                                 </p>
                             </div>
-                            <div>
+                            <div class="sm:col-span-2">
                                 <Label
                                     for="dep-site"
-                                    class="mb-1.5 flex items-center gap-1 text-sm font-medium sm:text-xs"
+                                    class="mb-2 flex items-center gap-1 text-sm font-medium"
                                 >
-                                    Site
+                                    Agence
                                     <Lock
                                         v-if="!can_change_site"
                                         class="h-3 w-3 text-muted-foreground"
@@ -1188,19 +1181,26 @@ function submitBrouillon() {
                                     :options="[
                                         {
                                             id: '',
-                                            nom: 'Aucun site spécifique',
+                                            nom: 'Aucune agence spécifique',
                                         },
                                         ...sites,
                                     ]"
                                     option-label="nom"
                                     option-value="id"
                                     :disabled="!can_change_site"
+                                    :invalid="!!form.errors.site_id"
                                     class="w-full min-w-0"
                                     append-to="self"
                                     :overlay-style="selectOverlayStyle"
                                     :pt="selectPt"
                                     scroll-height="min(15rem, 50dvh)"
                                 />
+                                <p
+                                    v-if="form.errors.site_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.site_id }}
+                                </p>
                             </div>
                         </div>
 
@@ -1226,7 +1226,7 @@ function submitBrouillon() {
                         <div>
                             <Label
                                 for="dep-comment"
-                                class="mb-1.5 block text-sm font-medium sm:text-xs"
+                                class="mb-2 flex items-center gap-2 text-sm font-medium"
                             >
                                 Commentaire
                                 <span
@@ -1234,17 +1234,19 @@ function submitBrouillon() {
                                     class="text-destructive"
                                     >*</span
                                 >
+                                <span
+                                    v-else
+                                    class="text-xs font-normal text-muted-foreground"
+                                    >Facultatif</span
+                                >
                             </Label>
-                            <textarea
+                            <Textarea
                                 id="dep-comment"
                                 v-model="form.commentaire"
-                                rows="3"
-                                placeholder="Détails de la dépense…"
-                                class="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.commentaire,
-                                }"
+                                rows="2"
+                                placeholder="Une précision sur la dépense…"
+                                class="w-full min-w-0 resize-y"
+                                :invalid="!!form.errors.commentaire"
                             />
                             <p
                                 v-if="form.errors.commentaire"
@@ -1370,7 +1372,7 @@ function submitBrouillon() {
 @media (max-width: 639px) {
     .depense-form :deep(input:not([type='radio'])),
     .depense-form :deep(select),
-    .depense-form :deep(button[id^='dep-']) {
+    .depense-form :deep(button[id^='dep-']:not([role='checkbox'])) {
         min-width: 0;
         min-height: 44px;
         font-size: 16px;
