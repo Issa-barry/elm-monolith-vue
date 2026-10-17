@@ -57,7 +57,8 @@ Il manquait réellement : la suppression d'un brouillon, le contrôle de désact
    affiché sur l'autre — rien n'est caché, le solde n'est pas contrôlé.
 5. **Traçabilité** dans le journal d'audit (`audit_logs`) : suppression (`deleted` : auteur, date,
    fiche du support et motif facultatif — la ligne elle-même disparaît), désactivation et
-   réactivation (`status_changed`).
+   réactivation (`status_changed`). *Depuis l'ADR 0030 (2026-10-16), la fiche enregistrée ne
+   contient plus de numéro de compte (colonne supprimée).*
 
 ## Décisions d'interprétation à connaître
 

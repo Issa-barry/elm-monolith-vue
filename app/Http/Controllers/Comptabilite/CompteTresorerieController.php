@@ -130,7 +130,7 @@ class CompteTresorerieController extends Controller
             ->whereNotNull('operateur_mobile_money')
             ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
             ->orderBy('libelle')
-            ->get(['id', 'site_id', 'libelle', 'numero', 'operateur_mobile_money']);
+            ->get(['id', 'site_id', 'libelle', 'operateur_mobile_money']);
         $agencesEtOperateursAvecDestination = $destinationsTransfert
             ->map(fn (CompteTresorerie $c) => $c->site_id.'|'.$c->operateur_mobile_money->value)
             ->flip();
@@ -169,7 +169,6 @@ class CompteTresorerieController extends Controller
                     'operateur_mobile_money' => $c->operateur_mobile_money?->value,
                     'operateur_label' => $c->operateur_mobile_money?->label(),
                     'libelle' => $c->libelle,
-                    'numero' => $c->numero,
                     'nature' => $c->isDediee() ? 'dediee' : 'agence',
                     'agent' => $c->agent ? ['id' => $c->agent->id, 'nom' => $c->agent->name] : null,
                     'compte_comptable_id' => $c->compte_comptable_id,
@@ -241,7 +240,6 @@ class CompteTresorerieController extends Controller
                 'id' => $c->id,
                 'site_id' => $c->site_id,
                 'libelle' => $c->libelle,
-                'numero' => $c->numero,
                 'operateur_mobile_money' => $c->operateur_mobile_money->value,
             ])->values(),
             'destinations_approvisionnement' => $destinationsApprovisionnement->map(fn (CompteTresorerie $c) => [
@@ -297,21 +295,19 @@ class CompteTresorerieController extends Controller
 
         $request->validate(['nature' => ['nullable', Rule::in(['agence', 'dediee'])]]);
 
-        // Compte Mobile Money dédié à un agent (ADR 0027) : opérateur et numéro du portefeuille
-        // obligatoires, compte comptable créé automatiquement — aucun compte venu de la requête.
+        // Compte Mobile Money dédié à un agent (ADR 0027) : opérateur obligatoire, compte comptable
+        // créé automatiquement — aucun compte venu de la requête. Aucun numéro de téléphone (ADR 0030).
         if ($request->input('nature') === 'dediee' && $request->input('type') === TypeSupportTresorerie::MOBILE_MONEY->value) {
             $data = $request->validate([
                 'site_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
                 'agent_id' => ['required', Rule::exists('users', 'id')->where('organization_id', $orgId)],
                 'operateur_mobile_money' => ['required', Rule::in(array_map(fn (OperateurMobileMoney $o) => $o->value, OperateurMobileMoney::avecWallet()))],
-                'numero' => ['required', 'string', 'max:50'],
                 'libelle' => ['nullable', 'string', 'max:150'],
             ], [
                 'operateur_mobile_money.required' => 'Choisissez l\'opérateur du portefeuille.',
-                'numero.required' => 'Le numéro du portefeuille est obligatoire.',
             ]);
 
-            $support = $this->caisseAgent->creerCompteMobileMoney($orgId, $data['site_id'], $data['agent_id'], $data['operateur_mobile_money'], $data['numero'], $data['libelle'] ?? null);
+            $support = $this->caisseAgent->creerCompteMobileMoney($orgId, $data['site_id'], $data['agent_id'], $data['operateur_mobile_money'], $data['libelle'] ?? null);
 
             return back()->with('success', "Compte « {$support->libelle} » créé en brouillon : il devra être validé avant d'être utilisable.");
         }
@@ -335,7 +331,6 @@ class CompteTresorerieController extends Controller
             // Facultatif : généré automatiquement ("{Type} de {Site}") par
             // CompteTresorerie::boot() si laissé vide — cf. revue du 2026-08-22.
             'libelle' => ['nullable', 'string', 'max:150'],
-            'numero' => ['nullable', 'string', 'max:50'],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
             ...$this->reglesOperateur(),
         ]);
@@ -366,15 +361,13 @@ class CompteTresorerieController extends Controller
         abort_unless(auth()->user()->can('tresorerie.gerer_soldes_ouverture'), 403);
         abort_unless($compteTresorerie->organization_id === auth()->user()->organization_id, 403);
 
-        // Support dédié : seuls le libellé et l'activation sont modifiables — et, pour un compte
-        // Mobile Money encore en brouillon, son numéro. Les autres champs éventuellement envoyés
-        // sont ignorés (validate() ne renvoie que ces clés) : un type ou un compte forgé ne peut
-        // jamais être appliqué.
+        // Support dédié : seuls le libellé et l'activation sont modifiables. Les autres champs
+        // éventuellement envoyés sont ignorés (validate() ne renvoie que ces clés) : un type ou un
+        // compte forgé ne peut jamais être appliqué.
         if ($compteTresorerie->isDediee()) {
             $data = $request->validate([
                 'libelle' => ['required', 'string', 'max:150'],
                 'actif' => ['required', 'boolean'],
-                ...($compteTresorerie->isMobileMoneyDedie() ? ['numero' => ['sometimes', 'nullable', 'string', 'max:50']] : []),
             ]);
 
             $actifAvant = $compteTresorerie->actif;
@@ -388,7 +381,6 @@ class CompteTresorerieController extends Controller
 
         $data = $request->validate([
             'libelle' => ['required', 'string', 'max:150'],
-            'numero' => ['sometimes', 'nullable', 'string', 'max:50'],
             'type' => ['required', Rule::enum(TypeSupportTresorerie::class)],
             'compte_comptable_id' => ['required', Rule::exists('compta_comptes', 'id')->where('organization_id', $orgId)],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
@@ -590,12 +582,6 @@ class CompteTresorerieController extends Controller
             throw ValidationException::withMessages([
                 'compte_comptable_id' => "Ce compte est déjà celui du support « {$dejaPris->libelle} » dans cette agence : chaque Mobile Money doit avoir son propre compte.",
             ]);
-        }
-
-        // Un portefeuille réel ne porte qu'un seul compte (ADR 0027) : le numéro du compte d'un
-        // agent ne peut pas être repris par un compte de l'agence.
-        if (array_key_exists('numero', $data)) {
-            $this->caisseAgent->garantirNumeroNonPrisParUnAgent($orgId, $operateur, $data['numero'], $courant?->id);
         }
 
         return $operateur->value;

@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import BeneficiairePickerDialog from '@/components/Depenses/BeneficiairePickerDialog.vue';
+import CommandeCarburantField, {
+    type CommandeCandidate,
+} from '@/components/Depenses/CommandeCarburantField.vue';
+import DateRaccourcis from '@/components/Depenses/DateRaccourcis.vue';
 import DepenseSummaryCard from '@/components/Depenses/DepenseSummaryCard.vue';
 import type { PickerField } from '@/components/Depenses/pickerTypes';
 import { Button } from '@/components/ui/button';
@@ -21,6 +25,7 @@ interface TypeOption {
     impact_message: string;
     commentaire_obligatoire: boolean;
     justificatif_obligatoire: boolean;
+    commande_obligatoire: boolean;
 }
 interface Vehicule {
     id: string;
@@ -54,6 +59,9 @@ interface DepenseData {
     date_depense: string;
     commentaire: string;
     statut: string;
+    commande: CommandeCandidate | null;
+    sans_commande: boolean;
+    motif_sans_commande: string;
 }
 
 const props = defineProps<{
@@ -108,8 +116,33 @@ const form = useForm({
     montant: props.depense.montant as number | '',
     date_depense: props.depense.date_depense,
     commentaire: props.depense.commentaire,
+    commande_vente_id:
+        props.depense.commande?.type === 'vente'
+            ? props.depense.commande.id
+            : '',
+    transfert_logistique_id:
+        props.depense.commande?.type === 'transfert'
+            ? props.depense.commande.id
+            : '',
+    sans_commande: props.depense.sans_commande,
+    motif_sans_commande: props.depense.motif_sans_commande,
     statut: 'brouillon' as 'brouillon' | 'soumis',
 });
+
+// ── Commande de référence (types carburant, ADR 0031) ────────────────────────
+const commandeSelection = ref<CommandeCandidate | null>(props.depense.commande);
+
+watch(commandeSelection, (c) => {
+    form.commande_vente_id = c?.type === 'vente' ? c.id : '';
+    form.transfert_logistique_id = c?.type === 'transfert' ? c.id : '';
+});
+
+const rattachementIncomplet = computed(
+    () =>
+        !!selectedType.value?.commande_obligatoire &&
+        !commandeSelection.value &&
+        !(form.sans_commande && form.motif_sans_commande.trim()),
+);
 
 const selectedType = computed<TypeOption | null>(
     () => typesFiltres.value.find((t) => t.id === form.depense_type_id) ?? null,
@@ -120,6 +153,9 @@ watch(
     (newVal, oldVal) => {
         if (newVal !== oldVal) {
             form.beneficiaire_id = '';
+            commandeSelection.value = null;
+            form.sans_commande = false;
+            form.motif_sans_commande = '';
             vehiculeSelected.value = null;
             employeSelected.value = null;
             livreurSelected.value = null;
@@ -1124,6 +1160,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                                 form.errors.date_depense,
                                         }"
                                     />
+                                    <DateRaccourcis
+                                        v-model="form.date_depense"
+                                    />
                                     <p
                                         v-if="form.errors.date_depense"
                                         class="mt-1 text-xs text-destructive"
@@ -1161,6 +1200,25 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                     </select>
                                 </div>
                             </div>
+
+                            <CommandeCarburantField
+                                v-if="selectedType.commande_obligatoire"
+                                v-model:selection="commandeSelection"
+                                v-model:sans-commande="form.sans_commande"
+                                v-model:motif="form.motif_sans_commande"
+                                :vehicule-id="form.beneficiaire_id"
+                                :date-depense="form.date_depense"
+                                :site-id="form.site_id"
+                                :error="
+                                    (
+                                        form.errors as Record<
+                                            string,
+                                            string | undefined
+                                        >
+                                    ).commande
+                                "
+                                :motif-error="form.errors.motif_sans_commande"
+                            />
 
                             <div>
                                 <Label
@@ -1214,7 +1272,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                     variant="outline"
                                     size="sm"
                                     :disabled="
-                                        form.processing || !form.depense_type_id
+                                        form.processing ||
+                                        !form.depense_type_id ||
+                                        rattachementIncomplet
                                     "
                                     @click="submitAs('brouillon')"
                                 >
@@ -1229,7 +1289,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                     type="button"
                                     size="sm"
                                     :disabled="
-                                        form.processing || !form.depense_type_id
+                                        form.processing ||
+                                        !form.depense_type_id ||
+                                        rattachementIncomplet
                                     "
                                     @click="submitAs('soumis')"
                                 >

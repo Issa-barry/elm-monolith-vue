@@ -90,7 +90,25 @@ stock « Casse » (ou constatée en écart `CASSE` à la réception).
 `Logistique\EnregistrerRetourTransfertController`) — `motif`, `commentaire`, `lignes[] = {id,
 quantite}`. La fiche transfert (`Logistique/Show`) reçoit `can_enregistrer_retour`, `motifs_retour`,
 `transfert.retours[]` et, par ligne, `quantite_retournee`, `quantite_retournable`,
-`quantite_recevable_max`. L'écran (bouton, dialogue, historique) est l'objet du lot 2.
+`quantite_recevable_max`.
+
+## Écran
+
+`Logistique/Show.vue` (lot 2, 16/10/2026) :
+
+- bouton **Enregistrer un retour** dans l'en-tête et le menu mobile, icône colis (`PackageMinus`) —
+  jamais un simple « Retour » avec une flèche, qui se confondrait avec la navigation vers la page
+  précédente ; affiché seulement avec `can_enregistrer_retour` ;
+- dialogue `partials/RetourTransfertDialog.vue` : quantité par produit plafonnée au retournable,
+  « Tout retourner », motif, commentaire (obligatoire pour « Autre »), colonne « Reste à livrer »
+  (livraison) ou « Non justifié » (après réception), avertissement de retour total en livraison ;
+  fermeture bloquée pendant l'envoi ;
+- onglet **Lignes produits** : colonne « Retourné » dès le premier retour, carte « Retours au site
+  source » (motif, date, auteur, site, détail par produit, commentaire) ;
+- statut **Retourné** : bandeau orange à la place du suivi des étapes ;
+- `partials/ReceptionDialog.vue` (fiche et liste) : quantité reçue pré-remplie à chargé − retourné,
+  plafonnée par `quantite_recevable_max`, colonne « Retourné », écart et type d'écart calculés sur
+  reçu + retourné − chargé.
 
 ## Non couvert
 

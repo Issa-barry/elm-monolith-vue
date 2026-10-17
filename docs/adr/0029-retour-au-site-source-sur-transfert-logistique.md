@@ -2,7 +2,7 @@
 
 - **Date** : 2026-10-16
 - **Statut** : accepté le 2026-10-16 (arbitrages A1 à A5 validés par le propriétaire du produit) —
-  lot 1 (backend) livré le 2026-10-16, lot 2 (écran) à venir
+  lot 1 (backend) et lot 2 (écran) livrés le 2026-10-16
 - **Périmètre** : `TransfertLogistique`, retour au site source avant clôture — cf.
   [retour-transfert.md](../retour-transfert.md)
 - **S'inspire de** : [ADR 0003](0003-retour-de-livraison-avant-encaissement.md) (retour de livraison
@@ -90,4 +90,4 @@ distincte, motif obligatoire, l'enregistrement par un utilisateur habilité vaut
   `quantite_retournee` en plus.
 - `avancerStatut()` travaille sur une copie verrouillée puis rafraîchit l'instance de l'appelant.
 - Hors périmètre : renvoi depuis la destination après réception (transfert inverse), correction d'un
-  retour, saisie depuis l'application mobile, écran (lot 2).
+  retour, saisie depuis l'application mobile.

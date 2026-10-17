@@ -23,7 +23,7 @@ class ExportCsvDepenseController extends Controller
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $depenses = $this->listing->query($filters, $orgId, $siteIds)
-            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->get();
 
         [$labelCache, $vehiculeInfoCache] = $this->listing->preloadBeneficiaires($depenses->all());

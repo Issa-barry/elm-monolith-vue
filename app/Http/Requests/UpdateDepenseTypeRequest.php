@@ -21,6 +21,8 @@ class UpdateDepenseTypeRequest extends FormRequest
             'categorie' => ['required', Rule::in(CategorieDepense::values())],
             'commentaire_obligatoire' => ['boolean'],
             'justificatif_obligatoire' => ['boolean'],
+            // ADR 0031 : seule une dépense véhicule a un véhicule pour retrouver sa commande.
+            'commande_obligatoire' => ['boolean', Rule::prohibitedIf(fn () => $this->boolean('commande_obligatoire') && $this->input('categorie') !== CategorieDepense::VEHICULE->value)],
             'type_paie' => ['nullable', 'string', Rule::in(['prime', 'autre_gain', 'avance', 'retenue', 'absence', 'autre_deduction'])],
             'is_active' => ['boolean'],
         ];
@@ -32,6 +34,7 @@ class UpdateDepenseTypeRequest extends FormRequest
             'libelle.required' => 'Le libellé est obligatoire.',
             'categorie.required' => 'Le concerné est obligatoire.',
             'categorie.in' => 'Le concerné sélectionné est invalide.',
+            'commande_obligatoire.prohibited' => 'Seul un type de dépense véhicule peut exiger une commande.',
         ];
     }
 }

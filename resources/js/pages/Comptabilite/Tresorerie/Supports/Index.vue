@@ -81,7 +81,6 @@ const props = defineProps<{
         id: string;
         site_id: string;
         libelle: string;
-        numero: string | null;
         operateur_mobile_money: string;
     }[];
     destinations_approvisionnement: {
@@ -220,7 +219,6 @@ const form = useForm({
     type: 'caisse',
     operateur_mobile_money: '',
     compte_comptable_id: '',
-    numero: '',
     moyen_paiement_defaut: '',
 });
 
@@ -298,7 +296,6 @@ function creerSupport() {
                 site_id: data.site_id,
                 agent_id: data.agent_id,
                 operateur_mobile_money: data.operateur_mobile_money,
-                numero: data.numero,
             };
         }
 
@@ -317,7 +314,6 @@ function creerSupport() {
                           ? data.operateur_mobile_money
                           : null,
                   compte_comptable_id: data.compte_comptable_id,
-                  numero: data.numero,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
               };
     }).post(URL_SUPPORTS, {
@@ -334,7 +330,6 @@ function creerSupport() {
 
 const editForm = useForm({
     libelle: '',
-    numero: '',
     type: '',
     operateur_mobile_money: '',
     compte_comptable_id: '',
@@ -351,12 +346,6 @@ const editVisible = computed({
 const editEstDediee = computed(() => editDialogPour.value?.nature === 'dediee');
 const editEstMobileMoneyDedie = computed(
     () => editEstDediee.value && editDialogPour.value?.type === 'mobile_money',
-);
-// Le numéro d'un compte Mobile Money d'agent se corrige tant qu'il est en brouillon, plus après.
-const editNumeroDedieModifiable = computed(
-    () =>
-        editEstMobileMoneyDedie.value &&
-        editDialogPour.value?.statut === 'brouillon',
 );
 
 // Une fois un solde d'ouverture saisi, le type et le compte comptable sont
@@ -385,7 +374,6 @@ watch(
 function ouvrirEdition(compte: CompteTresorerie) {
     editForm.clearErrors();
     editForm.libelle = compte.libelle;
-    editForm.numero = compte.numero ?? '';
     editForm.type = compte.type;
     editForm.operateur_mobile_money = compte.operateur_mobile_money ?? '';
     editForm.compte_comptable_id = compte.compte_comptable_id;
@@ -397,14 +385,12 @@ function ouvrirEdition(compte: CompteTresorerie) {
 function enregistrerEdition() {
     if (!editDialogPour.value) return;
     const dediee = editEstDediee.value;
-    const numeroDedie = editNumeroDedieModifiable.value;
     editForm
         .transform((data) =>
             dediee
                 ? {
                       libelle: data.libelle,
                       actif: data.actif,
-                      ...(numeroDedie ? { numero: data.numero } : {}),
                   }
                 : {
                       ...data,
@@ -993,13 +979,6 @@ const selectClass =
                             <td class="px-4 py-4 align-middle">{{ c.site }}</td>
                             <td class="px-4 py-4 align-middle">
                                 <div class="font-medium">{{ c.libelle }}</div>
-                                <div
-                                    v-if="c.numero"
-                                    class="text-xs text-muted-foreground tabular-nums"
-                                    data-testid="support-numero"
-                                >
-                                    N° {{ c.numero }}
-                                </div>
                                 <div
                                     v-if="alerte"
                                     class="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
@@ -1674,7 +1653,7 @@ const selectClass =
                         :key="d.id"
                         :value="d.id"
                     >
-                        {{ d.libelle }}{{ d.numero ? ` — N° ${d.numero}` : '' }}
+                        {{ d.libelle }}
                     </option>
                 </select>
                 <p
@@ -1955,29 +1934,6 @@ const selectClass =
                             {{ form.errors.operateur_mobile_money }}
                         </p>
                     </div>
-                    <div>
-                        <Label
-                            for="sup-numero-dedie"
-                            class="mb-1.5 block text-xs font-medium"
-                        >
-                            Numéro du portefeuille
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="sup-numero-dedie"
-                            v-model="form.numero"
-                            placeholder="Ex. 6XX XX XX XX"
-                        />
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Un numéro ne peut porter qu'un seul compte.
-                        </p>
-                        <p
-                            v-if="form.errors.numero"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.numero }}
-                        </p>
-                    </div>
                 </template>
 
                 <div>
@@ -2186,27 +2142,6 @@ const selectClass =
                 </p>
             </div>
 
-            <div v-if="form.nature !== 'dediee' && form.type !== 'caisse'">
-                <Label for="sup-numero" class="mb-1.5 block text-xs font-medium"
-                    >Numéro du compte (optionnel)</Label
-                >
-                <Input
-                    id="sup-numero"
-                    v-model="form.numero"
-                    placeholder="Ex. numéro marchand +224 6XX XX XX XX"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">
-                    Affiché à l'encaissement : l'agent vérifie que le client a
-                    payé sur ce compte.
-                </p>
-                <p
-                    v-if="form.errors.numero"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ form.errors.numero }}
-                </p>
-            </div>
-
             <div class="flex justify-between pt-2">
                 <Button
                     type="button"
@@ -2275,30 +2210,6 @@ const selectClass =
                     {{ editDialogPour.compte_numero }}. L'agent, l'opérateur et
                     le compte ne peuvent pas être modifiés.
                 </p>
-                <div>
-                    <Label
-                        for="edit-numero-dedie"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Numéro du portefeuille</Label
-                    >
-                    <Input
-                        id="edit-numero-dedie"
-                        v-model="editForm.numero"
-                        :disabled="!editNumeroDedieModifiable"
-                    />
-                    <p
-                        v-if="!editNumeroDedieModifiable"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Le numéro d'un compte validé ne peut plus être modifié.
-                    </p>
-                    <p
-                        v-if="editForm.errors.numero"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ editForm.errors.numero }}
-                    </p>
-                </div>
             </template>
             <template v-else-if="editEstDediee">
                 <p
@@ -2400,20 +2311,6 @@ const selectClass =
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ editForm.errors.operateur_mobile_money }}
-                    </p>
-                </div>
-                <div v-if="editForm.type !== 'caisse'">
-                    <Label
-                        for="edit-numero"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Numéro du compte</Label
-                    >
-                    <Input id="edit-numero" v-model="editForm.numero" />
-                    <p
-                        v-if="editForm.errors.numero"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ editForm.errors.numero }}
                     </p>
                 </div>
             </template>

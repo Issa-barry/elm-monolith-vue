@@ -51,7 +51,7 @@ class EncaissementMobileMoneyCompteAgentTest extends TestCase
         $this->site = $this->user->sites()->firstOrFail();
 
         $this->encaisseur = $this->creerUtilisateurNonAdmin($this->site, ['factures.encaisser', 'ventes.read', 'ventes.update', 'tresorerie.verser'], 'Moussa', 'Sidibé');
-        $this->compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $this->encaisseur->id, 'orange_money', '620000001');
+        $this->compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $this->encaisseur->id, 'orange_money');
         $this->compteAgence = $this->creerSupportAgence($this->site->id, 'mobile_money', '561100', 'orange_money');
     }
 
@@ -123,7 +123,7 @@ class EncaissementMobileMoneyCompteAgentTest extends TestCase
     {
         $sansCompte = $this->creerUtilisateurNonAdmin($this->site, ['factures.encaisser', 'ventes.read', 'ventes.update'], 'Fatou', 'Camara');
         $autreAgent = $this->creerUtilisateurNonAdmin($this->site, ['factures.encaisser', 'ventes.read', 'ventes.update'], 'Ibrahima', 'Bah');
-        $momo = $this->creerCompteMobileMoneyActif($this->site->id, $this->encaisseur->id, 'momo', '660000001');
+        $momo = $this->creerCompteMobileMoneyActif($this->site->id, $this->encaisseur->id, 'momo');
         $this->creerSupportAgence($this->site->id, 'mobile_money', '561200', 'momo');
 
         // Sans aucun compte : ni celui de l'agence, ni celui d'un collègue.
@@ -144,7 +144,7 @@ class EncaissementMobileMoneyCompteAgentTest extends TestCase
     {
         $kouria = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kouria', 'type' => 'agence', 'localisation' => 'Coyah']);
         $this->encaisseur->sites()->attach($kouria->id, ['role' => 'employe', 'is_default' => false]);
-        $compteKouria = $this->creerCompteMobileMoneyActif($kouria->id, $this->encaisseur->id, 'orange_money', '620000002');
+        $compteKouria = $this->creerCompteMobileMoneyActif($kouria->id, $this->encaisseur->id, 'orange_money');
 
         // Facture de l'agence de l'agent, compte rattaché à Kouria : refusé.
         $this->encaisser($this->facture(), ['compte_tresorerie_id' => $compteKouria->id])->assertSessionHasErrors('compte_tresorerie_id');
@@ -178,7 +178,7 @@ class EncaissementMobileMoneyCompteAgentTest extends TestCase
         $this->assertContains($this->compteAgent->id, $comptes);
         $this->assertContains($banque->id, $comptes);
         $this->assertNotContains($this->compteAgence->id, $comptes, 'le Mobile Money de l\'agence n\'est plus proposé à l\'encaissement');
-        $this->assertSame('620000001', collect($moyens)->firstWhere('compte_tresorerie_id', $this->compteAgent->id)['numero']);
+        $this->assertArrayNotHasKey('numero', collect($moyens)->firstWhere('compte_tresorerie_id', $this->compteAgent->id), 'aucun numéro de téléphone exposé');
 
         $sansCompte = $this->creerUtilisateurNonAdmin($this->site, ['factures.encaisser'], 'Fatou', 'Camara');
         $moyensSansCompte = collect(app(AgenceEncaissementResolver::class)->pourEcran($sansCompte, [$facture])[$facture->id]['agences'])

@@ -24,6 +24,7 @@ class DepenseType extends Model
         'categorie',
         'commentaire_obligatoire',
         'justificatif_obligatoire',
+        'commande_obligatoire',
         'type_paie',
         'is_active',
         'compte_comptable_id',
@@ -35,6 +36,7 @@ class DepenseType extends Model
             'categorie' => CategorieDepense::class,
             'commentaire_obligatoire' => 'boolean',
             'justificatif_obligatoire' => 'boolean',
+            'commande_obligatoire' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

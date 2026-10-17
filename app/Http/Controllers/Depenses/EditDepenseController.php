@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Depenses;
 use App\Enums\CategorieDepense;
 use App\Http\Controllers\Controller;
 use App\Models\Depense;
+use App\Services\Depenses\CommandeCarburantService;
 use App\Support\Depenses\DepenseFormOptionsLoader;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class EditDepenseController extends Controller
 {
-    public function __invoke(Depense $depense): Response
+    public function __invoke(Depense $depense, CommandeCarburantService $commandeCarburant): Response
     {
         $this->authorize('update', $depense);
 
@@ -37,6 +38,9 @@ class EditDepenseController extends Controller
                 'date_depense' => $depense->date_depense->toDateString(),
                 'commentaire' => $depense->commentaire ?? '',
                 'statut' => $depense->statut->value,
+                'commande' => $commandeCarburant->resume($depense->load(['commandeVente', 'transfertLogistique'])),
+                'sans_commande' => $depense->motif_sans_commande !== null,
+                'motif_sans_commande' => $depense->motif_sans_commande ?? '',
             ],
             'types' => DepenseFormOptionsLoader::types($orgId),
             'vehicules' => DepenseFormOptionsLoader::vehicules($orgId),

@@ -530,12 +530,6 @@ function handleSubmit() {
                             </span>
                             <span>{{ option.label }}</span>
                             <span
-                                v-if="option.numero"
-                                class="text-xs text-muted-foreground tabular-nums"
-                                data-testid="moyen-numero"
-                                >N° {{ option.numero }}</span
-                            >
-                            <span
                                 v-if="modeIndisponible(option)"
                                 class="text-xs text-muted-foreground"
                                 >— caisse requise</span

@@ -123,7 +123,7 @@ class SupportTresorerieSuppressionControllerTest extends TestCase
     public function test_un_compte_mobile_money_d_agent_en_brouillon_est_supprime_avec_son_sous_compte(): void
     {
         $agent = $this->creerAgent($this->site);
-        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $this->site->id, $agent->id, 'orange_money', '620000001');
+        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $this->site->id, $agent->id, 'orange_money');
         $sousCompteId = $brouillon->compte_comptable_id;
 
         $this->supprimer($brouillon)->assertSessionHasNoErrors();

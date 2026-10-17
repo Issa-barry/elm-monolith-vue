@@ -87,6 +87,7 @@ use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
 use App\Http\Controllers\ContratController;
+use App\Http\Controllers\Depenses\CommandesCarburantDepenseController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
 use App\Http\Controllers\Depenses\CreateDepenseController;
 use App\Http\Controllers\Depenses\DestroyDepenseController;
@@ -782,6 +783,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('depenses/export/excel', ExportCsvDepenseController::class)->name('depenses.export.excel');
             Route::get('depenses/imprimer', ImprimerDepenseController::class)->name('depenses.imprimer');
             Route::get('depenses/suggestions', SuggestionsDepenseController::class)->name('depenses.suggestions');
+            Route::get('depenses/commandes-carburant', CommandesCarburantDepenseController::class)->name('depenses.commandes-carburant');
             Route::get('depenses/concerne-detail', ConcerneDetailDepenseController::class)->name('depenses.concerne-detail');
             Route::get('depenses/vehicule-detail', VehiculeDetailDepenseController::class)->name('depenses.vehicule-detail');
 

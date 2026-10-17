@@ -28,7 +28,7 @@ class ImprimerDepenseController extends Controller
         $now = now();
 
         $depenses = $this->listing->query($filters, $orgId, $siteIds)
-            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->get();
 
         [$labelCache, $vehiculeInfoCache] = $this->listing->preloadBeneficiaires($depenses->all());

@@ -34,7 +34,7 @@ class IndexDepenseController extends Controller
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $paginator = $this->listing->query($filters, $orgId, $siteIds)
-            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->paginate(30)
             ->withQueryString();
 

@@ -24,8 +24,9 @@ import { loginAsElmV2Demo, selectOptionFromCombobox } from './helpers';
 const SUPPORTS_URL = '/backoffice/comptabilite/tresorerie/supports';
 const AGENCE = 'Siège V2 Demo';
 const AGENT = 'Admin V2 Demo';
-const NUMERO_AGENT = '620 55 44 33';
-const NUMERO_AGENCE = '611 00 00 99';
+// Libellé automatique du compte de l'agence : unique, le serveur refusant un second Mobile Money
+// sur le même compte comptable dans la même agence. Aucun numéro de téléphone (ADR 0030).
+const LIBELLE_AGENCE = `Orange Money de ${AGENCE}`;
 const FRAIS = 1_000;
 
 test.setTimeout(300_000);
@@ -77,11 +78,11 @@ test('Mobile Money : encaissement sur le compte de l’agent, puis transfert ver
     await agence
         .locator('#sup-operateur')
         .selectOption({ label: 'Orange Money' });
-    await agence.locator('#sup-numero').fill(NUMERO_AGENCE);
+    await expect(agence.locator('#sup-numero')).toHaveCount(0);
     await agence.getByRole('button', { name: /créer la caisse/i }).click();
     // Création + rechargement de la liste : lent sur un serveur de test déjà chargé.
     await expect(agence).toBeHidden({ timeout: 45_000 });
-    const ligneAgence = ligneSupport(page, NUMERO_AGENCE);
+    const ligneAgence = ligneSupport(page, LIBELLE_AGENCE);
     await expect(ligneAgence).toBeVisible({ timeout: 10_000 });
     await valider(ligneAgence);
 
@@ -97,7 +98,7 @@ test('Mobile Money : encaissement sur le compte de l’agent, puis transfert ver
     await agent
         .locator('#sup-operateur-dedie')
         .selectOption({ label: 'Orange Money' });
-    await agent.locator('#sup-numero-dedie').fill(NUMERO_AGENT);
+    await expect(agent.locator('#sup-numero-dedie')).toHaveCount(0);
     await agent.locator('#sup-agent').selectOption({ label: AGENT });
     await agent.getByRole('button', { name: /créer le compte/i }).click();
     await expect(agent).toBeHidden({ timeout: 45_000 });
@@ -134,15 +135,12 @@ test('Mobile Money : encaissement sur le compte de l’agent, puis transfert ver
     );
     expect(montant).toBeGreaterThan(FRAIS);
 
-    // Liste ouverte : une seule option Orange Money, portant le numéro du portefeuille de l'agent —
-    // jamais celui du compte de l'agence (ADR 0027).
+    // Liste ouverte : une seule option Orange Money, le compte de l'agent — jamais celui de
+    // l'agence (ADR 0027) — et aucun numéro de téléphone affiché (ADR 0030).
     await paiement.getByRole('combobox').last().click();
     const optionsOrange = page.getByRole('option', { name: /orange money/i });
     await expect(optionsOrange).toHaveCount(1, { timeout: 10_000 });
-    await expect(optionsOrange).toContainText(NUMERO_AGENT);
-    await expect(
-        page.getByRole('option', { name: new RegExp(NUMERO_AGENCE) }),
-    ).toHaveCount(0);
+    await expect(optionsOrange).not.toContainText('N°');
     await page.keyboard.press('Escape');
 
     await selectOptionFromCombobox(
@@ -166,7 +164,7 @@ test('Mobile Money : encaissement sur le compte de l’agent, puis transfert ver
         ),
     ).toBe(montant);
     await expect(
-        ligneSupport(page, NUMERO_AGENCE).getByTestId('support-solde'),
+        ligneSupport(page, LIBELLE_AGENCE).getByTestId('support-solde'),
     ).toHaveText(/^0\b/);
 
     // ── Transfert vers l'agence : montant reçu + frais en sus ───────────────
@@ -223,7 +221,7 @@ test('Mobile Money : encaissement sur le compte de l’agent, puis transfert ver
         ),
     ).toHaveText(/^0\b/);
     const soldeAgence = chiffres(
-        await ligneSupport(page, NUMERO_AGENCE)
+        await ligneSupport(page, LIBELLE_AGENCE)
             .getByTestId('support-solde')
             .textContent(),
     );

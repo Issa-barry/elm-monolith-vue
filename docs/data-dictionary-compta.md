@@ -132,9 +132,10 @@ Ce document distingue deux couches, volontairement séparées :
   **caisse en espèces** (type Caisse) ou, depuis le 2026-10-13, son **compte Mobile Money** (type
   Mobile Money, ADR 0027). La « nature » est **dérivée** de cette colonne, jamais stockée. Voir
   « Caisses dédiées à un agent » et « Compte Mobile Money dédié à un agent » ci-dessous.
-- **`numero`** (nullable, depuis le 2026-10-02) : numéro du compte (numéro marchand Mobile Money,
-  numéro bancaire), affiché à l'encaissement pour que l'agent choisisse le compte réellement payé.
-  **Obligatoire** pour le compte Mobile Money d'un agent, où il est le numéro du portefeuille.
+- ~~**`numero`**~~ : **colonne supprimée le 2026-10-16 avec ses données** (ADR [0030](adr/0030-suppression-du-numero-des-supports-de-tresorerie.md)).
+  Elle portait depuis le 2026-10-02 le numéro du compte (portefeuille Mobile Money, numéro
+  marchand, numéro bancaire) ; c'est une donnée sensible que l'application ne demande ni ne
+  conserve plus.
 - **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `agent_id` → `users`
   (`nullOnDelete`) ; `compte_comptable_id` → `compta_comptes`.
 - **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site) et, pour
@@ -597,19 +598,15 @@ compte actif pour l'opérateur, l'agent ne peut pas encaisser en Mobile Money (c
 **Règles garanties côté serveur** (`CaisseAgentService::creerCompteMobileMoney()`) :
 
 - Support de type **Mobile Money** rattaché à un agent (`agent_id`), une agence et un **opérateur**
-  (`operateur_mobile_money`, hors « Autre »). Le **numéro du portefeuille** (`numero`) est obligatoire.
+  (`operateur_mobile_money`, hors « Autre »). **Aucun numéro de portefeuille** n'est demandé ni
+  conservé (donnée sensible, ADR [0030](adr/0030-suppression-du-numero-des-supports-de-tresorerie.md), 2026-10-16).
 - **Un seul compte actif par (agent, site, opérateur).** La caisse en espèces de l'agent est un
   support distinct : un agent peut avoir sa caisse **et** un compte par opérateur dans la même agence.
-- **Un portefeuille = un seul compte** : le numéro n'est celui d'aucun autre support Mobile Money
-  **non désactivé** (brouillon ou actif, d'agent ou d'agence) du même opérateur, **dans
-  l'organisation**. La comparaison (`CompteTresorerie::memeNumero()`) ignore espaces et ponctuation
-  (« 620 00 00 01 » = « 620-000-001 ») et reconnaît le même portefeuille **avec ou sans indicatif**
-  (« +224 620 00 00 01 » = « 00224 620 00 00 01 » = « 620 00 00 01 ») : deux numéros en chiffres
-  sont identiques si l'un est l'autre précédé de 1 à 3 chiffres, le plus court en comptant au moins
-  8. Aucun indicatif n'est codé en dur. Le numéro est conservé tel que saisi. Un compte désactivé
-  libère son numéro ; deux organisations peuvent enregistrer le même. Dans l'autre sens, un compte
-  de l'agence ne peut pas prendre le numéro du compte d'un agent ; les supports d'agence ne sont pas
-  comparés entre eux.
+- ~~**Un portefeuille = un seul compte**~~ : règle **abandonnée le 2026-10-16** (ADR [0030](adr/0030-suppression-du-numero-des-supports-de-tresorerie.md)) —
+  sans numéro, elle ne peut plus être contrôlée. Deux comptes d'agents peuvent donc représenter le
+  même portefeuille réel sans que l'application le détecte.
+- **À la création, aucun compte actif ou en brouillon** du même opérateur pour cet agent dans cette
+  agence (ADR 0028).
 - **Un sous-compte comptable propre**, créé automatiquement sous le compte de l'opérateur :
   numéro du compte de l'opérateur suivi de 3 chiffres (561100001, 561100002… sous 561100), soit
   999 comptes par opérateur et par organisation. Le compte de l'opérateur est lu dans
@@ -617,17 +614,18 @@ compte actif pour l'opérateur, l'agent ne peut pas encaisser en Mobile Money (c
   sans paramétrage pour l'opérateur, la création est refusée.
 - Créé en **brouillon**, validé comme tout support ; **aucune écriture** à la création, **pas de
   solde d'ouverture** (refusé) : il démarre à 0.
-- Agent, agence, opérateur et sous-compte sont **figés**. Le libellé et l'activation se modifient ;
-  le **numéro se corrige tant que le compte est en brouillon**, plus après sa validation.
-- Il ne se désactive que vide ; sa réactivation revérifie les deux unicités.
+- Agent, agence, opérateur et sous-compte sont **figés**. Seuls le libellé et l'activation se
+  modifient.
+- Il ne se désactive que vide ; sa réactivation revérifie qu'aucun autre compte actif du même
+  opérateur n'existe pour l'agent dans l'agence.
 - **Créations simultanées** : la transaction prend ses verrous (agent, puis compte de l'opérateur)
   **avant toute lecture ordinaire**. Sous MySQL (`REPEATABLE READ`), une transaction fige ce qu'elle
   voit à sa première lecture non verrouillante : lue avant l'attente du verrou, elle ignorerait le
   compte qu'une création concurrente vient d'enregistrer. Les créations d'un même opérateur sont
-  donc sérialisées, numérotées à la suite, et un même portefeuille demandé deux fois au même
-  instant n'est accepté qu'une fois. Filets de sécurité : la contrainte unique
-  (`organization_id`, `numero`) de `compta_comptes`, et la validation, qui refuse deux brouillons
-  portant le même numéro. Aucun index unique ne porte sur le numéro du portefeuille.
+  donc sérialisées, numérotées à la suite, et un même agent demandé deux fois au même instant
+  (double clic) n'obtient qu'un compte. Filets de sécurité : la contrainte unique
+  (`organization_id`, `numero`) de `compta_comptes` (numéro du sous-compte comptable), et la
+  validation, qui refuse un second compte actif pour le même (agent, agence, opérateur).
 
 **Étanchéité avec les caisses en espèces** — un support dédié de type Mobile Money n'est jamais
 traité comme une caisse (`CompteTresorerie::caissesDediees()` / `isCaisseDediee()`, à utiliser pour

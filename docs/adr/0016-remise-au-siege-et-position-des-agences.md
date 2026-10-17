@@ -144,7 +144,8 @@ délai.
   `2026_10_03_100000_retirer_compte_commun_des_supports_tresorerie` retire `commun`,
   `compta_support_tresorerie_agences` et `encaissements_ventes.site_detenteur_id` (elle s'arrête si
   un compte commun a réellement servi). Le code revient au comportement d'ADR 0012. **Conservé** : le
-  numéro du compte (`compta_supports_tresorerie.numero`), affiché sous chaque moyen à l'encaissement.
+  numéro du compte (`compta_supports_tresorerie.numero`), affiché sous chaque moyen à l'encaissement
+  — **supprimé le 2026-10-16 avec ses données** (donnée sensible, [ADR 0030](0030-suppression-du-numero-des-supports-de-tresorerie.md)).
 - **Lot 1 — calcul, livré le 2026-10-03** : `FinancementAgenceService::calculerPourEcheance()` ajoute
   à chaque ligne `arrieres`, `a_conserver`, `fonds_autres_agences`, `disponible_propre`,
   `remise_obligatoire`, `excedent_a_remettre`, `total_a_remettre`, `est_tresorerie_principale` ;

@@ -61,9 +61,9 @@ trait HasCaissesDediees
     /**
      * Compte Mobile Money dédié à un agent (ADR 0027), créé PUIS validé : actif et utilisable.
      */
-    private function creerCompteMobileMoneyActif(string $siteId, string $agentId, string $operateur = 'orange_money', string $numero = '620 00 00 01'): CompteTresorerie
+    private function creerCompteMobileMoneyActif(string $siteId, string $agentId, string $operateur = 'orange_money'): CompteTresorerie
     {
-        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $siteId, $agentId, $operateur, $numero);
+        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $siteId, $agentId, $operateur);
 
         return app(SupportTresorerieValidationService::class)->valider($brouillon, $this->user);
     }
@@ -73,15 +73,9 @@ trait HasCaissesDediees
      * depuis le lot 3, c'est le seul support sur lequel il peut encaisser en Mobile Money. L'agent
      * valide son propre compte — le service ne contrôle pas « créateur ≠ validateur » (ADR 0002).
      */
-    private function creerCompteMobileMoneyActifPour(User $agent, string $siteId, string $operateur = 'orange_money', ?string $numero = null): CompteTresorerie
+    private function creerCompteMobileMoneyActifPour(User $agent, string $siteId, string $operateur = 'orange_money'): CompteTresorerie
     {
-        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney(
-            $agent->organization_id,
-            $siteId,
-            $agent->id,
-            $operateur,
-            $numero ?? '6'.str_pad((string) random_int(0, 99_999_999), 8, '0', STR_PAD_LEFT),
-        );
+        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($agent->organization_id, $siteId, $agent->id, $operateur);
 
         return app(SupportTresorerieValidationService::class)->valider($brouillon, $agent);
     }

@@ -65,10 +65,12 @@ sans support dans l'agence n'apparaît pas. Chaque support représente un compte
   561400), le valider : Kulu apparaît alors dans la liste des moyens de cette agence, sans changement
   de code.
 
-**Numéro du compte** (`compta_supports_tresorerie.numero`, 02/10/2026) : affiché sous chaque moyen
-dans la fenêtre de paiement (« N° … »). Quand une agence a plusieurs comptes pour un opérateur,
-l'agent choisit celui sur lequel le client a réellement payé — jamais de routage automatique ni de
-Mobile Money présélectionné.
+**Aucun numéro de compte affiché** (depuis le 16/10/2026, ADR
+[0030](adr/0030-suppression-du-numero-des-supports-de-tresorerie.md)) : le numéro des supports
+(`compta_supports_tresorerie.numero`, ajouté le 02/10/2026) a été supprimé avec ses données, c'est
+une donnée sensible. Chaque moyen se distingue par son libellé ; quand plusieurs comptes existent
+pour un opérateur, l'agent choisit celui sur lequel le client a réellement payé — jamais de routage
+automatique ni de Mobile Money présélectionné.
 
 **Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste de
 l'encaisseur (`pourSitePourEncaisseur()`/`parSitePourEncaisseur()`), exposée par les écrans sous

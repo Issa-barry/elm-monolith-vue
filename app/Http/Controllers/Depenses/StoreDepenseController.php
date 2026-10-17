@@ -48,6 +48,7 @@ class StoreDepenseController extends Controller
             'depense_type_id' => $request->depense_type_id,
             'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
             'beneficiaire_id' => $type->categorie->needsBeneficiaire() ? $request->beneficiaire_id : null,
+            ...$request->rattachementCommandeAttributs(),
             'site_id' => $request->site_id,
             'montant' => $request->montant,
             'date_depense' => $request->date_depense,

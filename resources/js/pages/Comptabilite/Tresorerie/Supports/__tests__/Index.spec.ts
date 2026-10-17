@@ -61,7 +61,6 @@ const compte = (surcharge: Partial<CompteTresorerie>): CompteTresorerie => ({
     operateur_mobile_money: null,
     operateur_label: null,
     libelle: 'Caisse-espèce',
-    numero: null,
     nature: 'agence',
     agent: null,
     compte_comptable_id: 'cc1',
@@ -872,7 +871,6 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         type_label: 'Mobile Money',
         operateur_mobile_money: 'orange_money',
         operateur_label: 'Orange Money',
-        numero: '620 00 00 01',
         nature: 'dediee',
         agent: { id: 'u1', nom: 'Moussa sidibé' },
         compte_numero: '561100001',
@@ -883,15 +881,15 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         etat.permissions = ['tresorerie.gerer_soldes_ouverture'];
     });
 
-    it('affiche le compte avec son opérateur, son numéro et son titulaire, sans « Verser »', () => {
+    it('affiche le compte avec son opérateur et son titulaire, sans numéro de téléphone ni « Verser »', () => {
         const wrapper = monter([MOBILE_MONEY_AGENT]);
         const ligne = lignes(wrapper)[0];
 
         expect(ligne.find('[data-testid="support-nature"]').text()).toBe(
             'Orange Money dédié',
         );
-        expect(ligne.find('[data-testid="support-numero"]').text()).toContain(
-            '620 00 00 01',
+        expect(ligne.find('[data-testid="support-numero"]').exists()).toBe(
+            false,
         );
         expect(ligne.find('[data-testid="support-compte"]').text()).toBe(
             '561100001',
@@ -910,7 +908,7 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         expect(carte.text()).not.toContain('2');
     });
 
-    it("demande l'opérateur et le numéro du portefeuille à la création", async () => {
+    it("demande l'opérateur à la création, jamais le numéro du portefeuille (donnée sensible)", async () => {
         const wrapper = monter([]);
 
         await wrapper.find('#sup-nature').setValue('dediee');
@@ -920,7 +918,8 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         await wrapper.find('#sup-type-dedie').setValue('mobile_money');
 
         expect(wrapper.find('#sup-operateur-dedie').exists()).toBe(true);
-        expect(wrapper.find('#sup-numero-dedie').exists()).toBe(true);
+        expect(wrapper.find('#sup-numero-dedie').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('Numéro du portefeuille');
         expect(wrapper.text()).toContain(
             "Les encaissements Mobile Money de l'agent arriveront sur ce compte",
         );
@@ -929,42 +928,37 @@ describe('Supports de trésorerie — compte Mobile Money dédié à un agent', 
         expect(wrapper.find('#sup-compte').exists()).toBe(false);
     });
 
-    it('laisse corriger le numéro en brouillon et le fige après la validation', async () => {
-        const ouvrir = async (c: CompteTresorerie) => {
-            const wrapper = monter([c]);
-            (wrapper.vm as unknown as Ouvrable).ouvrirEdition(c);
-            await nextTick();
+    it('ne demande aucun numéro à la modification', async () => {
+        const wrapper = monter([MOBILE_MONEY_AGENT]);
+        (wrapper.vm as unknown as Ouvrable).ouvrirEdition(MOBILE_MONEY_AGENT);
+        await nextTick();
 
-            return wrapper;
-        };
-
-        const brouillon = await ouvrir(
-            compte({
-                ...MOBILE_MONEY_AGENT,
-                actif: false,
-                statut: 'brouillon',
-                statut_label: 'Brouillon',
-                valide_le: null,
-            }),
-        );
         expect(
-            brouillon.find('[data-testid="edit-mobile-money-dedie"]').text(),
+            wrapper.find('[data-testid="edit-mobile-money-dedie"]').text(),
         ).toContain('Orange Money');
-        // Le champ factice rend l'attribut en toutes lettres : « false » = modifiable.
+        expect(wrapper.find('#edit-numero-dedie').exists()).toBe(false);
+        expect(wrapper.find('#edit-numero').exists()).toBe(false);
         expect(
-            brouillon.find('#edit-numero-dedie').attributes('disabled'),
-        ).toBe('false');
-
-        const valide = await ouvrir(MOBILE_MONEY_AGENT);
-        expect(valide.find('#edit-numero-dedie').attributes('disabled')).toBe(
-            'true',
-        );
-        expect(valide.text()).toContain(
-            "Le numéro d'un compte validé ne peut plus être modifié",
-        );
-        expect(
-            valide.find('[data-testid="edit-solde-ouverture"]').exists(),
+            wrapper.find('[data-testid="edit-solde-ouverture"]').exists(),
         ).toBe(false);
+    });
+
+    it("ne demande aucun numéro pour un Mobile Money ou une banque d'agence", async () => {
+        const wrapper = monter([]);
+
+        for (const type of ['mobile_money', 'banque']) {
+            await wrapper.find('#sup-type').setValue(type);
+            expect(wrapper.find('#sup-numero').exists()).toBe(false);
+        }
+
+        const banque = compte({
+            id: 'c-banque',
+            type: 'banque',
+            type_label: 'Banque',
+        });
+        (wrapper.vm as unknown as Ouvrable).ouvrirEdition(banque);
+        await nextTick();
+        expect(wrapper.find('#edit-numero').exists()).toBe(false);
     });
 });
 
@@ -991,21 +985,18 @@ describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () 
             id: 'd-om',
             site_id: 's1',
             libelle: 'Orange Money de Matoto',
-            numero: '611 00 00 00',
             operateur_mobile_money: 'orange_money',
         },
         {
             id: 'd-momo',
             site_id: 's1',
             libelle: 'MoMo de Matoto',
-            numero: null,
             operateur_mobile_money: 'momo',
         },
         {
             id: 'd-kouria',
             site_id: 's2',
             libelle: 'Orange Money de Kouria',
-            numero: null,
             operateur_mobile_money: 'orange_money',
         },
     ];
@@ -1062,7 +1053,7 @@ describe("Supports de trésorerie — transfert Mobile Money vers l'agence", () 
 
         expect(options.map((o) => o.attributes('value'))).toEqual(['', 'd-om']);
         expect(options[1].text()).toContain('Orange Money de Matoto');
-        expect(options[1].text()).toContain('611 00 00 00');
+        expect(options[1].text()).not.toContain('N°');
         expect(
             (wrapper.find('#transfert-dest').element as HTMLSelectElement)
                 .value,

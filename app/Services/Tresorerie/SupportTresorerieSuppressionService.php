@@ -72,7 +72,6 @@ class SupportTresorerieSuppressionService
                 'site' => $verrouille->site?->nom,
                 'agent' => $verrouille->agent?->name,
                 'operateur_mobile_money' => $verrouille->operateur_mobile_money?->value,
-                'numero' => $verrouille->numero,
                 'compte_numero' => $verrouille->compte?->numero,
                 'statut' => $verrouille->statut()->value,
             ], null, array_filter(['motif' => $motif !== null ? trim($motif) : null]));

@@ -34,7 +34,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import DepenseTypeImportDialog from './partials/DepenseTypeImportDialog.vue';
 
 interface Option {
@@ -49,6 +49,7 @@ interface DepenseType {
     categorie_label: string;
     commentaire_obligatoire: boolean;
     justificatif_obligatoire: boolean;
+    commande_obligatoire: boolean;
     type_paie: string | null;
     is_active: boolean;
     depenses_count: number;
@@ -161,9 +162,18 @@ const form = useForm({
     categorie: 'interne',
     commentaire_obligatoire: false,
     justificatif_obligatoire: false,
+    commande_obligatoire: false,
     type_paie: '' as string,
     is_active: true,
 });
+
+// Seul un type véhicule peut exiger une commande (ADR 0031).
+watch(
+    () => form.categorie,
+    (categorie) => {
+        if (categorie !== 'vehicule') form.commande_obligatoire = false;
+    },
+);
 
 function openCreate() {
     editingType.value = null;
@@ -180,6 +190,7 @@ function openEdit(type: DepenseType) {
     form.categorie = type.categorie;
     form.commentaire_obligatoire = type.commentaire_obligatoire;
     form.justificatif_obligatoire = type.justificatif_obligatoire;
+    form.commande_obligatoire = type.commande_obligatoire;
     form.type_paie = type.type_paie ?? '';
     form.is_active = type.is_active;
     showDialog.value = true;
@@ -657,6 +668,29 @@ const categorieColors: Record<string, string> = {
                         >
                         <p class="text-xs text-muted-foreground">
                             Un justificatif (reçu, photo) devra être fourni.
+                        </p>
+                    </div>
+                </div>
+                <div
+                    v-if="form.categorie === 'vehicule'"
+                    class="flex items-center gap-3"
+                >
+                    <Checkbox
+                        id="dt-commande"
+                        :model-value="form.commande_obligatoire"
+                        @update:model-value="
+                            form.commande_obligatoire = $event === true
+                        "
+                    />
+                    <div>
+                        <Label
+                            for="dt-commande"
+                            class="cursor-pointer text-sm font-medium"
+                            >Commande obligatoire</Label
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Rattachement à une vente ou un transfert logistique
+                            du véhicule, ou exception motivée (carburant).
                         </p>
                     </div>
                 </div>
