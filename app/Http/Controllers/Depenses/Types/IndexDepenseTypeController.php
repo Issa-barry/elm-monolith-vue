@@ -40,6 +40,7 @@ class IndexDepenseTypeController extends Controller
                 'categorie_label' => $t->categorie->label(),
                 'commentaire_obligatoire' => $t->commentaire_obligatoire,
                 'justificatif_obligatoire' => $t->justificatif_obligatoire,
+                'commande_obligatoire' => $t->commande_obligatoire,
                 'type_paie' => $t->type_paie,
                 'is_active' => $t->is_active,
                 'depenses_count' => $t->depenses()->count(),

@@ -3,12 +3,15 @@
 namespace App\Http\Requests;
 
 use App\Enums\CategorieDepense;
+use App\Http\Requests\Concerns\ValideRattachementCommande;
 use App\Models\DepenseType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreDepenseRequest extends FormRequest
 {
+    use ValideRattachementCommande;
+
     public function authorize(): bool
     {
         return $this->user()->can('depenses.create');
@@ -25,6 +28,7 @@ class StoreDepenseRequest extends FormRequest
         $categorie = $type?->categorie;
 
         return [
+            ...$this->rattachementCommandeRules(),
             'depense_type_id' => [
                 'required',
                 'ulid',

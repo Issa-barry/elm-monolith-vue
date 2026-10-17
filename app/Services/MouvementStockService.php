@@ -427,7 +427,9 @@ class MouvementStockService
      * (SORTIE chargement, puis ENTRÉE retour). Idempotent sur (source_type, source_id, site_id,
      * type) — un second appel pour la même ligne de retour est un no-op. Décision produit du
      * 23/09/2026 : contrairement à l'écart de réception (distribution/Grossiste livré), un retour
-     * remet toujours la marchandise en stock.
+     * remet toujours la marchandise en stock. Réutilisée telle quelle pour le retour au site source
+     * d'un transfert logistique (TransfertRetourService, source TransfertRetourLigne, ADR 0029) —
+     * distincte des mouvements TransfertLigne (sortie source, entrée destination).
      */
     public static function reintegrerRetour(
         string $varianteId,

@@ -42,7 +42,6 @@ class CompteTresorerie extends Model
         'type',
         'operateur_mobile_money',
         'libelle',
-        'numero',
         'moyen_paiement_defaut',
         'actif',
         'valide_le',
@@ -140,43 +139,6 @@ class CompteTresorerie extends Model
         $operateur = is_string($operateur) ? OperateurMobileMoney::tryFrom($operateur) : $operateur;
 
         return $operateur ? trim("{$operateur->label()} — {$agentNom}") : trim("Caisse {$agentNom}");
-    }
-
-    /**
-     * Forme de comparaison d'un numéro de portefeuille : lettres et chiffres seulement, sans le
-     * préfixe international « 00 » — « 620 00 00 01 » et « 620-000-001 » désignent le même compte.
-     */
-    public static function normaliserNumero(?string $numero): string
-    {
-        $numero = mb_strtoupper((string) preg_replace('/[^\p{L}\p{N}]+/u', '', (string) $numero));
-
-        return (string) preg_replace('/^00(?=\d{9,}$)/', '', $numero);
-    }
-
-    /**
-     * Deux écritures du même portefeuille : identiques une fois normalisées, ou l'une est l'autre
-     * précédée d'un indicatif de pays (1 à 3 chiffres) — « +224 620 00 00 01 » et « 620 00 00 01 ».
-     * Aucun indicatif n'est codé en dur ; le numéro sans indicatif doit compter au moins 8 chiffres.
-     */
-    public static function memeNumero(?string $a, ?string $b): bool
-    {
-        $a = self::normaliserNumero($a);
-        $b = self::normaliserNumero($b);
-
-        if ($a === '' || $b === '') {
-            return false;
-        }
-        if ($a === $b) {
-            return true;
-        }
-
-        [$court, $long] = strlen($a) <= strlen($b) ? [$a, $b] : [$b, $a];
-        $indicatif = strlen($long) - strlen($court);
-
-        return ctype_digit($court) && ctype_digit($long)
-            && strlen($court) >= 8
-            && $indicatif >= 1 && $indicatif <= 3
-            && str_ends_with($long, $court);
     }
 
     public function organization(): BelongsTo

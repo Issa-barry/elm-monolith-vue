@@ -65,10 +65,12 @@ sans support dans l'agence n'apparaît pas. Chaque support représente un compte
   561400), le valider : Kulu apparaît alors dans la liste des moyens de cette agence, sans changement
   de code.
 
-**Numéro du compte** (`compta_supports_tresorerie.numero`, 02/10/2026) : affiché sous chaque moyen
-dans la fenêtre de paiement (« N° … »). Quand une agence a plusieurs comptes pour un opérateur,
-l'agent choisit celui sur lequel le client a réellement payé — jamais de routage automatique ni de
-Mobile Money présélectionné.
+**Aucun numéro de compte affiché** (depuis le 16/10/2026, ADR
+[0030](adr/0030-suppression-du-numero-des-supports-de-tresorerie.md)) : le numéro des supports
+(`compta_supports_tresorerie.numero`, ajouté le 02/10/2026) a été supprimé avec ses données, c'est
+une donnée sensible. Chaque moyen se distingue par son libellé ; quand plusieurs comptes existent
+pour un opérateur, l'agent choisit celui sur lequel le client a réellement payé — jamais de routage
+automatique ni de Mobile Money présélectionné.
 
 **Source unique** : `App\Services\Tresorerie\MoyensEncaissementResolver` construit la liste de
 l'encaisseur (`pourSitePourEncaisseur()`/`parSitePourEncaisseur()`), exposée par les écrans sous
@@ -86,7 +88,14 @@ valeur envoyée par le navigateur.
 - **Sans compte actif pour l'opérateur, l'encaissement est refusé** (`compte_tresorerie_id` :
   « Vous n'avez pas de compte Mobile Money actif pour cet opérateur dans cette agence… »), pour
   tous les rôles. La fenêtre de paiement ne propose que les opérateurs pour lesquels l'utilisateur a
-  un compte, et affiche en ambre « Mobile Money indisponible » quand il n'en a aucun.
+  un compte, et affiche en ambre « Mobile Money indisponible : vous n'avez aucun compte Mobile Money
+  actif à {agence}. Demandez à votre responsable de vous en créer un. » quand il n'en a aucun —
+  y compris quand les espèces sont le seul mode possible (révisé le 15/10/2026 : l'ancienne simple
+  mention « Espèces uniquement. » ne disait pas pourquoi l'opérateur manquait). Quand **aucun**
+  mode n'est utilisable (ni caisse, ni compte Mobile Money, ni banque de l'agence), l'encaissement
+  est bloqué et l'alerte passe en **rouge** : « Encaissement impossible à {agence} : vous n'avez ni
+  caisse ni compte Mobile Money actif, et l'agence n'a aucun compte bancaire actif. » En paiement
+  sortant (fiches, factures d'achat), rien ne change hormis le rouge du cas bloquant.
 - Un portefeuille n'encaisse que dans son agence de rattachement : pour une commande d'une autre
   agence, l'agent encaisse « à son agence » (ADR 0012), la dette inter-agences étant tracée comme
   avant — elle ne dépend pas du support qui reçoit l'argent.

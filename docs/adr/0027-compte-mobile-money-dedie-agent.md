@@ -3,7 +3,9 @@
 - **Date** : 2026-10-13
 - **Statut** : accepté le 2026-10-13 (règles métier) — **lot 1 livré le 2026-10-13, lots 2 et 3
   livrés le 2026-10-14** ; lot 4 : volet rapports livré le 2026-10-14, transfert direct vers la
-  trésorerie principale reporté le 2026-10-15 (cf. « Lot 4 » ci-dessous)
+  trésorerie principale reporté le 2026-10-15 (cf. « Lot 4 » ci-dessous) — **amendé le 2026-10-16
+  par l'[ADR 0030](0030-suppression-du-numero-des-supports-de-tresorerie.md)** : plus aucun numéro de portefeuille, règle « un portefeuille = un
+  seul compte » abandonnée
 - **Périmètre** : encaissements de vente, supports de trésorerie, mouvements de fonds, financement
   et remises des agences, rapport d'activité
 - **Amendera, à la livraison du lot concerné** : [ADR 0005](0005-moyens-de-paiement-derives-des-supports.md)
@@ -44,13 +46,15 @@ Constats de l'audit du 2026-10-13 :
 ### 1. Un compte Mobile Money dédié par agent, agence et opérateur
 
 - Un compte Mobile Money dédié est un support de trésorerie de type Mobile Money rattaché à un
-  agent (`agent_id`), une agence et un opérateur. Le **numéro** du portefeuille est obligatoire.
+  agent (`agent_id`), une agence et un opérateur. ~~Le **numéro** du portefeuille est obligatoire.~~
+  **Depuis le 2026-10-16 (ADR 0030)**, aucun numéro n'est demandé ni conservé (donnée sensible).
 - **Un seul compte actif par (agent, agence, opérateur).** La caisse en espèces de l'agent reste un
   support distinct : la règle « une seule caisse dédiée active par (agent, agence) » de l'ADR 0001
   ne vaut plus que pour les caisses.
-- **Un portefeuille réel = un seul compte.** Le numéro d'un compte d'agent ne peut être porté par
+- ~~**Un portefeuille réel = un seul compte.** Le numéro d'un compte d'agent ne peut être porté par
   aucun autre support Mobile Money non désactivé du même opérateur dans l'organisation. Un
-  portefeuille est donc rattaché à une seule agence.
+  portefeuille est donc rattaché à une seule agence.~~ **Abandonnée le 2026-10-16 (ADR 0030)** :
+  sans numéro, la règle ne peut plus être contrôlée.
 - Chaque compte a son **propre sous-compte comptable**, créé automatiquement sous le compte de son
   opérateur ; son solde est celui de ce sous-compte au grand livre (même principe que l'ADR 0001).
 - Même cycle de vie que les caisses dédiées (ADR 0002) : brouillon, validation, actif, inactif. Il
@@ -142,6 +146,9 @@ encaissé sur les comptes des agents n'aurait aucune sortie enregistrable.
     MySQL (`REPEATABLE READ`) lui ferait relire un état périmé après l'attente du verrou ; prouvé
     par `CompteMobileMoneyAgentConcurrenceTest` (processus et connexions MySQL distincts) ;
   - le numéro se corrige tant que le compte est en brouillon, plus après sa validation ;
+  - *(les trois points sur le numéro ci-dessus — unicité, correction, et la preuve de concurrence
+    « même portefeuille » — sont retirés par l'ADR 0030 le 2026-10-16 ; le test de concurrence prouve
+    désormais qu'un double clic ne crée qu'un compte par agent)* ;
   - étanchéité : `CompteTresorerie::caissesDediees()` / `isCaisseDediee()` remplacent `dediees()` /
     `isDediee()` partout où il s'agit des espèces d'un agent (`CaisseAgentResolver`, versement,
     approvisionnement, policy, estimation du Financement, onglet Caisse du rapport, diagnostic) ;

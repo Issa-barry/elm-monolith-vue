@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\AuditEvent;
 use App\Enums\OperateurMobileMoney;
 use App\Enums\TypeSupportTresorerie;
 use App\Http\Controllers\Controller;
@@ -10,14 +11,18 @@ use App\Models\CompteMapping;
 use App\Models\CompteTresorerie;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\AuditLogService;
 use App\Services\Comptabilite\SupportTresorerieTypeResolver;
 use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\CaisseAgentService;
+use App\Services\Tresorerie\SupportAgenceDesactivationService;
+use App\Services\Tresorerie\SupportTresorerieSuppressionService;
 use App\Services\Tresorerie\SupportTresorerieValidationService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -39,7 +44,10 @@ use Inertia\Response;
  * Mobile Money (ADR 0027), et son compte comptable est créé automatiquement (cf. CaisseAgentService).
  *
  * Un support est créé en brouillon (inutilisable) puis validé par `tresorerie.valider_supports`
- * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif.
+ * (cf. SupportTresorerieValidationService) : seul un support validé peut être actif. Un brouillon
+ * se supprime (`tresorerie.supprimer_supports`, SupportTresorerieSuppressionService) ; un support
+ * validé ne se désactive que vide et sans mouvement en transit (ADR 0028). Désactivation,
+ * réactivation et suppression sont tracées dans le journal d'audit.
  */
 class CompteTresorerieController extends Controller
 {
@@ -47,6 +55,8 @@ class CompteTresorerieController extends Controller
         private readonly CaisseAgentService $caisseAgent,
         private readonly TresorerieDisponibiliteService $disponibilite,
         private readonly SiteScopeService $siteScope,
+        private readonly SupportAgenceDesactivationService $desactivationAgence,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request, SupportTresorerieTypeResolver $typeResolver, SavedFilterService $savedFilters): Response
@@ -120,7 +130,7 @@ class CompteTresorerieController extends Controller
             ->whereNotNull('operateur_mobile_money')
             ->when($sitesAccessibles !== null, fn ($q) => $q->whereIn('site_id', $sitesAccessibles))
             ->orderBy('libelle')
-            ->get(['id', 'site_id', 'libelle', 'numero', 'operateur_mobile_money']);
+            ->get(['id', 'site_id', 'libelle', 'operateur_mobile_money']);
         $agencesEtOperateursAvecDestination = $destinationsTransfert
             ->map(fn (CompteTresorerie $c) => $c->site_id.'|'.$c->operateur_mobile_money->value)
             ->flip();
@@ -159,7 +169,6 @@ class CompteTresorerieController extends Controller
                     'operateur_mobile_money' => $c->operateur_mobile_money?->value,
                     'operateur_label' => $c->operateur_mobile_money?->label(),
                     'libelle' => $c->libelle,
-                    'numero' => $c->numero,
                     'nature' => $c->isDediee() ? 'dediee' : 'agence',
                     'agent' => $c->agent ? ['id' => $c->agent->id, 'nom' => $c->agent->name] : null,
                     'compte_comptable_id' => $c->compte_comptable_id,
@@ -173,6 +182,8 @@ class CompteTresorerieController extends Controller
                     // Politique + état vérifiés EXPLICITEMENT (le Gate::before du super admin passe
                     // toujours) ; SupportTresorerieValidationService::valider() revérifie l'état.
                     'peut_valider' => ! $c->estValide() && $user->can('valider', $c),
+                    // Même principe : SupportTresorerieSuppressionService revérifie l'état.
+                    'peut_supprimer' => ! $c->estValide() && $user->can('supprimer', $c),
                     'solde' => $solde,
                     'en_cours_versement' => (float) ($enCours->get($c->id)['montant'] ?? 0),
                     'versements_en_cours' => (int) ($enCours->get($c->id)['nombre'] ?? 0),
@@ -229,7 +240,6 @@ class CompteTresorerieController extends Controller
                 'id' => $c->id,
                 'site_id' => $c->site_id,
                 'libelle' => $c->libelle,
-                'numero' => $c->numero,
                 'operateur_mobile_money' => $c->operateur_mobile_money->value,
             ])->values(),
             'destinations_approvisionnement' => $destinationsApprovisionnement->map(fn (CompteTresorerie $c) => [
@@ -285,21 +295,19 @@ class CompteTresorerieController extends Controller
 
         $request->validate(['nature' => ['nullable', Rule::in(['agence', 'dediee'])]]);
 
-        // Compte Mobile Money dédié à un agent (ADR 0027) : opérateur et numéro du portefeuille
-        // obligatoires, compte comptable créé automatiquement — aucun compte venu de la requête.
+        // Compte Mobile Money dédié à un agent (ADR 0027) : opérateur obligatoire, compte comptable
+        // créé automatiquement — aucun compte venu de la requête. Aucun numéro de téléphone (ADR 0030).
         if ($request->input('nature') === 'dediee' && $request->input('type') === TypeSupportTresorerie::MOBILE_MONEY->value) {
             $data = $request->validate([
                 'site_id' => ['required', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
                 'agent_id' => ['required', Rule::exists('users', 'id')->where('organization_id', $orgId)],
                 'operateur_mobile_money' => ['required', Rule::in(array_map(fn (OperateurMobileMoney $o) => $o->value, OperateurMobileMoney::avecWallet()))],
-                'numero' => ['required', 'string', 'max:50'],
                 'libelle' => ['nullable', 'string', 'max:150'],
             ], [
                 'operateur_mobile_money.required' => 'Choisissez l\'opérateur du portefeuille.',
-                'numero.required' => 'Le numéro du portefeuille est obligatoire.',
             ]);
 
-            $support = $this->caisseAgent->creerCompteMobileMoney($orgId, $data['site_id'], $data['agent_id'], $data['operateur_mobile_money'], $data['numero'], $data['libelle'] ?? null);
+            $support = $this->caisseAgent->creerCompteMobileMoney($orgId, $data['site_id'], $data['agent_id'], $data['operateur_mobile_money'], $data['libelle'] ?? null);
 
             return back()->with('success', "Compte « {$support->libelle} » créé en brouillon : il devra être validé avant d'être utilisable.");
         }
@@ -323,7 +331,6 @@ class CompteTresorerieController extends Controller
             // Facultatif : généré automatiquement ("{Type} de {Site}") par
             // CompteTresorerie::boot() si laissé vide — cf. revue du 2026-08-22.
             'libelle' => ['nullable', 'string', 'max:150'],
-            'numero' => ['nullable', 'string', 'max:50'],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
             ...$this->reglesOperateur(),
         ]);
@@ -354,18 +361,18 @@ class CompteTresorerieController extends Controller
         abort_unless(auth()->user()->can('tresorerie.gerer_soldes_ouverture'), 403);
         abort_unless($compteTresorerie->organization_id === auth()->user()->organization_id, 403);
 
-        // Support dédié : seuls le libellé et l'activation sont modifiables — et, pour un compte
-        // Mobile Money encore en brouillon, son numéro. Les autres champs éventuellement envoyés
-        // sont ignorés (validate() ne renvoie que ces clés) : un type ou un compte forgé ne peut
-        // jamais être appliqué.
+        // Support dédié : seuls le libellé et l'activation sont modifiables. Les autres champs
+        // éventuellement envoyés sont ignorés (validate() ne renvoie que ces clés) : un type ou un
+        // compte forgé ne peut jamais être appliqué.
         if ($compteTresorerie->isDediee()) {
             $data = $request->validate([
                 'libelle' => ['required', 'string', 'max:150'],
                 'actif' => ['required', 'boolean'],
-                ...($compteTresorerie->isMobileMoneyDedie() ? ['numero' => ['sometimes', 'nullable', 'string', 'max:50']] : []),
             ]);
 
-            $this->caisseAgent->mettreAJour($compteTresorerie, $data);
+            $actifAvant = $compteTresorerie->actif;
+            $support = $this->caisseAgent->mettreAJour($compteTresorerie, $data);
+            $this->tracerChangementActivation($support, $actifAvant);
 
             return back()->with('success', $compteTresorerie->isMobileMoneyDedie() ? 'Compte mis à jour.' : 'Caisse mise à jour.');
         }
@@ -374,7 +381,6 @@ class CompteTresorerieController extends Controller
 
         $data = $request->validate([
             'libelle' => ['required', 'string', 'max:150'],
-            'numero' => ['sometimes', 'nullable', 'string', 'max:50'],
             'type' => ['required', Rule::enum(TypeSupportTresorerie::class)],
             'compte_comptable_id' => ['required', Rule::exists('compta_comptes', 'id')->where('organization_id', $orgId)],
             'moyen_paiement_defaut' => ['nullable', 'string', 'max:30'],
@@ -412,7 +418,16 @@ class CompteTresorerieController extends Controller
             ]);
         }
 
-        $compteTresorerie->update($data);
+        DB::transaction(function () use ($compteTresorerie, $data) {
+            $actifAvant = (bool) CompteTresorerie::whereKey($compteTresorerie->id)->lockForUpdate()->value('actif');
+
+            if ($actifAvant && ! $data['actif']) {
+                $this->desactivationAgence->garantirDesactivable($compteTresorerie);
+            }
+
+            $compteTresorerie->update($data);
+            $this->tracerChangementActivation($compteTresorerie, $actifAvant);
+        });
 
         return back()->with('success', 'Support de trésorerie mis à jour.');
     }
@@ -428,6 +443,34 @@ class CompteTresorerieController extends Controller
         $support = $validation->valider($compteTresorerie, $user);
 
         return back()->with('success', "« {$support->libelle} » validé : le support est maintenant actif.");
+    }
+
+    /** Brouillon supprimé définitivement. Les règles d'état sont dans SupportTresorerieSuppressionService. */
+    public function destroy(Request $request, CompteTresorerie $compteTresorerie, SupportTresorerieSuppressionService $suppression)
+    {
+        $user = auth()->user();
+
+        abort_unless($compteTresorerie->organization_id === $user->organization_id, 403);
+        $this->authorize('supprimer', $compteTresorerie);
+
+        $data = $request->validate(['motif' => ['nullable', 'string', 'max:500']]);
+
+        $suppression->supprimer($compteTresorerie, $user, $data['motif'] ?? null);
+
+        return back()->with('success', "« {$compteTresorerie->libelle} » supprimé.");
+    }
+
+    /** Qui a désactivé ou réactivé un support, et quand (journal d'audit). */
+    private function tracerChangementActivation(CompteTresorerie $support, bool $actifAvant): void
+    {
+        if ($support->actif === $actifAvant) {
+            return;
+        }
+
+        $this->audit->record($support, AuditEvent::STATUS_CHANGED, auth()->user(),
+            ['actif' => $actifAvant],
+            ['actif' => $support->actif],
+        );
     }
 
     /**
@@ -539,12 +582,6 @@ class CompteTresorerieController extends Controller
             throw ValidationException::withMessages([
                 'compte_comptable_id' => "Ce compte est déjà celui du support « {$dejaPris->libelle} » dans cette agence : chaque Mobile Money doit avoir son propre compte.",
             ]);
-        }
-
-        // Un portefeuille réel ne porte qu'un seul compte (ADR 0027) : le numéro du compte d'un
-        // agent ne peut pas être repris par un compte de l'agence.
-        if (array_key_exists('numero', $data)) {
-            $this->caisseAgent->garantirNumeroNonPrisParUnAgent($orgId, $operateur, $data['numero'], $courant?->id);
         }
 
         return $operateur->value;

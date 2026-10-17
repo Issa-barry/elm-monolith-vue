@@ -7,7 +7,7 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import '../../../../css/logistique-mobile.css';
 
 interface LigneProp {
@@ -15,6 +15,10 @@ interface LigneProp {
     produit_nom: string;
     quantite_chargee: number | null;
     quantite_recue: number | null;
+    /** Déjà revenu au site source (ADR 0029) — absent ou 0 sans retour. */
+    quantite_retournee?: number;
+    /** Plafond de réception une fois les retours déduits ; null sans retour (surplus permis). */
+    quantite_recevable_max?: number | null;
     ecart_type: string | null;
     ecart_motif: string | null;
 }
@@ -28,6 +32,10 @@ interface ReceptionLigne {
     id: number;
     produit_nom: string;
     quantite_chargee: number;
+    quantite_retournee: number;
+    /** Quantité attendue à destination : chargé − déjà revenu au site source. */
+    quantite_attendue: number;
+    quantite_recevable_max: number | null;
     quantite_recue: number;
     ecart_type: string;
     ecart_motif: string;
@@ -55,22 +63,47 @@ watch(
     (open) => {
         if (open) {
             dialogErrors.value = [];
-            receptionLignes.value = props.lignes.map((l) => ({
-                id: l.id,
-                produit_nom: l.produit_nom,
-                quantite_chargee: l.quantite_chargee ?? 0,
-                quantite_recue: l.quantite_recue ?? l.quantite_chargee ?? 0,
-                ecart_type: l.ecart_type ?? 'conforme',
-                ecart_motif: l.ecart_motif ?? '',
-            }));
+            receptionLignes.value = props.lignes.map((l) => {
+                const chargee = l.quantite_chargee ?? 0;
+                const retournee = l.quantite_retournee ?? 0;
+                const attendue = Math.max(0, chargee - retournee);
+                const max = l.quantite_recevable_max ?? null;
+                const recue = l.quantite_recue ?? attendue;
+
+                return {
+                    id: l.id,
+                    produit_nom: l.produit_nom,
+                    quantite_chargee: chargee,
+                    quantite_retournee: retournee,
+                    quantite_attendue: attendue,
+                    quantite_recevable_max: max,
+                    // Une saisie antérieure au retour (brouillon, réception invalidée) ne doit pas
+                    // dépasser ce qui reste réceptionnable.
+                    quantite_recue: max === null ? recue : Math.min(recue, max),
+                    ecart_type: l.ecart_type ?? 'conforme',
+                    ecart_motif: l.ecart_motif ?? '',
+                };
+            });
         }
     },
     { immediate: true },
 );
 
+const avecRetours = computed(() =>
+    receptionLignes.value.some((l) => l.quantite_retournee > 0),
+);
+
+/** Écart = reçu + revenu au site source − chargé (ADR 0029) : un retour n'est ni manquant ni surplus. */
 function ecartReception(idx: number): number {
     const l = receptionLignes.value[idx];
-    return (l.quantite_recue ?? 0) - (l.quantite_chargee ?? 0);
+    return (l.quantite_recue ?? 0) - l.quantite_attendue;
+}
+
+function qualifierEcart(idx: number): void {
+    const l = receptionLignes.value[idx];
+    const ecart = ecartReception(idx);
+    l.ecart_type =
+        ecart === 0 ? 'conforme' : ecart < 0 ? 'manquant' : 'surplus';
 }
 
 function submit() {
@@ -123,6 +156,10 @@ function submit() {
         <p class="mb-4 text-sm text-muted-foreground">
             Renseignez les quantités reçues et les écarts constatés à
             destination.
+            <template v-if="avecRetours">
+                La marchandise déjà revenue au site source est déduite : elle ne
+                peut plus être réceptionnée.
+            </template>
         </p>
         <div
             v-if="dialogErrors.length"
@@ -142,6 +179,8 @@ function submit() {
                 <!-- Produit : flexible -->
                 <col style="width: 90px" />
                 <!-- Chargé -->
+                <col v-if="avecRetours" style="width: 90px" />
+                <!-- Retourné -->
                 <col style="width: 130px" />
                 <!-- Reçu -->
                 <col style="width: 70px" />
@@ -155,6 +194,9 @@ function submit() {
                 <tr class="border-b text-xs text-muted-foreground">
                     <th class="pb-3 text-left font-medium">Produit</th>
                     <th class="pb-3 text-center font-medium">Chargé</th>
+                    <th v-if="avecRetours" class="pb-3 text-center font-medium">
+                        Retourné
+                    </th>
                     <th class="pb-3 text-center font-medium">Reçu</th>
                     <th class="pb-3 text-center font-medium">Écart</th>
                     <th class="px-2 pb-3 text-left font-medium">Type</th>
@@ -176,34 +218,24 @@ function submit() {
                     >
                         {{ l.quantite_chargee }}
                     </td>
+                    <td
+                        v-if="avecRetours"
+                        data-label="Retourné"
+                        class="py-3 text-center text-muted-foreground tabular-nums"
+                    >
+                        {{ l.quantite_retournee }}
+                    </td>
                     <td data-label="Reçu" class="px-2 py-3">
                         <InputNumber
                             :input-id="`reception-qte-${l.id}`"
                             :aria-label="`Quantité reçue : ${l.produit_nom}`"
                             v-model="receptionLignes[idx].quantite_recue"
                             :min="0"
+                            :max="l.quantite_recevable_max ?? undefined"
                             :use-grouping="false"
                             class="w-full"
                             input-class="w-full text-center"
-                            @update:model-value="
-                                () => {
-                                    if (
-                                        receptionLignes[idx].quantite_recue ===
-                                        l.quantite_chargee
-                                    )
-                                        receptionLignes[idx].ecart_type =
-                                            'conforme';
-                                    else if (
-                                        (receptionLignes[idx].quantite_recue ??
-                                            0) < (l.quantite_chargee ?? 0)
-                                    )
-                                        receptionLignes[idx].ecart_type =
-                                            'manquant';
-                                    else
-                                        receptionLignes[idx].ecart_type =
-                                            'surplus';
-                                }
-                            "
+                            @update:model-value="qualifierEcart(idx)"
                         />
                     </td>
                     <td

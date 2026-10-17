@@ -13,6 +13,7 @@ use App\Models\CompteTresorerie;
 use App\Models\MouvementFonds;
 use App\Models\Site;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,9 +33,8 @@ use Illuminate\Validation\ValidationException;
  *  - au plus UNE caisse dédiée active par (agent, site) — nécessaire pour que le routage
  *    automatique des encaissements en espèces reste sans ambiguïté — et au plus UN compte Mobile
  *    Money actif par (agent, site, opérateur) ; caisse et comptes Mobile Money coexistent ;
- *  - un portefeuille réel ne porte qu'un seul compte : le numéro d'un compte Mobile Money d'agent
- *    n'est celui d'aucun autre support Mobile Money non désactivé du même opérateur, dans
- *    l'organisation ;
+ *  - à la création, ni brouillon ni support actif du même genre pour cet agent dans cette agence
+ *    (ADR 0028) : un second brouillon ne pourrait jamais être validé à côté du premier ;
  *  - type, opérateur et compte comptable ne se modifient jamais après création ;
  *  - un support est créé en BROUILLON (inactif, inutilisable) : il ne devient actif qu'à sa
  *    validation (SupportTresorerieValidationService), qui revérifie l'agent et les unicités ;
@@ -67,7 +67,10 @@ class CaisseAgentService
         return DB::transaction(function () use ($organizationId, $siteId, $agentId, $libelle) {
             [$site, $agent] = $this->siteEtAgentVerrouille($organizationId, $siteId, $agentId);
 
-            $this->garantirUneSeuleCaisseActive($organizationId, $agent, $site, null, 'agent_id');
+            $this->garantirAucunSupportEnCours(
+                CompteTresorerie::forOrg($organizationId)->caissesDediees(),
+                $agent, $site, 'agent_id', 'une caisse dédiée', feminin: true,
+            );
 
             $parentId = CompteComptable::where('organization_id', $organizationId)
                 ->where('numero', self::COMPTE_RACINE)
@@ -91,21 +94,17 @@ class CaisseAgentService
     }
 
     /**
-     * Compte Mobile Money dédié à un agent (ADR 0027) : un par (agent, agence, opérateur), numéro
-     * du portefeuille obligatoire, sous-compte propre créé à la suite du compte de l'opérateur
-     * (561100001, 561100002... sous 561100) — le compte de l'opérateur vient de compta_mappings,
-     * jamais d'un numéro codé en dur. Créé en brouillon, à 0, sans écriture.
+     * Compte Mobile Money dédié à un agent (ADR 0027) : un par (agent, agence, opérateur), sous-compte
+     * propre créé à la suite du compte de l'opérateur (561100001, 561100002... sous 561100) — le
+     * compte de l'opérateur vient de compta_mappings, jamais d'un numéro codé en dur. Aucun numéro de
+     * téléphone n'est demandé ni conservé (donnée sensible, ADR 0030). Créé en brouillon, à 0, sans
+     * écriture.
      */
-    public function creerCompteMobileMoney(string $organizationId, string $siteId, string $agentId, string $operateur, ?string $numero, ?string $libelle = null): CompteTresorerie
+    public function creerCompteMobileMoney(string $organizationId, string $siteId, string $agentId, string $operateur, ?string $libelle = null): CompteTresorerie
     {
         $operateur = OperateurMobileMoney::tryFrom($operateur);
         if (! $operateur || ! in_array($operateur, OperateurMobileMoney::avecWallet(), true)) {
             throw ValidationException::withMessages(['operateur_mobile_money' => 'Choisissez l\'opérateur du portefeuille.']);
-        }
-
-        $numero = trim((string) $numero);
-        if (CompteTresorerie::normaliserNumero($numero) === '') {
-            throw ValidationException::withMessages(['numero' => 'Le numéro du portefeuille est obligatoire.']);
         }
 
         // Paramétrage lu AVANT la transaction, pour qu'elle commence par ses verrous (ci-dessous).
@@ -116,13 +115,13 @@ class CaisseAgentService
             ]);
         }
 
-        return DB::transaction(function () use ($organizationId, $siteId, $agentId, $operateur, $compteOperateurId, $numero, $libelle) {
+        return DB::transaction(function () use ($organizationId, $siteId, $agentId, $operateur, $compteOperateurId, $libelle) {
             // Les verrous d'abord, avant toute lecture ordinaire. Sous MySQL (REPEATABLE READ), une
             // transaction fige ce qu'elle voit à sa première lecture non verrouillante : prise avant
             // l'attente du verrou, elle ignorerait le compte qu'une création concurrente vient
             // d'enregistrer, et le contrôle d'unicité comme la numérotation liraient un état périmé.
             // Verrou sur l'agent (comme creer()), puis sur le compte de l'opérateur, qui sérialise
-            // les créations, validations et corrections de numéro des comptes de cet opérateur.
+            // les créations et validations des comptes de cet opérateur.
             $agent = User::where('organization_id', $organizationId)->whereKey($agentId)->lockForUpdate()->first();
             $compteOperateur = CompteComptable::where('organization_id', $organizationId)->whereKey($compteOperateurId)->lockForUpdate()->first();
 
@@ -140,8 +139,10 @@ class CaisseAgentService
                 ]);
             }
 
-            $this->garantirUnSeulCompteMobileMoneyActif($organizationId, $agent, $site, $operateur, null, 'agent_id');
-            $this->garantirNumeroLibre($organizationId, $operateur, $numero, null);
+            $this->garantirAucunSupportEnCours(
+                CompteTresorerie::forOrg($organizationId)->mobileMoneyDedies()->where('operateur_mobile_money', $operateur->value),
+                $agent, $site, 'agent_id', "un compte {$operateur->label()}", feminin: false,
+            );
 
             $compte = $this->creerSousCompte($organizationId, $compteOperateur->id, $compteOperateur->numero, "{$operateur->label()} {$agent->name} ({$site->nom})");
 
@@ -152,7 +153,6 @@ class CaisseAgentService
                 'compte_comptable_id' => $compte->id,
                 'type' => TypeSupportTresorerie::MOBILE_MONEY->value,
                 'operateur_mobile_money' => $operateur->value,
-                'numero' => $numero,
                 // Vide → libellé automatique « {Opérateur} — {agent} » (CompteTresorerie::boot()).
                 'libelle' => trim((string) $libelle),
                 'moyen_paiement_defaut' => 'mobile_money:'.$operateur->detailComptable(),
@@ -164,7 +164,7 @@ class CaisseAgentService
     /**
      * Conditions à réunir AU MOMENT de mettre un support dédié en service (validation) : entre la
      * création du brouillon et sa validation, l'agent a pu être désactivé ou retiré de l'agence, un
-     * autre support actif lui avoir été attribué, ou le numéro avoir été pris par un autre compte.
+     * autre support actif lui avoir été attribué.
      * Appelé sous transaction par SupportTresorerieValidationService::valider().
      *
      * @throws ValidationException
@@ -189,10 +189,9 @@ class CaisseAgentService
 
     /**
      * Seuls le libellé et l'activation sont modifiables : l'agent, le site, le type, l'opérateur et
-     * le sous-compte sont figés (les écritures déjà posées y font référence). Le numéro d'un compte
-     * Mobile Money se corrige tant qu'il est en brouillon, plus après sa validation.
+     * le sous-compte sont figés (les écritures déjà posées y font référence).
      *
-     * @param  array{libelle:string, actif:bool, numero?:?string}  $data
+     * @param  array{libelle:string, actif:bool}  $data
      */
     public function mettreAJour(CompteTresorerie $support, array $data): CompteTresorerie
     {
@@ -218,13 +217,6 @@ class CaisseAgentService
 
             $modifications = ['libelle' => trim($data['libelle']), 'actif' => $actif];
 
-            if ($support->isMobileMoneyDedie() && array_key_exists('numero', $data)) {
-                $numero = $this->numeroCorrige($support, (string) $data['numero']);
-                if ($numero !== null) {
-                    $modifications['numero'] = $numero;
-                }
-            }
-
             if ($actif && ! $support->actif && $agent) {
                 $this->garantirUnicite($support, $agent, $support->site, 'actif');
             }
@@ -237,53 +229,6 @@ class CaisseAgentService
 
             return $support->fresh();
         });
-    }
-
-    /**
-     * Garde de la règle « un portefeuille = un seul compte » côté supports d'AGENCE : un compte
-     * Mobile Money de l'agence ne peut pas prendre le numéro du compte d'un agent. Les supports
-     * d'agence existants ne sont pas comparés entre eux (aucune règle nouvelle pour eux).
-     *
-     * @throws ValidationException
-     */
-    public function garantirNumeroNonPrisParUnAgent(string $organizationId, OperateurMobileMoney $operateur, ?string $numero, ?string $ignorerSupportId): void
-    {
-        if (CompteTresorerie::normaliserNumero($numero) === '') {
-            return;
-        }
-
-        $this->garantirNumeroLibre($organizationId, $operateur, (string) $numero, $ignorerSupportId, agentsSeulement: true);
-    }
-
-    /**
-     * Numéro à enregistrer s'il a réellement changé, null sinon.
-     *
-     * @throws ValidationException
-     */
-    private function numeroCorrige(CompteTresorerie $support, string $saisi): ?string
-    {
-        $numero = trim($saisi);
-        if ($numero === trim((string) $support->numero)) {
-            return null;
-        }
-
-        if ($support->estValide()) {
-            // Le même portefeuille écrit autrement n'est pas une modification : rien à refuser.
-            if (CompteTresorerie::memeNumero($numero, $support->numero)) {
-                return null;
-            }
-
-            throw ValidationException::withMessages([
-                'numero' => 'Le numéro d\'un compte validé ne peut plus être modifié : désactivez ce compte et créez-en un nouveau.',
-            ]);
-        }
-        if (CompteTresorerie::normaliserNumero($numero) === '') {
-            throw ValidationException::withMessages(['numero' => 'Le numéro du portefeuille est obligatoire.']);
-        }
-
-        $this->garantirNumeroLibre($support->organization_id, $support->operateur_mobile_money, $numero, $support->id);
-
-        return $numero;
     }
 
     /**
@@ -342,19 +287,21 @@ class CaisseAgentService
     }
 
     /**
-     * Verrou sur l'agent : sérialise deux créations simultanées pour le même agent, sinon les deux
-     * passeraient les contrôles d'unicité.
+     * Verrou sur l'agent : sérialise deux créations simultanées pour le même agent (double clic),
+     * sinon les deux passeraient les contrôles d'unicité. Pris AVANT toute lecture ordinaire, cf.
+     * creerCompteMobileMoney().
      *
      * @return array{0: Site, 1: User}
      */
     private function siteEtAgentVerrouille(string $organizationId, string $siteId, string $agentId): array
     {
+        $agent = User::where('organization_id', $organizationId)->whereKey($agentId)->lockForUpdate()->first();
+
         $site = Site::where('organization_id', $organizationId)->whereKey($siteId)->first();
         if (! $site) {
             throw ValidationException::withMessages(['site_id' => 'Agence introuvable dans cette organisation.']);
         }
 
-        $agent = User::where('organization_id', $organizationId)->whereKey($agentId)->lockForUpdate()->first();
         if (! $agent) {
             throw ValidationException::withMessages(['agent_id' => 'Agent introuvable dans cette organisation.']);
         }
@@ -382,9 +329,7 @@ class CaisseAgentService
             return;
         }
 
-        $operateur = $support->operateur_mobile_money;
-        $this->garantirUnSeulCompteMobileMoneyActif($support->organization_id, $agent, $site, $operateur, $support->id, $champ);
-        $this->garantirNumeroLibre($support->organization_id, $operateur, (string) $support->numero, $support->id, $champ);
+        $this->garantirUnSeulCompteMobileMoneyActif($support->organization_id, $agent, $site, $support->operateur_mobile_money, $support->id, $champ);
     }
 
     private function garantirUneSeuleCaisseActive(string $organizationId, User $agent, Site $site, ?string $ignorerSupportId, string $champ): void
@@ -404,6 +349,35 @@ class CaisseAgentService
         }
     }
 
+    /**
+     * Création d'un support dédié (ADR 0028) : refusée tant que l'agent a, dans cette agence, un
+     * support du même genre actif OU en brouillon. Un second brouillon ne pourrait jamais être
+     * validé à côté du premier ; le brouillon existant se valide ou se supprime. Un support
+     * désactivé ne bloque pas : il est remplacé par le nouveau.
+     *
+     * @param  Builder<CompteTresorerie>  $memeGenre
+     */
+    private function garantirAucunSupportEnCours(Builder $memeGenre, User $agent, Site $site, string $champ, string $genre, bool $feminin): void
+    {
+        $existant = $memeGenre
+            ->nonDesactives()
+            ->where('agent_id', $agent->id)
+            ->where('site_id', $site->id)
+            ->first(['id', 'libelle', 'valide_le', 'actif']);
+
+        if (! $existant) {
+            return;
+        }
+
+        [$actif, $pronom, $autre] = $feminin ? ['active', 'la', 'une autre'] : ['actif', 'le', 'un autre'];
+
+        throw ValidationException::withMessages([
+            $champ => $existant->estValide()
+                ? "{$agent->name} a déjà {$genre} {$actif} à {$site->nom}."
+                : "{$agent->name} a déjà {$genre} en brouillon à {$site->nom} (« {$existant->libelle} ») : validez-{$pronom} ou supprimez-{$pronom} avant d'en créer {$autre}.",
+        ]);
+    }
+
     private function garantirUnSeulCompteMobileMoneyActif(string $organizationId, User $agent, Site $site, OperateurMobileMoney $operateur, ?string $ignorerSupportId, string $champ): void
     {
         $existe = CompteTresorerie::forOrg($organizationId)
@@ -418,35 +392,6 @@ class CaisseAgentService
         if ($existe) {
             throw ValidationException::withMessages([
                 $champ => "{$agent->name} a déjà un compte {$operateur->label()} actif à {$site->nom}.",
-            ]);
-        }
-    }
-
-    /**
-     * Un portefeuille réel (un numéro chez un opérateur) ne porte qu'un seul compte dans
-     * l'organisation : brouillons et supports actifs comptent, un support désactivé libère son
-     * numéro. Deux organisations peuvent enregistrer le même numéro. Avec ou sans indicatif, c'est
-     * le même portefeuille (CompteTresorerie::memeNumero()).
-     *
-     * Lecture ordinaire : elle n'est à jour que parce que l'appelant prend ses verrous avant toute
-     * lecture (cf. creerCompteMobileMoney()). La validation reste le garde-fou : deux brouillons
-     * portant le même numéro ne peuvent être validés ni l'un ni l'autre.
-     */
-    private function garantirNumeroLibre(string $organizationId, OperateurMobileMoney $operateur, string $numero, ?string $ignorerSupportId, string $champ = 'numero', bool $agentsSeulement = false): void
-    {
-        $conflit = CompteTresorerie::forOrg($organizationId)
-            ->where('type', TypeSupportTresorerie::MOBILE_MONEY->value)
-            ->where('operateur_mobile_money', $operateur->value)
-            ->whereNotNull('numero')
-            ->nonDesactives()
-            ->when($agentsSeulement, fn ($q) => $q->dediees())
-            ->when($ignorerSupportId, fn ($q) => $q->whereKeyNot($ignorerSupportId))
-            ->get(['id', 'libelle', 'numero'])
-            ->first(fn (CompteTresorerie $s) => CompteTresorerie::memeNumero($s->numero, $numero));
-
-        if ($conflit) {
-            throw ValidationException::withMessages([
-                $champ => "Le numéro {$numero} est déjà celui de « {$conflit->libelle} » ({$operateur->label()}) : un portefeuille ne porte qu'un seul compte.",
             ]);
         }
     }

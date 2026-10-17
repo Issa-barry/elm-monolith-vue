@@ -87,6 +87,7 @@ use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
 use App\Http\Controllers\ContratController;
+use App\Http\Controllers\Depenses\CommandesCarburantDepenseController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
 use App\Http\Controllers\Depenses\CreateDepenseController;
 use App\Http\Controllers\Depenses\DestroyDepenseController;
@@ -131,6 +132,7 @@ use App\Http\Controllers\InstallWizard\VerifyEmailCodeInstallWizardController;
 use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\Livreurs\UpdateLivreurController;
+use App\Http\Controllers\Logistique\EnregistrerRetourTransfertController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
@@ -781,6 +783,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('depenses/export/excel', ExportCsvDepenseController::class)->name('depenses.export.excel');
             Route::get('depenses/imprimer', ImprimerDepenseController::class)->name('depenses.imprimer');
             Route::get('depenses/suggestions', SuggestionsDepenseController::class)->name('depenses.suggestions');
+            Route::get('depenses/commandes-carburant', CommandesCarburantDepenseController::class)->name('depenses.commandes-carburant');
             Route::get('depenses/concerne-detail', ConcerneDetailDepenseController::class)->name('depenses.concerne-detail');
             Route::get('depenses/vehicule-detail', VehiculeDetailDepenseController::class)->name('depenses.vehicule-detail');
 
@@ -876,6 +879,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
                 Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
                 Route::post('supports/{compteTresorerie}/valider', [CompteTresorerieController::class, 'valider'])->name('supports.valider');
+                Route::delete('supports/{compteTresorerie}', [CompteTresorerieController::class, 'destroy'])->name('supports.destroy');
                 Route::post('supports/{compteTresorerie}/verser', VerserCaisseAgentController::class)->name('supports.verser');
                 Route::post('supports/{compteTresorerie}/approvisionner', ApprovisionnerCaisseAgentController::class)->name('supports.approvisionner');
                 Route::post('supports/{compteTresorerie}/transferer', TransfererMobileMoneyAgentController::class)->name('supports.transferer');
@@ -1048,6 +1052,9 @@ Route::prefix('backoffice')->group(function () {
             // Transitions de statut
             Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
             Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
+
+            // Retour au site source de tout ou partie de la marchandise (ADR 0029)
+            Route::post('logistique/{transfert_logistique}/retour', EnregistrerRetourTransfertController::class)->name('logistique.retour.store');
 
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');

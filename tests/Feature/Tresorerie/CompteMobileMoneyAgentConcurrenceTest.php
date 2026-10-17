@@ -3,7 +3,6 @@
 namespace Tests\Feature\Tresorerie;
 
 use App\Models\CompteComptable;
-use App\Models\CompteTresorerie;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -64,7 +63,7 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
     private function baseDisponible(): bool
     {
         try {
-            return Schema::connection(self::CONNECTION)->hasColumn('compta_supports_tresorerie', 'numero');
+            return Schema::connection(self::CONNECTION)->hasColumn('compta_supports_tresorerie', 'operateur_mobile_money');
         } catch (\Throwable) {
             return false;
         }
@@ -121,27 +120,26 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
     }
 
     /**
-     * Lance une création par numéro, toutes au même instant, et rend le résultat de chacune.
+     * Lance une création par agent donné (un même agent peut figurer plusieurs fois), toutes au même
+     * instant, et rend le résultat de chacune.
      *
      * @param  list<string>  $agents
-     * @param  list<string>  $numeros
      * @return list<array<string, mixed>>
      */
-    private function creerEnMemeTemps(string $siteId, array $agents, array $numeros): array
+    private function creerEnMemeTemps(string $siteId, array $agents): array
     {
         $this->dossier = sys_get_temp_dir().'/elm_concurrence_mm_'.bin2hex(random_bytes(6));
         mkdir($this->dossier);
 
         $processus = [];
-        foreach ($numeros as $i => $numero) {
+        foreach ($agents as $i => $agentId) {
             $commande = sprintf(
-                '%s %s %s %s %s %s %s %s',
+                '%s %s %s %s %s %s %s',
                 escapeshellarg(PHP_BINARY),
                 escapeshellarg(base_path('tests/Support/concurrence_compte_mobile_money.php')),
                 escapeshellarg($this->organizationId),
                 escapeshellarg($siteId),
-                escapeshellarg($agents[$i]),
-                escapeshellarg($numero),
+                escapeshellarg($agentId),
                 escapeshellarg($this->dossier),
                 escapeshellarg("p{$i}"),
             );
@@ -150,14 +148,14 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
         }
 
         try {
-            foreach (array_keys($numeros) as $i) {
+            foreach (array_keys($agents) as $i) {
                 $this->attendre("{$this->dossier}/p{$i}_pret", "Le processus {$i} n'a jamais été prêt.");
             }
 
             file_put_contents($this->dossier.'/go', '1');
 
             $resultats = [];
-            foreach (array_keys($numeros) as $i) {
+            foreach (array_keys($agents) as $i) {
                 $this->attendre("{$this->dossier}/p{$i}_fini", "Le processus {$i} ne s'est jamais terminé.");
                 $resultats[$i] = json_decode((string) file_get_contents("{$this->dossier}/p{$i}_fini"), true);
             }
@@ -185,9 +183,7 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
     {
         ['site' => $siteId, 'agents' => $agents] = $this->preparer(6);
 
-        $resultats = $this->creerEnMemeTemps($siteId, $agents, [
-            '620000001', '620000002', '620000003', '620000004', '620000005', '620000006',
-        ]);
+        $resultats = $this->creerEnMemeTemps($siteId, $agents);
 
         foreach ($resultats as $i => $resultat) {
             $this->assertTrue($resultat['ok'] ?? false, "Création {$i} refusée : ".json_encode($resultat, JSON_UNESCAPED_UNICODE));
@@ -201,16 +197,16 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
             ->where('organization_id', $this->organizationId)->whereNotNull('agent_id')->count());
     }
 
-    public function test_deux_creations_simultanees_du_meme_portefeuille_n_en_laissent_passer_qu_une(): void
+    public function test_deux_creations_simultanees_pour_le_meme_agent_n_en_laissent_passer_qu_une(): void
     {
-        ['site' => $siteId, 'agents' => $agents] = $this->preparer(6);
+        ['site' => $siteId, 'agents' => $agents] = $this->preparer(3);
 
-        // Trois portefeuilles, chacun demandé deux fois au même instant par deux agents différents,
-        // sous deux écritures (espaces, indicatif, préfixe international).
-        $resultats = $this->creerEnMemeTemps($siteId, $agents, [
-            '620000001', '+224 620 00 00 01',
-            '620000002', '00224620000002',
-            '620 000 003', '620-000-003',
+        // Double clic : chaque agent demandé deux fois au même instant (ADR 0028 — un seul compte
+        // actif ou en brouillon par agent, agence et opérateur).
+        $resultats = $this->creerEnMemeTemps($siteId, [
+            $agents[0], $agents[0],
+            $agents[1], $agents[1],
+            $agents[2], $agents[2],
         ]);
 
         foreach ($resultats as $i => $resultat) {
@@ -221,14 +217,12 @@ class CompteMobileMoneyAgentConcurrenceTest extends TestCase
             $reussites = array_filter([$resultats[$a], $resultats[$b]], fn (array $r) => $r['ok']);
             $refus = array_filter([$resultats[$a], $resultats[$b]], fn (array $r) => ! $r['ok']);
 
-            $this->assertCount(1, $reussites, "Portefeuille {$a}/{$b} : une seule création doit réussir. ".json_encode([$resultats[$a], $resultats[$b]], JSON_UNESCAPED_UNICODE));
-            $this->assertArrayHasKey('numero', array_values($refus)[0]['erreurs'], 'le refus porte sur le numéro, jamais sur la numérotation comptable');
+            $this->assertCount(1, $reussites, "Agent {$a}/{$b} : une seule création doit réussir. ".json_encode([$resultats[$a], $resultats[$b]], JSON_UNESCAPED_UNICODE));
+            $this->assertArrayHasKey('agent_id', array_values($refus)[0]['erreurs'], 'le refus porte sur l\'agent, jamais sur la numérotation comptable');
         }
 
-        $supports = DB::connection(self::CONNECTION)->table('compta_supports_tresorerie')
-            ->where('organization_id', $this->organizationId)->whereNotNull('agent_id')->pluck('numero');
-        $this->assertCount(3, $supports);
-        $this->assertCount(3, $supports->map(fn (string $n) => substr(CompteTresorerie::normaliserNumero($n), -9))->unique());
+        $this->assertSame(3, DB::connection(self::CONNECTION)->table('compta_supports_tresorerie')
+            ->where('organization_id', $this->organizationId)->whereNotNull('agent_id')->count());
 
         $sousComptes = DB::connection(self::CONNECTION)->table('compta_comptes')
             ->where('organization_id', $this->organizationId)->where('numero', 'like', '561100___')->orderBy('numero')->pluck('numero')->all();

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
+import RetourTransfertDialog from '@/pages/Logistique/partials/RetourTransfertDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -22,6 +23,7 @@ import {
     MoreHorizontal,
     Package,
     PackageCheck,
+    PackageMinus,
     Pencil,
     ShieldCheck,
     ShieldX,
@@ -96,6 +98,9 @@ interface Ligne {
     quantite_demandee: number;
     quantite_chargee: number | null;
     quantite_recue: number | null;
+    quantite_retournee: number;
+    quantite_retournable: number;
+    quantite_recevable_max: number | null;
     ecart: number | null;
     ecart_type: string | null;
     ecart_label: string;
@@ -150,8 +155,27 @@ interface Transfert {
     is_cloture: boolean;
     is_terminal: boolean;
     is_annule: boolean;
+    is_retourne: boolean;
     is_editable: boolean;
     created_at: string;
+    retours: RetourTransfert[];
+}
+
+interface RetourTransfert {
+    id: string;
+    motif: string;
+    motif_label: string;
+    commentaire: string | null;
+    quantite_totale: number;
+    retour_total: boolean;
+    site_nom: string | null;
+    auteur_nom: string | null;
+    created_at: string | null;
+    lignes: {
+        transfert_ligne_id: string;
+        libelle: string | null;
+        quantite: number;
+    }[];
 }
 
 interface CommissionLivreurGenerique {
@@ -188,6 +212,8 @@ const props = defineProps<{
     can_annuler: boolean;
     can_update: boolean;
     can_valider_reception_admin: boolean;
+    can_enregistrer_retour: boolean;
+    motifs_retour: { value: string; label: string }[];
     activites: Activite[];
 }>();
 
@@ -333,6 +359,12 @@ const showReceptionDialog = ref(false);
 const processing = ref(false);
 const dialogErrors = ref<string[]>([]);
 const showAnnulationDialog = ref(false);
+const showRetourDialog = ref(false);
+
+// Colonne « Retourné » et historique dès le premier retour au site source (ADR 0029).
+const aDesRetours = computed(() =>
+    props.transfert.lignes.some((l) => (l.quantite_retournee ?? 0) > 0),
+);
 
 // ── Données formulaires dialogs (réinitialisées à chaque ouverture) ───────────
 
@@ -641,6 +673,8 @@ watch(showCommissionSection, (visible) => {
 
 function activiteDotClass(action: string): string {
     if (action === 'annule') return 'bg-amber-500';
+    if (action === 'retour_enregistre' || action === 'retourne')
+        return 'bg-orange-500';
     if (action === 'cloture') return 'bg-emerald-500';
     if (action === 'creation') return 'bg-blue-500';
     if (action === 'versement_effectue') return 'bg-purple-500';
@@ -701,6 +735,13 @@ function activiteDotClass(action: string): string {
                         ></DropdownMenuItem
                     >
                     <DropdownMenuItem
+                        v-if="can_enregistrer_retour"
+                        class="min-h-11 gap-2"
+                        @select="showRetourDialog = true"
+                        ><PackageMinus class="size-4" /> Enregistrer un
+                        retour</DropdownMenuItem
+                    >
+                    <DropdownMenuItem
                         v-if="can_annuler"
                         class="min-h-11 gap-2 text-destructive focus:text-destructive"
                         :disabled="processing"
@@ -738,8 +779,8 @@ function activiteDotClass(action: string): string {
                                 {{ contexteLabel }}
                             </h1>
                             <StatusDot
-                                :status="transfert.statut"
                                 :label="transfert.statut_label"
+                                :dot-class="transfert.statut_dot_class"
                             />
                         </div>
                         <p class="mt-0.5 text-xs text-muted-foreground">
@@ -769,6 +810,14 @@ function activiteDotClass(action: string): string {
                         ></Button
                     >
                     <Button
+                        v-if="can_enregistrer_retour"
+                        variant="outline"
+                        size="sm"
+                        @click="showRetourDialog = true"
+                        ><PackageMinus class="mr-1.5 size-3.5" /> Enregistrer un
+                        retour</Button
+                    >
+                    <Button
                         v-if="can_annuler"
                         variant="outline"
                         size="sm"
@@ -788,8 +837,8 @@ function activiteDotClass(action: string): string {
             >
                 <span class="text-muted-foreground">État du transfert</span
                 ><StatusDot
-                    :status="transfert.statut"
                     :label="transfert.statut_label"
+                    :dot-class="transfert.statut_dot_class"
                 />
             </div>
 
@@ -799,7 +848,7 @@ function activiteDotClass(action: string): string {
                 class="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:px-6"
             >
                 <div
-                    v-if="!transfert.is_annule"
+                    v-if="!transfert.is_annule && !transfert.is_retourne"
                     class="mb-3 flex items-center justify-between gap-2 sm:hidden"
                 >
                     <h2 class="text-sm font-semibold">Suivi du transfert</h2>
@@ -815,6 +864,21 @@ function activiteDotClass(action: string): string {
                     <XCircle class="h-5 w-5" />
                     <span class="font-semibold"
                         >Ce transfert a été annulé.</span
+                    >
+                </div>
+
+                <!-- Retourné : toute la marchandise est revenue au site source (ADR 0029) -->
+                <div
+                    v-else-if="transfert.is_retourne"
+                    class="flex items-center gap-2 text-orange-600 dark:text-orange-400"
+                >
+                    <PackageMinus class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Toute la marchandise est revenue au site source
+                        <template v-if="transfert.site_source_nom"
+                            >({{ transfert.site_source_nom }})</template
+                        >
+                        : le transfert est retourné.</span
                     >
                 </div>
 
@@ -1100,11 +1164,18 @@ function activiteDotClass(action: string): string {
                                                 'transit',
                                                 'reception',
                                                 'cloture',
+                                                'retourne',
                                             ].includes(transfert.statut)
                                         "
                                         class="px-4 py-2.5 text-center font-medium"
                                     >
                                         Chargé
+                                    </th>
+                                    <th
+                                        v-if="aDesRetours"
+                                        class="px-4 py-2.5 text-center font-medium"
+                                    >
+                                        Retourné
                                     </th>
                                     <th
                                         v-if="
@@ -1203,11 +1274,19 @@ function activiteDotClass(action: string): string {
                                                 'transit',
                                                 'reception',
                                                 'cloture',
+                                                'retourne',
                                             ].includes(transfert.statut)
                                         "
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_chargee ?? '—' }}
+                                    </td>
+                                    <td
+                                        data-label="Retourné"
+                                        v-if="aDesRetours"
+                                        class="px-4 py-3 text-center text-orange-600 tabular-nums dark:text-orange-400"
+                                    >
+                                        {{ ligne.quantite_retournee }}
                                     </td>
                                     <td
                                         data-label="Reçu"
@@ -1260,6 +1339,78 @@ function activiteDotClass(action: string): string {
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Retours au site source (ADR 0029) -->
+                    <div
+                        v-if="
+                            activeDetailTab === 'lignes' &&
+                            transfert.retours.length
+                        "
+                        data-testid="logistique-retours"
+                        class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                    >
+                        <div
+                            class="flex items-center justify-between border-b px-5 py-3.5"
+                        >
+                            <h2
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Retours au site source
+                            </h2>
+                            <span class="text-xs text-muted-foreground"
+                                >{{ transfert.retours.length }} retour(s)</span
+                            >
+                        </div>
+                        <ul class="divide-y">
+                            <li
+                                v-for="retour in transfert.retours"
+                                :key="retour.id"
+                                class="space-y-1.5 px-5 py-3 text-sm"
+                            >
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-2"
+                                >
+                                    <span class="font-medium"
+                                        >{{ retour.motif_label }}
+                                        <span
+                                            v-if="retour.retour_total"
+                                            class="ml-1 text-xs font-normal text-orange-600 dark:text-orange-400"
+                                            >— retour total</span
+                                        ></span
+                                    >
+                                    <span
+                                        class="text-xs text-muted-foreground tabular-nums"
+                                        >{{ retour.created_at }}</span
+                                    >
+                                </div>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ retour.quantite_totale }} unité(s)
+                                    réintégrée(s)
+                                    <template v-if="retour.site_nom"
+                                        >à {{ retour.site_nom }}</template
+                                    >
+                                    <template v-if="retour.auteur_nom">
+                                        · par {{ retour.auteur_nom }}</template
+                                    >
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    <span
+                                        v-for="(l, i) in retour.lignes"
+                                        :key="l.transfert_ligne_id"
+                                        >{{ i > 0 ? ' · ' : ''
+                                        }}{{ l.libelle ?? 'Produit' }} :
+                                        {{ l.quantite }}</span
+                                    >
+                                </p>
+                                <p
+                                    v-if="retour.commentaire"
+                                    class="text-xs italic"
+                                >
+                                    « {{ retour.commentaire }} »
+                                </p>
+                            </li>
+                        </ul>
                     </div>
 
                     <!-- ══ Commission logistique ═══════════════════════════════════════ -->
@@ -1931,6 +2082,17 @@ function activiteDotClass(action: string): string {
                 </Button>
             </template>
         </Dialog>
+
+        <!-- ══ Dialog : Retour au site source (ADR 0029) ══════════════════════ -->
+        <RetourTransfertDialog
+            v-if="can_enregistrer_retour"
+            v-model:visible="showRetourDialog"
+            :transfert-id="transfert.id"
+            :statut="transfert.statut"
+            :site-source-nom="transfert.site_source_nom"
+            :lignes="transfert.lignes"
+            :motifs="motifs_retour"
+        />
 
         <!-- ══ Dialog : Valider la réception ══════════════════════════════════ -->
         <ReceptionDialog

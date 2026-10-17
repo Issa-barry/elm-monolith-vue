@@ -520,7 +520,7 @@ class RapportActiviteTest extends TestCase
     {
         $this->alimenterCaisse($this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentB->id), 250_000);
         $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
-        $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money', '620000002');
+        $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money');
 
         $sansCaisse = $this->props($this->agentB, 'ma-situation')['rapport']['caisse'];
         $this->assertTrue($sansCaisse['aucune_caisse']);
@@ -537,7 +537,7 @@ class RapportActiviteTest extends TestCase
      */
     public function test_le_compte_mobile_money_de_l_agent_montre_ce_qu_il_detient_et_ce_qu_il_a_transfere(): void
     {
-        $compte = $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money', '620000001');
+        $compte = $this->creerCompteMobileMoneyActif($this->siteA->id, $this->agentA->id, 'orange_money');
         $compteAgence = $this->creerSupportAgence($this->siteA->id, 'mobile_money', '561100', 'orange_money');
         $facture = $this->vente($this->siteA, $this->agentA, 500_000);
         Auth::login($this->agentA);

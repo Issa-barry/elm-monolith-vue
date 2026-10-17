@@ -517,29 +517,29 @@ class CompteTresorerieControllerTest extends TestCase
                 ->where('operateur_options', fn ($options) => collect($options)->pluck('value')->all() === ['orange_money', 'kulu', 'soutra_money', 'momo', 'paycard']));
     }
 
-    /** Numéro du compte (numéro marchand) : affiché à l'encaissement, conservé quand il n'est pas renvoyé. */
-    public function test_le_numero_du_compte_est_enregistre_expose_et_conserve(): void
+    /** ADR 0030 : aucun numéro de support (Mobile Money, banque) n'est demandé, enregistré ni exposé. */
+    public function test_un_numero_envoye_n_est_ni_enregistre_ni_expose(): void
     {
         $compte = CompteComptable::where('organization_id', $this->org->id)->where('numero', '561100')->firstOrFail();
 
         $this->creerMobileMoney('561100', 'orange_money', ['numero' => '+224 620 00 00 00'])->assertSessionHasNoErrors();
         $support = CompteTresorerie::where('type', 'mobile_money')->firstOrFail();
-        $this->assertSame('+224 620 00 00 00', $support->numero);
+        $this->assertArrayNotHasKey('numero', $support->getAttributes());
 
-        // Activation depuis le menu ⋮ : le numéro n'est pas envoyé, il reste inchangé.
         $this->actingAs($this->user)
             ->put(route('comptabilite.tresorerie.supports.update', $support), [
                 'libelle' => $support->libelle,
+                'numero' => '+224 620 00 00 00',
                 'type' => 'mobile_money',
                 'operateur_mobile_money' => 'orange_money',
                 'compte_comptable_id' => $compte->id,
                 'actif' => false,
             ])
             ->assertSessionHasNoErrors();
-        $this->assertSame('+224 620 00 00 00', $support->fresh()->numero);
+        $this->assertArrayNotHasKey('numero', $support->fresh()->getAttributes());
 
         $this->actingAs($this->user)
             ->get(route('comptabilite.tresorerie.supports.index'))
-            ->assertInertia(fn (Assert $page) => $page->where('comptes.0.numero', '+224 620 00 00 00'));
+            ->assertInertia(fn (Assert $page) => $page->missing('comptes.0.numero'));
     }
 }

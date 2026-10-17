@@ -559,7 +559,7 @@ class EncaissementVenteTest extends TestCase
         Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
         $user->givePermissionTo('ventes.read');
 
-        $orange = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'orange_money', '620000001');
+        $orange = $this->creerCompteMobileMoneyActifPour($user, $facture->site_id, 'orange_money');
         $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000', null, 'UBA');
         // Ni le Mobile Money de l'agence (ADR 0027), ni un support d'une autre agence, ni un support
         // inactif, ni un Mobile Money sans opérateur.
@@ -580,7 +580,6 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => 'orange_money',
                         'compte_tresorerie_id' => $orange->id,
                         'reference_requise' => true,
-                        'numero' => '620000001',
                     ],
                     [
                         'key' => "virement:{$banque->id}",
@@ -589,7 +588,6 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => null,
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => true,
-                        'numero' => null,
                     ],
                     [
                         'key' => "cheque:{$banque->id}",
@@ -598,7 +596,6 @@ class EncaissementVenteTest extends TestCase
                         'operateur_mobile_money' => null,
                         'compte_tresorerie_id' => $banque->id,
                         'reference_requise' => false,
-                        'numero' => null,
                     ],
                 ]));
     }

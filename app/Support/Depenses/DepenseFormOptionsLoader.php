@@ -27,7 +27,7 @@ final class DepenseFormOptionsLoader
         return DepenseType::where('organization_id', $orgId)
             ->active()
             ->ordered()
-            ->get(['id', 'code', 'libelle', 'categorie', 'commentaire_obligatoire', 'justificatif_obligatoire'])
+            ->get(['id', 'code', 'libelle', 'categorie', 'commentaire_obligatoire', 'justificatif_obligatoire', 'commande_obligatoire'])
             ->map(fn ($t) => [
                 'id' => $t->id,
                 'code' => $t->code,
@@ -37,6 +37,7 @@ final class DepenseFormOptionsLoader
                 'impact_message' => $t->categorie->impactMessage(),
                 'commentaire_obligatoire' => $t->commentaire_obligatoire,
                 'justificatif_obligatoire' => $t->justificatif_obligatoire,
+                'commande_obligatoire' => $t->commande_obligatoire,
             ]);
     }
 
@@ -60,6 +61,8 @@ final class DepenseFormOptionsLoader
                 'proprietaire_nom' => $v->proprietaire
                     ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}")
                     : null,
+                // Affiché dans la confirmation de soumission (Depenses/Create.vue).
+                'proprietaire_telephone' => $v->proprietaire?->telephone,
                 'has_proprietaire' => (bool) $v->proprietaire_id,
             ]);
     }

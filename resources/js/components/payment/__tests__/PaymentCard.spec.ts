@@ -130,16 +130,34 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
         expect(message.classes().join(' ')).toContain('amber');
     });
 
-    it('affiche une seule alerte quand aucun moyen de paiement ne fonctionne', () => {
+    it('affiche une seule alerte, rouge et précise, quand aucun moyen de paiement ne fonctionne', () => {
         const wrapper = monter({ especesDisponibles: false });
 
-        expect(wrapper.get('[data-testid="especes-indisponible"]').text()).toBe(
-            'Aucun moyen de paiement disponible. Contactez votre responsable.',
+        const alerte = wrapper.get('[data-testid="especes-indisponible"]');
+        expect(alerte.text().replace(/\s+/g, ' ')).toBe(
+            "Encaissement impossible dans cette agence : vous n'avez ni caisse ni compte Mobile Money actif, et l'agence n'a aucun compte bancaire actif. Contactez votre responsable.",
         );
+        // Opération réellement bloquée : rouge, jamais ambre.
+        expect(alerte.classes()).toContain('text-destructive');
+        expect(
+            wrapper.find('[data-testid="mobile-money-indisponible"]').exists(),
+        ).toBe(false);
         expect(wrapper.find('[data-testid="aucun-autre-moyen"]').exists()).toBe(
             false,
         );
         expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+    });
+
+    it('en paiement sortant sans aucun moyen, garde le message générique, en rouge', () => {
+        const alerte = monter({
+            sens: 'decaissement',
+            especesDisponibles: false,
+        }).get('[data-testid="especes-indisponible"]');
+
+        expect(alerte.text().replace(/\s+/g, ' ')).toBe(
+            'Aucun moyen de paiement disponible. Contactez votre responsable.',
+        );
+        expect(alerte.classes()).toContain('text-destructive');
     });
 
     it('laisse les autres moyens de l’agence disponibles sans caisse', () => {
@@ -251,15 +269,32 @@ describe('PaymentCard — moyens issus des supports de l’agence', () => {
         );
     });
 
-    it('signale en information qu’aucun compte Mobile Money ni bancaire n’est actif dans l’agence', () => {
+    it('espèces seules à l’encaissement : alerte ambre sur le Mobile Money, sans bloquer les espèces', () => {
         const wrapper = monter();
 
         const options = select(wrapper).props('options') as { key: string }[];
         expect(options.map((o) => o.key)).toEqual(['especes']);
 
-        const info = wrapper.find('[data-testid="aucun-autre-moyen"]');
-        expect(info.exists()).toBe(true);
-        expect(info.text()).toBe('Espèces uniquement.');
+        const alerte = wrapper.get('[data-testid="mobile-money-indisponible"]');
+        expect(alerte.text().replace(/\s+/g, ' ')).toBe(
+            "Mobile Money indisponible : vous n'avez aucun compte Mobile Money actif dans cette agence. Demandez à votre responsable de vous en créer un.",
+        );
+        expect(alerte.classes()).toContain('bg-amber-50');
+        expect(wrapper.find('[data-testid="aucun-autre-moyen"]').exists()).toBe(
+            false,
+        );
+        expect(confirmer(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('espèces seules en paiement sortant : simple mention, sans alerte Mobile Money', () => {
+        const wrapper = monter({ sens: 'decaissement' });
+
+        expect(wrapper.get('[data-testid="aucun-autre-moyen"]').text()).toBe(
+            'Espèces uniquement.',
+        );
+        expect(
+            wrapper.find('[data-testid="mobile-money-indisponible"]').exists(),
+        ).toBe(false);
     });
 
     it('soumet le chèque sur la banque choisie, sans référence exigée', async () => {
@@ -623,6 +658,43 @@ describe('PaymentCard — Mobile Money sur le compte de l’agent (ADR 0027)', (
                 (o) => o.key,
             ),
         ).toEqual(['especes', 'virement:s-uba', 'cheque:s-uba']);
+    });
+
+    it('nomme l’agence d’encaissement : espèces seules à Matoto, rien d’utilisable à Kouriah', async () => {
+        const wrapper = monter({
+            agences: [
+                {
+                    site_id: 'site-a',
+                    nom: 'Matoto',
+                    moyens: [],
+                    peut_encaisser_especes: true,
+                },
+                {
+                    site_id: 'site-b',
+                    nom: 'Kouriah',
+                    moyens: [],
+                    peut_encaisser_especes: false,
+                },
+            ],
+            agenceDefaut: 'site-a',
+        });
+
+        expect(
+            wrapper.get('[data-testid="mobile-money-indisponible"]').text(),
+        ).toContain('aucun compte Mobile Money actif à Matoto');
+
+        const selectAgence = wrapper
+            .findAllComponents(SelectFactice)
+            .find((s) => s.props('optionValue') === 'site_id')!;
+        selectAgence.vm.$emit('update:modelValue', 'site-b');
+        await nextTick();
+
+        expect(
+            wrapper.get('[data-testid="especes-indisponible"]').text(),
+        ).toContain('Encaissement impossible à Kouriah');
+        expect(
+            wrapper.find('[data-testid="mobile-money-indisponible"]').exists(),
+        ).toBe(false);
     });
 
     it('ne dit rien quand l’agent a un compte Mobile Money', () => {

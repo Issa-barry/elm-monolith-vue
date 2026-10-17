@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MotifRetourTransfert;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommission;
 use App\Enums\StatutTransfert;
@@ -17,6 +18,7 @@ use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Models\TransfertRetour;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
@@ -90,7 +92,7 @@ class TransfertLogistiqueController extends Controller
             'equipeLivraison:id,vehicule_id',
             'equipeLivraison.vehicule:id,nom_vehicule',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
-            'lignes:id,transfert_logistique_id,variante_id,quantite_demandee,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
+            'lignes:id,transfert_logistique_id,variante_id,quantite_demandee,quantite_chargee,quantite_recue,quantite_retournee,ecart_type,ecart_motif',
             'lignes.variante:id,produit_id,sku',
             // image_url est un accesseur (dérivé de produit_medias, pas une colonne) : on charge
             // la relation medias plutôt que de la lister dans un select() limité aux colonnes.
@@ -126,6 +128,7 @@ class TransfertLogistiqueController extends Controller
                 StatutTransfert::RECEPTION->value,
                 StatutTransfert::CLOTURE->value,
                 StatutTransfert::ANNULE->value,
+                StatutTransfert::RETOURNE->value,
             ];
             $query->when($statut, fn ($q) => $q->where('statut', $statut))
                 ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
@@ -412,7 +415,12 @@ class TransfertLogistiqueController extends Controller
             'validateur.personne',
             'activites.user:id,personne_id',
             'activites.user.personne',
+            'retours.lignes',
+            'retours.site:id,nom',
+            'retours.createdBy:id,personne_id',
+            'retours.createdBy.personne',
         ]);
+        $transfert_logistique->lignes->each->setRelation('transfert', $transfert_logistique);
 
         // Contexte de navigation : transferts ou réceptions
         $user = auth()->user();
@@ -444,6 +452,9 @@ class TransfertLogistiqueController extends Controller
             'can_update' => $user->can('update', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
             'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
+            // État revérifié ici : Gate::before laisse passer le super admin quel que soit le statut.
+            'can_enregistrer_retour' => $transfert_logistique->isRetournable() && $user->can('enregistrerRetour', $transfert_logistique),
+            'motifs_retour' => MotifRetourTransfert::options(),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,
@@ -627,6 +638,7 @@ class TransfertLogistiqueController extends Controller
             'is_cloture' => $t->isCloture(),
             'is_terminal' => $t->isTerminal(),
             'is_annule' => $t->isAnnule(),
+            'is_retourne' => $t->isRetourne(),
             'is_editable' => $t->isEditable(),
             'can_annuler' => $t->isAnnulable() && $user->can('annuler', $t),
             'can_valider_reception' => $user->can('validerReception', $t),
@@ -641,6 +653,8 @@ class TransfertLogistiqueController extends Controller
                     'variante_libelle' => $l->variante?->libelle,
                     'quantite_chargee' => $l->quantite_chargee,
                     'quantite_recue' => $l->quantite_recue,
+                    'quantite_retournee' => (int) $l->quantite_retournee,
+                    'quantite_recevable_max' => $l->quantite_recevable_max,
                     'ecart_type' => $l->ecart_type?->value,
                     'ecart_motif' => $l->ecart_motif,
                 ])->values()->all()
@@ -682,6 +696,9 @@ class TransfertLogistiqueController extends Controller
             'quantite_demandee' => $l->quantite_demandee,
             'quantite_chargee' => $l->quantite_chargee,
             'quantite_recue' => $l->quantite_recue,
+            'quantite_retournee' => (int) $l->quantite_retournee,
+            'quantite_retournable' => $l->quantite_retournable,
+            'quantite_recevable_max' => $l->quantite_recevable_max,
             'ecart' => $l->ecart,
             'ecart_type' => $l->ecart_type?->value,
             'ecart_label' => $l->ecart_label,
@@ -689,6 +706,23 @@ class TransfertLogistiqueController extends Controller
             'ecart_motif' => $l->ecart_motif,
             'notes' => $l->notes,
             'est_reception_complete' => $l->estReceptionComplete(),
+        ])->values()->all();
+
+        $base['retours'] = $t->retours->map(fn (TransfertRetour $r) => [
+            'id' => $r->id,
+            'motif' => $r->motif->value,
+            'motif_label' => $r->motif->label(),
+            'commentaire' => $r->commentaire,
+            'quantite_totale' => $r->quantite_totale,
+            'retour_total' => $r->retour_total,
+            'site_nom' => $r->site?->nom,
+            'auteur_nom' => $r->createdBy ? trim($r->createdBy->prenom.' '.$r->createdBy->nom) : null,
+            'created_at' => $r->created_at?->format('d/m/Y H:i'),
+            'lignes' => $r->lignes->map(fn ($l) => [
+                'transfert_ligne_id' => $l->transfert_ligne_id,
+                'libelle' => $l->libelle_snapshot,
+                'quantite' => $l->quantite_retournee,
+            ])->values()->all(),
         ])->values()->all();
 
         if ($t->commission) {

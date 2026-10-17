@@ -5,7 +5,7 @@
  * compte Mobile Money d'agent sur SA propre connexion MySQL, déclenchée au même instant que les
  * autres (fichier « go »). Jamais lancé à la main : il écrit dans la base `mysql_testing`.
  *
- * Arguments : organisation, agence, agent, numéro, dossier de synchronisation, nom du processus.
+ * Arguments : organisation, agence, agent, dossier de synchronisation, nom du processus.
  */
 
 use App\Services\Tresorerie\CaisseAgentService;
@@ -13,7 +13,7 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-[, $organizationId, $siteId, $agentId, $numero, $dossier, $nom] = $argv;
+[, $organizationId, $siteId, $agentId, $dossier, $nom] = $argv;
 
 require __DIR__.'/../../vendor/autoload.php';
 
@@ -31,8 +31,8 @@ try {
         usleep(1000);
     }
 
-    $compte = app(CaisseAgentService::class)->creerCompteMobileMoney($organizationId, $siteId, $agentId, 'orange_money', $numero);
-    $resultat = ['ok' => true, 'compte' => $compte->compte->numero, 'numero' => $compte->numero];
+    $compte = app(CaisseAgentService::class)->creerCompteMobileMoney($organizationId, $siteId, $agentId, 'orange_money');
+    $resultat = ['ok' => true, 'compte' => $compte->compte->numero];
 } catch (ValidationException $e) {
     $resultat = ['ok' => false, 'erreurs' => $e->errors()];
 } catch (Throwable $e) {
