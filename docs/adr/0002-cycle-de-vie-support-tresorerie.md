@@ -1,7 +1,9 @@
 # ADR 0002 — Cycle de vie d'un support de trésorerie : brouillon → validé (actif) → désactivé
 
 - **Date** : 2026-09-19
-- **Statut** : accepté et livré le 2026-09-19
+- **Statut** : accepté et livré le 2026-09-19 — **amendé le 2026-10-15 par
+  l'[ADR 0028](0028-suppression-brouillon-et-desactivation-controlee-des-supports.md)** (suppression
+  d'un brouillon, désactivation contrôlée des supports d'agence, un seul brouillon dédié)
 - **Périmètre** : Comptabilité > Trésorerie > Supports (caisses, banques, Mobile Money, caisses
   dédiées aux agents) — complète l'[ADR 0001](0001-caisse-dediee-agent-sous-compte.md)
 
@@ -19,7 +21,9 @@ Actif** : un support (caisse, banque, wallet) ne doit servir qu'après avoir ét
 1. **Un support est créé en brouillon** et reste **inutilisable** — encaissements, mouvements de
    fonds, versements, position de trésorerie, soldes d'ouverture — jusqu'à sa **validation** par un
    utilisateur habilité. La validation le met en service (**actif**) et trace **qui** et **quand**.
-   Le support peut ensuite être désactivé puis réactivé (règles de désactivation inchangées).
+   Le support peut ensuite être désactivé puis réactivé (règles de désactivation inchangées —
+   **depuis l'ADR 0028**, un support d'agence ne se désactive lui aussi que vide et sans mouvement
+   en transit).
 2. **« Validé » est l'acte, « Actif » est l'état résultant.** Il n'y a pas d'état intermédiaire
    « validé mais pas encore actif » : la liste n'affiche qu'**un seul statut** par ligne (Brouillon,
    Actif, Inactif), ce qui répond à la remarque initiale (« Validé » ne doit pas se lire comme un
@@ -37,7 +41,8 @@ Actif** : un support (caisse, banque, wallet) ne doit servir qu'après avoir ét
    (`valide_par_id` NULL = repris). Rien ne change d'état ni d'usage à la mise en production.
 6. **Caisse dédiée** : créée en brouillon aussi ; sa validation revérifie l'agent (actif, rattaché à
    l'agence) et l'unicité « une seule caisse dédiée active par (agent, site) ». Créer un brouillon
-   reste refusé tant qu'une caisse active existe pour le même (agent, site).
+   reste refusé tant qu'une caisse active existe pour le même (agent, site) — **et, depuis
+   l'ADR 0028, tant qu'un brouillon existe** pour ce même (agent, site).
 7. **Routage des encaissements** : `CaisseAgentResolver` date désormais la **mise en service** de la
    caisse à sa validation (`valide_le`) et non à sa création. Sans cela, un rattrapage comptable
    aurait reclassé vers la caisse des encaissements enregistrés pendant qu'elle était en brouillon,
@@ -54,8 +59,10 @@ Actif** : un support (caisse, banque, wallet) ne doit servir qu'après avoir ét
 - **Le solde d'ouverture ne conditionne pas la validation du support** : ce sont deux actes
   distincts, chacun avec son propre état. Un support validé sans solde d'ouverture reste
   signalé (alerte ambre) et rend la position du site « non fiable » côté Financement, comme avant.
-- **Pas de suppression d'un brouillon** dans ce chantier : un brouillon inutile se valide puis se
-  désactive (aucun effet comptable). À reprendre si l'encombrement devient un sujet.
+- ~~**Pas de suppression d'un brouillon** dans ce chantier : un brouillon inutile se valide puis se
+  désactive (aucun effet comptable).~~ **Remplacé le 2026-10-15 (ADR 0028)** : un brouillon se
+  supprime définitivement (`tresorerie.supprimer_supports`) — des doublons ne pouvaient ni être
+  validés ni être retirés.
 
 ## Alternatives écartées
 

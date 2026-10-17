@@ -7,6 +7,8 @@ use App\Enums\CommissionMode;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionLogistique;
+use App\Enums\MotifRetourTransfert;
+use App\Enums\StatutCommission;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Features\ModuleFeature;
@@ -30,6 +32,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\TransfertLogistiqueService;
+use App\Services\TransfertRetourService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -814,5 +817,69 @@ class CommissionTriggerLogistiqueTest extends TestCase
 
         $this->assertTrue($props['commission_generique_genere']);
         $this->assertSame([], $props['commission_generique_livreurs']);
+    }
+
+    // ── Retour au site source (ADR 0029, COMM-007 maintenue) ─────────────────
+
+    private function retourner(TransfertLogistique $transfert, int $quantite): void
+    {
+        TransfertRetourService::enregistrer(
+            $transfert->fresh(),
+            [['id' => $transfert->lignes()->first()->id, 'quantite' => $quantite]],
+            MotifRetourTransfert::REFUS_RECEPTION,
+        );
+    }
+
+    public function test_chargement_valide_la_commission_reste_due_meme_apres_un_retour_total(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+        $this->actingAs($this->admin);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->retourner($transfert, 100);
+
+        $this->assertSame(StatutTransfert::RETOURNE, $transfert->fresh()->statut);
+        $enveloppes = CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->get();
+        $this->assertCount(1, $enveloppes);
+        $this->assertEquals(20000.0, (float) $enveloppes->first()->montant_total);
+        $this->assertNotSame(StatutCommission::ANNULEE, $enveloppes->first()->statut);
+    }
+
+    public function test_reception_effectuee_la_commission_porte_sur_le_recu_net_des_retours(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+        $this->actingAs($this->admin);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->retourner($transfert, 10);
+        $transfert->lignes()->first()->update(['quantite_recue' => 90, 'ecart_type' => TypeEcartLogistique::CONFORME->value]);
+        TransfertLogistiqueService::avancerStatut($transfert->fresh());
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $this->assertEquals(18000.0, (float) $this->enveloppePour($transfert)->montant_total); // 90 × 200 FG
+    }
+
+    public function test_reception_effectuee_un_retour_total_ne_genere_aucune_commission(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+        $this->actingAs($this->admin);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $this->retourner($transfert, 100);
+
+        $this->assertSame(StatutTransfert::RETOURNE, $transfert->fresh()->statut);
+        $this->assertNull($this->enveloppePour($transfert));
     }
 }

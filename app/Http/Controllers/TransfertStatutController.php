@@ -9,6 +9,7 @@ use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -38,38 +39,43 @@ class TransfertStatutController extends Controller
             'lignes.*.ecart_motif' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
-        // Mettre à jour les lignes si fournies
+        // Mettre à jour les lignes si fournies — chaque saisie seulement à son étape (quantité
+        // chargée en CHARGEMENT, réception en TRANSIT) et sous le verrou du transfert : une quantité
+        // chargée modifiée après le départ fausserait la sortie de stock déjà passée et les
+        // quantités retournables (ADR 0029). Transaction distincte de avancerStatut() : une
+        // transition refusée conserve la saisie, comme avant.
         if ($request->has('lignes')) {
-            $transfert_logistique->loadMissing('lignes');
+            DB::transaction(function () use ($request, $transfert_logistique) {
+                $transfert = TransfertLogistique::whereKey($transfert_logistique->id)->lockForUpdate()->firstOrFail();
+                $transfert->load('lignes');
+                $chargementOuvert = $transfert->statut === StatutTransfert::CHARGEMENT;
+                $receptionOuverte = $transfert->statut === StatutTransfert::TRANSIT;
 
-            foreach ($request->input('lignes') as $ligneData) {
-                $ligne = $transfert_logistique->lignes->find($ligneData['id']);
-                if (! $ligne) {
-                    continue;
+                foreach ($request->input('lignes') as $ligneData) {
+                    $ligne = $transfert->lignes->find($ligneData['id']);
+                    if (! $ligne) {
+                        continue;
+                    }
+
+                    $update = [];
+
+                    if ($chargementOuvert && isset($ligneData['quantite_chargee'])) {
+                        $update['quantite_chargee'] = $ligneData['quantite_chargee'];
+                    }
+
+                    if ($receptionOuverte) {
+                        foreach (['quantite_recue', 'ecart_type', 'ecart_motif'] as $champ) {
+                            if (isset($ligneData[$champ])) {
+                                $update[$champ] = $ligneData[$champ];
+                            }
+                        }
+                    }
+
+                    if (! empty($update)) {
+                        $ligne->update($update);
+                    }
                 }
-
-                $update = [];
-
-                if (isset($ligneData['quantite_chargee'])) {
-                    $update['quantite_chargee'] = $ligneData['quantite_chargee'];
-                }
-
-                if (isset($ligneData['quantite_recue'])) {
-                    $update['quantite_recue'] = $ligneData['quantite_recue'];
-                }
-
-                if (isset($ligneData['ecart_type'])) {
-                    $update['ecart_type'] = $ligneData['ecart_type'];
-                }
-
-                if (isset($ligneData['ecart_motif'])) {
-                    $update['ecart_motif'] = $ligneData['ecart_motif'];
-                }
-
-                if (! empty($update)) {
-                    $ligne->update($update);
-                }
-            }
+            });
         }
 
         $ancienStatut = $transfert_logistique->statut;

@@ -10,6 +10,8 @@ enum StatutTransfert: string
     case RECEPTION = 'reception';
     case CLOTURE = 'cloture';
     case ANNULE = 'annule';
+    /** Toute la marchandise chargée est revenue au site source avant réception (ADR 0029). */
+    case RETOURNE = 'retourne';
 
     public function label(): string
     {
@@ -20,6 +22,7 @@ enum StatutTransfert: string
             self::RECEPTION => 'Réceptionné',
             self::CLOTURE => 'Clôturé',
             self::ANNULE => 'Annulé',
+            self::RETOURNE => 'Retourné',
         };
     }
 
@@ -32,6 +35,7 @@ enum StatutTransfert: string
             self::RECEPTION => 'success',
             self::CLOTURE => 'success',
             self::ANNULE => 'danger',
+            self::RETOURNE => 'warn',
         };
     }
 
@@ -44,6 +48,7 @@ enum StatutTransfert: string
             self::RECEPTION => 'bg-teal-500',
             self::CLOTURE => 'bg-emerald-500',
             self::ANNULE => 'bg-red-400',
+            self::RETOURNE => 'bg-orange-500',
         };
     }
 
@@ -61,15 +66,15 @@ enum StatutTransfert: string
         return $this === self::BROUILLON;
     }
 
-    /** Statuts terminaux (irréversibles) */
     /** Annulation possible tant que la marchandise n'est pas partie (avant TRANSIT). */
     public function isAnnulable(): bool
     {
         return in_array($this, [self::BROUILLON, self::CHARGEMENT]);
     }
 
+    /** Statuts terminaux (irréversibles) */
     public function isTerminal(): bool
     {
-        return in_array($this, [self::CLOTURE, self::ANNULE]);
+        return in_array($this, [self::CLOTURE, self::ANNULE, self::RETOURNE]);
     }
 }

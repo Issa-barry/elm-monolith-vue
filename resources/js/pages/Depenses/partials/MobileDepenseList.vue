@@ -2,7 +2,7 @@
 import StatusDot from '@/components/StatusDot.vue';
 import type { DepenseRow } from '@/types/depense';
 import { Link } from '@inertiajs/vue3';
-import { ChevronRight, MapPin, Receipt } from 'lucide-vue-next';
+import { AlertTriangle, ChevronRight, MapPin, Receipt } from 'lucide-vue-next';
 import DepenseActions from './DepenseActions.vue';
 
 defineProps<{ depenses: DepenseRow[] }>();
@@ -73,6 +73,19 @@ function formatDate(value: string): string {
                             class="mt-0.5 text-xs leading-5 break-words text-muted-foreground"
                         >
                             {{ d.beneficiaire_label }}
+                        </p>
+                        <p
+                            v-if="d.sans_commande"
+                            class="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400"
+                        >
+                            <AlertTriangle class="size-3 shrink-0" />
+                            Sans commande
+                        </p>
+                        <p
+                            v-else-if="d.commande_reference"
+                            class="mt-0.5 font-mono text-xs text-muted-foreground"
+                        >
+                            {{ d.commande_reference }}
                         </p>
                     </div>
                 </div>

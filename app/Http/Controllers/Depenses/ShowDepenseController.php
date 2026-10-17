@@ -11,16 +11,17 @@ use App\Models\Livreur;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Services\Depenses\CommandeCarburantService;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ShowDepenseController extends Controller
 {
-    public function __invoke(Depense $depense): Response
+    public function __invoke(Depense $depense, CommandeCarburantService $commandeCarburant): Response
     {
         $this->authorize('view', $depense);
 
-        $depense->load(['depenseType', 'site', 'user', 'validateur', 'imputations']);
+        $depense->load(['depenseType', 'site', 'user', 'validateur', 'imputations', 'commandeVente', 'transfertLogistique']);
 
         $categorie = $depense->depenseType?->categorie;
         $user = auth()->user();
@@ -36,6 +37,14 @@ class ShowDepenseController extends Controller
         $impactMessage = $vehiculeInfo
             ? $vehiculeInfo['impact_message']
             : ($categorie?->impactMessage() ?? '');
+
+        $commande = $commandeCarburant->resume($depense);
+        if ($commande !== null) {
+            $cible = $depense->commandeVente ?? $depense->transfertLogistique;
+            $commande['url'] = $user->can('view', $cible)
+                ? ($commande['type'] === 'vente' ? route('ventes.show', $cible) : route('logistique.show', $cible))
+                : null;
+        }
 
         return Inertia::render('Depenses/Show', [
             'depense' => [
@@ -58,6 +67,9 @@ class ShowDepenseController extends Controller
                 'vehicule_nom' => $vehiculeInfo['vehicule_nom'] ?? null,
                 'vehicule_immatriculation' => $vehiculeInfo['vehicule_immatriculation'] ?? null,
                 'beneficiaire_label' => $concerneReelLabel,
+                'commande_obligatoire' => (bool) $depense->depenseType?->commande_obligatoire,
+                'commande' => $commande,
+                'motif_sans_commande' => $depense->motif_sans_commande,
                 'site_nom' => $depense->site?->nom,
                 'saisi_par' => $depense->user->name,
                 'validateur' => $depense->validateur?->name,

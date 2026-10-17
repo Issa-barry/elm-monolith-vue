@@ -39,13 +39,14 @@ class UpdateDepenseController extends Controller
         $shouldSubmit = $request->input('statut') === 'soumis'
             && in_array($depense->statut, $submittableStatuts, true);
 
-        $fields = ['depense_type_id', 'beneficiaire_type', 'beneficiaire_id', 'site_id', 'montant', 'date_depense', 'commentaire'];
+        $fields = ['depense_type_id', 'beneficiaire_type', 'beneficiaire_id', 'commande_vente_id', 'transfert_logistique_id', 'motif_sans_commande', 'site_id', 'montant', 'date_depense', 'commentaire'];
         $before = $depense->only($fields);
 
         $depense->update([
             'depense_type_id' => $request->depense_type_id,
             'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
             'beneficiaire_id' => $type->categorie->needsBeneficiaire() ? $request->beneficiaire_id : null,
+            ...$request->rattachementCommandeAttributs(),
             'site_id' => $request->site_id,
             'montant' => $request->montant,
             'date_depense' => $request->date_depense,

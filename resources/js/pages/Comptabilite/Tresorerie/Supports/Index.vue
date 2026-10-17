@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import {
     Tooltip,
     TooltipContent,
@@ -39,6 +40,7 @@ import {
     PiggyBank,
     Plus,
     Power,
+    Trash2,
     TriangleAlert,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -79,7 +81,6 @@ const props = defineProps<{
         id: string;
         site_id: string;
         libelle: string;
-        numero: string | null;
         operateur_mobile_money: string;
     }[];
     destinations_approvisionnement: {
@@ -218,7 +219,6 @@ const form = useForm({
     type: 'caisse',
     operateur_mobile_money: '',
     compte_comptable_id: '',
-    numero: '',
     moyen_paiement_defaut: '',
 });
 
@@ -296,7 +296,6 @@ function creerSupport() {
                 site_id: data.site_id,
                 agent_id: data.agent_id,
                 operateur_mobile_money: data.operateur_mobile_money,
-                numero: data.numero,
             };
         }
 
@@ -315,7 +314,6 @@ function creerSupport() {
                           ? data.operateur_mobile_money
                           : null,
                   compte_comptable_id: data.compte_comptable_id,
-                  numero: data.numero,
                   moyen_paiement_defaut: data.moyen_paiement_defaut,
               };
     }).post(URL_SUPPORTS, {
@@ -332,7 +330,6 @@ function creerSupport() {
 
 const editForm = useForm({
     libelle: '',
-    numero: '',
     type: '',
     operateur_mobile_money: '',
     compte_comptable_id: '',
@@ -349,12 +346,6 @@ const editVisible = computed({
 const editEstDediee = computed(() => editDialogPour.value?.nature === 'dediee');
 const editEstMobileMoneyDedie = computed(
     () => editEstDediee.value && editDialogPour.value?.type === 'mobile_money',
-);
-// Le numéro d'un compte Mobile Money d'agent se corrige tant qu'il est en brouillon, plus après.
-const editNumeroDedieModifiable = computed(
-    () =>
-        editEstMobileMoneyDedie.value &&
-        editDialogPour.value?.statut === 'brouillon',
 );
 
 // Une fois un solde d'ouverture saisi, le type et le compte comptable sont
@@ -383,7 +374,6 @@ watch(
 function ouvrirEdition(compte: CompteTresorerie) {
     editForm.clearErrors();
     editForm.libelle = compte.libelle;
-    editForm.numero = compte.numero ?? '';
     editForm.type = compte.type;
     editForm.operateur_mobile_money = compte.operateur_mobile_money ?? '';
     editForm.compte_comptable_id = compte.compte_comptable_id;
@@ -395,14 +385,12 @@ function ouvrirEdition(compte: CompteTresorerie) {
 function enregistrerEdition() {
     if (!editDialogPour.value) return;
     const dediee = editEstDediee.value;
-    const numeroDedie = editNumeroDedieModifiable.value;
     editForm
         .transform((data) =>
             dediee
                 ? {
                       libelle: data.libelle,
                       actif: data.actif,
-                      ...(numeroDedie ? { numero: data.numero } : {}),
                   }
                 : {
                       ...data,
@@ -504,6 +492,53 @@ function confirmerValidation(compte: CompteTresorerie) {
         rejectLabel: 'Annuler',
         acceptLabel: 'Valider',
         accept: () => validerSupport(compte),
+    });
+}
+
+// ── Suppression d'un brouillon (ADR 0028) ────────────────────────────────────
+// Seul un brouillon jamais validé se supprime ; le serveur revérifie permission, agence et état
+// (SupportTresorerieSuppressionService). Pendant la requête, la fenêtre ne se ferme pas et ses
+// boutons sont désactivés (pas de double envoi).
+
+const suppressionCible = ref<CompteTresorerie | null>(null);
+const suppressionMotif = ref('');
+const suppressionEnCours = ref(false);
+const suppressionVisible = computed({
+    get: () => suppressionCible.value !== null,
+    set: (visible: boolean) => {
+        if (!visible && !suppressionEnCours.value)
+            suppressionCible.value = null;
+    },
+});
+
+function ouvrirSuppression(compte: CompteTresorerie) {
+    suppressionMotif.value = '';
+    suppressionCible.value = compte;
+}
+
+function supprimerSupport() {
+    const compte = suppressionCible.value;
+    if (!compte || suppressionEnCours.value) return;
+
+    suppressionEnCours.value = true;
+    router.delete(`${URL_SUPPORTS}/${compte.id}`, {
+        data: { motif: suppressionMotif.value.trim() || null },
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            suppressionCible.value = null;
+        },
+        onError: (errors) =>
+            toast.add({
+                severity: 'error',
+                summary: 'Suppression impossible',
+                detail: Object.values(errors)[0],
+                life: 6000,
+                group: 'top',
+            }),
+        onFinish: () => {
+            suppressionEnCours.value = false;
+        },
     });
 }
 
@@ -945,13 +980,6 @@ const selectClass =
                             <td class="px-4 py-4 align-middle">
                                 <div class="font-medium">{{ c.libelle }}</div>
                                 <div
-                                    v-if="c.numero"
-                                    class="text-xs text-muted-foreground tabular-nums"
-                                    data-testid="support-numero"
-                                >
-                                    N° {{ c.numero }}
-                                </div>
-                                <div
                                     v-if="alerte"
                                     class="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
                                     data-testid="support-alerte-solde"
@@ -1182,6 +1210,19 @@ const selectClass =
                                             >
                                                 <Power class="h-4 w-4" />
                                                 Réactiver
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                v-if="
+                                                    actions.includes(
+                                                        'supprimer',
+                                                    )
+                                                "
+                                                class="cursor-pointer text-destructive focus:text-destructive"
+                                                data-testid="support-supprimer"
+                                                @click="ouvrirSuppression(c)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                                Supprimer le brouillon
                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
@@ -1571,16 +1612,25 @@ const selectClass =
         <form
             v-if="transfertCible"
             id="transfert-form"
-            class="space-y-4 pb-1"
+            class="space-y-3 pb-1"
             data-testid="transfert-form"
             @submit.prevent="envoyerTransfert"
         >
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                <span class="text-muted-foreground">Depuis</span>
-                <span class="font-medium">{{ transfertCible.libelle }}</span>
-                <span class="text-muted-foreground">
-                    · {{ transfertCible.site }}
-                </span>
+            <div class="rounded-lg bg-muted/40 px-3 py-2">
+                <p class="text-sm font-medium break-words">
+                    {{ transfertCible.libelle }}
+                </p>
+                <div
+                    class="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                >
+                    <span>{{ transfertCible.site }}</span>
+                    <span>
+                        Disponible :
+                        <span class="font-medium text-foreground tabular-nums">
+                            {{ formatGNF(transfertCible.solde) }}
+                        </span>
+                    </span>
+                </div>
             </div>
 
             <div>
@@ -1588,7 +1638,7 @@ const selectClass =
                     for="transfert-dest"
                     class="mb-1.5 block text-xs font-medium"
                 >
-                    Compte Mobile Money de l'agence
+                    Compte de l'agence
                     <span class="text-destructive">*</span>
                 </Label>
                 <select
@@ -1603,7 +1653,7 @@ const selectClass =
                         :key="d.id"
                         :value="d.id"
                     >
-                        {{ d.libelle }}{{ d.numero ? ` — N° ${d.numero}` : '' }}
+                        {{ d.libelle }}
                     </option>
                 </select>
                 <p
@@ -1614,13 +1664,13 @@ const selectClass =
                 </p>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="grid gap-3 sm:grid-cols-2">
                 <div>
                     <Label
                         for="transfert-montant"
                         class="mb-1.5 block text-xs font-medium"
                     >
-                        Montant reçu par l'agence (GNF)
+                        Montant reçu (GNF)
                         <span class="text-destructive">*</span>
                     </Label>
                     <input
@@ -1645,7 +1695,7 @@ const selectClass =
                         for="transfert-frais"
                         class="mb-1.5 block text-xs font-medium"
                     >
-                        Frais de l'opérateur (GNF)
+                        Frais (GNF)
                         <span class="text-destructive">*</span>
                     </Label>
                     <input
@@ -1667,15 +1717,11 @@ const selectClass =
                 </div>
             </div>
 
-            <dl class="grid grid-cols-3 gap-3 text-xs">
+            <dl
+                class="grid grid-cols-2 gap-3 border-t border-border/60 pt-3 text-xs"
+            >
                 <div>
-                    <dt class="text-muted-foreground">Disponible</dt>
-                    <dd class="mt-0.5 font-medium tabular-nums">
-                        {{ formatGNF(transfertCible.solde) }}
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Sort du compte</dt>
+                    <dt class="text-muted-foreground">Total débité</dt>
                     <dd
                         class="mt-0.5 font-medium tabular-nums"
                         data-testid="transfert-sortie"
@@ -1684,7 +1730,7 @@ const selectClass =
                     </dd>
                 </div>
                 <div class="text-right">
-                    <dt class="text-muted-foreground">Reste après envoi</dt>
+                    <dt class="text-muted-foreground">Solde restant</dt>
                     <dd
                         class="mt-0.5 font-medium tabular-nums"
                         :class="{ 'text-destructive': soldeApresTransfert < 0 }"
@@ -1699,7 +1745,7 @@ const selectClass =
                 class="text-xs text-destructive"
                 data-testid="transfert-depassement"
             >
-                Le montant et les frais dépassent le solde disponible du compte.
+                Le montant et les frais dépassent le solde disponible.
             </p>
 
             <div>
@@ -1707,13 +1753,13 @@ const selectClass =
                     for="transfert-reference"
                     class="mb-1.5 block text-xs font-medium"
                 >
-                    Référence de la transaction
+                    Référence opérateur
                     <span class="text-destructive">*</span>
                 </Label>
                 <Input
                     id="transfert-reference"
                     v-model="transfertForm.reference_externe"
-                    placeholder="Référence donnée par l'opérateur"
+                    placeholder="N° de transaction"
                     data-testid="transfert-reference"
                 />
                 <p
@@ -1724,20 +1770,25 @@ const selectClass =
                 </p>
             </div>
 
-            <div>
-                <Label
-                    for="transfert-motif"
-                    class="mb-1.5 block text-xs font-medium"
-                    >Motif</Label
+            <details :open="!!transfertForm.errors.motif">
+                <summary
+                    class="cursor-pointer rounded-sm text-xs font-medium text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                <Input id="transfert-motif" v-model="transfertForm.motif" />
-                <p
-                    v-if="transfertForm.errors.motif"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ transfertForm.errors.motif }}
-                </p>
-            </div>
+                    Ajouter un motif
+                </summary>
+                <div class="mt-2">
+                    <Label for="transfert-motif" class="sr-only">
+                        Motif (facultatif)
+                    </Label>
+                    <Input id="transfert-motif" v-model="transfertForm.motif" />
+                    <p
+                        v-if="transfertForm.errors.motif"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ transfertForm.errors.motif }}
+                    </p>
+                </div>
+            </details>
 
             <p v-if="erreurCompteTransfert" class="text-xs text-destructive">
                 {{ erreurCompteTransfert }}
@@ -1747,9 +1798,8 @@ const selectClass =
                 class="text-xs text-muted-foreground"
                 data-testid="transfert-confirmation"
             >
-                Enregistrez ici un transfert déjà fait sur le téléphone. Le
-                compte de l'agence sera crédité quand elle aura confirmé la
-                réception (dans Mouvements).
+                Transfert déjà effectué sur le téléphone. Crédit après
+                confirmation de l'agence.
             </p>
         </form>
         <template #footer>
@@ -1882,29 +1932,6 @@ const selectClass =
                             class="mt-1 text-xs text-destructive"
                         >
                             {{ form.errors.operateur_mobile_money }}
-                        </p>
-                    </div>
-                    <div>
-                        <Label
-                            for="sup-numero-dedie"
-                            class="mb-1.5 block text-xs font-medium"
-                        >
-                            Numéro du portefeuille
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="sup-numero-dedie"
-                            v-model="form.numero"
-                            placeholder="Ex. 6XX XX XX XX"
-                        />
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Un numéro ne peut porter qu'un seul compte.
-                        </p>
-                        <p
-                            v-if="form.errors.numero"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.numero }}
                         </p>
                     </div>
                 </template>
@@ -2115,27 +2142,6 @@ const selectClass =
                 </p>
             </div>
 
-            <div v-if="form.nature !== 'dediee' && form.type !== 'caisse'">
-                <Label for="sup-numero" class="mb-1.5 block text-xs font-medium"
-                    >Numéro du compte (optionnel)</Label
-                >
-                <Input
-                    id="sup-numero"
-                    v-model="form.numero"
-                    placeholder="Ex. numéro marchand +224 6XX XX XX XX"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">
-                    Affiché à l'encaissement : l'agent vérifie que le client a
-                    payé sur ce compte.
-                </p>
-                <p
-                    v-if="form.errors.numero"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ form.errors.numero }}
-                </p>
-            </div>
-
             <div class="flex justify-between pt-2">
                 <Button
                     type="button"
@@ -2204,30 +2210,6 @@ const selectClass =
                     {{ editDialogPour.compte_numero }}. L'agent, l'opérateur et
                     le compte ne peuvent pas être modifiés.
                 </p>
-                <div>
-                    <Label
-                        for="edit-numero-dedie"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Numéro du portefeuille</Label
-                    >
-                    <Input
-                        id="edit-numero-dedie"
-                        v-model="editForm.numero"
-                        :disabled="!editNumeroDedieModifiable"
-                    />
-                    <p
-                        v-if="!editNumeroDedieModifiable"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Le numéro d'un compte validé ne peut plus être modifié.
-                    </p>
-                    <p
-                        v-if="editForm.errors.numero"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ editForm.errors.numero }}
-                    </p>
-                </div>
             </template>
             <template v-else-if="editEstDediee">
                 <p
@@ -2329,20 +2311,6 @@ const selectClass =
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ editForm.errors.operateur_mobile_money }}
-                    </p>
-                </div>
-                <div v-if="editForm.type !== 'caisse'">
-                    <Label
-                        for="edit-numero"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Numéro du compte</Label
-                    >
-                    <Input id="edit-numero" v-model="editForm.numero" />
-                    <p
-                        v-if="editForm.errors.numero"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ editForm.errors.numero }}
                     </p>
                 </div>
             </template>
@@ -2514,5 +2482,95 @@ const selectClass =
                 </Button>
             </div>
         </form>
+    </Dialog>
+    <!-- Suppression d'un brouillon (ADR 0028) -->
+    <Dialog
+        v-model:visible="suppressionVisible"
+        modal
+        header="Supprimer ce brouillon ?"
+        :style="{ width: 'min(480px, 95vw)' }"
+        :closable="!suppressionEnCours"
+        :close-on-escape="!suppressionEnCours"
+        :dismissable-mask="!suppressionEnCours"
+    >
+        <form
+            v-if="suppressionCible"
+            id="suppression-form"
+            class="space-y-4 pb-1"
+            data-testid="suppression-form"
+            @submit.prevent="supprimerSupport"
+        >
+            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt class="text-muted-foreground">Support</dt>
+                <dd class="font-medium">{{ suppressionCible.libelle }}</dd>
+                <dt class="text-muted-foreground">Agence</dt>
+                <dd>{{ suppressionCible.site ?? '—' }}</dd>
+                <template v-if="suppressionCible.agent">
+                    <dt class="text-muted-foreground">Responsable</dt>
+                    <dd>{{ suppressionCible.agent.nom }}</dd>
+                </template>
+                <template v-if="suppressionCible.compte_numero">
+                    <dt class="text-muted-foreground">Compte</dt>
+                    <dd class="tabular-nums">
+                        {{ suppressionCible.compte_numero }}
+                    </dd>
+                </template>
+            </dl>
+
+            <p class="text-sm text-muted-foreground">
+                Ce support n'a jamais été validé : il n'a servi à aucune
+                opération. Il sera supprimé définitivement{{
+                    suppressionCible.nature === 'dediee'
+                        ? ', avec son sous-compte comptable'
+                        : ''
+                }}. La suppression est tracée à votre nom.
+            </p>
+
+            <div>
+                <Label
+                    for="suppression-motif"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Motif
+                    <span class="font-normal text-muted-foreground"
+                        >(facultatif)</span
+                    >
+                </Label>
+                <Input
+                    id="suppression-motif"
+                    v-model="suppressionMotif"
+                    maxlength="500"
+                    placeholder="Ex. : doublon créé par erreur"
+                    :disabled="suppressionEnCours"
+                    data-testid="suppression-motif"
+                />
+            </div>
+        </form>
+        <template #footer>
+            <div class="flex w-full justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="suppressionEnCours"
+                    @click="suppressionVisible = false"
+                    >Annuler</Button
+                >
+                <Button
+                    type="submit"
+                    form="suppression-form"
+                    variant="destructive"
+                    size="sm"
+                    class="disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="suppression-confirmer"
+                    :disabled="suppressionEnCours"
+                    :aria-busy="suppressionEnCours"
+                >
+                    <Spinner v-if="suppressionEnCours" />
+                    {{ suppressionEnCours ? 'Suppression…' : 'Supprimer' }}
+                </Button>
+            </div>
+        </template>
     </Dialog>
 </template>

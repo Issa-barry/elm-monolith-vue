@@ -166,6 +166,11 @@ class TransfertLogistique extends Model
         return $this->hasMany(TransfertActivite::class)->orderBy('created_at');
     }
 
+    public function retours(): HasMany
+    {
+        return $this->hasMany(TransfertRetour::class)->orderBy('created_at');
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     public function getStatutLabelAttribute(): string
@@ -203,6 +208,40 @@ class TransfertLogistique extends Model
     public function isAnnule(): bool
     {
         return $this->statut === StatutTransfert::ANNULE;
+    }
+
+    public function isRetourne(): bool
+    {
+        return $this->statut === StatutTransfert::RETOURNE;
+    }
+
+    /**
+     * Source de vérité unique de l'éligibilité au retour (ADR 0029) — relue par la Policy, l'écran
+     * et TransfertRetourService. Un retour n'est possible qu'une fois la marchandise partie et
+     * avant la clôture : en TRANSIT (quantité retournable = chargée − retournée) ou en RECEPTION
+     * (chargée − reçue − retournée, seul ce qui n'a pas été reçu peut revenir).
+     */
+    public function raisonRetourImpossible(): ?string
+    {
+        if (! in_array($this->statut, [StatutTransfert::TRANSIT, StatutTransfert::RECEPTION], true)) {
+            return 'Un retour ne peut être enregistré qu\'une fois la marchandise partie et avant la clôture du transfert.';
+        }
+
+        $this->loadMissing('lignes');
+        $this->lignes->each->setRelation('transfert', $this);
+
+        if ($this->lignes->every(fn (TransfertLigne $l) => $l->quantite_retournable <= 0)) {
+            return $this->isTransit()
+                ? 'Toute la marchandise chargée a déjà été retournée.'
+                : 'Toute la marchandise chargée a été reçue ou déjà retournée.';
+        }
+
+        return null;
+    }
+
+    public function isRetournable(): bool
+    {
+        return $this->raisonRetourImpossible() === null;
     }
 
     public function isAnnulable(): bool

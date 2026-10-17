@@ -18,6 +18,8 @@ export interface DepenseRow {
     vehicule_id: string | null;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
+    commande_reference: string | null;
+    sans_commande: boolean;
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
     validateur: { id: string; name: string } | null;

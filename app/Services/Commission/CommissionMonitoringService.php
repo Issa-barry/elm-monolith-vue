@@ -393,6 +393,13 @@ class CommissionMonitoringService
             return 'Transfert annulé : aucune commission n\'est plus due.';
         }
 
+        // Toute la marchandise est revenue au site source avant réception (ADR 0029) : aucune
+        // génération manquante n'est relancée. Une commission déjà générée au chargement, elle,
+        // reste due (COMM-007).
+        if ($source instanceof TransfertLogistique && $source->statut === StatutTransfert::RETOURNE) {
+            return 'Transfert retourné au site source : aucune commission n\'est plus due.';
+        }
+
         if ($enveloppesSource->contains(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::ANNULEE)) {
             return 'La commission de l\'opération a été annulée (retour ou suppression de l\'encaissement) : elle n\'est jamais complétée.';
         }

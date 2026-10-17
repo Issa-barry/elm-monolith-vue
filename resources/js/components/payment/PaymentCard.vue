@@ -179,6 +179,18 @@ const mobileMoneyIndisponible = computed(
         !moyensEffectifs.value.some((m) => m.mode_paiement === 'mobile_money'),
 );
 
+// Aucun mode utilisable (ni caisse, ni autre moyen) : l'opération est réellement bloquée — rouge.
+const aucunMoyenUtilisable = computed(
+    () => aucunAutreMoyen.value && especesBloquees.value,
+);
+
+// « à Matoto » quand l'agence est connue (choix d'agence), sinon « dans cette agence ».
+const dansAgence = computed(() =>
+    agenceActive.value?.nom
+        ? `à ${agenceActive.value.nom}`
+        : 'dans cette agence',
+);
+
 // Mode présélectionné à l'ouverture : le premier, sauf s'il est indisponible — jamais un autre mode
 // choisi à la place de l'utilisateur (un Mobile Money enregistré par erreur serait un encaissement
 // mal classé) : la liste reste vide et il choisit lui-même.
@@ -518,12 +530,6 @@ function handleSubmit() {
                             </span>
                             <span>{{ option.label }}</span>
                             <span
-                                v-if="option.numero"
-                                class="text-xs text-muted-foreground tabular-nums"
-                                data-testid="moyen-numero"
-                                >N° {{ option.numero }}</span
-                            >
-                            <span
                                 v-if="modeIndisponible(option)"
                                 class="text-xs text-muted-foreground"
                                 >— caisse requise</span
@@ -531,28 +537,43 @@ function handleSubmit() {
                         </div>
                     </template>
                 </Select>
+                <!-- Aucun mode utilisable : opération réellement bloquée, rouge, avec ce qui manque. -->
+                <p
+                    v-if="aucunMoyenUtilisable"
+                    class="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm leading-relaxed text-destructive"
+                    data-testid="especes-indisponible"
+                >
+                    <template v-if="decaissement">
+                        Aucun moyen de paiement disponible. Contactez votre
+                        responsable.
+                    </template>
+                    <template v-else>
+                        Encaissement impossible {{ dansAgence }} : vous n'avez
+                        ni caisse ni compte Mobile Money actif, et l'agence n'a
+                        aucun compte bancaire actif. Contactez votre
+                        responsable.
+                    </template>
+                </p>
                 <!-- Espèces impossibles (aucune caisse dédiée active sur ce site) : message visible en
                      permanence sous la liste, pas seulement au survol. Ambre (attention, les autres
                      modes restent possibles) — jamais rouge : rien n'est bloqué pour eux. -->
                 <p
-                    v-if="especesBloquees"
+                    v-else-if="especesBloquees"
                     class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950 dark:bg-amber-950/40 dark:text-amber-200"
                     data-testid="especes-indisponible"
                 >
-                    <template v-if="aucunAutreMoyen">
-                        Aucun moyen de paiement disponible. Contactez votre
-                        responsable.
-                    </template>
-                    <template v-else>{{ messageEspecesIndisponible }}</template>
+                    {{ messageEspecesIndisponible }}
                 </p>
-                <!-- Encaissement sans compte Mobile Money de l'agent : ambre, les autres modes restent possibles. -->
+                <!-- Encaissement sans compte Mobile Money de l'agent, alors qu'un autre mode reste
+                     possible (espèces, banque) : ambre, pour dire pourquoi l'opérateur n'est pas proposé. -->
                 <p
-                    v-if="mobileMoneyIndisponible && !aucunAutreMoyen"
+                    v-if="mobileMoneyIndisponible && !aucunMoyenUtilisable"
                     class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950 dark:bg-amber-950/40 dark:text-amber-200"
                     data-testid="mobile-money-indisponible"
                 >
                     Mobile Money indisponible : vous n'avez aucun compte Mobile
-                    Money actif dans cette agence.
+                    Money actif {{ dansAgence }}. Demandez à votre responsable
+                    de vous en créer un.
                 </p>
                 <!-- Décaissement : solde du support choisi ; rouge seulement s'il bloque le paiement. -->
                 <p
@@ -579,9 +600,10 @@ function handleSubmit() {
                 >
                     {{ errors.mode_paiement }}
                 </p>
-                <!-- Mention utile seulement si les espèces sont effectivement disponibles. -->
+                <!-- Décaissement seulement (en encaissement, l'alerte Mobile Money le dit déjà) :
+                     mention utile si les espèces sont effectivement disponibles. -->
                 <p
-                    v-if="aucunAutreMoyen && !especesBloquees"
+                    v-if="decaissement && aucunAutreMoyen && !especesBloquees"
                     class="mt-2 text-sm leading-relaxed text-foreground"
                     data-testid="aucun-autre-moyen"
                 >

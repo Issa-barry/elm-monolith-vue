@@ -21,6 +21,9 @@ class Depense extends Model
         'depense_type_id',
         'beneficiaire_type',
         'beneficiaire_id',
+        'commande_vente_id',
+        'transfert_logistique_id',
+        'motif_sans_commande',
         'montant',
         'date_depense',
         'commentaire',
@@ -67,6 +70,17 @@ class Depense extends Model
     public function validateur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validateur_id');
+    }
+
+    /** Commande de référence d'une dépense de carburant (ADR 0031) — au plus une des deux. */
+    public function commandeVente(): BelongsTo
+    {
+        return $this->belongsTo(CommandeVente::class);
+    }
+
+    public function transfertLogistique(): BelongsTo
+    {
+        return $this->belongsTo(TransfertLogistique::class);
     }
 
     public function imputations(): HasMany

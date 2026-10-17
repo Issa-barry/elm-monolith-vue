@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import BeneficiairePickerDialog from '@/components/Depenses/BeneficiairePickerDialog.vue';
+import CommandeCarburantField, {
+    type CommandeCandidate,
+} from '@/components/Depenses/CommandeCarburantField.vue';
+import DateRaccourcis from '@/components/Depenses/DateRaccourcis.vue';
 import DepenseConfirmDialog from '@/components/Depenses/DepenseConfirmDialog.vue';
 import type { PickerField } from '@/components/Depenses/pickerTypes';
 import { Button } from '@/components/ui/button';
@@ -30,6 +34,7 @@ interface TypeOption {
     impact_message: string;
     commentaire_obligatoire: boolean;
     justificatif_obligatoire: boolean;
+    commande_obligatoire: boolean;
 }
 interface Vehicule {
     id: string;
@@ -113,8 +118,27 @@ const form = useForm({
     montant: '' as number | '',
     date_depense: new Date().toISOString().slice(0, 10),
     commentaire: '',
+    commande_vente_id: '',
+    transfert_logistique_id: '',
+    sans_commande: false,
+    motif_sans_commande: '',
     statut: 'brouillon' as 'brouillon' | 'soumis',
 });
+
+// ── Commande de référence (types carburant, ADR 0031) ────────────────────────
+const commandeSelection = ref<CommandeCandidate | null>(null);
+
+watch(commandeSelection, (c) => {
+    form.commande_vente_id = c?.type === 'vente' ? c.id : '';
+    form.transfert_logistique_id = c?.type === 'transfert' ? c.id : '';
+});
+
+const rattachementIncomplet = computed(
+    () =>
+        !!selectedType.value?.commande_obligatoire &&
+        !commandeSelection.value &&
+        !(form.sans_commande && form.motif_sans_commande.trim()),
+);
 
 const showDiscardDialog = ref(false);
 
@@ -142,6 +166,9 @@ watch(
     () => form.depense_type_id,
     () => {
         form.beneficiaire_id = '';
+        commandeSelection.value = null;
+        form.sans_commande = false;
+        form.motif_sans_commande = '';
         vehiculeSelected.value = null;
         employeSelected.value = null;
         livreurSelected.value = null;
@@ -1136,6 +1163,7 @@ function submitBrouillon() {
                                             form.errors.date_depense,
                                     }"
                                 />
+                                <DateRaccourcis v-model="form.date_depense" />
                                 <p
                                     v-if="form.errors.date_depense"
                                     class="mt-1 text-xs text-destructive"
@@ -1175,6 +1203,25 @@ function submitBrouillon() {
                                 />
                             </div>
                         </div>
+
+                        <CommandeCarburantField
+                            v-if="selectedType.commande_obligatoire"
+                            v-model:selection="commandeSelection"
+                            v-model:sans-commande="form.sans_commande"
+                            v-model:motif="form.motif_sans_commande"
+                            :vehicule-id="form.beneficiaire_id"
+                            :date-depense="form.date_depense"
+                            :site-id="form.site_id"
+                            :error="
+                                (
+                                    form.errors as Record<
+                                        string,
+                                        string | undefined
+                                    >
+                                ).commande
+                            "
+                            :motif-error="form.errors.motif_sans_commande"
+                        />
 
                         <div>
                             <Label
@@ -1230,7 +1277,9 @@ function submitBrouillon() {
                                 size="sm"
                                 class="h-12 px-4 sm:h-8 sm:px-3"
                                 :disabled="
-                                    form.processing || !form.depense_type_id
+                                    form.processing ||
+                                    !form.depense_type_id ||
+                                    rattachementIncomplet
                                 "
                                 @click="submitBrouillon"
                             >
@@ -1253,7 +1302,9 @@ function submitBrouillon() {
                                 size="sm"
                                 class="h-12 min-w-0 flex-1 px-4 sm:h-8 sm:flex-none sm:px-3"
                                 :disabled="
-                                    form.processing || !form.depense_type_id
+                                    form.processing ||
+                                    !form.depense_type_id ||
+                                    rattachementIncomplet
                                 "
                                 @click="openConfirmDialog"
                             >

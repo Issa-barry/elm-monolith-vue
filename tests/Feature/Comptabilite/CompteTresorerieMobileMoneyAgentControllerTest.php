@@ -48,7 +48,6 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
                 'site_id' => $this->site->id,
                 'agent_id' => $agent->id,
                 'operateur_mobile_money' => 'orange_money',
-                'numero' => '620 00 00 01',
             ], $surcharge));
     }
 
@@ -68,21 +67,29 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
         $this->assertSame($agent->id, $compte->agent_id);
         $this->assertSame('mobile_money', $compte->type->value);
         $this->assertSame('orange_money', $compte->operateur_mobile_money->value);
-        $this->assertSame('620 00 00 01', $compte->numero);
+        $this->assertArrayNotHasKey('numero', $compte->getAttributes(), 'aucun numéro de téléphone conservé');
         $this->assertFalse($compte->actif);
         $this->assertSame('561100001', $compte->compte->numero, 'compte créé automatiquement, jamais celui de la requête');
     }
 
-    public function test_store_exige_l_operateur_et_le_numero(): void
+    public function test_store_exige_l_operateur_mais_jamais_de_numero(): void
     {
         $agent = $this->creerAgent($this->site);
 
-        $this->creer($agent, ['operateur_mobile_money' => '', 'numero' => ''])
-            ->assertSessionHasErrors(['operateur_mobile_money', 'numero']);
+        $this->creer($agent, ['operateur_mobile_money' => ''])
+            ->assertSessionHasErrors('operateur_mobile_money')
+            ->assertSessionDoesntHaveErrors('numero');
         $this->creer($agent, ['operateur_mobile_money' => 'autre'])
             ->assertSessionHasErrors('operateur_mobile_money');
-
         $this->assertSame(0, CompteTresorerie::dediees()->count());
+
+        // Sans numéro : créé, puis validé.
+        $this->creer($agent)->assertSessionHasNoErrors();
+        $compte = CompteTresorerie::dediees()->sole();
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.tresorerie.supports.valider', $compte))
+            ->assertSessionHasNoErrors();
+        $this->assertTrue($compte->fresh()->actif);
     }
 
     public function test_store_refuse_un_agent_ou_une_agence_d_une_autre_organisation(): void
@@ -107,32 +114,9 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
         $this->assertSame(0, CompteTresorerie::dediees()->count());
     }
 
-    public function test_un_support_d_agence_ne_peut_pas_reprendre_le_numero_du_compte_d_un_agent(): void
-    {
-        $this->creerCompteMobileMoneyActif($this->site->id, $this->creerAgent($this->site)->id, 'orange_money', '620000001');
-        $compteOrange = CompteComptable::where('organization_id', $this->org->id)->where('numero', '561100')->firstOrFail();
-        $donnees = [
-            'nature' => 'agence',
-            'site_id' => $this->site->id,
-            'type' => 'mobile_money',
-            'operateur_mobile_money' => 'orange_money',
-            'compte_comptable_id' => $compteOrange->id,
-        ];
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.tresorerie.supports.store'), [...$donnees, 'numero' => '620 000 001'])
-            ->assertSessionHasErrors('numero');
-        $this->assertSame(0, CompteTresorerie::agence()->count());
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.tresorerie.supports.store'), [...$donnees, 'numero' => '620000099'])
-            ->assertSessionHasNoErrors();
-        $this->assertSame(1, CompteTresorerie::agence()->count());
-    }
-
     // ── update / valider ─────────────────────────────────────────────────────
 
-    public function test_update_corrige_le_numero_d_un_brouillon_et_ignore_un_type_ou_un_compte_forges(): void
+    public function test_update_ignore_un_numero_un_type_ou_un_compte_forges(): void
     {
         $agent = $this->creerAgent($this->site);
         $this->creer($agent);
@@ -154,14 +138,14 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
 
         $compte->refresh();
         $this->assertSame('Orange Moussa', $compte->libelle);
-        $this->assertSame('620000002', $compte->numero);
+        $this->assertArrayNotHasKey('numero', $compte->getAttributes());
         $this->assertSame('mobile_money', $compte->type->value);
         $this->assertSame('orange_money', $compte->operateur_mobile_money->value);
         $this->assertSame($sousCompte, $compte->compte_comptable_id);
         $this->assertSame($agent->id, $compte->agent_id);
     }
 
-    public function test_valider_met_le_compte_en_service_et_fige_son_numero(): void
+    public function test_valider_met_le_compte_en_service(): void
     {
         $this->creer($this->creerAgent($this->site));
         $compte = CompteTresorerie::dediees()->firstOrFail();
@@ -171,12 +155,6 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertTrue($compte->fresh()->actif);
 
-        $this->actingAs($this->user)
-            ->put(route('comptabilite.tresorerie.supports.update', $compte), ['libelle' => $compte->libelle, 'actif' => true, 'numero' => '620000002'])
-            ->assertSessionHasErrors('numero');
-        $this->assertSame('620 00 00 01', $compte->fresh()->numero);
-
-        // Activer / désactiver depuis le menu n'envoie pas le numéro : jamais bloqué par lui.
         $this->actingAs($this->user)
             ->put(route('comptabilite.tresorerie.supports.update', $compte), ['libelle' => $compte->libelle, 'actif' => false])
             ->assertSessionHasNoErrors();
@@ -188,7 +166,7 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
     public function test_index_presente_le_compte_comme_un_support_dedie_mobile_money_sans_action_de_versement(): void
     {
         $agent = $this->creerAgent($this->site);
-        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $agent->id, 'orange_money', '620000001');
+        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $agent->id, 'orange_money');
         $this->alimenterCaisse($compte, 300_000);
         // Une caisse d'agence existe : seule la nature du compte doit empêcher le versement.
         $this->creerSupportAgence($this->site->id, 'caisse', '571000', null, 'Caisse agence');
@@ -201,7 +179,7 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
                 $this->assertSame('dediee', $ligne['nature']);
                 $this->assertSame('mobile_money', $ligne['type']);
                 $this->assertSame('Orange Money', $ligne['operateur_label']);
-                $this->assertSame('620000001', $ligne['numero']);
+                $this->assertArrayNotHasKey('numero', $ligne);
                 $this->assertSame(['id' => $agent->id, 'nom' => $agent->name], $ligne['agent']);
                 $this->assertSame('561100001', $ligne['compte_numero']);
                 $this->assertEquals(300_000, $ligne['solde']);
@@ -216,7 +194,7 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
         $avecCaisse = $this->creerAgent($this->site);
         $avecCompte = $this->creerAgent($this->site, 'Fatou', 'Camara');
         $this->creerCaisseActive($this->site->id, $avecCaisse->id);
-        $this->creerCompteMobileMoneyActif($this->site->id, $avecCompte->id, 'momo', '660000001');
+        $this->creerCompteMobileMoneyActif($this->site->id, $avecCompte->id, 'momo');
 
         $this->actingAs($this->user)
             ->get($this->urlIndex())
@@ -233,7 +211,7 @@ class CompteTresorerieMobileMoneyAgentControllerTest extends TestCase
     {
         $agent = $this->creerAgent($this->site);
         $this->creerCaisseActive($this->site->id, $agent->id);
-        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $agent->id, 'orange_money', '620000001');
+        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $agent->id, 'orange_money');
         $this->creerSupportAgence($this->site->id, 'mobile_money', '561100', 'orange_money');
 
         $this->actingAs($this->user)

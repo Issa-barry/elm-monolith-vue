@@ -745,6 +745,19 @@ const categorieColors: Record<string, string> = {
                                     {{ d.type.categorie_label }}
                                 </span>
                                 <div
+                                    v-if="d.sans_commande"
+                                    class="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                >
+                                    <AlertTriangle class="h-3 w-3 shrink-0" />
+                                    Sans commande
+                                </div>
+                                <div
+                                    v-else-if="d.commande_reference"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ d.commande_reference }}
+                                </div>
+                                <div
                                     v-if="d.commentaire"
                                     class="mt-0.5 truncate text-xs text-muted-foreground"
                                     style="max-width: 200px"

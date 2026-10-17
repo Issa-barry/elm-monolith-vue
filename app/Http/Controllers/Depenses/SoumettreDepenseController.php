@@ -24,6 +24,15 @@ class SoumettreDepenseController extends Controller
             return back()->withErrors(['statut' => 'Cette dépense ne peut pas être soumise.']);
         }
 
+        // ADR 0031 : une dépense dont le type exige une commande (brouillon antérieur à la règle)
+        // ne part en validation qu'une fois rattachée, ou déclarée sans commande avec son motif.
+        if ($depense->depenseType?->commande_obligatoire
+            && ! $depense->commande_vente_id
+            && ! $depense->transfert_logistique_id
+            && ! $depense->motif_sans_commande) {
+            return back()->withErrors(['commande' => 'Rattachez cette dépense à une commande (ou déclarez-la sans commande avec son motif) avant de la soumettre.']);
+        }
+
         $depense->update(['statut' => StatutDepense::SOUMIS]);
         $this->audit->record($depense, AuditEvent::SUBMITTED, auth()->user(), null, null, [
             'module' => 'depenses',

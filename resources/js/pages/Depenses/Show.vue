@@ -62,6 +62,15 @@ interface DepenseDetail {
     impact_message: string;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
+    commande_obligatoire: boolean;
+    commande: {
+        type: 'vente' | 'transfert';
+        id: string;
+        reference: string;
+        nature_label: string;
+        url: string | null;
+    } | null;
+    motif_sans_commande: string | null;
     beneficiaire_label: string | null;
     site_nom: string | null;
     saisi_par: string;
@@ -564,6 +573,66 @@ function formatDate(iso: string | null): string {
                                                 depense.vehicule_immatriculation
                                             }}
                                         </span>
+                                    </dd>
+                                </div>
+                                <div
+                                    v-if="
+                                        depense.commande ||
+                                        depense.motif_sans_commande ||
+                                        depense.commande_obligatoire
+                                    "
+                                    class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                                    data-testid="depense-commande"
+                                >
+                                    <dt class="text-muted-foreground">
+                                        Commande
+                                    </dt>
+                                    <dd class="col-span-2">
+                                        <template v-if="depense.commande">
+                                            <Link
+                                                v-if="depense.commande.url"
+                                                :href="depense.commande.url"
+                                                class="font-mono font-medium text-primary hover:underline"
+                                                >{{
+                                                    depense.commande.reference
+                                                }}</Link
+                                            >
+                                            <span v-else class="font-mono">{{
+                                                depense.commande.reference
+                                            }}</span>
+                                            <span class="text-muted-foreground">
+                                                —
+                                                {{
+                                                    depense.commande
+                                                        .nature_label
+                                                }}
+                                            </span>
+                                        </template>
+                                        <template
+                                            v-else-if="
+                                                depense.motif_sans_commande
+                                            "
+                                        >
+                                            <span
+                                                class="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"
+                                            >
+                                                <AlertTriangle
+                                                    class="h-3.5 w-3.5 shrink-0"
+                                                />
+                                                Sans commande (exception)
+                                            </span>
+                                            <span
+                                                class="mt-0.5 block whitespace-pre-line text-muted-foreground"
+                                                >{{
+                                                    depense.motif_sans_commande
+                                                }}</span
+                                            >
+                                        </template>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >Non renseignée</span
+                                        >
                                     </dd>
                                 </div>
                                 <div

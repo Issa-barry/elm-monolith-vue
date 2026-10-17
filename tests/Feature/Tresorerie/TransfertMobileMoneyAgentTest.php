@@ -58,7 +58,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
         $this->site = $this->user->sites()->first();
 
         $this->agent = $this->creerAgent($this->site);
-        $this->compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $this->agent->id, 'orange_money', '620000001');
+        $this->compteAgent = $this->creerCompteMobileMoneyActif($this->site->id, $this->agent->id, 'orange_money');
         $this->alimenterCaisse($this->compteAgent, 500_000);
         $this->compteAgence = $this->creerSupportAgence($this->site->id, 'mobile_money', '561100', 'orange_money');
     }
@@ -170,7 +170,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
             'autre agence' => $this->creerSupportAgence($autreSite->id, 'mobile_money', '561100', 'orange_money'),
             'caisse de l\'agence' => $this->creerSupportAgence($this->site->id, 'caisse', '571000', null, 'Caisse agence'),
             'banque de l\'agence' => $this->creerSupportAgence($this->site->id, 'banque', '521000', null, 'Banque agence'),
-            'compte d\'un autre agent' => $this->creerCompteMobileMoneyActif($this->site->id, $autreAgent->id, 'orange_money', '620000002'),
+            'compte d\'un autre agent' => $this->creerCompteMobileMoneyActif($this->site->id, $autreAgent->id, 'orange_money'),
             'compte désactivé' => $inactif,
         ];
 
@@ -189,7 +189,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
         $this->assertErreurValidationSur('compte_tresorerie_id', fn () => $this->transferer(50_000, 0, 'R1', $caisse));
         $this->assertErreurValidationSur('compte_tresorerie_id', fn () => $this->transferer(50_000, 0, 'R2', $this->compteAgence));
 
-        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $this->site->id, $this->creerAgent($this->site, 'Fatou', 'Camara')->id, 'orange_money', '620000009');
+        $brouillon = app(CaisseAgentService::class)->creerCompteMobileMoney($this->org->id, $this->site->id, $this->creerAgent($this->site, 'Fatou', 'Camara')->id, 'orange_money');
         $this->assertErreurValidationSur('compte_tresorerie_id', fn () => $this->transferer(50_000, 0, 'R3', $brouillon));
 
         $this->assertSame(0, MouvementFonds::count());
@@ -307,7 +307,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
     public function test_le_titulaire_enregistre_son_transfert_et_les_frais_sont_obligatoires(): void
     {
         $titulaire = $this->creerUtilisateurNonAdmin($this->site, ['tresorerie.verser'], 'Aminata', 'Titulaire');
-        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $titulaire->id, 'orange_money', '620000007');
+        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $titulaire->id, 'orange_money');
         $this->alimenterCaisse($compte, 500_000);
 
         // Frais absents ou vides : refusés, jamais supposés nuls.
@@ -331,7 +331,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
     public function test_des_frais_a_zero_saisis_explicitement_sont_acceptes(): void
     {
         $titulaire = $this->creerUtilisateurNonAdmin($this->site, ['tresorerie.verser'], 'Aminata', 'Titulaire');
-        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $titulaire->id, 'orange_money', '620000007');
+        $compte = $this->creerCompteMobileMoneyActif($this->site->id, $titulaire->id, 'orange_money');
         $this->alimenterCaisse($compte, 100_000);
 
         $this->poster($titulaire, ['montant' => 100_000, 'frais' => 0], $compte)->assertSessionHasNoErrors();
@@ -360,7 +360,7 @@ class TransfertMobileMoneyAgentTest extends TestCase
 
     public function test_l_ecran_supports_propose_le_transfert_et_l_agence_est_prevenue(): void
     {
-        $sansDestination = $this->creerCompteMobileMoneyActif($this->site->id, $this->agent->id, 'momo', '660000001');
+        $sansDestination = $this->creerCompteMobileMoneyActif($this->site->id, $this->agent->id, 'momo');
         $this->alimenterCaisse($sansDestination, 100_000);
 
         $this->actingAs($this->user)

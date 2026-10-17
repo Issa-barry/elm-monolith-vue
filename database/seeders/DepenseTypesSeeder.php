@@ -17,6 +17,8 @@ class DepenseTypesSeeder extends Seeder
             'categorie' => 'vehicule',
             'commentaire_obligatoire' => false,
             'justificatif_obligatoire' => false,
+            // ADR 0031 : rattachement à une commande (ou exception motivée) obligatoire.
+            'commande_obligatoire' => true,
             'type_paie' => null,
         ],
         [

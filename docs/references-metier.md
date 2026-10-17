@@ -113,3 +113,10 @@ déjà unique globalement l'est trivialement aussi par organisation).
   indépendamment de `reference` — il n'entre simplement plus dans sa composition (l'ancien format
   `TR-NNNNN-XXX` l'y intégrait pour éviter une collision liée à l'absence de verrou ; devenu
   inutile une fois la génération correctement verrouillée).
+
+## Code abrégé `JJ-NNN` (dépenses de carburant)
+
+Pour rattacher une dépense de carburant à sa commande, l'agent peut rechercher parmi les commandes
+du véhicule par le seul jour et numéro de la référence (`16-007` pour `VTE-161026-007`) ; le même
+code pouvant exister sous plusieurs préfixes, l'agent choisit. Cf.
+[depenses-carburant-commande.md](depenses-carburant-commande.md) (ADR 0031).
