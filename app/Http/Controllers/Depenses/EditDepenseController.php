@@ -39,8 +39,6 @@ class EditDepenseController extends Controller
                 'commentaire' => $depense->commentaire ?? '',
                 'statut' => $depense->statut->value,
                 'commande' => $commandeCarburant->resume($depense->load(['commandeVente', 'transfertLogistique'])),
-                'sans_commande' => $depense->motif_sans_commande !== null,
-                'motif_sans_commande' => $depense->motif_sans_commande ?? '',
             ],
             'types' => DepenseFormOptionsLoader::types($orgId),
             'vehicules' => DepenseFormOptionsLoader::vehicules($orgId),

@@ -313,7 +313,8 @@ final class DepenseListingService
             'vehicule_nom' => $vehiculeNom,
             'vehicule_id' => ($d->beneficiaire_type === 'vehicule') ? $d->beneficiaire_id : null,
             'vehicule_immatriculation' => $vehiculeImmatriculation,
-            // ADR 0031 : identifie dans la liste à valider une dépense carburant sans commande.
+            // ADR 0031 : identifie une ancienne dépense carburant enregistrée « sans commande » (exception
+            // supprimée le 17/10/2026, historique conservé).
             'commande_reference' => $d->commandeVente?->reference ?? $d->transfertLogistique?->reference,
             'sans_commande' => $d->motif_sans_commande !== null,
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,

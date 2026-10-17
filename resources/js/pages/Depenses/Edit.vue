@@ -60,8 +60,6 @@ interface DepenseData {
     commentaire: string;
     statut: string;
     commande: CommandeCandidate | null;
-    sans_commande: boolean;
-    motif_sans_commande: string;
 }
 
 const props = defineProps<{
@@ -124,8 +122,6 @@ const form = useForm({
         props.depense.commande?.type === 'transfert'
             ? props.depense.commande.id
             : '',
-    sans_commande: props.depense.sans_commande,
-    motif_sans_commande: props.depense.motif_sans_commande,
     statut: 'brouillon' as 'brouillon' | 'soumis',
 });
 
@@ -139,9 +135,7 @@ watch(commandeSelection, (c) => {
 
 const rattachementIncomplet = computed(
     () =>
-        !!selectedType.value?.commande_obligatoire &&
-        !commandeSelection.value &&
-        !(form.sans_commande && form.motif_sans_commande.trim()),
+        !!selectedType.value?.commande_obligatoire && !commandeSelection.value,
 );
 
 const selectedType = computed<TypeOption | null>(
@@ -154,8 +148,6 @@ watch(
         if (newVal !== oldVal) {
             form.beneficiaire_id = '';
             commandeSelection.value = null;
-            form.sans_commande = false;
-            form.motif_sans_commande = '';
             vehiculeSelected.value = null;
             employeSelected.value = null;
             livreurSelected.value = null;
@@ -1204,8 +1196,6 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                             <CommandeCarburantField
                                 v-if="selectedType.commande_obligatoire"
                                 v-model:selection="commandeSelection"
-                                v-model:sans-commande="form.sans_commande"
-                                v-model:motif="form.motif_sans_commande"
                                 :vehicule-id="form.beneficiaire_id"
                                 :date-depense="form.date_depense"
                                 :site-id="form.site_id"
@@ -1217,7 +1207,6 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         >
                                     ).commande
                                 "
-                                :motif-error="form.errors.motif_sans_commande"
                             />
 
                             <div>

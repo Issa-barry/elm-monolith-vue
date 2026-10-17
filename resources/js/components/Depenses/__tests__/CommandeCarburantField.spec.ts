@@ -47,8 +47,6 @@ function monter(props: Record<string, unknown> = {}) {
             dateDepense: '2026-10-16',
             siteId: 'site-1',
             selection: null,
-            sansCommande: false,
-            motif: '',
             ...props,
         },
         attachTo: document.body,
@@ -210,15 +208,15 @@ describe('CommandeCarburantField', () => {
         expect(fetchMock.mock.calls[0][0]).not.toContain('site_id');
     });
 
-    it('déclarer une exception retire la commande et demande le motif', async () => {
-        repondre([vente]);
-        const wrapper = monter({ selection: vente });
+    it('ne propose aucune option « sans commande » : la commande est obligatoire', async () => {
+        repondre([]);
+        const wrapper = monter();
         await flushPromises();
 
-        await wrapper.setProps({ sansCommande: true });
-        await flushPromises();
-
-        expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([null]);
-        expect(wrapper.find('#dep-motif-sans-commande').exists()).toBe(true);
+        expect(wrapper.find('#dep-sans-commande').exists()).toBe(false);
+        expect(wrapper.find('#dep-motif-sans-commande').exists()).toBe(false);
+        expect(
+            wrapper.find('[data-testid="commande-carburant-message"]').text(),
+        ).toContain('Vérifiez le véhicule, la date et l’agence.');
     });
 });

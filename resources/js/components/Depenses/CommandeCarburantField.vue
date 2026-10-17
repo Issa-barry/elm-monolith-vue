@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { onClickOutside } from '@vueuse/core';
 import { Check, Info, Loader2, Search } from 'lucide-vue-next';
@@ -9,14 +8,13 @@ import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
-import Textarea from 'primevue/textarea';
 import { computed, nextTick, ref, watch } from 'vue';
 
 /**
  * Commande de référence d'une dépense de carburant (ADR 0031) : champ de recherche (comme la
  * recherche globale) sur les commandes rattachables du véhicule, du jour et de l'agence de la
- * dépense — par référence, code abrégé `JJ-NNN` ou client —, ou exception motivée. Le serveur
- * revérifie toujours le rattachement à l'enregistrement.
+ * dépense — par référence, code abrégé `JJ-NNN` ou client. La commande est obligatoire, sans
+ * exception (décision du 17/10/2026) ; le serveur revérifie le rattachement à l'enregistrement.
  */
 export interface CommandeCandidate {
     type: 'vente' | 'transfert';
@@ -37,14 +35,11 @@ const props = defineProps<{
     /** Agence de la dépense ; vide = toutes les agences. */
     siteId: string;
     error?: string;
-    motifError?: string;
 }>();
 
 const selection = defineModel<CommandeCandidate | null>('selection', {
     required: true,
 });
-const sansCommande = defineModel<boolean>('sansCommande', { required: true });
-const motif = defineModel<string>('motif', { required: true });
 
 const candidats = ref<CommandeCandidate[]>([]);
 const message = ref<string | null>(null);
@@ -117,7 +112,7 @@ async function charger(conserverSelection: boolean) {
         candidats.value = data.candidats;
         message.value =
             data.candidats.length === 0
-                ? 'Aucune commande ne correspond à cette sélection.'
+                ? 'Aucune commande ne correspond à cette sélection. Vérifiez le véhicule, la date et l’agence.'
                 : data.message;
         // Véhicule, date ou agence modifiés : une commande qui n'est plus rattachable est retirée.
         if (
@@ -141,10 +136,6 @@ watch(
     (_nouveau, ancien) => charger(ancien === undefined),
     { immediate: true },
 );
-
-watch(sansCommande, (actifSansCommande) => {
-    if (actifSansCommande) selection.value = null;
-});
 
 function choisir(c: CommandeCandidate) {
     selection.value = c;
@@ -182,7 +173,7 @@ function formatDate(iso?: string) {
         <div>
             <Label for="dep-commande" class="block text-sm font-medium">
                 Commande liée
-                <span v-if="!sansCommande" class="text-destructive">*</span>
+                <span class="text-destructive">*</span>
             </Label>
             <p
                 id="dep-commande-aide"
@@ -199,7 +190,7 @@ function formatDate(iso?: string) {
             Sélectionnez d'abord le véhicule.
         </p>
 
-        <template v-else-if="!sansCommande">
+        <template v-else>
             <div
                 v-if="selection"
                 class="flex items-start justify-between gap-3 rounded-lg border p-3"
@@ -347,49 +338,5 @@ function formatDate(iso?: string) {
         </template>
 
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
-
-        <div v-if="vehiculeId" class="space-y-3">
-            <div class="flex items-center gap-2">
-                <Checkbox
-                    id="dep-sans-commande"
-                    :model-value="sansCommande"
-                    @update:model-value="sansCommande = $event === true"
-                />
-                <Label
-                    for="dep-sans-commande"
-                    class="flex min-h-11 cursor-pointer items-center text-sm font-normal sm:min-h-0"
-                >
-                    Dépense sans commande
-                </Label>
-            </div>
-            <template v-if="sansCommande">
-                <div class="space-y-2">
-                    <Label
-                        for="dep-motif-sans-commande"
-                        class="text-sm font-medium"
-                    >
-                        Motif <span class="text-destructive">*</span>
-                    </Label>
-                    <Textarea
-                        id="dep-motif-sans-commande"
-                        v-model="motif"
-                        rows="2"
-                        placeholder="Ex. : trajet au garage"
-                        class="w-full min-w-0 resize-y max-sm:text-base"
-                        :invalid="!!motifError"
-                        aria-describedby="dep-motif-aide"
-                    />
-                    <p
-                        id="dep-motif-aide"
-                        class="text-xs text-muted-foreground"
-                    >
-                        Ce motif sera transmis au valideur.
-                    </p>
-                    <p v-if="motifError" class="text-xs text-destructive">
-                        {{ motifError }}
-                    </p>
-                </div>
-            </template>
-        </div>
     </div>
 </template>

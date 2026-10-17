@@ -11,6 +11,7 @@ async function ouvrir(
         noClientTypes?: boolean;
         canChangeSite?: boolean;
         carburant?: 'empty' | 'available';
+        proprietaire?: boolean;
     } = {},
 ) {
     const manifest = JSON.parse(
@@ -77,8 +78,13 @@ async function ouvrir(
                           immatriculation: 'RC-1234',
                           categorie: 'camion',
                           site_nom: 'Matoto',
-                          proprietaire_nom: null,
-                          has_proprietaire: false,
+                          proprietaire_nom: options.proprietaire
+                              ? 'Mamadou Diallo'
+                              : null,
+                          proprietaire_telephone: options.proprietaire
+                              ? '+224620112233'
+                              : null,
+                          has_proprietaire: !!options.proprietaire,
                       },
                   ]
                 : [],
@@ -210,7 +216,7 @@ async function choisirVehicule(page: Page) {
 }
 
 for (const width of [390, 768, 1440]) {
-    test(`détails carburant ${width} : disposition et exception motivée`, async ({
+    test(`détails carburant ${width} : disposition et commande obligatoire`, async ({
         page,
     }, info) => {
         await page.setViewportSize({ width, height: 900 });
@@ -226,7 +232,8 @@ for (const width of [390, 768, 1440]) {
         const agence = (await page.locator('#dep-site').boundingBox())!;
         if (width >= 640) expect(montant.y).toBe(date.y);
         else expect(date.y).toBeGreaterThan(montant.y);
-        expect(agence.y).toBeGreaterThan(date.y);
+        expect(agence.y).toBeLessThan(montant.y);
+        expect(agence.y).toBeLessThan(date.y);
         expect(
             (await page.locator('#dep-commande').boundingBox())!.y,
         ).toBeGreaterThan(agence.y);
@@ -236,37 +243,20 @@ for (const width of [390, 768, 1440]) {
             name: width < 640 ? 'Brouillon' : 'Enregistrer comme brouillon',
             exact: true,
         });
+        // Commande obligatoire sans exception (ADR 0031, 17/10/2026) : sans commande trouvée,
+        // aucune option « sans commande » et rien ne peut être enregistré.
         await expect(brouillon).toBeDisabled();
-        const checkbox = (await page
-            .locator('#dep-sans-commande')
-            .boundingBox())!;
-        expect(checkbox.height).toBe(checkbox.width);
-        await page.getByLabel('Dépense sans commande', { exact: true }).click();
-        await expect(page.locator('#dep-commande')).toHaveCount(0);
-        await expect(brouillon).toBeDisabled();
-        await page
-            .getByLabel('Motif', { exact: false })
-            .fill('Trajet au garage');
-        await expect(brouillon).toBeEnabled();
+        await expect(page.locator('#dep-sans-commande')).toHaveCount(0);
+        await expect(page.getByLabel('Motif', { exact: false })).toHaveCount(0);
+        await expect(
+            page.getByTestId('commande-carburant-message'),
+        ).toContainText('Vérifiez le véhicule, la date et l’agence.');
         expect(
             await page.evaluate(
                 () => document.documentElement.scrollWidth <= innerWidth,
             ),
         ).toBe(true);
-        await details.screenshot({
-            path: info.outputPath('details-exception.png'),
-        });
-        await brouillon.click();
-        await expect.poll(() => payloads.length).toBe(1);
-        expect(payloads[0]).toMatchObject({
-            montant: 150000,
-            beneficiaire_id: 'vehicule-1',
-            site_id: 'site-matoto',
-            sans_commande: true,
-            motif_sans_commande: 'Trajet au garage',
-            commande_vente_id: '',
-            transfert_logistique_id: '',
-        });
+        expect(payloads).toHaveLength(0);
     });
 }
 
@@ -556,6 +546,45 @@ test('soumission : récapitulatif défilant, retour à la saisie et confirmation
         depense_type_id: 'type-interne',
         site_id: 'site-matoto',
         montant: 5000,
+    });
+});
+
+test('soumission carburant : la confirmation montre la commande et le propriétaire', async ({
+    page,
+}, info) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const payloads = await ouvrir(
+        page,
+        {},
+        { carburant: 'available', proprietaire: true },
+    );
+    await choisirVehicule(page);
+    await page.locator('#dep-montant').fill('15000');
+    await page.getByRole('combobox', { name: 'Commande liée' }).focus();
+    await page.getByRole('option', { name: /VTE-171026-002/ }).click();
+    await page
+        .getByRole('button', { name: 'Soumettre pour validation', exact: true })
+        .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByTestId('confirm-commande')).toContainText(
+        'VTE-171026-002',
+    );
+    const proprietaire = dialog.getByTestId('confirm-proprietaire');
+    await expect(proprietaire).toContainText('Mamadou Diallo');
+    await expect(proprietaire).toContainText('+224 620 11 22 33');
+    await expect(proprietaire.getByRole('link')).toHaveAttribute(
+        'href',
+        'tel:+224620112233',
+    );
+    await page.screenshot({
+        path: info.outputPath('confirmation-carburant.png'),
+    });
+    await dialog.getByRole('button', { name: "Confirmer l'envoi" }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+        statut: 'soumis',
+        commande_vente_id: 'commande-1',
+        montant: 15000,
     });
 });
 

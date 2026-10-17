@@ -61,6 +61,8 @@ final class DepenseFormOptionsLoader
                 'proprietaire_nom' => $v->proprietaire
                     ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}")
                     : null,
+                // Affiché dans la confirmation de soumission (Depenses/Create.vue).
+                'proprietaire_telephone' => $v->proprietaire?->telephone,
                 'has_proprietaire' => (bool) $v->proprietaire_id,
             ]);
     }

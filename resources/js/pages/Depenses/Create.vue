@@ -44,6 +44,7 @@ interface Vehicule {
     categorie: string;
     site_nom: string | null;
     proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
     has_proprietaire: boolean;
 }
 interface PersonneOption {
@@ -121,8 +122,6 @@ const form = useForm({
     commentaire: '',
     commande_vente_id: '',
     transfert_logistique_id: '',
-    sans_commande: false,
-    motif_sans_commande: '',
     statut: 'brouillon' as 'brouillon' | 'soumis',
 });
 
@@ -136,9 +135,7 @@ watch(commandeSelection, (c) => {
 
 const rattachementIncomplet = computed(
     () =>
-        !!selectedType.value?.commande_obligatoire &&
-        !commandeSelection.value &&
-        !(form.sans_commande && form.motif_sans_commande.trim()),
+        !!selectedType.value?.commande_obligatoire && !commandeSelection.value,
 );
 
 const showDiscardDialog = ref(false);
@@ -168,8 +165,6 @@ watch(
     () => {
         form.beneficiaire_id = '';
         commandeSelection.value = null;
-        form.sans_commande = false;
-        form.motif_sans_commande = '';
         vehiculeSelected.value = null;
         employeSelected.value = null;
         livreurSelected.value = null;
@@ -1116,6 +1111,44 @@ function submitBrouillon() {
                         <div
                             class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2"
                         >
+                            <div class="sm:col-span-2">
+                                <Label
+                                    for="dep-site"
+                                    class="mb-2 flex items-center gap-1 text-sm font-medium"
+                                >
+                                    Agence
+                                    <Lock
+                                        v-if="!can_change_site"
+                                        class="h-3 w-3 text-muted-foreground"
+                                    />
+                                </Label>
+                                <Select
+                                    input-id="dep-site"
+                                    v-model="form.site_id"
+                                    :options="[
+                                        {
+                                            id: '',
+                                            nom: 'Aucune agence spécifique',
+                                        },
+                                        ...sites,
+                                    ]"
+                                    option-label="nom"
+                                    option-value="id"
+                                    :disabled="!can_change_site"
+                                    :invalid="!!form.errors.site_id"
+                                    class="w-full min-w-0"
+                                    append-to="self"
+                                    :overlay-style="selectOverlayStyle"
+                                    :pt="selectPt"
+                                    scroll-height="min(15rem, 50dvh)"
+                                />
+                                <p
+                                    v-if="form.errors.site_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.site_id }}
+                                </p>
+                            </div>
                             <div>
                                 <Label
                                     for="dep-montant"
@@ -1164,51 +1197,11 @@ function submitBrouillon() {
                                     {{ form.errors.date_depense }}
                                 </p>
                             </div>
-                            <div class="sm:col-span-2">
-                                <Label
-                                    for="dep-site"
-                                    class="mb-2 flex items-center gap-1 text-sm font-medium"
-                                >
-                                    Agence
-                                    <Lock
-                                        v-if="!can_change_site"
-                                        class="h-3 w-3 text-muted-foreground"
-                                    />
-                                </Label>
-                                <Select
-                                    input-id="dep-site"
-                                    v-model="form.site_id"
-                                    :options="[
-                                        {
-                                            id: '',
-                                            nom: 'Aucune agence spécifique',
-                                        },
-                                        ...sites,
-                                    ]"
-                                    option-label="nom"
-                                    option-value="id"
-                                    :disabled="!can_change_site"
-                                    :invalid="!!form.errors.site_id"
-                                    class="w-full min-w-0"
-                                    append-to="self"
-                                    :overlay-style="selectOverlayStyle"
-                                    :pt="selectPt"
-                                    scroll-height="min(15rem, 50dvh)"
-                                />
-                                <p
-                                    v-if="form.errors.site_id"
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{ form.errors.site_id }}
-                                </p>
-                            </div>
                         </div>
 
                         <CommandeCarburantField
                             v-if="selectedType.commande_obligatoire"
                             v-model:selection="commandeSelection"
-                            v-model:sans-commande="form.sans_commande"
-                            v-model:motif="form.motif_sans_commande"
                             :vehicule-id="form.beneficiaire_id"
                             :date-depense="form.date_depense"
                             :site-id="form.site_id"
@@ -1220,7 +1213,6 @@ function submitBrouillon() {
                                     >
                                 ).commande
                             "
-                            :motif-error="form.errors.motif_sans_commande"
                         />
 
                         <div>
@@ -1358,6 +1350,13 @@ function submitBrouillon() {
             :vehicule-nom="vehiculeSelected?.nom_vehicule ?? null"
             :vehicule-immatriculation="
                 vehiculeSelected?.immatriculation ?? null
+            "
+            :proprietaire-nom="vehiculeSelected?.proprietaire_nom ?? null"
+            :proprietaire-telephone="
+                vehiculeSelected?.proprietaire_telephone ?? null
+            "
+            :commande="
+                selectedType?.commande_obligatoire ? commandeSelection : null
             "
             :montant="form.montant"
             :site-nom="siteNom"

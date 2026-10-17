@@ -8,6 +8,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { Send } from 'lucide-vue-next';
 
 interface TypeInfo {
@@ -22,6 +23,10 @@ defineProps<{
     type: TypeInfo | null;
     vehiculeNom: string | null;
     vehiculeImmatriculation: string | null;
+    proprietaireNom?: string | null;
+    proprietaireTelephone?: string | null;
+    /** Commande de référence d'une dépense de carburant (ADR 0031). */
+    commande?: { reference: string; nature_label: string } | null;
     montant: number | '';
     siteNom: string | null;
     commentaire: string;
@@ -104,6 +109,44 @@ function fmt(n: number | '') {
                                 v-if="vehiculeImmatriculation"
                                 class="ml-1 font-mono text-xs text-muted-foreground"
                                 >{{ vehiculeImmatriculation }}</span
+                            >
+                        </dd>
+                    </div>
+
+                    <div
+                        v-if="vehiculeNom && proprietaireNom"
+                        class="grid grid-cols-3 gap-1 px-3 py-2.5"
+                        data-testid="confirm-proprietaire"
+                    >
+                        <dt class="text-muted-foreground">Propriétaire</dt>
+                        <dd class="col-span-2">
+                            <span class="block font-medium">{{
+                                proprietaireNom
+                            }}</span>
+                            <a
+                                v-if="proprietaireTelephone"
+                                :href="`tel:${proprietaireTelephone}`"
+                                class="text-xs whitespace-nowrap text-muted-foreground tabular-nums hover:underline"
+                                >{{
+                                    formatPhoneDisplay(proprietaireTelephone)
+                                }}</a
+                            >
+                        </dd>
+                    </div>
+
+                    <div
+                        v-if="commande"
+                        class="grid grid-cols-3 gap-1 px-3 py-2.5"
+                        data-testid="confirm-commande"
+                    >
+                        <dt class="text-muted-foreground">Commande</dt>
+                        <dd class="col-span-2">
+                            <span class="font-mono font-medium">{{
+                                commande.reference
+                            }}</span>
+                            <span
+                                class="ml-1.5 text-xs text-muted-foreground"
+                                >{{ commande.nature_label }}</span
                             >
                         </dd>
                     </div>
