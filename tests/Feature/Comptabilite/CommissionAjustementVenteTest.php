@@ -655,6 +655,39 @@ class CommissionAjustementVenteTest extends TestCase
     }
 
     /** @test */
+    public function periode_show_filtre_les_vehicules_sur_plusieurs_etats(): void
+    {
+        ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
+        $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);
+        ['vehicule' => $vehiculeB, 'categorie' => $categorieB] = $this->makeVehiculeTroisLivreurs(' B');
+        $this->creerCommandeEtGenererCommission($vehiculeB, $categorieB);
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehiculeA->id]))
+            ->assertSessionHasNoErrors();
+        $url = route('comptabilite.periodes.show', $periode);
+
+        $this->get($url.'?'.http_build_query(['etat' => ['validee']]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 1)
+                ->where('vehicules.0.vehicule_id', $vehiculeA->id)
+                ->where('filters.etat', ['validee'])
+            );
+        $this->get($url.'?'.http_build_query(['etat' => ['a_verifier', 'validee']]))
+            ->assertInertia(fn (Assert $page) => $page->has('vehicules', 2));
+        $this->get($url.'?'.http_build_query(['etat' => ['a_reverifier', 'payee']]))
+            ->assertInertia(fn (Assert $page) => $page->has('vehicules', 0));
+        // Une valeur unique (ancien lien) reste acceptée.
+        $this->get($url.'?etat=a_verifier')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vehicules', 1)
+                ->where('vehicules.0.vehicule_id', $vehiculeB->id)
+                ->where('filters.etat', ['a_verifier'])
+            );
+    }
+
+    /** @test */
     public function periode_show_affiche_et_filtre_le_type_en_conservant_la_recherche(): void
     {
         $camion = TypeVehicule::firstOrCreate(['organization_id' => $this->org->id, 'nom' => 'Camion']);

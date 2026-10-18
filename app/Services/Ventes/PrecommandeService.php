@@ -270,7 +270,8 @@ class PrecommandeService
         $support = $this->supportRemboursement($commande, $payeur, $paiement['mode_paiement'], $paiement['compte_tresorerie_id'] ?? null);
         $montant = round((float) $paiement['montant'], 2);
 
-        if (in_array($paiement['mode_paiement'], [ModePaiement::MOBILE_MONEY->value, ModePaiement::VIREMENT->value], true)
+        // Référence pour le Mobile Money seulement, jamais pour la banque (décision du 17/10/2026).
+        if ($paiement['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
             && blank($paiement['reference_paiement'] ?? null)) {
             throw ValidationException::withMessages([
                 'reference_paiement' => 'La référence du remboursement est obligatoire pour ce mode de paiement.',

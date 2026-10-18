@@ -66,7 +66,7 @@ class FichePayableResolverTest extends TestCase
         ]);
     }
 
-    private function resoudre(?User $user = null, string $periodeCode = ''): ?array
+    private function resoudre(?User $user = null, array|string $periodeCode = ''): ?array
     {
         return FichePayableResolver::pourBeneficiaires($user ?? $this->user, 'livreur', [$this->beneficiaireId], $periodeCode)
             ->get($this->beneficiaireId);
@@ -114,6 +114,14 @@ class FichePayableResolverTest extends TestCase
         $this->fiche($this->periode('2026-09-01', '2026-09-15', StatutPeriodePaiement::VALIDEE), 3_000);
 
         $this->assertNull($this->resoudre(null, '2026-09-P2'));
+    }
+
+    public function test_plusieurs_periodes_cochees_retrouvent_la_fiche_de_lune_delles(): void
+    {
+        $fiche = $this->fiche($this->periode('2026-09-01', '2026-09-15', StatutPeriodePaiement::VALIDEE), 3_000);
+
+        $this->assertSame($fiche->id, $this->resoudre(null, ['2026-08-P2', '2026-09-P1'])['id']);
+        $this->assertNull($this->resoudre(null, ['2026-08-P2', '2026-09-P2']));
     }
 
     public function test_sans_permission_payer_aucune_fiche(): void

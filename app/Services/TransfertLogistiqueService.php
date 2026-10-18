@@ -86,6 +86,10 @@ class TransfertLogistiqueService
 
                     TransfertActiviteService::log($transfert, 'validation_admin_auto');
                 }
+
+                // Signalement seulement (ADR 0032), envoyé après le commit : l'écart reste traité
+                // manuellement, ni le stock ni la commission ne sont touchés.
+                TransfertEcartReceptionService::signalerApresReception($transfert);
             }
 
             return $transfert->fresh();

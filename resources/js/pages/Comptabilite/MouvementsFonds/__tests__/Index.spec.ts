@@ -820,3 +820,57 @@ describe('Mouvements de fonds — transfert Mobile Money (ADR 0027)', () => {
         ).toBe(false);
     });
 });
+
+describe('Mouvements de fonds — caisses d’origine et de destination', () => {
+    const transfert = (surcharge: Record<string, unknown> = {}) =>
+        mouvement({
+            nature: 'inter_sites',
+            nature_label: 'Transfert entre agences',
+            site_origine: 'Matoto',
+            site_destination: 'Agence Principale',
+            compte_origine: 'Caisse Matoto',
+            compte_destination: null,
+            compte_destination_id: null,
+            ...surcharge,
+        });
+
+    it('affiche la caisse d’origine et son agence pour un transfert entre agences', () => {
+        const origine = monter([transfert()]).get(
+            '[data-testid="mouvement-origine"]',
+        );
+
+        expect(origine.text()).toContain('Caisse Matoto');
+        expect(origine.text()).toContain('Matoto');
+    });
+
+    it('affiche la caisse de destination et son agence une fois le transfert reçu', () => {
+        const destination = monter([
+            transfert({
+                statut: 'recu',
+                statut_label: 'Reçu',
+                compte_destination: 'Caisse principale',
+            }),
+        ]).get('[data-testid="mouvement-destination"]');
+
+        expect(destination.text()).toContain('Caisse principale');
+        expect(destination.text()).toContain('Agence Principale');
+        expect(
+            destination
+                .find('[data-testid="mouvement-caisse-a-la-reception"]')
+                .exists(),
+        ).toBe(false);
+    });
+
+    it('indique que la caisse de destination sera choisie à la réception tant que le transfert n’est pas reçu', () => {
+        const destination = monter([transfert()]).get(
+            '[data-testid="mouvement-destination"]',
+        );
+
+        expect(
+            destination
+                .get('[data-testid="mouvement-caisse-a-la-reception"]')
+                .text(),
+        ).toBe('Choisie à la réception');
+        expect(destination.text()).toContain('Agence Principale');
+    });
+});

@@ -40,6 +40,18 @@ const vehicules = [
     },
 ];
 
+// Comme Laravel : `etat[]=a&etat[]=b` devient `etat: ['a', 'b']`.
+function filtresDepuisUrl(requestUrl: string) {
+    const filters: Record<string, string | string[]> = {};
+    for (const [key, value] of new URL(requestUrl).searchParams) {
+        if (key.endsWith('[]')) {
+            const name = key.slice(0, -2);
+            filters[name] = [...((filters[name] as string[]) ?? []), value];
+        } else filters[key] = value;
+    }
+    return filters;
+}
+
 // Vrai bundle, réponses interceptées : aucun paiement ni accès à la base locale.
 async function ouvrir(page: Page, overrides: Record<string, unknown> = {}) {
     const manifest = JSON.parse(
@@ -134,9 +146,7 @@ async function ouvrir(page: Page, overrides: Record<string, unknown> = {}) {
                         url: request.url(),
                         props: {
                             ...initialPage.props,
-                            filters: Object.fromEntries(
-                                new URL(request.url()).searchParams,
-                            ),
+                            filters: filtresDepuisUrl(request.url()),
                         },
                     }),
                 });
@@ -259,11 +269,15 @@ for (const width of [390, 768, 1440, 1920]) {
         await page
             .getByRole('option', { name: 'À vérifier', exact: true })
             .click();
+        await page
+            .getByRole('option', { name: 'À revérifier', exact: true })
+            .click();
         await page.keyboard.press('Escape');
         const request = page.waitForRequest(
             (request) =>
-                new URL(request.url()).searchParams.get('etat') ===
-                'a_verifier',
+                new URL(request.url()).searchParams
+                    .getAll('etat[]')
+                    .join(',') === 'a_verifier,a_reverifier',
         );
         await drawer
             .getByRole('button', { name: 'Appliquer les filtres', exact: true })
@@ -297,8 +311,10 @@ for (const width of [390, 768, 1440, 1920]) {
         );
         await typeVehicule.locator('[data-pc-section="clearicon"]').click();
         expect(
-            new URL((await clearTypeRequest).url()).searchParams.get('etat'),
-        ).toBe('a_verifier');
+            new URL((await clearTypeRequest).url()).searchParams.getAll(
+                'etat[]',
+            ),
+        ).toEqual(['a_verifier', 'a_reverifier']);
         expect(errors).toEqual([]);
     });
 }

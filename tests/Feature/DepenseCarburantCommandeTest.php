@@ -12,6 +12,7 @@ use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Depenses\CommandeCarburantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Permission;
@@ -369,6 +370,106 @@ class DepenseCarburantCommandeTest extends TestCase
 
         $this->post(route('depenses.store'), $this->payload(['commande_vente_id' => $commande->id]))
             ->assertSessionHasErrors('commande');
+    }
+
+    // ── Unicité de la commande (DEPCARB-004) ──────────────────────────────────
+
+    private function depenseCarburant(array $attrs = []): Depense
+    {
+        return Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'site_id' => $this->site->id,
+            'depense_type_id' => $this->carburant->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $this->vehicule->id,
+            'date_depense' => '2026-10-16',
+            ...$attrs,
+        ]);
+    }
+
+    public function test_commande_deja_rattachee_a_une_autre_depense_est_refusee(): void
+    {
+        $commande = $this->vente('VTE-161026-001', '2026-10-16');
+        $this->depenseCarburant(['commande_vente_id' => $commande->id]);
+
+        $this->post(route('depenses.store'), $this->payload(['commande_vente_id' => $commande->id]))
+            ->assertSessionHasErrors(['commande' => 'Cette commande est déjà rattachée à une autre dépense de carburant (du 16/10/2026).']);
+
+        $this->assertSame(1, Depense::where('commande_vente_id', $commande->id)->count());
+    }
+
+    public function test_un_brouillon_reserve_aussi_sa_commande(): void
+    {
+        $transfert = $this->transfert('TRF-161026-001', '2026-10-16');
+        $this->depenseCarburant(['statut' => StatutDepense::BROUILLON, 'transfert_logistique_id' => $transfert->id]);
+
+        $this->post(route('depenses.store'), $this->payload(['transfert_logistique_id' => $transfert->id]))
+            ->assertSessionHasErrors('commande');
+    }
+
+    public function test_une_depense_rejetee_ou_annulee_libere_sa_commande(): void
+    {
+        $commande = $this->vente('VTE-161026-001', '2026-10-16');
+        $this->depenseCarburant(['statut' => StatutDepense::REJETE, 'commande_vente_id' => $commande->id]);
+        $this->depenseCarburant(['statut' => StatutDepense::ANNULE, 'commande_vente_id' => $commande->id]);
+
+        $this->post(route('depenses.store'), $this->payload(['commande_vente_id' => $commande->id]))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_modifier_la_depense_qui_detient_la_commande_est_permis(): void
+    {
+        $commande = $this->vente('VTE-161026-001', '2026-10-16');
+        $depense = $this->depenseCarburant(['statut' => StatutDepense::BROUILLON, 'commande_vente_id' => $commande->id]);
+
+        $this->put(route('depenses.update', $depense), $this->payload([
+            'commande_vente_id' => $commande->id,
+            'montant' => 90000,
+            'statut' => 'brouillon',
+        ]))->assertSessionHasNoErrors();
+
+        $this->assertEquals(90000, $depense->fresh()->montant);
+    }
+
+    public function test_resoumettre_une_depense_rejetee_dont_la_commande_a_ete_reprise_est_refuse(): void
+    {
+        $commande = $this->vente('VTE-161026-001', '2026-10-16');
+        $rejetee = $this->depenseCarburant(['statut' => StatutDepense::REJETE, 'commande_vente_id' => $commande->id]);
+        $this->depenseCarburant(['commande_vente_id' => $commande->id]);
+
+        $this->patch(route('depenses.soumettre', $rejetee))->assertSessionHasErrors('commande');
+
+        $this->assertSame(StatutDepense::REJETE, $rejetee->fresh()->statut);
+    }
+
+    public function test_verrouiller_unicite_repose_le_controle_sous_verrou(): void
+    {
+        $commande = $this->vente('VTE-161026-001', '2026-10-16');
+        $detentrice = $this->depenseCarburant(['commande_vente_id' => $commande->id]);
+        $service = app(CommandeCarburantService::class);
+
+        $this->assertNotNull(\DB::transaction(fn () => $service->verrouillerUnicite($commande->id, null)));
+        $this->assertNull(\DB::transaction(fn () => $service->verrouillerUnicite($commande->id, null, $detentrice->id)));
+        $this->assertNull($service->verrouillerUnicite(null, null));
+    }
+
+    public function test_la_liste_signale_les_commandes_deja_prises_sauf_pour_leur_propre_depense(): void
+    {
+        $prise = $this->vente('VTE-161026-001', '2026-10-16');
+        $libre = $this->vente('VTE-161026-002', '2026-10-16');
+        $detentrice = $this->depenseCarburant(['commande_vente_id' => $prise->id]);
+
+        $liees = array_column($this->candidats()['candidats'], 'depenses_liees', 'id');
+        $this->assertSame(1, $liees[$prise->id]);
+        $this->assertSame(0, $liees[$libre->id]);
+
+        $enModification = $this->getJson(route('depenses.commandes-carburant', [
+            'vehicule_id' => $this->vehicule->id,
+            'date_depense' => '2026-10-16',
+            'depense_id' => $detentrice->id,
+        ]))->assertOk()->json('candidats');
+        $this->assertSame(0, array_column($enModification, 'depenses_liees', 'id')[$prise->id]);
     }
 
     public function test_une_depense_sans_commande_n_est_plus_acceptee_meme_motivee(): void

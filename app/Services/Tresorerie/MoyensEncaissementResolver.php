@@ -203,8 +203,10 @@ class MoyensEncaissementResolver
             }
         }
 
+        // Banque (virement, chèque) : aucune référence saisie, ni à l'encaissement ni au paiement —
+        // décision du 17/10/2026, la saisie d'une référence bancaire est jugée risquée.
         foreach ($banques as $support) {
-            $moyens[] = $this->moyen($support, ModePaiement::VIREMENT, "Virement bancaire — {$support->libelle}", true);
+            $moyens[] = $this->moyen($support, ModePaiement::VIREMENT, "Virement bancaire — {$support->libelle}", false);
         }
         foreach ($banques as $support) {
             $moyens[] = $this->moyen($support, ModePaiement::CHEQUE, "Chèque — {$support->libelle}", false);

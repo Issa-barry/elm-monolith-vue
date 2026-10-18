@@ -23,13 +23,18 @@ use Illuminate\Support\Collection;
  * candidats() liste exactement ces commandes pour la liste déroulante de l'écran ; verifier() repose
  * les mêmes critères à chaque enregistrement, la sélection faite à l'écran n'étant jamais crue
  * telle quelle.
+ *
+ * Unicité (DEPCARB-004, 17/10/2026) : une commande n'est rattachée qu'à une seule dépense. Toute
+ * dépense non rejetée ni annulée la détient, brouillon compris ; la dépense en cours de
+ * modification ne se bloque pas elle-même. verrouillerUnicite() repose ce contrôle sous verrou de
+ * la commande, dans la transaction d'enregistrement, contre deux saisies simultanées.
  */
 final class CommandeCarburantService
 {
     /**
      * @return array{candidats: list<array<string, mixed>>, message: ?string}
      */
-    public function candidats(string $orgId, string $vehiculeId, CarbonInterface $dateDepense, ?string $siteId): array
+    public function candidats(string $orgId, string $vehiculeId, CarbonInterface $dateDepense, ?string $siteId, ?string $exceptDepenseId = null): array
     {
         $jour = $dateDepense->toDateString();
 
@@ -44,7 +49,7 @@ final class CommandeCarburantService
                 ->orWhere('site_destination_id', $siteId)))
             ->get();
 
-        $candidats = $this->serialiser($ventes, $transferts);
+        $candidats = $this->serialiser($ventes, $transferts, $exceptDepenseId);
 
         return [
             'candidats' => $candidats,
@@ -53,7 +58,7 @@ final class CommandeCarburantService
     }
 
     /** Message d'erreur si le rattachement est refusé, null s'il est valide. */
-    public function verifier(string $orgId, string $vehiculeId, CarbonInterface $dateDepense, ?string $siteId, ?string $commandeVenteId, ?string $transfertLogistiqueId): ?string
+    public function verifier(string $orgId, string $vehiculeId, CarbonInterface $dateDepense, ?string $siteId, ?string $commandeVenteId, ?string $transfertLogistiqueId, ?string $exceptDepenseId = null): ?string
     {
         $commande = $commandeVenteId
             ? CommandeVente::where('organization_id', $orgId)->find($commandeVenteId)
@@ -63,7 +68,48 @@ final class CommandeCarburantService
             return 'La commande sélectionnée est introuvable.';
         }
 
-        return $this->motifRefus($commande, $vehiculeId, $dateDepense->toDateString(), $siteId);
+        return $this->motifRefus($commande, $vehiculeId, $dateDepense->toDateString(), $siteId)
+            ?? $this->motifDejaRattachee($commandeVenteId, $transfertLogistiqueId, $exceptDepenseId, false);
+    }
+
+    /**
+     * Unicité sous verrou, à appeler dans la transaction qui enregistre la dépense : verrouille la
+     * ligne de la commande (deux enregistrements simultanés sur la même commande s'attendent), puis
+     * relit les dépenses qui la détiennent par une lecture verrouillante — sous MySQL REPEATABLE
+     * READ, une lecture simple pourrait ne pas voir la dépense que l'autre transaction vient de
+     * valider. Sans commande, rien à verrouiller.
+     */
+    public function verrouillerUnicite(?string $commandeVenteId, ?string $transfertLogistiqueId, ?string $exceptDepenseId = null): ?string
+    {
+        if ($commandeVenteId) {
+            CommandeVente::whereKey($commandeVenteId)->lockForUpdate()->first(['id']);
+        } elseif ($transfertLogistiqueId) {
+            TransfertLogistique::whereKey($transfertLogistiqueId)->lockForUpdate()->first(['id']);
+        } else {
+            return null;
+        }
+
+        return $this->motifDejaRattachee($commandeVenteId, $transfertLogistiqueId, $exceptDepenseId, true);
+    }
+
+    private function motifDejaRattachee(?string $commandeVenteId, ?string $transfertLogistiqueId, ?string $exceptDepenseId, bool $verrouiller): ?string
+    {
+        $detentrice = $this->depensesDetentrices()
+            ->where($commandeVenteId ? 'commande_vente_id' : 'transfert_logistique_id', $commandeVenteId ?? $transfertLogistiqueId)
+            ->when($exceptDepenseId, fn (Builder $q) => $q->whereKeyNot($exceptDepenseId))
+            ->when($verrouiller, fn (Builder $q) => $q->lockForUpdate())
+            ->orderBy('created_at')
+            ->first(['id', 'date_depense']);
+
+        return $detentrice
+            ? 'cette commande est déjà rattachée à une autre dépense de carburant (du '.$detentrice->date_depense->format('d/m/Y').').'
+            : null;
+    }
+
+    /** Dépenses qui détiennent leur commande : toutes sauf rejetées et annulées. */
+    private function depensesDetentrices(): Builder
+    {
+        return Depense::query()->whereNotIn('statut', [StatutDepense::REJETE->value, StatutDepense::ANNULE->value]);
     }
 
     /**
@@ -173,14 +219,14 @@ final class CommandeCarburantService
      * @param  Collection<int, TransfertLogistique>  $transferts
      * @return list<array<string, mixed>>
      */
-    private function serialiser(Collection $ventes, Collection $transferts): array
+    private function serialiser(Collection $ventes, Collection $transferts, ?string $exceptDepenseId): array
     {
         $ventes->load('client');
         $transferts->load(['siteSource:id,nom', 'siteDestination:id,nom']);
 
-        $liees = fn (string $colonne, Collection $ids) => $ids->isEmpty() ? collect() : Depense::query()
+        $liees = fn (string $colonne, Collection $ids) => $ids->isEmpty() ? collect() : $this->depensesDetentrices()
             ->whereIn($colonne, $ids)
-            ->whereNotIn('statut', [StatutDepense::REJETE->value, StatutDepense::ANNULE->value])
+            ->when($exceptDepenseId, fn (Builder $q) => $q->whereKeyNot($exceptDepenseId))
             ->selectRaw("{$colonne} as cle, COUNT(*) as n")
             ->groupBy($colonne)
             ->pluck('n', 'cle');

@@ -143,8 +143,15 @@ Cf. [ADR 0005](adr/0005-moyens-de-paiement-derives-des-supports.md).
 ## Référence de paiement obligatoire
 
 Champ `reference_paiement` (nullable, string 190) sur `encaissements_ventes`, requis côté backend
-(`StoreEncaissementVenteController`) pour **Mobile Money** et **Virement**. Facultatif pour
-**Chèque** et **Espèces**. Le champ `note` reste un commentaire libre, distinct de la référence.
+(`SaisieEncaissementVente`) pour le **Mobile Money** seulement. Le champ `note` reste un
+commentaire libre, distinct de la référence.
+
+**Banque : aucune référence saisie** (décision du 17/10/2026, la saisie d'une référence bancaire
+étant jugée risquée). Pour un virement comme pour un chèque, la fenêtre de paiement ne demande
+plus de référence (`reference_requise = false`, `MoyensEncaissementResolver`) et le serveur ne
+l'exige plus — à l'encaissement d'une vente ou d'un acompte, au remboursement d'une précommande,
+au paiement d'une fiche de commission et au paiement d'une facture d'achat. Espèces : jamais de
+référence. *Avant le 17/10/2026, le virement exigeait une référence.*
 
 Contrôle dans le rapport d'activité ([rapports.md](rapports.md), RAP-007) : un Mobile Money saisi
 depuis le **14/09/2026** sans référence est signalé ; plus ancien, il est « antérieur à

@@ -53,6 +53,12 @@ Une seule transaction (`TransfertRetourService::enregistrer()`), sous verrou du 
   restent acquis ; la nouvelle réception est soumise à la même borne.
 - **Saisies par étape** : la quantité chargée n'est modifiable qu'en chargement, la réception qu'en
   livraison en cours.
+- **Signalement des écarts** ([ADR 0032](adr/0032-signalement-ecarts-reception-transfert.md)) : une
+  réception dont une ligne a un écart non nul ou un type d'écart autre que « Conforme » (surplus
+  compris) notifie le réceptionnaire, le créateur, l'agence source (`logistique.update`) et les
+  administrateurs — dans l'application (cloche web, API mobile), par push et par email. Un seul
+  signalement par réception, regroupant les lignes. L'écart reste **traité manuellement** : rien
+  n'est réintégré ni régularisé. Une invalidation retire les signalements non lus de la cloche.
 
 ## Commissions (COMM-007 maintenue)
 

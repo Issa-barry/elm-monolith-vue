@@ -87,6 +87,26 @@ l'icône PrimeIcons `pi pi-clipboard` — et cette icône ne sert **qu'à** cela
   ni de `useClipboard`) — choisis une autre icône.
 - La coche de confirmation après copie reste libre (`pi pi-check` recommandé).
 
+## 5. Factures et bons PDF : toujours le modèle officiel partagé
+
+Toute facture ou tout bon généré en PDF (facture d'achat, bon de commande, facture de vente, et tout
+nouveau document de ce type) utilise le modèle officiel décrit dans `docs/documents-pdf.md`
+(ADR 0033) :
+
+```blade
+<x-pdf.document :document="$document" />
+```
+
+- Les données sont préparées par un constructeur `app/Support/Documents/XxxDocument.php` qui
+  retourne un `DocumentPdf` ; le rendu passe par `DocumentPdfRenderer`.
+- **Interdit** : une nouvelle vue PDF de facture ou de bon avec son propre HTML/CSS (`<style>`,
+  tableaux d'en-tête ou de totaux recopiés). Un besoin de présentation nouveau s'ajoute au modèle
+  (paramètre de `DocumentPdf` ou slot du composant), pour tous les documents.
+- Une mention propre à un document reste propre à ce document (ex. « Ce document n'est pas
+  l'original du fournisseur » : facture d'achat uniquement).
+- Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
+  propagation du bloc partagé). Cette règle n'est pas couverte par `lint:standards`.
+
 ## Échappatoire
 
 Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est

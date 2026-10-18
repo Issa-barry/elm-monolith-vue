@@ -10,6 +10,7 @@ use App\Models\MouvementFonds;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Notifications\EcartReceptionTransfertNotification;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
 use App\Services\ThemePolicyService;
@@ -214,6 +215,32 @@ class HandleInertiaRequests extends Middleware
             ->count();
     }
 
+    /**
+     * Signalements d'écart de réception non lus de l'utilisateur (ADR 0032) — notification
+     * événementielle, à la différence des compteurs d'état ci-dessus : elle sort de la cloche une
+     * fois ouverte (OuvrirEcartReceptionController) ou quand la réception est invalidée.
+     */
+    private function ecartsReception(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return ['total' => 0, 'recents' => []];
+        }
+
+        $query = $user->unreadNotifications()->where('type', EcartReceptionTransfertNotification::class);
+
+        return [
+            'total' => (clone $query)->count(),
+            'recents' => $query->latest()->limit(5)->get()
+                ->map(fn ($n) => [
+                    'id' => $n->id,
+                    'message' => $n->data['message'] ?? '',
+                    'created_at' => $n->created_at?->format('d/m/Y H:i'),
+                ])
+                ->all(),
+        ];
+    }
+
     private function orgSites(Request $request): array
     {
         $user = $request->user();
@@ -379,6 +406,7 @@ class HandleInertiaRequests extends Middleware
             'mouvements_fonds_a_confirmer' => $this->mouvementsFondsAConfirmer($request),
             'approvisionnements_a_confirmer' => $this->approvisionnementsAConfirmer($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
+            'ecarts_reception' => $this->ecartsReception($request),
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),
             'org_sites' => $this->orgSites($request),

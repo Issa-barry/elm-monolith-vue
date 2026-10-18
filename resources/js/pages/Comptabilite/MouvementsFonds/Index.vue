@@ -210,6 +210,13 @@ function entreCaisses(m: Mouvement): boolean {
     );
 }
 
+function caisseDestinationAVenir(m: Mouvement): boolean {
+    return (
+        !entreCaisses(m) &&
+        ['brouillon', 'envoye', 'conteste'].includes(m.statut)
+    );
+}
+
 function dateFr(date: string): string {
     return new Date(date).toLocaleDateString('fr-FR');
 }
@@ -527,31 +534,40 @@ function confirmerMotif() {
                                     {{ m.commentaire }}
                                 </div>
                             </td>
-                            <td class="px-4 py-3">
-                                <template v-if="entreCaisses(m)">
-                                    <div class="font-medium">
-                                        {{ m.compte_origine ?? '—' }}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        {{ m.site_origine }}
-                                    </div>
-                                </template>
-                                <template v-else>{{
-                                    m.site_origine ?? '—'
-                                }}</template>
+                            <!-- Caisse (support) en premier, agence en dessous, quel que soit le type de mouvement. -->
+                            <td
+                                class="px-4 py-3"
+                                data-testid="mouvement-origine"
+                            >
+                                <div class="font-medium">
+                                    {{ m.compte_origine ?? '—' }}
+                                </div>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ m.site_origine }}
+                                </div>
                             </td>
-                            <td class="px-4 py-3">
-                                <template v-if="entreCaisses(m)">
-                                    <div class="font-medium">
-                                        {{ m.compte_destination ?? '—' }}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        {{ m.site_destination }}
-                                    </div>
-                                </template>
-                                <template v-else>{{
-                                    m.site_destination ?? '—'
-                                }}</template>
+                            <td
+                                class="px-4 py-3"
+                                data-testid="mouvement-destination"
+                            >
+                                <div
+                                    v-if="m.compte_destination"
+                                    class="font-medium"
+                                >
+                                    {{ m.compte_destination }}
+                                </div>
+                                <!-- Entre agences, le support de destination n'est choisi qu'à la réception. -->
+                                <div
+                                    v-else-if="caisseDestinationAVenir(m)"
+                                    class="text-muted-foreground italic"
+                                    data-testid="mouvement-caisse-a-la-reception"
+                                >
+                                    Choisie à la réception
+                                </div>
+                                <div v-else class="font-medium">—</div>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ m.site_destination }}
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(m.montant) }}

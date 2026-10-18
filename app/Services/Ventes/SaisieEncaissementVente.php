@@ -49,9 +49,11 @@ class SaisieEncaissementVente
                 'nullable', 'string',
                 'required_unless:mode_paiement,'.ModePaiement::ESPECES->value,
             ],
+            // Obligatoire pour le Mobile Money seulement : aucune référence n'est saisie pour un
+            // paiement par banque (virement, chèque — décision du 17/10/2026).
             'reference_paiement' => [
                 'nullable', 'string', 'max:190',
-                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value.','.ModePaiement::VIREMENT->value,
+                'required_if:mode_paiement,'.ModePaiement::MOBILE_MONEY->value,
             ],
             'note' => 'nullable|string|max:2000',
             'site_encaissement_id' => 'nullable|string',

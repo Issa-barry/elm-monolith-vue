@@ -823,6 +823,7 @@ reste inchangé (seule `activite` y est exposée pour l'instant).
 | Commission payée (`CommissionPayeeNotification`, réactivée) | Bénéficiaire réel, sur les 3 chemins de paiement (direct logistique, versement legacy, paiement de fiche vente/logistique) | `commissions` |
 | Dépense validée (`DepenseValideeNotification`, nouveau) | Propriétaire du véhicule, uniquement si la dépense est imputée à un `proprietaire` (catégorie VEHICULE) | `depenses` |
 | Commission manquante (`CommissionManquanteNotification`) | Staff org + déclencheur — inchangé, hors préférences | — |
+| Écart de réception d'un transfert (`EcartReceptionTransfertNotification`, 18/10/2026, ADR 0032) | Réceptionnaire, créateur, agence source (`logistique.update`), administrateurs — + email | `livraisons` |
 
 **Gaps documentés, volontairement hors phase 1** :
 - `CommandeVente.LIVREE` (déclenché au premier encaissement, pas une action
@@ -881,6 +882,7 @@ neuve ressortent avec exactement les mêmes clés
 | `depense_validee` | `expense.validated` |
 | `transfert_cree` | `transfer.created` |
 | `transfert_receptionne` | `transfer.received` |
+| `transfert_ecart_reception` | `transfer.reception_discrepancy` |
 
 **Convention de champs retenue** : français pour les champs de domaine
 (`titre`, `lu`, `montant` — comme `DepenseResource::montant` déjà en
