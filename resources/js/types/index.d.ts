@@ -98,7 +98,8 @@ export interface Auth {
     default_site: AuthSite | null;
     /**
      * Périmètre de CONSULTATION : l'utilisateur voit les données de toutes les agences
-     * (administrateur ou permission `sites.lecture_toutes_agences`, ADR 0025). Ne jamais s'en
+     * (administrateur, superviseur — ADR 0034 — ou permission `sites.lecture_toutes_agences`,
+     * ADR 0025). Ne jamais s'en
      * servir pour afficher une action d'écriture.
      */
     voit_toutes_agences: boolean;

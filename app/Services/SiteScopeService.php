@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Périmètre d'agences en CONSULTATION (listes, détails, recherches, exports, statistiques) : toute
- * l'organisation pour qui voit toutes les agences (User::voitToutesLesAgences() — administrateur
+ * l'organisation pour qui voit toutes les agences (User::voitToutesLesAgences() — administrateur, superviseur
  * ou permission « vision 360° », ADR 0025), ses agences `user_sites` sinon.
  *
  * Ne sert jamais à autoriser une écriture : pour cela, assignedSiteIds() (rattachement réel).
@@ -32,11 +32,12 @@ class SiteScopeService
 
     /**
      * Périmètre d'ÉCRITURE : les agences auxquelles l'utilisateur est réellement rattaché. La vision
-     * 360° ne l'élargit pas. Administrateur → collection vide (= pas de restriction).
+     * 360° ne l'élargit pas. Administrateur ou superviseur (User::agitSurToutesLesAgences(),
+     * ADR 0034) → collection vide (= pas de restriction).
      */
     public function assignedSiteIds(User $user): Collection
     {
-        if ($user->isAdmin()) {
+        if ($user->agitSurToutesLesAgences()) {
             return collect();
         }
 

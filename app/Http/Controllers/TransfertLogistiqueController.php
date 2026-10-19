@@ -228,10 +228,10 @@ class TransfertLogistiqueController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->agitSurToutesLesAgences();
 
-        // Admins : site source libre (null ici, sélectionné dans le formulaire)
-        // Non-admins : site par défaut de l'utilisateur (ou premier site affecté)
+        // Admins et superviseur : site source libre (null ici, sélectionné dans le formulaire)
+        // Autres rôles : site par défaut de l'utilisateur (ou premier site affecté)
         if ($isAdmin) {
             $siteSource = null;
         } else {
@@ -282,7 +282,7 @@ class TransfertLogistiqueController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $isAdmin = $user->isAdmin();
+        $isAdmin = $user->agitSurToutesLesAgences();
 
         $rules = [
             'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
@@ -298,7 +298,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ];
 
-        // Admins : site source soumis librement depuis le formulaire
+        // Admins et superviseur : site source soumis librement depuis le formulaire
         if ($isAdmin) {
             $rules['site_source_id'] = ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)];
         }
@@ -315,12 +315,12 @@ class TransfertLogistiqueController extends Controller
         ]);
 
         if ($isAdmin) {
-            // Admins : site source validé depuis le formulaire
+            // Admins et superviseur : site source validé depuis le formulaire
             if ($data['site_source_id'] === $data['site_destination_id']) {
                 return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
             }
         } else {
-            // Non-admins : site source forcé depuis le site par défaut de l'utilisateur
+            // Autres rôles : site source forcé depuis le site par défaut de l'utilisateur
             $siteSource = $user->sites()->where('is_default', true)->first()
                 ?? $user->sites()->first();
 

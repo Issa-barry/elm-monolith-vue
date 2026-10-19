@@ -32,7 +32,7 @@ use Inertia\Response;
  * Gestion des supports de trésorerie (caisses, banques, comptes Mobile Money
  * par site, et caisses dédiées à un agent) avec leur solde actuel — prérequis
  * pour créer un mouvement de fonds ou un solde d'ouverture.
- * Lecture ouverte à `tresorerie.read`, limitée aux agences de l'utilisateur (admins : toutes) —
+ * Lecture ouverte à `tresorerie.read`, limitée aux agences de l'utilisateur (admins et superviseur : toutes) —
  * un responsable d'agence y suit les caisses et verse celle d'un agent (permission
  * `tresorerie.verser`, cf. VerserCaisseAgentController) ou, dans l'autre sens, approvisionne la
  * caisse d'un agent depuis la caisse de l'agence (`tresorerie.envoyer`, cf.
@@ -72,7 +72,7 @@ class CompteTresorerieController extends Controller
         // null = toutes les agences (admin ou vision 360°) ; sinon uniquement celles de l'utilisateur.
         $sitesAccessibles = $user->voitToutesLesAgences() ? null : $this->siteScope->accessibleSiteIds($user)->all();
         // Données de création d'une caisse : agences de rattachement, la vision 360° ne les élargit pas.
-        $sitesEcriture = $user->isAdmin() ? null : $this->siteScope->assignedSiteIds($user)->all();
+        $sitesEcriture = $user->agitSurToutesLesAgences() ? null : $this->siteScope->assignedSiteIds($user)->all();
         $typesParCompte = $peutGerer ? $typeResolver->typesParCompte($orgId) : collect();
 
         $filters = [

@@ -35,7 +35,7 @@ class StoreDepenseController extends Controller
             'Vous n\'êtes pas autorisé à créer une dépense sur ce site.'
         );
 
-        if (! $user->isAdmin()) {
+        if (! $user->agitSurToutesLesAgences()) {
             $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
             abort_unless(
                 in_array($request->site_id, $allowedSiteIds, true),

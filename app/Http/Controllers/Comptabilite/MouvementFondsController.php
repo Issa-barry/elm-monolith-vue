@@ -442,7 +442,7 @@ class MouvementFondsController extends Controller
         $query = Site::where('organization_id', $orgId)->orderBy('nom');
 
         if ($pourCreation) {
-            if (! $user->isAdmin()) {
+            if (! $user->agitSurToutesLesAgences()) {
                 $query->whereIn('id', $this->siteScope->assignedSiteIds($user));
             }
         } elseif (! $user->voitToutesLesAgences()) {
