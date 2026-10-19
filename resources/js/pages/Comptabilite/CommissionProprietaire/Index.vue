@@ -15,6 +15,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    ajouterStatutsEtPeriodes,
+    libellePeriodes,
+} from '@/lib/commissionFiltres';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import type {
@@ -85,11 +89,11 @@ const props = defineProps<{
     };
     filtre_nom: string;
     filtre_telephone: string;
-    filtre_statut: string;
+    filtre_statuts: string[];
     filtre_site_ids: string[];
     filtre_processus: string[];
     processus_options: { value: string; label: string }[];
-    selected_periode: string;
+    selected_periodes: string[];
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
     periode_affichee: PeriodeAffichee | null;
@@ -129,7 +133,7 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'statut',
         label: 'Statut',
-        type: 'select' as const,
+        type: 'multi-select' as const,
         options: [
             { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
@@ -140,7 +144,8 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'periode',
         label: 'Période',
-        type: 'select' as const,
+        type: 'multi-select' as const,
+        searchable: true,
         options: props.periodes_disponibles.map((p) => ({
             value: p.code,
             label: p.label,
@@ -152,8 +157,8 @@ const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
     nom: props.filtre_nom ?? '',
     telephone: props.filtre_telephone ?? '',
-    statut: props.filtre_statut ?? '',
-    periode: props.selected_periode ?? '',
+    statut: props.filtre_statuts ?? [],
+    periode: props.selected_periodes ?? [],
     // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
     // repli implicite sur 'vente'.
     processus: props.filtre_processus ?? [],
@@ -196,12 +201,14 @@ function openPaiement(b: BeneficiaireRow) {
 }
 
 function buildParams(): URLSearchParams {
-    const params = new URLSearchParams();
-    if (props.selected_periode) params.set('periode', props.selected_periode);
+    const params = ajouterStatutsEtPeriodes(
+        new URLSearchParams(),
+        props.filtre_statuts ?? [],
+        props.selected_periodes ?? [],
+    );
     for (const id of props.filtre_site_ids ?? []) {
         params.append('site_ids[]', id);
     }
-    if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (props.filtre_nom) params.set('nom', props.filtre_nom);
     if (props.filtre_telephone) params.set('telephone', props.filtre_telephone);
     for (const code of props.filtre_processus ?? []) {
@@ -226,15 +233,14 @@ function exportPdf() {
     );
 }
 
-const periodContextLabel = computed(() => {
-    if (!props.selected_periode) return 'Toutes les périodes';
+const periodContextLabel = computed(() =>
+    libellePeriodes(props.selected_periodes ?? [], props.periodes_disponibles),
+);
 
-    return (
-        props.periodes_disponibles.find(
-            (periode) => periode.code === props.selected_periode,
-        )?.label ?? props.selected_periode
-    );
-});
+// Le statut d'une période n'a de sens que pour UNE période sélectionnée.
+const periodeUnique = computed(() =>
+    props.selected_periodes?.length === 1 ? props.selected_periodes[0] : null,
+);
 
 const indexSummary = computed<CommissionIndexSummary>(() => ({
     generated: props.kpis.total_genere,
@@ -274,7 +280,7 @@ function fmtTel(tel: string | null | undefined): string {
             entity-label="propriétaire"
             :period-label="periodContextLabel"
             :period-status="
-                selected_periode && periode_affichee
+                periodeUnique && periode_affichee
                     ? {
                           status: periode_affichee.statut,
                           label: periode_affichee.statut_label,

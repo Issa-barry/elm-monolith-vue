@@ -28,6 +28,7 @@ use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
 use App\Support\Achats\JalonsCommandeAchat;
+use App\Support\Documents\FactureAchatDocument;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -963,7 +964,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertSame(10_000.0, $sansNumero->fresh()->resteDu());
 
         // PDF : « Sans numéro », jamais « sans justificatif » ni « aucun document ».
-        $html = view('pdf.facture_achat', ['facture' => $sansNumero->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        $html = view('pdf.facture_achat', ['document' => FactureAchatDocument::depuis($sansNumero->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), $this->org)])->render();
         $this->assertStringContainsString('Sans numéro', $html);
         $this->assertStringContainsString('n’est pas l’original du fournisseur', $html);
         $this->assertStringNotContainsStringIgnoringCase('justificatif', $html);
@@ -1132,7 +1133,7 @@ class FactureFournisseurTest extends TestCase
         $this->assertStringContainsString($facture->reference.'.pdf', (string) $apercu->headers->get('content-disposition'));
         $this->assertStringStartsWith('%PDF-', $apercu->getContent());
 
-        $html = view('pdf.facture_achat', ['facture' => $facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), 'organisation' => $this->org])->render();
+        $html = view('pdf.facture_achat', ['document' => FactureAchatDocument::depuis($facture->fresh(['commande', 'site', 'fournisseur', 'createdBy', 'valideePar', 'lignes.receptionLigne.reception']), $this->org)])->render();
         foreach (['FACTURE D’ACHAT', $facture->reference, 'FR-123', 'Préformes 500 ml', 'BROUILLON', 'n’est pas l’original du fournisseur'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
@@ -1145,13 +1146,13 @@ class FactureFournisseurTest extends TestCase
         $logoPng = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=');
         Storage::disk('public')->put('organizations/logo-test.png', $logoPng);
         $this->org->logo_path = 'organizations/logo-test.png';
-        $htmlPersonnalise = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $htmlPersonnalise = view('pdf.facture_achat', ['document' => FactureAchatDocument::depuis($facture, $this->org)])->render();
         $this->assertStringContainsString('data:image/png;base64,'.base64_encode($logoPng), $htmlPersonnalise);
         $this->assertStringNotContainsString('data:image/svg+xml;base64,', $htmlPersonnalise);
 
         // Un ancien chemin dont le fichier manque conserve un logo visible.
         $this->org->logo_path = 'organizations/logo-absent.png';
-        $htmlSansFichier = view('pdf.facture_achat', ['facture' => $facture, 'organisation' => $this->org])->render();
+        $htmlSansFichier = view('pdf.facture_achat', ['document' => FactureAchatDocument::depuis($facture, $this->org)])->render();
         $this->assertStringContainsString('data:image/svg+xml;base64,', $htmlSansFichier);
 
         // Hors périmètre : refus, comme la fiche.

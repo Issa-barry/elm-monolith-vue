@@ -11,13 +11,6 @@ import type {
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatQuantite } from '@/lib/utils';
@@ -27,8 +20,7 @@ import {
     ArrowLeft,
     Building2,
     CreditCard,
-    History,
-    MoreVertical,
+    Download,
     Search,
     Truck,
     X,
@@ -39,6 +31,7 @@ import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import EncaisserAutreAgenceDialog from './partials/EncaisserAutreAgenceDialog.vue';
+import FactureActionsMenu from './partials/FactureActionsMenu.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface EncaissementItem {
@@ -503,6 +496,19 @@ function _progressPercent(f: FactureItem): number {
                                 Encaisser
                             </Button>
                         </span>
+                        <Button
+                            v-if="can('ventes.read')"
+                            as="a"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 text-xs"
+                            :href="`/backoffice/factures/${f.id}/pdf`"
+                            download
+                            data-testid="telecharger-facture-mobile"
+                        >
+                            <Download class="mr-1 h-3.5 w-3.5" />
+                            Télécharger la facture
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -820,55 +826,11 @@ function _progressPercent(f: FactureItem): number {
                     <Column header="" style="width: 4%; min-width: 56px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-8 w-8"
-                                            :aria-label="`Actions de la facture ${data.reference}`"
-                                        >
-                                            <MoreVertical class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        class="w-48"
-                                    >
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
-                                            @click="openHistory(data)"
-                                        >
-                                            <History class="h-4 w-4" />
-                                            Historique
-                                        </DropdownMenuItem>
-                                        <template
-                                            v-if="
-                                                !data.is_annulee &&
-                                                !data.is_payee &&
-                                                can('ventes.update')
-                                            "
-                                        >
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                class="cursor-pointer"
-                                                :disabled="!data.is_encaissable"
-                                                :title="
-                                                    !data.is_encaissable
-                                                        ? 'Encaissement possible uniquement après validation du chargement.'
-                                                        : ''
-                                                "
-                                                @click="
-                                                    data.is_encaissable &&
-                                                    openDialog(data)
-                                                "
-                                            >
-                                                <CreditCard class="h-4 w-4" />
-                                                Encaisser
-                                            </DropdownMenuItem>
-                                        </template>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                <FactureActionsMenu
+                                    :facture="data"
+                                    @historique="openHistory(data)"
+                                    @encaisser="openDialog(data)"
+                                />
                             </div>
                         </template>
                     </Column>

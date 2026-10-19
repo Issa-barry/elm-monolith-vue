@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\FactureFournisseur;
 use App\Models\Organization;
 use App\Services\Achats\PerimetreCommandesAchat;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Support\Documents\DocumentPdfRenderer;
+use App\Support\Documents\FactureAchatDocument;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
- * Récapitulatif PDF d'une facture d'achat telle qu'enregistrée dans l'application (même modèle
- * visuel que le bon de commande). Ce n'est pas la facture originale du fournisseur.
+ * Récapitulatif PDF d'une facture d'achat telle qu'enregistrée dans l'application (modèle officiel
+ * partagé des factures et bons). Ce n'est pas la facture originale du fournisseur.
  */
 class PdfFactureFournisseurController extends Controller
 {
@@ -21,21 +22,10 @@ class PdfFactureFournisseurController extends Controller
         $this->authorize('view', $facture);
         $perimetre->autoriserConsultationFacture($facture, auth()->user());
 
-        $facture->load([
-            'commande', 'site', 'fournisseur.personne', 'fournisseur.entrepriseTierce', 'createdBy', 'valideePar',
-            'lignes.receptionLigne.reception',
-        ]);
+        $facture->load(['site', 'fournisseur.personne', 'fournisseur.entrepriseTierce', 'lignes']);
 
-        $pdf = Pdf::loadView('pdf.facture_achat', [
-            'facture' => $facture,
-            'organisation' => Organization::findOrFail($facture->organization_id),
-        ])->setPaper('a4', 'portrait')
-            // Poppins : ascender 1.05 + descender 0.35. DomPDF multiplie l'interligne CSS
-            // par la hauteur de la fonte ; ce ratio conserve les interlignes d'Apollo.
-            ->setOption('fontHeightRatio', 1 / 1.4);
+        $document = FactureAchatDocument::depuis($facture, Organization::findOrFail($facture->organization_id));
 
-        return $request->boolean('preview')
-            ? $pdf->stream($facture->reference.'.pdf')
-            : $pdf->download($facture->reference.'.pdf');
+        return DocumentPdfRenderer::reponse($document, $request->boolean('preview'));
     }
 }

@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { watch } from 'vue';
 import UserForm from './partials/UserForm.vue';
 
@@ -76,6 +77,8 @@ function localDigits(
     return tel;
 }
 
+const toast = useToast();
+
 const resolvedCodePays = props.user.code_pays ?? 'GN';
 
 // ── Formulaire informations ───────────────────────────────────────────────────
@@ -118,7 +121,23 @@ watch(
 );
 
 function submitInfo() {
-    infoForm.put(`/backoffice/users/${props.user.id}`);
+    infoForm.put(`/backoffice/users/${props.user.id}`, {
+        preserveScroll: true,
+        onSuccess: () =>
+            toast.add({
+                severity: 'success',
+                summary: 'Compte mis à jour',
+                detail: `${infoForm.prenom} ${infoForm.nom} a été mis à jour.`,
+                life: 3000,
+            }),
+        onError: () =>
+            toast.add({
+                severity: 'error',
+                summary: 'Modification impossible',
+                detail: 'Vérifiez les champs signalés.',
+                life: 4000,
+            }),
+    });
 }
 </script>
 

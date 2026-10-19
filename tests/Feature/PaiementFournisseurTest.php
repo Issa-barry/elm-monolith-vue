@@ -373,6 +373,27 @@ class PaiementFournisseurTest extends TestCase
         $this->assertSame(2, PaiementFournisseur::where('site_id', $matoto->id)->count());
     }
 
+    public function test_paiement_par_banque_sans_reference_mobile_money_avec_reference(): void
+    {
+        // Décision du 17/10/2026 : aucune référence pour un paiement par banque ; le Mobile Money la garde.
+        $banque = $this->creerSupportAgence($this->agence->id, 'banque', '521000', null, 'UBA');
+        $this->alimenterCaisse($banque, 1_000_000);
+        $facture = $this->facture(300_000);
+
+        $this->actingAs($this->user)->get(route('achats.factures.show', $facture))
+            ->assertInertia(fn ($page) => $page->where('paiement.moyens', fn ($moyens) => collect($moyens)->every(fn ($m) => $m['reference_requise'] === false)));
+
+        $this->payer($facture, ['montant' => 100_000, 'mode_paiement' => 'virement', 'compte_tresorerie_id' => $banque->id])->assertSessionHasNoErrors();
+        $this->payer($facture, ['montant' => 100_000, 'mode_paiement' => 'cheque', 'compte_tresorerie_id' => $banque->id])->assertSessionHasNoErrors();
+        $this->assertSame(2, PaiementFournisseur::whereNull('reference_paiement')->count());
+        $this->assertSame(800_000.0, $this->solde($banque));
+
+        $orange = $this->creerSupportAgence($this->agence->id, 'mobile_money', '561100', 'orange_money');
+        $this->alimenterCaisse($orange, 500_000);
+        $this->payer($facture, ['montant' => 50_000, 'mode_paiement' => 'mobile_money', 'compte_tresorerie_id' => $orange->id])
+            ->assertSessionHasErrors('reference_paiement');
+    }
+
     public function test_le_support_d_une_autre_agence_est_refuse_si_elle_n_est_pas_choisie(): void
     {
         [, $banque] = $this->agenceAvecBanque('Matoto');

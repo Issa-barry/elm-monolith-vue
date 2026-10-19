@@ -15,6 +15,7 @@ use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -139,6 +140,24 @@ class DepenseTest extends TestCase
                     ->firstWhere('nom_vehicule', 'Camion interne')['categorie'] === 'interne'
                     && collect($vehicules)
                         ->firstWhere('nom_vehicule', 'Camion partenaire')['categorie'] === 'partenaire'
+                )
+            );
+    }
+
+    public function test_create_expose_le_type_des_vehicules_pour_le_picker(): void
+    {
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Camionnette picker']);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'ACHOUR',
+            'type_vehicule_id' => $type->id,
+        ]);
+
+        $this->get('/backoffice/depenses/create')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules', fn ($vehicules) => collect($vehicules)
+                    ->firstWhere('nom_vehicule', 'ACHOUR')['type_vehicule_nom'] === 'Camionnette picker'
                 )
             );
     }

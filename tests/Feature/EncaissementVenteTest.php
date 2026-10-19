@@ -262,17 +262,23 @@ class EncaissementVenteTest extends TestCase
         $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
     }
 
-    public function test_encaissement_virement_sans_reference_est_refuse(): void
+    public function test_encaissement_virement_sans_reference_est_accepte(): void
     {
+        // Décision du 17/10/2026 : aucune référence saisie pour un paiement par banque.
         ['facture' => $facture, 'user' => $user] = $this->creerContexte();
         $banque = $this->creerSupportAgence($facture->site_id, 'banque', '521000');
 
         $this->poster($user, $facture, [
             'mode_paiement' => 'virement',
             'compte_tresorerie_id' => $banque->id,
-        ])->assertSessionHasErrors('reference_paiement');
+        ])->assertSessionHasNoErrors()->assertRedirect();
 
-        $this->assertDatabaseMissing('encaissements_ventes', ['facture_vente_id' => $facture->id]);
+        $this->assertDatabaseHas('encaissements_ventes', [
+            'facture_vente_id' => $facture->id,
+            'mode_paiement' => 'virement',
+            'compte_tresorerie_id' => $banque->id,
+            'reference_paiement' => null,
+        ]);
     }
 
     public function test_encaissement_cheque_sans_reference_est_accepte(): void
@@ -587,7 +593,7 @@ class EncaissementVenteTest extends TestCase
                         'mode_paiement' => 'virement',
                         'operateur_mobile_money' => null,
                         'compte_tresorerie_id' => $banque->id,
-                        'reference_requise' => true,
+                        'reference_requise' => false,
                     ],
                     [
                         'key' => "cheque:{$banque->id}",

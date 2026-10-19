@@ -96,7 +96,7 @@ const props = defineProps<{
     vehicules: VehiculeCard[];
     typesVehicule: { value: string; label: string }[];
     beneficiaires: BeneficiaireFiche[];
-    filters: Record<string, string>;
+    filters: Record<string, string | string[]>;
     recalcul: {
         effectue: boolean;
         nb_fiches: number;
@@ -137,7 +137,7 @@ const filterFields = computed<FilterField[]>(() =>
               {
                   key: 'etat',
                   label: 'État',
-                  type: 'select',
+                  type: 'multi-select',
                   options: [
                       { value: 'a_verifier', label: 'À vérifier' },
                       { value: 'validee', label: 'Validé' },
@@ -168,7 +168,7 @@ const filterFields = computed<FilterField[]>(() =>
               {
                   key: 'etat',
                   label: 'État',
-                  type: 'select',
+                  type: 'multi-select',
                   options: [
                       { value: 'a_payer', label: 'À payer' },
                       {
@@ -244,15 +244,15 @@ const controleVehicules = computed(() => {
 const rechercheKey = computed(() =>
     isVehiculeType.value ? 'vehicule' : 'beneficiaire',
 );
-const recherche = ref(props.filters[rechercheKey.value] ?? '');
+const recherche = ref((props.filters[rechercheKey.value] as string) ?? '');
 watch(
     () => props.filters[rechercheKey.value],
     (value) => {
-        recherche.value = value ?? '';
+        recherche.value = (value as string) ?? '';
     },
 );
 const filtresVisiblesParams = computed(() => {
-    const params: Record<string, string> = {};
+    const params: Record<string, string | string[]> = {};
     for (const key of [rechercheKey.value, 'type_vehicule_id']) {
         if (props.filters[key]) params[key] = props.filters[key];
     }

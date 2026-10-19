@@ -19,7 +19,9 @@ use App\Services\PeriodeComptableService;
 use App\Services\SavedFilterService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionPeriodeFilter;
 use App\Support\Commission\CommissionProcessusFilter;
+use App\Support\Commission\CommissionStatutFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -89,11 +91,11 @@ class CommissionConsultantController extends Controller
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $meta['search'],
-            'filtre_statut' => $meta['filtre_statut'],
+            'filtre_statuts' => $meta['filtre_statuts'],
             'filtre_consultant_id' => $meta['filtre_consultant_id'],
             'filtre_processus' => $meta['filtre_processus'],
             'processus_options' => CommissionProcessusFilter::options(),
-            'selected_periode' => $meta['filtre_periode'],
+            'selected_periodes' => $meta['filtre_periodes'],
             'periodes_disponibles' => $periodesDisponibles,
             'consultants_options' => $meta['consultants_options'],
             'can_payer' => auth()->user()->can('comptabilite.payer'),
@@ -286,11 +288,9 @@ class CommissionConsultantController extends Controller
     {
         $orgId = auth()->user()->organization_id;
         $search = trim((string) $request->input('search', ''));
-        $filtreStatut = $this->scalarInput($request, 'statut');
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
-            $filtrePeriode = '';
-        }
+        // Plusieurs statuts / périodes cochés s'unissent (décision produit du 18/10/2026).
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
         $filtreConsultantId = $this->scalarInput($request, 'consultant_id');
         // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
         // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
@@ -300,13 +300,10 @@ class CommissionConsultantController extends Controller
         $query = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
                 $q->where('organization_id', $orgId)
                     ->where('cible_type', CommissionCibleType::CODE_CONSULTANT);
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $q->whereBetween('earned_at', [$debut, $fin]);
-                }
+                CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
 
         if ($filtreConsultantId !== '') {
@@ -319,12 +316,12 @@ class CommissionConsultantController extends Controller
         $partsParConsultant = $allParts->groupBy('beneficiaire_id');
 
         $allConsultantIds = $partsParConsultant->keys()->map(fn ($id) => (string) $id)->all();
-        $fraisDepensesParConsultant = $this->fraisDepensesParConsultant($orgId, $allConsultantIds, $filtrePeriode);
+        $fraisDepensesParConsultant = $this->fraisDepensesParConsultant($orgId, $allConsultantIds, $filtrePeriodes);
         $prestatairesById = Prestataire::with(['personne', 'entrepriseTierce'])
             ->whereIn('id', $allConsultantIds)
             ->get()
             ->keyBy('id');
-        $fichesPayables = FichePayableResolver::pourBeneficiaires(auth()->user(), CommissionEnveloppePart::TYPE_PRESTATAIRE, $allConsultantIds, $filtrePeriode);
+        $fichesPayables = FichePayableResolver::pourBeneficiaires(auth()->user(), CommissionEnveloppePart::TYPE_PRESTATAIRE, $allConsultantIds, $filtrePeriodes);
 
         $beneficiaires = $partsParConsultant->map(function (Collection $parts, string $consultantId) use (
             $fraisDepensesParConsultant, $prestatairesById, $fichesPayables,
@@ -375,9 +372,7 @@ class CommissionConsultantController extends Controller
             ];
         })->values();
 
-        if ($filtreStatut !== '') {
-            $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
-        }
+        $beneficiaires = CommissionStatutFilter::appliquer($beneficiaires, $filtreStatuts);
 
         if ($search !== '') {
             $s = mb_strtolower($search);
@@ -397,8 +392,8 @@ class CommissionConsultantController extends Controller
 
         return [$beneficiaires->sortBy('beneficiaire_nom')->values(), [
             'search' => $search,
-            'filtre_statut' => $filtreStatut,
-            'filtre_periode' => $filtrePeriode,
+            'filtre_statuts' => $filtreStatuts,
+            'filtre_periodes' => $filtrePeriodes,
             'filtre_consultant_id' => $filtreConsultantId,
             'filtre_processus' => $filtreProcessus,
             'consultants_options' => $consultantsOptions,
@@ -424,8 +419,9 @@ class CommissionConsultantController extends Controller
      * sites : une dépense créée avec ce bénéficiaire est réellement déduite ici.
      *
      * @param  array<int, string>  $consultantIds
+     * @param  array<int, string>  $periodes
      */
-    private function fraisDepensesParConsultant(string $orgId, array $consultantIds, string $periode = ''): array
+    private function fraisDepensesParConsultant(string $orgId, array $consultantIds, array $periodes = []): array
     {
         if (empty($consultantIds)) {
             return [];
@@ -436,10 +432,7 @@ class CommissionConsultantController extends Controller
             ->where('statut', StatutDepense::VALIDE->value)
             ->where('organization_id', $orgId);
 
-        if ($periode !== '') {
-            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periode);
-            $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
-        }
+        CommissionPeriodeFilter::appliquer($query, $periodes, 'date_depense', colonneDate: true);
 
         return $query->get(['beneficiaire_id', 'montant'])
             ->groupBy('beneficiaire_id')
@@ -486,10 +479,9 @@ class CommissionConsultantController extends Controller
         abort_unless(auth()->user()->canReadCommissions(), 403);
         abort_unless(auth()->user()->can('commissions.exporter'), 403);
 
-        [$rows] = $this->resolveBeneficiaires($request);
+        [$rows, $meta] = $this->resolveBeneficiaires($request);
         $org = Organization::find(auth()->user()->organization_id);
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $periodeLabel = CommissionPeriodeFilter::label($meta['filtre_periodes']);
 
         $pdf = Pdf::loadView('pdf.commissions.consultants', [
             'title' => 'Commissions des consultants',

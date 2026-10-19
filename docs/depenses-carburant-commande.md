@@ -23,10 +23,25 @@ sans exception** (depuis le 17/10/2026). Décision : [ADR 0031](adr/0031-rattach
     le jour du voyage.
   - *De l'agence* : vente de cette agence (`site_id`) ; transfert dont l'agence est la source ou la
     destination. Sans agence sur la dépense (« Aucun site spécifique »), pas de filtre d'agence.
-- **DEPCARB-004** — **Une seule commande de référence** par dépense. Le plein peut avoir servi à
+- **DEPCARB-004** — **Une seule commande de référence** par dépense, et **une commande n'est
+  rattachée qu'à une seule dépense** (unicité, décision du 17/10/2026 ; auparavant plusieurs
+  dépenses pouvaient la référencer avec un simple avertissement). Le plein peut avoir servi à
   plusieurs commandes de la tournée ; la commande retenue sert de référence, sans répartition du
-  coût. Une même commande peut être référencée par plusieurs dépenses (deux pleins pour un long
-  trajet) : l'écran le signale (« Déjà rattachée à N dépense(s) ») sans le bloquer.
+  coût.
+  - Détient sa commande toute dépense **non rejetée ni annulée**, brouillon compris (un brouillon
+    la réserve). Une dépense rejetée ou annulée la libère ; si une autre dépense l'a prise
+    entre-temps, la dépense rejetée ne peut repartir en validation qu'avec une autre commande
+    (`SoumettreDepenseController`).
+  - La dépense en cours de modification ne se bloque pas elle-même.
+  - Contrôlé par le serveur à la validation du formulaire (`CommandeCarburantService::verifier()`)
+    puis reposé **sous verrou de la commande** dans la transaction d'enregistrement
+    (`verrouillerUnicite()`, lecture verrouillante des dépenses détentrices — MySQL REPEATABLE
+    READ) : deux saisies simultanées de la même commande ne peuvent pas passer toutes les deux.
+  - Pas d'index unique en base : la règle dépend du statut de la dépense (rejetée/annulée exclues).
+  - Les doublons éventuellement enregistrés avant cette règle restent en l'état (aucune donnée
+    modifiée) ; ils seront bloqués au prochain enregistrement ou à la prochaine soumission.
+  - À l'écran, une commande déjà prise reste listée mais **grisée et non sélectionnable**
+    (« Déjà rattachée à une autre dépense de carburant »).
 - **DEPCARB-005** — **Aucune exception** : un plein sans commande (plein de début de semaine,
   retour à vide, trajet au garage…) ne peut pas être saisi comme dépense de ce type. Décision du
   17/10/2026, qui remplace l'exception motivée ouverte le 16/10 (cf. ADR 0031). La dépense suit le

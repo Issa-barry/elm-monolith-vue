@@ -16,6 +16,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    ajouterStatutsEtPeriodes,
+    libellePeriodes,
+} from '@/lib/commissionFiltres';
 import { filtrerParMotCle } from '@/lib/tableKeywordSearch';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
@@ -109,11 +113,11 @@ const props = defineProps<{
         payable?: number;
     };
     search: string;
-    filtre_statut: string;
+    filtre_statuts: string[];
     filtre_site_ids: string[];
     filtre_processus: string[];
     processus_options: { value: string; label: string }[];
-    selected_periode: string;
+    selected_periodes: string[];
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
     periode_affichee: PeriodeAffichee | null;
@@ -171,7 +175,7 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'statut',
         label: 'Statut',
-        type: 'select' as const,
+        type: 'multi-select' as const,
         options: [
             { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
@@ -182,7 +186,8 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'periode',
         label: 'Période',
-        type: 'select' as const,
+        type: 'multi-select' as const,
+        searchable: true,
         options: props.periodes_disponibles.map((p) => ({
             value: p.code,
             label: p.label,
@@ -192,8 +197,8 @@ const filterFields = computed((): FilterField[] => [
 
 const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
-    statut: props.filtre_statut ?? '',
-    periode: props.selected_periode ?? '',
+    statut: props.filtre_statuts ?? [],
+    periode: props.selected_periodes ?? [],
     // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
     // repli implicite sur 'vente'.
     processus: props.filtre_processus ?? [],
@@ -228,12 +233,14 @@ function openPaiement(b: BeneficiaireRow) {
 }
 
 function buildParams(): URLSearchParams {
-    const params = new URLSearchParams();
-    if (props.selected_periode) params.set('periode', props.selected_periode);
+    const params = ajouterStatutsEtPeriodes(
+        new URLSearchParams(),
+        props.filtre_statuts ?? [],
+        props.selected_periodes ?? [],
+    );
     for (const id of props.filtre_site_ids ?? []) {
         params.append('site_ids[]', id);
     }
-    if (props.filtre_statut) params.set('statut', props.filtre_statut);
     for (const code of props.filtre_processus ?? []) {
         params.append('processus[]', code);
     }
@@ -277,15 +284,14 @@ const indexSummary = computed<CommissionIndexSummary>(() => ({
     paid: props.kpis.total_verse,
 }));
 
-const periodContextLabel = computed(() => {
-    if (!props.selected_periode) return 'Toutes les périodes';
+const periodContextLabel = computed(() =>
+    libellePeriodes(props.selected_periodes ?? [], props.periodes_disponibles),
+);
 
-    return (
-        props.periodes_disponibles.find(
-            (periode) => periode.code === props.selected_periode,
-        )?.label ?? props.selected_periode
-    );
-});
+// Statut et répartition n'ont de sens que pour UNE période sélectionnée.
+const periodeUnique = computed(() =>
+    props.selected_periodes?.length === 1 ? props.selected_periodes[0] : null,
+);
 
 const confirm = useConfirm();
 const toast = useToast();
@@ -435,8 +441,8 @@ function submitAjuster(payload: {
 
 function repartirUrl(b: BeneficiaireRow): string | null {
     if (b.vehicules.length !== 1 || !b.vehicules[0].id) return null;
-    const params = props.selected_periode
-        ? `?periode=${encodeURIComponent(props.selected_periode)}`
+    const params = periodeUnique.value
+        ? `?periode=${encodeURIComponent(periodeUnique.value)}`
         : '';
     return `/backoffice/comptabilite/commissions/vehicules/${b.vehicules[0].id}/repartir${params}`;
 }
@@ -471,7 +477,7 @@ function fmtTel(tel: string | null | undefined): string {
             entity-label="livreur"
             :period-label="periodContextLabel"
             :period-status="
-                selected_periode && periode_affichee
+                periodeUnique && periode_affichee
                     ? {
                           status: periode_affichee.statut,
                           label: periode_affichee.statut_label,

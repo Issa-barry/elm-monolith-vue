@@ -27,10 +27,13 @@ use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionPdfFooter;
+use App\Support\Commission\CommissionPeriodeFilter;
 use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSiteResponsableFilter;
+use App\Support\Commission\CommissionStatutFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
@@ -47,7 +50,7 @@ class CommissionVenteController extends Controller
 
     /**
      * Les filtres "select" de DataFilters sont toujours envoyés en tableau
-     * (ex: statut[]=impaye), même pour un choix unique : extrait la première
+     * (ex: processus[]=vente), même pour un choix unique : extrait la première
      * valeur pour éviter un "Array to string conversion".
      */
     private function scalarInput(Request $request, string $key): string
@@ -76,11 +79,9 @@ class CommissionVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
-        $filtreStatut = $this->scalarInput($request, 'statut');
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
-            $filtrePeriode = '';
-        }
+        // Plusieurs statuts / périodes cochés s'unissent (décision produit du 18/10/2026).
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
         // Décision produit du 02/09/2026 (révise ce commentaire) : plus de repli implicite sur
         // "vente" — aucune sélection = "Tous les processus" (jamais un mélange silencieusement
         // réduit à un seul), plusieurs processus cochés s'unissent (cf. docs/commissions.md et
@@ -106,14 +107,12 @@ class CommissionVenteController extends Controller
             // représente plus de créance réelle, est exclue ici. Le détail payable/en attente de
             // période est ventilé plus bas via CommissionKpiBuckets, jamais en cachant la ligne.
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
                 $q->where('organization_id', $orgId);
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $q->whereBetween('earned_at', [$debut, $fin]);
-                }
+                CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
+        self::restreindreAuxStatuts($query, $filtreStatuts);
 
         // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
         // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
@@ -127,7 +126,7 @@ class CommissionVenteController extends Controller
         $partsParLivreur = $allParts->groupBy('beneficiaire_id');
 
         $allLivreurIds = $partsParLivreur->keys()->map(fn ($id) => (string) $id)->all();
-        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur($orgId, $allLivreurIds, $filtrePeriode);
+        $fraisDepensesParLivreur = self::fraisDepenses($orgId, $partsParLivreur, $filtrePeriodes, $filtreStatuts);
 
         $nomsSites = $sites->pluck('nom', 'id');
         $agencesParLivreur = $partsParLivreur->map(fn ($parts) => self::agencesResponsables($parts, $nomsSites));
@@ -175,7 +174,7 @@ class CommissionVenteController extends Controller
             $user,
             CommissionEnveloppePart::TYPE_LIVREUR,
             $allLivreurIds,
-            $filtrePeriode,
+            $filtrePeriodes,
         );
 
         $beneficiaires = $partsParLivreur->map(function (Collection $parts, string $livreurId) use (
@@ -186,12 +185,13 @@ class CommissionVenteController extends Controller
             $premier = $parts->first();
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
 
-            // total_brut_cumule/total_net_cumule/total_verse/solde_restant sont désormais
-            // calculés sur TOUTES les parts actives (CREEE incluse) — décision produit du
-            // 29/08/2026, qui affine « visible ne veut pas dire payable » (20/08/2026) :
+            // total_brut_cumule/total_net_cumule/total_verse/solde_restant sont calculés sur
+            // TOUTES les parts actives retenues (CREEE incluse sans filtre Statut) — décision
+            // produit du 29/08/2026, qui affine « visible ne veut pas dire payable » (20/08/2026) :
             // le MONTANT affiché doit toujours refléter la valeur retenue courante
             // (montant_actuel ?? montant_net), la VALIDATION ne conditionnant que le
             // droit au paiement (statutGlobal ci-dessous), jamais l'affichage du montant.
+            // Avec un filtre Statut, $parts ne contient déjà que les parts de ces statuts.
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $parts->sum('montant_brut'),
                 0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
@@ -272,15 +272,14 @@ class CommissionVenteController extends Controller
             ];
         })->values();
 
-        if ($filtreStatut !== '') {
-            $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
-        }
-
         if ($search !== '') {
             $s = mb_strtolower($search);
+            $searchDigits = preg_replace('/\D/', '', $search);
+            // Sans chiffre dans la recherche, la comparaison téléphone ne doit pas tout accepter
+            // (str_contains($tel, '') est toujours vrai) — même garde que buildExportRows().
             $beneficiaires = $beneficiaires->filter(
                 fn ($b) => str_contains(mb_strtolower((string) $b['beneficiaire_nom']), $s)
-                    || str_contains(preg_replace('/\D/', '', (string) ($b['telephone'] ?? '')), preg_replace('/\D/', '', $search))
+                    || ($searchDigits !== '' && str_contains(preg_replace('/\D/', '', (string) ($b['telephone'] ?? '')), $searchDigits))
             );
         }
 
@@ -308,21 +307,27 @@ class CommissionVenteController extends Controller
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
 
-        $dateAffichee = $filtrePeriode !== ''
-            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
-            : now();
-        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
+        // Le statut d'une période n'a de sens que pour UNE période : aucun badge si plusieurs
+        // périodes sont cochées.
+        $periodeUnique = CommissionPeriodeFilter::codeUnique($filtrePeriodes);
+        $periodeAffichee = $filtrePeriodes === [] || $periodeUnique !== null
+            ? app(PeriodePaiementService::class)->getPeriodByDate(
+                $orgId,
+                TypePeriodePaiement::LIVREUR,
+                $periodeUnique !== null ? PeriodeComptableService::dateRangeForCode($periodeUnique)[0] : now(),
+            )
+            : null;
 
         return Inertia::render('Comptabilite/CommissionVente/Index', [
             'saved_view' => $savedView,
             'beneficiaires' => $list,
             'kpis' => $kpis,
             'search' => $search,
-            'filtre_statut' => $filtreStatut,
+            'filtre_statuts' => $filtreStatuts,
             'filtre_site_ids' => $filtreSiteIds,
             'filtre_processus' => $filtreProcessus,
             'processus_options' => CommissionProcessusFilter::options(),
-            'selected_periode' => $filtrePeriode,
+            'selected_periodes' => $filtrePeriodes,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
             'periode_affichee' => $periodeAffichee ? [
@@ -625,6 +630,46 @@ class CommissionVenteController extends Controller
     }
 
     /**
+     * Filtre Statut de la liste et des exports : porte sur le statut de CHAQUE commission, jamais
+     * sur le statut global du livreur (décision produit du 18/10/2026). Un livreur est listé dès
+     * qu'il a une commission retenue, et lignes, cartes et exports ne cumulent que celles-ci.
+     *
+     * @param  array<int, string>  $statuts
+     */
+    private static function restreindreAuxStatuts(Builder $query, array $statuts): void
+    {
+        if ($statuts !== []) {
+            $query->whereIn('statut', $statuts);
+        }
+    }
+
+    /**
+     * Dépenses déduites par livreur. Sans filtre Statut : toutes les dépenses validées des
+     * périodes sélectionnées. Avec un filtre Statut : seulement celles des périodes de paie des
+     * commissions retenues, comme sur la fiche de paie — jamais une dépense d'une période dont
+     * aucune commission n'est affichée.
+     *
+     * @param  Collection<string, Collection<int, CommissionEnveloppePart>>  $partsParLivreur
+     * @param  array<int, string>  $filtrePeriodes
+     * @param  array<int, string>  $filtreStatuts
+     * @param  array<int, string>|null  $siteIds
+     * @return array<string, float>
+     */
+    private static function fraisDepenses(string $orgId, Collection $partsParLivreur, array $filtrePeriodes, array $filtreStatuts, ?array $siteIds = null): array
+    {
+        if ($filtreStatuts === []) {
+            return CommissionVenteCalculatorService::fraisDepensesParLivreur(
+                $orgId,
+                $partsParLivreur->keys()->map(fn ($id) => (string) $id)->all(),
+                $filtrePeriodes,
+                $siteIds,
+            );
+        }
+
+        return CommissionVenteCalculatorService::fraisDepensesSurPeriodesDesParts($orgId, $partsParLivreur, $siteIds);
+    }
+
+    /**
      * Sans période résolue (toutes les parts encore CREEE), la pré-validation (validated_at)
      * est lue directement sur les parts du livreur — sinon le badge resterait « À valider »
      * après un clic sur Valider, alors que plus aucune action n'est possible sur la ligne.
@@ -711,8 +756,9 @@ class CommissionVenteController extends Controller
     // ── Exports ───────────────────────────────────────────────────────────────
     //
     // Source CommissionEnveloppePart. Les exports reprennent exactement le
-    // périmètre visible dans index() : tous les statuts affichés, y compris CREEE,
-    // et les mêmes filtres. Seules les parts ANNULEE restent hors de la liste.
+    // périmètre visible dans index() : mêmes filtres, y compris le filtre Statut
+    // appliqué commission par commission (restreindreAuxStatuts()) et les mêmes
+    // dépenses déduites (fraisDepenses()). Seules les parts ANNULEE restent hors de la liste.
 
     public function exportExcel(Request $request): StreamedResponse
     {
@@ -721,24 +767,25 @@ class CommissionVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $toutesAgences = $user->voitToutesLesAgences();
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds, $filtreProcessus);
-        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriodes, $filtreSiteIds, $filtreProcessus, $filtreStatuts);
+        $fraisDepensesParLivreur = self::fraisDepenses(
             $orgId,
-            $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
-            $filtrePeriode,
+            $parts->groupBy('beneficiaire_id'),
+            $filtrePeriodes,
+            $filtreStatuts,
             ! empty($filtreSiteIds) ? $filtreSiteIds : null,
         );
-        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
+        $rows = $this->buildExportRows($parts, $filtrePeriodes, $search, $fraisDepensesParLivreur);
 
-        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $periodeLabel = CommissionPeriodeFilter::label($filtrePeriodes);
         $filename = 'commissions-vente-'.now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
@@ -773,32 +820,33 @@ class CommissionVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $toutesAgences = $user->voitToutesLesAgences();
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds, $filtreProcessus);
-        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriodes, $filtreSiteIds, $filtreProcessus, $filtreStatuts);
+        $fraisDepensesParLivreur = self::fraisDepenses(
             $orgId,
-            $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
-            $filtrePeriode,
+            $parts->groupBy('beneficiaire_id'),
+            $filtrePeriodes,
+            $filtreStatuts,
             ! empty($filtreSiteIds) ? $filtreSiteIds : null,
         );
-        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
+        $rows = $this->buildExportRows($parts, $filtrePeriodes, $search, $fraisDepensesParLivreur);
         $siteGroups = $this->buildSiteGroups($rows);
 
         $org = Organization::find($orgId);
-        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $periodeLabel = CommissionPeriodeFilter::label($filtrePeriodes);
 
         $pdf = Pdf::loadView('pdf.commissions.index', [
             'title' => 'Commissions livreur vente',
             'org' => $org,
             'periode_label' => $periodeLabel,
-            'filters' => ['statut' => $filtreStatut, 'search' => $search],
+            'filters' => ['statut' => $filtreStatuts, 'search' => $search],
             'sites' => $siteGroups,
             'show_validation_columns' => true,
             'printed_by' => auth()->user()->name ?? '—',
@@ -809,24 +857,24 @@ class CommissionVenteController extends Controller
     }
 
     /**
+     * @param  array<int, string>  $filtrePeriodes
      * @param  array<int, string>  $filtreSiteIds
      * @param  array<int, string>  $filtreProcessus
+     * @param  array<int, string>  $filtreStatuts
      */
-    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = [], array $filtreProcessus = []): Collection
+    private function loadPartsForExport(string $orgId, array $filtrePeriodes, array $filtreSiteIds = [], array $filtreProcessus = [], array $filtreStatuts = []): Collection
     {
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
                 $q->where('organization_id', $orgId);
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $q->whereBetween('earned_at', [$debut, $fin]);
-                }
+                CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
+        self::restreindreAuxStatuts($query, $filtreStatuts);
 
         if (! empty($filtreSiteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
@@ -835,17 +883,23 @@ class CommissionVenteController extends Controller
         return $query->get();
     }
 
-    /** @return Collection<int, array<string, mixed>> */
-    private function buildExportRows(Collection $parts, string $filtrePeriode, string $filtreStatut, string $search, array $fraisDepensesParLivreur = []): Collection
+    /**
+     * $parts est déjà restreint au filtre Statut (loadPartsForExport()) : aucune ligne n'est
+     * re-filtrée ici sur son statut global, comme dans index().
+     *
+     * @param  array<int, string>  $filtrePeriodes
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function buildExportRows(Collection $parts, array $filtrePeriodes, string $search, array $fraisDepensesParLivreur = []): Collection
     {
         $nomsSites = Site::whereIn('id', $parts->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->siteResponsableId())->filter()->unique()->values())
             ->pluck('nom', 'id');
-        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $livParts) use ($filtrePeriode, $fraisDepensesParLivreur, $nomsSites) {
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $livParts) use ($filtrePeriodes, $fraisDepensesParLivreur, $nomsSites) {
             $first = $livParts->first();
             $beneficiaire = $first->resoudreBeneficiaire();
             $fraisDepenses = $fraisDepensesParLivreur[(string) $first->beneficiaire_id] ?? 0.0;
-            // Même règle que index()/showLivreur() : le résumé porte sur toutes les parts
-            // actives (CREEE incluse), seul le statut reste conditionné par la payabilité.
+            // Même règle que index() : le résumé porte sur toutes les parts actives retenues
+            // (CREEE incluse sans filtre Statut), seul le statut reste conditionné par la payabilité.
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $livParts->sum('montant_brut'),
                 0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
@@ -866,8 +920,9 @@ class CommissionVenteController extends Controller
 
             $agence = self::agencesResponsables($livParts, $nomsSites);
 
-            $periodeLabel = $filtrePeriode !== ''
-                ? PeriodeComptableService::labelForCode($filtrePeriode)
+            $periodeUnique = CommissionPeriodeFilter::codeUnique($filtrePeriodes);
+            $periodeLabel = $periodeUnique !== null
+                ? PeriodeComptableService::labelForCode($periodeUnique)
                 : $livParts->pluck('enveloppe.earned_at')
                     ->filter()
                     ->map(fn ($d) => PeriodeComptableService::labelForCode(
@@ -894,12 +949,6 @@ class CommissionVenteController extends Controller
                     : StatutCommission::from($statut)->label(),
             ];
         });
-
-        if ($filtreStatut !== '') {
-            if (in_array($filtreStatut, array_column(StatutCommission::cases(), 'value'), true)) {
-                $rows = $rows->filter(fn ($r) => $r['statut_code'] === $filtreStatut);
-            }
-        }
 
         if ($search !== '') {
             $s = mb_strtolower($search);

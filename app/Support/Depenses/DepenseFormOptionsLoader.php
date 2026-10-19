@@ -45,13 +45,14 @@ final class DepenseFormOptionsLoader
     {
         return Vehicule::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->with(['site:id,nom', 'proprietaire:id,personne_id', 'proprietaire.personne'])
+            ->with(['site:id,nom', 'typeVehicule:id,nom', 'proprietaire:id,personne_id', 'proprietaire.personne'])
             ->orderBy('nom_vehicule')
-            ->get(['id', 'nom_vehicule', 'immatriculation', 'categorie', 'site_id', 'proprietaire_id'])
+            ->get(['id', 'nom_vehicule', 'immatriculation', 'categorie', 'site_id', 'type_vehicule_id', 'proprietaire_id'])
             ->map(fn ($v) => [
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
+                'type_vehicule_nom' => $v->typeVehicule?->nom,
                 // Propriété réelle du véhicule — plus jamais reconstruite depuis
                 // livraison_logistique (confusion usage/propriété corrigée, cf. Vehicule::categorie).
                 // Consommé par Depenses/Create.vue et Edit.vue (vehiculeContext) pour distinguer

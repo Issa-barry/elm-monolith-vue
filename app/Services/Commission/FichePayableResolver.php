@@ -5,8 +5,8 @@ namespace App\Services\Commission;
 use App\Enums\StatutPeriodePaiement;
 use App\Models\PaiementFiche;
 use App\Models\User;
-use App\Services\PeriodeComptableService;
 use App\Services\Tresorerie\DecaissementFicheResolver;
+use App\Support\Commission\CommissionPeriodeFilter;
 use Illuminate\Support\Collection;
 
 /**
@@ -31,7 +31,7 @@ final class FichePayableResolver
         User $user,
         string $beneficiaireType,
         array $beneficiaireIds,
-        string $periodeCode = '',
+        array|string $periodeCodes = [],
     ): Collection {
         if ($beneficiaireIds === [] || ! $user->can('comptabilite.payer')) {
             return collect();
@@ -43,13 +43,9 @@ final class FichePayableResolver
             ->where('beneficiaire_type', $beneficiaireType)
             ->whereIn('beneficiaire_id', $beneficiaireIds)
             ->whereColumn('montant_paye', '<', 'montant_net')
-            ->whereHas('periode', function ($q) use ($periodeCode) {
+            ->whereHas('periode', function ($q) use ($periodeCodes) {
                 $q->where('statut', StatutPeriodePaiement::VALIDEE->value);
-                if ($periodeCode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periodeCode);
-                    $q->where('date_debut', '<=', $fin->toDateString())
-                        ->where('date_fin', '>=', $debut->toDateString());
-                }
+                CommissionPeriodeFilter::appliquerChevauchement($q, CommissionPeriodeFilter::normaliserCodes($periodeCodes));
             })
             ->get()
             ->sortBy(fn (PaiementFiche $f) => $f->periode->date_debut->toDateString().'|'.$f->reference);

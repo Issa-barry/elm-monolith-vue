@@ -133,6 +133,7 @@ use App\Http\Controllers\InstallWizard\VerifyTokenInstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\Livreurs\UpdateLivreurController;
 use App\Http\Controllers\Logistique\EnregistrerRetourTransfertController;
+use App\Http\Controllers\Logistique\OuvrirEcartReceptionController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
@@ -268,6 +269,7 @@ use App\Http\Controllers\Ventes\ShowCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
 use App\Http\Controllers\Ventes\StorePrecommandeController;
+use App\Http\Controllers\Ventes\TelechargerFactureVenteController;
 use App\Http\Controllers\Ventes\UpdateCommandeVenteController;
 use App\Http\Controllers\Ventes\ValiderCommandeVenteController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
@@ -488,6 +490,7 @@ Route::prefix('backoffice')->group(function () {
             // Encaisser dans son agence une commande d'une autre agence (ADR 0012) : recherche par
             // référence exacte, lecture seule — l'encaissement passe par encaissements.store.
             Route::get('factures/autre-agence', RechercherFactureAutreAgenceController::class)->name('factures.autre-agence');
+            Route::get('factures/{facture_vente}/pdf', TelechargerFactureVenteController::class)->name('factures.pdf');
 
             // Encaissements factures
             Route::post('factures/{facture_vente}/encaissements', StoreEncaissementVenteController::class)->name('encaissements.store');
@@ -1058,6 +1061,9 @@ Route::prefix('backoffice')->group(function () {
 
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
+
+            // Signalement d'écart de réception ouvert depuis la cloche (ADR 0032)
+            Route::post('logistique/ecarts-reception/{notification}/ouvrir', OuvrirEcartReceptionController::class)->name('logistique.ecarts-reception.ouvrir');
 
             // Versements de parts de commission
             Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])

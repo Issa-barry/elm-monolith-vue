@@ -171,7 +171,11 @@ class PaiementPeriodeController extends Controller
 
         $allFiches = $periode->fiches()->get();
 
-        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'nb_membres', 'etat', 'beneficiaire']);
+        $filters = $request->only(['vehicule', 'type_vehicule_id', 'livreur', 'proprietaire', 'nb_membres', 'beneficiaire']);
+        // Choix multiple : la ligne est gardée si son état fait partie de la sélection.
+        if ($etats = array_values(array_filter((array) $request->input('etat', []), 'is_string'))) {
+            $filters['etat'] = $etats;
+        }
 
         // Le détail de période est centré véhicule pour livreur/propriétaire : c'est ainsi que
         // le métier travaille pour ces deux types (une commission de vente/logistique s'ancre
@@ -221,7 +225,7 @@ class PaiementPeriodeController extends Controller
                         }
                     }
                     if (! empty($filters['etat'])) {
-                        if ($v['statut_validation'] !== $filters['etat']) {
+                        if (! in_array($v['statut_validation'], $filters['etat'], true)) {
                             return false;
                         }
                     }
@@ -249,7 +253,7 @@ class PaiementPeriodeController extends Controller
                     fn (PaiementFiche $f) => str_contains(mb_strtolower($f->beneficiaire_nom ?? ''), mb_strtolower(trim($filters['beneficiaire'])))
                 ))
                 ->when(! empty($filters['etat']), fn ($c) => $c->filter(
-                    fn (PaiementFiche $f) => $f->statut?->value === $filters['etat']
+                    fn (PaiementFiche $f) => in_array($f->statut?->value, $filters['etat'], true)
                 ))
                 ->map(fn (PaiementFiche $f) => [
                     'fiche_id' => $f->id,

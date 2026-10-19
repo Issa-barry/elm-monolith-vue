@@ -41,6 +41,7 @@ interface Vehicule {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
+    type_vehicule_nom: string | null;
     categorie: string;
     site_nom: string | null;
     proprietaire_nom: string | null;
@@ -600,8 +601,11 @@ function submitBrouillon() {
                                         "
                                     >
                                         {{
-                                            vehiculeSelected?.nom_vehicule ??
-                                            'Rechercher un véhicule…'
+                                            vehiculeSelected
+                                                ? vehiculeSelected.type_vehicule_nom
+                                                    ? `${vehiculeSelected.nom_vehicule} (${vehiculeSelected.type_vehicule_nom})`
+                                                    : vehiculeSelected.nom_vehicule
+                                                : 'Rechercher un véhicule…'
                                         }}
                                     </span>
                                 </button>
@@ -633,6 +637,13 @@ function submitBrouillon() {
                                 <template #option="{ option }">
                                     <div class="leading-tight font-medium">
                                         {{ option.nom_vehicule }}
+                                        <span
+                                            v-if="option.type_vehicule_nom"
+                                            class="font-normal text-muted-foreground"
+                                            >({{
+                                                option.type_vehicule_nom
+                                            }})</span
+                                        >
                                     </div>
                                     <div
                                         class="mt-0.5 font-mono text-xs text-muted-foreground"

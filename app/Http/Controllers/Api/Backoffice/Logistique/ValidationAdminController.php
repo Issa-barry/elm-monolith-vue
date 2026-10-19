@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\CommissionTriggerService;
 use App\Services\MouvementStockService;
 use App\Services\TransfertActiviteService;
+use App\Services\TransfertEcartReceptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -102,6 +103,7 @@ class ValidationAdminController extends Controller
             ]);
 
             MouvementStockService::supprimerEntreeDestination($transfert);
+            TransfertEcartReceptionService::retirerSignalements($transfert);
         });
 
         TransfertActiviteService::log($transfert, 'reception_invalidee', [], $user->id);

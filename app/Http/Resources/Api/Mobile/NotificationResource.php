@@ -39,6 +39,7 @@ class NotificationResource extends JsonResource
         'depense_validee' => 'expense.validated',
         'transfert_cree' => 'transfer.created',
         'transfert_receptionne' => 'transfer.received',
+        'transfert_ecart_reception' => 'transfer.reception_discrepancy',
         'stock_alerte' => 'stock.alert',
     ];
 

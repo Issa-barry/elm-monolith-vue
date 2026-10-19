@@ -8,14 +8,18 @@ use App\Http\Requests\StoreDepenseRequest;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Services\AuditLogService;
+use App\Services\Depenses\CommandeCarburantService;
 use App\Services\DroitCreationDepenseService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class StoreDepenseController extends Controller
 {
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly DroitCreationDepenseService $droitCreationDepense,
+        private readonly CommandeCarburantService $commandeCarburant,
     ) {}
 
     public function __invoke(StoreDepenseRequest $request): RedirectResponse
@@ -42,19 +46,29 @@ class StoreDepenseController extends Controller
 
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
-        $depense = Depense::create([
-            'organization_id' => $orgId,
-            'user_id' => auth()->id(),
-            'depense_type_id' => $request->depense_type_id,
-            'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
-            'beneficiaire_id' => $type->categorie->needsBeneficiaire() ? $request->beneficiaire_id : null,
-            ...$request->rattachementCommandeAttributs(),
-            'site_id' => $request->site_id,
-            'montant' => $request->montant,
-            'date_depense' => $request->date_depense,
-            'commentaire' => $request->commentaire,
-            'statut' => $request->statut,
-        ]);
+        $rattachement = $request->rattachementCommandeAttributs();
+
+        $depense = DB::transaction(function () use ($request, $orgId, $type, $rattachement) {
+            // Unicité de la commande (ADR 0031, DEPCARB-004), reposée sous verrou.
+            $erreur = $this->commandeCarburant->verrouillerUnicite($rattachement['commande_vente_id'], $rattachement['transfert_logistique_id']);
+            if ($erreur !== null) {
+                throw ValidationException::withMessages(['commande' => ucfirst($erreur)]);
+            }
+
+            return Depense::create([
+                'organization_id' => $orgId,
+                'user_id' => auth()->id(),
+                'depense_type_id' => $request->depense_type_id,
+                'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
+                'beneficiaire_id' => $type->categorie->needsBeneficiaire() ? $request->beneficiaire_id : null,
+                ...$rattachement,
+                'site_id' => $request->site_id,
+                'montant' => $request->montant,
+                'date_depense' => $request->date_depense,
+                'commentaire' => $request->commentaire,
+                'statut' => $request->statut,
+            ]);
+        });
 
         $this->audit->record($depense, AuditEvent::CREATED, auth()->user(), null, null, [
             'module' => 'depenses',

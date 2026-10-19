@@ -1,7 +1,7 @@
 # ADR 0031 — Rattachement d'une dépense de carburant à sa commande
 
 - **Date** : 2026-10-16
-- **Statut** : accepté et livré le 2026-10-16, amendé le 2026-10-17 (exception retirée, filtre jour + agence, champ de recherche)
+- **Statut** : accepté et livré le 2026-10-16, amendé le 2026-10-17 (exception retirée, filtre jour + agence, champ de recherche, unicité de la commande)
 - **Périmètre** : Dépenses (saisie, modification, soumission, liste, détail) et types de dépense
 - **Doc métier** : [depenses-carburant-commande.md](../depenses-carburant-commande.md)
 
@@ -23,7 +23,10 @@ l'agent. Confrontée au code :
 ## Décision
 
 1. **Une commande de référence par dépense** (vente/distribution **ou** transfert), pas de
-   répartition du coût entre les commandes d'une tournée.
+   répartition du coût entre les commandes d'une tournée. **Unicité** (17/10/2026) : une commande
+   n'est rattachée qu'à une seule dépense non rejetée ni annulée (brouillon compris), contrôle
+   serveur reposé sous verrou de la commande ; elle était d'abord partageable avec un simple
+   avertissement.
 2. **Commande obligatoire, sans exception** (décision du 17/10/2026). Une première version
    (16/10) autorisait une exception motivée (plein de début de semaine, retour à vide, garage),
    validée par le valideur habituel et signalée « Sans commande » ; elle a été retirée : un plein

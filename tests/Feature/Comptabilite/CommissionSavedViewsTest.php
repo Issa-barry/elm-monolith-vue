@@ -27,10 +27,10 @@ class CommissionSavedViewsTest extends TestCase
     public static function lists(): array
     {
         return [
-            'livreurs' => ['commissions-livreurs', 'vente', 'impaye', 'filtre_statut'],
-            'proprietaires' => ['commissions-proprietaires', 'proprietaires', 'impaye', 'filtre_statut'],
-            'sites' => ['commissions-sites', 'sites', 'impaye', 'filtre_statut'],
-            'consultants' => ['commissions-consultants', 'consultants', 'impaye', 'filtre_statut'],
+            'livreurs' => ['commissions-livreurs', 'vente', 'impaye', 'filtre_statuts'],
+            'proprietaires' => ['commissions-proprietaires', 'proprietaires', 'impaye', 'filtre_statuts'],
+            'sites' => ['commissions-sites', 'sites', 'impaye', 'filtre_statuts'],
+            'consultants' => ['commissions-consultants', 'consultants', 'impaye', 'filtre_statuts'],
             'cashback' => ['cashback', 'cashback', 'valide', 'filters.statut'],
         ];
     }
@@ -46,20 +46,24 @@ class CommissionSavedViewsTest extends TestCase
             'name' => 'Vue comptable', 'visibility' => 'personal', 'filters' => $filters, 'is_default' => true,
         ])->assertCreated()->json('id');
 
+        // Les listes de commissions restituent statut/période en tableau (multi-sélection) ; une
+        // vue enregistrée avant la multi-sélection (valeur scalaire) reste appliquée.
+        $attendu = fn (string $valeur) => $scope === 'cashback' ? $valeur : ($valeur === '' ? [] : [$valeur]);
+
         $url = '/backoffice/comptabilite/commissions/'.$path;
         foreach ([$url.'?saved_view='.$id, $url] as $target) {
-            $this->get($target)->assertOk()->assertInertia(function (Assert $page) use ($id, $prop, $status, $scope) {
-                $page->where('saved_view.id', $id)->where($prop, $status);
+            $this->get($target)->assertOk()->assertInertia(function (Assert $page) use ($id, $prop, $status, $scope, $attendu) {
+                $page->where('saved_view.id', $id)->where($prop, $attendu($status));
                 if ($scope !== 'cashback') {
                     $page->where('filtre_processus', ['vente', 'logistique_transfert'])
-                        ->where('selected_periode', '2026-08-P1');
+                        ->where('selected_periodes', ['2026-08-P1']);
                 }
             });
         }
         $this->get($url.'?all=1')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('saved_view', null)->where($prop, ''));
+            ->where('saved_view', null)->where($prop, $attendu('')));
         $this->get($url.'?statut=partiel')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('saved_view', null)->where($prop, 'partiel'));
+            ->where('saved_view', null)->where($prop, $attendu('partiel')));
     }
 
     #[DataProvider('lists')]

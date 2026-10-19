@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Notifications\CommandeAchatNotification;
 use App\Services\Achats\CommandeAchatService;
+use App\Support\Documents\BonCommandeAchatDocument;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1004,12 +1005,12 @@ class CommandeAchatTest extends TestCase
         $this->assertStringContainsString('application/pdf', $response->headers->get('Content-Type'));
 
         $commande->load(['fournisseur', 'lignes', 'createdBy', 'valideePar', 'organization', 'site']);
-        $html = view('pdf.bon_commande_achat', ['commande' => $commande, 'organisation' => $commande->organization, 'createdBy' => '—'])->render();
+        $html = view('pdf.bon_commande_achat', ['document' => BonCommandeAchatDocument::depuis($commande, $commande->organization)])->render();
         $this->assertStringContainsString('NON VALIDÉ', $html);
 
         $this->actingAs($this->makeValidateur())->patch(route('achats.valider', $commande));
         $commande = $commande->fresh(['fournisseur', 'lignes', 'createdBy', 'valideePar', 'organization', 'site']);
-        $html = view('pdf.bon_commande_achat', ['commande' => $commande, 'organisation' => $commande->organization, 'createdBy' => '—'])->render();
+        $html = view('pdf.bon_commande_achat', ['document' => BonCommandeAchatDocument::depuis($commande, $commande->organization)])->render();
         $this->assertStringNotContainsString('NON VALIDÉ', $html);
         $this->assertStringContainsString('Bon de commande validé', $html);
     }

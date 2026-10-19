@@ -219,4 +219,33 @@ describe('CommandeCarburantField', () => {
             wrapper.find('[data-testid="commande-carburant-message"]').text(),
         ).toContain('Vérifiez le véhicule, la date et l’agence.');
     });
+
+    it('une commande déjà rattachée à une autre dépense est grisée et non sélectionnable', async () => {
+        repondre([{ ...vente, depenses_liees: 1 }, transfert]);
+        const wrapper = monter();
+        await flushPromises();
+        const champ = wrapper.find('#dep-commande');
+
+        await champ.trigger('focus');
+        const prise = wrapper.find('[data-cle="vente:v1"]');
+        expect(prise.attributes('disabled')).toBeDefined();
+        expect(prise.text()).toContain('Déjà rattachée à une autre dépense');
+
+        await prise.trigger('click');
+        await champ.trigger('keydown', { key: 'Enter' });
+        expect(wrapper.emitted('update:selection')).toBeUndefined();
+
+        await wrapper.find('[data-cle="transfert:t1"]').trigger('click');
+        expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([
+            transfert,
+        ]);
+    });
+
+    it('en modification, transmet la dépense pour ne pas griser sa propre commande', async () => {
+        const fetchMock = repondre([]);
+        monter({ depenseId: 'dep-1' });
+        await flushPromises();
+
+        expect(fetchMock.mock.calls[0][0]).toContain('depense_id=dep-1');
+    });
 });
