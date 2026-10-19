@@ -71,24 +71,36 @@ enfants.
 
 | Périmètre | Qui voit / agit sur toutes les agences | Source unique |
 |---|---|---|
-| **Consultation** (listes, détails, recherche, exports, statistiques) | administrateur, **ou** rôle ayant la permission `sites.lecture_toutes_agences` | `User::voitToutesLesAgences()`, `SiteScopeService::accessibleSiteIds()` |
-| **Écriture** (créer, modifier, supprimer, valider, payer, réceptionner…) | administrateur seulement ; sinon agences de rattachement | `User::isAdmin()`, `SiteScopeService::assignedSiteIds()`, policies |
+| **Consultation** (listes, détails, recherche, exports, statistiques) | administrateur, superviseur, **ou** rôle ayant la permission `sites.lecture_toutes_agences` | `User::voitToutesLesAgences()`, `SiteScopeService::accessibleSiteIds()` |
+| **Écriture** (créer, modifier, supprimer, valider, payer, réceptionner…) | administrateur ou superviseur (ADR 0034) ; sinon agences de rattachement | `User::agitSurToutesLesAgences()`, `SiteScopeService::assignedSiteIds()`, policies |
 
 - La permission se coche dans Rôles & Permissions → Sites → « Périmètre de consultation ». Elle
   n'ouvre aucun écran : « Lire » sur la ressource reste requis. Elle ne dépend ni du libellé ni du
   trinôme du rôle.
 - Elle n'accorde aucune écriture : un rôle qui a aussi « Créer » ou « Modifier » continue d'agir
   uniquement dans ses agences de rattachement.
-- Tout nouvel écran de liste applique `voitToutesLesAgences()` pour la lecture et `isAdmin()` pour
-  l'écriture — jamais `isAdmin()` pour décider de ce qui est affiché.
-- **Exemple : superviseur.** Pour qu'un superviseur consulte toutes les agences, on coche cette
-  permission sur son rôle, en plus des « Lire » des modules qu'il doit voir. Sans elle, il reste
-  limité à son agence de rattachement et le filtre Agence est verrouillé (cadenas). Avec elle, il
-  voit les mêmes lignes, totaux et exports qu'un administrateur, et peut filtrer une agence ou les
-  voir toutes. Il ne peut créer, modifier, valider, supprimer ou encaisser que si le rôle a aussi
-  la permission correspondante (`ventes.create`, `ventes.update`, `ventes.delete`,
-  `factures.encaisser`…), et seulement dans ses agences de rattachement. Aucune règle ne teste le
-  nom « superviseur ».
+- Tout nouvel écran de liste applique `voitToutesLesAgences()` pour la lecture et
+  `agitSurToutesLesAgences()` pour choisir les agences d'une écriture — jamais `isAdmin()` pour
+  décider de ce qui est affiché ou de l'agence où l'on agit. `isAdmin()` reste réservé aux
+  fonctions d'administration (rôles, organisation, périodes de paie, annulation d'une vente…).
+
+### Superviseur : toutes les agences, comme un administrateur (ADR 0034)
+
+Le rôle de nom technique `superviseur` (libellé « SUPERVISEUR ») consulte **et** agit sur toutes
+les agences de l'organisation, quelles que soient ses permissions, sans case à cocher. Codé sur le
+rôle par décision de l'utilisateur.
+
+- Ses **permissions** décident toujours de ce qu'il fait : sans « Lire » il n'accède pas au module,
+  sans « Créer », « Modifier », « Valider », « Encaisser »… il ne fait pas l'action. Avec la
+  permission, il la fait dans n'importe quelle agence.
+- Il ne reçoit pas les fonctions réservées aux administrateurs (périodes de paie, annulation d'une
+  vente, validation d'un cashback, validation administrative d'une réception, ajustements de
+  commissions, rôles, organisation).
+- Les modules qui ont leur propre réglage par rôle s'appliquent à lui comme à admin_entreprise :
+  « Peut acheter pour », droits de création/validation des dépenses, droit d'ajustement de stock,
+  plafonds de validation.
+- Le libellé et le trinôme peuvent être renommés sans effet. Un rôle recréé sous un autre libellé
+  (autre nom technique) n'en profite pas.
 
 ## Import CSV
 

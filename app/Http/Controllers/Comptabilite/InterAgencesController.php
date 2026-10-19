@@ -205,7 +205,7 @@ class InterAgencesController extends Controller
             404,
         );
 
-        if ($consultation ? $user->voitToutesLesAgences() : $user->isAdmin()) {
+        if ($consultation ? $user->voitToutesLesAgences() : $user->agitSurToutesLesAgences()) {
             return;
         }
 

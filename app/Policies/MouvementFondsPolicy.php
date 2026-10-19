@@ -57,7 +57,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($debiteur->id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($debiteur->id);
     }
 
     public function envoyer(User $user, MouvementFonds $mouvement): bool
@@ -66,7 +66,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($mouvement->site_origine_id);
     }
 
     public function recevoir(User $user, MouvementFonds $mouvement): bool
@@ -81,7 +81,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($mouvement->site_destination_id);
     }
 
     public function annuler(User $user, MouvementFonds $mouvement): bool
@@ -90,7 +90,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($mouvement->site_origine_id);
     }
 
     /** Contestation — côté destinataire : "je n'ai rien reçu". */
@@ -103,7 +103,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($mouvement->site_destination_id);
     }
 
     /** Retour confirmé — côté origine : l'argent est physiquement revenu. */
@@ -116,7 +116,7 @@ class MouvementFondsPolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($mouvement->site_origine_id);
     }
 
     private function sameOrganization(User $user, MouvementFonds $mouvement): bool

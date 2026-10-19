@@ -35,7 +35,7 @@ class PaiementFichePolicy
             return false;
         }
 
-        return $user->isAdmin() || $this->sameSite($user, $fiche);
+        return $user->agitSurToutesLesAgences() || $this->sameSite($user, $fiche);
     }
 
     private function sameSite(User $user, PaiementFiche $fiche): bool

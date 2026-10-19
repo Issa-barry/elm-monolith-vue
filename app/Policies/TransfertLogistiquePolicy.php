@@ -70,7 +70,7 @@ class TransfertLogistiquePolicy
 
     /**
      * Valider la réception (TRANSIT → RECEPTION).
-     * Les admins (super_admin, admin_entreprise) ont autorité sur toute l'organisation.
+     * Les admins et le superviseur (User::agitSurToutesLesAgences()) agissent sur toute l'organisation.
      * Les autres utilisateurs doivent être affectés au site destination.
      */
     public function validerReception(User $user, TransfertLogistique $transfert): bool
@@ -82,8 +82,8 @@ class TransfertLogistiquePolicy
             return false;
         }
 
-        // Admins : autorité globale sur l'organisation
-        if ($user->isAdmin()) {
+        // Admins et superviseur (User::agitSurToutesLesAgences()) : toutes les agences de l'organisation
+        if ($user->agitSurToutesLesAgences()) {
             return true;
         }
 
@@ -111,8 +111,8 @@ class TransfertLogistiquePolicy
             return false;
         }
 
-        // Admins : autorité globale sur l'organisation
-        if ($user->isAdmin()) {
+        // Admins et superviseur (User::agitSurToutesLesAgences()) : toutes les agences de l'organisation
+        if ($user->agitSurToutesLesAgences()) {
             return true;
         }
 
@@ -141,7 +141,7 @@ class TransfertLogistiquePolicy
             return false;
         }
 
-        if ($user->isAdmin()) {
+        if ($user->agitSurToutesLesAgences()) {
             return true;
         }
 

@@ -28,7 +28,7 @@ class UpdateDepenseController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        if (! $user->isAdmin()) {
+        if (! $user->agitSurToutesLesAgences()) {
             $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
             abort_unless(
                 in_array($request->site_id, $allowedSiteIds, true),

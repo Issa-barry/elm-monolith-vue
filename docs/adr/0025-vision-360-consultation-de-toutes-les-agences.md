@@ -1,7 +1,8 @@
 # ADR 0025 — Vision 360° : consulter les données de toutes les agences, sans élargir l'écriture
 
 - **Date** : 2026-10-10
-- **Statut** : accepté le 2026-10-10 (décisions de l'utilisateur pendant le chantier)
+- **Statut** : accepté le 2026-10-10 (décisions de l'utilisateur pendant le chantier) — point 5
+  amendé par [ADR 0034](0034-superviseur-agit-sur-toutes-les-agences.md) pour le rôle superviseur
 - **Amende** : [ADR 0021](0021-achats-bon-de-commande-valide-par-plafond-de-role.md), point 2 « voir »
   et point 8 (liste des réceptions), en consultation seulement
 - **Détail fonctionnel** : [docs/sites.md](../sites.md) (périmètre de consultation),
