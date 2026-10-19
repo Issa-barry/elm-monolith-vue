@@ -602,6 +602,41 @@ class CommissionAjustementVenteTest extends TestCase
         $this->assertSame(StatutPeriodePaiement::CALCULEE->value, $periode->statut->value);
         $this->assertTrue($periode->calculated_at->equalTo($calculeLe), 'la période ne doit pas avoir été recalculée');
         $this->assertFalse(app(PeriodeCalculatorService::class)->needsRecalcul($periode));
+
+        // Une vraie modification de montant continue, elle, de déclencher le recalcul.
+        $this->travel(5)->minutes();
+        $partB = CommissionAdjustmentService::partsPourPeriode($periode)
+            ->first(fn ($p) => $p->validated_at === null);
+        $this->actingAs($this->user)->post(route('comptabilite.ajustements.absence', ['type' => 'vente', 'partId' => $partB->id]));
+
+        $this->assertTrue($periode->fresh()->calculated_at->greaterThan($calculeLe), 'un ajustement doit recalculer la période');
+    }
+
+    /**
+     * Deux validations simultanées (clic + validation automatique, deux onglets) : la seconde,
+     * qui a lu la période avant que la première ne la valide, ne la revalide ni ne la réaudite.
+     *
+     * @test
+     */
+    public function une_validation_sur_une_periode_deja_validee_entre_temps_est_refusee(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $parts = CommissionAdjustmentService::partsPourPeriode($periode);
+        CommissionEnveloppePart::whereIn('id', $parts->pluck('id'))->update(['validated_at' => now(), 'validated_by' => $this->user->id]);
+
+        $copieLue = $periode->fresh();
+        $this->assertNull(app(PeriodeValidationService::class)->valider($periode->fresh(), $this->user));
+
+        $this->mock(AuditLogService::class, fn ($mock) => $mock->shouldNotReceive('record'));
+
+        $this->assertSame(
+            'Seule une période calculée peut être validée.',
+            app(PeriodeValidationService::class)->valider($copieLue, $this->user),
+        );
     }
 
     /**
@@ -676,7 +711,11 @@ class CommissionAjustementVenteTest extends TestCase
         CommissionEnveloppePart::whereIn('id', $parts->pluck('id'))->update(['validated_at' => now(), 'validated_by' => $this->user->id]);
         $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value, 'validated_at' => now()]);
 
-        $this->artisan('commissions:activer-periodes-validees')->assertSuccessful();
+        $this->artisan('commissions:activer-periodes-validees', ['--periode' => 'PAY-INEXISTANTE'])
+            ->expectsOutput('Aucune période validée ne porte de commission « À valider ».')
+            ->assertSuccessful();
+
+        $this->artisan('commissions:activer-periodes-validees', ['--periode' => $periode->reference])->assertSuccessful();
         foreach ($parts as $part) {
             $this->assertSame('creee', $part->fresh()->statut->value, 'l\'aperçu ne doit rien modifier');
         }

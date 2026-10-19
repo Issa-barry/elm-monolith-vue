@@ -28,6 +28,7 @@ class CommissionsActiverPeriodesValideesCommand extends Command
 {
     protected $signature = 'commissions:activer-periodes-validees
         {--organization= : ID d\'organisation ; toutes si omis}
+        {--periode= : Référence de la période (ex. PAY-202610-P1-LIV) ; toutes les périodes validées si omis}
         {--appliquer : Active les commissions (sinon simple aperçu)}';
 
     protected $description = 'Active les commissions restées « À valider » sur des périodes déjà validées (aperçu par défaut).';
@@ -38,18 +39,26 @@ class CommissionsActiverPeriodesValideesCommand extends Command
 
         $periodes = PaiementPeriode::whereIn('statut', [StatutPeriodePaiement::VALIDEE->value, StatutPeriodePaiement::CLOTUREE->value])
             ->when($this->option('organization'), fn ($q, $org) => $q->where('organization_id', $org))
+            ->when($this->option('periode'), fn ($q, $reference) => $q->where('reference', $reference))
             ->orderBy('date_debut')
             ->get();
 
         $lignes = [];
         foreach ($periodes as $periode) {
-            $creees = $this->compterCreees($periode, CommissionEnveloppePart::class)
-                + $this->compterCreees($periode, CommissionLogistiquePart::class);
+            [$nbVente, $montantVente] = $this->creees($periode, CommissionEnveloppePart::class);
+            [$nbLogistique, $montantLogistique] = $this->creees($periode, CommissionLogistiquePart::class);
+            $creees = $nbVente + $nbLogistique;
             if ($creees === 0) {
                 continue;
             }
 
-            $lignes[] = [$periode->reference, $periode->type->value, $periode->statut->value, $creees];
+            $lignes[] = [
+                $periode->reference,
+                $periode->type->value,
+                $periode->statut->value,
+                $creees,
+                number_format($montantVente + $montantLogistique, 0, ',', ' '),
+            ];
 
             if ($appliquer) {
                 DB::transaction(function () use ($periode, $creees, $auditLog) {
@@ -71,24 +80,38 @@ class CommissionsActiverPeriodesValideesCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->table(['Période', 'Type', 'Statut', 'Commissions « À valider »'], $lignes);
+        $this->table(['Période', 'Type', 'Statut', 'Commissions « À valider »', 'Montant (GNF)'], $lignes);
         $this->line(count($lignes).' période(s) '.($appliquer
-            ? 'rattrapée(s). Lancer ensuite : php artisan comptabilite:rattraper --type=fiche'
+            ? 'rattrapée(s). Lancer ensuite : php artisan comptabilite:rattraper --type=fiche --type=paiement-fiche --dry-run, puis sans --dry-run'
             : 'à rattraper — relancer avec --appliquer pour activer.'));
 
         return self::SUCCESS;
     }
 
-    /** @param  class-string<CommissionEnveloppePart|CommissionLogistiquePart>  $classePart */
-    private function compterCreees(PaiementPeriode $periode, string $classePart): int
+    /**
+     * Nombre et montant dû des parts encore CREEE portées par les fiches de la période.
+     *
+     * @param  class-string<CommissionEnveloppePart|CommissionLogistiquePart>  $classePart
+     * @return array{0: int, 1: float}
+     */
+    private function creees(PaiementPeriode $periode, string $classePart): array
     {
         $ids = PaiementFicheLigne::whereIn('fiche_id', $periode->fiches()->pluck('id'))
             ->where('source_type', $classePart)
             ->pluck('source_id')
             ->unique();
 
-        return $ids->chunk(500)->sum(fn ($lot) => $classePart::whereIn('id', $lot->values())
-            ->where('statut', StatutCommission::CREEE->value)
-            ->count());
+        $nombre = 0;
+        $montant = 0.0;
+        foreach ($ids->chunk(500) as $lot) {
+            $resultat = $classePart::whereIn('id', $lot->values())
+                ->where('statut', StatutCommission::CREEE->value)
+                ->selectRaw('COUNT(*) as n, COALESCE(SUM(COALESCE(montant_actuel, montant_net)), 0) as s')
+                ->first();
+            $nombre += (int) $resultat->n;
+            $montant += (float) $resultat->s;
+        }
+
+        return [$nombre, $montant];
     }
 }

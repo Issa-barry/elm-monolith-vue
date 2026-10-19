@@ -1421,7 +1421,9 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   dans une seule transaction (`PeriodeValidationService::valider`). Une interruption laisse la
   période « Calculée » et ses commissions intactes, jamais une période validée à moitié activée. La
   comptabilisation des fiches reste en aval, hors transaction (elle n'a jamais fait échouer la
-  validation).
+  validation). La période est relue sous verrou (`lockForUpdate`) dans la transaction : deux
+  validations simultanées (clic et validation automatique, deux onglets) ne la valident et ne
+  l'auditent qu'une fois.
 - **Activation part par part** : chaque part `creee` est activée pour elle-même, même si son
   enveloppe (ou sa commission logistique) est déjà sortie de `creee`, en SQL groupé.
 - **Une validation ne relance plus le calcul** : poser `validated_at` ne modifie plus `updated_at`
@@ -1430,10 +1432,16 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 - **Validation en masse des véhicules** : la période est lue une seule fois et les parts de tous les
   véhicules retenus sont validées en un seul lot (au lieu d'une relecture complète de la période et
   d'un traitement par véhicule). Même règle d'équilibre par véhicule, même audit par véhicule.
-- **Rattrapage** : `php artisan commissions:activer-periodes-validees` (aperçu), puis avec
-  `--appliquer` ; ensuite `php artisan comptabilite:rattraper --type=fiche --dry-run`, puis sans
-  `--dry-run`, pour les pièces « fiche validée » manquantes.
+- **Rattrapage** : `php artisan commissions:activer-periodes-validees` (aperçu : période, nombre et
+  montant des commissions « À valider » ; `--periode=PAY-…` pour cibler une période), puis avec
+  `--appliquer` (transaction + audit par période, idempotent). Ensuite
+  `php artisan comptabilite:rattraper --type=fiche --type=paiement-fiche --dry-run`, puis sans
+  `--dry-run`, pour les pièces « fiche validée » manquantes (et les paiements éventuellement faits
+  entre-temps). Un paiement fait avant le rattrapage reste juste : il est réparti sur toutes les
+  parts de la fiche, y compris celles restées « À valider », qui passent « Payé » et que le
+  rattrapage ignore ensuite.
 - Tests : `CommissionAjustementVenteTest` (`valider_un_vehicule_ne_relance_pas_le_calcul_de_la_periode`,
+  `une_validation_sur_une_periode_deja_validee_entre_temps_est_refusee`,
   `la_validation_active_une_part_restee_creee_derriere_une_enveloppe_deja_activee`,
   `une_validation_interrompue_laisse_la_periode_calculee_et_les_commissions_a_valider`,
   `la_commande_de_rattrapage_active_les_commissions_d_une_periode_deja_validee`).

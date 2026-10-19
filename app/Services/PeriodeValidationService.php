@@ -88,7 +88,14 @@ class PeriodeValidationService
         // Tout ou rien : une période ne passe jamais « Validée » sans que ses commissions soient
         // activées. Le 17/10/2026, une requête interrompue en pleine activation avait laissé
         // PAY-202610-P1-LIV validée avec 2 258 commissions encore « À valider ».
-        DB::transaction(function () use ($periode, $user, $automatique) {
+        $validee = DB::transaction(function () use ($periode, $user, $automatique) {
+            // Verrou + relecture : deux validations simultanées (clic et validation automatique,
+            // ou deux onglets) ne valident et n'auditent la période qu'une seule fois.
+            $etatActuel = PaiementPeriode::whereKey($periode->id)->lockForUpdate()->first(['id', 'statut'])?->statut;
+            if ($etatActuel !== StatutPeriodePaiement::CALCULEE) {
+                return false;
+            }
+
             $periode->update([
                 'statut' => StatutPeriodePaiement::VALIDEE->value,
                 'validated_by' => $user?->id,
@@ -108,7 +115,13 @@ class PeriodeValidationService
                     ? "Période {$periode->reference} validée automatiquement : toutes ses commissions sont validées ({$nbCommissionsActivees} commission(s) activée(s))"
                     : "Période {$periode->reference} validée ({$nbCommissionsActivees} commission(s) de vente activée(s))",
             ]);
+
+            return true;
         });
+
+        if (! $validee) {
+            return 'Seule une période calculée peut être validée.';
+        }
 
         // Comptabilité générale : engagement de la dette envers chaque bénéficiaire,
         // en aval — ne doit jamais faire échouer la validation métier (mode shadow,
