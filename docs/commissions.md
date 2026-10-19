@@ -516,6 +516,60 @@ tracée par bénéficiaire via la colonne « Origine » de `commission_details`.
   fiche détail) ne sont eux non plus jamais ventilés par processus — l'argent versé à un bénéficiaire
   ne « sait » pas de quel processus il provenait.
 
+### Listes (Index) — Statut et Période à choix multiple (18/10/2026)
+
+Sur les quatre listes Livreurs, Propriétaires, Agences et Consultants, les filtres **Statut** et
+**Période** du drawer « Filtres » sont désormais des cases à cocher multiples (`multi-select`,
+recherche dans la liste des périodes). L'écran historique Commission logistique (retiré du menu)
+garde un choix unique.
+
+- **Union, jamais intersection** : un bénéficiaire est affiché si son statut global est l'un des
+  statuts cochés (`CommissionStatutFilter`) — sauf sur l'écran **Livreurs**, où le statut s'applique
+  commission par commission (section suivante) ; une commission est retenue si sa date (`earned_at`)
+  tombe dans l'une des périodes cochées (`CommissionPeriodeFilter`). Aucune case cochée = tous les
+  statuts / toutes les périodes.
+- **Même périmètre partout** : les dépenses déduites (`date_depense`), la fiche proposée au bouton
+  Payer (`FichePayableResolver`) et les exports Excel/PDF utilisent exactement les mêmes périodes
+  que la liste.
+- **Une période unique seulement pour ce qui n'a de sens que pour une période** : le badge de
+  statut de période de l'en-tête et le lien « Répartir » ne s'affichent / ne transmettent la
+  période que si une seule est cochée. L'en-tête affiche « Toutes les périodes », le libellé de la
+  période, deux libellés joints, ou « N périodes sélectionnées » au-delà.
+- **Compatibilité** : un lien ou une vue enregistrée avec une valeur unique (`?statut=impaye`,
+  `?periode=2026-09-P1`) reste accepté ; une valeur inconnue ou un code de période mal formé est
+  écarté. Les props Inertia sont `filtre_statuts` et `selected_periodes` (tableaux).
+- Les fiches détail (Show) gardent leur sélecteur de période unique.
+
+### Commissions des livreurs — le filtre Statut s'applique aux montants (18/10/2026)
+
+**Constat** : avec « Impayé », la liste retenait les livreurs dont le statut *global* était
+« Impayé », mais leurs montants additionnaient toutes leurs commissions actives, y compris celles
+encore à valider. Et un livreur déjà payé en partie (statut global « Partiel ») disparaissait de la
+vue « Impayé » même avec d'autres commissions validées non payées.
+
+**Règle** (écran Livreurs, liste et exports Excel/PDF) :
+
+- Le filtre Statut porte sur le **statut de chaque commission** (`CommissionEnveloppePart.statut`),
+  jamais sur le statut global du livreur : `creee` = à valider (période non validée), `impaye` =
+  validée, rien versé, `partiel` = validée, versée en partie, `paye` = soldée. Plusieurs statuts
+  cochés s'unissent.
+- Un livreur est listé dès qu'il a au moins une commission retenue. Toutes ses colonnes (Généré,
+  Brut, Dépenses, Net à payer, Déjà payé, Reste à payer), le bouton Valider (parts à valider
+  retenues) et les cartes du haut ne cumulent que ces commissions.
+- **Dépenses** : seules les dépenses validées datées dans une période de paie (quinzaine) où le
+  livreur a au moins une commission retenue sont déduites — même rattachement par date que la fiche
+  de paie (`CommissionVenteCalculatorService::fraisDepensesSurPeriodesDesParts()`). Une dépense
+  n'est déduite qu'une fois, même si plusieurs statuts sont cochés.
+- « Partiel » : Déjà payé = sommes versées sur ces commissions, Reste à payer = Net − Déjà payé ;
+  rien n'est recompté.
+- Sans filtre Statut, rien ne change : toutes les commissions actives (à valider incluses) et
+  toutes les dépenses des périodes sélectionnées (décision du 29/08/2026).
+- Le badge Statut de la ligne est recalculé sur les commissions retenues ; les règles de
+  validation et de paiement (fiche, bouton Payer) sont inchangées.
+- La recherche serveur (`?search=`) ne fait plus correspondre toutes les lignes quand le texte
+  ne contient aucun chiffre (même garde que l'export).
+- Test : `tests/Feature/Comptabilite/CommissionVenteFiltreStatutMontantsTest.php`.
+
 ### Détail (Show) — indépendance vis-à-vis du filtre Index généralisée le 02/09/2026
 
 **Historique** : jusqu'au 31/08/2026, la fiche détail héritait du même filtre `processus` que
@@ -1249,6 +1303,16 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Conteneur étroit (< 1000px) : la taille d'équipe passe sous le nom du véhicule.
 - Test : `CommissionAjustementVenteTest::periode_show_distingue_la_taille_de_l_equipe_des_membres_commissionnes`.
 
+### Filtre « État » du détail de période : choix multiple (18/10/2026)
+
+- Le filtre **État** (drawer « Filtres ») accepte plusieurs valeurs : une ligne est affichée si
+  son état fait partie de la sélection (ex. « À vérifier » + « À revérifier »). Véhicules
+  (livreur/propriétaire) : `a_verifier`, `validee`, `a_reverifier`, `payee` ; bénéficiaires
+  (autres types) : statut de la fiche.
+- Paramètre `etat[]` ; une valeur unique `etat=…` (anciens liens) reste acceptée. Tout cocher
+  revient à ne pas filtrer.
+- Test : `CommissionAjustementVenteTest::periode_show_filtre_les_vehicules_sur_plusieurs_etats`.
+
 ### Cartes, « Déjà payé » et colonne Propriétaire du détail de période (09/10/2026)
 
 - **Cartes (Reste à payer / Net à payer / Déjà payé)** : sans filtre, totaux des fiches de la
@@ -1283,10 +1347,10 @@ Comptabilité > Fiches de paiement » : les liens de menu vers les fiches avaien
   Aucun endpoint de paiement propre aux écrans Commissions.
 - **Fiche retenue** (`FichePayableResolver`) : fiche du bénéficiaire (même `beneficiaire_type` :
   `livreur`, `proprietaire`, `site`, `prestataire`) dont la période est **validée**, avec un
-  **reste à payer > 0**, chevauchant le filtre de période de l'écran, et que l'utilisateur peut
-  payer (`PaiementFichePolicy::payer` : `comptabilite.payer` + agence de la fiche, sauf admin).
-  Sans filtre de période, la **plus ancienne** fiche due est proposée ; les suivantes se paient
-  une par une.
+  **reste à payer > 0**, chevauchant au moins une des périodes cochées sur l'écran, et que
+  l'utilisateur peut payer (`PaiementFichePolicy::payer` : `comptabilite.payer` + agence de la
+  fiche, sauf admin). Sans filtre de période, ou si plusieurs périodes chevauchent une fiche due,
+  la **plus ancienne** fiche due est proposée ; les suivantes se paient une par une.
 - **Pas de bouton** si : période non validée (À valider, Validée — période en attente, clôturée),
   reste à payer nul, aucune fiche générée pour la période, ou utilisateur sans droit.
 - Le montant proposé est le **reste de la fiche** (plafond serveur `max:montant_restant`), la date

@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Achats;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeAchat;
 use App\Services\Achats\PerimetreCommandesAchat;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Support\Documents\BonCommandeAchatDocument;
+use App\Support\Documents\DocumentPdfRenderer;
 use Illuminate\Http\Response;
 
 class PdfCommandeAchatController extends Controller
@@ -17,16 +18,6 @@ class PdfCommandeAchatController extends Controller
 
         $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'valideePar', 'organization', 'site', 'sitePayeur']);
 
-        $createdBy = $achat->createdBy
-            ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)
-            : 'â€”';
-
-        $pdf = Pdf::loadView('pdf.bon_commande_achat', [
-            'commande' => $achat,
-            'organisation' => $achat->organization,
-            'createdBy' => $createdBy,
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download($achat->reference.'.pdf');
+        return DocumentPdfRenderer::reponse(BonCommandeAchatDocument::depuis($achat, $achat->organization));
     }
 }

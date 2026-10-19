@@ -81,6 +81,14 @@ enfants.
   uniquement dans ses agences de rattachement.
 - Tout nouvel écran de liste applique `voitToutesLesAgences()` pour la lecture et `isAdmin()` pour
   l'écriture — jamais `isAdmin()` pour décider de ce qui est affiché.
+- **Exemple : superviseur.** Pour qu'un superviseur consulte toutes les agences, on coche cette
+  permission sur son rôle, en plus des « Lire » des modules qu'il doit voir. Sans elle, il reste
+  limité à son agence de rattachement et le filtre Agence est verrouillé (cadenas). Avec elle, il
+  voit les mêmes lignes, totaux et exports qu'un administrateur, et peut filtrer une agence ou les
+  voir toutes. Il ne peut créer, modifier, valider, supprimer ou encaisser que si le rôle a aussi
+  la permission correspondante (`ventes.create`, `ventes.update`, `ventes.delete`,
+  `factures.encaisser`…), et seulement dans ses agences de rattachement. Aucune règle ne teste le
+  nom « superviseur ».
 
 ## Import CSV
 

@@ -258,12 +258,17 @@ thead th.col-ben, tbody td.col-ben { padding-left: 12pt; padding-right: 10pt; }
     {{-- Ligne meta : filtres appliqués + total --}}
     <div class="meta-row">
         @php
-            $statutFiltreLabel = match ($filters['statut'] ?? '') {
-                'impaye' => 'Impayée',
-                'paye' => 'Payée',
-                'partiel' => 'Partiellement payée',
-                default => null,
-            };
+            // Un ou plusieurs statuts cochés (tableau), ou une valeur unique (écran Logistique).
+            $statutFiltreLabel = collect((array) ($filters['statut'] ?? []))
+                ->map(fn ($statut) => match ($statut) {
+                    'creee' => 'À valider',
+                    'impaye' => 'Impayée',
+                    'paye' => 'Payée',
+                    'partiel' => 'Partiellement payée',
+                    default => null,
+                })
+                ->filter()
+                ->implode(', ');
         @endphp
         @if($statutFiltreLabel)
         <div>Statut : <b>{{ $statutFiltreLabel }}</b></div>

@@ -219,6 +219,56 @@ class LectureToutesAgencesTest extends TestCase
         $this->actingAs($this->add)->get(route('ventes.show', $etrangere))->assertForbidden();
     }
 
+    public function test_les_totaux_de_la_liste_des_ventes_suivent_le_meme_perimetre_que_les_lignes(): void
+    {
+        $this->facture($this->agenceA, 1000);
+        $this->facture($this->agenceB, 4000);
+
+        $totaux = fn (User $user, array $params = []) => $this->actingAs($user)
+            ->get(route('ventes.index', array_merge(['periode' => 'all'], $params)))
+            ->assertOk()
+            ->viewData('page')['props']['totaux'];
+
+        $this->assertEquals(5000, $totaux($this->add)['total_montant']);
+        $this->assertEquals(5000, $totaux($this->add)['total_a_encaisser']);
+        $this->assertEquals(4000, $totaux($this->add, ['site_ids' => [$this->agenceB->id]])['total_montant']);
+        $this->assertEquals(1000, $totaux($this->collegue)['total_montant']);
+    }
+
+    /**
+     * Superviseur « lecture seule » : la vision 360° est cochée, mais aucune permission d'écriture
+     * sur les ventes. Il consulte tout, ne crée, modifie, valide, supprime ni n'encaisse rien —
+     * ni dans une autre agence, ni dans la sienne.
+     */
+    public function test_un_superviseur_en_lecture_seule_ne_peut_ecrire_aucune_vente(): void
+    {
+        $superviseur = $this->creerUtilisateur(
+            $this->creerRole('superviseur', 'SUPERVISEUR', 'SUP', ['ventes.read', User::PERMISSION_LECTURE_TOUTES_AGENCES]),
+            $this->agenceA,
+        );
+
+        foreach ([$this->agenceA, $this->agenceB] as $agence) {
+            $brouillon = $this->commande($agence, ['statut' => StatutCommandeVente::BROUILLON]);
+            $annulee = $this->commande($agence, ['statut' => StatutCommandeVente::ANNULEE]);
+            $facture = $this->facture($agence, 3000);
+
+            $this->actingAs($superviseur)->get(route('ventes.show', $brouillon))->assertOk();
+            $this->actingAs($superviseur)->patch(route('ventes.valider', $brouillon))->assertForbidden();
+            $this->actingAs($superviseur)->put(route('ventes.update', $brouillon), [])->assertForbidden();
+            $this->actingAs($superviseur)->delete(route('ventes.destroy', $annulee))->assertForbidden();
+            $this->actingAs($superviseur)->post(route('encaissements.store', $facture), [])->assertForbidden();
+
+            $this->assertSame(StatutCommandeVente::BROUILLON, $brouillon->fresh()->statut);
+            $this->assertNotNull($annulee->fresh());
+        }
+
+        $this->actingAs($superviseur)->post(route('ventes.store'), [])->assertForbidden();
+        $this->assertEqualsCanonicalizing(
+            [$this->agenceA->nom, $this->agenceB->nom],
+            array_column($this->actingAs($superviseur)->get(route('ventes.index'))->viewData('page')['props']['sites'], 'nom'),
+        );
+    }
+
     // ── 3, 10 : la vision 360° n'ouvre aucun écran sans « Lire » ───────────────
 
     public function test_sans_la_permission_lire_la_ressource_reste_inaccessible(): void

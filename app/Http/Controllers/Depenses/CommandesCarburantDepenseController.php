@@ -26,6 +26,8 @@ class CommandesCarburantDepenseController extends Controller
             'vehicule_id' => ['required', 'ulid', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)],
             'date_depense' => ['required', 'date'],
             'site_id' => ['nullable', 'ulid', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            // Dépense en cours de modification : sa propre commande n'est pas comptée comme prise.
+            'depense_id' => ['nullable', 'ulid', Rule::exists('depenses', 'id')->where('organization_id', $orgId)],
         ]);
 
         return response()->json($service->candidats(
@@ -33,6 +35,7 @@ class CommandesCarburantDepenseController extends Controller
             $data['vehicule_id'],
             Carbon::parse($data['date_depense']),
             $data['site_id'] ?? null,
+            $data['depense_id'] ?? null,
         ));
     }
 }

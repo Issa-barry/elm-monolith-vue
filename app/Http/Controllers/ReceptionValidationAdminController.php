@@ -8,6 +8,7 @@ use App\Models\TransfertLogistique;
 use App\Services\CommissionTriggerService;
 use App\Services\MouvementStockService;
 use App\Services\TransfertActiviteService;
+use App\Services\TransfertEcartReceptionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -95,6 +96,7 @@ class ReceptionValidationAdminController extends Controller
             }
 
             MouvementStockService::supprimerEntreeDestination($transfert);
+            TransfertEcartReceptionService::retirerSignalements($transfert);
 
             $transfert->update([
                 'statut' => StatutTransfert::TRANSIT,

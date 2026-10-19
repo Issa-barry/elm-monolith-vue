@@ -25,8 +25,10 @@ use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionPdfFooter;
+use App\Support\Commission\CommissionPeriodeFilter;
 use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSiteResponsableFilter;
+use App\Support\Commission\CommissionStatutFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -70,11 +72,9 @@ class CommissionProprietaireController extends Controller
         $orgId = $user->organization_id;
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
-        $filtreStatut = $this->scalarInput($request, 'statut');
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
-            $filtrePeriode = '';
-        }
+        // Plusieurs statuts / périodes cochés s'unissent (décision produit du 18/10/2026).
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
         // Décision produit du 02/09/2026 : plus de repli implicite sur "vente" — aucune sélection
         // = "Tous les processus", plusieurs processus cochés s'unissent (cf. docs/commissions.md
         // et CommissionProcessusFilter).
@@ -91,12 +91,9 @@ class CommissionProprietaireController extends Controller
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
                 $q->where('organization_id', $orgId);
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $q->whereBetween('earned_at', [$debut, $fin]);
-                }
+                CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
 
         // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
@@ -130,14 +127,7 @@ class CommissionProprietaireController extends Controller
 
             $allVehiculeIds = $vehiculesByProprio->flatten()->pluck('id');
 
-            $applyPeriode = function ($query) use ($filtrePeriode) {
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
-                }
-
-                return $query;
-            };
+            $applyPeriode = fn ($query) => CommissionPeriodeFilter::appliquer($query, $filtrePeriodes, 'date_depense', colonneDate: true);
 
             if ($allVehiculeIds->isNotEmpty()) {
                 $depQuery = Depense::where('beneficiaire_type', 'vehicule')
@@ -193,7 +183,7 @@ class CommissionProprietaireController extends Controller
             $user,
             CommissionEnveloppePart::TYPE_PROPRIETAIRE,
             $partsParProprio->keys()->map(fn ($id) => (string) $id)->all(),
-            $filtrePeriode,
+            $filtrePeriodes,
         );
 
         $nomsSites = $sites->pluck('nom', 'id');
@@ -291,9 +281,7 @@ class CommissionProprietaireController extends Controller
             ];
         })->values();
 
-        if ($filtreStatut !== '') {
-            $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
-        }
+        $beneficiaires = CommissionStatutFilter::appliquer($beneficiaires, $filtreStatuts);
 
         if ($filtreNom !== '') {
             $s = mb_strtolower($filtreNom);
@@ -330,10 +318,16 @@ class CommissionProprietaireController extends Controller
 
         $periodeCourante = PeriodeComptableService::periodeCouranteProprietaire();
 
-        $dateAffichee = $filtrePeriode !== ''
-            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
-            : now();
-        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, $dateAffichee);
+        // Le statut d'une période n'a de sens que pour UNE période : aucun badge si plusieurs
+        // périodes sont cochées.
+        $periodeUnique = CommissionPeriodeFilter::codeUnique($filtrePeriodes);
+        $periodeAffichee = $filtrePeriodes === [] || $periodeUnique !== null
+            ? app(PeriodePaiementService::class)->getPeriodByDate(
+                $orgId,
+                TypePeriodePaiement::PROPRIETAIRE,
+                $periodeUnique !== null ? PeriodeComptableService::dateRangeForCode($periodeUnique)[0] : now(),
+            )
+            : null;
 
         return Inertia::render('Comptabilite/CommissionProprietaire/Index', [
             'saved_view' => $savedView,
@@ -341,11 +335,11 @@ class CommissionProprietaireController extends Controller
             'kpis' => $kpis,
             'filtre_nom' => $filtreNom,
             'filtre_telephone' => $filtreTelephone,
-            'filtre_statut' => $filtreStatut,
+            'filtre_statuts' => $filtreStatuts,
             'filtre_site_ids' => $filtreSiteIds,
             'filtre_processus' => $filtreProcessus,
             'processus_options' => CommissionProcessusFilter::options(),
-            'selected_periode' => $filtrePeriode,
+            'selected_periodes' => $filtrePeriodes,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
             'periode_affichee' => $periodeAffichee ? [
@@ -693,8 +687,8 @@ class CommissionProprietaireController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
         $filtreSiteIds = $user->voitToutesLesAgences()
@@ -705,14 +699,14 @@ class CommissionProprietaireController extends Controller
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
-            $filtrePeriode,
+            $filtrePeriodes,
             $filtreSiteIds,
             $restreindreAuxSites,
             $filtreProcessus,
         );
-        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
+        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriodes, $filtreStatuts, $filtreNom, $filtreTelephone);
 
-        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $periodeLabel = CommissionPeriodeFilter::label($filtrePeriodes);
         $filename = 'commissions-proprietaires-'.now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
@@ -746,8 +740,8 @@ class CommissionProprietaireController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filtrePeriode = $this->scalarInput($request, 'periode');
-        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriodes = CommissionPeriodeFilter::normaliserCodes($request->input('periode', []));
+        $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
         $filtreSiteIds = $user->voitToutesLesAgences()
@@ -758,22 +752,22 @@ class CommissionProprietaireController extends Controller
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
-            $filtrePeriode,
+            $filtrePeriodes,
             $filtreSiteIds,
             $restreindreAuxSites,
             $filtreProcessus,
         );
-        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
+        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriodes, $filtreStatuts, $filtreNom, $filtreTelephone);
         $siteGroups = $this->buildSiteGroups($rows);
 
         $org = Organization::find($orgId);
-        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $periodeLabel = CommissionPeriodeFilter::label($filtrePeriodes);
 
         $pdf = Pdf::loadView('pdf.commissions.index', [
             'title' => 'Commissions propriétaire',
             'org' => $org,
             'periode_label' => $periodeLabel,
-            'filters' => ['statut' => $filtreStatut, 'nom' => $filtreNom, 'telephone' => $filtreTelephone],
+            'filters' => ['statut' => $filtreStatuts, 'nom' => $filtreNom, 'telephone' => $filtreTelephone],
             'sites' => $siteGroups,
             'show_validation_columns' => true,
             'printed_by' => auth()->user()->name ?? '—',
@@ -784,12 +778,13 @@ class CommissionProprietaireController extends Controller
     }
 
     /**
+     * @param  array<int, string>  $filtrePeriodes
      * @param  array<int, string>  $filtreProcessus
      * @return array{0: Collection<int, CommissionEnveloppePart>, 1: array<string, float>, 2: array<string, string>}
      */
     private function loadPartsForExport(
         string $orgId,
-        string $filtrePeriode,
+        array $filtrePeriodes,
         array $filtreSiteIds = [],
         bool $restreindreAuxSites = false,
         array $filtreProcessus = [],
@@ -797,12 +792,9 @@ class CommissionProprietaireController extends Controller
         $query = CommissionEnveloppePart::with(['enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
                 $q->where('organization_id', $orgId);
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $q->whereBetween('earned_at', [$debut, $fin]);
-                }
+                CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
 
         if ($restreindreAuxSites) {
@@ -825,14 +817,7 @@ class CommissionProprietaireController extends Controller
 
             $allVehiculeIds = $vehiculesByProprio->flatten()->pluck('id');
 
-            $applyPeriode = function ($query) use ($filtrePeriode) {
-                if ($filtrePeriode !== '') {
-                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
-                }
-
-                return $query;
-            };
+            $applyPeriode = fn ($query) => CommissionPeriodeFilter::appliquer($query, $filtrePeriodes, 'date_depense', colonneDate: true);
 
             if ($allVehiculeIds->isNotEmpty()) {
                 $depQuery = Depense::with('depenseType:id,libelle')
@@ -873,12 +858,16 @@ class CommissionProprietaireController extends Controller
         return [$parts, $fraisParProprio, $motifsParProprio];
     }
 
-    /** @return Collection<int, array<string, mixed>> */
-    private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $filtreNom, string $filtreTelephone): Collection
+    /**
+     * @param  array<int, string>  $filtrePeriodes
+     * @param  array<int, string>  $filtreStatuts
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, array $filtrePeriodes, array $filtreStatuts, string $filtreNom, string $filtreTelephone): Collection
     {
         $nomsSites = Site::whereIn('id', $parts->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->siteResponsableId())->filter()->unique()->values())
             ->pluck('nom', 'id');
-        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode, $nomsSites) {
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriodes, $nomsSites) {
             $first = $propParts->first();
             $beneficiaire = $first->resoudreBeneficiaire();
             $partsValidees = $propParts->filter(
@@ -901,8 +890,9 @@ class CommissionProprietaireController extends Controller
 
             $motifs = $motifsParProprio[$proprioId] ?? null;
 
-            $periodeLabel = $filtrePeriode !== ''
-                ? PeriodeComptableService::labelForCode($filtrePeriode)
+            $periodeUnique = CommissionPeriodeFilter::codeUnique($filtrePeriodes);
+            $periodeLabel = $periodeUnique !== null
+                ? PeriodeComptableService::labelForCode($periodeUnique)
                 : $propParts->pluck('enveloppe.earned_at')
                     ->filter()
                     ->map(fn ($d) => PeriodeComptableService::labelForCode(
@@ -938,11 +928,7 @@ class CommissionProprietaireController extends Controller
             ];
         });
 
-        if ($filtreStatut !== '') {
-            if (in_array($filtreStatut, array_column(StatutCommission::cases(), 'value'), true)) {
-                $rows = $rows->filter(fn ($r) => $r['statut_code'] === $filtreStatut);
-            }
-        }
+        $rows = CommissionStatutFilter::appliquer($rows, $filtreStatuts, 'statut_code');
 
         if ($filtreNom !== '') {
             $s = mb_strtolower($filtreNom);

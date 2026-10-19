@@ -15,6 +15,8 @@ import { computed, nextTick, ref, watch } from 'vue';
  * recherche globale) sur les commandes rattachables du véhicule, du jour et de l'agence de la
  * dépense — par référence, code abrégé `JJ-NNN` ou client. La commande est obligatoire, sans
  * exception (décision du 17/10/2026) ; le serveur revérifie le rattachement à l'enregistrement.
+ * Une commande déjà rattachée à une autre dépense est affichée mais non sélectionnable (unicité,
+ * DEPCARB-004).
  */
 export interface CommandeCandidate {
     type: 'vente' | 'transfert';
@@ -26,6 +28,7 @@ export interface CommandeCandidate {
     statut?: string | null;
     statut_label?: string | null;
     detail?: string;
+    /** Autres dépenses détenant déjà la commande (hors dépense en cours de modification). */
     depenses_liees?: number;
 }
 
@@ -34,6 +37,8 @@ const props = defineProps<{
     dateDepense: string;
     /** Agence de la dépense ; vide = toutes les agences. */
     siteId: string;
+    /** Dépense en cours de modification : sa propre commande reste sélectionnable. */
+    depenseId?: string;
     error?: string;
 }>();
 
@@ -87,6 +92,7 @@ async function charger(conserverSelection: boolean) {
         date_depense: props.dateDepense,
     });
     if (props.siteId) params.set('site_id', props.siteId);
+    if (props.depenseId) params.set('depense_id', props.depenseId);
 
     const numero = ++requete;
     chargement.value = true;
@@ -137,7 +143,10 @@ watch(
     { immediate: true },
 );
 
+const estDisponible = (c: CommandeCandidate) => !c.depenses_liees;
+
 function choisir(c: CommandeCandidate) {
+    if (!estDisponible(c)) return;
     selection.value = c;
     recherche.value = '';
     ouvert.value = false;
@@ -287,8 +296,10 @@ function formatDate(iso?: string) {
                             type="button"
                             role="option"
                             :aria-selected="i === actif"
+                            :aria-disabled="!estDisponible(c)"
+                            :disabled="!estDisponible(c)"
                             :data-cle="cle(c)"
-                            class="flex min-h-11 w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                            class="flex min-h-11 w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
                             :class="{ 'bg-muted/50': i === actif }"
                             @mouseenter="actif = i"
                             @click="choisir(c)"
@@ -312,13 +323,10 @@ function formatDate(iso?: string) {
                                 >
                             </span>
                             <span
-                                v-if="c.depenses_liees"
-                                class="text-xs text-amber-700 dark:text-amber-400"
+                                v-if="!estDisponible(c)"
+                                class="text-xs text-muted-foreground"
                             >
-                                Déjà rattachée à
-                                {{ c.depenses_liees }} dépense{{
-                                    c.depenses_liees > 1 ? 's' : ''
-                                }}.
+                                Déjà rattachée à une autre dépense de carburant.
                             </span>
                         </button>
                     </template>

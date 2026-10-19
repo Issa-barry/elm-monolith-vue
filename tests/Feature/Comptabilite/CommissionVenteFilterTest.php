@@ -46,7 +46,7 @@ class CommissionVenteFilterTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Index')
-                ->where('filtre_statut', 'impaye')
+                ->where('filtre_statuts', ['impaye'])
             );
     }
 
@@ -226,6 +226,82 @@ class CommissionVenteFilterTest extends TestCase
         $livreurIds = collect($indexProps['beneficiaires'])->pluck('beneficiaire_id')->all();
         $this->assertContains((string) $livreurVente->id, $livreurIds, 'La commission issue de la CommandeVente doit rester visible.');
         $this->assertContains((string) $livreurTransfert->id, $livreurIds, 'La commission issue du TransfertLogistique doit rester visible.');
+    }
+
+    /**
+     * Multi-sélection (décision produit du 18/10/2026) : plusieurs périodes et plusieurs statuts
+     * cochés s'unissent — jamais seulement la première valeur.
+     */
+    public function test_index_unit_plusieurs_periodes_et_plusieurs_statuts(): void
+    {
+        $aoutP1Impaye = $this->creerCommissionLivreur('2026-08-05 10:00:00', 0);
+        $aoutP2Partiel = $this->creerCommissionLivreur('2026-08-20 10:00:00', 10000);
+        $septembreImpaye = $this->creerCommissionLivreur('2026-09-05 10:00:00', 0);
+        $septembrePaye = $this->creerCommissionLivreur('2026-09-06 10:00:00', 30000);
+
+        $livreurs = fn (array $filtres) => collect(
+            $this->get('/backoffice/comptabilite/commissions/vente?'.http_build_query($filtres))
+                ->assertOk()->viewData('page')['props']['beneficiaires']
+        )->pluck('beneficiaire_id')->sort()->values()->all();
+        $ids = fn (Livreur ...$l) => collect($l)->map(fn (Livreur $x) => (string) $x->id)->sort()->values()->all();
+
+        $this->assertSame(
+            $ids($aoutP1Impaye, $aoutP2Partiel),
+            $livreurs(['periode' => ['2026-08-P1', '2026-08-P2']]),
+        );
+        $this->assertSame(
+            $ids($aoutP1Impaye, $aoutP2Partiel, $septembreImpaye),
+            $livreurs(['statut' => ['impaye', 'partiel']]),
+        );
+        $this->assertSame(
+            $ids($aoutP2Partiel, $septembrePaye),
+            $livreurs(['statut' => ['partiel', 'paye'], 'periode' => ['2026-08-P2', '2026-09-P1']]),
+        );
+        // Lien ou vue enregistrée d'avant la multi-sélection : valeur scalaire toujours acceptée.
+        $this->assertSame($ids($septembreImpaye, $septembrePaye), $livreurs(['periode' => '2026-09-P1']));
+
+        $csv = $this->get('/backoffice/comptabilite/commissions/vente/export/excel?'.http_build_query([
+            'statut' => ['impaye', 'partiel'],
+            'periode' => ['2026-08-P1', '2026-08-P2', '2026-09-P1'],
+        ]))->assertOk()->streamedContent();
+        $this->assertCount(3, array_filter(array_slice(explode("\n", trim($csv)), 1)), 'Trois livreurs attendus dans l\'export (impayé/partiel sur les trois périodes).');
+    }
+
+    private function creerCommissionLivreur(string $earnedAt, int $montantVerse): Livreur
+    {
+        $site = $this->user->sites()->first();
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'site_id' => $site->id]);
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            ['libelle' => 'Vente', 'declencheur' => 'facture_encaissee', 'strategie_ancrage_site' => 'source', 'statut' => 'actif'],
+        );
+        $statut = match (true) {
+            $montantVerse >= 30000 => StatutCommission::PAYE,
+            $montantVerse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => 'equipe_livraison',
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 30000,
+            'earned_at' => $earnedAt,
+            'statut' => $statut->value,
+        ]);
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'montant_brut' => 30000,
+            'montant_net' => 30000,
+            'montant_verse' => $montantVerse,
+            'statut' => $statut->value,
+        ]);
+
+        return $livreur;
     }
 
     public function test_export_excel_avec_filtres_en_tableau_ne_plante_pas(): void

@@ -20,6 +20,7 @@ import {
     MessageSquare,
     Moon,
     Package,
+    PackageX,
     Sun,
 } from 'lucide-vue-next';
 import IconField from 'primevue/iconfield';
@@ -128,6 +129,17 @@ const contactMessagesNonLus = computed(
 );
 const mouvementsFondsAConfirmer = computed(
     () => (page.props as any).mouvements_fonds_a_confirmer ?? 0,
+);
+const ecartsReception = computed<{
+    total: number;
+    recents: { id: string; message: string; created_at: string | null }[];
+}>(() => (page.props as any).ecarts_reception ?? { total: 0, recents: [] });
+const totalNotifications = computed(
+    () =>
+        stockAlertes.value.total +
+        contactMessagesNonLus.value +
+        mouvementsFondsAConfirmer.value +
+        ecartsReception.value.total,
 );
 
 function syncThemeState() {
@@ -270,18 +282,9 @@ onMounted(() => {
                     >
                         <Bell class="h-5 w-5" />
                         <span
-                            v-if="
-                                stockAlertes.total +
-                                    contactMessagesNonLus +
-                                    mouvementsFondsAConfirmer >
-                                0
-                            "
+                            v-if="totalNotifications > 0"
                             class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-0.5 text-[10px] font-bold text-destructive-foreground"
-                            >{{
-                                stockAlertes.total +
-                                contactMessagesNonLus +
-                                mouvementsFondsAConfirmer
-                            }}</span
+                            >{{ totalNotifications }}</span
                         >
                         <span class="sr-only">Notifications</span>
                     </Button>
@@ -294,34 +297,48 @@ onMounted(() => {
                     >
                         <span class="text-sm font-semibold">Notifications</span>
                         <span
-                            v-if="
-                                stockAlertes.total +
-                                    contactMessagesNonLus +
-                                    mouvementsFondsAConfirmer >
-                                0
-                            "
+                            v-if="totalNotifications > 0"
                             class="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground"
                         >
-                            {{
-                                stockAlertes.total +
-                                contactMessagesNonLus +
-                                mouvementsFondsAConfirmer
-                            }}
+                            {{ totalNotifications }}
                         </span>
                     </div>
 
                     <!-- Aucune notif -->
                     <div
-                        v-if="
-                            stockAlertes.total +
-                                contactMessagesNonLus +
-                                mouvementsFondsAConfirmer ===
-                            0
-                        "
+                        v-if="totalNotifications === 0"
                         class="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground"
                     >
                         <Bell class="h-8 w-8 opacity-20" />
                         <p>Aucune notification</p>
+                    </div>
+
+                    <!-- Écarts de réception des transferts (ADR 0032) -->
+                    <div v-if="ecartsReception.total > 0" class="border-b">
+                        <div
+                            class="flex items-center gap-2 bg-amber-50 px-4 py-2 dark:bg-amber-950/20"
+                        >
+                            <PackageX class="h-3.5 w-3.5 text-amber-500" />
+                            <span
+                                class="text-xs font-semibold text-amber-700 dark:text-amber-400"
+                                >Écarts de réception ({{
+                                    ecartsReception.total
+                                }})</span
+                            >
+                        </div>
+                        <Link
+                            v-for="ecart in ecartsReception.recents"
+                            :key="ecart.id"
+                            :href="`/backoffice/logistique/ecarts-reception/${ecart.id}/ouvrir`"
+                            method="post"
+                            as="button"
+                            class="block w-full px-4 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                        >
+                            <span class="block">{{ ecart.message }}</span>
+                            <span class="block text-[11px] opacity-70">{{
+                                ecart.created_at
+                            }}</span>
+                        </Link>
                     </div>
 
                     <!-- Ruptures -->
@@ -409,12 +426,7 @@ onMounted(() => {
 
                     <!-- Footer -->
                     <div
-                        v-if="
-                            stockAlertes.total +
-                                contactMessagesNonLus +
-                                mouvementsFondsAConfirmer >
-                            0
-                        "
+                        v-if="totalNotifications > 0"
                         class="border-t px-4 py-2"
                     >
                         <Link

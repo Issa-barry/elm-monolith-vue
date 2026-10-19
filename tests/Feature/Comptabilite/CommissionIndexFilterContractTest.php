@@ -5,6 +5,7 @@ namespace Tests\Feature\Comptabilite;
 use App\Models\Categorie;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -40,8 +41,8 @@ class CommissionIndexFilterContractTest extends TestCase
         ]))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Comptabilite/CommissionVente/Index')
             ->where('filtre_site_ids', [$siteId])
-            ->where('filtre_statut', 'impaye')
-            ->where('selected_periode', '2026-08-P1')
+            ->where('filtre_statuts', ['impaye'])
+            ->where('selected_periodes', ['2026-08-P1'])
         );
     }
 
@@ -76,8 +77,8 @@ class CommissionIndexFilterContractTest extends TestCase
             ->where('filtre_site_ids', [$siteId])
             ->where('filtre_nom', 'Moussa')
             ->where('filtre_telephone', '622')
-            ->where('filtre_statut', 'partiel')
-            ->where('selected_periode', '2026-08-P1')
+            ->where('filtre_statuts', ['partiel'])
+            ->where('selected_periodes', ['2026-08-P1'])
         );
     }
 
@@ -99,11 +100,39 @@ class CommissionIndexFilterContractTest extends TestCase
         ]))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Comptabilite/CommissionSite/Index')
             ->where('filtre_site_ids', [$siteId])
-            ->where('filtre_statut', 'creee')
+            ->where('filtre_statuts', ['creee'])
             ->where('filtre_categorie_id', $categorie->id)
             ->where('filtre_site_type', 'depot')
-            ->where('selected_periode', '2026-08-P1')
+            ->where('selected_periodes', ['2026-08-P1'])
         );
+    }
+
+    /**
+     * Multi-sélection (décision produit du 18/10/2026) : plusieurs statuts et plusieurs périodes
+     * cochés sont restitués tels quels sur les quatre listes ; une valeur inconnue ou mal formée
+     * est écartée.
+     */
+    #[DataProvider('listesMultiSelection')]
+    public function test_restitue_plusieurs_statuts_et_periodes(string $chemin, string $composant): void
+    {
+        $this->get('/backoffice/comptabilite/commissions/'.$chemin.'?'.http_build_query([
+            'statut' => ['impaye', 'partiel', 'inconnu', 'impaye'],
+            'periode' => ['2026-08-P1', '2026-08-P2', 'pas-une-periode'],
+        ]))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component($composant)
+            ->where('filtre_statuts', ['impaye', 'partiel'])
+            ->where('selected_periodes', ['2026-08-P1', '2026-08-P2'])
+        );
+    }
+
+    public static function listesMultiSelection(): array
+    {
+        return [
+            'livreurs' => ['vente', 'Comptabilite/CommissionVente/Index'],
+            'proprietaires' => ['proprietaires', 'Comptabilite/CommissionProprietaire/Index'],
+            'sites' => ['sites', 'Comptabilite/CommissionSite/Index'],
+            'consultants' => ['consultants', 'Comptabilite/CommissionConsultant/Index'],
+        ];
     }
 
     /**
@@ -118,9 +147,9 @@ class CommissionIndexFilterContractTest extends TestCase
             'consultant_id' => ['some-prestataire-id'],
         ]))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Comptabilite/CommissionConsultant/Index')
-            ->where('filtre_statut', 'impaye')
+            ->where('filtre_statuts', ['impaye'])
             ->where('filtre_consultant_id', 'some-prestataire-id')
-            ->where('selected_periode', '2026-08-M')
+            ->where('selected_periodes', ['2026-08-M'])
         );
     }
 }

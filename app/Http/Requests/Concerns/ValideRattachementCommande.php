@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Concerns;
 
+use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Services\Depenses\CommandeCarburantService;
 use Illuminate\Support\Carbon;
@@ -90,8 +91,17 @@ trait ValideRattachementCommande
             $this->site_id ?: null,
             $venteId,
             $transfertId,
+            $this->depenseModifieeId(),
         );
 
         return $erreur === null ? null : ucfirst($erreur);
+    }
+
+    /** En modification, la dépense ne se bloque pas elle-même sur l'unicité de sa commande. */
+    public function depenseModifieeId(): ?string
+    {
+        $depense = $this->route('depense');
+
+        return $depense instanceof Depense ? $depense->id : null;
     }
 }

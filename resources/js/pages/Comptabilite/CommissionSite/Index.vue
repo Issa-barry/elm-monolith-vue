@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    ajouterStatutsEtPeriodes,
+    libellePeriodes,
+} from '@/lib/commissionFiltres';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import { Head } from '@inertiajs/vue3';
@@ -59,13 +63,13 @@ const props = defineProps<{
         reste_a_payer: number;
     };
     search: string;
-    filtre_statut: string;
+    filtre_statuts: string[];
     filtre_site_ids: string[];
     filtre_categorie_id: string;
     filtre_site_type: string;
     filtre_processus: string[];
     processus_options: { value: string; label: string }[];
-    selected_periode: string;
+    selected_periodes: string[];
     periodes_disponibles: PeriodeOption[];
     sites: { id: string; nom: string }[];
     categories: { id: string; nom: string }[];
@@ -95,7 +99,7 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'statut',
         label: 'Statut',
-        type: 'select' as const,
+        type: 'multi-select' as const,
         options: [
             { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
@@ -106,7 +110,8 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'periode',
         label: 'Période',
-        type: 'select' as const,
+        type: 'multi-select' as const,
+        searchable: true,
         options: props.periodes_disponibles.map((p) => ({
             value: p.code,
             label: p.label,
@@ -128,8 +133,8 @@ const filterFields = computed((): FilterField[] => [
 
 const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
-    statut: props.filtre_statut ?? '',
-    periode: props.selected_periode ?? '',
+    statut: props.filtre_statuts ?? [],
+    periode: props.selected_periodes ?? [],
     categorie_id: props.filtre_categorie_id ?? '',
     site_type: props.filtre_site_type ?? '',
     // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
@@ -158,12 +163,14 @@ function openAudit(b: BeneficiaireRow) {
 }
 
 function buildParams(): URLSearchParams {
-    const params = new URLSearchParams();
-    if (props.selected_periode) params.set('periode', props.selected_periode);
+    const params = ajouterStatutsEtPeriodes(
+        new URLSearchParams(),
+        props.filtre_statuts ?? [],
+        props.selected_periodes ?? [],
+    );
     for (const id of props.filtre_site_ids ?? []) {
         params.append('site_ids[]', id);
     }
-    if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (props.filtre_categorie_id)
         params.set('categorie_id', props.filtre_categorie_id);
     if (props.filtre_site_type) params.set('site_type', props.filtre_site_type);
@@ -190,15 +197,9 @@ function exportPdf() {
     );
 }
 
-const periodContextLabel = computed(() => {
-    if (!props.selected_periode) return 'Toutes les périodes';
-
-    return (
-        props.periodes_disponibles.find(
-            (periode) => periode.code === props.selected_periode,
-        )?.label ?? props.selected_periode
-    );
-});
+const periodContextLabel = computed(() =>
+    libellePeriodes(props.selected_periodes ?? [], props.periodes_disponibles),
+);
 
 const indexSummary = computed<CommissionIndexSummary>(() => ({
     generated: props.kpis.commissions_generees,
