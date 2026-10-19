@@ -36,7 +36,7 @@ class RelancerCommissionMonitoringController extends Controller
             array_values(array_unique($valides['anomalies'])),
             $user->id,
             // Relance = écriture : agences de rattachement, jamais la vision 360° (ADR 0025).
-            $user->isAdmin() ? null : $siteScope->assignedSiteIds($user),
+            $user->agitSurToutesLesAgences() ? null : $siteScope->assignedSiteIds($user),
         );
 
         if ($request->wantsJson()) {

@@ -19,7 +19,7 @@ class EditDepenseController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $sites = $user->isAdmin()
+        $sites = $user->agitSurToutesLesAgences()
             ? DepenseFormOptionsLoader::sites($orgId)
             : $user->sites()
                 ->where('sites.organization_id', $orgId)
@@ -49,7 +49,7 @@ class EditDepenseController extends Controller
             'prestataires' => DepenseFormOptionsLoader::prestataires($orgId),
             'clients' => DepenseFormOptionsLoader::clients($orgId),
             'categories' => CategorieDepense::optionsConcerne(),
-            'can_change_site' => $user->isAdmin(),
+            'can_change_site' => $user->agitSurToutesLesAgences(),
         ]);
     }
 }

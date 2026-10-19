@@ -27,7 +27,7 @@ class CreateDepenseController extends Controller
                 ->value('id');
         }
 
-        $sites = $user->isAdmin()
+        $sites = $user->agitSurToutesLesAgences()
             ? DepenseFormOptionsLoader::sites($orgId)
             : $user->sites()
                 ->where('sites.organization_id', $orgId)
@@ -46,7 +46,7 @@ class CreateDepenseController extends Controller
             'clients' => DepenseFormOptionsLoader::clients($orgId),
             'default_site_id' => $this->defaultSiteId(),
             'categories' => CategorieDepense::optionsConcerne(),
-            'can_change_site' => $user->isAdmin(),
+            'can_change_site' => $user->agitSurToutesLesAgences(),
             'initial_beneficiaire_type' => $initialBeneficiaireType,
             'initial_beneficiaire_id' => $initialBeneficiaireId,
         ]);

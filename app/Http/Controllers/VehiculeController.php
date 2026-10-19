@@ -285,7 +285,7 @@ class VehiculeController extends Controller
                 ->value('id');
         }
 
-        $canChangeSite = $user->isAdmin();
+        $canChangeSite = $user->agitSurToutesLesAgences();
         $defaultSiteId = $this->defaultSiteId();
 
         // Un admin arrivant depuis une page de site (ex: ?site_id=... depuis
@@ -329,7 +329,7 @@ class VehiculeController extends Controller
 
         // Non-admin : ne peut créer que sur son(ses) propre(s) site(s) — un
         // admin peut choisir n'importe quel site de l'organisation.
-        if (! $user->isAdmin()) {
+        if (! $user->agitSurToutesLesAgences()) {
             $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
             abort_unless(
                 in_array($data['site_id'], $allowedSiteIds, true),
@@ -589,7 +589,7 @@ class VehiculeController extends Controller
             'categories_vehicule' => CategorieVehicule::options(),
             'categories_produit' => $this->categoriesProduitOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
-            'can_change_site' => $user->isAdmin(),
+            'can_change_site' => $user->agitSurToutesLesAgences(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
             'capacites' => $vehicule->capacites->map(fn ($c) => [
                 'categorie_id' => $c->categorie_id,
@@ -624,7 +624,7 @@ class VehiculeController extends Controller
 
         // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
         // site(s) — un admin peut choisir n'importe quel site de l'organisation.
-        if (! $user->isAdmin()) {
+        if (! $user->agitSurToutesLesAgences()) {
             $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
             abort_unless(
                 in_array($data['site_id'], $allowedSiteIds, true),
@@ -949,7 +949,7 @@ class VehiculeController extends Controller
      */
     private function sitesOptions(User $user, string $orgId): array
     {
-        $sites = $user->isAdmin()
+        $sites = $user->agitSurToutesLesAgences()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
             : $user->sites()->where('sites.organization_id', $orgId)->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
 

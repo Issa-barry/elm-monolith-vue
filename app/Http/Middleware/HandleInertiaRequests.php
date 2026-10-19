@@ -127,7 +127,7 @@ class HandleInertiaRequests extends Middleware
      * confirmation (ENVOYE -> RECU) : ce compteur relit l'état réel du mouvement, il ne mémorise
      * aucun état de lecture séparé.
      *
-     * Un admin (`isAdmin()`) voit le compteur org-wide, sans restriction de site — pas seulement
+     * Un admin ou un superviseur (`agitSurToutesLesAgences()`) voit le compteur org-wide, sans restriction de site — pas seulement
      * pour ses propres sites rattachés. C'est nécessaire pour rester cohérent avec le reste de la
      * fonctionnalité : `MouvementFondsPolicy::recevoir()` laisse déjà un admin confirmer un
      * mouvement même sans y être personnellement affecté, et `MouvementFondsController::
@@ -158,7 +158,7 @@ class HandleInertiaRequests extends Middleware
             ->whereIn('nature', [NatureMouvementFonds::INTER_SITES->value, NatureMouvementFonds::REGLEMENT_AGENCES->value, NatureMouvementFonds::DEPOT_BANQUE->value, NatureMouvementFonds::TRANSFERT_MOBILE_MONEY->value])
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
 
-        if (! $user->isAdmin()) {
+        if (! $user->agitSurToutesLesAgences()) {
             $siteIds = $user->sites()->pluck('sites.id');
             if ($siteIds->isEmpty()) {
                 return 0;

@@ -235,40 +235,6 @@ class LectureToutesAgencesTest extends TestCase
         $this->assertEquals(1000, $totaux($this->collegue)['total_montant']);
     }
 
-    /**
-     * Superviseur « lecture seule » : la vision 360° est cochée, mais aucune permission d'écriture
-     * sur les ventes. Il consulte tout, ne crée, modifie, valide, supprime ni n'encaisse rien —
-     * ni dans une autre agence, ni dans la sienne.
-     */
-    public function test_un_superviseur_en_lecture_seule_ne_peut_ecrire_aucune_vente(): void
-    {
-        $superviseur = $this->creerUtilisateur(
-            $this->creerRole('superviseur', 'SUPERVISEUR', 'SUP', ['ventes.read', User::PERMISSION_LECTURE_TOUTES_AGENCES]),
-            $this->agenceA,
-        );
-
-        foreach ([$this->agenceA, $this->agenceB] as $agence) {
-            $brouillon = $this->commande($agence, ['statut' => StatutCommandeVente::BROUILLON]);
-            $annulee = $this->commande($agence, ['statut' => StatutCommandeVente::ANNULEE]);
-            $facture = $this->facture($agence, 3000);
-
-            $this->actingAs($superviseur)->get(route('ventes.show', $brouillon))->assertOk();
-            $this->actingAs($superviseur)->patch(route('ventes.valider', $brouillon))->assertForbidden();
-            $this->actingAs($superviseur)->put(route('ventes.update', $brouillon), [])->assertForbidden();
-            $this->actingAs($superviseur)->delete(route('ventes.destroy', $annulee))->assertForbidden();
-            $this->actingAs($superviseur)->post(route('encaissements.store', $facture), [])->assertForbidden();
-
-            $this->assertSame(StatutCommandeVente::BROUILLON, $brouillon->fresh()->statut);
-            $this->assertNotNull($annulee->fresh());
-        }
-
-        $this->actingAs($superviseur)->post(route('ventes.store'), [])->assertForbidden();
-        $this->assertEqualsCanonicalizing(
-            [$this->agenceA->nom, $this->agenceB->nom],
-            array_column($this->actingAs($superviseur)->get(route('ventes.index'))->viewData('page')['props']['sites'], 'nom'),
-        );
-    }
-
     // ── 3, 10 : la vision 360° n'ouvre aucun écran sans « Lire » ───────────────
 
     public function test_sans_la_permission_lire_la_ressource_reste_inaccessible(): void

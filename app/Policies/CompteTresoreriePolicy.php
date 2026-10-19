@@ -38,7 +38,7 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($support->site_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($support->site_id);
     }
 
     /**
@@ -53,7 +53,7 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($support->site_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($support->site_id);
     }
 
     public function verser(User $user, CompteTresorerie $caisse): bool
@@ -67,7 +67,7 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        if (! $user->isAdmin() && ! $user->isAssignedToSite($caisse->site_id)) {
+        if (! $user->agitSurToutesLesAgences() && ! $user->isAssignedToSite($caisse->site_id)) {
             return false;
         }
 
@@ -77,7 +77,7 @@ class CompteTresoreriePolicy
     /**
      * Transférer le compte Mobile Money dédié d'un agent vers le Mobile Money de l'agence (ADR
      * 0027) : mêmes droits que le versement de caisse — `tresorerie.verser`, agence de
-     * l'utilisateur (admins : toutes), son propre compte seulement, sauf `tresorerie.envoyer` qui
+     * l'utilisateur (admins et superviseur : toutes), son propre compte seulement, sauf `tresorerie.envoyer` qui
      * permet d'enregistrer le transfert d'un autre agent de l'agence. État et solde sont revérifiés
      * par MouvementFondsService::transfererMobileMoneyAgent() (Gate::before du super admin).
      */
@@ -91,7 +91,7 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        if (! $user->isAdmin() && ! $user->isAssignedToSite($compte->site_id)) {
+        if (! $user->agitSurToutesLesAgences() && ! $user->isAssignedToSite($compte->site_id)) {
             return false;
         }
 
@@ -101,7 +101,7 @@ class CompteTresoreriePolicy
     /**
      * Approvisionner la caisse dédiée d'un agent depuis cette caisse de l'agence (ADR 0018) :
      * `tresorerie.envoyer` (sortie de fonds de la caisse de l'agence), même organisation, agence de
-     * l'utilisateur (admins : toutes). Ce droit ne donne jamais celui de confirmer la réception,
+     * l'utilisateur (admins et superviseur : toutes). Ce droit ne donne jamais celui de confirmer la réception,
      * réservée à l'agent bénéficiaire. Type, état et solde de la caisse sont revérifiés par
      * MouvementFondsService::approvisionnerCaisseAgent() (Gate::before du super admin).
      */
@@ -115,7 +115,7 @@ class CompteTresoreriePolicy
             return false;
         }
 
-        return $user->isAdmin() || $user->isAssignedToSite($caisse->site_id);
+        return $user->agitSurToutesLesAgences() || $user->isAssignedToSite($caisse->site_id);
     }
 
     /**

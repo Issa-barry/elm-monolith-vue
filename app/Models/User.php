@@ -313,7 +313,27 @@ class User extends Authenticatable
      */
     public function voitToutesLesAgences(): bool
     {
-        return $this->isAdmin() || $this->can(self::PERMISSION_LECTURE_TOUTES_AGENCES);
+        return $this->agitSurToutesLesAgences() || $this->can(self::PERMISSION_LECTURE_TOUTES_AGENCES);
+    }
+
+    /**
+     * Nom technique du rôle superviseur (libellé « SUPERVISEUR », cf. RoleNamingService) : il ne
+     * change pas quand le libellé est renommé.
+     */
+    public const ROLE_SUPERVISEUR = 'superviseur';
+
+    /**
+     * Périmètre d'AGENCES des écritures : l'utilisateur agit-il sur toutes les agences de son
+     * organisation, comme un administrateur ? Administrateur ou superviseur (ADR 0034, décision de
+     * l'utilisateur du 19/10/2026 : codé sur le rôle, quelles que soient ses permissions). Ne donne
+     * aucune permission : chaque action exige toujours la sienne. Ne remplace pas non plus les
+     * fonctions réservées aux administrateurs (périodes de paie, annulation d'une vente…) ni les
+     * réglages propres d'un module (« Peut acheter pour », droits de dépenses, d'ajustement de
+     * stock, plafonds de validation), qui restent appliqués comme pour admin_entreprise.
+     */
+    public function agitSurToutesLesAgences(): bool
+    {
+        return $this->isAdmin() || $this->hasRole(self::ROLE_SUPERVISEUR);
     }
 
     /**
