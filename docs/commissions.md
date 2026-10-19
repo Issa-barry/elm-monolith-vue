@@ -1411,6 +1411,33 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 - Tests : `tests/Feature/Comptabilite/CommissionSiteTest.php` (validation automatique, réouverture,
   rattrapage), `CommissionAjustementVenteTest`, `CommissionAjustementTest`, `PaiementPeriodeTest`.
 
+### Validation atomique et validation en masse sans 504 (19/10/2026)
+
+- **Incident du 17/10/2026** : `PAY-202610-P1-LIV` est passée « Validée » mais seules 109 de ses
+  2 367 commissions livreur ont été activées. La requête de validation en masse des véhicules a été
+  interrompue (délai serveur, 504) en pleine activation : 2 258 commissions (116 619 175 GNF) sont
+  restées « À valider », non payables, et les fiches n'ont pas été comptabilisées.
+- **Validation tout-ou-rien** : passage « Validée », activation `creee → impaye` et audit s'exécutent
+  dans une seule transaction (`PeriodeValidationService::valider`). Une interruption laisse la
+  période « Calculée » et ses commissions intactes, jamais une période validée à moitié activée. La
+  comptabilisation des fiches reste en aval, hors transaction (elle n'a jamais fait échouer la
+  validation).
+- **Activation part par part** : chaque part `creee` est activée pour elle-même, même si son
+  enveloppe (ou sa commission logistique) est déjà sortie de `creee`, en SQL groupé.
+- **Une validation ne relance plus le calcul** : poser `validated_at` ne modifie plus `updated_at`
+  (qui entre dans l'empreinte de calcul) — une validation ne change aucun montant de fiche. Avant,
+  chaque validation recalculait toutes les fiches de toutes les périodes couvrant la date.
+- **Validation en masse des véhicules** : la période est lue une seule fois et les parts de tous les
+  véhicules retenus sont validées en un seul lot (au lieu d'une relecture complète de la période et
+  d'un traitement par véhicule). Même règle d'équilibre par véhicule, même audit par véhicule.
+- **Rattrapage** : `php artisan commissions:activer-periodes-validees` (aperçu), puis avec
+  `--appliquer` ; ensuite `php artisan comptabilite:rattraper --type=fiche --dry-run`, puis sans
+  `--dry-run`, pour les pièces « fiche validée » manquantes.
+- Tests : `CommissionAjustementVenteTest` (`valider_un_vehicule_ne_relance_pas_le_calcul_de_la_periode`,
+  `la_validation_active_une_part_restee_creee_derriere_une_enveloppe_deja_activee`,
+  `une_validation_interrompue_laisse_la_periode_calculee_et_les_commissions_a_valider`,
+  `la_commande_de_rattrapage_active_les_commissions_d_une_periode_deja_validee`).
+
 ## Fiche figée, fiche complémentaire et report de déduction (28/09/2026, ADR 0010 lot 1)
 
 - **Fiche figée** (`PaiementFiche::estFigee()`) : fiche ayant reçu au moins un paiement, même
