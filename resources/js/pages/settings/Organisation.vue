@@ -10,6 +10,7 @@ import { edit, update } from '@/routes/organisation';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Check, Upload, X } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
 
 interface Props {
@@ -19,11 +20,13 @@ interface Props {
         code: string;
         siret: string | null;
         logo_url: string | null;
+        pied_page_documents: string | null;
     };
     login_url: string;
 }
 
 const props = defineProps<Props>();
+const toast = useToast();
 
 const breadcrumbItems: BreadcrumbItem[] = [
     { title: "Informations de l'organisation", href: edit().url },
@@ -36,6 +39,7 @@ const form = useForm({
     siret: props.organisation.siret ?? '',
     logo: null as File | null,
     remove_logo: false,
+    pied_page_documents: props.organisation.pied_page_documents ?? '',
 });
 
 const linkCopied = ref(false);
@@ -68,9 +72,27 @@ function removeLogo() {
 function submit() {
     form.post(update().url, {
         preserveScroll: true,
+        // Toast à chaque enregistrement : le flash serveur, identique d'une fois sur l'autre, ne
+        // déclencherait un toast qu'au premier (cf. useFlashToast).
         onSuccess: () => {
             form.remove_logo = false;
             form.logo = null;
+            toast.add({
+                group: 'top',
+                severity: 'success',
+                summary: 'Organisation mise à jour',
+                detail: 'Les modifications ont été enregistrées.',
+                life: 4000,
+            });
+        },
+        onError: () => {
+            toast.add({
+                group: 'top',
+                severity: 'error',
+                summary: 'Modifications non enregistrées',
+                detail: 'Corrigez les champs signalés.',
+                life: 5000,
+            });
         },
     });
 }
@@ -234,6 +256,30 @@ function submit() {
                                 <InputError :message="form.errors.logo" />
                             </div>
                         </div>
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="pied_page_documents"
+                            >Pied de page des factures et bons</Label
+                        >
+                        <textarea
+                            id="pied_page_documents"
+                            v-model="form.pied_page_documents"
+                            rows="6"
+                            class="mt-1 block w-full max-w-xl rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-1 focus:ring-ring focus:outline-none"
+                            placeholder="Raison sociale&#10;Adresse&#10;N° RCCM — NIF&#10;Téléphones&#10;Email"
+                        />
+                        <InputError
+                            class="mt-2"
+                            :message="form.errors.pied_page_documents"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Affiché centré en bas de chaque page des factures et
+                            bons PDF, une ligne du PDF par ligne saisie :
+                            appuyez sur Entrée entre chaque information (6
+                            lignes de 150 caractères au plus). Laisser vide pour
+                            ne pas l'afficher.
+                        </p>
                     </div>
 
                     <div class="flex items-center gap-4">

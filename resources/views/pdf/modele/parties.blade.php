@@ -1,3 +1,4 @@
+@if($document->parties)
 <table class="parties">
     <tbody><tr>
         @foreach($document->parties as $partie)
@@ -13,3 +14,6 @@
         @endif
     </tr></tbody>
 </table>
+@else
+    <div class="sans-parties"></div>
+@endif
