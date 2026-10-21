@@ -2,7 +2,8 @@
     <tbody><tr>
         <td style="width: 48%;">
             <div class="logo-cadre"><img class="logo" src="{{ $document->organisation->logo }}" alt="Logo de {{ $document->organisation->nom }}" /></div>
-            <div class="org-nom coupe">{{ mb_strtoupper($document->organisation->nom) }}</div>
+            @php [$nomDebut, $nomFin] = $document->organisation->nomEnDeuxTons(); @endphp
+            <div class="org-nom coupe"><span class="fonce">{{ $nomDebut }}</span>@if($nomFin) <span class="clair">{{ $nomFin }}</span>@endif</div>
             @foreach($document->lignesAgence as $ligne)
                 <div class="agence coupe">{{ $ligne }}</div>
             @endforeach

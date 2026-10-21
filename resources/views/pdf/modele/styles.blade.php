@@ -1,3 +1,13 @@
+@php
+    // Marge basse = pied de page fixe (ligne de pagination, plus le pied officiel : trait, 8px,
+    // lignes de 14.2px, 8px) + un espace de garde : le contenu ne passe jamais dessous. Le pied
+    // reste à 20px du bord de la feuille.
+    $lignesPiedOfficiel = $document->organisation->lignesPiedRendues();
+    $margeBasse = 64 + ($lignesPiedOfficiel > 0 ? 17 + (int) ceil(14.2 * $lignesPiedOfficiel) : 0);
+    // Seules couleurs hors design d'origine : les deux tons du nom de l'organisation (logo).
+    $nomFonce = \App\Support\Documents\CharteDocument::NOM_FONCE;
+    $nomClair = \App\Support\Documents\CharteDocument::NOM_CLAIR;
+@endphp
 <style>
     @font-face {
         font-family: PoppinsInvoice;
@@ -27,7 +37,7 @@
     /* Apollo 6.2.0 (template « Invoice ») : racine 14px, Poppins 400/500/600/700, .card à 28px de
        padding. Tableaux plutôt que flexbox : DomPDF ne gère pas flexbox.
        1px CSS = 0.75pt dans DomPDF ; ne pas réduire les tailles à l'impression. */
-    @page { margin: 28px 28px 64px; }
+    @page { margin: 28px 28px {{ $margeBasse }}px; }
     body { margin: 0; padding: 0; font-family: PoppinsInvoice, DejaVu Sans, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.2; color: #334155; }
     table { border-collapse: collapse; }
     .card { padding: 28px; background: #fff; }
@@ -38,6 +48,8 @@
     .logo-cadre { width: 48px; height: 50px; }
     .logo { max-width: 48px; max-height: 50px; }
     .org-nom { margin: 14px 0; font-size: 31.5px; line-height: 35px; font-weight: 700; color: #0f172a; }
+    .org-nom .fonce { color: {{ $nomFonce }}; }
+    .org-nom .clair { color: {{ $nomClair }}; }
     .agence { margin-bottom: 7px; }
     .agence:last-child { margin-bottom: 0; }
     .doc-titre { margin: 0 0 14px; font-size: 21px; line-height: 28px; font-weight: 600; text-align: right; }
@@ -51,6 +63,7 @@
     .parties > tbody > tr > td { width: 50%; padding: 0; vertical-align: top; }
     .parties > tbody > tr > td.suivante { padding-left: 28px; }
     .partie-titre { margin: 0 0 14px; font-size: 21px; line-height: 28px; font-weight: 500; }
+    .sans-parties { height: 70px; }
     .partie p { margin: 0 0 7px; }
     .partie p:last-child { margin-bottom: 0; }
 
@@ -83,9 +96,12 @@
     .ton-attention { color: #b45309; }
     .ton-danger { color: #b91c1c; }
 
-    .pied-page { position: fixed; bottom: -44px; left: 28px; right: 28px; font-size: 10.5px; line-height: 1.2; color: #64748b; }
+    .pied-page { position: fixed; bottom: -{{ $margeBasse - 20 }}px; left: 28px; right: 28px; font-size: 10.5px; line-height: 1.2; color: #64748b; }
     .pied-page table { width: 100%; table-layout: fixed; }
     .pied-page td { padding: 0; vertical-align: bottom; }
     .pied-page .pagination { padding-left: 14px; }
+    .pied-officiel { margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10.5px; line-height: 1.35; color: #475569; }
+    .pied-officiel p { margin: 0; }
+    .pied-officiel p.premiere { font-weight: 600; color: #334155; }
     .filigrane { position: fixed; top: 330px; left: -28px; width: 760px; text-align: center; font-size: 84px; font-weight: 700; color: rgba(220, 38, 38, 0.10); transform: rotate(-30deg); }
 </style>

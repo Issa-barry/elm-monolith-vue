@@ -43,16 +43,22 @@ class CommissionAdjustmentService
     /** @return Collection<int, CommissionEnveloppePart> */
     public static function partsPourPeriode(PaiementPeriode $periode): Collection
     {
-        $ficheIds = $periode->fiches()->pluck('id');
-
-        $partIds = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
-            ->where('source_type', CommissionEnveloppePart::class)
-            ->pluck('source_id')
-            ->unique();
-
-        return CommissionEnveloppePart::whereIn('id', $partIds)
-            ->with(['enveloppe.source', 'validateur'])
+        // source.vehicule préchargé : groupesParCommission() lit le véhicule de chaque enveloppe,
+        // sans quoi une période de plusieurs milliers de commissions déclenchait une requête par vente.
+        return CommissionEnveloppePart::whereIn('id', self::idsSourcesPourPeriode($periode, CommissionEnveloppePart::class))
+            ->with(['enveloppe.source.vehicule', 'validateur'])
             ->get();
+    }
+
+    /** @return list<string> */
+    private static function idsSourcesPourPeriode(PaiementPeriode $periode, string $sourceType): array
+    {
+        return PaiementFicheLigne::whereIn('fiche_id', $periode->fiches()->pluck('id'))
+            ->where('source_type', $sourceType)
+            ->pluck('source_id')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Parts encore non validées et non payées/partiellement payées bloquant la validation de la période. */
@@ -71,39 +77,60 @@ class CommissionAdjustmentService
      * Appelée depuis PaiementPeriodeController::valider(), juste après le
      * passage CALCULEE→VALIDEE. Idempotente : sans effet sur une part déjà
      * sortie de CREEE.
+     *
+     * Chaque part CREEE est activée pour elle-même, même si son enveloppe est déjà sortie de
+     * CREEE : une activation interrompue (incident du 17/10/2026 sur PAY-202610-P1-LIV) laissait
+     * sinon des parts CREEE derrière une enveloppe IMPAYE, que plus rien n'activait. Mises à jour
+     * groupées en SQL, jamais part par part : une période porte plusieurs milliers de parts.
+     *
+     * @return int nombre d'enveloppes dont au moins une part a été activée
      */
     public static function activerCommissionsCreees(PaiementPeriode $periode): int
     {
-        $parts = self::partsPourPeriode($periode)
-            ->filter(fn (CommissionEnveloppePart $part) => $part->statut === StatutCommission::CREEE);
+        return self::activerPartsCreees(
+            self::idsSourcesPourPeriode($periode, CommissionEnveloppePart::class),
+            CommissionEnveloppePart::class,
+            CommissionEnveloppe::class,
+            'enveloppe_id',
+        );
+    }
 
-        $count = 0;
+    /**
+     * Bascule CREEE→IMPAYE (PAYE si montant nul) des parts données et de leurs parents encore
+     * CREEE. Partagée vente/logistique : seules les classes et la clé du parent diffèrent.
+     *
+     * @param  list<string>  $partIds
+     * @param  class-string<Model>  $classePart
+     * @param  class-string<Model>  $classeParent
+     */
+    private static function activerPartsCreees(array $partIds, string $classePart, string $classeParent, string $cleParent): int
+    {
+        $creee = StatutCommission::CREEE->value;
+        $parentIds = [];
 
-        foreach ($parts->groupBy('enveloppe_id') as $groupe) {
-            /** @var CommissionEnveloppe $enveloppe */
-            $enveloppe = $groupe->first()->enveloppe;
-            if (! $enveloppe || $enveloppe->statut !== StatutCommission::CREEE) {
+        foreach (array_chunk($partIds, 500) as $lot) {
+            $parentsDuLot = $classePart::whereIn('id', $lot)->where('statut', $creee)->distinct()->pluck($cleParent)->all();
+            if ($parentsDuLot === []) {
                 continue;
             }
+            array_push($parentIds, ...$parentsDuLot);
 
-            $enveloppe->update([
-                'statut' => ((float) $enveloppe->montant_total > 0
-                    ? StatutCommission::IMPAYE
-                    : StatutCommission::PAYE)->value,
-            ]);
-
-            foreach ($groupe as $part) {
-                $part->update([
-                    'statut' => ((float) $part->montant_net > 0
-                        ? StatutCommission::IMPAYE
-                        : StatutCommission::PAYE)->value,
-                ]);
-            }
-
-            $count++;
+            $classePart::whereIn('id', $lot)->where('statut', $creee)->where('montant_net', '>', 0)
+                ->update(['statut' => StatutCommission::IMPAYE->value]);
+            $classePart::whereIn('id', $lot)->where('statut', $creee)
+                ->update(['statut' => StatutCommission::PAYE->value]);
         }
 
-        return $count;
+        $parentIds = array_values(array_unique($parentIds));
+
+        foreach (array_chunk($parentIds, 500) as $lot) {
+            $classeParent::whereIn('id', $lot)->where('statut', $creee)->where('montant_total', '>', 0)
+                ->update(['statut' => StatutCommission::IMPAYE->value]);
+            $classeParent::whereIn('id', $lot)->where('statut', $creee)
+                ->update(['statut' => StatutCommission::PAYE->value]);
+        }
+
+        return count($parentIds);
     }
 
     /**
@@ -499,7 +526,12 @@ class CommissionAdjustmentService
     {
         $part->validated_by = $user->id;
         $part->validated_at = now();
-        $part->save();
+
+        // Une validation ne change aucun montant de fiche : elle ne touche pas updated_at, qui entre
+        // dans l'empreinte de calcul de la période (PeriodeCalculatorService::signatureSource()).
+        // Sinon chaque validation relançait un recalcul complet de toutes les fiches, et une
+        // validation de plusieurs véhicules dépassait le délai du serveur (504).
+        $part::withoutTimestamps(fn () => $part->save());
     }
 
     /**
@@ -540,14 +572,7 @@ class CommissionAdjustmentService
     /** @return Collection<int, CommissionLogistiquePart> */
     public static function partsLogistiquePourPeriode(PaiementPeriode $periode): Collection
     {
-        $ficheIds = $periode->fiches()->pluck('id');
-
-        $partIds = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
-            ->where('source_type', CommissionLogistiquePart::class)
-            ->pluck('source_id')
-            ->unique();
-
-        return CommissionLogistiquePart::whereIn('id', $partIds)
+        return CommissionLogistiquePart::whereIn('id', self::idsSourcesPourPeriode($periode, CommissionLogistiquePart::class))
             ->with(['livreur', 'proprietaire', 'validateur', 'commission.transfert'])
             ->get();
     }
@@ -564,39 +589,17 @@ class CommissionAdjustmentService
      * Bascule CREEE→IMPAYE (ou PAYE direct si montant nul) toutes les commissions
      * logistique encore CREEE rattachées à cette période — seul moment où une commission
      * sort de CREEE (cf. CommissionLogistiqueService, qui la crée toujours en CREEE).
-     * Idempotente : sans effet sur une part déjà sortie de CREEE.
+     * Idempotente : sans effet sur une part déjà sortie de CREEE. Même mécanique que
+     * activerCommissionsCreees() (activation part par part, en SQL groupé).
      */
     public static function activerCommissionsLogistiqueCreees(PaiementPeriode $periode): int
     {
-        $creees = self::partsLogistiquePourPeriode($periode)
-            ->filter(fn (CommissionLogistiquePart $part) => $part->statut === StatutCommission::CREEE);
-
-        $count = 0;
-
-        foreach ($creees->groupBy('commission_logistique_id') as $groupe) {
-            $commission = $groupe->first()->commission;
-            if (! $commission || $commission->statut !== StatutCommission::CREEE) {
-                continue;
-            }
-
-            $commission->update([
-                'statut' => ((float) $commission->montant_total > 0
-                    ? StatutCommission::IMPAYE
-                    : StatutCommission::PAYE)->value,
-            ]);
-
-            foreach ($groupe as $part) {
-                $part->update([
-                    'statut' => ((float) $part->montant_net > 0
-                        ? StatutCommission::IMPAYE
-                        : StatutCommission::PAYE)->value,
-                ]);
-            }
-
-            $count++;
-        }
-
-        return $count;
+        return self::activerPartsCreees(
+            self::idsSourcesPourPeriode($periode, CommissionLogistiquePart::class),
+            CommissionLogistiquePart::class,
+            CommissionLogistique::class,
+            'commission_logistique_id',
+        );
     }
 
     /**

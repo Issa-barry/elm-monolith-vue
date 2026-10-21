@@ -201,4 +201,61 @@ class OrganisationTest extends TestCase
         $this->assertDatabaseHas('organizations', ['id' => $orgA->id, 'name' => 'Org A modifiée']);
         $this->assertDatabaseHas('organizations', ['id' => $orgB->id, 'name' => 'Org B']);
     }
+
+    // ── Pied de page des factures et bons (ADR 0033) ─────────────────────────
+
+    public function test_update_enregistre_le_pied_de_page_des_documents_normalise(): void
+    {
+        $org = Organization::factory()->create();
+        $autre = Organization::factory()->create(['pied_page_documents' => 'AUTRE SARL']);
+        $user = $this->makeUser($org, 'admin_entreprise');
+
+        $this->actingAs($user)
+            ->put(route('organisation.update'), [
+                'name' => $org->name,
+                'code' => $org->code,
+                'pied_page_documents' => "  ENTREPRISE GBALAN PRESTATION  \r\n\r\nN° RCCM : GN.KAL.2018.A.083 891 — NIF : 474736378\n",
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertSame(
+            "ENTREPRISE GBALAN PRESTATION\nN° RCCM : GN.KAL.2018.A.083 891 — NIF : 474736378",
+            $org->fresh()->pied_page_documents,
+        );
+        $this->assertSame('AUTRE SARL', $autre->fresh()->pied_page_documents);
+
+        $this->actingAs($user)->get(route('organisation.edit'))
+            ->assertInertia(fn (Assert $page) => $page->where('organisation.pied_page_documents', $org->fresh()->pied_page_documents));
+
+        // Vidé : plus de bloc sur les documents.
+        $this->actingAs($user)->put(route('organisation.update'), ['name' => $org->name, 'code' => $org->code, 'pied_page_documents' => " \n "]);
+        $this->assertNull($org->fresh()->pied_page_documents);
+    }
+
+    public function test_update_sans_le_champ_conserve_le_pied_de_page(): void
+    {
+        $org = Organization::factory()->create(['pied_page_documents' => 'ENTREPRISE GBALAN PRESTATION']);
+        $user = $this->makeUser($org, 'admin_entreprise');
+
+        $this->actingAs($user)->put(route('organisation.update'), ['name' => 'Nouveau nom', 'code' => $org->code])->assertRedirect();
+
+        $this->assertSame('ENTREPRISE GBALAN PRESTATION', $org->fresh()->pied_page_documents);
+    }
+
+    public function test_update_refuse_un_pied_de_page_trop_long_pour_la_marge_du_modele(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeUser($org, 'admin_entreprise');
+
+        $this->actingAs($user)
+            ->put(route('organisation.update'), ['name' => $org->name, 'code' => $org->code, 'pied_page_documents' => implode("\n", range(1, 7))])
+            ->assertSessionHasErrors('pied_page_documents');
+
+        $this->actingAs($user)
+            ->put(route('organisation.update'), ['name' => $org->name, 'code' => $org->code, 'pied_page_documents' => "ENTREPRISE GBALAN PRESTATION\n".str_repeat('a', 151)])
+            ->assertSessionHasErrors(['pied_page_documents' => 'La ligne 2 compte 151 caractères (maximum 150) : appuyez sur Entrée pour passer à la ligne entre chaque information.']);
+
+        $this->assertNull($org->fresh()->pied_page_documents);
+    }
 }

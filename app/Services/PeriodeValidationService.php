@@ -85,25 +85,43 @@ class PeriodeValidationService
             return "Impossible de valider : {$sens} sur {$n} véhicule(s). La somme des montants ajustés doit toujours égaler la somme des montants théoriques, véhicule par véhicule sur l'ensemble de la période. Passez par l'écran d'ajustement.";
         }
 
-        $periode->update([
-            'statut' => StatutPeriodePaiement::VALIDEE->value,
-            'validated_by' => $user?->id,
-            'validated_at' => now(),
-        ]);
+        // Tout ou rien : une période ne passe jamais « Validée » sans que ses commissions soient
+        // activées. Le 17/10/2026, une requête interrompue en pleine activation avait laissé
+        // PAY-202610-P1-LIV validée avec 2 258 commissions encore « À valider ».
+        $validee = DB::transaction(function () use ($periode, $user, $automatique) {
+            // Verrou + relecture : deux validations simultanées (clic et validation automatique,
+            // ou deux onglets) ne valident et n'auditent la période qu'une seule fois.
+            $etatActuel = PaiementPeriode::whereKey($periode->id)->lockForUpdate()->first(['id', 'statut'])?->statut;
+            if ($etatActuel !== StatutPeriodePaiement::CALCULEE) {
+                return false;
+            }
 
-        // Seul moment où les commissions encore CREEE de cette période deviennent
-        // payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
-        $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode)
-            + CommissionAdjustmentService::activerCommissionsLogistiqueCreees($periode);
+            $periode->update([
+                'statut' => StatutPeriodePaiement::VALIDEE->value,
+                'validated_by' => $user?->id,
+                'validated_at' => now(),
+            ]);
 
-        app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, $user, null, null, [
-            'module' => 'periodes_paiement',
-            'site_id' => $periode->site_id,
-            'automatique' => $automatique,
-            'description' => $automatique
-                ? "Période {$periode->reference} validée automatiquement : toutes ses commissions sont validées ({$nbCommissionsActivees} commission(s) activée(s))"
-                : "Période {$periode->reference} validée ({$nbCommissionsActivees} commission(s) de vente activée(s))",
-        ]);
+            // Seul moment où les commissions encore CREEE de cette période deviennent
+            // payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
+            $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode)
+                + CommissionAdjustmentService::activerCommissionsLogistiqueCreees($periode);
+
+            app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, $user, null, null, [
+                'module' => 'periodes_paiement',
+                'site_id' => $periode->site_id,
+                'automatique' => $automatique,
+                'description' => $automatique
+                    ? "Période {$periode->reference} validée automatiquement : toutes ses commissions sont validées ({$nbCommissionsActivees} commission(s) activée(s))"
+                    : "Période {$periode->reference} validée ({$nbCommissionsActivees} commission(s) de vente activée(s))",
+            ]);
+
+            return true;
+        });
+
+        if (! $validee) {
+            return 'Seule une période calculée peut être validée.';
+        }
 
         // Comptabilité générale : engagement de la dette envers chaque bénéficiaire,
         // en aval — ne doit jamais faire échouer la validation métier (mode shadow,

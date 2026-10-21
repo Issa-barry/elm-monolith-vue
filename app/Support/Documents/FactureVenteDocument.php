@@ -72,17 +72,26 @@ final class FactureVenteDocument
             : (float) $ligne->prix_vente_snapshot;
     }
 
-    /** @return list<array{titre: string, lignes: list<string>}> */
+    /**
+     * CLIENT puis VÉHICULE, côte à côte. Bloc CLIENT seulement si un client est associé, avec ses
+     * seules coordonnées renseignées (nom, adresse, téléphone, email) : la fiche client ne porte ni
+     * raison sociale, ni RCCM, ni NIF, rien n'est donc inventé.
+     *
+     * @return list<array{titre: string, lignes: list<string>}>
+     */
     private static function parties(?CommandeVente $commande): array
     {
         $parties = [];
 
-        if ($client = $commande?->client) {
-            $parties[] = ['titre' => 'CLIENT', 'lignes' => array_values(array_filter([
-                $client->nom_complet ?: '—',
-                $client->telephone ? PhoneFormatter::display($client->telephone) : null,
-                collect([$client->adresse, $client->ville, $client->pays])->filter()->implode(', ') ?: null,
-            ]))];
+        $client = $commande?->client;
+        $coordonnees = $client ? array_values(array_filter([
+            $client->nom_complet ?: null,
+            collect([$client->adresse, $client->ville, $client->pays])->map(fn ($v) => trim((string) $v))->filter()->implode(', ') ?: null,
+            filled($client->telephone) ? PhoneFormatter::display($client->telephone) : null,
+            filled($client->email) ? trim($client->email) : null,
+        ])) : [];
+        if ($coordonnees) {
+            $parties[] = ['titre' => 'CLIENT', 'lignes' => $coordonnees];
         }
 
         if ($vehicule = $commande?->vehicule) {
@@ -92,7 +101,7 @@ final class FactureVenteDocument
             ]))];
         }
 
-        return $parties ?: [['titre' => 'CLIENT', 'lignes' => ['—']]];
+        return $parties;
     }
 
     /** @return list<array{cle: string, valeur: string}> */
