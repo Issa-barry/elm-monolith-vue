@@ -22,10 +22,15 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Support\Documents\BonCommandeAchatDocument;
+use App\Support\Documents\CharteDocument;
 use App\Support\Documents\DocumentPdf;
+use App\Support\Documents\DocumentPdfPagination;
 use App\Support\Documents\DocumentPdfRenderer;
 use App\Support\Documents\FactureAchatDocument;
 use App\Support\Documents\FactureVenteDocument;
+use App\Support\Documents\IdentiteOrganisation;
+use Dompdf\Canvas;
+use Dompdf\Frame;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -244,6 +249,156 @@ class ModeleDocumentPdfTest extends TestCase
 
         $this->assertStringStartsWith('%PDF-', $sortie);
         $this->assertGreaterThan(1, $pdf->getDomPDF()->getCanvas()->get_page_count());
+    }
+
+    private const PIED_GBALAN = "ENTREPRISE GBALAN PRESTATION\nSis à Matoto / Commune de Matoto / Conakry — République de Guinée\nN° RCCM : GN.KAL.2018.A.083 891 — NIF : 474736378\nTél. : 620 23 23 83 / 656 55 55 20\nEmail : sidibemsa81@gmail.com";
+
+    public function test_le_pied_de_page_officiel_de_l_organisation_figure_sur_tous_les_documents(): void
+    {
+        $this->org->pied_page_documents = "  \n".self::PIED_GBALAN."\n\n";
+
+        foreach ($this->tousLesDocuments() as $type => $document) {
+            $html = $this->rendre($document);
+
+            $this->assertSame(explode("\n", self::PIED_GBALAN), $document->organisation->piedPage, $type);
+            $this->assertStringContainsString('<div class="pied-officiel">', $html, $type);
+            $this->assertStringContainsString('<p class="coupe premiere">ENTREPRISE GBALAN PRESTATION</p>', $html, $type);
+            foreach (explode("\n", self::PIED_GBALAN) as $ligne) {
+                $this->assertStringContainsString(e($ligne), $html, $type);
+            }
+            // Marge basse agrandie pour 5 lignes : le contenu ne passe jamais sous le pied.
+            $this->assertStringContainsString('@page { margin: 28px 28px 152px; }', $html, $type);
+        }
+    }
+
+    public function test_design_d_origine_avec_le_nom_de_l_organisation_en_deux_tons(): void
+    {
+        $this->org->name = 'Eau La Maman';
+
+        foreach ($this->tousLesDocuments() as $type => $document) {
+            $html = $this->rendre($document);
+
+            $this->assertStringContainsString('<div class="org-nom coupe"><span class="fonce">EAU LA</span> <span class="clair">MAMAN</span></div>', $html, $type);
+            $this->assertStringContainsString('.org-nom .fonce { color: '.CharteDocument::NOM_FONCE.'; }', $html, $type);
+            $this->assertStringContainsString('.org-nom .clair { color: '.CharteDocument::NOM_CLAIR.'; }', $html, $type);
+            // Police, taille et position du nom inchangées ; logo par défaut d'origine.
+            $this->assertStringContainsString('.org-nom { margin: 14px 0; font-size: 31.5px; line-height: 35px; font-weight: 700; color: #0f172a; }', $html, $type);
+            $this->assertStringContainsString('#2563eb', base64_decode(substr($document->organisation->logo, strlen('data:image/svg+xml;base64,'))), $type);
+        }
+
+        // Aucune autre couleur que celles du design d'origine de la facture d'achat (+ pied officiel).
+        preg_match_all('/#[0-9a-fA-F]{6}\b/', File::get(resource_path('views/pdf/modele/styles.blade.php')), $couleurs);
+        $this->assertEqualsCanonicalizing(
+            ['#334155', '#e2e8f0', '#0f172a', '#64748b', '#047857', '#b45309', '#b91c1c', '#cbd5e1', '#475569'],
+            array_values(array_unique(array_map('strtolower', $couleurs[0]))),
+        );
+
+        $this->assertSame(['ACME', null], (new IdentiteOrganisation(' acme ', ''))->nomEnDeuxTons());
+    }
+
+    public function test_bloc_client_complet_sur_la_meme_ligne_que_le_vehicule(): void
+    {
+        $facture = $this->factureVente();
+        $facture->commande->setRelation('client', new Client([
+            'nom_complet' => 'Mamadou Diallo', 'adresse' => 'Madina marché', 'ville' => 'Conakry', 'pays' => 'Guinée',
+            'telephone' => '+224622123456', 'email' => 'mamadou@example.com',
+        ]));
+
+        $document = FactureVenteDocument::depuis($facture, $this->org);
+
+        $this->assertSame([
+            ['titre' => 'CLIENT', 'lignes' => ['Mamadou Diallo', 'Madina marché, Conakry, Guinée', '+224 622 12 34 56', 'mamadou@example.com']],
+            ['titre' => 'VÉHICULE', 'lignes' => ['Thierno-Moto', 'RC-1234-A']],
+        ], $document->parties);
+        $this->assertMatchesRegularExpression('/<tr>\s*<td class="partie">\s*<div class="partie-titre">CLIENT<\/div>.*<td class="partie suivante">\s*<div class="partie-titre">VÉHICULE<\/div>/s', $this->rendre($document));
+    }
+
+    public function test_bloc_client_avec_coordonnees_partielles_masque_les_champs_vides(): void
+    {
+        $facture = $this->factureVente();
+        $facture->commande->setRelation('client', new Client(['nom_complet' => 'Boutique Kaloum', 'adresse' => '  ', 'telephone' => null, 'email' => 'contact@kaloum.gn']));
+
+        $document = FactureVenteDocument::depuis($facture, $this->org);
+
+        $this->assertSame(['Boutique Kaloum', 'contact@kaloum.gn'], $document->parties[0]['lignes']);
+        $this->assertStringNotContainsString('RCCM', $this->rendre($document));
+        $this->assertStringNotContainsString('NIF', $this->rendre($document));
+    }
+
+    public function test_sans_client_le_bloc_client_est_masque(): void
+    {
+        $facture = $this->factureVente();
+        $facture->commande->setRelation('client', null);
+
+        $document = FactureVenteDocument::depuis($facture, $this->org);
+        $this->assertSame([['titre' => 'VÉHICULE', 'lignes' => ['Thierno-Moto', 'RC-1234-A']]], $document->parties);
+        $this->assertStringNotContainsString('CLIENT', $this->rendre($document));
+
+        // Ni client ni véhicule : aucun bloc de parties.
+        $facture->commande->setRelation('vehicule', null);
+        $document = FactureVenteDocument::depuis($facture, $this->org);
+        $this->assertSame([], $document->parties);
+        $html = $this->rendre($document);
+        $this->assertStringNotContainsString('class="parties"', $html);
+        $this->assertStringNotContainsString('class="partie-titre"', $html);
+    }
+
+    public function test_sans_pied_de_page_saisi_le_bloc_et_la_marge_supplementaire_sont_absents(): void
+    {
+        foreach ($this->tousLesDocuments() as $type => $document) {
+            $html = $this->rendre($document);
+
+            $this->assertSame([], $document->organisation->piedPage, $type);
+            $this->assertStringNotContainsString('pied-officiel"', $html, $type);
+            $this->assertStringContainsString('@page { margin: 28px 28px 64px; }', $html, $type);
+        }
+    }
+
+    public function test_une_ligne_longue_du_pied_agrandit_la_marge_selon_les_lignes_rendues(): void
+    {
+        // 150 caractères : 2 lignes rendues ; 2 lignes courtes : 1 chacune → 4 lignes rendues.
+        $this->org->pied_page_documents = "ENTREPRISE GBALAN PRESTATION\n".str_pad('Sis à Matoto', 151, ' Conakry')."\nNIF : 474736378";
+        $document = FactureVenteDocument::depuis($this->factureVente(), $this->org);
+
+        $this->assertSame(150, mb_strlen($document->organisation->piedPage[1]));
+        $this->assertSame(4, $document->organisation->lignesPiedRendues());
+        $this->assertStringContainsString('@page { margin: 28px 28px '.(64 + 17 + (int) ceil(14.2 * 4)).'px; }', $this->rendre($document));
+    }
+
+    public function test_le_pied_de_page_est_celui_de_l_organisation_du_document(): void
+    {
+        $this->org->pied_page_documents = self::PIED_GBALAN;
+        $autre = new Organization(['name' => 'Autre Org', 'pied_page_documents' => "AUTRE SOCIÉTÉ SARL\nNIF : 999"]);
+
+        $html = $this->rendre(FactureVenteDocument::depuis($this->factureVente(), $autre));
+
+        $this->assertStringContainsString('AUTRE SOCIÉTÉ SARL', $html);
+        $this->assertStringNotContainsString('GBALAN', $html);
+    }
+
+    public function test_le_pied_de_page_officiel_se_repete_sur_chaque_page(): void
+    {
+        $this->org->pied_page_documents = self::PIED_GBALAN;
+        $facture = $this->factureVente();
+        $facture->commande->setRelation('lignes', collect(range(1, 60))->map(fn (int $i) => $this->ligneVente([
+            'libelle_snapshot' => 'Pack '.$i, 'quantite_livree' => 10, 'prix_vente_snapshot' => 1000, 'total_ligne' => 10000,
+        ])));
+
+        $pagesAvecPied = [];
+        $pdf = DocumentPdfRenderer::pdf(FactureVenteDocument::depuis($facture, $this->org))->setCallbacks([...DocumentPdfPagination::callbacks(), [
+            'event' => 'end_frame',
+            'f' => function (Frame $frame, Canvas $canvas) use (&$pagesAvecPied): void {
+                $node = $frame->get_node();
+                if ($node instanceof \DOMElement && $node->getAttribute('class') === 'pied-officiel') {
+                    $pagesAvecPied[$canvas->get_page_number()] = true;
+                }
+            },
+        ]]);
+        $pdf->render();
+
+        $total = $pdf->getDomPDF()->getCanvas()->get_page_count();
+        $this->assertGreaterThan(1, $total);
+        $this->assertSame(range(1, $total), array_keys($pagesAvecPied));
     }
 
     // ── Fixtures en mémoire ──────────────────────────────────────────────────

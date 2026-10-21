@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>{{ $document->reference }}</title>
-@include('pdf.modele.styles')
+@include('pdf.modele.styles', ['document' => $document])
 </head>
 <body data-modele="document-officiel" data-type="{{ $document->type }}">
 @include('pdf.modele.pied', ['document' => $document])

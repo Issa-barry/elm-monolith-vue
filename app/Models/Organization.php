@@ -20,7 +20,7 @@ class Organization extends Model
     // proprietaire_interne_id volontairement absent : jamais assignable en masse, seulement
     // via une affectation explicite (InstallationService::install(), migration de rattrapage,
     // ou ProprietaireController) — jamais deviné depuis une requête utilisateur.
-    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'is_active', 'domaine_activite'];
+    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'pied_page_documents', 'is_active', 'domaine_activite'];
 
     protected $appends = ['logo_url'];
 

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Services\ImageService;
+use App\Support\Documents\IdentiteOrganisation;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,7 +14,8 @@ use Inertia\Response;
 
 /**
  * Administration de l'organisation courante (identité affichée dans la
- * sidebar/header : nom, logo). Portée strictement limitée à l'organisation
+ * sidebar/header : nom, logo ; pied de page officiel des factures et bons, ADR 0033).
+ * Portée strictement limitée à l'organisation
  * de l'utilisateur connecté — jamais de sélection d'une autre organisation.
  */
 class OrganisationController extends Controller
@@ -30,6 +33,7 @@ class OrganisationController extends Controller
                 'code' => $org->code,
                 'siret' => $org->siret,
                 'logo_url' => $org->logo_url,
+                'pied_page_documents' => $org->pied_page_documents,
             ],
             'login_url' => route('login.org', $org->code),
         ]);
@@ -50,6 +54,20 @@ class OrganisationController extends Controller
             'siret' => ['nullable', 'string', 'max:14'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
             'remove_logo' => ['nullable', 'boolean'],
+            'pied_page_documents' => ['nullable', 'string', 'max:1000', function (string $attribut, mixed $valeur, Closure $echec) {
+                $lignes = IdentiteOrganisation::lignesPied($valeur);
+                if (count($lignes) > IdentiteOrganisation::PIED_MAX_LIGNES) {
+                    $echec('Le pied de page ne peut pas dépasser '.IdentiteOrganisation::PIED_MAX_LIGNES.' lignes.');
+                } else {
+                    foreach ($lignes as $i => $ligne) {
+                        if (mb_strlen($ligne) > IdentiteOrganisation::PIED_MAX_CARACTERES_LIGNE) {
+                            $echec('La ligne '.($i + 1).' compte '.mb_strlen($ligne).' caractères (maximum '.IdentiteOrganisation::PIED_MAX_CARACTERES_LIGNE.') : appuyez sur Entrée pour passer à la ligne entre chaque information.');
+
+                            return;
+                        }
+                    }
+                }
+            }],
         ], [
             'name.required' => "Le nom de l'organisation est obligatoire.",
             'code.required' => 'Le code organisation est obligatoire.',
@@ -61,6 +79,9 @@ class OrganisationController extends Controller
         ]);
 
         $data['code'] = mb_strtoupper($data['code']);
+        if (array_key_exists('pied_page_documents', $data)) {
+            $data['pied_page_documents'] = implode("\n", IdentiteOrganisation::lignesPied($data['pied_page_documents'])) ?: null;
+        }
 
         $imageService = new ImageService;
 

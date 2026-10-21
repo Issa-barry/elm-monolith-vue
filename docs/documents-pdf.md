@@ -23,8 +23,9 @@ dépenses, ticket thermique du PDV.
    - `DocumentPdf` : objet de données prêt à afficher (titre, référence, identité, agence,
      métadonnées, parties, colonnes, lignes, totaux, notes, encadré, filigrane, mention, pied).
      Tous les textes y sont déjà formatés ; le modèle n'interroge aucun modèle Eloquent.
-   - `IdentiteOrganisation` : nom et logo embarqué (logo personnalisé lisible, sinon logo par
-     défaut), lignes d'agence (nom + localisation, ou ville/quartier).
+   - `IdentiteOrganisation` : nom, logo embarqué (logo personnalisé lisible, sinon logo par
+     défaut), pied de page officiel, lignes d'agence (nom + localisation, ou ville/quartier).
+   - `CharteDocument` : les deux tons du nom de l'organisation (voir « Charte »).
    - Un constructeur par type (`…Document::depuis()`), seul endroit où vivent les règles propres au
      document.
    - `DocumentPdfRenderer` : options DomPDF communes (A4 portrait, `fontHeightRatio` Poppins,
@@ -37,6 +38,30 @@ dépenses, ticket thermique du PDV.
    `styles`, `entete`, `parties`, `lignes`, `resume` (notes, totaux, encadré), `pied`. Le slot par
    défaut du composant accueille un complément propre à un document, affiché après les totaux.
 3. **Vue par type** : une ligne qui délègue au composant. Elle ne contient ni HTML ni CSS.
+
+## Charte
+
+Le design d'origine de la facture d'achat (couleurs des textes, titres, tableaux, séparateurs, logo
+par défaut) s'applique tel quel. **Seule exception** : le nom de l'organisation dans l'en-tête, en
+deux tons repris du logo « EAU LA MAMAN » (`CharteDocument`) — le début du nom (« EAU LA ») en bleu
+foncé `#2B5196`, son dernier mot (« MAMAN ») en bleu clair `#56ADE2` ; un nom d'un seul mot reste en
+bleu foncé. Police, taille et position du nom inchangées. Le texte affiché est le nom saisi dans
+Paramètres → Organisation : une faute de saisie (« EAU LA AMAN ») s'y corrige, jamais dans le modèle.
+Valeurs relevées à l'œil sur le visuel fourni : à remplacer dans `CharteDocument` si les codes
+officiels diffèrent.
+
+## Pied de page officiel
+
+- Propre à chaque organisation : champ « Pied de page des factures et bons » de Paramètres →
+  Organisation (`organizations.pied_page_documents`, administrateurs). Aucune valeur par défaut :
+  sans texte, pas de bloc.
+- Une ligne par ligne saisie (lignes vides ignorées), **6 lignes de 150 caractères au plus** —
+  limite contrôlée côté serveur, car la marge basse est calculée pour elle.
+- Rendu centré sous un trait fin gris, au-dessus de la ligne mention / pagination, répété sur
+  chaque page. Une ligne saisie trop longue pour la largeur de la page passe à la ligne dans le PDF.
+  La marge basse grandit avec le nombre de lignes **rendues** (64 px sans pied, sinon
+  64 + 17 + 14,2 px par ligne rendue, estimée à 95 caractères par ligne) : le contenu ne passe
+  jamais sous le pied.
 
 ## Règles du modèle
 
@@ -55,7 +80,7 @@ dépenses, ticket thermique du PDV.
 |---|---|---|
 | Facture d'achat | « Ce document n’est pas l’original du fournisseur. » (uniquement ce document) ; n° fournisseur ou « Sans numéro » ; HT, TVA au taux de la facture, TTC. | `BROUILLON`, `ANNULÉE` |
 | Bon de commande | Agence de livraison et agence payeuse ; fournisseur et agence du snapshot de validation (ACH-006) ; référence des lignes ; encadré de validation (règle de plafond appliquée), d'attente ou d'annulation (motif) ; date de génération. | `NON VALIDÉ`, `ANNULÉ` |
-| Facture de vente | Client et/ou véhicule ; n° de commande s'il diffère ; statut. Montants et quantités repris du métier, jamais recalculés : quantité ayant servi au dernier calcul de `total_ligne` (livrée, sinon chargée, sinon préparée, sinon demandée), prix du mode de tarification figé, `total_ligne`, `montant_net` (montant brut affiché seulement s'il diffère), encaissé (acomptes compris, « dont acomptes »), remboursé, reste à payer (sauf facture annulée), trop-perçu à rendre (ADR 0019). **Aucune TVA** : la vente n'en porte pas. | `ANNULÉE` |
+| Facture de vente | Bloc CLIENT (seulement si un client est associé : nom, adresse, téléphone, email — champs vides masqués ; la fiche client ne porte ni raison sociale, ni RCCM, ni NIF) sur la même ligne que le bloc VÉHICULE ; sans client ni véhicule, aucun bloc ; n° de commande s'il diffère ; statut. Montants et quantités repris du métier, jamais recalculés : quantité ayant servi au dernier calcul de `total_ligne` (livrée, sinon chargée, sinon préparée, sinon demandée), prix du mode de tarification figé, `total_ligne`, `montant_net` (montant brut affiché seulement s'il diffère), encaissé (acomptes compris, « dont acomptes »), remboursé, reste à payer (sauf facture annulée), trop-perçu à rendre (ADR 0019). **Aucune TVA** : la vente n'en porte pas. | `ANNULÉE` |
 
 ## Téléchargement d'une facture de vente
 

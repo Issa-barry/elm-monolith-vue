@@ -32,6 +32,21 @@ recopiée document par document, et la facture de vente n'avait pas de PDF.
 6. **Convention** : toute nouvelle facture ou tout nouveau bon PDF utilise ce modèle (CLAUDE.md,
    AGENTS.md).
 
+## Amendement du 2026-10-19
+
+7. **Pied de page officiel par organisation** (raison sociale, adresse, RCCM, NIF, contacts) :
+   texte saisi dans Paramètres → Organisation, affiché centré sous un trait fin sur chaque page de
+   tous les documents. Il n'est pas écrit dans le modèle : l'application est multi-organisation et
+   ces mentions légales n'appartiennent qu'à une entreprise. Borné à 6 lignes de 150 caractères
+   pour que la marge basse calculée suffise.
+8. **Charte** : design d'origine de la facture d'achat conservé ; seul le nom de l'organisation
+   prend les deux tons du logo « EAU LA MAMAN » (début bleu foncé, dernier mot bleu clair),
+   centralisés dans `CharteDocument`. Une première version colorant titres et traits a été
+   abandonnée le jour même à la demande du métier.
+9. **Bloc CLIENT** de la facture de vente : uniquement si un client est associé, avec ses seules
+   coordonnées renseignées (nom, adresse, téléphone, email), à côté du bloc VÉHICULE. RCCM, NIF et
+   raison sociale ne sont pas affichés : la fiche client ne les porte pas.
+
 ## Conséquences
 
 - Le bon de commande prend la typographie Poppins de la facture d'achat et le logo par défaut quand

@@ -143,6 +143,9 @@ nouveau document de ce type) utilise le modèle officiel décrit dans `docs/docu
 - **Interdit** : une nouvelle vue PDF de facture ou de bon avec son propre HTML/CSS (`<style>`,
   tableaux d'en-tête ou de totaux recopiés). Un besoin de présentation nouveau s'ajoute au modèle
   (paramètre de `DocumentPdf` ou slot du composant), pour tous les documents.
+- Couleurs : celles du design d'origine de la facture d'achat ; seul le nom de l'organisation prend
+  les deux tons de `CharteDocument`. Pied de page légal : celui de l'organisation (Paramètres →
+  Organisation), jamais écrit dans le modèle.
 - Une mention propre à un document reste propre à ce document (ex. « Ce document n'est pas
   l'original du fournisseur » : facture d'achat uniquement).
 - Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
