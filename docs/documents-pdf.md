@@ -12,6 +12,15 @@ de ce modèle change tous les documents à la fois.
 | Facture d'achat | `GET /backoffice/achats/factures/{facture}/pdf` (`achats.factures.pdf`, `?preview=1` = aperçu) | `FactureAchatDocument` | `pdf/facture_achat` |
 | Bon de commande fournisseur | `GET /backoffice/achats/{achat}/pdf` (`achats.pdf`) | `BonCommandeAchatDocument` | `pdf/bon_commande_achat` |
 | Facture de vente | `GET /backoffice/factures/{facture_vente}/pdf` (`factures.pdf`) | `FactureVenteDocument` | `pdf/facture_vente` |
+| Bon de commande de vente | `GET /backoffice/ventes/{commande_vente}/pdf` (`ventes.pdf`) | `BonCommandeVenteDocument` | `pdf/bon_commande_vente` |
+
+Les actions **Voir la facture** et **Voir le bon de commande** ouvrent le PDF dans un nouvel
+onglet (`target="_blank"`, `rel="noopener noreferrer"`), sur ordinateur comme sur mobile. Toutes
+ces routes acceptent `?preview=1` pour répondre en `Content-Disposition: inline` ; sans ce
+paramètre, elles conservent le téléchargement. L'aperçu applique les mêmes contrôles de permission,
+d'organisation et d'agence que le téléchargement. Le lecteur PDF du navigateur permet ensuite
+de télécharger ou d'imprimer le document. Depuis une application installée (PWA), le navigateur
+peut choisir une fenêtre séparée plutôt qu'un onglet.
 
 Hors périmètre (ce ne sont ni des factures ni des bons) : rapports et états de commissions,
 période et fiche de paiement, salaires, types de dépense, rapport d'activité, impression des
@@ -81,10 +90,11 @@ officiels diffèrent.
 | Facture d'achat | « Ce document n’est pas l’original du fournisseur. » (uniquement ce document) ; n° fournisseur ou « Sans numéro » ; HT, TVA au taux de la facture, TTC. | `BROUILLON`, `ANNULÉE` |
 | Bon de commande | Agence de livraison et agence payeuse ; fournisseur et agence du snapshot de validation (ACH-006) ; référence des lignes ; encadré de validation (règle de plafond appliquée), d'attente ou d'annulation (motif) ; date de génération. | `NON VALIDÉ`, `ANNULÉ` |
 | Facture de vente | Bloc CLIENT (seulement si un client est associé : nom, adresse, téléphone, email — champs vides masqués ; la fiche client ne porte ni raison sociale, ni RCCM, ni NIF) sur la même ligne que le bloc VÉHICULE ; sans client ni véhicule, aucun bloc ; n° de commande s'il diffère ; statut. Montants et quantités repris du métier, jamais recalculés : quantité ayant servi au dernier calcul de `total_ligne` (livrée, sinon chargée, sinon préparée, sinon demandée), prix du mode de tarification figé, `total_ligne`, `montant_net` (montant brut affiché seulement s'il diffère), encaissé (acomptes compris, « dont acomptes »), remboursé, reste à payer (sauf facture annulée), trop-perçu à rendre (ADR 0019). **Aucune TVA** : la vente n'en porte pas. | `ANNULÉE` |
+| Bon de commande de vente | Mêmes blocs CLIENT / VÉHICULE et même lecture des lignes que la facture de vente (`CommandeVenteDonneesDocument`, partagé par les deux) : quantité ayant servi au dernier calcul de `total_ligne`, prix du mode de tarification figé, `total_ligne` ; quantité commandée rappelée sous la désignation quand elle diffère (« Quantité commandée : 100 » après un chargement partiel ou un retour). Date de création, n° de commande, statut tel qu'affiché à l'écran (`statutAffichage()` : « Commissions à verser », « Retirée »…), date de remise prévue d'une précommande pas encore remise. Total = `total_commande` ; pas d'encaissement (il relève de la facture). **Aucune TVA**. Date de génération en pied. | `BROUILLON`, `ANNULÉE` (annulée ou annulée pour erreur de saisie), `RETOURNÉE` |
 
 ## Téléchargement d'une facture de vente
 
-- Menu de chaque ligne de `/backoffice/factures` : « Télécharger la facture », immédiatement sous
+- Menu de chaque ligne de `/backoffice/factures` : « Voir la facture », immédiatement sous
   « Encaisser » quand cette action est affichée. Disponible quel que soit le statut, facture payée
   ou annulée comprise : il ne dépend pas de la possibilité d'encaisser. Vue mobile : bouton sur
   chaque carte.
@@ -92,6 +102,17 @@ officiels diffèrent.
   même organisation, et agence de la commande dans le périmètre de consultation
   (`SiteScopeService` : vision toutes agences, sinon agences rattachées). Organisation et agence
   vérifiées explicitement (le `Gate::before` du super administrateur court-circuite les policies).
+
+## Bon de commande de vente
+
+- « Voir le bon de commande » : menu de chaque ligne de `/backoffice/ventes` (même liste pour
+  `/backoffice/distributions` et `/backoffice/precommandes`), en-tête de la fiche de la commande
+  (Vente et Distribution) et, sur mobile, menu ⋮ de la fiche et tiroir de détail de la liste.
+  Disponible quel que soit le statut, brouillon et commande annulée compris ; affiché seulement
+  avec `ventes.read`.
+- Serveur (`TelechargerBonCommandeVenteController`) : mêmes contrôles que la facture de vente —
+  permission `ventes.read` (policy de la commande), même organisation, agence de la commande dans
+  le périmètre de consultation (`SiteScopeService`), vérifiées explicitement.
 
 ## Ajouter une facture ou un bon
 

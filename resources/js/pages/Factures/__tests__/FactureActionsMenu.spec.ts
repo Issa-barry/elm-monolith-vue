@@ -34,7 +34,7 @@ describe('Factures de vente — menu de ligne', () => {
         permissions.add('ventes.update');
     });
 
-    it('place « Télécharger la facture » immédiatement sous « Encaisser »', () => {
+    it('ouvre « Voir la facture » dans un nouvel onglet, sous « Encaisser »', () => {
         const wrapper = monter();
 
         expect(actions(wrapper)).toEqual([
@@ -44,13 +44,15 @@ describe('Factures de vente — menu de ligne', () => {
         ]);
         const lien = wrapper.find('[data-testid="action-telecharger"] a');
         expect(lien.attributes('href')).toBe(
-            '/backoffice/factures/01JFACTURE/pdf',
+            '/backoffice/factures/01JFACTURE/pdf?preview=1',
         );
-        expect(lien.attributes('download')).toBeDefined();
-        expect(lien.text()).toContain('Télécharger la facture');
+        expect(lien.attributes('download')).toBeUndefined();
+        expect(lien.attributes('target')).toBe('_blank');
+        expect(lien.attributes('rel')).toBe('noopener noreferrer');
+        expect(lien.text()).toContain('Voir la facture');
     });
 
-    it('garde le téléchargement pour une facture payée, sans « Encaisser »', () => {
+    it('garde l’aperçu pour une facture payée, sans « Encaisser »', () => {
         const wrapper = monter({ is_payee: true });
 
         expect(actions(wrapper)).toEqual([
@@ -59,7 +61,7 @@ describe('Factures de vente — menu de ligne', () => {
         ]);
     });
 
-    it('garde le téléchargement sans droit d’encaissement', () => {
+    it('garde l’aperçu sans droit d’encaissement', () => {
         permissions.delete('ventes.update');
 
         expect(actions(monter())).toEqual([
@@ -68,7 +70,7 @@ describe('Factures de vente — menu de ligne', () => {
         ]);
     });
 
-    it('n’affiche pas le téléchargement sans la permission de consultation', () => {
+    it('n’affiche pas l’aperçu sans la permission de consultation', () => {
         permissions.clear();
 
         expect(actions(monter())).toEqual(['action-historique']);

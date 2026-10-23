@@ -172,16 +172,20 @@ class IndexCommandeVenteController extends Controller
             $query->whereHas('vehicule.equipe.membres', fn ($q) => $q->where('role', $livreurRole));
         }
 
+        // nom_complet est le champ saisi/affiché (cf. Client::getNomCompletAttribute) ; nom/prenom
+        // ne restent cherchés que pour les anciennes fiches.
         if ($client) {
             $query->whereHas('client', function ($q) use ($client) {
-                $q->where('nom', 'like', "%{$client}%")
+                $q->where('nom_complet', 'like', "%{$client}%")
+                    ->orWhere('nom', 'like', "%{$client}%")
                     ->orWhere('prenom', 'like', "%{$client}%")
                     ->orWhere('telephone', 'like', "%{$client}%");
             });
         }
 
         if ($clientNom = $request->input('client_nom')) {
-            $query->whereHas('client', fn ($q) => $q->where('nom', 'like', "%{$clientNom}%")
+            $query->whereHas('client', fn ($q) => $q->where('nom_complet', 'like', "%{$clientNom}%")
+                ->orWhere('nom', 'like', "%{$clientNom}%")
                 ->orWhere('prenom', 'like', "%{$clientNom}%"));
         }
 

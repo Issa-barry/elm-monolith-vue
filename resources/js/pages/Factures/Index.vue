@@ -20,7 +20,7 @@ import {
     ArrowLeft,
     Building2,
     CreditCard,
-    Download,
+    Eye,
     Search,
     Truck,
     X,
@@ -502,12 +502,13 @@ function _progressPercent(f: FactureItem): number {
                             size="sm"
                             variant="outline"
                             class="h-7 text-xs"
-                            :href="`/backoffice/factures/${f.id}/pdf`"
-                            download
+                            :href="`/backoffice/factures/${f.id}/pdf?preview=1`"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             data-testid="telecharger-facture-mobile"
                         >
-                            <Download class="mr-1 h-3.5 w-3.5" />
-                            Télécharger la facture
+                            <Eye class="mr-1 h-3.5 w-3.5" />
+                            Voir la facture
                         </Button>
                     </div>
                 </div>

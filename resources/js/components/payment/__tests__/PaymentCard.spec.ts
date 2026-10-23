@@ -135,7 +135,7 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
 
         const alerte = wrapper.get('[data-testid="especes-indisponible"]');
         expect(alerte.text().replace(/\s+/g, ' ')).toBe(
-            "Encaissement impossible dans cette agence : vous n'avez ni caisse ni compte Mobile Money actif, et l'agence n'a aucun compte bancaire actif. Contactez votre responsable.",
+            "Encaissement bloqué dans cette agence : aucune caisse ni aucun compte bancaire actif dans l'agence, et aucun compte Mobile Money actif pour vous. Demandez à votre responsable d'activer un moyen d'encaissement.",
         );
         // Opération réellement bloquée : rouge, jamais ambre.
         expect(alerte.classes()).toContain('text-destructive');
@@ -691,7 +691,7 @@ describe('PaymentCard — Mobile Money sur le compte de l’agent (ADR 0027)', (
 
         expect(
             wrapper.get('[data-testid="especes-indisponible"]').text(),
-        ).toContain('Encaissement impossible à Kouriah');
+        ).toContain('Encaissement bloqué à Kouriah');
         expect(
             wrapper.find('[data-testid="mobile-money-indisponible"]').exists(),
         ).toBe(false);
