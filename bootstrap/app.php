@@ -86,7 +86,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
-            AddLinkHeadersForPreloadedAssets::class,
+            // Sans limite, l'en-tête Link listait toutes les dépendances JS de la page (~10 Ko sur
+            // Ventes) : le serveur de prod rejetait la réponse en 500 au chargement complet de la page
+            // (onglet dupliqué, retour navigateur). Le HTML garde tous ses <link rel="modulepreload">.
+            AddLinkHeadersForPreloadedAssets::using(20),
             PreventCachingOfDynamicResponses::class,
         ]);
 
