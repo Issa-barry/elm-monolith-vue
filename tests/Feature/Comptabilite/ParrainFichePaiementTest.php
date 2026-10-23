@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMode;
+use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
@@ -15,7 +17,9 @@ use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -33,6 +37,7 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageLivraisonVersionService;
 use App\Services\Commission\PartageParrainService;
@@ -190,6 +195,58 @@ class ParrainFichePaiementTest extends TestCase
         return $commande->fresh();
     }
 
+    /**
+     * Vente générée sans partage d'équipe actif (Propriétaire seul) : tentative PARTIELLE, comme une
+     * commande créée avant la correction de son équipe — c'est elle que la relance complète.
+     */
+    private function venteSansPartageEquipe(int $qte): CommandeVente
+    {
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
+            'libelle' => 'Propriétaire — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'mode' => CommissionMode::DIRECT->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => '2026-10-01',
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+        EquipeLivraisonPartageCategorie::where('equipe_id', $this->equipe->id)->delete();
+
+        $commande = $this->vendre($qte);
+        $this->assertSame(0, $this->enveloppesEquipe($commande)->count());
+        $this->assertSame(
+            CommissionGenerationStatut::PARTIEL,
+            CommissionGenerationAttempt::where('source_id', $commande->id)->latest('created_at')->latest('id')->first()->statut,
+        );
+
+        return $commande;
+    }
+
+    private function retablirPartageAvecParrain(): void
+    {
+        PartageLivraisonVersionService::versionner(
+            $this->equipe->id,
+            CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
+            $this->categorie->id,
+            [$this->chauffeur->id => 500, $this->convoyeur->id => 300],
+            Carbon::today(),
+            200,
+        );
+    }
+
+    /** @return Collection<int, CommissionEnveloppe> */
+    private function enveloppesEquipe(CommandeVente $commande): Collection
+    {
+        return CommissionEnveloppe::where('source_type', CommandeVente::class)
+            ->where('source_id', $commande->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)
+            ->with('parts')
+            ->get();
+    }
+
     private function periode(TypePeriodePaiement $type): PaiementPeriode
     {
         $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($this->org->id, $type, Carbon::today());
@@ -296,6 +353,61 @@ class ParrainFichePaiementTest extends TestCase
         $this->assertEquals(20000.0, (float) $agence['parrains_p1']);
         $this->assertEquals(0.0, (float) $agence['parrains_p2']);
         $this->assertEquals(80000.0, (float) $agence['livreurs_p1'], 'La colonne livreurs ne compte que les livreurs.');
+    }
+
+    public function test_relancer_une_generation_partielle_cree_la_part_du_parrain_sans_doublon(): void
+    {
+        $commande = $this->venteSansPartageEquipe(100);
+        $this->retablirPartageAvecParrain();
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+
+        $this->assertSame(1, $this->enveloppesEquipe($commande)->count(), 'Une seule enveloppe Livreur, même relancée deux fois.');
+        $this->assertEquals(20000.0, (float) $this->enveloppesEquipe($commande)->sole()->parts->firstWhere('beneficiaire_type', 'parrain')->montant_net);
+        $this->assertEquals(20000.0, (float) $this->fichesParrain($this->periode(TypePeriodePaiement::PARRAIN))->sole()->montant_net);
+    }
+
+    public function test_une_periode_parrain_cloturee_bloque_la_relance_de_lenveloppe_livreur(): void
+    {
+        $commande = $this->venteSansPartageEquipe(100);
+        $this->retablirPartageAvecParrain();
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($this->org->id, TypePeriodePaiement::PARRAIN, Carbon::today());
+        $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+
+        $this->assertSame(0, $this->enveloppesEquipe($commande)->count(), 'La part du parrain ne serait jamais payée : rien n\'est créé.');
+        $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->latest('created_at')->latest('id')->first();
+        $this->assertSame(CommissionGenerationStatut::PARTIEL, $tentative->statut);
+        $this->assertContains(
+            CommissionMotifNonGeneration::PERIODE_FIGEE->value,
+            collect($tentative->detail_erreur['cibles'] ?? [])->pluck('code')->all(),
+        );
+        $this->assertSame(0, PaiementFiche::where('beneficiaire_type', 'parrain')->count());
+    }
+
+    public function test_reaffecter_le_vehicule_deplace_la_fiche_parrain_et_sa_dette_vers_la_nouvelle_agence(): void
+    {
+        $this->vendre(100);
+        $periode = $this->periode(TypePeriodePaiement::PARRAIN);
+        app(PeriodeValidationService::class)->validerSiComplete($periode);
+        $nouvelleAgence = Site::create(['organization_id' => $this->org->id, 'nom' => 'Agence B', 'type' => 'agence', 'localisation' => 'Kindia']);
+
+        $this->vehicule->update(['site_id' => $nouvelleAgence->id]);
+
+        $fiche = $this->fichesParrain($periode)->sole();
+        $this->assertSame($nouvelleAgence->id, $fiche->site_id);
+        foreach ([EvenementComptable::FICHE_REAFFECTEE_SORTIE, EvenementComptable::FICHE_REAFFECTEE_ENTREE] as $evenement) {
+            $piece = PieceComptable::where('type_evenement', $evenement->value)
+                ->whereHas('lignes.compte', fn ($q) => $q->where('numero', '467210'))
+                ->sole();
+            $this->assertEquals(40000.0, (float) $piece->lignes()->sum('debit') + (float) $piece->lignes()->sum('credit'));
+            $this->assertSame(
+                [$evenement === EvenementComptable::FICHE_REAFFECTEE_SORTIE ? $this->site->id : $nouvelleAgence->id],
+                $piece->lignes()->pluck('site_id')->unique()->values()->all(),
+            );
+        }
     }
 
     public function test_la_page_fiches_parrains_liste_la_fiche(): void

@@ -88,6 +88,20 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
 - **Hors périmètre** : régularisation de clôture comptable (comme sites et consultants, la fiche
   étant validée d'office).
 
+## Lot 4 — vérification du parcours (2026-10-23)
+
+- **E2E** `tests/e2e/commissions/parrain-commission.spec.ts` (organisation dédiée,
+  `CommissionE2eFixturesController::parrainCommission`) : ajout du parrain, répartition
+  500 / 300 / 200 dans la modale Équipe, vente (part du parrain prise sur l'enveloppe), transfert
+  entre sites sans part, période Parrains validée d'office, paiement partiel par la fiche, journal,
+  soldes 622500 / 467210 / 467220, Financement de l'agence, fiche complémentaire, fiches livreurs.
+- **Tests serveur** (`ParrainFichePaiementTest`) pour les cas difficiles à piloter à l'écran :
+  relance d'une génération partielle (part créée une seule fois), période Parrain clôturée qui
+  bloque la relance, réaffectation du véhicule vers une autre agence (fiche et dette déplacées).
+- **Avant tout déploiement** : exécuter en production le contrôle des numéros de compte
+  (`SELECT organization_id, numero, libelle FROM compta_comptes WHERE numero IN
+  ('622500','467210','467220') AND libelle NOT LIKE '%arrain%';` — résultat attendu : aucune ligne).
+
 ## Conséquences
 
 - Les commissions existantes ne sont ni recalculées ni modifiées ; sans parrain, rien ne change.

@@ -189,3 +189,9 @@ Distribution.
   livreurs.
 - Écrans : Comptabilité → Commissions → **Parrains** (`fiches/parrains`, liste des fiches et
   paiement), périodes « Parrains » dans la page Périodes.
+
+**Vérification (lot 4, 23/10/2026)** : parcours complet couvert par
+`tests/e2e/commissions/parrain-commission.spec.ts` (de l'ajout du parrain au paiement partiel de sa
+fiche, avec contrôle des comptes 622500 / 467210 / 467220 et des fiches livreurs) ; relance d'une
+génération partielle, période Parrain clôturée et réaffectation d'agence couvertes par
+`tests/Feature/Comptabilite/ParrainFichePaiementTest.php` (ADR 0035, lot 4).

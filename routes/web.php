@@ -1123,10 +1123,17 @@ if (app()->environment('e2e')) {
             ->name('e2e.diagnostics.commande-vente-commissions');
         Route::match(['post', 'delete'], 'e2e/fixtures/permission-annulation-exceptionnelle', [CommissionE2eFixturesController::class, 'permissionAnnulationExceptionnelle'])
             ->name('e2e.fixtures.permission-annulation-exceptionnelle');
+        Route::post('e2e/fixtures/parrain-commission/{vehicule}/{type}', [CommissionE2eFixturesController::class, 'parrainOperation'])
+            ->whereIn('type', ['vente', 'transfert'])
+            ->name('e2e.fixtures.parrain-operation');
+        Route::get('e2e/fixtures/parrain-commission/{vehicule}/etat', [CommissionE2eFixturesController::class, 'parrainEtat'])
+            ->name('e2e.fixtures.parrain-etat');
     });
-    // Crée sa propre organisation et y connecte la session : aucun utilisateur préalable requis.
+    // Créent leur propre organisation et y connectent la session : aucun utilisateur préalable requis.
     Route::post('e2e/fixtures/partages-livreur', [CommissionE2eFixturesController::class, 'partagesLivreur'])
         ->name('e2e.fixtures.partages-livreur');
+    Route::post('e2e/fixtures/parrain-commission', [CommissionE2eFixturesController::class, 'parrainCommission'])
+        ->name('e2e.fixtures.parrain-commission');
 }
 
 require __DIR__.'/settings.php';
