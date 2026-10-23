@@ -98,6 +98,12 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
 - **Tests serveur** (`ParrainFichePaiementTest`) pour les cas difficiles à piloter à l'écran :
   relance d'une génération partielle (part créée une seule fois), période Parrain clôturée qui
   bloque la relance, réaffectation du véhicule vers une autre agence (fiche et dette déplacées).
+- **Liste Financement des agences** (E2E) : colonnes Parrains P1 / P2 en « Mois complet », seule la
+  colonne de la quinzaine filtrée sinon ; le reste dû du parrain ne se mêle pas aux livreurs.
+- **Changement de véhicule d'un livreur** (`EquipeLivraisonTransfertLivreurTest`) : départ d'un
+  véhicule parrainé (la part du parrain reste dans la nouvelle répartition de départ), refus en
+  bloc si cette part manque, arrivée sur un véhicule parrainé, départ du dernier livreur (équipe
+  dissoute, parrain conservé sur le véhicule).
 - **Avant tout déploiement** : exécuter en production le contrôle des numéros de compte
   (`SELECT organization_id, numero, libelle FROM compta_comptes WHERE numero IN
   ('622500','467210','467220') AND libelle NOT LIKE '%arrain%';` — résultat attendu : aucune ligne).

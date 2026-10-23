@@ -194,4 +194,6 @@ Distribution.
 `tests/e2e/commissions/parrain-commission.spec.ts` (de l'ajout du parrain au paiement partiel de sa
 fiche, avec contrôle des comptes 622500 / 467210 / 467220 et des fiches livreurs) ; relance d'une
 génération partielle, période Parrain clôturée et réaffectation d'agence couvertes par
-`tests/Feature/Comptabilite/ParrainFichePaiementTest.php` (ADR 0035, lot 4).
+`tests/Feature/Comptabilite/ParrainFichePaiementTest.php` ; changement de véhicule d'un livreur
+de ou vers un véhicule parrainé par `tests/Feature/EquipeLivraisonTransfertLivreurTest.php`
+(ADR 0035, lot 4).

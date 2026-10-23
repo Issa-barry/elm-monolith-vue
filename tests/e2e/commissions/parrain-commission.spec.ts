@@ -85,6 +85,30 @@ async function saisirMontant(champ: Locator, montant: number): Promise<void> {
     await input.blur();
 }
 
+/** Cellule de la liste Financement des agences : ligne de l'agence × colonne nommée. */
+async function celluleFinancement(
+    page: Page,
+    agence: string,
+    colonne: string,
+): Promise<Locator> {
+    await expect(
+        page.locator('tbody tr', { hasText: agence }).first(),
+    ).toBeVisible();
+    const entetes = (await page.locator('thead th').allInnerTexts()).map((t) =>
+        t.trim(),
+    );
+    const index = entetes.indexOf(colonne);
+    expect(
+        index,
+        `Colonne « ${colonne} » absente : ${entetes.join(' | ')}`,
+    ).toBeGreaterThan(-1);
+    return page
+        .locator('tbody tr', { hasText: agence })
+        .first()
+        .locator('td')
+        .nth(index);
+}
+
 const somme = (parts: Operation['parts'], type: string) =>
     parts.filter((p) => p.type === type).reduce((t, p) => t + p.montant, 0);
 
@@ -259,6 +283,35 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await expect(section.locator('tr', { hasText: nomParrain })).toContainText(
         new RegExp(gnf(15_000)),
     );
+
+    // Liste du financement : colonnes Parrains P1 / P2 (mois complet), puis seule la colonne
+    // de la quinzaine courante quand on filtre sur son échéance.
+    const autre = quinzaine === 'P1' ? 'P2' : 'P1';
+    await page.goto('/backoffice/comptabilite/tresorerie/financement');
+    await expect(
+        await celluleFinancement(page, f.site.nom, `Parrains ${quinzaine}`),
+    ).toContainText(new RegExp(gnf(15_000)));
+    await expect(
+        await celluleFinancement(page, f.site.nom, `Parrains ${autre}`),
+    ).not.toContainText(new RegExp(gnf(15_000)));
+    await page.screenshot({
+        path: test.info().outputPath('financement-mois-complet.png'),
+        fullPage: true,
+    });
+
+    await page.goto(
+        `/backoffice/comptabilite/tresorerie/financement?echeance=${quinzaine.toLowerCase()}`,
+    );
+    await expect(
+        await celluleFinancement(page, f.site.nom, `Parrains ${quinzaine}`),
+    ).toContainText(new RegExp(gnf(15_000)));
+    await expect(
+        page.locator('thead th', { hasText: `Parrains ${autre}` }),
+    ).toHaveCount(0);
+    await page.screenshot({
+        path: test.info().outputPath(`financement-${quinzaine}.png`),
+        fullPage: true,
+    });
 
     // ── 9. Nouvelle vente : fiche complémentaire, fiche payée intacte ──────────────
     await post<Operation>(
