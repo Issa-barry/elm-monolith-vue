@@ -89,11 +89,25 @@ class TelechargerFactureVenteTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $reponse->getContent());
     }
 
+    public function test_affiche_le_pdf_en_apercu_sans_forcer_le_telechargement(): void
+    {
+        $user = $this->utilisateur($this->org, 'admin_entreprise', ['ventes.read'], $this->agence);
+
+        $reponse = $this->actingAs($user)->get(route('factures.pdf', ['facture_vente' => $this->facture, 'preview' => 1]));
+
+        $reponse->assertOk()->assertHeader('content-type', 'application/pdf');
+        $disposition = (string) $reponse->headers->get('content-disposition');
+        $this->assertStringStartsWith('inline;', $disposition);
+        $this->assertStringContainsString('filename='.$this->facture->reference.'.pdf', $disposition);
+        $this->assertStringStartsWith('%PDF-', $reponse->getContent());
+    }
+
     public function test_refuse_sans_permission_de_consultation_des_ventes(): void
     {
         $user = $this->utilisateur($this->org, 'agent_test', ['ventes.update', 'factures.encaisser'], $this->agence);
 
         $this->actingAs($user)->get(route('factures.pdf', $this->facture))->assertForbidden();
+        $this->actingAs($user)->get(route('factures.pdf', ['facture_vente' => $this->facture, 'preview' => 1]))->assertForbidden();
     }
 
     public function test_refuse_une_facture_d_une_autre_organisation(): void

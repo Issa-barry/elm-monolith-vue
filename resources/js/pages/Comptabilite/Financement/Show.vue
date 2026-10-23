@@ -39,6 +39,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const sections: { key: string; label: string }[] = [
     { key: 'livreurs_p1', label: 'Commissions livreurs — 1re quinzaine' },
     { key: 'livreurs_p2', label: 'Commissions livreurs — 2e quinzaine' },
+    { key: 'parrains_p1', label: 'Commissions parrains — 1re quinzaine' },
+    { key: 'parrains_p2', label: 'Commissions parrains — 2e quinzaine' },
     { key: 'proprietaires', label: 'Commissions propriétaires' },
     { key: 'salaires', label: 'Salaires' },
     { key: 'fournisseurs', label: 'Factures d’achat à payer' },

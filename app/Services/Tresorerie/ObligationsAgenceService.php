@@ -7,6 +7,7 @@ use App\Services\Tresorerie\Obligations\FournisseurObligationContributor;
 use App\Services\Tresorerie\Obligations\LivreurObligationContributor;
 use App\Services\Tresorerie\Obligations\ObligationAccumulator;
 use App\Services\Tresorerie\Obligations\ObligationContributor;
+use App\Services\Tresorerie\Obligations\ParrainObligationContributor;
 use App\Services\Tresorerie\Obligations\ProprietaireObligationContributor;
 use App\Services\Tresorerie\Obligations\SalaireObligationContributor;
 use Carbon\CarbonInterface;
@@ -14,7 +15,7 @@ use Carbon\CarbonInterface;
 /**
  * Calcule, pour un mois donné, les obligations RESTANTES (montant déjà payé
  * déduit, jamais le brut théorique) de chaque agence : commissions livreurs
- * (P1/P2), propriétaires (mensuel) et salaires (mensuel) — cf. anciennement
+ * et parrains (P1/P2, ADR 0035), propriétaires (mensuel) et salaires (mensuel) — cf. anciennement
  * BesoinTresorerieService, renommé/refactoré pour le chantier Financement des
  * agences.
  *
@@ -40,8 +41,9 @@ class ObligationsAgenceService
         ProprietaireObligationContributor $proprietaire,
         SalaireObligationContributor $salaire,
         FournisseurObligationContributor $fournisseur,
+        ParrainObligationContributor $parrain,
     ) {
-        $this->contributors = [$livreur, $proprietaire, $salaire, $fournisseur];
+        $this->contributors = [$livreur, $proprietaire, $salaire, $fournisseur, $parrain];
     }
 
     /** @return list<array<string, mixed>> */

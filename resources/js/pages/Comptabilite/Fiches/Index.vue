@@ -64,7 +64,7 @@ interface Stats {
 }
 
 const props = defineProps<{
-    type: 'livreur' | 'proprietaire' | 'salarie';
+    type: 'livreur' | 'proprietaire' | 'salarie' | 'parrain';
     fiches: { data: Fiche[]; links: unknown[] };
     sites: Site[];
     periodes: PeriodeOption[];
@@ -82,12 +82,14 @@ const typeRoute = {
     livreur: '/backoffice/comptabilite/fiches/livreurs',
     proprietaire: '/backoffice/comptabilite/fiches/proprietaires',
     salarie: '/backoffice/comptabilite/fiches/salaries',
+    parrain: '/backoffice/comptabilite/fiches/parrains',
 };
 
 const typeTitle = {
     livreur: 'Paiements livreurs',
     proprietaire: 'Paiements propriétaires',
     salarie: 'Paiements salariés',
+    parrain: 'Paiements parrains',
 };
 
 const breadcrumbs: BreadcrumbItem[] = [

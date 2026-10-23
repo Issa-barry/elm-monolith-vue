@@ -27,6 +27,9 @@ enum EvenementComptable: string
     case FICHE_CONSULTANT_VALIDEE = 'fiche_consultant_validee';
     case PAIEMENT_SITE = 'paiement_site';
     case PAIEMENT_CONSULTANT = 'paiement_consultant';
+    // Commission parrain (ADR 0035, PaiementFiche beneficiaire_type='parrain') : même traitement.
+    case FICHE_PARRAIN_VALIDEE = 'fiche_parrain_validee';
+    case PAIEMENT_PARRAIN = 'paiement_parrain';
     case DEPENSE_INTERNE_VALIDEE = 'depense_interne_validee';
     case DEPENSE_AVANCE_TIERS_VALIDEE = 'depense_avance_tiers_validee';
     case REGULARISATION_CLOTURE_FICHE = 'regularisation_cloture_fiche';
@@ -105,6 +108,8 @@ enum EvenementComptable: string
             self::FICHE_CONSULTANT_VALIDEE => 'Fiche commission consultant validée',
             self::PAIEMENT_SITE => 'Paiement commission site',
             self::PAIEMENT_CONSULTANT => 'Paiement commission consultant',
+            self::FICHE_PARRAIN_VALIDEE => 'Fiche commission parrain validée',
+            self::PAIEMENT_PARRAIN => 'Paiement commission parrain',
             self::DEPENSE_INTERNE_VALIDEE => 'Dépense interne validée',
             self::DEPENSE_AVANCE_TIERS_VALIDEE => 'Dépense imputée à un tiers (avance)',
             self::REGULARISATION_CLOTURE_FICHE => 'Régularisation de clôture (fiche non validée)',

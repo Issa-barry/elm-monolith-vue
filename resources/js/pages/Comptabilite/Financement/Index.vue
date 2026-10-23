@@ -16,6 +16,8 @@ interface Row {
     site_nom: string;
     livreurs_p1: number;
     livreurs_p2: number;
+    parrains_p1: number;
+    parrains_p2: number;
     proprietaires: number;
     salaires: number;
     fournisseurs: number;
@@ -147,14 +149,16 @@ function changerEcheance(echeance: 'p1' | 'p2' | 'mensuel') {
 }
 
 // ── Colonnes de commissions affichées selon l'échéance ────────────────────────
-// P1 = seulement livreurs_p1 ; P2/mensuel = tout le reste (jamais les deux
+// P1 = seulement les colonnes de 1re quinzaine (livreurs, parrains) ; P2/mensuel = tout le reste (jamais les deux
 // mélangés pour P1, cf. règle "ne jamais recompter le P1 dans le P2").
 
 const colonnesVisibles = computed(() => {
-    if (props.filters.echeance === 'p1') return ['livreurs_p1'] as const;
+    if (props.filters.echeance === 'p1')
+        return ['livreurs_p1', 'parrains_p1'] as const;
     if (props.filters.echeance === 'p2')
         return [
             'livreurs_p2',
+            'parrains_p2',
             'proprietaires',
             'salaires',
             'fournisseurs',
@@ -162,6 +166,8 @@ const colonnesVisibles = computed(() => {
     return [
         'livreurs_p1',
         'livreurs_p2',
+        'parrains_p1',
+        'parrains_p2',
         'proprietaires',
         'salaires',
         'fournisseurs',
@@ -171,6 +177,8 @@ const colonnesVisibles = computed(() => {
 const labelsColonnes: Record<string, string> = {
     livreurs_p1: 'Livreurs P1',
     livreurs_p2: 'Livreurs P2',
+    parrains_p1: 'Parrains P1',
+    parrains_p2: 'Parrains P2',
     proprietaires: 'Propriétaires',
     salaires: 'Salaires',
     fournisseurs: 'Fournisseurs',

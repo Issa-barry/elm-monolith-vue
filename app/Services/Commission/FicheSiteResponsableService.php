@@ -23,7 +23,8 @@ use Illuminate\Support\Facades\Log;
  */
 class FicheSiteResponsableService
 {
-    private const TYPES_CONCERNES = ['livreur', 'proprietaire'];
+    /** Fiches payées par l'agence du véhicule ; le parrain suit le livreur dont il partage l'enveloppe (ADR 0035). */
+    public const TYPES_CONCERNES = ['livreur', 'proprietaire', 'parrain'];
 
     /**
      * Site retenu pour une fiche : celui qui pèse le plus dans le montant de ses commissions (cas

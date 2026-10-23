@@ -37,6 +37,7 @@ import {
     CheckCircle,
     CircleAlert,
     Download,
+    Eye,
     HandCoins,
     History,
     MoreHorizontal,
@@ -1597,7 +1598,7 @@ function confirmDelete(c: Commande) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
-                                        class="w-44"
+                                        class="w-60"
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
@@ -1607,6 +1608,21 @@ function confirmDelete(c: Commande) {
                                                 <ShoppingCart class="h-4 w-4" />
                                                 Détail
                                             </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="can('ventes.read')"
+                                            as-child
+                                            data-testid="action-telecharger-bon"
+                                        >
+                                            <a
+                                                :href="`/backoffice/ventes/${data.id}/pdf?preview=1`"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="flex w-full cursor-pointer items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir le bon de commande
+                                            </a>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="data.can_modifier"

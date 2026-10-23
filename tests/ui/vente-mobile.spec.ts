@@ -292,6 +292,16 @@ for (const width of [360, 390, 480]) {
         await expect(drawer).toContainText('Tél. chauffeur');
         await expect(drawer).toContainText('10 260 000 GNF');
         await expect(drawer).toContainText('10 000 000 GNF');
+        const apercuBon = drawer.getByRole('link', {
+            name: 'Voir le bon de commande',
+        });
+        await expect(apercuBon).toHaveAttribute(
+            'href',
+            `/backoffice/ventes/${base.id}/pdf?preview=1`,
+        );
+        await expect(apercuBon).toHaveAttribute('target', '_blank');
+        await expect(apercuBon).toHaveAttribute('rel', 'noopener noreferrer');
+        await expect(apercuBon).not.toHaveAttribute('download');
         await expect(
             drawer.getByRole('button', { name: /encaisser|modifier|annuler/i }),
         ).toHaveCount(0);

@@ -67,7 +67,7 @@ export async function creerCommande(
  * (déjà seedée, un seul chauffeur), vérifie que l'étape Partage propose `categorieNom` (le
  * barème Livraison de cette catégorie doit être > 0, sinon le tout-ou-rien de
  * CommissionPartageLivraisonValidator bloque la génération entière — pas seulement Livreur),
- * accepte la répartition complète auto (chauffeur unique = 100%), enregistre.
+ * vérifie que la répartition est équilibrée (chauffeur unique = tout le barème), enregistre.
  * Généralisation de l'ancien commission-v2-full-chain.spec.ts::configurerPartageVehicule()
  * (qui ne gérait qu'un seul véhicule en dur).
  */
@@ -94,21 +94,21 @@ export async function configurerPartageEquipe(
 
     await dialog.getByRole('button', { name: /suivant/i }).click();
 
-    await expect(dialog.getByText(new RegExp(categorieNom, 'i'))).toBeVisible({
-        timeout: 10_000,
-    });
-    const categorieRow = dialog
-        .getByRole('row')
+    // Une carte par catégorie (barème Livreur + éditeur de répartition commun, ADR 0035).
+    const carte = dialog
+        .locator('[data-testid^="partage-categorie-"]')
         .filter({ hasText: new RegExp(categorieNom, 'i') });
-    await expect(categorieRow).toContainText(
+    await expect(carte).toBeVisible({ timeout: 10_000 });
+    await expect(carte).toContainText(
         new RegExp(
-            `${montantPattern(livraisonMontant)}\\s*GNF\\s*/\\s*${montantPattern(livraisonMontant)}\\s*GNF`,
+            `Barème Livreur\\s*:\\s*${montantPattern(livraisonMontant)}\\s*GNF\\s*/\\s*pack`,
             'i',
         ),
     );
-    await expect(dialog.getByText(/répartition complète/i)).toBeVisible({
-        timeout: 5_000,
-    });
+    await expect(carte.getByTestId('partage-livreur-etat')).toContainText(
+        /répartition équilibrée/i,
+        { timeout: 5_000 },
+    );
 
     const suivantBtn = dialog.getByRole('button', { name: /suivant/i });
     await expect(suivantBtn).toBeEnabled({ timeout: 5_000 });

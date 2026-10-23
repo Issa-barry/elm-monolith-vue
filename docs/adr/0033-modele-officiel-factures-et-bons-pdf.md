@@ -47,6 +47,13 @@ recopiée document par document, et la facture de vente n'avait pas de PDF.
    coordonnées renseignées (nom, adresse, téléphone, email), à côté du bloc VÉHICULE. RCCM, NIF et
    raison sociale ne sont pas affichés : la fiche client ne les porte pas.
 
+## Amendement du 2026-10-21
+
+10. **Bon de commande de vente** (`BonCommandeVenteDocument`), en application du point 6 : depuis la
+    liste et la fiche des commandes de vente, mêmes contrôles d'accès que la facture de vente. Il
+    partage avec elle les blocs CLIENT / VÉHICULE et la lecture des lignes
+    (`CommandeVenteDonneesDocument`) ; total = `total_commande`, sans encaissement ni TVA.
+
 ## Conséquences
 
 - Le bon de commande prend la typographie Poppins de la facture d'achat et le logo par défaut quand

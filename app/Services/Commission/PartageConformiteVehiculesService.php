@@ -2,7 +2,6 @@
 
 namespace App\Services\Commission;
 
-use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\Categorie;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraisonPartageCategorie;
@@ -14,7 +13,8 @@ use InvalidArgumentException;
 
 /**
  * État du partage Livreur de chaque véhicule, pour chaque processus configurable (Vente,
- * Transfert logistique, Transfert grossiste) — colonne « Partages » de la liste des véhicules.
+ * Transfert logistique, Transfert grossiste) et pour la Distribution d'un véhicule parrainé (son
+ * partage propre, cf. docs/parrainage-vehicule.md) — colonne « Partages » de la liste des véhicules.
  * Même juge que la fiche véhicule et que le blocage des commandes (COMM-015) : pour chaque
  * catégorie dont le barème Livreur en vigueur (type du véhicule) est positif, somme exacte et
  * chaque membre actif présent. Calcul groupé (partages et barèmes chargés une fois) pour rester
@@ -44,11 +44,13 @@ class PartageConformiteVehiculesService
      */
     public static function statuts(string $organizationId, Collection $vehicules): array
     {
-        $codes = CommissionRegleController::processusCodesDisponibles();
+        $codes = CommissionProcessusDefaults::codesPartageEquipe();
         $processus = CommissionProcessus::where('organization_id', $organizationId)
             ->whereIn('code', $codes)
             ->get()
             ->keyBy('code');
+        // Barème de chaque processus : la distribution garde celui de Logistique (COMM-005).
+        $processusBareme = $processus->map(fn (CommissionProcessus $p) => CommissionProcessusDefaults::processusResolutionBareme($p));
         $categorieIds = Categorie::where('organization_id', $organizationId)->where('statut', 'actif')->pluck('id');
         $aujourdhui = Carbon::today();
 
@@ -65,9 +67,9 @@ class PartageConformiteVehiculesService
         $resultat = [];
 
         foreach ($vehicules as $vehicule) {
-            $applicables = CommissionProcessusDefaults::codesApplicablesPourVehicule($vehicule, $codes);
+            $applicables = CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehicule);
             $equipe = $vehicule->equipe;
-            $requis = $equipe
+            $requisLivreurs = $equipe
                 ? $equipe->membres
                     ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
                     ->pluck('livreur_id')
@@ -75,6 +77,11 @@ class PartageConformiteVehiculesService
                 : [];
 
             foreach ($codes as $code) {
+                // Distribution : état exposé seulement pour un véhicule qui tient ce partage.
+                if ($code === CommissionProcessus::CODE_DISTRIBUTION_CLIENT && ! in_array($code, $applicables, true)) {
+                    continue;
+                }
+
                 if (! in_array($code, $applicables, true)) {
                     $resultat[$vehicule->id][$code] = self::NON_APPLICABLE;
 
@@ -82,12 +89,16 @@ class PartageConformiteVehiculesService
                 }
 
                 $proc = $processus->get($code);
+                $procBareme = $processusBareme->get($code);
                 $statut = self::NON_REQUIS;
+                // Même juge que la commande : la ligne du parrain est exigée là où il est rémunéré.
+                $parrainId = CommissionProcessusDefaults::remunereLeParrain($code) ? $vehicule->parrain_id : null;
+                $requis = $parrainId ? [...$requisLivreurs, $parrainId] : $requisLivreurs;
 
-                foreach ($proc ? $categorieIds : [] as $categorieId) {
-                    $cle = "{$proc->id}|{$categorieId}|{$vehicule->type_vehicule_id}";
+                foreach ($proc && $procBareme ? $categorieIds : [] as $categorieId) {
+                    $cle = "{$procBareme->id}|{$categorieId}|{$vehicule->type_vehicule_id}";
                     $baremes[$cle] ??= CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
-                        $organizationId, $proc->id, $categorieId, $vehicule->type_vehicule_id, $aujourdhui,
+                        $organizationId, $procBareme->id, $categorieId, $vehicule->type_vehicule_id, $aujourdhui,
                     );
                     if ($baremes[$cle] <= 0) {
                         continue;
@@ -101,6 +112,7 @@ class PartageConformiteVehiculesService
                     $lignes = $partages->get("{$equipe->id}|{$proc->id}|{$categorieId}", collect());
 
                     try {
+                        CommissionPartageLivraisonCategorieChecker::verifierParrainAJour($lignes, $parrainId);
                         CommissionPartageLivraisonValidator::valider($lignes, $baremes[$cle], $requis);
                         $statut = self::FAIT;
                     } catch (InvalidArgumentException) {
