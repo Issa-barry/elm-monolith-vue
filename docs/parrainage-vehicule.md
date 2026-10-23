@@ -168,6 +168,24 @@ Distribution.
   identité puis « Nouvelle répartition » quand le parrain a une part, ou une simple confirmation de
   retrait sinon.
 
-**Restant à livrer** (lot 3) : fiche et période de paiement « Parrain » à la quinzaine,
-comptabilisation et trésorerie. D'ici là, les parts de parrain générées ne figurent sur aucune
-fiche de paiement.
+**Paiement (lot 3, 23/10/2026)** :
+- **PARRAIN-017 — Fiche « Parrain » à la quinzaine.** Type de période `parrain` (référence
+  `PAY-AAAAMM-P1-PAR`), P1 du 1er au 15, P2 du 16 à la fin du mois. Une fiche par parrain et par
+  période (`PeriodeCalculatorService::calculerParrains()`), une ligne par vente, **sans déduction**
+  (aucune dépense n'est imputable à un parrain). Agence de paiement = site du véhicule, qui
+  suit ses réaffectations comme la fiche du livreur (ADR 0020, `FicheSiteResponsableService`).
+- **PARRAIN-018 — Validation automatique.** Sa part étant validée d'office, la période « Parrain »
+  se valide d'elle-même (`PeriodeValidationService::TYPES_AUTOMATIQUES`) ; paiement par le
+  mécanisme commun des fiches (décaissement depuis un support, ADR 0009 ; fiche figée et fiche
+  complémentaire, ADR 0010).
+- **PARRAIN-019 — Comptabilité.** À la validation : débit **622500 « Commissions parrains »**,
+  crédit **467210 « Parrains — commissions à payer »** (467220 pour d'éventuelles avances) ; au
+  paiement : débit 467210, crédit trésorerie (`fiche_parrain_validee`, `paiement_parrain`). La
+  charge du parrain sort de celle des livreurs : 622200 + 622500 = l'enveloppe, jamais plus.
+  Comptes créés par la migration `2026_10_23_100000_bootstrap_comptes_commission_parrain`
+  (idempotente ; un numéro déjà utilisé pour un autre usage est signalé dans le journal).
+- **PARRAIN-020 — Prévision de trésorerie.** Colonnes « Parrains P1 » / « Parrains P2 » du
+  financement des agences (`ParrainObligationContributor`), restant dû des fiches, comme les
+  livreurs.
+- Écrans : Comptabilité → Commissions → **Parrains** (`fiches/parrains`, liste des fiches et
+  paiement), périodes « Parrains » dans la page Périodes.

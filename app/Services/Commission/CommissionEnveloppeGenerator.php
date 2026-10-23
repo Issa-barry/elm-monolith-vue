@@ -408,23 +408,32 @@ class CommissionEnveloppeGenerator
      * serait jamais payée. Une période seulement validée, même déjà payée, l'accepte : elle est
      * rouverte et la part va sur une fiche complémentaire (ADR 0010, point 4, cf.
      * PeriodeValidationService::rouvrirSiDesynchronisee()).
+     *
+     * Enveloppe de l'équipe qui porte une part de parrain (ADR 0035) : sa période « parrain »
+     * compte aussi, la part n'y serait jamais payée.
+     *
+     * @param  list<array<string, mixed>>  $parts
      */
-    private static function periodeClotureePour(string $organizationId, string $cibleType, Carbon $date): ?PaiementPeriode
+    private static function periodeClotureePour(string $organizationId, string $cibleType, Carbon $date, array $parts = []): ?PaiementPeriode
     {
-        $type = match ($cibleType) {
-            CommissionCibleType::CODE_PROPRIETAIRE => TypePeriodePaiement::PROPRIETAIRE,
-            CommissionCibleType::CODE_EQUIPE_LIVRAISON => TypePeriodePaiement::LIVREUR,
-            CommissionCibleType::CODE_SITE => TypePeriodePaiement::SITE,
-            CommissionCibleType::CODE_CONSULTANT => TypePeriodePaiement::CONSULTANT,
-            default => null,
+        $types = match ($cibleType) {
+            CommissionCibleType::CODE_PROPRIETAIRE => [TypePeriodePaiement::PROPRIETAIRE],
+            CommissionCibleType::CODE_EQUIPE_LIVRAISON => [TypePeriodePaiement::LIVREUR],
+            CommissionCibleType::CODE_SITE => [TypePeriodePaiement::SITE],
+            CommissionCibleType::CODE_CONSULTANT => [TypePeriodePaiement::CONSULTANT],
+            default => [],
         };
 
-        if ($type === null) {
+        if (collect($parts)->contains('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)) {
+            $types[] = TypePeriodePaiement::PARRAIN;
+        }
+
+        if ($types === []) {
             return null;
         }
 
         return PaiementPeriode::where('organization_id', $organizationId)
-            ->where('type', $type->value)
+            ->whereIn('type', array_map(fn (TypePeriodePaiement $t) => $t->value, $types))
             ->where('statut', StatutPeriodePaiement::CLOTUREE->value)
             ->whereDate('date_debut', '<=', $date)
             ->whereDate('date_fin', '>=', $date)
@@ -980,7 +989,7 @@ class CommissionEnveloppeGenerator
 
             foreach (array_keys($enveloppesACreer) as $cle) {
                 $cibleType = explode(':', (string) $cle)[0];
-                $periode = self::periodeClotureePour($ctx->organizationId, $cibleType, $earnedAt);
+                $periode = self::periodeClotureePour($ctx->organizationId, $cibleType, $earnedAt, $enveloppesACreer[$cle]['parts']);
                 if ($periode) {
                     $erreurs[] = self::erreurCible(
                         $cibleType,

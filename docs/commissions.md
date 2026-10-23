@@ -1628,6 +1628,7 @@ Cf. [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md) et
   « Nouvelle répartition » de l'onglet Parrain ; droit `equipes-livraison.update` en plus).
 - **Changement de barème** : équipe parrainée toujours dans la grille (cf. COMM-019, exception du
   21/10/2026) ; un brouillon Logistique fait aussi reconfigurer le partage Distribution.
-- **Paiement** : fiche « Parrain » à la quinzaine — **à livrer (lot 3)** ; d'ici là les parts de
-  parrain ne figurent sur aucune fiche.
-- Tests : `tests/Feature/ParrainPartageCommissionTest.php`.
+- **Paiement** : fiche « Parrain » à la quinzaine (période `parrain`, P1/P2), validée d'office, sans
+  déduction, payée par l'agence du véhicule ; charge 622500, dette 467210 (PARRAIN-017 à 020).
+- Tests : `tests/Feature/ParrainPartageCommissionTest.php`,
+  `tests/Feature/Comptabilite/ParrainFichePaiementTest.php`.

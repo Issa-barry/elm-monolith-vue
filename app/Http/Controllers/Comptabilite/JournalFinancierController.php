@@ -149,6 +149,7 @@ class JournalFinancierController extends Controller
             EvenementComptable::PAIEMENT_LIVREUR,
             EvenementComptable::PAIEMENT_SITE,
             EvenementComptable::PAIEMENT_CONSULTANT,
+            EvenementComptable::PAIEMENT_PARRAIN,
             EvenementComptable::DEPENSE_INTERNE_VALIDEE,
             EvenementComptable::DEPENSE_AVANCE_TIERS_VALIDEE,
             EvenementComptable::ENCAISSEMENT_VENTE_RECU,

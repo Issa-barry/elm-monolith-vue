@@ -8,6 +8,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiementFicheReaffectation;
 use App\Models\PieceComptable;
+use App\Services\Commission\FicheSiteResponsableService;
 use Illuminate\Support\Carbon;
 
 /**
@@ -31,13 +32,16 @@ class FicheComptabilisationService
     // bien des PaiementFiche pour ces deux types (PaiementFiche::getBeneficiaireModel()
     // les résout déjà) — seule cette liste les excluait, laissant leur validation
     // et leur paiement totalement hors comptabilité générale.
-    private const TYPES_SUPPORTES = ['proprietaire', 'livreur', 'site', 'prestataire'];
+    // 'parrain' ajouté le 2026-10-23 (ADR 0035) : sa part est prise sur l'enveloppe Livreur, sa
+    // charge va sur son propre compte (622500) pour suivre le coût du parrainage.
+    private const TYPES_SUPPORTES = ['proprietaire', 'livreur', 'site', 'prestataire', 'parrain'];
 
     private const EVENEMENT_VALIDATION = [
         'livreur' => EvenementComptable::FICHE_LIVREUR_VALIDEE,
         'proprietaire' => EvenementComptable::FICHE_PROPRIETAIRE_VALIDEE,
         'site' => EvenementComptable::FICHE_SITE_VALIDEE,
         'prestataire' => EvenementComptable::FICHE_CONSULTANT_VALIDEE,
+        'parrain' => EvenementComptable::FICHE_PARRAIN_VALIDEE,
     ];
 
     private const EVENEMENT_PAIEMENT = [
@@ -45,6 +49,7 @@ class FicheComptabilisationService
         'proprietaire' => EvenementComptable::PAIEMENT_PROPRIETAIRE,
         'site' => EvenementComptable::PAIEMENT_SITE,
         'prestataire' => EvenementComptable::PAIEMENT_CONSULTANT,
+        'parrain' => EvenementComptable::PAIEMENT_PARRAIN,
     ];
 
     public function __construct(
@@ -179,7 +184,7 @@ class FicheComptabilisationService
     }
 
     /**
-     * Fiche livreur/propriétaire déjà constatée qui change d'agence (ADR 0020) : déplace le reste
+     * Fiche livreur/propriétaire/parrain déjà constatée qui change d'agence (ADR 0020) : déplace le reste
      * dû et la charge correspondante de l'agence d'origine vers la nouvelle, pour que la dette soit
      * soldée là où elle est payée. Sans effet si la fiche n'a jamais été constatée (pas de pièce de
      * validation) ou s'il ne reste rien à payer.
@@ -190,7 +195,7 @@ class FicheComptabilisationService
     {
         $fiche = $reaffectation->fiche;
         $type = $fiche?->beneficiaire_type;
-        if (! in_array($type, ['livreur', 'proprietaire'], true) || (float) $reaffectation->montant <= 0.009) {
+        if (! in_array($type, FicheSiteResponsableService::TYPES_CONCERNES, true) || (float) $reaffectation->montant <= 0.009) {
             return null;
         }
 

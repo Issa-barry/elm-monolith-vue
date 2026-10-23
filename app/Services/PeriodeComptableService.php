@@ -44,7 +44,8 @@ class PeriodeComptableService
         // révisiter si le produit tranche différemment. Résultat implicite via le "mensuelle"
         // par défaut ci-dessous : 'consultant' n'a volontairement pas besoin d'entrer dans la
         // liste quinzaine.
-        return in_array($typeBeneficiaire, ['livreur', 'site'], true) ? 'quinzaine' : 'mensuelle';
+        // Parrain (ADR 0035) : payé à la quinzaine, comme les livreurs dont il partage l'enveloppe.
+        return in_array($typeBeneficiaire, ['livreur', 'site', 'parrain'], true) ? 'quinzaine' : 'mensuelle';
     }
 
     // ── Calcul du code ────────────────────────────────────────────────────────

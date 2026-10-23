@@ -60,6 +60,9 @@ class PlanComptableBootstrapService
             '622200' => 'Commissions livreurs',
             '622300' => 'Commissions sites',
             '622400' => 'Commissions consultants',
+            // Part du parrain prise sur l'enveloppe Livreur (ADR 0035) : compte propre pour suivre le
+            // coût du parrainage, le total des commissions restant inchangé.
+            '622500' => 'Commissions parrains',
             '467110' => 'Propriétaires — commissions à payer',
             '467120' => 'Livreurs — commissions à payer',
             '467170' => 'Sites — commissions à payer',
@@ -68,6 +71,8 @@ class PlanComptableBootstrapService
             '467140' => 'Livreurs — avances et dépenses à récupérer',
             '467190' => 'Sites — avances et dépenses à récupérer',
             '467200' => 'Consultants — avances et dépenses à récupérer',
+            '467210' => 'Parrains — commissions à payer',
+            '467220' => 'Parrains — avances à récupérer',
             '467150' => 'Propriétaires — charges à payer (provision de clôture)',
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
             '658100' => 'Cashback clients accordés',
@@ -183,6 +188,11 @@ class PlanComptableBootstrapService
             ['fiche_consultant_validee', 'dette_tiers', null, '467180', 'OD'],
             ['fiche_consultant_validee', 'avance_tiers_prestataire', null, '467200', 'OD'],
 
+            // Engagement — fiche commission parrain validée (ADR 0035)
+            ['fiche_parrain_validee', 'charge_commission', null, '622500', 'OD'],
+            ['fiche_parrain_validee', 'dette_tiers', null, '467210', 'OD'],
+            ['fiche_parrain_validee', 'avance_tiers_parrain', null, '467220', 'OD'],
+
             // Règlement — paiement commission site
             ['paiement_site', 'dette_tiers', null, '467170', null],
             ['paiement_site', 'tresorerie', null, '571000', 'CA'],
@@ -204,6 +214,17 @@ class PlanComptableBootstrapService
             ['paiement_consultant', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['paiement_consultant', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_consultant', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Règlement — paiement commission parrain (ADR 0035)
+            ['paiement_parrain', 'dette_tiers', null, '467210', null],
+            ['paiement_parrain', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_parrain', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_parrain', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_parrain', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_parrain', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_parrain', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_parrain', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_parrain', 'tresorerie', 'cheque', '521000', 'BQ'],
 
             // Versement cashback (jambe trésorerie uniquement, cf. EvenementComptable::
             // VERSEMENT_CASHBACK et CashbackComptabilisationService).
@@ -350,10 +371,14 @@ class PlanComptableBootstrapService
             ['fiche_reaffectee_sortie', 'charge_commission_livreur', null, '622200', 'OD'],
             ['fiche_reaffectee_sortie', 'dette_tiers_proprietaire', null, '467110', 'OD'],
             ['fiche_reaffectee_sortie', 'charge_commission_proprietaire', null, '622100', 'OD'],
+            ['fiche_reaffectee_sortie', 'dette_tiers_parrain', null, '467210', 'OD'],
+            ['fiche_reaffectee_sortie', 'charge_commission_parrain', null, '622500', 'OD'],
             ['fiche_reaffectee_entree', 'dette_tiers_livreur', null, '467120', 'OD'],
             ['fiche_reaffectee_entree', 'charge_commission_livreur', null, '622200', 'OD'],
             ['fiche_reaffectee_entree', 'dette_tiers_proprietaire', null, '467110', 'OD'],
             ['fiche_reaffectee_entree', 'charge_commission_proprietaire', null, '622100', 'OD'],
+            ['fiche_reaffectee_entree', 'dette_tiers_parrain', null, '467210', 'OD'],
+            ['fiche_reaffectee_entree', 'charge_commission_parrain', null, '622500', 'OD'],
 
             // Régularisation de clôture (provision, reprise automatique à la validation réelle)
             ['regularisation_cloture_fiche', 'charge_commission_proprietaire', null, '622100', 'OD'],

@@ -3,7 +3,7 @@
 - **Date** : 2026-10-21
 - **Statut** : accepté le 2026-10-20 (décisions métier de l'utilisateur) ; **lots 1 et 2 livrés le
   2026-10-21** (données, moteur de calcul, garde-fous serveur ; écrans et parcours combiné) ; lot 3
-  (paiement, comptabilité, trésorerie) à venir
+  (paiement, comptabilité, trésorerie) livré le 2026-10-23
 - **Amende** : [commissions.md](../commissions.md) COMM-005 (la distribution d'un véhicule parrainé a
   son propre partage, le barème reste celui de Logistique) et COMM-019 (pas d'alignement
   automatique pour une équipe parrainée)
@@ -70,8 +70,23 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
   prorata) dans la modale Équipe, le transfert de véhicule et le parcours combiné ; grille de
   reconfiguration ; onglet Parrain (part par processus et catégorie) ; onglet Distribution des
   véhicules parrainés.
-- **Non livré** : fiche/période « Parrain », comptabilisation et trésorerie (lot 3). D'ici là, les
-  parts de parrain générées n'apparaissent sur aucune fiche : **ne pas déployer avant le lot 3**.
+- Le lot 2 ne devait pas être déployé sans le lot 3 (parts de parrain sur aucune fiche).
+
+## Lot 3 — livré le 2026-10-23
+
+- **Période et fiche** : type `parrain` (quinzaine, abréviation `PAR`), `calculerParrains()` (sans
+  déduction, agence = site du véhicule, réaffectation ADR 0020), validation automatique.
+- **Comptabilité** (choix du 23/10/2026) : compte de charge dédié **622500 « Commissions
+  parrains »**, dette 467210, avances 467220 ; événements `fiche_parrain_validee` et
+  `paiement_parrain`, réaffectation d'agence ; migration de mise en place idempotente.
+- **Trésorerie** : colonnes Parrains P1 / P2 de la prévision (`ParrainObligationContributor`, base
+  commune `FichesQuinzaineObligationContributor` partagée avec les livreurs).
+- **Écrans** (version minimale, choix du 23/10/2026) : Comptabilité → Commissions → Parrains
+  (`fiches/parrains`), périodes Parrains ; pas d'écran « Commissions → Parrains » détaillé.
+- **Garde-fou** : la relance d'une génération partielle refuse aussi une période « Parrain »
+  clôturée quand l'enveloppe porte une part de parrain.
+- **Hors périmètre** : régularisation de clôture comptable (comme sites et consultants, la fiche
+  étant validée d'office).
 
 ## Conséquences
 

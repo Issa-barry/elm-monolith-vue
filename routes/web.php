@@ -911,6 +911,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
             Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
+            Route::get('fiches/parrains', [PaiementFicheController::class, 'indexParrains'])->name('fiches.parrains');
             Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
             Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
             Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
