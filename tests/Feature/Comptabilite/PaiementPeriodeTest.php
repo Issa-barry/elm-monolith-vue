@@ -132,7 +132,7 @@ class PaiementPeriodeTest extends TestCase
 
         $response->assertInertia(fn (Assert $page) => $page
             ->where('cycle.periode_courante_label', 'Juillet 2026 - P1')
-            ->has('cycle.par_type', 5) // livreur + propriétaire + salarié + site + consultant
+            ->has('cycle.par_type', 6) // livreur + propriétaire + salarié + site + consultant + parrain (ADR 0035)
         );
 
         $this->assertDatabaseHas('paiement_periodes', [

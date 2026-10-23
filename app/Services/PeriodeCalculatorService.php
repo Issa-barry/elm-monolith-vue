@@ -18,6 +18,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -62,6 +63,7 @@ class PeriodeCalculatorService
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
                 TypePeriodePaiement::SITE => $this->calculerSites($periode),
                 TypePeriodePaiement::CONSULTANT => $this->calculerConsultants($periode),
+                TypePeriodePaiement::PARRAIN => $this->calculerParrains($periode),
             };
 
             // Le hash/horodatage sont enregistrés même à 0 fiche : sans données source, on ne
@@ -126,6 +128,7 @@ class PeriodeCalculatorService
             TypePeriodePaiement::PROPRIETAIRE => [CommissionEnveloppePart::TYPE_PROPRIETAIRE, null, 'proprietaire', 'proprietaire_id'],
             TypePeriodePaiement::SITE => [CommissionEnveloppePart::TYPE_SITE, CommissionCibleType::CODE_SITE, null, null],
             TypePeriodePaiement::CONSULTANT => [CommissionEnveloppePart::TYPE_PRESTATAIRE, CommissionCibleType::CODE_CONSULTANT, null, null],
+            TypePeriodePaiement::PARRAIN => [CommissionEnveloppePart::TYPE_PARRAIN, null, null, null],
             default => [null, null, null, null],
         };
 
@@ -252,6 +255,7 @@ class PeriodeCalculatorService
             TypePeriodePaiement::LIVREUR => 'livreur',
             TypePeriodePaiement::SITE => CommissionEnveloppePart::TYPE_SITE,
             TypePeriodePaiement::CONSULTANT => CommissionEnveloppePart::TYPE_PRESTATAIRE,
+            TypePeriodePaiement::PARRAIN => CommissionEnveloppePart::TYPE_PARRAIN,
             default => 'proprietaire',
         };
 
@@ -273,7 +277,7 @@ class PeriodeCalculatorService
 
         // Ni un site ni un consultant n'ont jamais de commission logistique (transfert), au même
         // titre qu'un gérant de dépôt n'en avait jamais — cf. calculerSites()/calculerConsultants().
-        $logParts = in_array($periode->type, [TypePeriodePaiement::SITE, TypePeriodePaiement::CONSULTANT], true)
+        $logParts = in_array($periode->type, [TypePeriodePaiement::SITE, TypePeriodePaiement::CONSULTANT, TypePeriodePaiement::PARRAIN], true)
             ? null
             : CommissionLogistiquePart::where('type_beneficiaire', $type)
                 ->whereNotNull("{$type}_id")
@@ -683,6 +687,65 @@ class PeriodeCalculatorService
             }
 
             if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Fiches des parrains (ADR 0035) : leurs parts sortent de l'enveloppe de l'équipe de livraison,
+     * jamais d'une commission logistique legacy, et ne supportent aucune déduction (aucune dépense
+     * n'est imputable à un parrain). Agence de paiement = site du véhicule (ADR 0020), comme le
+     * livreur dont il partage l'enveloppe.
+     */
+    private function calculerParrains(PaiementPeriode $periode): int
+    {
+        $orgId = $periode->organization_id;
+
+        $commParts = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+            ->with(['enveloppe.source.vehicule'])
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $count = 0;
+
+        foreach ($commParts as $parrainId => $parts) {
+            $parrain = Parrain::with('personne')->find($parrainId);
+            if (! $parrain) {
+                continue;
+            }
+
+            $ordre = 1;
+            $lignes = collect();
+            $montantParSite = [];
+
+            foreach ($parts as $part) {
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->enveloppe->source?->reference ?? '—';
+                $montant = $part->montant_a_payer;
+                $lignes->push([
+                    'source_type' => CommissionEnveloppePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
+                    'libelle' => 'Commission parrain '.$ref,
+                    'montant' => $montant,
+                    'ordre' => $ordre++,
+                ]);
+                $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
+            }
+
+            if ($lignes->isEmpty()) {
+                continue;
+            }
+
+            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PARRAIN, $parrainId, $parrain->nom_complet ?: $parrainId, $this->resolveSitePrincipal($montantParSite), $lignes)) {
                 $count++;
             }
         }

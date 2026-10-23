@@ -208,6 +208,7 @@ class PaiementFiche extends Model
             'salarie' => Employe::find($this->beneficiaire_id),
             'site' => Site::find($this->beneficiaire_id),
             'prestataire' => Prestataire::find($this->beneficiaire_id),
+            'parrain' => Parrain::find($this->beneficiaire_id),
             default => null,
         };
     }

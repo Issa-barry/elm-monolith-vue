@@ -140,6 +140,9 @@ même principe de barème dynamique au transfert logistique interne.
     même résolution identité → barème que le générateur réel
     (`CommissionEnveloppeGenerator::genererPourCommandeVente()`), jamais une résolution divergente
     qui validerait ou exigerait un partage différent de celui réellement consommé.
+  - **Véhicule parrainé (21/10/2026, ADR 0035)** : le barème reste celui de `logistique_transfert`,
+    mais le PARTAGE d'équipe devient propre à la distribution (le parrain y est rémunéré, jamais sur
+    un transfert entre sites) — cf. section « Part du parrain » plus bas.
   - `App\Support\Commission\CommissionProcessusFilter` (reporting Comptabilité) continue de
     distinguer les 3 codes — plus que jamais justifié : `distribution_client` reste un processus
     vivant et croissant, pas seulement un solde historique à réconcilier. Ne jamais aligner ce
@@ -1164,7 +1167,9 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
   brouillon). Elle n'apparaît jamais dans la grille et ne déclenche jamais, seule, un brouillon ;
   l'aperçu l'annonce (« N équipe(s) n'ont qu'un seul livreur… »). Un membre désactivé n'est pas
   compté. Les équipes à **plusieurs** livreurs actifs gardent un partage explicite obligatoire
-  (grille, proposition jamais appliquée seule).
+  (grille, proposition jamais appliquée seule). **Exception (21/10/2026, ADR 0035)** : une équipe
+  dont le véhicule a un parrain n'est jamais alignée automatiquement, même avec un seul livreur et
+  une part de parrain à 0 GNF — elle passe par la grille, le parrain y étant un membre requis.
   - **Équipes examinées** : toute équipe rattachée à un véhicule, **quel que soit
     `equipes_livraison.is_active`** (drapeau lu seulement par le contrôle des distributions, jamais
     par la vente, COMM-015 ni la génération). Correctif du 25/09/2026 : filtrer sur ce drapeau
@@ -1598,3 +1603,32 @@ fiche de paiement partait vers le site majoritaire des ventes de la quinzaine.
 - **Rattrapage** : `php artisan commissions:realigner-sites-fiches` liste les fiches non payées
   calculées avant la règle dont l'agence doit changer ; `--appliquer` les corrige.
 - Tests : `tests/Feature/Comptabilite/CommissionSiteResponsableVehiculeTest.php`.
+
+## Part du parrain dans l'enveloppe Livreur (21/10/2026, ADR 0035)
+
+Cf. [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md) et
+[parrainage-vehicule.md](parrainage-vehicule.md) (règles PARRAIN-007 à PARRAIN-015).
+
+- **COMM-022 — Le parrain partage l'enveloppe Livreur, sans l'augmenter.** Le parrain du véhicule
+  est une ligne du partage d'équipe (`parrain_id`), avec un montant fixe en GNF par pack, par
+  catégorie et par processus. La somme livreurs + parrain doit égaler exactement le barème Livreur
+  (même juge) : l'enveloppe de l'équipe reste quantité × barème, sa part sort de celle des
+  livreurs. Part `CommissionEnveloppePart::TYPE_PARRAIN`, validée d'office.
+- **Opérations** : vente, transfert grossiste et distribution client
+  (`CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN`) ; jamais le transfert logistique
+  entre sites. La distribution d'un véhicule parrainé a donc son propre partage, avec le barème
+  Logistique (COMM-005 maintenue pour le barème).
+- **Garde-fous** : ligne du parrain obligatoire (0 GNF accepté) dès que le véhicule a un parrain ;
+  toute nouvelle version de partage sans elle est refusée par le serveur
+  (`PartageLivraisonVersionService::versionner()`), jamais complétée ; ligne d'un autre parrain =
+  partage non conforme.
+- **Changement de parrain** (`PartageParrainService`) : effet le jour même ; lignes à 0 GNF à
+  l'ajout ; une part nulle suit le parrain ; une part positive impose de joindre la nouvelle
+  répartition complète, enregistrée avec le changement dans une seule transaction (parcours
+  « Nouvelle répartition » de l'onglet Parrain ; droit `equipes-livraison.update` en plus).
+- **Changement de barème** : équipe parrainée toujours dans la grille (cf. COMM-019, exception du
+  21/10/2026) ; un brouillon Logistique fait aussi reconfigurer le partage Distribution.
+- **Paiement** : fiche « Parrain » à la quinzaine (période `parrain`, P1/P2), validée d'office, sans
+  déduction, payée par l'agence du véhicule ; charge 622500, dette 467210 (PARRAIN-017 à 020).
+- Tests : `tests/Feature/ParrainPartageCommissionTest.php`,
+  `tests/Feature/Comptabilite/ParrainFichePaiementTest.php`.

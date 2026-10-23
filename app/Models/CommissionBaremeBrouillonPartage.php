@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Part PRÉPARÉE d'un livreur pour (équipe, catégorie) dans un brouillon de barème — jamais lue par
  * la génération ni par les contrôles de commande : elle ne devient un
  * EquipeLivraisonPartageCategorie qu'à la publication du brouillon.
+ *
+ * Part d'un livreur ou du parrain du véhicule (`parrain_id`). `processus_id` désigne le partage
+ * concerné quand il diffère du processus du brouillon (partage Distribution d'un véhicule parrainé,
+ * qui suit le barème Logistique) ; vide = processus du brouillon.
  */
 class CommissionBaremeBrouillonPartage extends Model
 {
@@ -21,7 +25,9 @@ class CommissionBaremeBrouillonPartage extends Model
         'brouillon_id',
         'equipe_id',
         'categorie_id',
+        'processus_id',
         'livreur_id',
+        'parrain_id',
         'montant_unitaire',
         'signature_equipe',
         'updated_by',

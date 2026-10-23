@@ -33,7 +33,11 @@ import {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Membre {
-    livreur_id: string;
+    /** Livreur de l'équipe ou parrain du véhicule (ADR 0035) — clé de saisie. */
+    type: 'livreur' | 'parrain';
+    beneficiaire_id: string;
+    livreur_id: string | null;
+    parrain_id: string | null;
     nom: string;
     role: string;
     ordre: number;
@@ -46,6 +50,8 @@ interface Membre {
 interface Groupe {
     cle: string;
     equipe_id: string;
+    /** Partage concerné : celui du brouillon, ou Distribution d'un véhicule parrainé. */
+    processus_code: string;
     vehicule_id: string;
     vehicule_nom: string;
     immatriculation: string | null;
@@ -102,12 +108,12 @@ let navigationAutorisee = false;
 const formatNombre = (n: number) => new Intl.NumberFormat('fr-FR').format(n);
 const formatGnf = (n: number) =>
     `${new Intl.NumberFormat('fr-FR').format(n)} GNF`;
-const roleLabel = (role: string) =>
-    role === 'chauffeur'
-        ? 'Chauffeur'
-        : role === 'convoyeur'
-          ? 'Convoyeur'
-          : role;
+const ROLES: Record<string, string> = {
+    chauffeur: 'Chauffeur',
+    convoyeur: 'Convoyeur',
+    parrain: 'Parrain',
+};
+const roleLabel = (role: string) => ROLES[role] ?? role;
 
 // ── Saisie (jamais enregistrée tant que « Enregistrer » n'est pas cliqué) ────────
 // Valeurs de cellule gardées en texte, pour distinguer « vide » (aucune part) de « 0 » (part à
@@ -127,7 +133,7 @@ function initialiser(): void {
     const snap: Record<string, string> = {};
     props.groupes.forEach((g) => {
         saisies[g.cle] = Object.fromEntries(
-            g.membres.map((m) => [m.livreur_id, valeurInitiale(m)]),
+            g.membres.map((m) => [m.beneficiaire_id, valeurInitiale(m)]),
         );
         snap[g.cle] = JSON.stringify(saisies[g.cle]);
     });
@@ -145,14 +151,15 @@ const groupesModifies = computed(() => props.groupes.filter(estModifie));
 
 function total(g: Groupe): number {
     return g.membres.reduce(
-        (somme, m) => somme + (Number(saisies[g.cle]?.[m.livreur_id]) || 0),
+        (somme, m) =>
+            somme + (Number(saisies[g.cle]?.[m.beneficiaire_id]) || 0),
         0,
     );
 }
 
 function sansPart(g: Groupe): Membre[] {
     return g.membres.filter(
-        (m) => m.requis && (saisies[g.cle]?.[m.livreur_id] ?? '') === '',
+        (m) => m.requis && (saisies[g.cle]?.[m.beneficiaire_id] ?? '') === '',
     );
 }
 
@@ -329,24 +336,25 @@ function appliquerProposition(): void {
     cibleActions.value.forEach((g) => {
         if (g.membres.some((m) => m.proposition === null)) return;
         g.membres.forEach((m) => {
-            saisies[g.cle][m.livreur_id] = String(m.proposition);
+            saisies[g.cle][m.beneficiaire_id] = String(m.proposition);
         });
     });
 }
 
 const montantChauffeur = ref('');
 const montantConvoyeur = ref('');
+const montantParrain = ref('');
 
 function appliquerParRole(): void {
+    const parRole: Record<string, string> = {
+        chauffeur: montantChauffeur.value,
+        convoyeur: montantConvoyeur.value,
+        parrain: montantParrain.value,
+    };
     cibleActions.value.forEach((g) => {
         g.membres.forEach((m) => {
-            const valeur =
-                m.role === 'chauffeur'
-                    ? montantChauffeur.value
-                    : m.role === 'convoyeur'
-                      ? montantConvoyeur.value
-                      : '';
-            if (valeur !== '') saisies[g.cle][m.livreur_id] = valeur;
+            const valeur = parRole[m.role] ?? '';
+            if (valeur !== '') saisies[g.cle][m.beneficiaire_id] = valeur;
         });
     });
 }
@@ -357,13 +365,13 @@ function recopierPremiere(): void {
     if (!modele) return;
     const roles = (g: Groupe) => g.membres.map((m) => m.role).join(',');
     const valeurs = modele.membres.map(
-        (m) => saisies[modele.cle][m.livreur_id],
+        (m) => saisies[modele.cle][m.beneficiaire_id],
     );
     autres
         .filter((g) => roles(g) === roles(modele))
         .forEach((g) =>
             g.membres.forEach((m, i) => {
-                saisies[g.cle][m.livreur_id] = valeurs[i];
+                saisies[g.cle][m.beneficiaire_id] = valeurs[i];
             }),
         );
 }
@@ -468,11 +476,16 @@ function enregistrer(): void {
             saisies: groupesModifies.value.map((g) => ({
                 equipe_id: g.equipe_id,
                 categorie_id: g.categorie_id,
+                processus_code: g.processus_code,
                 parts: g.membres
-                    .filter((m) => saisies[g.cle][m.livreur_id] !== '')
+                    .filter((m) => saisies[g.cle][m.beneficiaire_id] !== '')
                     .map((m) => ({
-                        livreur_id: m.livreur_id,
-                        montant_unitaire: Number(saisies[g.cle][m.livreur_id]),
+                        ...(m.type === 'parrain'
+                            ? { parrain_id: m.beneficiaire_id }
+                            : { livreur_id: m.beneficiaire_id }),
+                        montant_unitaire: Number(
+                            saisies[g.cle][m.beneficiaire_id],
+                        ),
                     })),
             })),
         },
@@ -745,6 +758,21 @@ const baremesModifies = computed(() => {
                                 "
                             />
                         </label>
+                        <label class="text-xs">
+                            <span class="text-muted-foreground">Parrain</span>
+                            <input
+                                v-model="montantParrain"
+                                inputmode="numeric"
+                                class="mt-1 block h-8 w-24 rounded-md border bg-background px-2 text-right tabular-nums"
+                                data-testid="reconfiguration-role-parrain"
+                                @input="
+                                    montantParrain = montantParrain.replace(
+                                        /\D/g,
+                                        '',
+                                    )
+                                "
+                            />
+                        </label>
                         <Button
                             type="button"
                             variant="outline"
@@ -829,7 +857,7 @@ const baremesModifies = computed(() => {
                             <template v-for="g in groupesPage" :key="g.cle">
                                 <tr
                                     v-for="(m, i) in g.membres"
-                                    :key="`${g.cle}|${m.livreur_id}`"
+                                    :key="`${g.cle}|${m.beneficiaire_id}`"
                                     :class="[
                                         i === 0 ? 'border-t' : '',
                                         selection.has(g.cle)
@@ -878,6 +906,17 @@ const baremesModifies = computed(() => {
                                             class="px-3 py-2 align-top"
                                         >
                                             {{ g.categorie_nom }}
+                                            <p
+                                                v-if="
+                                                    g.processus_code !==
+                                                    brouillon.processus_code
+                                                "
+                                                class="text-xs text-muted-foreground"
+                                                data-testid="reconfiguration-partage-distribution"
+                                            >
+                                                Partage Distribution (avec le
+                                                parrain)
+                                            </p>
                                         </td>
                                     </template>
                                     <td class="px-3 py-1.5">
@@ -907,7 +946,7 @@ const baremesModifies = computed(() => {
                                         <input
                                             :value="
                                                 saisies[g.cle]?.[
-                                                    m.livreur_id
+                                                    m.beneficiaire_id
                                                 ] ?? ''
                                             "
                                             :readonly="!permissions.modifier"
@@ -915,13 +954,13 @@ const baremesModifies = computed(() => {
                                             autocomplete="off"
                                             data-cellule
                                             :data-cle="g.cle"
-                                            :data-livreur="m.livreur_id"
+                                            :data-livreur="m.beneficiaire_id"
                                             :aria-label="`Nouveau montant ${m.nom} ${g.vehicule_nom} ${g.categorie_nom}`"
                                             class="h-8 w-24 rounded-md border bg-background px-2 text-right tabular-nums focus:ring-2 focus:ring-primary focus:outline-none"
                                             :class="
                                                 m.requis &&
                                                 (saisies[g.cle]?.[
-                                                    m.livreur_id
+                                                    m.beneficiaire_id
                                                 ] ?? '') === '' &&
                                                 estModifie(g)
                                                     ? 'border-amber-500'
@@ -930,7 +969,7 @@ const baremesModifies = computed(() => {
                                             @input="
                                                 surSaisie(
                                                     g.cle,
-                                                    m.livreur_id,
+                                                    m.beneficiaire_id,
                                                     $event,
                                                 )
                                             "

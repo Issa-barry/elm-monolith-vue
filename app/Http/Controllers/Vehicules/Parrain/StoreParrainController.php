@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Parrain;
 use App\Models\Personne;
 use App\Models\Vehicule;
+use App\Services\Commission\PartageParrainService;
 use App\Support\Parrainage\ParrainValidationMessages;
+use App\Support\Parrainage\RepartitionsParrain;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -28,6 +31,7 @@ class StoreParrainController extends Controller
         $this->authorize('update', $vehicule);
 
         $orgId = $vehicule->organization_id;
+        $repartitions = RepartitionsParrain::valider($request);
 
         if ($request->filled('personne_id')) {
             $data = $request->validate([
@@ -39,7 +43,7 @@ class StoreParrainController extends Controller
                 'personne_id.exists' => "Cette personne n'appartient pas à votre organisation.",
             ]);
 
-            $personne = Personne::where('organization_id', $orgId)->findOrFail($data['personne_id']);
+            $resoudrePersonne = fn () => Personne::where('organization_id', $orgId)->findOrFail($data['personne_id']);
         } else {
             $data = $request->validate([
                 'nom_complet' => 'required|string|max:255',
@@ -53,7 +57,7 @@ class StoreParrainController extends Controller
             $this->validateLocalPhoneLength($data);
             $data = $this->normalizePersonData($data);
 
-            $personne = Personne::resoudreOuCreer($orgId, [
+            $resoudrePersonne = fn () => Personne::resoudreOuCreer($orgId, [
                 'nom_complet' => $data['nom_complet'],
                 'telephone' => $data['telephone'],
                 'code_pays' => $data['code_pays'],
@@ -64,12 +68,23 @@ class StoreParrainController extends Controller
             ]);
         }
 
-        $parrain = Parrain::firstOrCreate(
-            ['organization_id' => $orgId, 'personne_id' => $personne->id],
-            ['is_active' => true],
-        );
+        // Le partage des commissions suit le parrain dans la même transaction (ligne à 0 GNF pour un
+        // nouveau parrain, transfert d'une part nulle) ; un parrain remplacé qui a une part positive
+        // impose la nouvelle répartition complète, jointe ($repartitions) et validée ici — cf.
+        // PartageParrainService. Personne résolue dans la transaction : un refus ne laisse aucune
+        // identité créée.
+        DB::transaction(function () use ($orgId, $resoudrePersonne, $vehicule, $repartitions) {
+            $personne = $resoudrePersonne();
+            $parrain = Parrain::firstOrCreate(
+                ['organization_id' => $orgId, 'personne_id' => $personne->id],
+                ['is_active' => true],
+            );
 
-        $vehicule->update(['parrain_id' => $parrain->id]);
+            $ancienParrainId = $vehicule->parrain_id;
+            $vehicule->update(['parrain_id' => $parrain->id]);
+
+            PartageParrainService::appliquerChangementDeParrain($vehicule, $ancienParrainId, $repartitions);
+        });
 
         return redirect()->route('vehicules.show', $vehicule)
             ->with('success', 'Parrain associé au véhicule.');

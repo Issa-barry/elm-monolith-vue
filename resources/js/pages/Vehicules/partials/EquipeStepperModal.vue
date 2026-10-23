@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { CommissionMontantFixeMembre } from '@/components/commission/CommissionMontantFixeEditor.vue';
+import CommissionMontantFixeEditor, {
+    type CommissionMontantFixeMembre,
+} from '@/components/commission/CommissionMontantFixeEditor.vue';
 import { Button } from '@/components/ui/button';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
     ChevronLeft,
     ChevronRight,
-    CircleCheck,
     Info,
     Plus,
     Trash2,
@@ -14,7 +15,6 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -54,6 +54,8 @@ interface MembreExistant {
 interface PartageCategorieExistant {
     categorie_id: string;
     parts: Array<{ livreur_id: string; montant_unitaire: number }>;
+    /** Part du parrain du véhicule (null : aucune ligne parrain). */
+    part_parrain?: number | null;
 }
 
 interface EquipeExistante {
@@ -103,6 +105,11 @@ const props = defineProps<{
     // changer d'onglet recharge la page avec les barèmes/partages du nouveau processus.
     processusActif: string;
     processusOptions: { value: string; label: string }[];
+    /**
+     * Parrain du véhicule s'il est rémunéré sur le processus actif (ADR 0035) : sa part est
+     * prise sur la même enveloppe et sa ligne est exigée (0 GNF accepté). Null sinon.
+     */
+    parrain?: { id: string; nom_complet: string } | null;
 }>();
 
 const emit = defineEmits<{
@@ -410,6 +417,8 @@ async function goToStep2() {
 const partagesParCategorie = ref<Record<string, CommissionMontantFixeMembre[]>>(
     {},
 );
+/** Part du parrain par catégorie (seulement si le processus actif le rémunère). */
+const partParrainParCategorie = ref<Record<string, number>>({});
 
 function membreLabels(): string[] {
     const roleCounts: Record<string, number> = {};
@@ -422,6 +431,7 @@ function membreLabels(): string[] {
 function initPartagesParCategorie() {
     const labels = membreLabels();
     const result: Record<string, CommissionMontantFixeMembre[]> = {};
+    const parrains: Record<string, number> = {};
 
     for (const cat of categoriesAvecPartageLivraison.value) {
         const existant = props.equipe?.partages_categorie?.find(
@@ -439,16 +449,33 @@ function initPartagesParCategorie() {
             };
         });
 
-        // Un seul membre pour cette catégorie : toute l'enveloppe lui revient
-        // automatiquement (rien à répartir).
-        if (parts.length === 1 && parts[0].montant_unitaire === 0) {
+        // Un seul membre pour cette catégorie et aucun parrain : toute l'enveloppe
+        // lui revient automatiquement (rien à répartir). Avec un parrain, la
+        // répartition reste une décision explicite (ADR 0035).
+        if (
+            !props.parrain &&
+            parts.length === 1 &&
+            parts[0].montant_unitaire === 0
+        ) {
             parts[0].montant_unitaire = cat.montant_livraison;
         }
 
         result[cat.categorie_id] = parts;
+        if (props.parrain) {
+            parrains[cat.categorie_id] = existant?.part_parrain ?? 0;
+        }
     }
 
     partagesParCategorie.value = result;
+    partParrainParCategorie.value = parrains;
+}
+
+function onPartParrainChange(categorieId: string, montant: number) {
+    markChanged();
+    partParrainParCategorie.value = {
+        ...partParrainParCategorie.value,
+        [categorieId]: montant,
+    };
 }
 
 function onPartageCategorieUpdate(
@@ -462,41 +489,18 @@ function onPartageCategorieUpdate(
     };
 }
 
-function onMontantPartageChange(
-    categorieId: string,
-    membreId: string,
-    montant: number | null,
-) {
-    const parts = partagesParCategorie.value[categorieId] ?? [];
-    onPartageCategorieUpdate(
-        categorieId,
-        parts.map((part) =>
-            part.id === membreId
-                ? { ...part, montant_unitaire: montant ?? 0 }
-                : part,
-        ),
-    );
-}
-
 function totalPartageCategorie(categorieId: string): number {
-    return (partagesParCategorie.value[categorieId] ?? []).reduce(
-        (total, part) => total + (part.montant_unitaire || 0),
-        0,
+    return (
+        (partagesParCategorie.value[categorieId] ?? []).reduce(
+            (total, part) => total + (part.montant_unitaire || 0),
+            0,
+        ) +
+        (props.parrain ? (partParrainParCategorie.value[categorieId] ?? 0) : 0)
     );
 }
 
 function restePartageCategorie(categorieId: string, enveloppe: number): number {
     return enveloppe - totalPartageCategorie(categorieId);
-}
-
-function etatPartageCategorie(
-    categorieId: string,
-    enveloppe: number,
-): 'reste' | 'depassement' | 'complet' {
-    const reste = restePartageCategorie(categorieId, enveloppe);
-    if (reste > 0) return 'reste';
-    if (reste < 0) return 'depassement';
-    return 'complet';
 }
 
 // ── Partage : validité ───────────────────────────────────────────────────
@@ -510,9 +514,24 @@ function etatPartageCategorie(
 const partageValide = computed(() =>
     categoriesAvecPartageLivraison.value.every((cat) => {
         const parts = partagesParCategorie.value[cat.categorie_id] ?? [];
-        const total = parts.reduce((s, p) => s + (p.montant_unitaire || 0), 0);
-        return parts.length > 0 && total === cat.montant_livraison;
+        return (
+            parts.length > 0 &&
+            totalPartageCategorie(cat.categorie_id) === cat.montant_livraison
+        );
     }),
+);
+
+/** Catégories encore déséquilibrées, nommées sous le bouton « Suivant ». */
+const categoriesNonEquilibrees = computed(() =>
+    categoriesAvecPartageLivraison.value
+        .filter(
+            (cat) =>
+                restePartageCategorie(
+                    cat.categorie_id,
+                    cat.montant_livraison,
+                ) !== 0,
+        )
+        .map((cat) => cat.categorie_nom),
 );
 
 function goToStep3() {
@@ -598,6 +617,12 @@ function buildPayload() {
                     montant_unitaire: p.montant_unitaire,
                 }),
             ),
+            ...(props.parrain
+                ? {
+                      part_parrain:
+                          partParrainParCategorie.value[cat.categorie_id] ?? 0,
+                  }
+                : {}),
         })),
     };
 }
@@ -739,8 +764,10 @@ const hasStep1Errors = computed(() =>
                 </p>
                 <p class="mt-0.5 text-xs leading-5 text-muted-foreground">
                     Attribuez entièrement l'enveloppe Livreur de chaque
-                    catégorie. Les autres processus conservent leur propre
-                    répartition.
+                    catégorie<template v-if="parrain">
+                        entre l'équipe et le parrain du véhicule — sa part est
+                        prise sur l'enveloppe, le total ne change pas</template
+                    >. Les autres processus conservent leur propre répartition.
                 </p>
             </div>
         </div>
@@ -900,13 +927,13 @@ const hasStep1Errors = computed(() =>
             </p>
         </div>
 
-        <!-- ── Étape 2 : Barèmes + partage livreurs PAR CATÉGORIE ──────────── -->
-        <div v-else-if="step === 2">
+        <!-- ── Étape 2 : Barèmes + partage PAR CATÉGORIE ─────────────────────── -->
+        <div v-else-if="step === 2" class="space-y-4">
             <!-- Chaque catégorie a son propre barème Propriétaire ET Livraison
                  (Paramètres → Commissions) — jamais un montant global blended.
-                 Le Propriétaire reste toujours informatif et non modifiable ici ;
-                 un tableau de répartition n'apparaît que si Livraison > 0 pour
-                 cette catégorie (rien à partager sinon). -->
+                 Le Propriétaire reste informatif ; la répartition (livreurs et,
+                 s'il est rémunéré sur ce processus, parrain du véhicule) n'apparaît
+                 que si Livraison > 0. Même éditeur que le transfert de véhicule. -->
             <div
                 v-if="baremesCommissionCategories.length === 0"
                 class="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground"
@@ -916,182 +943,74 @@ const hasStep1Errors = computed(() =>
                 Commissions).
             </div>
 
-            <div v-else class="overflow-x-auto rounded-lg border bg-background">
-                <table class="w-full min-w-[760px] text-sm">
-                    <thead>
-                        <tr
-                            class="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground"
+            <div
+                v-for="cat in baremesCommissionCategories"
+                :key="cat.categorie_id"
+                class="rounded-lg border bg-background"
+                :data-testid="`partage-categorie-${cat.categorie_id}`"
+            >
+                <div
+                    class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b bg-muted/30 px-4 py-3"
+                >
+                    <p class="font-semibold text-foreground">
+                        {{ cat.categorie_nom }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        Barème Livreur :
+                        <span class="font-semibold text-foreground tabular-nums"
+                            >{{ formatGNF(cat.montant_livraison) }} / pack</span
                         >
-                            <th class="w-[18%] px-4 py-3">Catégorie</th>
-                            <th class="w-[22%] px-4 py-3">Part propriétaire</th>
-                            <th class="w-[38%] px-4 py-3">
-                                Répartition par membre
-                            </th>
-                            <th class="w-[22%] px-4 py-3">Contrôle</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="cat in baremesCommissionCategories"
-                            :key="cat.categorie_id"
-                            class="align-top"
-                        >
-                            <td class="px-4 py-4">
-                                <p class="font-semibold text-foreground">
-                                    {{ cat.categorie_nom }}
-                                </p>
-                            </td>
+                    </p>
+                    <p
+                        v-if="hasProprietaire"
+                        class="w-full truncate text-xs text-muted-foreground"
+                    >
+                        Part propriétaire (information) :
+                        {{ formatGNF(cat.montant_proprietaire) }} / pack —
+                        {{ proprietaireNom }}
+                    </p>
+                </div>
 
-                            <td class="px-4 py-4">
-                                <template v-if="hasProprietaire">
-                                    <p class="font-semibold tabular-nums">
-                                        {{
-                                            formatGNF(cat.montant_proprietaire)
-                                        }}
-                                        / unité
-                                    </p>
-                                    <p
-                                        class="mt-1 truncate text-xs text-muted-foreground"
-                                    >
-                                        {{ proprietaireNom }}
-                                    </p>
-                                </template>
-                                <span v-else class="text-muted-foreground"
-                                    >—</span
-                                >
-                            </td>
-
-                            <td class="px-4 py-3">
-                                <p
-                                    v-if="cat.montant_livraison <= 0"
-                                    class="py-1 text-xs text-muted-foreground"
-                                >
-                                    Aucune répartition nécessaire
-                                </p>
-                                <div v-else class="space-y-2">
-                                    <div
-                                        v-for="m in partagesParCategorie[
-                                            cat.categorie_id
-                                        ] ?? []"
-                                        :key="m.id"
-                                        class="flex items-center gap-2"
-                                    >
-                                        <span
-                                            class="min-w-0 flex-1 truncate text-xs font-medium"
-                                            :title="m.label"
-                                        >
-                                            {{ m.label }}
-                                        </span>
-                                        <InputNumber
-                                            :model-value="
-                                                m.montant_unitaire || null
-                                            "
-                                            placeholder="0"
-                                            :min="0"
-                                            :max-fraction-digits="0"
-                                            suffix=" GNF"
-                                            class="w-36 shrink-0"
-                                            :data-testid="`partage-livreur-montant-${m.id}`"
-                                            :input-style="{
-                                                textAlign: 'right',
-                                                width: '100%',
-                                                fontWeight: '600',
-                                            }"
-                                            @update:model-value="
-                                                onMontantPartageChange(
-                                                    cat.categorie_id,
-                                                    m.id,
-                                                    $event,
-                                                )
-                                            "
-                                        />
-                                    </div>
-                                </div>
-                            </td>
-
-                            <td class="px-4 py-4">
-                                <template v-if="cat.montant_livraison > 0">
-                                    <p class="text-xs text-muted-foreground">
-                                        Attribué
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                totalPartageCategorie(
-                                                    cat.categorie_id,
-                                                ),
-                                            )
-                                        }}
-                                        <span
-                                            class="font-normal text-muted-foreground"
-                                        >
-                                            /
-                                            {{
-                                                formatGNF(cat.montant_livraison)
-                                            }}
-                                        </span>
-                                    </p>
-                                    <p
-                                        class="mt-2 flex items-center gap-1.5 text-xs font-semibold"
-                                        :class="{
-                                            'text-emerald-600':
-                                                etatPartageCategorie(
-                                                    cat.categorie_id,
-                                                    cat.montant_livraison,
-                                                ) === 'complet',
-                                            'text-orange-600':
-                                                etatPartageCategorie(
-                                                    cat.categorie_id,
-                                                    cat.montant_livraison,
-                                                ) === 'reste',
-                                            'text-destructive':
-                                                etatPartageCategorie(
-                                                    cat.categorie_id,
-                                                    cat.montant_livraison,
-                                                ) === 'depassement',
-                                        }"
-                                        data-testid="partage-livreur-etat"
-                                    >
-                                        <CircleCheck
-                                            v-if="
-                                                etatPartageCategorie(
-                                                    cat.categorie_id,
-                                                    cat.montant_livraison,
-                                                ) === 'complet'
-                                            "
-                                            class="h-4 w-4 shrink-0"
-                                        />
-                                        <TriangleAlert
-                                            v-else
-                                            class="h-4 w-4 shrink-0"
-                                        />
-                                        <span>
-                                            {{
-                                                etatPartageCategorie(
-                                                    cat.categorie_id,
-                                                    cat.montant_livraison,
-                                                ) === 'complet'
-                                                    ? 'Répartition complète'
-                                                    : etatPartageCategorie(
-                                                            cat.categorie_id,
-                                                            cat.montant_livraison,
-                                                        ) === 'reste'
-                                                      ? `Reste ${formatGNF(restePartageCategorie(cat.categorie_id, cat.montant_livraison))}`
-                                                      : `Dépassement ${formatGNF(Math.abs(restePartageCategorie(cat.categorie_id, cat.montant_livraison)))}`
-                                            }}
-                                        </span>
-                                    </p>
-                                </template>
-                                <span v-else class="text-muted-foreground"
-                                    >—</span
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="p-3">
+                    <p
+                        v-if="cat.montant_livraison <= 0"
+                        class="py-1 text-xs text-muted-foreground"
+                    >
+                        Aucune répartition nécessaire
+                    </p>
+                    <CommissionMontantFixeEditor
+                        v-else
+                        :model-value="
+                            partagesParCategorie[cat.categorie_id] ?? []
+                        "
+                        :enveloppe-unitaire="cat.montant_livraison"
+                        :parrain="parrain ? { nom: parrain.nom_complet } : null"
+                        :part-parrain="
+                            partParrainParCategorie[cat.categorie_id] ?? 0
+                        "
+                        @update:model-value="
+                            onPartageCategorieUpdate(cat.categorie_id, $event)
+                        "
+                        @update:part-parrain="
+                            onPartParrainChange(cat.categorie_id, $event)
+                        "
+                    />
+                </div>
             </div>
+
+            <p class="text-xs text-muted-foreground">
+                La nouvelle répartition s'applique aux opérations à venir ; les
+                commissions déjà calculées ne changent pas.
+            </p>
+            <p
+                v-if="!partageValide && categoriesNonEquilibrees.length > 0"
+                class="flex items-center gap-1.5 text-xs font-medium text-orange-600"
+                data-testid="partage-categories-a-corriger"
+            >
+                <TriangleAlert class="h-3.5 w-3.5 shrink-0" />
+                À équilibrer avant de continuer :
+                {{ categoriesNonEquilibrees.join(', ') }}.
+            </p>
         </div>
 
         <!-- ── Étape 3 : Récapitulatif ──────────────────────────────────────── -->
@@ -1175,6 +1094,28 @@ const hasStep1Errors = computed(() =>
                                 class="px-4 py-2.5 text-right font-mono text-xs"
                             >
                                 {{ montantUnitaireMembre(cat.categorie_id, i) }}
+                            </td>
+                        </tr>
+                        <tr v-if="parrain" data-testid="recap-parrain">
+                            <td class="px-4 py-2.5 font-medium">
+                                Parrain — {{ parrain.nom_complet }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground"
+                            >
+                                Parrain du véhicule
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-right font-mono text-xs"
+                            >
+                                {{
+                                    formatGNF(
+                                        partParrainParCategorie[
+                                            cat.categorie_id
+                                        ] ?? 0,
+                                    )
+                                }}
+                                / unité
                             </td>
                         </tr>
                     </tbody>

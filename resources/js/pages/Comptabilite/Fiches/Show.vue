@@ -80,12 +80,14 @@ const typeLabel = {
     livreur: 'Livreur',
     proprietaire: 'Propriétaire',
     salarie: 'Salarié',
+    parrain: 'Parrain',
 };
 
 const typeRoute = {
     livreur: '/backoffice/comptabilite/fiches/livreurs',
     proprietaire: '/backoffice/comptabilite/fiches/proprietaires',
     salarie: '/backoffice/comptabilite/fiches/salaries',
+    parrain: '/backoffice/comptabilite/fiches/parrains',
 };
 
 const breadcrumbs: BreadcrumbItem[] = [

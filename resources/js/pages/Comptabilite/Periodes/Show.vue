@@ -335,6 +335,8 @@ const voirCommissionsUrl = computed(() => {
             return `/backoffice/comptabilite/commissions/sites`;
         case 'consultant':
             return `/backoffice/comptabilite/commissions/consultants`;
+        case 'parrain':
+            return `/backoffice/comptabilite/fiches/parrains`;
         default:
             return '/backoffice/comptabilite/periodes';
     }

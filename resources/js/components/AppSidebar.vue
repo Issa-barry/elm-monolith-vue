@@ -348,6 +348,11 @@ const mainNavItems = computed((): NavItem[] => {
                 href: '/backoffice/comptabilite/commissions/consultants',
             },
             {
+                // Fiches de paiement des parrains de véhicule (ADR 0035).
+                title: 'Parrains',
+                href: '/backoffice/comptabilite/fiches/parrains',
+            },
+            {
                 title: 'Monitoring',
                 href: '/backoffice/comptabilite/commissions/monitoring',
             },

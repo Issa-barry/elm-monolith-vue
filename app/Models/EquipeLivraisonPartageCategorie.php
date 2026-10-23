@@ -21,6 +21,10 @@ use Illuminate\Support\Carbon;
  * (effective_to NULL) — nécessaire pour qu'une relance de commission historique
  * résolve le partage réellement en vigueur à la date du fait générateur.
  *
+ * Bénéficiaire : un livreur de l'équipe, ou le parrain du véhicule (`parrain_id`, jamais les deux)
+ * — sa part est prise sur la même enveloppe, la somme reste égale au barème (cf.
+ * docs/parrainage-vehicule.md). Jamais de ligne parrain sur un transfert logistique entre sites.
+ *
  * part_pourcentage (legacy, en cours de retrait) : encore lue par le code %
  * historique le temps de la migration commissions:migrer-partages-livraison ;
  * les nouvelles lignes y écrivent un placeholder 0, jamais lu.
@@ -29,6 +33,10 @@ class EquipeLivraisonPartageCategorie extends Model
 {
     use HasUlids;
 
+    public const TYPE_LIVREUR = CommissionGroupeMembre::TYPE_LIVREUR;
+
+    public const TYPE_PARRAIN = 'parrain';
+
     protected $table = 'equipe_livraison_partages_categorie';
 
     protected $fillable = [
@@ -36,6 +44,7 @@ class EquipeLivraisonPartageCategorie extends Model
         'processus_id',
         'categorie_id',
         'livreur_id',
+        'parrain_id',
         'part_pourcentage',
         'montant_unitaire',
         'effective_from',
@@ -64,12 +73,17 @@ class EquipeLivraisonPartageCategorie extends Model
 
     public function getBeneficiaireTypeAttribute(): string
     {
-        return CommissionGroupeMembre::TYPE_LIVREUR;
+        return $this->parrain_id ? self::TYPE_PARRAIN : self::TYPE_LIVREUR;
     }
 
     public function getBeneficiaireIdAttribute(): string
     {
-        return $this->livreur_id;
+        return $this->parrain_id ?? $this->livreur_id;
+    }
+
+    public function estParrain(): bool
+    {
+        return $this->parrain_id !== null;
     }
 
     public function equipe(): BelongsTo
@@ -90,5 +104,10 @@ class EquipeLivraisonPartageCategorie extends Model
     public function livreur(): BelongsTo
     {
         return $this->belongsTo(Livreur::class);
+    }
+
+    public function parrain(): BelongsTo
+    {
+        return $this->belongsTo(Parrain::class);
     }
 }

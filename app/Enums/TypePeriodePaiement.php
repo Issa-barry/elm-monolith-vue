@@ -11,6 +11,8 @@ enum TypePeriodePaiement: string
     case SALARIE = 'salarie';
     case SITE = 'site';
     case CONSULTANT = 'consultant';
+    // Parrain du véhicule : sa part est prise sur l'enveloppe Livreur (ADR 0035), payée à la quinzaine.
+    case PARRAIN = 'parrain';
 
     public function label(): string
     {
@@ -20,6 +22,7 @@ enum TypePeriodePaiement: string
             self::SALARIE => 'Salariés',
             self::SITE => 'Sites',
             self::CONSULTANT => 'Consultants',
+            self::PARRAIN => 'Parrains',
         };
     }
 
@@ -43,6 +46,7 @@ enum TypePeriodePaiement: string
             self::SALARIE => 'SAL',
             self::SITE => 'SIT',
             self::CONSULTANT => 'CON',
+            self::PARRAIN => 'PAR',
         };
     }
 

@@ -35,6 +35,7 @@ class PeriodeValidationService
         TypePeriodePaiement::PROPRIETAIRE,
         TypePeriodePaiement::SITE,
         TypePeriodePaiement::CONSULTANT,
+        TypePeriodePaiement::PARRAIN,
     ];
 
     private const EVENEMENTS_FICHE_VALIDEE = [
@@ -42,6 +43,7 @@ class PeriodeValidationService
         EvenementComptable::FICHE_PROPRIETAIRE_VALIDEE,
         EvenementComptable::FICHE_SITE_VALIDEE,
         EvenementComptable::FICHE_CONSULTANT_VALIDEE,
+        EvenementComptable::FICHE_PARRAIN_VALIDEE,
     ];
 
     public function __construct(

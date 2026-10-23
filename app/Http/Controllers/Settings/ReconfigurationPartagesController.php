@@ -73,8 +73,12 @@ class ReconfigurationPartagesController extends Controller
             'saisies' => ['required', 'array', 'min:1'],
             'saisies.*.equipe_id' => ['required', 'string'],
             'saisies.*.categorie_id' => ['required', 'string'],
+            // Partage Distribution d'un véhicule parrainé, préparé dans un brouillon Logistique.
+            'saisies.*.processus_code' => ['nullable', 'string'],
             'saisies.*.parts' => ['required', 'array', 'min:1'],
-            'saisies.*.parts.*.livreur_id' => ['required', 'string'],
+            // Chaque part désigne un livreur de l'équipe ou le parrain du véhicule.
+            'saisies.*.parts.*.livreur_id' => ['required_without:saisies.*.parts.*.parrain_id', 'nullable', 'string'],
+            'saisies.*.parts.*.parrain_id' => ['nullable', 'string'],
             'saisies.*.parts.*.montant_unitaire' => ['required', 'integer', 'min:0', 'max:99999999'],
         ], [
             'saisies.*.parts.*.montant_unitaire.integer' => 'Chaque montant doit être un entier GNF, sans décimales.',

@@ -377,10 +377,9 @@ class VehiculeController extends Controller
         // EquipeLivraisonController. Un véhicule sans aucun usage actif (cas transitoire) retombe
         // sur la liste complète pour ne jamais afficher un écran cassé — aucun partage n'y sera de
         // toute façon jamais exigé (CommissionPartageLivraisonCategorieChecker reste la garde réelle).
-        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
-            $vehicule,
-            CommissionRegleController::processusCodesDisponibles(),
-        );
+        // Plus l'onglet Distribution d'un véhicule parrainé à usage Logistique : partage propre (le
+        // parrain y est rémunéré), barème Logistique — cf. ADR 0035.
+        $codesApplicables = CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehicule);
         if (empty($codesApplicables)) {
             $codesApplicables = CommissionRegleController::processusCodesDisponibles();
         }
@@ -480,7 +479,43 @@ class VehiculeController extends Controller
                 fn (string $code) => ['value' => $code, 'label' => CommissionRegleController::processusLabel($code)],
                 $codesApplicables,
             ),
+            // Onglet Parrain : sa part actuelle par processus et catégorie (lecture seule) ; une part
+            // positive impose de refaire la répartition pour le remplacer ou le retirer.
+            'parrain_remuneration' => $this->remunerationParrain($vehicule),
+            // Parrain présenté dans la modale Équipe pour le processus actif (ligne exigée).
+            'parrain_partage' => $vehicule->parrain && CommissionProcessusDefaults::remunereLeParrain($processusCode)
+                ? ['id' => $vehicule->parrain->id, 'nom_complet' => $vehicule->parrain->nom_complet]
+                : null,
         ]);
+    }
+
+    /** @return list<array{processus_code: string, processus_label: string, categorie_nom: string, montant: int}> */
+    private function remunerationParrain(Vehicule $vehicule): array
+    {
+        if (! $vehicule->parrain_id || ! $vehicule->equipe) {
+            return [];
+        }
+
+        $processus = CommissionProcessus::where('organization_id', $vehicule->organization_id)
+            ->whereIn('code', CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN)
+            ->get()
+            ->keyBy('id');
+
+        return EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
+            ->whereIn('processus_id', $processus->keys())
+            ->where('parrain_id', $vehicule->parrain_id)
+            ->actifA(now())
+            ->with('categorie:id,nom')
+            ->get()
+            ->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                'processus_code' => $processus->get($p->processus_id)->code,
+                'processus_label' => CommissionRegleController::processusLabel($processus->get($p->processus_id)->code),
+                'categorie_nom' => $p->categorie?->nom ?? '—',
+                'montant' => (int) $p->montant_unitaire,
+            ])
+            ->sortBy(fn (array $r) => [$r['processus_label'], $r['categorie_nom']])
+            ->values()
+            ->all();
     }
 
     public function storeFrais(Request $request, Vehicule $vehicule): RedirectResponse
@@ -773,6 +808,9 @@ class VehiculeController extends Controller
             return [];
         }
 
+        // Distribution : barème Logistique tant qu'elle n'a pas le sien (COMM-005).
+        $processus = CommissionProcessusDefaults::processusResolutionBareme($processus);
+
         $reglesActives = CommissionRegle::where('organization_id', $orgId)
             ->where('processus_id', $processus->id)
             ->whereIn('cible_type', [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON])
@@ -852,13 +890,19 @@ class VehiculeController extends Controller
             ->whereNull('effective_to')
             ->get()
             ->groupBy('categorie_id')
-            ->map(fn (Collection $parts, string $categorieId) => [
-                'categorie_id' => $categorieId,
-                'parts' => $parts->map(fn (EquipeLivraisonPartageCategorie $p) => [
-                    'livreur_id' => $p->livreur_id,
-                    'montant_unitaire' => (int) $p->montant_unitaire,
-                ])->values()->all(),
-            ])
+            ->map(function (Collection $parts, string $categorieId) {
+                $ligneParrain = $parts->first(fn (EquipeLivraisonPartageCategorie $p) => $p->estParrain());
+
+                return [
+                    'categorie_id' => $categorieId,
+                    'parts' => $parts->reject(fn (EquipeLivraisonPartageCategorie $p) => $p->estParrain())->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                        'livreur_id' => $p->livreur_id,
+                        'montant_unitaire' => (int) $p->montant_unitaire,
+                    ])->values()->all(),
+                    // Part du parrain du véhicule sur cette catégorie (null : pas de ligne parrain).
+                    'part_parrain' => $ligneParrain ? (int) $ligneParrain->montant_unitaire : null,
+                ];
+            })
             ->values()
             ->all();
     }
@@ -891,10 +935,11 @@ class VehiculeController extends Controller
         // « fait » = même règle que la commande et l'enregistrement de l'équipe (décision du
         // 24/09/2026) : somme exacte ET chaque membre actif présent (0 GNF accepté).
         $equipe = EquipeLivraison::find($equipeId);
-        $membresRequis = $equipe ? CommissionPartageLivraisonCategorieChecker::membresRequis($equipe)->keys() : collect();
 
         foreach ($codes as $code) {
             $processusCourant = $processus->get($code);
+            $membresRequis = $equipe ? CommissionPartageLivraisonCategorieChecker::membresRequis($equipe, $code)->keys() : collect();
+            $parrainAttenduId = $equipe ? CommissionPartageLivraisonCategorieChecker::parrainRemunere($equipe, $code)?->id : null;
             $baremes = $this->baremesCommissionParCategorie($orgId, $typeVehiculeId, $code);
 
             foreach ($baremes as $bareme) {
@@ -912,6 +957,7 @@ class VehiculeController extends Controller
                     : collect();
 
                 try {
+                    CommissionPartageLivraisonCategorieChecker::verifierParrainAJour($lignes, $parrainAttenduId);
                     CommissionPartageLivraisonValidator::valider($lignes, $enveloppe, $membresRequis);
                     $statuts[$categorieId][$code] = 'fait';
                 } catch (\InvalidArgumentException) {
