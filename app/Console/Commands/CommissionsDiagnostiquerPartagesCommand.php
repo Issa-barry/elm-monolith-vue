@@ -88,10 +88,7 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
         $lignes = [];
         foreach ($equipes as $equipe) {
             $vehicule = $equipe->vehicule;
-            $codes = CommissionProcessusDefaults::codesApplicablesPourVehicule(
-                $vehicule,
-                CommissionRegleController::processusCodesDisponibles(),
-            );
+            $codes = CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehicule);
             // Membres de l'équipe (chauffeur ET convoyeur) dont le livreur est actif.
             $requis = CommissionPartageLivraisonCategorieChecker::membresRequis($equipe);
             $equipeNonConforme = false;
@@ -107,7 +104,11 @@ class CommissionsDiagnostiquerPartagesCommand extends Command
                 );
                 $equipeNonConforme = $equipeNonConforme || $nonConformites->isNotEmpty();
 
-                if ($aligner && $requis->count() === 1 && $nonConformites->isNotEmpty()) {
+                // Véhicule parrainé : jamais d'alignement automatique, la répartition avec le parrain
+                // reste une décision explicite (cf. docs/parrainage-vehicule.md).
+                $parrainRemunere = CommissionPartageLivraisonCategorieChecker::parrainRemunere($equipe, $code) !== null;
+
+                if ($aligner && $requis->count() === 1 && ! $parrainRemunere && $nonConformites->isNotEmpty()) {
                     $this->alignerLivreurUnique($organization->id, $equipe, $vehicule, $code, (string) $requis->keys()->first(), $nonConformites);
 
                     continue;

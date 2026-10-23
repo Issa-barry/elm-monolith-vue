@@ -9,10 +9,12 @@ pour mémoriser qui l'a fait entrer dans le parc.
 - la création d'une nouvelle `Personne` si aucune ne correspond ;
 - l'association d'un parrain à un véhicule, sa modification en place, son remplacement.
 
-**Explicitement hors périmètre de la phase 1** : commission de parrainage, calcul, paiement,
-historique des parrains successifs d'un véhicule. L'architecture (voir ci-dessous) est conçue
-pour ne pas devoir être repensée quand ces besoins arriveront, mais rien n'est implémenté
-maintenant.
+**Hors périmètre de la phase 1** : commission de parrainage, calcul, paiement, historique des
+parrains successifs d'un véhicule.
+
+**Phase 2 (chantier du 21/10/2026, [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md))**
+— le parrain reçoit une part de l'enveloppe Livreur, sans jamais augmenter le total des
+commissions : voir la section « Part du parrain » plus bas.
 
 ## Règles métier (IDs)
 
@@ -41,7 +43,8 @@ maintenant.
   contrainte unique `personnes.(organization_id, telephone_normalise)`.
 - **PARRAIN-006** — Le rattachement d'un parrain est protégé par les mêmes permissions que le
   véhicule (`vehicules.update` + isolation par organisation via `VehiculePolicy`) : pas de
-  permission dédiée créée pour cette fonctionnalité.
+  permission dédiée créée pour cette fonctionnalité. Exception depuis la phase 2 : changer ou
+  retirer un parrain qui reçoit une part exige aussi `equipes-livraison.update` (PARRAIN-016).
 
 ## Modèles et migrations
 
@@ -65,7 +68,8 @@ gatés par `$this->authorize('update', $vehicule)` :
 - `StoreParrainController` (POST) — soit `personne_id` (personne trouvée, réutilisée telle
   quelle), soit les champs d'identité complets (`nom_complet`, `telephone`, `code_pays`, `ville`,
   `adresse`) pour créer/réutiliser via `Personne::resoudreOuCreer()`. Résout ensuite le `Parrain`
-  (créé ou réutilisé) et assigne `vehicule.parrain_id`.
+  (créé ou réutilisé), assigne `vehicule.parrain_id` et répercute le changement sur le partage
+  des commissions (PARRAIN-012), le tout dans une seule transaction.
 - `UpdateParrainController` (PUT) — édite l'identité du parrain déjà rattaché, en place.
 
 ## Frontend
@@ -80,14 +84,90 @@ gatés par `$this->authorize('update', $vehicule)` :
   `CreateFournisseurModal.vue` (Dialog + masque téléphone + sélecteur pays) pour la cohérence
   visuelle avec le reste de l'application.
 
-## Hors périmètre — pistes pour une phase 2
+## Part du parrain dans l'enveloppe Livreur (phase 2, 21/10/2026)
 
-Si une commission de parrainage est demandée plus tard, l'architecture actuelle n'a pas besoin
-d'être repensée :
-- une commission se rattacherait au modèle `Parrain` (comme les commissions propriétaire se
-  rattachent à `Proprietaire`), pas à `Personne` ;
-- un historique des parrains successifs d'un véhicule (si demandé) s'ajouterait comme une table
-  d'événements séparée (ex. `vehicule_parrainages` avec `date_debut`/`date_fin`), en gardant
-  `vehicules.parrain_id` comme pointeur dénormalisé vers le parrain **actuel** — aucun précédent
-  de ce type n'existe dans le code (le changement de propriétaire n'est pas non plus historisé),
-  ce serait une nouveauté à concevoir le moment venu, pas une extension mécanique de l'existant.
+Décisions métier du 20/10/2026, cf. [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md)
+et [commissions.md](commissions.md).
+
+- **PARRAIN-007 — Une part de l'enveloppe Livreur, jamais une commission en plus.** Le parrain est
+  une ligne du partage d'équipe (`equipe_livraison_partages_categorie.parrain_id`, exclusif de
+  `livreur_id`) : montant fixe en GNF par pack, par catégorie et par processus, comme un livreur.
+  La somme livreurs + parrain doit égaler exactement le barème Livreur (même juge,
+  `CommissionPartageLivraisonValidator`) : l'enveloppe reste quantité × barème. Exemple
+  (fictif) : barème 1 000 GNF/pack, chauffeur 500, convoyeur 300, parrain 200.
+- **PARRAIN-008 — Opérations rémunérées.** Toute commission livreur du véhicule, **sauf le transfert
+  logistique entre sites** : vente classique (`vente`), vente Grossiste livrée
+  (`transfert_grossiste`), distribution client (`distribution_client`) —
+  `CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN`. Une ligne parrain sur le partage
+  Logistique est refusée.
+- **PARRAIN-009 — Distribution : partage propre, barème Logistique.** La distribution garde le
+  barème Logistique (COMM-005), mais un véhicule parrainé à usage Logistique a son propre partage
+  Distribution (avec le parrain), le partage Logistique restant sans parrain. La génération lit le
+  partage Distribution de l'équipe s'il existe à la date de l'opération, sinon le partage Logistique
+  (`CommissionPartageLivraisonCategorieChecker::partagesActifsPourGeneration()`). Les contrôles de
+  commande l'exigent dès que le véhicule a un parrain (`processusBaremeEtPartage()`).
+- **PARRAIN-010 — Ligne obligatoire, 0 GNF accepté.** Dès que le véhicule a un parrain, sa ligne est
+  exigée dans chaque partage qui le rémunère (enregistrement de l'équipe, commande, chargement, liste
+  des véhicules) ; une ligne désignant un autre parrain que le parrain actuel rend le partage non
+  conforme (`verifierParrainAJour()`).
+- **PARRAIN-011 — Garde-fou serveur.** `PartageLivraisonVersionService::versionner()` ferme la
+  version active en bloc : toute nouvelle version d'un véhicule parrainé, sur un processus qui le
+  rémunère, doit porter explicitement la part du parrain — jamais complétée ni recalculée par le
+  serveur (refus `ValidationException`) ; une part de parrain est refusée partout ailleurs.
+- **PARRAIN-012 — Ajout, remplacement, retrait** (`PartageParrainService`, dans la transaction de
+  `StoreParrainController`, effet le jour même, jamais rétroactif) : un nouveau parrain reçoit une
+  ligne à 0 GNF dans chaque partage existant, et le partage Distribution est créé (copie du partage
+  Logistique + parrain à 0) — aucun montant ne change, aucune opération n'est bloquée. Une part
+  nulle passe au nouveau parrain ; au retrait, elle disparaît et la distribution reprend le partage
+  Logistique. **Une part positive n'est jamais transférée ni retirée automatiquement** : le
+  changement (remplacement par `StoreParrainController`, retrait par `DestroyParrainController`)
+  doit joindre la nouvelle répartition complète de chaque partage où il reçoit une part
+  (`repartitions`, cf. `PartageParrainService::groupesARepartir()` et
+  `GET vehicules/{vehicule}/parrain/repartitions`), validée puis enregistrée avec le changement
+  dans une seule transaction — refusé sinon, rien n'est enregistré. Au retrait, le partage
+  Distribution (barème Logistique) est clos, sans répartition à refaire.
+- **PARRAIN-016 — Droits.** Ajouter un parrain, ou changer un parrain sans part : `vehicules.update`.
+  Joindre une répartition (changer ou retirer un parrain qui a une part) : en plus
+  `equipes-livraison.update`, vérifié par le serveur (`RepartitionsParrain`) ; les boutons
+  « Changer de parrain » et « Retirer le parrain » ne s'affichent que si l'utilisateur peut aller au
+  bout.
+- **PARRAIN-013 — Changement de barème.** Une équipe parrainée (même part à 0) n'est jamais alignée
+  automatiquement : elle passe par la grille de reconfiguration, le parrain y figurant comme membre
+  requis ; un brouillon Logistique y ajoute son partage Distribution
+  (`ReconfigurationPartagesService`). Équipes sans parrain : comportement inchangé (COMM-019).
+- **PARRAIN-014 — Part validée d'office**, comme celles du propriétaire, du site et du consultant
+  (`CommissionEnveloppeGenerator::TYPES_VALIDATION_AUTOMATIQUE`) : un parrain n'est jamais absent
+  ni remplacé. Type de part `CommissionEnveloppePart::TYPE_PARRAIN`.
+- **PARRAIN-015 — Cumul de rôles autorisé** : un parrain qui est aussi livreur ou propriétaire du
+  même véhicule reçoit des parts distinctes.
+
+**Historique** : `vehicules.parrain_id` reste un pointeur vers le parrain actuel ; l'historique des
+parts passe par le versionnement du partage (chaque ligne désigne son parrain et ses dates), ce qui
+garantit qu'une régénération à une date passée paie le parrain en place à cette date.
+
+**Reprise** : migration `2026_10_21_100100_backfill_parrain_partages_commission` (rejouable) — chaque
+véhicule déjà parrainé reçoit ses lignes à 0 GNF et, s'il a l'usage Logistique, son partage
+Distribution.
+
+**Écrans (lot 2, 21/10/2026)** :
+- `CommissionMontantFixeEditor.vue` (éditeur unique, désormais utilisé aussi par la modale Équipe) :
+  section « Parrain du véhicule » distincte de l'équipe, totaux mis à jour pendant la frappe, trois
+  états avec libellé et écart (« Répartition équilibrée », « Reste à répartir », « Dépassement du
+  barème »), bouton « Ajuster l'équipe au prorata » (barème − part du parrain, reliquat au
+  chauffeur, rien n'est enregistré).
+- `EquipeStepperModal.vue` : une carte par catégorie (barème, part propriétaire pour information,
+  éditeur), catégories à équilibrer nommées sous le bouton « Suivant », parrain dans le
+  récapitulatif ; plus d'attribution automatique du barème au livreur seul quand le véhicule a un
+  parrain. Onglet Distribution pour un véhicule parrainé à usage Logistique.
+- `TransfertVehiculeDialog.vue` : ligne du parrain dans les répartitions de départ et d'arrivée
+  (à 0 au départ, comme les livreurs).
+- `Reconfiguration.vue` : le parrain est un membre de la grille (rôle « Parrain »), champ « Parrain »
+  dans « Appliquer par rôle », partages Distribution signalés dans un brouillon Logistique.
+- Onglet Parrain (`Vehicules/Show.vue`) : part par processus et catégorie, « Modifier la
+  répartition », « Changer de parrain », « Retirer le parrain » ; `ParrainDialog.vue` enchaîne
+  identité puis « Nouvelle répartition » quand le parrain a une part, ou une simple confirmation de
+  retrait sinon.
+
+**Restant à livrer** (lot 3) : fiche et période de paiement « Parrain » à la quinzaine,
+comptabilisation et trésorerie. D'ici là, les parts de parrain générées ne figurent sur aucune
+fiche de paiement.

@@ -166,8 +166,21 @@ const props = defineProps<{
         string,
         Record<string, StatutPartageCommission>
     >;
-    processus_actif: 'vente' | 'distribution_client' | 'logistique_transfert';
+    processus_actif:
+        | 'vente'
+        | 'distribution_client'
+        | 'logistique_transfert'
+        | 'transfert_grossiste';
     processus_options: { value: string; label: string }[];
+    /** Part actuelle du parrain par processus et catégorie (ADR 0035). */
+    parrain_remuneration: Array<{
+        processus_code: string;
+        processus_label: string;
+        categorie_nom: string;
+        montant: number;
+    }>;
+    /** Parrain exigé dans la répartition du processus actif, null sinon. */
+    parrain_partage: { id: string; nom_complet: string } | null;
 }>();
 
 const page = usePage();
@@ -369,10 +382,12 @@ function partsCommissionMembre(livreurId: string | null) {
 }
 
 const showParrainDialog = ref(false);
-const parrainDialogMode = ref<'ajouter' | 'modifier'>('ajouter');
+const parrainDialogMode = ref<'ajouter' | 'changer' | 'modifier' | 'retirer'>(
+    'ajouter',
+);
 
 function ouvrirAjoutParrain() {
-    parrainDialogMode.value = 'ajouter';
+    parrainDialogMode.value = props.vehicule.parrain_id ? 'changer' : 'ajouter';
     showParrainDialog.value = true;
 }
 
@@ -380,6 +395,23 @@ function ouvrirModifierParrain() {
     parrainDialogMode.value = 'modifier';
     showParrainDialog.value = true;
 }
+
+function ouvrirRetraitParrain() {
+    parrainDialogMode.value = 'retirer';
+    showParrainDialog.value = true;
+}
+
+// Remplacer ou retirer un parrain qui reçoit une part impose de refaire la
+// répartition des commissions de l'équipe : même droit que la modale Équipe,
+// vérifié aussi par le serveur (ADR 0035). Jamais une action visible qui échouerait.
+const parrainAUnePart = computed(() =>
+    props.parrain_remuneration.some((r) => r.montant > 0),
+);
+const peutChangerParrain = computed(
+    () =>
+        can('vehicules.update') &&
+        (!parrainAUnePart.value || can('equipes-livraison.update')),
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -1237,8 +1269,8 @@ function formatGNF(val: number): string {
                         </div>
                     </div>
 
-                    <!-- Parrain tab (phase 1 : pas de commission ni d'historique — cf.
-                docs/parrainage-vehicule.md) -->
+                    <!-- Parrain tab — sa part est prise sur l'enveloppe Livreur, cf.
+                docs/parrainage-vehicule.md (ADR 0035) -->
                     <div
                         v-else-if="activeTab === 'parrain'"
                         class="rounded-xl border bg-card p-4 sm:p-6"
@@ -1268,59 +1300,153 @@ function formatGNF(val: number): string {
                             </Button>
                         </div>
 
-                        <div v-else class="rounded-lg border bg-background p-4">
-                            <p
-                                class="text-sm font-medium"
-                                data-testid="parrain-nom"
-                            >
-                                {{ vehicule.parrain_nom_complet }}
-                            </p>
-                            <p
-                                class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                data-testid="parrain-telephone"
-                            >
-                                {{
-                                    formatPhoneDisplay(
-                                        vehicule.parrain_telephone,
-                                    )
-                                }}
-                            </p>
-                            <p
-                                v-if="
-                                    vehicule.parrain_ville ||
-                                    vehicule.parrain_pays
-                                "
-                                class="mt-0.5 text-xs text-muted-foreground"
-                            >
-                                {{
-                                    [
-                                        vehicule.parrain_ville,
-                                        vehicule.parrain_pays,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(' · ')
-                                }}
-                            </p>
-                            <div
-                                v-if="can('vehicules.update')"
-                                class="mt-4 flex gap-2"
-                            >
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    data-testid="modifier-parrain-btn"
-                                    @click="ouvrirModifierParrain"
+                        <div v-else class="space-y-4">
+                            <div class="rounded-lg border bg-background p-4">
+                                <p
+                                    class="text-sm font-medium"
+                                    data-testid="parrain-nom"
                                 >
-                                    Modifier
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    data-testid="changer-parrain-btn"
-                                    @click="ouvrirAjoutParrain"
+                                    {{ vehicule.parrain_nom_complet }}
+                                </p>
+                                <p
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    data-testid="parrain-telephone"
                                 >
-                                    Changer de parrain
-                                </Button>
+                                    {{
+                                        formatPhoneDisplay(
+                                            vehicule.parrain_telephone,
+                                        )
+                                    }}
+                                </p>
+                                <p
+                                    v-if="
+                                        vehicule.parrain_ville ||
+                                        vehicule.parrain_pays
+                                    "
+                                    class="mt-0.5 text-xs text-muted-foreground"
+                                >
+                                    {{
+                                        [
+                                            vehicule.parrain_ville,
+                                            vehicule.parrain_pays,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ')
+                                    }}
+                                </p>
+                                <div
+                                    v-if="can('vehicules.update')"
+                                    class="mt-4 flex flex-wrap gap-2"
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="modifier-parrain-btn"
+                                        @click="ouvrirModifierParrain"
+                                    >
+                                        Modifier
+                                    </Button>
+                                    <Button
+                                        v-if="peutChangerParrain"
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="changer-parrain-btn"
+                                        @click="ouvrirAjoutParrain"
+                                    >
+                                        Changer de parrain
+                                    </Button>
+                                    <Button
+                                        v-if="peutChangerParrain"
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="retirer-parrain-btn"
+                                        @click="ouvrirRetraitParrain"
+                                    >
+                                        Retirer le parrain
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg border bg-background">
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
+                                >
+                                    <div>
+                                        <p class="text-sm font-semibold">
+                                            Part des commissions
+                                        </p>
+                                        <p
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Prise sur l'enveloppe des livreurs,
+                                            par pack — jamais sur les transferts
+                                            entre sites.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        v-if="
+                                            can('equipes-livraison.update') &&
+                                            vehicule.equipe_id
+                                        "
+                                        variant="outline"
+                                        size="sm"
+                                        data-testid="parrain-modifier-repartition-btn"
+                                        @click="
+                                            choisirOnglet('equipe');
+                                            showStepperModal = true;
+                                        "
+                                    >
+                                        Modifier la répartition
+                                    </Button>
+                                </div>
+                                <p
+                                    v-if="parrain_remuneration.length === 0"
+                                    class="px-4 py-4 text-xs text-muted-foreground"
+                                >
+                                    Aucune part configurée : le véhicule n'a pas
+                                    encore d'équipe ou de répartition.
+                                </p>
+                                <table
+                                    v-else
+                                    class="w-full text-sm"
+                                    data-testid="parrain-remuneration"
+                                >
+                                    <thead>
+                                        <tr
+                                            class="border-b text-left text-xs text-muted-foreground"
+                                        >
+                                            <th class="px-4 py-2 font-medium">
+                                                Processus
+                                            </th>
+                                            <th class="px-4 py-2 font-medium">
+                                                Catégorie
+                                            </th>
+                                            <th
+                                                class="px-4 py-2 text-right font-medium"
+                                            >
+                                                GNF / pack
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr
+                                            v-for="r in parrain_remuneration"
+                                            :key="`${r.processus_code}|${r.categorie_nom}`"
+                                        >
+                                            <td class="px-4 py-2.5">
+                                                {{ r.processus_label }}
+                                            </td>
+                                            <td class="px-4 py-2.5">
+                                                {{ r.categorie_nom }}
+                                            </td>
+                                            <td
+                                                class="px-4 py-2.5 text-right font-mono tabular-nums"
+                                            >
+                                                {{ formatGNF(r.montant) }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -1454,6 +1580,7 @@ function formatGNF(val: number): string {
         :baremes-commission-categories="baremes_commission_categories"
         :processus-actif="processus_actif"
         :processus-options="processus_options"
+        :parrain="parrain_partage"
     />
 
     <TransfertVehiculeDialog
@@ -1466,6 +1593,7 @@ function formatGNF(val: number): string {
         v-model:visible="showParrainDialog"
         :vehicule-id="vehicule.id"
         :mode="parrainDialogMode"
+        :part-positive="parrainAUnePart"
         :parrain-actuel="
             vehicule.parrain_id
                 ? {

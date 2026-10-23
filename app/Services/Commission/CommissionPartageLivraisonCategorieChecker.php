@@ -8,6 +8,7 @@ use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
+use App\Models\Parrain;
 use App\Models\Produit;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -84,6 +85,62 @@ class CommissionPartageLivraisonCategorieChecker
     }
 
     /**
+     * Partage consommé par la GÉNÉRATION d'une opération : celui du processus de barème, sauf pour
+     * une distribution dont l'équipe a son propre partage Distribution à cette date (véhicule
+     * parrainé — le parrain y est rémunéré, jamais sur un transfert entre sites). Résolu à la date
+     * du fait générateur : une relance antérieure au parrainage retrouve le partage Logistique.
+     *
+     * @return Collection<int, EquipeLivraisonPartageCategorie>
+     */
+    public static function partagesActifsPourGeneration(
+        CommissionProcessus $processusIdentite,
+        CommissionProcessus $processusBareme,
+        string $equipeId,
+        string $categorieId,
+        CarbonInterface $date,
+    ): Collection {
+        if ($processusIdentite->id !== $processusBareme->id) {
+            $propres = self::partagesActifs($processusIdentite->id, $equipeId, $categorieId, $date);
+            if ($propres->isNotEmpty()) {
+                return $propres;
+            }
+        }
+
+        return self::partagesActifs($processusBareme->id, $equipeId, $categorieId, $date);
+    }
+
+    /**
+     * [processus de barème, processus de partage] à CONTRÔLER pour une opération de code
+     * $processusCode (code d'identité) sur cette équipe : identiques, sauf une distribution qui
+     * hérite du barème Logistique (COMM-005) mais dont le véhicule a un parrain — son partage
+     * Distribution propre est alors exigé. Null si le processus n'existe pas pour l'organisation.
+     *
+     * @return array{0: ?CommissionProcessus, 1: ?CommissionProcessus}
+     */
+    public static function processusBaremeEtPartage(string $organizationId, string $processusCode, EquipeLivraison $equipe): array
+    {
+        $identite = CommissionProcessus::where('organization_id', $organizationId)
+            ->where('code', $processusCode)
+            ->first();
+
+        if ($processusCode !== CommissionProcessus::CODE_DISTRIBUTION_CLIENT) {
+            return [$identite, $identite];
+        }
+
+        $bareme = $identite
+            ? CommissionProcessusDefaults::processusResolutionBareme($identite)
+            : CommissionProcessus::where('organization_id', $organizationId)
+                ->where('code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+                ->first();
+
+        $partage = $identite && $bareme && $identite->id !== $bareme->id && $equipe->vehicule?->parrain_id
+            ? $identite
+            : $bareme;
+
+        return [$bareme, $partage];
+    }
+
+    /**
      * Catégories, parmi $categorieIds, dont le partage Livreur de l'équipe n'est PAS conforme à
      * $date — décision du 24/09/2026 : exige désormais un partage CONFORME (somme exactement égale
      * au barème, chaque membre actif présent, 0 GNF accepté), plus seulement un partage existant.
@@ -91,6 +148,9 @@ class CommissionPartageLivraisonCategorieChecker
      * l'enregistrement de l'équipe) ; les champs de détail (total, écart, membres sans part) ne
      * servent qu'à un message actionnable. Une enveloppe à 0 (aucune règle, ou règle à 0) n'exige
      * jamais de partage : "rien à distribuer" est une valeur métier valide.
+     *
+     * $processusCode : code d'IDENTITÉ de l'opération (distribution_client pour une distribution) —
+     * barème et partage contrôlés sont résolus par processusBaremeEtPartage().
      *
      * @param  iterable<string>  $categorieIds
      * @return Collection<int, array{categorie_id: string, categorie_nom: string, bareme: int, total_configure: int|null, ecart: int, membres_manquants: list<string>, motif: string}>
@@ -108,32 +168,32 @@ class CommissionPartageLivraisonCategorieChecker
             return collect();
         }
 
-        $processus = CommissionProcessus::where('organization_id', $organizationId)
-            ->where('code', $processusCode)
-            ->first();
+        [$processusBareme, $processusPartage] = self::processusBaremeEtPartage($organizationId, $processusCode, $equipe);
 
         // Processus jamais configuré pour l'organisation : aucune CommissionRegle ne peut y
         // référer, l'enveloppe est donc toujours 0 — rien à exiger.
-        if (! $processus) {
+        if (! $processusBareme || ! $processusPartage) {
             return collect();
         }
 
-        $membresRequis = self::membresRequis($equipe);
+        $membresRequis = self::membresRequis($equipe, $processusPartage->code);
+        $parrainAttenduId = self::parrainRemunere($equipe, $processusPartage->code)?->id;
         $categories = Categorie::whereIn('id', $categorieIds)->get()->keyBy('id');
 
         return $categorieIds
-            ->map(function (string $categorieId) use ($organizationId, $equipe, $processus, $typeVehiculeId, $date, $membresRequis, $categories) {
-                $bareme = self::resoudreEnveloppe($organizationId, $processus->id, $categorieId, $typeVehiculeId, $date);
+            ->map(function (string $categorieId) use ($organizationId, $equipe, $processusBareme, $processusPartage, $typeVehiculeId, $date, $membresRequis, $parrainAttenduId, $categories) {
+                $bareme = self::resoudreEnveloppe($organizationId, $processusBareme->id, $categorieId, $typeVehiculeId, $date);
                 if ($bareme <= 0) {
                     return null;
                 }
 
-                $partages = self::partagesActifs($processus->id, $equipe->id, $categorieId, $date);
+                $partages = self::partagesActifs($processusPartage->id, $equipe->id, $categorieId, $date);
 
                 try {
+                    self::verifierParrainAJour($partages, $parrainAttenduId);
                     CommissionPartageLivraisonValidator::valider(
                         $partages->map(fn (EquipeLivraisonPartageCategorie $p) => (object) [
-                            'beneficiaire_id' => $p->livreur_id,
+                            'beneficiaire_id' => $p->beneficiaire_id,
                             'montant_unitaire' => $p->montant_unitaire,
                         ]),
                         $bareme,
@@ -143,7 +203,7 @@ class CommissionPartageLivraisonCategorieChecker
                     return null;
                 } catch (InvalidArgumentException $e) {
                     $total = $partages->isEmpty() ? null : (int) $partages->sum('montant_unitaire');
-                    $presents = $partages->pluck('livreur_id')->all();
+                    $presents = $partages->pluck('beneficiaire_id')->all();
 
                     return [
                         'categorie_id' => $categorieId,
@@ -207,7 +267,7 @@ class CommissionPartageLivraisonCategorieChecker
         try {
             CommissionPartageLivraisonValidator::valider(
                 $versionActive->map(fn (EquipeLivraisonPartageCategorie $p) => (object) [
-                    'beneficiaire_id' => $p->livreur_id,
+                    'beneficiaire_id' => $p->beneficiaire_id,
                     'montant_unitaire' => $p->montant_unitaire,
                 ]),
                 $bareme,
@@ -224,17 +284,54 @@ class CommissionPartageLivraisonCategorieChecker
 
     /**
      * Membres dont une ligne de partage est exigée : membres de l'équipe dont le livreur est
-     * actif — un livreur désactivé mais encore rattaché n'est jamais exigé.
+     * actif — un livreur désactivé mais encore rattaché n'est jamais exigé. Avec $processusCode
+     * (processus du partage contrôlé), le parrain du véhicule s'y ajoute quand ce processus le
+     * rémunère : sa ligne est obligatoire, 0 GNF accepté.
      *
-     * @return Collection<string, string> livreur_id => nom affiché
+     * @return Collection<string, string> livreur_id (ou parrain_id) => nom affiché
      */
-    public static function membresRequis(EquipeLivraison $equipe): Collection
+    public static function membresRequis(EquipeLivraison $equipe, ?string $processusCode = null): Collection
     {
-        return $equipe->membres()
+        $requis = $equipe->membres()
             ->with('livreur')
             ->get()
             ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
             ->mapWithKeys(fn (EquipeLivreur $m) => [$m->livreur_id => $m->livreur->nom_complet ?? $m->livreur_id]);
+
+        $parrain = $processusCode !== null ? self::parrainRemunere($equipe, $processusCode) : null;
+        if ($parrain) {
+            $requis->put($parrain->id, 'Parrain — '.($parrain->nom_complet ?: $parrain->id));
+        }
+
+        return $requis;
+    }
+
+    /**
+     * Une ligne parrain doit désigner le parrain ACTUEL du véhicule (parrain retiré ou remplacé
+     * sans nouvelle répartition, équipe déplacée sur un autre véhicule) : sinon le partage n'est
+     * pas conforme, la part irait à la mauvaise personne.
+     *
+     * @param  Collection<int, EquipeLivraisonPartageCategorie>  $lignes
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function verifierParrainAJour(Collection $lignes, ?string $parrainAttenduId): void
+    {
+        $obsolete = $lignes->first(fn (EquipeLivraisonPartageCategorie $p) => $p->estParrain() && $p->parrain_id !== $parrainAttenduId);
+
+        if ($obsolete) {
+            throw new InvalidArgumentException('La part de parrain ne correspond plus au parrain actuel du véhicule : refaites la répartition.');
+        }
+    }
+
+    /** Parrain du véhicule de l'équipe, s'il est rémunéré sur ce processus. */
+    public static function parrainRemunere(EquipeLivraison $equipe, string $processusCode): ?Parrain
+    {
+        if (! CommissionProcessusDefaults::remunereLeParrain($processusCode)) {
+            return null;
+        }
+
+        return $equipe->vehicule?->parrain;
     }
 
     /**

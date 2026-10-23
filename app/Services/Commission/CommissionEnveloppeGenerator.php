@@ -64,12 +64,14 @@ class CommissionEnveloppeGenerator
     /**
      * Bénéficiaires toujours uniques sur leur enveloppe (aucune répartition possible) : leur
      * part est validée d'office à la génération. Les livreurs (partage d'équipe) restent en
-     * validation manuelle — c'est là que se constatent absences et remplacements.
+     * validation manuelle — c'est là que se constatent absences et remplacements. Le parrain,
+     * bien que dans le partage d'équipe, n'est jamais absent ni remplacé : validé d'office.
      */
     public const TYPES_VALIDATION_AUTOMATIQUE = [
         CommissionEnveloppePart::TYPE_PROPRIETAIRE,
         CommissionEnveloppePart::TYPE_SITE,
         CommissionEnveloppePart::TYPE_PRESTATAIRE,
+        CommissionEnveloppePart::TYPE_PARRAIN,
     ];
 
     /**
@@ -782,8 +784,9 @@ class CommissionEnveloppeGenerator
                         'enveloppe_unitaire' => $enveloppeUnitaire,
                     ];
 
-                    $partages = CommissionPartageLivraisonCategorieChecker::partagesActifs(
-                        $processusBareme->id,
+                    $partages = CommissionPartageLivraisonCategorieChecker::partagesActifsPourGeneration(
+                        $processusIdentite,
+                        $processusBareme,
                         $vehicule->equipe->id,
                         $categorieId,
                         $earnedAt,
@@ -797,7 +800,7 @@ class CommissionEnveloppeGenerator
                     }
 
                     $membresValidation = $partages->map(fn (EquipeLivraisonPartageCategorie $p) => (object) [
-                        'beneficiaire_id' => $p->livreur_id,
+                        'beneficiaire_id' => $p->beneficiaire_id,
                         'montant_unitaire' => $p->montant_unitaire,
                     ]);
 
@@ -811,6 +814,7 @@ class CommissionEnveloppeGenerator
                             'ecart' => $enveloppeUnitaire - $attribue,
                             'parts' => $partages->map(fn (EquipeLivraisonPartageCategorie $p) => [
                                 'livreur_id' => $p->livreur_id,
+                                'parrain_id' => $p->parrain_id,
                                 'montant_unitaire' => $p->montant_unitaire === null ? null : (int) $p->montant_unitaire,
                             ])->values()->all(),
                         ]);
@@ -819,13 +823,16 @@ class CommissionEnveloppeGenerator
                         continue;
                     }
 
+                    // Le parrain est une ligne du même partage : sa part sort de cette enveloppe,
+                    // le total de l'équipe reste quantité × barème.
                     foreach ($partages as $partage) {
-                        $beneficiaireId = $partage->livreur_id;
+                        $type = $partage->estParrain() ? CommissionEnveloppePart::TYPE_PARRAIN : CommissionEnveloppePart::TYPE_LIVREUR;
+                        $cleBeneficiaire = $type.':'.$partage->beneficiaire_id;
                         $montantMembre = $quantiteCategorie * (int) $partage->montant_unitaire;
 
-                        $montantParBeneficiaire[$beneficiaireId] = ($montantParBeneficiaire[$beneficiaireId] ?? 0) + $montantMembre;
-                        $montantUnitaireParBeneficiaire[$beneficiaireId] = (int) $partage->montant_unitaire;
-                        $typeParBeneficiaire[$beneficiaireId] = CommissionEnveloppePart::TYPE_LIVREUR;
+                        $montantParBeneficiaire[$cleBeneficiaire] = ($montantParBeneficiaire[$cleBeneficiaire] ?? 0) + $montantMembre;
+                        $montantUnitaireParBeneficiaire[$cleBeneficiaire] = (int) $partage->montant_unitaire;
+                        $typeParBeneficiaire[$cleBeneficiaire] = $type;
                     }
 
                     $montantTotalEquipe += $quantiteCategorie * $enveloppeUnitaire;
@@ -850,12 +857,12 @@ class CommissionEnveloppeGenerator
                     'montant' => $montantTotalEquipe,
                     'cible_id' => $groupe->id,
                     'contributions' => $contributions,
-                    'parts' => array_map(fn (string $beneficiaireId) => [
-                        'beneficiaire_type' => $typeParBeneficiaire[$beneficiaireId],
-                        'beneficiaire_id' => $beneficiaireId,
+                    'parts' => array_map(fn (string $cleBeneficiaire) => [
+                        'beneficiaire_type' => $typeParBeneficiaire[$cleBeneficiaire],
+                        'beneficiaire_id' => explode(':', $cleBeneficiaire, 2)[1],
                         'taux' => null,
-                        'montant_unitaire' => $montantUnitaireParBeneficiaire[$beneficiaireId],
-                        'montant' => $montantParBeneficiaire[$beneficiaireId],
+                        'montant_unitaire' => $montantUnitaireParBeneficiaire[$cleBeneficiaire],
+                        'montant' => $montantParBeneficiaire[$cleBeneficiaire],
                     ], array_keys($montantParBeneficiaire)),
                 ];
 

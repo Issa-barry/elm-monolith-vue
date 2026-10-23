@@ -665,10 +665,12 @@ final class CommandeVenteFormBuilder
         string $action,
         string $champErreur,
     ): void {
+        // Code d'identité : le juge résout lui-même le barème (distribution → Logistique, COMM-005)
+        // et le partage (Distribution propre pour un véhicule parrainé).
         $nonConformites = CommissionPartageLivraisonCategorieChecker::nonConformites(
             $organizationId,
             $vehicule->equipe,
-            $processusBareme->code,
+            $processusIdentite->code,
             $vehicule->type_vehicule_id,
             $categorieIds,
             Carbon::today(),
