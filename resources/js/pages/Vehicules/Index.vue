@@ -567,7 +567,9 @@ function confirmDelete(v: Vehicule) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="filteredVehicules"
                     :paginator="filteredVehicules.length > 20"
@@ -576,8 +578,20 @@ function confirmDelete(v: Vehicule) {
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    table-class="w-full"
-                    :pt="{ bodyRow: bodyRowPt }"
+                    table-style="width: max-content; min-width: 100%"
+                    :pt="{
+                        root: { class: 'w-full min-w-0' },
+                        table: { class: 'whitespace-nowrap' },
+                        tableContainer: {
+                            class: 'overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                            tabindex: 0,
+                            role: 'region',
+                            'aria-label':
+                                'Tableau des véhicules, défilement horizontal disponible',
+                            'data-testid': 'vehicules-table-scroll',
+                        },
+                        bodyRow: bodyRowPt,
+                    }"
                     @row-click="onRowClick"
                 >
                     <!-- Photo -->
@@ -720,19 +734,26 @@ function confirmDelete(v: Vehicule) {
                         <template #body="{ data }">
                             <div class="leading-tight">
                                 <div class="text-muted-foreground">
-                                    {{ data.equipe_nom ?? '—' }}
-                                    <span
-                                        v-if="data.equipe_nom"
-                                        class="ml-1 text-xs text-muted-foreground/70"
-                                    >
-                                        ·
-                                        {{ data.equipe_membres.length }}
-                                        {{
-                                            data.equipe_membres.length > 1
-                                                ? 'membres'
-                                                : 'membre'
-                                        }}
-                                    </span>
+                                    <template v-if="data.equipe_nom">
+                                        <template
+                                            v-if="
+                                                data.equipe_nom.trim() !==
+                                                data.nom_vehicule.trim()
+                                            "
+                                            >{{ data.equipe_nom }} ·
+                                        </template>
+                                        <span
+                                            class="text-xs text-muted-foreground/70"
+                                        >
+                                            {{ data.equipe_membres.length }}
+                                            {{
+                                                data.equipe_membres.length > 1
+                                                    ? 'membres'
+                                                    : 'membre'
+                                            }}
+                                        </span>
+                                    </template>
+                                    <span v-else>—</span>
                                 </div>
                                 <div
                                     v-if="data.livreur_principal_nom"

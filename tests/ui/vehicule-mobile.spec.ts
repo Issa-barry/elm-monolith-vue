@@ -142,7 +142,11 @@ const detailProps = {
 };
 const listeProps = {
     vehicules: [
-        vehicule,
+        {
+            ...vehicule,
+            equipe_nom: 'Abarry',
+            livreur_principal_nom: 'Saa Fodé',
+        },
         {
             ...vehicule,
             id: 'vehicule-2',
@@ -531,3 +535,45 @@ for (const width of [768, 1440]) {
         },
     );
 }
+
+test('tableau desktop : toutes les colonnes restent accessibles par défilement horizontal', async ({
+    page,
+}, info) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await ouvrir(page, { list: true });
+
+    const tableau = page.getByTestId('vehicules-table-scroll');
+    await expect(tableau).toBeVisible();
+    await expect(tableau).toHaveAttribute('tabindex', '0');
+    await expect(
+        page.getByText(
+            'Faites défiler horizontalement pour voir toutes les colonnes.',
+        ),
+    ).toHaveCount(0);
+    expect(
+        await tableau.evaluate(
+            (element) => element.scrollWidth > element.clientWidth,
+        ),
+    ).toBe(true);
+
+    await tableau.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+    });
+    expect(
+        await tableau.evaluate((element) => element.scrollLeft),
+    ).toBeGreaterThan(0);
+    await page.screenshot({ path: info.outputPath('tableau-horizontal.png') });
+    await expect(tableau).toContainText('Partages');
+    await expect(tableau).toContainText('Statut');
+    const premiereLigne = tableau.locator('tbody tr').first();
+    await expect(
+        premiereLigne.getByText('Abarry', { exact: true }),
+    ).toHaveCount(1);
+    await expect(premiereLigne).toContainText('1 membre');
+    await expect(premiereLigne).toContainText('Saa Fodé');
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+    ).toBe(true);
+});

@@ -3,13 +3,16 @@
 namespace App\Http\Middleware;
 
 use App\Enums\NatureMouvementFonds;
+use App\Enums\StatutAnomalieEncaissement;
 use App\Enums\StatutMouvementFonds;
 use App\Enums\StatutTransfert;
+use App\Models\AnomalieEncaissement;
 use App\Models\ContactMessage;
 use App\Models\MouvementFonds;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Notifications\AnomalieEncaissementNotification;
 use App\Notifications\EcartReceptionTransfertNotification;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
@@ -241,6 +244,45 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 
+    /**
+     * Contrôle des encaissements (ADR 0036) : alertes non lues de l'utilisateur (cloche) et
+     * anomalies « Nouvelle » de son périmètre (badge du menu). Une alerte sort de la cloche quand
+     * la fiche de l'anomalie est ouverte (ControleEncaissementsController::show()).
+     */
+    private function anomaliesEncaissement(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return ['total' => 0, 'recents' => [], 'a_traiter' => 0];
+        }
+
+        $query = $user->unreadNotifications()->where('type', AnomalieEncaissementNotification::class);
+
+        $aTraiter = 0;
+        if ($user->can('encaissements.surveiller')) {
+            $siteIds = $user->voitToutesLesAgences() ? null : $user->sites()->pluck('sites.id')->all();
+            $aTraiter = AnomalieEncaissement::query()
+                ->where('organization_id', $user->organization_id)
+                ->where('statut', StatutAnomalieEncaissement::NOUVELLE->value)
+                ->when($siteIds !== null, fn ($q) => $q->where(fn ($q) => $q->whereIn('site_id', $siteIds)->orWhereNull('site_id')))
+                ->count();
+        }
+
+        return [
+            'total' => (clone $query)->count(),
+            'recents' => $query->latest()->limit(5)->get()
+                ->map(fn ($n) => [
+                    'id' => $n->id,
+                    'message' => $n->data['message'] ?? '',
+                    'gravite' => $n->data['gravite'] ?? null,
+                    'url' => $n->data['url'] ?? null,
+                    'created_at' => $n->created_at?->format('d/m/Y H:i'),
+                ])
+                ->all(),
+            'a_traiter' => $aTraiter,
+        ];
+    }
+
     private function orgSites(Request $request): array
     {
         $user = $request->user();
@@ -407,6 +449,7 @@ class HandleInertiaRequests extends Middleware
             'approvisionnements_a_confirmer' => $this->approvisionnementsAConfirmer($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'ecarts_reception' => $this->ecartsReception($request),
+            'anomalies_encaissement' => $this->anomaliesEncaissement($request),
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),
             'org_sites' => $this->orgSites($request),

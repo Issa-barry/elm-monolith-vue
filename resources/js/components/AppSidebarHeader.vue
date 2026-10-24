@@ -16,6 +16,7 @@ import {
     AlertTriangle,
     ArrowRightLeft,
     Bell,
+    CircleDollarSign,
     Loader2,
     MessageSquare,
     Moon,
@@ -134,12 +135,27 @@ const ecartsReception = computed<{
     total: number;
     recents: { id: string; message: string; created_at: string | null }[];
 }>(() => (page.props as any).ecarts_reception ?? { total: 0, recents: [] });
+// Contrôle des encaissements (ADR 0036) : alertes non lues ; ouvrir la fiche les marque lues.
+const anomaliesEncaissement = computed<{
+    total: number;
+    recents: {
+        id: string;
+        message: string;
+        gravite: string | null;
+        url: string | null;
+        created_at: string | null;
+    }[];
+}>(
+    () =>
+        (page.props as any).anomalies_encaissement ?? { total: 0, recents: [] },
+);
 const totalNotifications = computed(
     () =>
         stockAlertes.value.total +
         contactMessagesNonLus.value +
         mouvementsFondsAConfirmer.value +
-        ecartsReception.value.total,
+        ecartsReception.value.total +
+        anomaliesEncaissement.value.total,
 );
 
 function syncThemeState() {
@@ -311,6 +327,40 @@ onMounted(() => {
                     >
                         <Bell class="h-8 w-8 opacity-20" />
                         <p>Aucune notification</p>
+                    </div>
+
+                    <!-- Contrôle des encaissements (ADR 0036) -->
+                    <div
+                        v-if="anomaliesEncaissement.total > 0"
+                        class="border-b"
+                        data-testid="cloche-anomalies-encaissement"
+                    >
+                        <div
+                            class="flex items-center gap-2 bg-destructive/5 px-4 py-2"
+                        >
+                            <CircleDollarSign
+                                class="h-3.5 w-3.5 text-destructive"
+                            />
+                            <span class="text-xs font-semibold text-destructive"
+                                >Anomalies d'encaissement ({{
+                                    anomaliesEncaissement.total
+                                }})</span
+                            >
+                        </div>
+                        <Link
+                            v-for="alerte in anomaliesEncaissement.recents"
+                            :key="alerte.id"
+                            :href="
+                                alerte.url ??
+                                '/backoffice/comptabilite/tresorerie/controle-encaissements'
+                            "
+                            class="block w-full px-4 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                        >
+                            <span class="block">{{ alerte.message }}</span>
+                            <span class="block text-[11px] opacity-70">{{
+                                alerte.created_at
+                            }}</span>
+                        </Link>
                     </div>
 
                     <!-- Écarts de réception des transferts (ADR 0032) -->

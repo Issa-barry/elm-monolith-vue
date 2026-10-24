@@ -72,6 +72,7 @@ use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\CompteTresorerieController;
+use App\Http\Controllers\Comptabilite\ControleEncaissementsController;
 use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\InterAgencesController;
@@ -896,6 +897,15 @@ Route::prefix('backoffice')->group(function () {
                 // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
                 // et leur règlement (création + envoi en une opération).
                 Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
+                // Contrôle des encaissements (ADR 0036) : anomalies, alertes, traitement contrôlé.
+                Route::get('controle-encaissements', [ControleEncaissementsController::class, 'index'])->name('controle-encaissements.index');
+                Route::post('controle-encaissements/analyser', [ControleEncaissementsController::class, 'analyser'])->middleware('throttle:6,1')->name('controle-encaissements.analyser');
+                Route::get('controle-encaissements/{anomalie}', [ControleEncaissementsController::class, 'show'])->name('controle-encaissements.show');
+                Route::post('controle-encaissements/{anomalie}/prendre-en-charge', [ControleEncaissementsController::class, 'prendreEnCharge'])->name('controle-encaissements.prendre-en-charge');
+                Route::post('controle-encaissements/{anomalie}/commentaires', [ControleEncaissementsController::class, 'commenter'])->name('controle-encaissements.commenter');
+                Route::post('controle-encaissements/{anomalie}/resoudre', [ControleEncaissementsController::class, 'resoudre'])->name('controle-encaissements.resoudre');
+                Route::post('controle-encaissements/{anomalie}/fausse-alerte', [ControleEncaissementsController::class, 'fausseAlerte'])->name('controle-encaissements.fausse-alerte');
+
                 Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
                 Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
 

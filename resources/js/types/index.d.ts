@@ -54,6 +54,8 @@ export type StandalonePermission =
     | 'tresorerie.valider_supports'
     | 'tresorerie.supprimer_supports'
     | 'tresorerie.designer_principale'
+    | 'encaissements.surveiller'
+    | 'encaissements.traiter_anomalies'
     | 'rapports.read_own'
     | 'rapports.read'
     | 'factures.encaisser'

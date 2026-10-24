@@ -319,6 +319,8 @@ function close() {
 }
 
 function handleSubmit() {
+    // Jamais un second envoi tant que le premier n'a pas répondu (double encaissement du 22/10/2026).
+    if (props.processing) return;
     if (refusAgence.value) return;
     if (!montant.value || montant.value <= 0) return;
     const mode = modeActif.value;
