@@ -165,6 +165,7 @@ final class SavedFilterScopes
                         }
                     }],
                     'partage' => [Rule::in(['a_faire', 'fait'])],
+                    'parrain_part' => [Rule::in(['a_definir', 'definie'])],
                 ],
             ],
             'commissions-livreurs' => $commission,

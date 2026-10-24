@@ -841,8 +841,10 @@ class ParrainPartageCommissionTest extends TestCase
         $this->ajouterParrain($this->vehicule);
         $statuts = PartageConformiteVehiculesService::statuts($this->org->id, Vehicule::with('equipe.membres.livreur')->whereKey($this->vehicule->id)->get());
 
-        $this->assertSame(PartageConformiteVehiculesService::FAIT, $statuts[$this->vehicule->id][CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
-        $this->assertSame(PartageConformiteVehiculesService::FAIT, $statuts[$this->vehicule->id][CommissionProcessus::CODE_VENTE]);
+        // PARRAIN-022 : partages complets, mais la part du parrain à 0 GNF créée par le système
+        // reste à répartir tant qu'une personne ne l'a pas définie ou confirmée.
+        $this->assertSame(PartageConformiteVehiculesService::A_REPARTIR, $statuts[$this->vehicule->id][CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
+        $this->assertSame(PartageConformiteVehiculesService::A_REPARTIR, $statuts[$this->vehicule->id][CommissionProcessus::CODE_VENTE]);
     }
 
     public function test_la_reprise_ajoute_la_ligne_du_parrain_aux_vehicules_deja_parraines(): void

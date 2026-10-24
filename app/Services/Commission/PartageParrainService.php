@@ -78,12 +78,92 @@ class PartageParrainService
      */
     public static function groupesARepartir(Vehicule $vehicule, ?Carbon $date = null): Collection
     {
+        return self::groupes($vehicule, $date ?? Carbon::today(), positivesSeulement: true);
+    }
+
+    /**
+     * Tous les partages où le parrain actuel figure (part nulle comprise), même format que
+     * groupesARepartir() — grille « Définir la part du parrain » (PARRAIN-021).
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function groupesDuParrain(Vehicule $vehicule, ?Carbon $date = null): Collection
+    {
+        if (! $vehicule->parrain_id) {
+            return collect();
+        }
+
+        return self::groupes($vehicule, $date ?? Carbon::today(), positivesSeulement: false);
+    }
+
+    /**
+     * Livreurs actifs de l'équipe : chacun doit figurer dans une répartition.
+     *
+     * @return Collection<int, string>
+     */
+    public static function membresRequis(EquipeLivraison $equipe): Collection
+    {
+        return $equipe->membres()->with('livreur')->get()
+            ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
+            ->pluck('livreur_id');
+    }
+
+    /**
+     * Contrôle d'une répartition d'un partage (somme exacte du barème, livreurs actifs seulement,
+     * part du parrain présente s'il y en a un, absente sinon) — commun au changement de parrain et
+     * à la grille de sa part.
+     *
+     * @param  array<string, mixed>  $groupe  élément de groupes()
+     * @param  array<string, mixed>  $repartition  parts (livreur_id, montant_unitaire), part_parrain
+     * @param  Collection<int, string>  $requis
+     *
+     * @throws ValidationException
+     */
+    public static function validerGroupe(array $groupe, array $repartition, ?string $parrainId, Collection $requis): void
+    {
+        $partParrain = $repartition['part_parrain'] ?? null;
+        $libelle = $groupe['processus_label'].' · '.$groupe['categorie_nom'];
+
+        if (($parrainId === null) !== ($partParrain === null)) {
+            throw ValidationException::withMessages([
+                'repartitions' => $parrainId === null
+                    ? "{$libelle} : aucune part de parrain après son retrait."
+                    : "{$libelle} : la part du parrain doit être renseignée (0 GNF accepté).",
+            ]);
+        }
+
+        $membres = collect($repartition['parts'])->map(fn (array $p) => (object) [
+            'beneficiaire_id' => $p['livreur_id'],
+            'montant_unitaire' => $p['montant_unitaire'],
+        ]);
+        if ($membres->pluck('beneficiaire_id')->diff($requis)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'repartitions' => "{$libelle} : un livreur ne fait plus partie de l'équipe (rafraîchissez la page).",
+            ]);
+        }
+        if ($partParrain !== null) {
+            $membres->push((object) ['beneficiaire_id' => $parrainId, 'montant_unitaire' => $partParrain]);
+        }
+
+        try {
+            CommissionPartageLivraisonValidator::valider(
+                $membres,
+                $groupe['bareme'],
+                $parrainId === null ? $requis : $requis->concat([$parrainId]),
+            );
+        } catch (InvalidArgumentException $e) {
+            throw ValidationException::withMessages(['repartitions' => "{$libelle} : {$e->getMessage()}"]);
+        }
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private static function groupes(Vehicule $vehicule, Carbon $date, bool $positivesSeulement): Collection
+    {
         $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->first();
         if (! $equipe) {
             return collect();
         }
 
-        $date ??= Carbon::today();
         $orgId = $vehicule->organization_id;
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->whereIn('code', CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN)
@@ -92,8 +172,11 @@ class PartageParrainService
 
         $partsPositives = EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
             ->whereIn('processus_id', $processus->keys())
-            ->whereNotNull('parrain_id')
-            ->where('montant_unitaire', '>', 0)
+            ->when(
+                $positivesSeulement,
+                fn ($q) => $q->whereNotNull('parrain_id')->where('montant_unitaire', '>', 0),
+                fn ($q) => $q->where('parrain_id', $vehicule->parrain_id),
+            )
             ->actifA($date)
             ->get();
 
@@ -129,7 +212,10 @@ class PartageParrainService
                     'montant_actuel' => (int) ($montants->get($m->livreur_id) ?? 0),
                 ])->all(),
             ];
-        })->values();
+        })
+            // Ordre métier des onglets Équipe, puis catégorie.
+            ->sortBy(fn (array $g) => [array_search($g['processus_code'], CommissionProcessusDefaults::codesPartageEquipe(), true), $g['categorie_nom']])
+            ->values();
     }
 
     /**
@@ -164,45 +250,10 @@ class PartageParrainService
             ]);
         }
 
-        $requis = $equipe->membres()->with('livreur')->get()
-            ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
-            ->pluck('livreur_id');
+        $requis = self::membresRequis($equipe);
 
         foreach ($parCle as $cle => $repartition) {
-            $groupe = $aRepartir[$cle];
-            $partParrain = $repartition['part_parrain'] ?? null;
-            $libelle = $groupe['processus_label'].' · '.$groupe['categorie_nom'];
-
-            if (($nouveauParrainId === null) !== ($partParrain === null)) {
-                throw ValidationException::withMessages([
-                    'repartitions' => $nouveauParrainId === null
-                        ? "{$libelle} : aucune part de parrain après son retrait."
-                        : "{$libelle} : la part du nouveau parrain doit être renseignée (0 GNF accepté).",
-                ]);
-            }
-
-            $membres = collect($repartition['parts'])->map(fn (array $p) => (object) [
-                'beneficiaire_id' => $p['livreur_id'],
-                'montant_unitaire' => $p['montant_unitaire'],
-            ]);
-            if ($membres->pluck('beneficiaire_id')->diff($requis)->isNotEmpty()) {
-                throw ValidationException::withMessages([
-                    'repartitions' => "{$libelle} : un livreur ne fait plus partie de l'équipe (rafraîchissez la page).",
-                ]);
-            }
-            if ($partParrain !== null) {
-                $membres->push((object) ['beneficiaire_id' => $nouveauParrainId, 'montant_unitaire' => $partParrain]);
-            }
-
-            try {
-                CommissionPartageLivraisonValidator::valider(
-                    $membres,
-                    $groupe['bareme'],
-                    $nouveauParrainId === null ? $requis : $requis->concat([$nouveauParrainId]),
-                );
-            } catch (InvalidArgumentException $e) {
-                throw ValidationException::withMessages(['repartitions' => "{$libelle} : {$e->getMessage()}"]);
-            }
+            self::validerGroupe($aRepartir[$cle], $repartition, $nouveauParrainId, $requis);
         }
 
         return $parCle;

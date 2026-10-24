@@ -32,8 +32,11 @@ final class VehiculeIndexFilters
                 return false;
             }
             $partage = $filters['partage'] ?? '';
-            $aFaire = count(array_intersect($v['partages_commission'], ['a_faire', 'sans_equipe'])) > 0;
+            $aFaire = count(array_intersect($v['partages_commission'], ['a_faire', 'sans_equipe', 'a_repartir'])) > 0;
             if ($partage !== '' && ($partage === 'a_faire' ? ! $aFaire : $aFaire)) {
+                return false;
+            }
+            if (! empty($filters['parrain_part']) && ($v['parrain_part'] ?? null) !== $filters['parrain_part']) {
                 return false;
             }
 

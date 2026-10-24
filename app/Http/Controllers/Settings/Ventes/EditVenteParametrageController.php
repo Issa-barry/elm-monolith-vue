@@ -50,6 +50,8 @@ class EditVenteParametrageController extends Controller
             'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
             'declencheur_commission_vente' => Parametre::getDeclencheurCommissionVente($orgId)->value,
             'declencheurs_commission_vente_options' => DeclencheurCommissionVente::options(),
+            // PARRAIN-022 : vide = garde-fou pas encore activé (l'état « À répartir » s'affiche).
+            'repartition_parrain_obligatoire_du' => Parametre::getRepartitionParrainObligatoireDu($orgId),
             'annulation_exceptionnelle_confirmation' => Parametre::getModeConfirmationAnnulationExceptionnelle($orgId)->value,
             'annulation_exceptionnelle_confirmation_options' => ModeConfirmationAnnulationExceptionnelle::options(),
             // Même double condition que UpdateVenteParametrageController : administrer les

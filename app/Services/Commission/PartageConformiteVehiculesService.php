@@ -30,6 +30,9 @@ class PartageConformiteVehiculesService
 
     public const A_FAIRE = 'a_faire';
 
+    /** PARRAIN-022 : partage complet, mais part du parrain à 0 GNF jamais confirmée. */
+    public const A_REPARTIR = 'a_repartir';
+
     public const NON_REQUIS = 'non_requis';
 
     public const SANS_EQUIPE = 'sans_equipe';
@@ -91,6 +94,7 @@ class PartageConformiteVehiculesService
                 $proc = $processus->get($code);
                 $procBareme = $processusBareme->get($code);
                 $statut = self::NON_REQUIS;
+                $aRepartir = false;
                 // Même juge que la commande : la ligne du parrain est exigée là où il est rémunéré.
                 $parrainId = CommissionProcessusDefaults::remunereLeParrain($code) ? $vehicule->parrain_id : null;
                 $requis = $parrainId ? [...$requisLivreurs, $parrainId] : $requisLivreurs;
@@ -115,13 +119,14 @@ class PartageConformiteVehiculesService
                         CommissionPartageLivraisonCategorieChecker::verifierParrainAJour($lignes, $parrainId);
                         CommissionPartageLivraisonValidator::valider($lignes, $baremes[$cle], $requis);
                         $statut = self::FAIT;
+                        $aRepartir = $aRepartir || ($parrainId && CommissionPartageLivraisonCategorieChecker::partParrainARepartir($lignes));
                     } catch (InvalidArgumentException) {
                         $statut = self::A_FAIRE;
                         break;
                     }
                 }
 
-                $resultat[$vehicule->id][$code] = $statut;
+                $resultat[$vehicule->id][$code] = $statut === self::FAIT && $aRepartir ? self::A_REPARTIR : $statut;
             }
         }
 

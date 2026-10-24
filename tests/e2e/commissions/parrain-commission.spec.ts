@@ -140,21 +140,57 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await page.getByTestId('parrain-creer-personne-btn').click();
     await page.getByTestId('parrain-creation-nom-input').fill(nomParrain);
     await page.getByTestId('parrain-creer-et-associer-btn').click();
-    await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain, {
-        timeout: 15_000,
-    });
+
+    // PARRAIN-021 : l'association annonce une part à 0 GNF, à définir (rien n'est bloqué).
+    await expect(page.getByTestId('parrain-apres-ajout')).toContainText(
+        /0 GNF/,
+        { timeout: 15_000 },
+    );
+    await page.getByTestId('parrain-part-plus-tard-btn').click();
+    await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain);
     const remuneration = page.getByTestId('parrain-remuneration');
     await expect(remuneration).toContainText('Vente');
     // Véhicule Vente + Logistique : la distribution a sa propre ligne, jamais le transfert.
     await expect(remuneration).toContainText(/distribution/i);
     await expect(remuneration).not.toContainText(/transfert logistique/i);
+    await expect(page.getByTestId('parrain-part-a-definir')).toBeVisible();
+    // Véhicule Logistique : les transferts entre sites sont signalés, jamais rémunérés.
+    await expect(
+        page.getByTestId('parrain-ligne-transfert-exclu'),
+    ).toContainText(/jamais rémunéré/i);
 
-    // ── 2. Répartition Vente 500 / 300 / 200 dans la modale Équipe ──────────────────
-    await page.getByTestId('parrain-modifier-repartition-btn').click();
-    const modale = page.getByRole('dialog');
-    await modale.getByRole('button', { name: /suivant/i }).click();
-    const carte = modale.getByTestId(`partage-categorie-${f.categorie.id}`);
-    await expect(carte).toContainText(nomParrain);
+    // Rappels hors de l'onglet : onglet Équipe et liste (filtre « Part du parrain à définir »).
+    await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=equipe`);
+    await expect(page.getByTestId('equipe-rappel-part-parrain')).toContainText(
+        nomParrain,
+    );
+    // Le parrain apparaît hors équipe, sa part comprise dans le total réparti (= barème).
+    await expect(page.getByTestId('equipe-ligne-parrain')).toContainText(
+        nomParrain,
+    );
+    await expect(page.getByTestId('equipe-ligne-parrain')).toContainText(
+        /à répartir/i,
+    );
+    await expect(page.getByTestId('equipe-total-reparti')).toContainText(
+        /barème/i,
+    );
+    await page.goto('/backoffice/vehicules?parrain_part=a_definir');
+    await expect(
+        page.getByTestId(`part-parrain-${f.vehicule.id}`),
+    ).toContainText(/à définir/i);
+
+    // ── 2. Part du parrain : Vente 500 / 300 / 200, en une seule grille ─────────────
+    await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=parrain`);
+    await page.getByTestId('parrain-definir-part-onglet-btn').click();
+    const grille = page.getByTestId('part-parrain-dialog');
+    const carte = grille.getByTestId('part-parrain-vente');
+    // Une carte par partage du parrain : Vente et Distribution (jamais le transfert).
+    await expect(
+        grille.getByTestId('part-parrain-distribution_client'),
+    ).toBeVisible();
+    await expect(
+        grille.getByTestId('part-parrain-confirmer-nulle'),
+    ).toBeVisible();
     const membres = carte.locator('[data-testid^="partage-livreur-montant-"]');
     await expect(membres).toHaveCount(2);
     await saisirMontant(membres.nth(0), 500);
@@ -166,12 +202,21 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await expect(carte.getByTestId('partage-livreur-etat')).toContainText(
         /équilibrée/i,
     );
-    await modale.getByRole('button', { name: /suivant/i }).click();
-    await expect(modale.getByTestId('recap-parrain')).toContainText(nomParrain);
-    await modale.getByRole('button', { name: /enregistrer l.équipe/i }).click();
-    await expect(modale).toBeHidden({ timeout: 15_000 });
+    // PARRAIN-022 : la Distribution reste à 0 GNF — confirmation explicite exigée pour elle seule.
+    const confirmation = grille.getByTestId('part-parrain-confirmer-nulle');
+    await expect(confirmation).toContainText(/distribution/i);
+    await expect(confirmation).not.toContainText(/ventes/i);
+    await expect(
+        page.getByTestId('part-parrain-enregistrer-btn'),
+    ).toBeDisabled();
+    await confirmation.getByRole('checkbox').click();
+    await page.getByTestId('part-parrain-enregistrer-btn').click();
+    await expect(grille).toBeHidden({ timeout: 15_000 });
 
-    await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=parrain`);
+    await expect(page.getByTestId('parrain-part-a-definir')).toBeHidden();
+    await expect(
+        page.getByTestId('parrain-definir-part-onglet-btn'),
+    ).toHaveText(/modifier la part du parrain/i);
     await expect(
         page
             .getByTestId('parrain-remuneration')
@@ -353,4 +398,130 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     expect(livreurs).toHaveLength(2);
     expect(livreurs.reduce((t, x) => t + x.montant_net, 0)).toBe(138_000);
     expect(livreurs.every((x) => x.montant_paye === 0)).toBe(true);
+});
+
+test('un seul livreur et un parrain : la part saisie calcule l’autre, dans les deux sens', async ({
+    page,
+}) => {
+    test.setTimeout(180_000);
+    await page.context().clearCookies();
+    await page.goto('/login');
+    const f = await post<Fixture>(page, '/e2e/fixtures/parrain-commission', {
+        livreurs: 1,
+    });
+    const nomParrain = `E2E Parrain ${randomDigits(6)}`;
+
+    await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=parrain`);
+    await page.getByTestId('ajouter-parrain-btn').click();
+    await page
+        .getByTestId('parrain-recherche-telephone-input')
+        .fill(`6${randomDigits(8)}`);
+    await page.getByTestId('parrain-rechercher-btn').click();
+    await page.getByTestId('parrain-creer-personne-btn').click();
+    await page.getByTestId('parrain-creation-nom-input').fill(nomParrain);
+    await page.getByTestId('parrain-creer-et-associer-btn').click();
+
+    // « Définir sa part maintenant » ouvre directement la grille.
+    await page.getByTestId('parrain-definir-part-btn').click();
+    const grille = page.getByTestId('part-parrain-dialog');
+    const carte = grille.getByTestId('part-parrain-vente');
+    await expect(carte.getByTestId('partage-calcul-auto')).toBeVisible();
+    const livreur = carte.locator('[data-testid^="partage-livreur-montant-"]');
+    const parrain = carte.getByTestId('partage-parrain-montant');
+
+    // Part du parrain saisie → part du livreur calculée (1 000 − 200).
+    await saisirMontant(parrain, 200);
+    await expect(livreur.locator('input')).toHaveValue('800');
+    await expect(carte.getByTestId('partage-livreur-calcule')).toBeVisible();
+    await expect(carte.getByTestId('partage-livreur-etat')).toContainText(
+        /équilibrée/i,
+    );
+
+    // Part du livreur saisie → part du parrain calculée (1 000 − 900).
+    await saisirMontant(livreur, 900);
+    await expect(parrain.locator('input')).toHaveValue('100');
+    await expect(carte.getByTestId('partage-parrain-calcule')).toBeVisible();
+
+    // Au-delà du barème : ramenée au barème, avec un message explicite.
+    await saisirMontant(parrain, 1500);
+    await expect(carte.getByTestId('partage-alerte-limite')).toContainText(
+        /ne peut pas dépasser.*ramenée/i,
+    );
+    await expect(livreur.locator('input')).toHaveValue('');
+    await saisirMontant(parrain, 100);
+    await expect(livreur.locator('input')).toHaveValue('900');
+
+    // La Distribution reste à 0 : la confirmation explicite reste exigée.
+    await expect(
+        page.getByTestId('part-parrain-enregistrer-btn'),
+    ).toBeDisabled();
+    await grille
+        .getByTestId('part-parrain-confirmer-nulle')
+        .getByRole('checkbox')
+        .click();
+    await page.getByTestId('part-parrain-enregistrer-btn').click();
+    await expect(grille).toBeHidden({ timeout: 15_000 });
+
+    await expect(
+        page
+            .getByTestId('parrain-remuneration')
+            .locator('tr', { hasText: 'Vente' }),
+    ).toContainText('100');
+
+    // Même calcul dans la modale Équipe, dès la frappe (sans sortir du champ).
+    await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=equipe`);
+    await page
+        .getByRole('button', { name: /gérer l'équipe/i })
+        .first()
+        .click();
+    const modale = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+    await modale.getByRole('button', { name: /suivant/i }).click();
+    const carteEquipe = modale
+        .getByTestId(`partage-categorie-${f.categorie.id}`)
+        .first();
+    await expect(carteEquipe.getByTestId('partage-calcul-auto')).toBeVisible();
+    const champLivreur = carteEquipe
+        .locator('[data-testid^="partage-livreur-montant-"]')
+        .locator('input');
+    const champParrain = carteEquipe
+        .getByTestId('partage-parrain-montant')
+        .locator('input');
+    const etatEquipe = carteEquipe.getByTestId('partage-livreur-etat');
+    const taper = async (champ: Locator, valeur: string) => {
+        await champ.click();
+        await champ.press('Control+A');
+        await champ.press('Backspace');
+        await champ.pressSequentially(valeur);
+    };
+
+    await taper(champParrain, '250');
+    await expect(champLivreur).toHaveValue('750');
+    await expect(etatEquipe).toContainText(/équilibrée/i);
+    await carteEquipe.screenshot({
+        path: test.info().outputPath('equipe-parrain-saisi.png'),
+    });
+
+    await taper(champLivreur, '400');
+    await expect(champParrain).toHaveValue('600');
+    await expect(etatEquipe).toContainText(/équilibrée/i);
+    await carteEquipe.screenshot({
+        path: test.info().outputPath('equipe-livreur-saisi.png'),
+    });
+
+    // Limites : tout le barème au parrain, puis tout au livreur (part du parrain 0).
+    await taper(champParrain, '1000');
+    await expect(champLivreur).toHaveValue('');
+    await expect(etatEquipe).toContainText(/équilibrée/i);
+    await taper(champLivreur, '1000');
+    await expect(champParrain).toHaveValue('0');
+    await expect(etatEquipe).toContainText(/équilibrée/i);
+    // Part du parrain calculée à 0 : la confirmation explicite reste demandée, non cochée.
+    const confirmationZero = modale.getByTestId(
+        `confirmer-part-parrain-nulle-${f.categorie.id}`,
+    );
+    await expect(confirmationZero).toBeVisible();
+    await expect(confirmationZero.getByRole('checkbox')).not.toBeChecked();
+    await page.keyboard.press('Escape');
 });

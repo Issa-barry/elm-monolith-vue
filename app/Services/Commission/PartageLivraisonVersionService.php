@@ -2,10 +2,13 @@
 
 namespace App\Services\Commission;
 
+use App\Models\Categorie;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -36,6 +39,8 @@ class PartageLivraisonVersionService
         array $montantsParLivreur,
         CarbonInterface $dateEffet,
         ?int $montantParrain = null,
+        bool $confirmerPartParrainNulle = false,
+        bool $remplacerPlanification = false,
     ): void {
         $parrainId = self::parrainRemunereId($equipeId, $processusId);
 
@@ -53,10 +58,60 @@ class PartageLivraisonVersionService
 
         $date = $dateEffet->toDateString();
 
-        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+        // PARRAIN-023 : une répartition planifiée (date de début future) n'est jamais écrasée en
+        // silence — seule la grille de la part du parrain peut la remplacer, explicitement.
+        $planifiee = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
             ->where('processus_id', $processusId)
             ->where('categorie_id', $categorieId)
-            ->whereNull('effective_to')
+            ->whereDate('effective_from', '>', Carbon::today()->toDateString())
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereColumn('effective_to', '>', 'effective_from'))
+            ->min('effective_from');
+        if ($planifiee !== null && ! $remplacerPlanification) {
+            throw ValidationException::withMessages([
+                'partages' => sprintf(
+                    'Une répartition planifiée prend effet le %s pour la catégorie %s : modifiez-la depuis l\'onglet Parrain du véhicule (date de début des droits) avant de changer l\'équipe ou sa répartition.',
+                    Carbon::parse($planifiee)->format('d/m/Y'),
+                    Categorie::whereKey($categorieId)->value('nom') ?? $categorieId,
+                ),
+            ]);
+        }
+
+        $confirmeeAt = $parrainId !== null
+            ? self::confirmationPartParrain($equipeId, $processusId, $categorieId, $parrainId, (int) $montantParrain, $confirmerPartParrainNulle)
+            : null;
+
+        $versions = fn () => EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processusId)
+            ->where('categorie_id', $categorieId);
+
+        if ($planifiee !== null) {
+            // Remplacement explicite d'une planification : toute version future est neutralisée et
+            // la version en vigueur aujourd'hui, que la planification bornait, est prolongée —
+            // jamais de période sans répartition entre aujourd'hui et la nouvelle date d'effet.
+            $aujourdhui = Carbon::today()->toDateString();
+            $versions()
+                ->whereDate('effective_from', '>', $aujourdhui)
+                ->where(fn ($q) => $q->whereNull('effective_to')->orWhereColumn('effective_to', '>', 'effective_from'))
+                ->update(['effective_to' => DB::raw('effective_from')]);
+            $versions()
+                ->whereDate('effective_from', '<=', $aujourdhui)
+                ->whereNotNull('effective_to')
+                ->whereDate('effective_to', '>', $aujourdhui)
+                ->update(['effective_to' => null]);
+        }
+
+        // Date d'effet antérieure à des versions existantes (PARRAIN-023, droits du parrain
+        // antidatés) : ces versions sont neutralisées — bornées à leur propre début, jamais
+        // supprimées (historique conservé). Sans effet pour une date d'effet du jour.
+        $versions()
+            ->whereDate('effective_from', '>', $date)
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereColumn('effective_to', '>', 'effective_from'))
+            ->update(['effective_to' => DB::raw('effective_from')]);
+
+        // Version en cours à la date d'effet : bornée à cette date.
+        $versions()
+            ->whereDate('effective_from', '<=', $date)
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>', $date))
             ->update(['effective_to' => $date]);
 
         $lignes = collect($montantsParLivreur)->map(fn ($montant, $livreurId) => ['livreur_id' => $livreurId, 'montant' => $montant]);
@@ -73,6 +128,7 @@ class PartageLivraisonVersionService
                 'parrain_id' => $ligne['parrain_id'] ?? null,
                 'part_pourcentage' => 0,
                 'montant_unitaire' => (int) $ligne['montant'],
+                'part_parrain_confirmee_at' => isset($ligne['parrain_id']) ? $confirmeeAt : null,
                 'effective_from' => $date,
                 'effective_to' => null,
             ]);
@@ -80,6 +136,31 @@ class PartageLivraisonVersionService
     }
 
     /** Parrain du véhicule de l'équipe si ce processus le rémunère, null sinon. */
+    /**
+     * PARRAIN-022 — date de décision de la part du parrain dans la nouvelle version : une part
+     * positive vaut décision ; une part nulle n'est confirmée que sur demande explicite d'une
+     * personne, ou reprise telle quelle si la version remplacée portait déjà une part nulle
+     * confirmée pour CE parrain (modifier l'équipe ne redemande pas une décision déjà prise). Un
+     * nouveau parrain, ou une ligne créée par le système, reste donc « à répartir ».
+     */
+    private static function confirmationPartParrain(string $equipeId, string $processusId, string $categorieId, string $parrainId, int $montant, bool $confirmer): ?Carbon
+    {
+        if ($montant > 0 || $confirmer) {
+            return Carbon::now();
+        }
+
+        $precedente = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processusId)
+            ->where('categorie_id', $categorieId)
+            ->where('parrain_id', $parrainId)
+            ->whereNull('effective_to')
+            ->first();
+
+        return $precedente && (int) $precedente->montant_unitaire === 0
+            ? $precedente->part_parrain_confirmee_at
+            : null;
+    }
+
     public static function parrainRemunereId(string $equipeId, string $processusId): ?string
     {
         $code = CommissionProcessus::whereKey($processusId)->value('code');

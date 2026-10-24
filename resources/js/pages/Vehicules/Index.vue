@@ -76,6 +76,8 @@ interface Vehicule {
     usage_label: string;
     /** processus_code → fait | a_faire | non_requis | sans_equipe | non_applicable */
     partages_commission: Record<string, string>;
+    /** Part du parrain (PARRAIN-021) : rappel, jamais bloquant ; null sans parrain. */
+    parrain_part: 'a_definir' | 'definie' | null;
 }
 
 const props = defineProps<{
@@ -110,9 +112,15 @@ const PARTAGE_PROCESSUS: Array<{ code: string; label: string }> = [
     { code: 'distribution_client', label: 'Distribution' },
 ];
 
+const PART_PARRAIN_LABEL: Record<string, string> = {
+    a_definir: 'À définir',
+    definie: 'Définie',
+};
+
 const PARTAGE_LABEL: Record<string, string> = {
     fait: 'Fait',
     a_faire: 'À faire',
+    a_repartir: 'À répartir',
     sans_equipe: 'Sans équipe',
     non_requis: 'Non requis',
 };
@@ -175,6 +183,15 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'a_faire', label: 'Au moins un partage à faire' },
             { value: 'fait', label: 'Tous les partages faits' },
+        ],
+    },
+    {
+        key: 'parrain_part',
+        label: 'Part du parrain',
+        type: 'select',
+        options: [
+            { value: 'a_definir', label: 'Part du parrain à définir' },
+            { value: 'definie', label: 'Part du parrain définie' },
         ],
     },
 ]);
@@ -776,7 +793,10 @@ function confirmDelete(v: Vehicule) {
                     <Column header="Partages" style="width: 170px">
                         <template #body="{ data }">
                             <div
-                                v-if="partagesAffiches(data).length"
+                                v-if="
+                                    partagesAffiches(data).length ||
+                                    data.parrain_part
+                                "
                                 class="flex flex-col gap-1"
                                 :data-testid="`partages-${data.id}`"
                             >
@@ -791,6 +811,24 @@ function confirmDelete(v: Vehicule) {
                                     <StatusDot
                                         :status="p.statut"
                                         :label="PARTAGE_LABEL[p.statut]"
+                                        size="sm"
+                                    />
+                                </div>
+                                <div
+                                    v-if="data.parrain_part"
+                                    class="flex items-center justify-between gap-2 border-t pt-1 text-xs"
+                                    :data-testid="`part-parrain-${data.id}`"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Parrain</span
+                                    >
+                                    <StatusDot
+                                        :status="data.parrain_part"
+                                        :label="
+                                            PART_PARRAIN_LABEL[
+                                                data.parrain_part
+                                            ]
+                                        "
                                         size="sm"
                                     />
                                 </div>

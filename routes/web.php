@@ -235,7 +235,9 @@ use App\Http\Controllers\UserInvitation\ForceDestroyUserInvitationController;
 use App\Http\Controllers\UserInvitation\ResendUserInvitationController;
 use App\Http\Controllers\UserInvitation\StoreUserInvitationController;
 use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\Vehicules\Parrain\DefinirPartParrainController;
 use App\Http\Controllers\Vehicules\Parrain\DestroyParrainController;
+use App\Http\Controllers\Vehicules\Parrain\PartParrainController;
 use App\Http\Controllers\Vehicules\Parrain\RechercherTelephoneParrainController;
 use App\Http\Controllers\Vehicules\Parrain\RepartitionsParrainController;
 use App\Http\Controllers\Vehicules\Parrain\StoreParrainController;
@@ -593,6 +595,8 @@ Route::prefix('backoffice')->group(function () {
             // permissions que le véhicule (vehicules.update), pas de permission dédiée.
             Route::get('vehicules/{vehicule}/parrain/rechercher', RechercherTelephoneParrainController::class)->name('vehicules.parrain.rechercher');
             Route::get('vehicules/{vehicule}/parrain/repartitions', RepartitionsParrainController::class)->name('vehicules.parrain.repartitions');
+            Route::get('vehicules/{vehicule}/parrain/part', PartParrainController::class)->name('vehicules.parrain.part');
+            Route::put('vehicules/{vehicule}/parrain/part', DefinirPartParrainController::class)->name('vehicules.parrain.part.update');
             Route::post('vehicules/{vehicule}/parrain', StoreParrainController::class)->name('vehicules.parrain.store');
             Route::put('vehicules/{vehicule}/parrain', UpdateParrainController::class)->name('vehicules.parrain.update');
             Route::delete('vehicules/{vehicule}/parrain', DestroyParrainController::class)->name('vehicules.parrain.destroy');

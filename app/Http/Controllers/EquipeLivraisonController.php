@@ -681,6 +681,9 @@ class EquipeLivraisonController extends Controller
             // Part du parrain du véhicule (GNF/pack), prise sur la même enveloppe : exigée quand le
             // processus le rémunère, refusée sinon (cf. validatePartagesCategorie()).
             'partages_categorie.*.part_parrain' => 'nullable|integer|min:0',
+            // PARRAIN-022 : part du parrain laissée à 0 GNF confirmée explicitement (« aucune part
+            // pour le moment ») — sinon elle reste « à répartir ».
+            'partages_categorie.*.confirmer_part_parrain_nulle' => 'nullable|boolean',
             'partages_categorie.*.parts.*.membre_ordre' => [
                 'required', 'integer', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
@@ -1104,7 +1107,15 @@ class EquipeLivraisonController extends Controller
 
             $partParrain = isset($pc['part_parrain']) ? (int) $pc['part_parrain'] : null;
 
-            PartageLivraisonVersionService::versionner($equipeId, $processus->id, $pc['categorie_id'], $montants, $dateEffet, $partParrain);
+            PartageLivraisonVersionService::versionner(
+                $equipeId,
+                $processus->id,
+                $pc['categorie_id'],
+                $montants,
+                $dateEffet,
+                $partParrain,
+                confirmerPartParrainNulle: (bool) ($pc['confirmer_part_parrain_nulle'] ?? false),
+            );
         }
     }
 

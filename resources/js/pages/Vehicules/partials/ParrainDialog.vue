@@ -73,10 +73,18 @@ const props = defineProps<{
      * changement (ADR 0035).
      */
     partPositive?: boolean;
+    /** Droit de répartir les commissions de l'équipe (`equipes-livraison.update`). */
+    peutDefinirPart?: boolean;
+    /** Le véhicule a une équipe : la part du parrain peut être répartie tout de suite. */
+    aUneEquipe?: boolean;
+    /** Effet d'une part « à répartir » sur les ventes (date d'activation, PARRAIN-022). */
+    messageBlocage?: string;
 }>();
 
 const emit = defineEmits<{
     'update:visible': [boolean];
+    /** Ouvrir la grille « Définir la part du parrain » après l'association (PARRAIN-021). */
+    'definir-part': [];
 }>();
 
 const localVisible = computed({
@@ -90,8 +98,22 @@ type Step =
     | 'creation'
     | 'edition'
     | 'repartition'
-    | 'retrait';
+    | 'retrait'
+    | 'apres_ajout';
 const step = ref<Step>('telephone');
+
+// ── Après l'association : sa part est à 0 GNF, à définir (PARRAIN-021) ──
+const nomAssocie = ref('');
+
+function apresAssociation(nom: string) {
+    nomAssocie.value = nom;
+    step.value = 'apres_ajout';
+}
+
+function definirPartMaintenant() {
+    close();
+    emit('definir-part');
+}
 
 // ── Nouvelle répartition (changement ou retrait d'un parrain qui a une part) ──
 
@@ -380,6 +402,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 }
 
 const dialogHeader = computed(() => {
+    if (step.value === 'apres_ajout') return 'Parrain associé';
     if (step.value === 'repartition') return 'Nouvelle répartition';
     if (step.value === 'retrait') return 'Retirer le parrain';
     if (step.value === 'edition') return 'Modifier le parrain';
@@ -491,10 +514,13 @@ function utiliserPersonneTrouvee() {
         void ouvrirRepartition('resultat');
         return;
     }
+    const nom = personneTrouvee.value.nom_complet;
     associerForm.personne_id = personneTrouvee.value.id;
     associerForm.post(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
         preserveScroll: true,
-        onSuccess: () => close(),
+        // La fenêtre reste ouverte sur l'étape « Parrain associé » après le rechargement.
+        preserveState: true,
+        onSuccess: () => apresAssociation(nom),
     });
 }
 
@@ -503,9 +529,12 @@ function submitCreation() {
         void ouvrirRepartition('creation');
         return;
     }
+    const nom = creationForm.nom_complet.trim();
     creationForm.post(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
         preserveScroll: true,
-        onSuccess: () => close(),
+        // La fenêtre reste ouverte sur l'étape « Parrain associé » après le rechargement.
+        preserveState: true,
+        onSuccess: () => apresAssociation(nom),
     });
 }
 
@@ -536,6 +565,7 @@ function onHide() {
     repartitions.value = {};
     erreurRepartition.value = null;
     origineRepartition.value = null;
+    nomAssocie.value = '';
 }
 </script>
 
@@ -917,6 +947,37 @@ function onHide() {
             </p>
         </div>
 
+        <!-- Après l'association : sa part est à 0 GNF, à définir (PARRAIN-021) -->
+        <div
+            v-else-if="step === 'apres_ajout'"
+            class="space-y-3"
+            data-testid="parrain-apres-ajout"
+        >
+            <p class="text-sm">
+                <span class="font-semibold">{{ nomAssocie }}</span> est associé
+                au véhicule.
+            </p>
+            <div
+                class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+            >
+                Sa part des commissions est de
+                <span class="font-semibold">0 GNF</span> pour l'instant : il ne
+                reçoit rien tant qu'elle n'est pas répartie.
+                {{ messageBlocage }}
+            </div>
+            <p v-if="!aUneEquipe" class="text-xs text-muted-foreground">
+                Le véhicule n'a pas encore d'équipe : sa part se définira une
+                fois l'équipe configurée.
+            </p>
+            <p
+                v-else-if="!peutDefinirPart"
+                class="text-xs text-muted-foreground"
+            >
+                Un responsable des équipes de livraison doit définir sa part
+                (onglet Parrain).
+            </p>
+        </div>
+
         <!-- Retrait d'un parrain sans part : simple confirmation -->
         <div v-else-if="step === 'retrait'" class="space-y-3">
             <p class="text-sm">
@@ -941,6 +1002,26 @@ function onHide() {
 
         <template #footer>
             <div class="flex justify-end gap-2">
+                <template v-if="step === 'apres_ajout'">
+                    <Button
+                        variant="outline"
+                        data-testid="parrain-part-plus-tard-btn"
+                        @click="close"
+                        >{{
+                            peutDefinirPart && aUneEquipe
+                                ? 'Plus tard'
+                                : 'Fermer'
+                        }}</Button
+                    >
+                    <Button
+                        v-if="peutDefinirPart && aUneEquipe"
+                        data-testid="parrain-definir-part-btn"
+                        @click="definirPartMaintenant"
+                    >
+                        Définir sa part maintenant
+                    </Button>
+                </template>
+
                 <template v-if="step === 'repartition'">
                     <Button
                         v-if="origineRepartition"
