@@ -320,6 +320,29 @@ class CommandeVenteIndexFilterTest extends TestCase
         $this->assertIndexReturnsOnly($match, ['client_nom' => 'Diallo']);
     }
 
+    public function test_filtre_client_cherche_le_nom_complet_saisi(): void
+    {
+        $c1 = Client::factory()->create(['organization_id' => $this->org->id, 'nom' => null, 'prenom' => null, 'nom_complet' => 'Mariama Soumah']);
+        $c2 = Client::factory()->create(['organization_id' => $this->org->id, 'nom' => null, 'prenom' => null, 'nom_complet' => 'Kadiatou Keita']);
+
+        $match = $this->makeCommande(['client_id' => $c1->id]);
+        $this->makeCommande(['client_id' => $c2->id]);
+
+        $this->assertIndexReturnsOnly($match, ['client' => 'Mariama Sou']);
+        $this->assertIndexReturnsOnly($match, ['client_nom' => 'Soumah']);
+    }
+
+    public function test_filtre_client_cherche_aussi_le_telephone(): void
+    {
+        $c1 = Client::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224664555666']);
+        $c2 = Client::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224664777888']);
+
+        $match = $this->makeCommande(['client_id' => $c1->id]);
+        $this->makeCommande(['client_id' => $c2->id]);
+
+        $this->assertIndexReturnsOnly($match, ['client' => '555666']);
+    }
+
     public function test_filter_by_client_telephone(): void
     {
         $c1 = Client::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224664111222']);

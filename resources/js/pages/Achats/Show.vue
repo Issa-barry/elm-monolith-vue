@@ -10,7 +10,7 @@ import {
     AlertTriangle,
     ArrowLeft,
     CheckCircle2,
-    Download,
+    Eye,
     FileText,
     HandCoins,
     Info,
@@ -322,15 +322,17 @@ function supprimer() {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <a
-                        :href="`/backoffice/achats/${commande.id}/pdf`"
-                        target="_blank"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Download class="mr-2 h-4 w-4" />
-                            PDF
-                        </Button>
-                    </a>
+                    <Button as-child variant="outline" size="sm">
+                        <a
+                            :href="`/backoffice/achats/${commande.id}/pdf?preview=1`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Voir le bon de commande dans un nouvel onglet"
+                        >
+                            <Eye class="mr-2 h-4 w-4" />
+                            Voir le bon de commande
+                        </a>
+                    </Button>
                     <Link
                         v-if="actions.peut_modifier"
                         :href="`/backoffice/achats/${commande.id}/edit`"

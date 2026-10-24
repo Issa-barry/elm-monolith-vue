@@ -40,6 +40,9 @@ use InvalidArgumentException;
  */
 class EquipeLivraisonController extends Controller
 {
+    /** Clé du parrain parmi les membres d'un partage soumis (les livreurs y sont désignés par leur ordre ou leur id). */
+    private const CLE_PARRAIN = 'parrain';
+
     public function index(): InertiaResponse
     {
         $this->authorize('viewAny', EquipeLivraison::class);
@@ -71,7 +74,7 @@ class EquipeLivraisonController extends Controller
         $this->validatePartagesCategorie(
             $data['partages_categorie'] ?? [],
             $orgId,
-            $vehiculeSelectionne?->type_vehicule_id,
+            $vehiculeSelectionne,
             $data['processus_code'],
             $this->membresRequisDepuisPayload($data['membres'], $orgId),
         );
@@ -137,7 +140,7 @@ class EquipeLivraisonController extends Controller
         $this->validatePartagesCategorie(
             $data['partages_categorie'] ?? [],
             $orgId,
-            $vehiculeSelectionne?->type_vehicule_id,
+            $vehiculeSelectionne,
             $data['processus_code'],
             $this->membresRequisDepuisPayload($data['membres'], $orgId),
         );
@@ -241,9 +244,7 @@ class EquipeLivraisonController extends Controller
         $vehiculeDepart = $equipeDepart->vehicule;
         $seraDissoute = EquipeLivreur::where('equipe_id', $equipeDepart->id)->count() <= 1;
 
-        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
-            $vehiculeDepart, CommissionRegleController::processusCodesDisponibles(),
-        );
+        $codesApplicables = CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehiculeDepart);
 
         return response()->json([
             'livreur' => [
@@ -300,9 +301,7 @@ class EquipeLivraisonController extends Controller
 
         $this->authorize('update', $equipeArrivee);
 
-        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
-            $vehicule, CommissionRegleController::processusCodesDisponibles(),
-        );
+        $codesApplicables = CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehicule);
 
         return response()->json([
             'nouvelle_equipe' => false,
@@ -321,7 +320,7 @@ class EquipeLivraisonController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_unless($livreur->organization_id === $orgId, 404);
 
-        $codesDisponibles = CommissionRegleController::processusCodesDisponibles();
+        $codesDisponibles = CommissionProcessusDefaults::codesPartageEquipe();
 
         $data = $request->validate([
             'nouveau_vehicule_id' => [
@@ -339,6 +338,7 @@ class EquipeLivraisonController extends Controller
             'partages_depart.*.parts' => 'required|array|min:1',
             'partages_depart.*.parts.*.livreur_id' => ['required', 'string'],
             'partages_depart.*.parts.*.montant_unitaire' => 'required|integer|min:0',
+            'partages_depart.*.part_parrain' => 'nullable|integer|min:0',
             'partages_arrivee' => 'nullable|array',
             'partages_arrivee.*.processus_code' => ['required', Rule::in($codesDisponibles)],
             'partages_arrivee.*.categorie_id' => [
@@ -348,6 +348,7 @@ class EquipeLivraisonController extends Controller
             'partages_arrivee.*.parts' => 'required|array|min:1',
             'partages_arrivee.*.parts.*.livreur_id' => ['required', 'string'],
             'partages_arrivee.*.parts.*.montant_unitaire' => 'required|integer|min:0',
+            'partages_arrivee.*.part_parrain' => 'nullable|integer|min:0',
         ], [
             'nouveau_vehicule_id.required' => 'Le véhicule cible est obligatoire.',
             'nouveau_vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
@@ -389,7 +390,7 @@ class EquipeLivraisonController extends Controller
             $this->validatePartagesCategorie(
                 $this->normaliserPartagesPourSync($partages),
                 $orgId,
-                $equipeDepart->vehicule->type_vehicule_id,
+                $equipeDepart->vehicule,
                 $processusCode,
                 $this->membresRequisTransfert($equipeDepart, $livreur, null),
             );
@@ -400,7 +401,7 @@ class EquipeLivraisonController extends Controller
             $this->validatePartagesCategorie(
                 $this->normaliserPartagesPourSync($partages),
                 $orgId,
-                $vehiculeCible->type_vehicule_id,
+                $vehiculeCible,
                 $processusCode,
                 $this->membresRequisTransfert($equipeArriveeExistante, null, $livreur),
             );
@@ -535,15 +536,19 @@ class EquipeLivraisonController extends Controller
             }
 
             $categories = Categorie::whereIn('id', $categorieIds)->get()->keyBy('id');
+            // Distribution : barème Logistique (COMM-005), partage propre au véhicule parrainé.
+            $processusBareme = CommissionProcessusDefaults::processusResolutionBareme($processus);
+            $parrain = CommissionPartageLivraisonCategorieChecker::parrainRemunere($equipe, $code);
 
             $result[] = [
                 'processus_code' => $code,
                 'processus_label' => CommissionRegleController::processusLabel($code),
+                'parrain' => $parrain ? ['id' => $parrain->id, 'nom_complet' => $parrain->nom_complet] : null,
                 'categories' => $categorieIds->map(fn (string $categorieId) => [
                     'categorie_id' => $categorieId,
                     'categorie_nom' => $categories->get($categorieId)?->nom,
                     'enveloppe' => CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
-                        $orgId, $processus->id, $categorieId, $typeVehiculeId, now(),
+                        $orgId, $processusBareme->id, $categorieId, $typeVehiculeId, now(),
                     ),
                 ])->values()->all(),
             ];
@@ -568,6 +573,7 @@ class EquipeLivraisonController extends Controller
                 'membre_ordre' => $p['livreur_id'],
                 'montant_unitaire' => $p['montant_unitaire'],
             ])->all(),
+            'part_parrain' => $pc['part_parrain'] ?? null,
         ])->values()->all();
     }
 
@@ -595,15 +601,15 @@ class EquipeLivraisonController extends Controller
         // la liste complète reste la whitelist : l'erreur pertinente remonte via la règle
         // vehicule_id ci-dessous, jamais un faux positif sur processus_code.
         $codesApplicables = $vehiculeSelectionne
-            ? CommissionProcessusDefaults::codesApplicablesPourVehicule($vehiculeSelectionne, CommissionRegleController::processusCodesDisponibles())
-            : CommissionRegleController::processusCodesDisponibles();
+            ? CommissionProcessusDefaults::codesPartageEquipePourVehicule($vehiculeSelectionne)
+            : CommissionProcessusDefaults::codesPartageEquipe();
 
         return [
-            // Détermine quel partage (vente / logistique_transfert / transfert_grossiste, cf.
-            // CommissionRegleController::processusCodesDisponibles() — distribution_client n'est
-            // plus un processus configurable depuis le 01/09/2026) cette soumission remplace —
-            // jamais un fallback implicite vers vente. Chaque processus a ses propres montants
-            // fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
+            // Détermine quel partage (vente / logistique_transfert / transfert_grossiste, plus
+            // distribution_client pour un véhicule parrainé à usage Logistique — cf.
+            // CommissionProcessusDefaults::codesPartageEquipePourVehicule()) cette soumission
+            // remplace — jamais un fallback implicite vers vente. Chaque processus a ses propres
+            // montants fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
             'processus_code' => ['required', Rule::in($codesApplicables)],
             'vehicule_id' => [
                 'required', 'string',
@@ -672,6 +678,9 @@ class EquipeLivraisonController extends Controller
             ],
             'partages_categorie.*.parts' => 'required|array|min:1',
             'partages_categorie.*.parts.*.montant_unitaire' => 'required|integer|min:0',
+            // Part du parrain du véhicule (GNF/pack), prise sur la même enveloppe : exigée quand le
+            // processus le rémunère, refusée sinon (cf. validatePartagesCategorie()).
+            'partages_categorie.*.part_parrain' => 'nullable|integer|min:0',
             'partages_categorie.*.parts.*.membre_ordre' => [
                 'required', 'integer', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
@@ -911,7 +920,7 @@ class EquipeLivraisonController extends Controller
     private function validatePartagesCategorie(
         array $partagesCategorie,
         string $orgId,
-        ?string $typeVehiculeId,
+        ?Vehicule $vehicule,
         string $processusCode = CommissionProcessus::CODE_VENTE,
         array $membresRequis = [],
     ): void {
@@ -922,15 +931,38 @@ class EquipeLivraisonController extends Controller
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->where('code', $processusCode)
             ->first();
+        // Distribution : barème Logistique tant qu'elle n'a pas le sien (COMM-005).
+        $processusBareme = $processus
+            ? CommissionProcessusDefaults::processusResolutionBareme($processus)
+            : ($processusCode === CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+                ? CommissionProcessus::where('organization_id', $orgId)->where('code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)->first()
+                : null);
+
+        // Le parrain du véhicule est un membre de plus quand ce processus le rémunère : sa part
+        // (0 GNF accepté) est exigée, jamais déduite — et refusée partout ailleurs.
+        $parrain = $vehicule && CommissionProcessusDefaults::remunereLeParrain($processusCode) ? $vehicule->parrain : null;
+        if ($parrain) {
+            $membresRequis[self::CLE_PARRAIN] = 'Parrain — '.$parrain->nom_complet;
+        }
 
         $categories = Categorie::whereIn('id', collect($partagesCategorie)->pluck('categorie_id'))->pluck('nom', 'id');
 
         foreach ($partagesCategorie as $pc) {
+            $partParrain = $pc['part_parrain'] ?? null;
+            $categorie = $categories->get($pc['categorie_id'], 'catégorie');
+
+            if (! $parrain && $partParrain !== null) {
+                abort(422, "{$categorie} : aucune part de parrain n'est possible ici — le véhicule n'a pas de parrain, ou ce processus ne le rémunère pas.");
+            }
+            if ($parrain && $partParrain === null) {
+                abort(422, "{$categorie} : la part du parrain {$parrain->nom_complet} doit être renseignée (0 GNF accepté).");
+            }
+
             $enveloppe = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
                 $orgId,
-                $processus?->id,
+                $processusBareme?->id,
                 $pc['categorie_id'],
-                $typeVehiculeId,
+                $vehicule?->type_vehicule_id,
                 now(),
             );
 
@@ -938,6 +970,9 @@ class EquipeLivraisonController extends Controller
                 'beneficiaire_id' => $p['membre_ordre'],
                 'montant_unitaire' => $p['montant_unitaire'] ?? null,
             ]);
+            if ($parrain && $partParrain !== null) {
+                $membres->push((object) ['beneficiaire_id' => self::CLE_PARRAIN, 'montant_unitaire' => $partParrain]);
+            }
 
             try {
                 CommissionPartageLivraisonValidator::valider($membres, $enveloppe, array_map('strval', array_keys($membresRequis)));
@@ -1031,6 +1066,9 @@ class EquipeLivraisonController extends Controller
     ): void {
         $maintenant = now()->startOfDay();
         $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
+        // Barème lu pour la date d'effet (distribution : celui de Logistique, COMM-005) ; les lignes
+        // de partage restent celles du processus soumis.
+        $processusBareme = CommissionProcessusDefaults::processusResolutionBareme($processus);
 
         // Scopée par processus : sans ce filtre, enregistrer le partage Vente fermerait aussi
         // silencieusement les partages Distribution/Transfert logistique de la même équipe.
@@ -1052,7 +1090,7 @@ class EquipeLivraisonController extends Controller
         foreach ($partagesCategorie as $pc) {
             $dateEffet = CommissionPartageLivraisonCategorieChecker::dateEffetNouvelleVersion(
                 $orgId,
-                $processus->id,
+                $processusBareme->id,
                 $pc['categorie_id'],
                 $typeVehiculeId,
                 $versionsActives->get($pc['categorie_id'], collect()),
@@ -1064,7 +1102,9 @@ class EquipeLivraisonController extends Controller
                 $montants[$livreurIdParOrdre[$p['membre_ordre']]] = (int) $p['montant_unitaire'];
             }
 
-            PartageLivraisonVersionService::versionner($equipeId, $processus->id, $pc['categorie_id'], $montants, $dateEffet);
+            $partParrain = isset($pc['part_parrain']) ? (int) $pc['part_parrain'] : null;
+
+            PartageLivraisonVersionService::versionner($equipeId, $processus->id, $pc['categorie_id'], $montants, $dateEffet, $partParrain);
         }
     }
 

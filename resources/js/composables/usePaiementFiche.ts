@@ -10,6 +10,7 @@ const TITRES: Record<string, string> = {
     proprietaire: 'Payer une commission propriétaire',
     site: 'Payer une commission site',
     prestataire: 'Payer une commission consultant',
+    parrain: 'Payer une commission parrain',
 };
 
 /**

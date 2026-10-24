@@ -35,6 +35,6 @@ class TelechargerFactureVenteController extends Controller
 
         $document = FactureVenteDocument::depuis($facture_vente, Organization::findOrFail($facture_vente->organization_id));
 
-        return DocumentPdfRenderer::reponse($document);
+        return DocumentPdfRenderer::reponse($document, $request->boolean('preview'));
     }
 }

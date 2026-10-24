@@ -4,6 +4,7 @@ namespace Tests\Feature\Documents;
 
 use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeAchat;
+use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureFournisseur;
 use App\Enums\StatutFactureVente;
 use App\Models\Client;
@@ -22,6 +23,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Support\Documents\BonCommandeAchatDocument;
+use App\Support\Documents\BonCommandeVenteDocument;
 use App\Support\Documents\CharteDocument;
 use App\Support\Documents\DocumentPdf;
 use App\Support\Documents\DocumentPdfPagination;
@@ -65,6 +67,7 @@ class ModeleDocumentPdfTest extends TestCase
             'facture_achat' => FactureAchatDocument::depuis($this->factureAchat(), $this->org),
             'bon_commande_achat' => BonCommandeAchatDocument::depuis($this->bonCommande(), $this->org),
             'facture_vente' => FactureVenteDocument::depuis($this->factureVente(), $this->org),
+            'bon_commande_vente' => BonCommandeVenteDocument::depuis($this->commandeVente(), $this->org),
         ];
     }
 
@@ -113,6 +116,7 @@ class ModeleDocumentPdfTest extends TestCase
         $this->assertStringContainsString(FactureAchatDocument::MENTION, $this->rendre($documents['facture_achat']));
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['bon_commande_achat']));
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['facture_vente']));
+        $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['bon_commande_vente']));
     }
 
     public function test_facture_d_achat_conserve_ses_donnees_et_filigranes(): void
@@ -134,7 +138,7 @@ class ModeleDocumentPdfTest extends TestCase
     {
         $bon = $this->bonCommande();
         $html = $this->rendre(BonCommandeAchatDocument::depuis($bon, $this->org));
-        foreach (['BON DE COMMANDE', 'BCA-181026-001', 'Agence de livraison : Kaloum', 'Payé par : Siège', 'LIVRER À', 'Émis par Issa Barry', 'Réf. ROUL-01', 'NON VALIDÉ', 'En attente de validation', 'Généré le'] as $attendu) {
+        foreach (['BON DE COMMANDE D’ACHAT', 'BCA-181026-001', 'Agence de livraison : Kaloum', 'Payé par : Siège', 'LIVRER À', 'Émis par Issa Barry', 'Réf. ROUL-01', 'NON VALIDÉ', 'En attente de validation', 'Généré le'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
 
@@ -177,7 +181,7 @@ class ModeleDocumentPdfTest extends TestCase
             ['cle' => 'RESTE À PAYER', 'valeur' => '275 000 GNF'],
         ], $document->totaux);
 
-        foreach (['FACTURE', 'CMD-181026-004', 'Partiellement payée', 'CLIENT', 'Mamadou Diallo', 'VÉHICULE', 'Thierno-Moto', 'Agence : Kaloum'] as $attendu) {
+        foreach (['FACTURE DE VENTE', 'CMD-181026-004', 'Partiellement payée', 'CLIENT', 'Mamadou Diallo', 'VÉHICULE', 'Thierno-Moto', 'Agence : Kaloum'] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
         $this->assertStringNotContainsString('TVA', $html);
@@ -215,6 +219,71 @@ class ModeleDocumentPdfTest extends TestCase
         $tropPercu = $this->factureVente(['montant_brut' => 400000, 'montant_net' => 400000, 'montant_rembourse' => 0], [['montant' => 450000, 'est_acompte' => true]]);
         $document = FactureVenteDocument::depuis($tropPercu, $this->org);
         $this->assertContains(['cle' => 'TROP-PERÇU À RENDRE', 'valeur' => '50 000 GNF'], $document->totaux);
+    }
+
+    public function test_bon_de_commande_de_vente_reprend_les_donnees_reelles_de_la_commande(): void
+    {
+        $commande = $this->commandeVente();
+        $document = BonCommandeVenteDocument::depuis($commande, $this->org);
+        $html = $this->rendre($document);
+
+        // Mêmes quantités et prix que la facture ; quantité commandée rappelée si elle diffère.
+        $this->assertSame(['Pack Eau 1,5 L', '90', '4 500 GNF', '405 000 GNF'], $document->lignes[0]['cellules']);
+        $this->assertSame('Quantité commandée : 100', $document->lignes[0]['detail']);
+        $this->assertSame(['Pack Eau 0,5 L', '40', '3 000 GNF', '120 000 GNF'], $document->lignes[1]['cellules']);
+        $this->assertNull($document->lignes[1]['detail']);
+        $this->assertSame([['cle' => 'TOTAL', 'valeur' => '525 000 GNF']], $document->totaux);
+        $this->assertSame([
+            ['cle' => 'DATE', 'valeur' => '18/10/2026'],
+            ['cle' => 'BON N°', 'valeur' => 'CMD-181026-004'],
+            ['cle' => 'STATUT', 'valeur' => 'Livraison en cours'],
+        ], $document->metadonnees);
+        $this->assertSame([
+            ['titre' => 'CLIENT', 'lignes' => ['Mamadou Diallo', 'Conakry', '+224 622 12 34 56']],
+            ['titre' => 'VÉHICULE', 'lignes' => ['Thierno-Moto', 'RC-1234-A']],
+        ], $document->parties);
+
+        foreach (['BON DE COMMANDE DE VENTE', 'CMD-181026-004', 'Agence : Kaloum', 'Quantité commandée : 100', 'Généré le'] as $attendu) {
+            $this->assertStringContainsString($attendu, $html);
+        }
+        $this->assertStringNotContainsString('TVA', $html);
+        $this->assertNull($document->filigrane);
+        $this->assertSame('CMD-181026-004.pdf', $document->nomFichier());
+    }
+
+    public function test_bon_de_commande_de_vente_statut_affiche_et_filigranes(): void
+    {
+        $commande = $this->commandeVente(['statut' => StatutCommandeVente::FACTURATION]);
+        $commande->setRelation('facture', (new FactureVente)->forceFill(['statut_facture' => StatutFactureVente::PAYEE]));
+        $this->assertContains(['cle' => 'STATUT', 'valeur' => 'Commissions à verser'], BonCommandeVenteDocument::depuis($commande, $this->org)->metadonnees);
+
+        $attendus = [
+            'brouillon' => 'BROUILLON', 'annulee' => 'ANNULÉE', 'annulee_erreur_saisie' => 'ANNULÉE',
+            'retournee' => 'RETOURNÉE', 'cloturee' => null, 'a_charger' => null,
+        ];
+        foreach ($attendus as $statut => $filigrane) {
+            $document = BonCommandeVenteDocument::depuis($this->commandeVente(['statut' => StatutCommandeVente::from($statut)]), $this->org);
+            $this->assertSame($filigrane, $document->filigrane, $statut);
+        }
+        $this->assertStringContainsString('RETOURNÉE', $this->rendre(BonCommandeVenteDocument::depuis($this->commandeVente(['statut' => StatutCommandeVente::RETOURNEE]), $this->org)));
+    }
+
+    public function test_bon_de_commande_de_vente_precommande_et_sans_client_ni_vehicule(): void
+    {
+        $commande = $this->commandeVente(['statut' => StatutCommandeVente::RESERVEE, 'est_precommande' => true, 'date_remise_prevue' => '2026-10-25']);
+        $commande->setRelation('client', null);
+        $commande->setRelation('vehicule', null);
+
+        $document = BonCommandeVenteDocument::depuis($commande, $this->org);
+
+        $this->assertContains(['cle' => 'REMISE PRÉVUE', 'valeur' => '25/10/2026'], $document->metadonnees);
+        $this->assertContains(['cle' => 'STATUT', 'valeur' => 'Créée'], $document->metadonnees);
+        $this->assertSame([], $document->parties);
+        $this->assertStringNotContainsString('class="partie-titre"', $this->rendre($document));
+
+        // Une fois la marchandise remise, la date prévue n'est plus affichée.
+        $commande->statut = StatutCommandeVente::LIVREE;
+        $this->assertNotContains('REMISE PRÉVUE', array_column(BonCommandeVenteDocument::depuis($commande, $this->org)->metadonnees, 'cle'));
     }
 
     public function test_logo_par_defaut_ou_personnalise_identique_pour_tous_les_documents(): void
@@ -468,6 +537,17 @@ class ModeleDocumentPdfTest extends TestCase
         )));
 
         return $facture;
+    }
+
+    /** @param  array<string, mixed>  $attributs */
+    private function commandeVente(array $attributs = []): CommandeVente
+    {
+        $commande = $this->factureVente()->commande->forceFill(array_merge([
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS, 'total_commande' => 525000, 'created_at' => '2026-10-18 07:45:00',
+        ], $attributs));
+        $commande->setRelation('facture', null);
+
+        return $commande;
     }
 
     private function utilisateur(string $prenom, string $nom): User

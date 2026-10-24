@@ -1003,6 +1003,13 @@ class CommandeAchatTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('achats.pdf', $commande));
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', $response->headers->get('Content-Type'));
+        $this->assertStringStartsWith('attachment;', (string) $response->headers->get('content-disposition'));
+
+        $apercu = $this->actingAs($this->user)->get(route('achats.pdf', ['achat' => $commande, 'preview' => 1]));
+        $apercu->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('inline;', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringContainsString($commande->reference.'.pdf', (string) $apercu->headers->get('content-disposition'));
+        $this->assertStringStartsWith('%PDF-', $apercu->getContent());
 
         $commande->load(['fournisseur', 'lignes', 'createdBy', 'valideePar', 'organization', 'site']);
         $html = view('pdf.bon_commande_achat', ['document' => BonCommandeAchatDocument::depuis($commande, $commande->organization)])->render();

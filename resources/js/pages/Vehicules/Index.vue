@@ -106,6 +106,8 @@ const PARTAGE_PROCESSUS: Array<{ code: string; label: string }> = [
     { code: 'vente', label: 'Vente' },
     { code: 'logistique_transfert', label: 'Logistique' },
     { code: 'transfert_grossiste', label: 'Grossiste' },
+    // Seulement pour un véhicule parrainé à usage Logistique (partage propre, cf. ADR 0035).
+    { code: 'distribution_client', label: 'Distribution' },
 ];
 
 const PARTAGE_LABEL: Record<string, string> = {

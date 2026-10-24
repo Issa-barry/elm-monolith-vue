@@ -35,6 +35,8 @@ interface CategorieAPartager {
 interface PartageProcessus {
     processus_code: string;
     processus_label: string;
+    /** Parrain du véhicule rémunéré sur ce processus (sa ligne est exigée), null sinon. */
+    parrain: { id: string; nom_complet: string } | null;
     categories: CategorieAPartager[];
 }
 
@@ -134,6 +136,7 @@ async function onVehiculeCibleChange(id: string | null) {
     vehiculeCibleId.value = id;
     donneesArrivee.value = null;
     partagesArrivee.value = {};
+    partsParrainArrivee.value = {};
     if (!id) return;
 
     loadingArrivee.value = true;
@@ -166,6 +169,24 @@ const partagesDepart = ref<
 const partagesArrivee = ref<
     Record<string, Record<string, CommissionMontantFixeMembre[]>>
 >({});
+/** Part du parrain (processus → catégorie → GNF/pack), lui aussi à 0 au départ. */
+const partsParrainDepart = ref<Record<string, Record<string, number>>>({});
+const partsParrainArrivee = ref<Record<string, Record<string, number>>>({});
+
+function setPartParrain(
+    target: typeof partsParrainDepart,
+    processusCode: string,
+    categorieId: string,
+    montant: number,
+) {
+    target.value = {
+        ...target.value,
+        [processusCode]: {
+            ...target.value[processusCode],
+            [categorieId]: montant,
+        },
+    };
+}
 
 function rosterLabel(m: MembreRoster): string {
     return (
@@ -199,6 +220,7 @@ function initPartages(
 watch(
     () => donneesDepart.value,
     (val) => {
+        partsParrainDepart.value = {};
         if (val && !val.equipe_depart.sera_dissoute) {
             initPartages(
                 partagesDepart,
@@ -247,6 +269,22 @@ function updatePartDepart(
     setPart(partagesDepart, processusCode, categorieId, list);
 }
 
+function updatePartParrainDepart(
+    processusCode: string,
+    categorieId: string,
+    montant: number,
+) {
+    setPartParrain(partsParrainDepart, processusCode, categorieId, montant);
+}
+
+function updatePartParrainArrivee(
+    processusCode: string,
+    categorieId: string,
+    montant: number,
+) {
+    setPartParrain(partsParrainArrivee, processusCode, categorieId, montant);
+}
+
 function updatePartArrivee(
     processusCode: string,
     categorieId: string,
@@ -257,6 +295,7 @@ function updatePartArrivee(
 
 function sideComplete(
     target: typeof partagesDepart,
+    parrains: typeof partsParrainDepart,
     groupes: PartageProcessus[] | undefined,
 ): boolean {
     if (!groupes || groupes.length === 0) return true;
@@ -264,10 +303,12 @@ function sideComplete(
         g.categories.every((cat) => {
             const list =
                 target.value[g.processus_code]?.[cat.categorie_id] ?? [];
-            const total = list.reduce(
-                (s, p) => s + (p.montant_unitaire || 0),
-                0,
-            );
+            const total =
+                list.reduce((s, p) => s + (p.montant_unitaire || 0), 0) +
+                (g.parrain
+                    ? (parrains.value[g.processus_code]?.[cat.categorie_id] ??
+                      0)
+                    : 0);
             return total === cat.enveloppe;
         }),
     );
@@ -287,10 +328,18 @@ const arriveeAFaire = computed(
 );
 
 const departValide = computed(() =>
-    sideComplete(partagesDepart, donneesDepart.value?.equipe_depart.partages),
+    sideComplete(
+        partagesDepart,
+        partsParrainDepart,
+        donneesDepart.value?.equipe_depart.partages,
+    ),
 );
 const arriveeValide = computed(() =>
-    sideComplete(partagesArrivee, donneesArrivee.value?.partages),
+    sideComplete(
+        partagesArrivee,
+        partsParrainArrivee,
+        donneesArrivee.value?.partages,
+    ),
 );
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -334,12 +383,14 @@ const peutContinuerVehicule = computed(
 
 function flatten(
     target: Record<string, Record<string, CommissionMontantFixeMembre[]>>,
+    parrains: Record<string, Record<string, number>>,
     groupes: PartageProcessus[],
 ) {
     const out: Array<{
         processus_code: string;
         categorie_id: string;
         parts: Array<{ livreur_id: string; montant_unitaire: number }>;
+        part_parrain?: number;
     }> = [];
     for (const g of groupes) {
         for (const cat of g.categories) {
@@ -351,6 +402,13 @@ function flatten(
                     livreur_id: p.id,
                     montant_unitaire: p.montant_unitaire,
                 })),
+                ...(g.parrain
+                    ? {
+                          part_parrain:
+                              parrains[g.processus_code]?.[cat.categorie_id] ??
+                              0,
+                      }
+                    : {}),
             });
         }
     }
@@ -368,11 +426,16 @@ function submit() {
         partages_depart: departAFaire.value
             ? flatten(
                   partagesDepart.value,
+                  partsParrainDepart.value,
                   donneesDepart.value!.equipe_depart.partages,
               )
             : [],
         partages_arrivee: arriveeAFaire.value
-            ? flatten(partagesArrivee.value, donneesArrivee.value!.partages)
+            ? flatten(
+                  partagesArrivee.value,
+                  partsParrainArrivee.value,
+                  donneesArrivee.value!.partages,
+              )
             : [],
     };
 
@@ -537,12 +600,30 @@ function submit() {
                                 ] ?? []
                             "
                             :enveloppe-unitaire="cat.enveloppe"
+                            :parrain="
+                                g.parrain
+                                    ? { nom: g.parrain.nom_complet }
+                                    : null
+                            "
+                            :part-parrain="
+                                partsParrainDepart[g.processus_code]?.[
+                                    cat.categorie_id
+                                ] ?? 0
+                            "
                             @update:model-value="
                                 (list) =>
                                     updatePartDepart(
                                         g.processus_code,
                                         cat.categorie_id,
                                         list,
+                                    )
+                            "
+                            @update:part-parrain="
+                                (montant) =>
+                                    updatePartParrainDepart(
+                                        g.processus_code,
+                                        cat.categorie_id,
+                                        montant,
                                     )
                             "
                         />
@@ -589,12 +670,30 @@ function submit() {
                                 ] ?? []
                             "
                             :enveloppe-unitaire="cat.enveloppe"
+                            :parrain="
+                                g.parrain
+                                    ? { nom: g.parrain.nom_complet }
+                                    : null
+                            "
+                            :part-parrain="
+                                partsParrainArrivee[g.processus_code]?.[
+                                    cat.categorie_id
+                                ] ?? 0
+                            "
                             @update:model-value="
                                 (list) =>
                                     updatePartArrivee(
                                         g.processus_code,
                                         cat.categorie_id,
                                         list,
+                                    )
+                            "
+                            @update:part-parrain="
+                                (montant) =>
+                                    updatePartParrainArrivee(
+                                        g.processus_code,
+                                        cat.categorie_id,
+                                        montant,
                                     )
                             "
                         />

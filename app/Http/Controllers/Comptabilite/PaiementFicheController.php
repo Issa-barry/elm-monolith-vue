@@ -44,6 +44,12 @@ class PaiementFicheController extends Controller
         return $this->renderIndex($request, 'salarie');
     }
 
+    /** Fiches des parrains de véhicule (ADR 0035), payées par le mécanisme commun des fiches. */
+    public function indexParrains(Request $request): Response
+    {
+        return $this->renderIndex($request, 'parrain');
+    }
+
     private function renderIndex(Request $request, string $type): Response
     {
         $this->authorize('viewAny', PaiementFiche::class);

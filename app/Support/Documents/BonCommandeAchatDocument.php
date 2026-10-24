@@ -39,7 +39,7 @@ final class BonCommandeAchatDocument
         return new DocumentPdf(
             type: 'bon_commande_achat',
             vue: 'pdf.bon_commande_achat',
-            titre: 'BON DE COMMANDE',
+            titre: 'BON DE COMMANDE D’ACHAT',
             reference: (string) $commande->reference,
             organisation: IdentiteOrganisation::depuis($organisation),
             lignesAgence: $lignesAgence,

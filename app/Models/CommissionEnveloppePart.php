@@ -35,6 +35,12 @@ class CommissionEnveloppePart extends Model
      */
     public const TYPE_PRESTATAIRE = 'prestataire';
 
+    /**
+     * Bénéficiaire = App\Models\Parrain du véhicule : sa part est prise sur l'enveloppe de l'équipe
+     * de livraison (cf. docs/parrainage-vehicule.md), jamais une commission en plus.
+     */
+    public const TYPE_PARRAIN = 'parrain';
+
     protected $table = 'commission_enveloppe_parts';
 
     protected $fillable = [
@@ -159,6 +165,7 @@ class CommissionEnveloppePart extends Model
             self::TYPE_EMPLOYE => Employe::find($this->beneficiaire_id),
             self::TYPE_SITE => Site::find($this->beneficiaire_id),
             self::TYPE_PRESTATAIRE => Prestataire::find($this->beneficiaire_id),
+            self::TYPE_PARRAIN => Parrain::find($this->beneficiaire_id),
             default => null,
         };
     }

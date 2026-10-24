@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import CommissionMontantFixeEditor, {
+    type CommissionMontantFixeMembre,
+} from '@/components/commission/CommissionMontantFixeEditor.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { paysOptionsByCode } from '@/lib/pays';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -38,12 +41,38 @@ interface PersonneTrouvee {
     adresse: string | null;
 }
 
+/** Partage où le parrain actuel reçoit une part positive, à refaire pour le changer ou le retirer. */
+interface GroupeARepartir {
+    processus_code: string;
+    processus_label: string;
+    categorie_id: string;
+    categorie_nom: string;
+    bareme: number;
+    part_parrain_actuelle: number;
+    au_retrait: boolean;
+    membres: Array<{
+        livreur_id: string;
+        nom_complet: string | null;
+        role: string;
+        montant_actuel: number;
+    }>;
+}
+
 const props = defineProps<{
     visible: boolean;
     vehiculeId: string;
-    /** 'ajouter' couvre aussi "Changer de parrain" (nouvelle recherche) ; 'modifier' édite en place. */
-    mode: 'ajouter' | 'modifier';
+    /**
+     * 'ajouter' : premier parrain ; 'changer' : nouvelle recherche puis remplacement ;
+     * 'modifier' : identité éditée en place ; 'retirer' : retrait du parrain.
+     */
+    mode: 'ajouter' | 'changer' | 'modifier' | 'retirer';
     parrainActuel?: ParrainActuel | null;
+    /**
+     * Le parrain actuel reçoit une part des commissions : le changer ou le retirer impose
+     * de refaire la répartition complète des partages concernés, enregistrée avec le
+     * changement (ADR 0035).
+     */
+    partPositive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -55,8 +84,191 @@ const localVisible = computed({
     set: (val: boolean) => emit('update:visible', val),
 });
 
-type Step = 'telephone' | 'resultat' | 'creation' | 'edition';
+type Step =
+    | 'telephone'
+    | 'resultat'
+    | 'creation'
+    | 'edition'
+    | 'repartition'
+    | 'retrait';
 const step = ref<Step>('telephone');
+
+// ── Nouvelle répartition (changement ou retrait d'un parrain qui a une part) ──
+
+const groupes = ref<GroupeARepartir[]>([]);
+const repartitions = ref<
+    Record<
+        string,
+        { membres: CommissionMontantFixeMembre[]; partParrain: number }
+    >
+>({});
+const chargementGroupes = ref(false);
+const erreurRepartition = ref<string | null>(null);
+const enregistrement = ref(false);
+/** Étape d'où vient la répartition (pour « Retour ») et ce qu'elle enregistre. */
+const origineRepartition = ref<'resultat' | 'creation' | null>(null);
+
+const avecNouveauParrain = computed(() => props.mode !== 'retirer');
+const nomNouveauParrain = computed(() =>
+    origineRepartition.value === 'resultat'
+        ? (personneTrouvee.value?.nom_complet ?? 'Nouveau parrain')
+        : creationForm.nom_complet.trim() || 'Nouveau parrain',
+);
+const groupesAffiches = computed(() =>
+    avecNouveauParrain.value
+        ? groupes.value
+        : groupes.value.filter((g) => g.au_retrait),
+);
+
+function cleGroupe(g: GroupeARepartir): string {
+    return `${g.processus_code}|${g.categorie_id}`;
+}
+
+function libelleMembre(m: GroupeARepartir['membres'][number]): string {
+    const role = m.role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur';
+    return m.nom_complet ? `${role} — ${m.nom_complet}` : role;
+}
+
+async function chargerGroupes(): Promise<boolean> {
+    chargementGroupes.value = true;
+    erreurRepartition.value = null;
+    try {
+        const response = await fetch(
+            `/backoffice/vehicules/${props.vehiculeId}/parrain/repartitions`,
+            { headers: { Accept: 'application/json' } },
+        );
+        if (!response.ok) {
+            erreurRepartition.value =
+                'Impossible de charger la répartition des commissions.';
+            return false;
+        }
+        const body = await response.json();
+        groupes.value = body.groupes as GroupeARepartir[];
+        repartitions.value = Object.fromEntries(
+            groupes.value.map((g) => [
+                cleGroupe(g),
+                {
+                    membres: g.membres.map((m) => ({
+                        id: m.livreur_id,
+                        label: libelleMembre(m),
+                        montant_unitaire: m.montant_actuel,
+                    })),
+                    // Point de départ : la part actuelle, au nouveau parrain — à confirmer
+                    // ou modifier. Au retrait, cette part est à redistribuer à l'équipe.
+                    partParrain: g.part_parrain_actuelle,
+                },
+            ]),
+        );
+        return true;
+    } catch {
+        erreurRepartition.value =
+            'Impossible de charger la répartition des commissions.';
+        return false;
+    } finally {
+        chargementGroupes.value = false;
+    }
+}
+
+function totalGroupe(g: GroupeARepartir): number {
+    const r = repartitions.value[cleGroupe(g)];
+    if (!r) return 0;
+    return (
+        r.membres.reduce((s, m) => s + (m.montant_unitaire || 0), 0) +
+        (avecNouveauParrain.value ? r.partParrain : 0)
+    );
+}
+
+const repartitionsEquilibrees = computed(() =>
+    groupesAffiches.value.every((g) => totalGroupe(g) === g.bareme),
+);
+
+/** Au retrait : répartit le barème entre les livreurs au prorata de leurs parts. */
+function repartirAuProrata(g: GroupeARepartir) {
+    const r = repartitions.value[cleGroupe(g)];
+    if (!r || r.membres.length === 0) return;
+    const total = r.membres.reduce((s, m) => s + (m.montant_unitaire || 0), 0);
+    const parts = r.membres.map((m) =>
+        total > 0
+            ? Math.floor(((m.montant_unitaire || 0) * g.bareme) / total)
+            : Math.floor(g.bareme / r.membres.length),
+    );
+    parts[0] += g.bareme - parts.reduce((s, p) => s + p, 0);
+    r.membres = r.membres.map((m, i) => ({ ...m, montant_unitaire: parts[i] }));
+}
+
+function payloadRepartitions() {
+    return groupesAffiches.value.map((g) => {
+        const r = repartitions.value[cleGroupe(g)];
+        return {
+            processus_code: g.processus_code,
+            categorie_id: g.categorie_id,
+            parts: r.membres.map((m) => ({
+                livreur_id: m.id,
+                montant_unitaire: m.montant_unitaire || 0,
+            })),
+            ...(avecNouveauParrain.value
+                ? { part_parrain: r.partParrain }
+                : {}),
+        };
+    });
+}
+
+async function ouvrirRepartition(origine: 'resultat' | 'creation') {
+    if (await chargerGroupes()) {
+        origineRepartition.value = origine;
+        step.value = 'repartition';
+    }
+}
+
+function onErreurRepartition(errors: Record<string, string>) {
+    erreurRepartition.value =
+        errors.repartitions ??
+        errors.parrain ??
+        Object.values(errors)[0] ??
+        null;
+}
+
+function enregistrerRepartition() {
+    if (!repartitionsEquilibrees.value || enregistrement.value) return;
+
+    const options = {
+        preserveScroll: true,
+        onStart: () => (enregistrement.value = true),
+        onFinish: () => (enregistrement.value = false),
+        onSuccess: () => close(),
+        onError: onErreurRepartition,
+    };
+
+    if (props.mode === 'retirer') {
+        router.delete(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
+            ...options,
+            data: { repartitions: payloadRepartitions() },
+        });
+        return;
+    }
+
+    const identite =
+        origineRepartition.value === 'resultat' && personneTrouvee.value
+            ? { personne_id: personneTrouvee.value.id }
+            : { ...creationForm.data() };
+
+    router.post(
+        `/backoffice/vehicules/${props.vehiculeId}/parrain`,
+        { ...identite, repartitions: payloadRepartitions() },
+        options,
+    );
+}
+
+function confirmerRetrait() {
+    if (enregistrement.value) return;
+    router.delete(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
+        preserveScroll: true,
+        onStart: () => (enregistrement.value = true),
+        onFinish: () => (enregistrement.value = false),
+        onSuccess: () => close(),
+        onError: onErreurRepartition,
+    });
+}
 const searching = ref(false);
 const searchError = ref<string | null>(null);
 const personneTrouvee = ref<PersonneTrouvee | null>(null);
@@ -168,13 +380,17 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 }
 
 const dialogHeader = computed(() => {
+    if (step.value === 'repartition') return 'Nouvelle répartition';
+    if (step.value === 'retrait') return 'Retirer le parrain';
     if (step.value === 'edition') return 'Modifier le parrain';
     if (step.value === 'creation') return 'Créer une personne';
     if (step.value === 'resultat')
         return personneTrouvee.value
             ? 'Personne trouvée'
             : 'Aucune personne trouvée';
-    return 'Ajouter un parrain';
+    return props.mode === 'changer'
+        ? 'Changer de parrain'
+        : 'Ajouter un parrain';
 });
 
 watch(
@@ -183,6 +399,17 @@ watch(
         if (!visible) return;
         searchError.value = null;
         personneTrouvee.value = null;
+        erreurRepartition.value = null;
+        groupes.value = [];
+        origineRepartition.value = null;
+
+        if (props.mode === 'retirer') {
+            step.value = props.partPositive ? 'repartition' : 'retrait';
+            if (props.partPositive) {
+                void chargerGroupes();
+            }
+            return;
+        }
 
         if (props.mode === 'modifier' && props.parrainActuel) {
             const dial = digitsOnly(props.parrainActuel.code_phone_pays);
@@ -259,6 +486,11 @@ function retourRecherche() {
 
 function utiliserPersonneTrouvee() {
     if (!personneTrouvee.value) return;
+    // Remplacer un parrain qui a une part : nouvelle répartition jointe au changement.
+    if (props.mode === 'changer' && props.partPositive) {
+        void ouvrirRepartition('resultat');
+        return;
+    }
     associerForm.personne_id = personneTrouvee.value.id;
     associerForm.post(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
         preserveScroll: true,
@@ -267,6 +499,10 @@ function utiliserPersonneTrouvee() {
 }
 
 function submitCreation() {
+    if (props.mode === 'changer' && props.partPositive) {
+        void ouvrirRepartition('creation');
+        return;
+    }
     creationForm.post(`/backoffice/vehicules/${props.vehiculeId}/parrain`, {
         preserveScroll: true,
         onSuccess: () => close(),
@@ -296,6 +532,10 @@ function onHide() {
     editionForm.clearErrors();
     associerForm.reset();
     associerForm.clearErrors();
+    groupes.value = [];
+    repartitions.value = {};
+    erreurRepartition.value = null;
+    origineRepartition.value = null;
 }
 </script>
 
@@ -613,8 +853,145 @@ function onHide() {
             </div>
         </div>
 
+        <!-- Nouvelle répartition : changer ou retirer un parrain qui a une part (ADR 0035) -->
+        <div v-else-if="step === 'repartition'" class="space-y-4">
+            <p class="text-sm text-muted-foreground">
+                <template v-if="avecNouveauParrain">
+                    Le parrain actuel reçoit une part des commissions. Vérifiez
+                    la répartition de chaque enveloppe entre l'équipe et le
+                    nouveau parrain : elle est enregistrée avec le changement.
+                </template>
+                <template v-else>
+                    Le parrain reçoit une part des commissions : répartissez à
+                    nouveau chaque enveloppe entre les membres de l'équipe.
+                </template>
+                Les commissions déjà calculées ne changent pas.
+            </p>
+
+            <p v-if="chargementGroupes" class="text-sm text-muted-foreground">
+                Chargement de la répartition…
+            </p>
+
+            <div
+                v-for="g in groupesAffiches"
+                :key="cleGroupe(g)"
+                class="space-y-2"
+                :data-testid="`parrain-repartition-${g.processus_code}`"
+            >
+                <div class="flex items-baseline justify-between gap-2">
+                    <p class="text-sm font-semibold">
+                        {{ g.processus_label }} · {{ g.categorie_nom }}
+                    </p>
+                    <button
+                        v-if="!avecNouveauParrain"
+                        type="button"
+                        class="text-xs font-medium text-primary hover:underline"
+                        @click="repartirAuProrata(g)"
+                    >
+                        Répartir au prorata
+                    </button>
+                </div>
+                <CommissionMontantFixeEditor
+                    v-if="repartitions[cleGroupe(g)]"
+                    :model-value="repartitions[cleGroupe(g)].membres"
+                    :enveloppe-unitaire="g.bareme"
+                    :parrain="
+                        avecNouveauParrain ? { nom: nomNouveauParrain } : null
+                    "
+                    :part-parrain="repartitions[cleGroupe(g)].partParrain"
+                    @update:model-value="
+                        repartitions[cleGroupe(g)].membres = $event
+                    "
+                    @update:part-parrain="
+                        repartitions[cleGroupe(g)].partParrain = $event
+                    "
+                />
+            </div>
+
+            <p
+                v-if="erreurRepartition"
+                class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+                data-testid="parrain-repartition-erreur"
+            >
+                {{ erreurRepartition }}
+            </p>
+        </div>
+
+        <!-- Retrait d'un parrain sans part : simple confirmation -->
+        <div v-else-if="step === 'retrait'" class="space-y-3">
+            <p class="text-sm">
+                Retirer
+                <span class="font-semibold">{{
+                    parrainActuel?.nom_complet
+                }}</span>
+                de ce véhicule ?
+            </p>
+            <p class="text-xs text-muted-foreground">
+                Sa part des commissions est nulle : la répartition de l'équipe
+                ne change pas. Il reste enregistré comme personne et peut
+                parrainer d'autres véhicules.
+            </p>
+            <p
+                v-if="erreurRepartition"
+                class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+                {{ erreurRepartition }}
+            </p>
+        </div>
+
         <template #footer>
             <div class="flex justify-end gap-2">
+                <template v-if="step === 'repartition'">
+                    <Button
+                        v-if="origineRepartition"
+                        variant="outline"
+                        :disabled="enregistrement"
+                        @click="step = origineRepartition"
+                        >Retour</Button
+                    >
+                    <Button
+                        v-else
+                        variant="outline"
+                        :disabled="enregistrement"
+                        @click="close"
+                        >Annuler</Button
+                    >
+                    <Button
+                        data-testid="parrain-repartition-enregistrer-btn"
+                        :disabled="
+                            !repartitionsEquilibrees ||
+                            chargementGroupes ||
+                            enregistrement
+                        "
+                        @click="enregistrerRepartition"
+                    >
+                        {{
+                            enregistrement
+                                ? 'Enregistrement…'
+                                : avecNouveauParrain
+                                  ? 'Changer de parrain'
+                                  : 'Retirer le parrain'
+                        }}
+                    </Button>
+                </template>
+
+                <template v-else-if="step === 'retrait'">
+                    <Button
+                        variant="outline"
+                        :disabled="enregistrement"
+                        @click="close"
+                        >Annuler</Button
+                    >
+                    <Button
+                        variant="destructive"
+                        data-testid="parrain-retrait-confirmer-btn"
+                        :disabled="enregistrement"
+                        @click="confirmerRetrait"
+                    >
+                        {{ enregistrement ? 'Retrait…' : 'Retirer' }}
+                    </Button>
+                </template>
+
                 <template v-if="step === 'telephone'">
                     <Button variant="outline" @click="close">Annuler</Button>
                     <Button
@@ -659,7 +1036,11 @@ function onHide() {
                         "
                         @click="submitCreation"
                     >
-                        Créer et associer
+                        {{
+                            mode === 'changer' && partPositive
+                                ? 'Continuer'
+                                : 'Créer et associer'
+                        }}
                     </Button>
                 </template>
 

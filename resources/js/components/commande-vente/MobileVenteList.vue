@@ -2,14 +2,17 @@
 import StatusDot from '@/components/StatusDot.vue';
 import QrCodeTicket from '@/components/print/QrCodeTicket.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import type { VenteMobile } from '@/types/vente-mobile';
 import { useMediaQuery } from '@vueuse/core';
-import { ChevronRight, ShoppingBag, Truck, X } from 'lucide-vue-next';
+import { ChevronRight, Eye, ShoppingBag, Truck, X } from 'lucide-vue-next';
 import Drawer from 'primevue/drawer';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ commandes: VenteMobile[] }>();
+const { can } = usePermissions();
 const isMobile = useMediaQuery('(max-width: 639px)');
 const visible = ref(false);
 const selectedId = ref<string | null>(null);
@@ -300,6 +303,20 @@ const detailRows = computed(() => {
                     />
                 </div>
             </section>
+
+            <Button
+                v-if="can('ventes.read')"
+                as="a"
+                variant="outline"
+                class="h-11 w-full"
+                :href="`/backoffice/ventes/${selected.id}/pdf?preview=1`"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="telecharger-bon-mobile"
+            >
+                <Eye class="mr-2 h-4 w-4" aria-hidden="true" />
+                Voir le bon de commande
+            </Button>
         </div>
     </Drawer>
 </template>

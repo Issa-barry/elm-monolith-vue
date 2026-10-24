@@ -64,12 +64,14 @@ class CommissionEnveloppeGenerator
     /**
      * Bénéficiaires toujours uniques sur leur enveloppe (aucune répartition possible) : leur
      * part est validée d'office à la génération. Les livreurs (partage d'équipe) restent en
-     * validation manuelle — c'est là que se constatent absences et remplacements.
+     * validation manuelle — c'est là que se constatent absences et remplacements. Le parrain,
+     * bien que dans le partage d'équipe, n'est jamais absent ni remplacé : validé d'office.
      */
     public const TYPES_VALIDATION_AUTOMATIQUE = [
         CommissionEnveloppePart::TYPE_PROPRIETAIRE,
         CommissionEnveloppePart::TYPE_SITE,
         CommissionEnveloppePart::TYPE_PRESTATAIRE,
+        CommissionEnveloppePart::TYPE_PARRAIN,
     ];
 
     /**
@@ -406,23 +408,32 @@ class CommissionEnveloppeGenerator
      * serait jamais payée. Une période seulement validée, même déjà payée, l'accepte : elle est
      * rouverte et la part va sur une fiche complémentaire (ADR 0010, point 4, cf.
      * PeriodeValidationService::rouvrirSiDesynchronisee()).
+     *
+     * Enveloppe de l'équipe qui porte une part de parrain (ADR 0035) : sa période « parrain »
+     * compte aussi, la part n'y serait jamais payée.
+     *
+     * @param  list<array<string, mixed>>  $parts
      */
-    private static function periodeClotureePour(string $organizationId, string $cibleType, Carbon $date): ?PaiementPeriode
+    private static function periodeClotureePour(string $organizationId, string $cibleType, Carbon $date, array $parts = []): ?PaiementPeriode
     {
-        $type = match ($cibleType) {
-            CommissionCibleType::CODE_PROPRIETAIRE => TypePeriodePaiement::PROPRIETAIRE,
-            CommissionCibleType::CODE_EQUIPE_LIVRAISON => TypePeriodePaiement::LIVREUR,
-            CommissionCibleType::CODE_SITE => TypePeriodePaiement::SITE,
-            CommissionCibleType::CODE_CONSULTANT => TypePeriodePaiement::CONSULTANT,
-            default => null,
+        $types = match ($cibleType) {
+            CommissionCibleType::CODE_PROPRIETAIRE => [TypePeriodePaiement::PROPRIETAIRE],
+            CommissionCibleType::CODE_EQUIPE_LIVRAISON => [TypePeriodePaiement::LIVREUR],
+            CommissionCibleType::CODE_SITE => [TypePeriodePaiement::SITE],
+            CommissionCibleType::CODE_CONSULTANT => [TypePeriodePaiement::CONSULTANT],
+            default => [],
         };
 
-        if ($type === null) {
+        if (collect($parts)->contains('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)) {
+            $types[] = TypePeriodePaiement::PARRAIN;
+        }
+
+        if ($types === []) {
             return null;
         }
 
         return PaiementPeriode::where('organization_id', $organizationId)
-            ->where('type', $type->value)
+            ->whereIn('type', array_map(fn (TypePeriodePaiement $t) => $t->value, $types))
             ->where('statut', StatutPeriodePaiement::CLOTUREE->value)
             ->whereDate('date_debut', '<=', $date)
             ->whereDate('date_fin', '>=', $date)
@@ -782,8 +793,9 @@ class CommissionEnveloppeGenerator
                         'enveloppe_unitaire' => $enveloppeUnitaire,
                     ];
 
-                    $partages = CommissionPartageLivraisonCategorieChecker::partagesActifs(
-                        $processusBareme->id,
+                    $partages = CommissionPartageLivraisonCategorieChecker::partagesActifsPourGeneration(
+                        $processusIdentite,
+                        $processusBareme,
                         $vehicule->equipe->id,
                         $categorieId,
                         $earnedAt,
@@ -797,7 +809,7 @@ class CommissionEnveloppeGenerator
                     }
 
                     $membresValidation = $partages->map(fn (EquipeLivraisonPartageCategorie $p) => (object) [
-                        'beneficiaire_id' => $p->livreur_id,
+                        'beneficiaire_id' => $p->beneficiaire_id,
                         'montant_unitaire' => $p->montant_unitaire,
                     ]);
 
@@ -811,6 +823,7 @@ class CommissionEnveloppeGenerator
                             'ecart' => $enveloppeUnitaire - $attribue,
                             'parts' => $partages->map(fn (EquipeLivraisonPartageCategorie $p) => [
                                 'livreur_id' => $p->livreur_id,
+                                'parrain_id' => $p->parrain_id,
                                 'montant_unitaire' => $p->montant_unitaire === null ? null : (int) $p->montant_unitaire,
                             ])->values()->all(),
                         ]);
@@ -819,13 +832,16 @@ class CommissionEnveloppeGenerator
                         continue;
                     }
 
+                    // Le parrain est une ligne du même partage : sa part sort de cette enveloppe,
+                    // le total de l'équipe reste quantité × barème.
                     foreach ($partages as $partage) {
-                        $beneficiaireId = $partage->livreur_id;
+                        $type = $partage->estParrain() ? CommissionEnveloppePart::TYPE_PARRAIN : CommissionEnveloppePart::TYPE_LIVREUR;
+                        $cleBeneficiaire = $type.':'.$partage->beneficiaire_id;
                         $montantMembre = $quantiteCategorie * (int) $partage->montant_unitaire;
 
-                        $montantParBeneficiaire[$beneficiaireId] = ($montantParBeneficiaire[$beneficiaireId] ?? 0) + $montantMembre;
-                        $montantUnitaireParBeneficiaire[$beneficiaireId] = (int) $partage->montant_unitaire;
-                        $typeParBeneficiaire[$beneficiaireId] = CommissionEnveloppePart::TYPE_LIVREUR;
+                        $montantParBeneficiaire[$cleBeneficiaire] = ($montantParBeneficiaire[$cleBeneficiaire] ?? 0) + $montantMembre;
+                        $montantUnitaireParBeneficiaire[$cleBeneficiaire] = (int) $partage->montant_unitaire;
+                        $typeParBeneficiaire[$cleBeneficiaire] = $type;
                     }
 
                     $montantTotalEquipe += $quantiteCategorie * $enveloppeUnitaire;
@@ -850,12 +866,12 @@ class CommissionEnveloppeGenerator
                     'montant' => $montantTotalEquipe,
                     'cible_id' => $groupe->id,
                     'contributions' => $contributions,
-                    'parts' => array_map(fn (string $beneficiaireId) => [
-                        'beneficiaire_type' => $typeParBeneficiaire[$beneficiaireId],
-                        'beneficiaire_id' => $beneficiaireId,
+                    'parts' => array_map(fn (string $cleBeneficiaire) => [
+                        'beneficiaire_type' => $typeParBeneficiaire[$cleBeneficiaire],
+                        'beneficiaire_id' => explode(':', $cleBeneficiaire, 2)[1],
                         'taux' => null,
-                        'montant_unitaire' => $montantUnitaireParBeneficiaire[$beneficiaireId],
-                        'montant' => $montantParBeneficiaire[$beneficiaireId],
+                        'montant_unitaire' => $montantUnitaireParBeneficiaire[$cleBeneficiaire],
+                        'montant' => $montantParBeneficiaire[$cleBeneficiaire],
                     ], array_keys($montantParBeneficiaire)),
                 ];
 
@@ -973,7 +989,7 @@ class CommissionEnveloppeGenerator
 
             foreach (array_keys($enveloppesACreer) as $cle) {
                 $cibleType = explode(':', (string) $cle)[0];
-                $periode = self::periodeClotureePour($ctx->organizationId, $cibleType, $earnedAt);
+                $periode = self::periodeClotureePour($ctx->organizationId, $cibleType, $earnedAt, $enveloppesACreer[$cle]['parts']);
                 if ($periode) {
                     $erreurs[] = self::erreurCible(
                         $cibleType,

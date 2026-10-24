@@ -28,6 +28,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Versement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
@@ -480,6 +481,29 @@ class ModelTest extends TestCase
         $org = $this->makeOrg();
         $result = Parametre::get($org->id, 'inexistant', 'defaut');
         $this->assertSame('defaut', $result);
+    }
+
+    public function test_parametre_absent_est_mis_en_cache_sans_requete_repetee(): void
+    {
+        $org = $this->makeOrg();
+        Parametre::get($org->id, Parametre::CLE_THEME_PRESET);
+
+        DB::enableQueryLog();
+        $this->assertNull(Parametre::get($org->id, Parametre::CLE_THEME_PRESET));
+        $this->assertNull(Parametre::get($org->id, Parametre::CLE_THEME_PRESET));
+        $requetes = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'parametres'));
+        DB::disableQueryLog();
+
+        $this->assertCount(0, $requetes);
+    }
+
+    public function test_parametre_defaut_d_un_appelant_n_est_pas_mis_en_cache_pour_les_autres(): void
+    {
+        $org = $this->makeOrg();
+
+        $this->assertFalse(Parametre::isPrecommandeAcompteObligatoire($org->id));
+        $this->assertFalse(Parametre::isPrecommandeConfiguree($org->id));
+        $this->assertSame('defaut', Parametre::get($org->id, Parametre::CLE_VENTES_PRECOMMANDE_ACOMPTE_OBLIGATOIRE, 'defaut'));
     }
 
     public function test_parametre_get_returns_cast_value(): void

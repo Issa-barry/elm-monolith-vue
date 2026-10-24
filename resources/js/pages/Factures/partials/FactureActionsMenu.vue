@@ -8,7 +8,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
-import { CreditCard, Download, History, MoreVertical } from 'lucide-vue-next';
+import { CreditCard, Eye, History, MoreVertical } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -32,8 +32,10 @@ const peutEncaisser = computed(
         can('ventes.update'),
 );
 
-// Indépendant de l'encaissement : une facture payée ou annulée reste téléchargeable.
-const urlPdf = computed(() => `/backoffice/factures/${props.facture.id}/pdf`);
+// Indépendant de l'encaissement : une facture payée ou annulée reste consultable.
+const urlPdf = computed(
+    () => `/backoffice/factures/${props.facture.id}/pdf?preview=1`,
+);
 </script>
 
 <template>
@@ -79,9 +81,9 @@ const urlPdf = computed(() => `/backoffice/factures/${props.facture.id}/pdf`);
                 class="cursor-pointer"
                 data-testid="action-telecharger"
             >
-                <a :href="urlPdf" download>
-                    <Download class="h-4 w-4" />
-                    Télécharger la facture
+                <a :href="urlPdf" target="_blank" rel="noopener noreferrer">
+                    <Eye class="h-4 w-4" />
+                    Voir la facture
                 </a>
             </DropdownMenuItem>
         </DropdownMenuContent>

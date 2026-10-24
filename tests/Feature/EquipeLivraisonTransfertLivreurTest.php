@@ -15,10 +15,15 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\Commission\PartageLivraisonVersionService;
+use App\Services\Commission\PartageParrainService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -424,6 +429,184 @@ class EquipeLivraisonTransfertLivreurTest extends TestCase
                 'role' => 'chauffeur',
             ])
             ->assertStatus(403);
+    }
+
+    // ── Véhicule parrainé (ADR 0035) ─────────────────────────────────────────
+
+    /**
+     * Parraine le véhicule (lignes du parrain créées à 0) puis verse la part du parrain dans une
+     * nouvelle répartition complète de l'équipe — comme l'onglet Parrain puis la modale Équipe.
+     *
+     * @param  array<string, int>  $montantsLivreurs
+     */
+    private function parrainer(Vehicule $vehicule, EquipeLivraison $equipe, Categorie $categorie, array $montantsLivreurs, int $partParrain): Parrain
+    {
+        $parrain = Parrain::factory()->create(['organization_id' => $this->org->id]);
+        DB::transaction(function () use ($vehicule, $parrain) {
+            $vehicule->update(['parrain_id' => $parrain->id]);
+            PartageParrainService::appliquerChangementDeParrain($vehicule->fresh(), null);
+        });
+        PartageLivraisonVersionService::versionner(
+            $equipe->id,
+            $this->processusPour(CommissionProcessus::CODE_VENTE)->id,
+            $categorie->id,
+            $montantsLivreurs,
+            Carbon::today(),
+            $partParrain,
+        );
+
+        return $parrain;
+    }
+
+    /** @return array<string, int> "livreur:id" ou "parrain:id" => GNF/pack, lignes actives */
+    private function lignesActives(EquipeLivraison $equipe): array
+    {
+        return EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
+            ->whereNull('effective_to')
+            ->get()
+            ->mapWithKeys(fn (EquipeLivraisonPartageCategorie $l) => [
+                ($l->parrain_id ? "parrain:{$l->parrain_id}" : "livreur:{$l->livreur_id}") => (int) $l->montant_unitaire,
+            ])
+            ->sortKeys()
+            ->all();
+    }
+
+    /** @param  array<string, int>  $attendu */
+    private function assertLignesActives(EquipeLivraison $equipe, array $attendu): void
+    {
+        ksort($attendu);
+        $this->assertSame($attendu, $this->lignesActives($equipe));
+    }
+
+    public function test_transfert_depuis_un_vehicule_parraine_garde_la_part_du_parrain_au_depart(): void
+    {
+        $this->configurerBareme(CommissionProcessus::CODE_VENTE, 100);
+        $categorie = $this->categorieDefaut();
+        [$vehiculeA, $vehiculeB] = [$this->makeVehicule(), $this->makeVehicule()];
+        [$x, $y, $z] = Livreur::factory()->count(3)->create(['organization_id' => $this->org->id])->all();
+
+        $equipeA = $this->makeEquipe($vehiculeA, [['livreur' => $x, 'role' => 'chauffeur'], ['livreur' => $y, 'role' => 'convoyeur']]);
+        $this->configurerPartage($equipeA, CommissionProcessus::CODE_VENTE, $categorie, [$x->id => 60, $y->id => 40]);
+        $parrain = $this->parrainer($vehiculeA, $equipeA, $categorie, [$x->id => 50, $y->id => 30], 20);
+        $equipeB = $this->makeEquipe($vehiculeB, [['livreur' => $z, 'role' => 'chauffeur']]);
+        $this->configurerPartage($equipeB, CommissionProcessus::CODE_VENTE, $categorie, [$z->id => 100]);
+
+        $this->actingAs($this->user)->post(route('equipes-livraison.transfert.store', $x->id), [
+            'nouveau_vehicule_id' => $vehiculeB->id,
+            'role' => 'chauffeur',
+            'partages_depart' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($y->id, 80)],
+                'part_parrain' => 20,
+            ]],
+            'partages_arrivee' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($z->id, 60), $this->part($x->id, 40)],
+            ]],
+        ])->assertRedirectContains("/backoffice/vehicules/{$vehiculeB->id}");
+
+        $this->assertLignesActives($equipeA, ["livreur:{$y->id}" => 80, "parrain:{$parrain->id}" => 20]);
+        $this->assertLignesActives($equipeB, ["livreur:{$z->id}" => 60, "livreur:{$x->id}" => 40]);
+    }
+
+    public function test_transfert_depuis_un_vehicule_parraine_sans_la_part_du_parrain_est_refuse_sans_rien_changer(): void
+    {
+        $this->configurerBareme(CommissionProcessus::CODE_VENTE, 100);
+        $categorie = $this->categorieDefaut();
+        [$vehiculeA, $vehiculeB] = [$this->makeVehicule(), $this->makeVehicule()];
+        [$x, $y, $z] = Livreur::factory()->count(3)->create(['organization_id' => $this->org->id])->all();
+
+        $equipeA = $this->makeEquipe($vehiculeA, [['livreur' => $x, 'role' => 'chauffeur'], ['livreur' => $y, 'role' => 'convoyeur']]);
+        $this->configurerPartage($equipeA, CommissionProcessus::CODE_VENTE, $categorie, [$x->id => 60, $y->id => 40]);
+        $parrain = $this->parrainer($vehiculeA, $equipeA, $categorie, [$x->id => 50, $y->id => 30], 20);
+        $equipeB = $this->makeEquipe($vehiculeB, [['livreur' => $z, 'role' => 'chauffeur']]);
+        $this->configurerPartage($equipeB, CommissionProcessus::CODE_VENTE, $categorie, [$z->id => 100]);
+
+        // La part du parrain est versée au livreur restant : refusé (la ligne du parrain manque).
+        $reponse = $this->actingAs($this->user)->post(route('equipes-livraison.transfert.store', $x->id), [
+            'nouveau_vehicule_id' => $vehiculeB->id,
+            'role' => 'chauffeur',
+            'partages_depart' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($y->id, 100)],
+            ]],
+            'partages_arrivee' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($z->id, 60), $this->part($x->id, 40)],
+            ]],
+        ]);
+        $reponse->assertStatus(422);
+        $this->assertStringContainsStringIgnoringCase('parrain', $reponse->getContent());
+
+        $this->assertDatabaseHas('equipe_livreurs', ['equipe_id' => $equipeA->id, 'livreur_id' => $x->id]);
+        $this->assertLignesActives($equipeA, ["livreur:{$x->id}" => 50, "livreur:{$y->id}" => 30, "parrain:{$parrain->id}" => 20]);
+        $this->assertLignesActives($equipeB, ["livreur:{$z->id}" => 100]);
+    }
+
+    public function test_transfert_vers_un_vehicule_parraine_integre_le_livreur_avec_la_part_du_parrain(): void
+    {
+        $this->configurerBareme(CommissionProcessus::CODE_VENTE, 100);
+        $categorie = $this->categorieDefaut();
+        [$vehiculeA, $vehiculeB] = [$this->makeVehicule(), $this->makeVehicule()];
+        [$x, $y, $z] = Livreur::factory()->count(3)->create(['organization_id' => $this->org->id])->all();
+
+        $equipeA = $this->makeEquipe($vehiculeA, [['livreur' => $x, 'role' => 'chauffeur'], ['livreur' => $y, 'role' => 'convoyeur']]);
+        $this->configurerPartage($equipeA, CommissionProcessus::CODE_VENTE, $categorie, [$x->id => 60, $y->id => 40]);
+        $equipeB = $this->makeEquipe($vehiculeB, [['livreur' => $z, 'role' => 'chauffeur']]);
+        $this->configurerPartage($equipeB, CommissionProcessus::CODE_VENTE, $categorie, [$z->id => 100]);
+        $parrain = $this->parrainer($vehiculeB, $equipeB, $categorie, [$z->id => 80], 20);
+
+        $this->actingAs($this->user)->post(route('equipes-livraison.transfert.store', $x->id), [
+            'nouveau_vehicule_id' => $vehiculeB->id,
+            'role' => 'convoyeur',
+            'partages_depart' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($y->id, 100)],
+            ]],
+            'partages_arrivee' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($z->id, 50), $this->part($x->id, 30)],
+                'part_parrain' => 20,
+            ]],
+        ])->assertRedirectContains("/backoffice/vehicules/{$vehiculeB->id}");
+
+        $this->assertLignesActives($equipeA, ["livreur:{$y->id}" => 100]);
+        $this->assertLignesActives($equipeB, ["livreur:{$z->id}" => 50, "livreur:{$x->id}" => 30, "parrain:{$parrain->id}" => 20]);
+    }
+
+    public function test_transfert_du_dernier_livreur_dun_vehicule_parraine_dissout_lequipe_et_garde_le_parrain(): void
+    {
+        $this->configurerBareme(CommissionProcessus::CODE_VENTE, 100);
+        $categorie = $this->categorieDefaut();
+        [$vehiculeA, $vehiculeB] = [$this->makeVehicule(), $this->makeVehicule()];
+        [$x, $z] = Livreur::factory()->count(2)->create(['organization_id' => $this->org->id])->all();
+
+        $equipeA = $this->makeEquipe($vehiculeA, [['livreur' => $x, 'role' => 'chauffeur']]);
+        $this->configurerPartage($equipeA, CommissionProcessus::CODE_VENTE, $categorie, [$x->id => 100]);
+        $parrain = $this->parrainer($vehiculeA, $equipeA, $categorie, [$x->id => 80], 20);
+        $equipeB = $this->makeEquipe($vehiculeB, [['livreur' => $z, 'role' => 'chauffeur']]);
+        $this->configurerPartage($equipeB, CommissionProcessus::CODE_VENTE, $categorie, [$z->id => 100]);
+
+        $this->actingAs($this->user)->post(route('equipes-livraison.transfert.store', $x->id), [
+            'nouveau_vehicule_id' => $vehiculeB->id,
+            'role' => 'convoyeur',
+            'partages_arrivee' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $categorie->id,
+                'parts' => [$this->part($z->id, 60), $this->part($x->id, 40)],
+            ]],
+        ])->assertRedirectContains("/backoffice/vehicules/{$vehiculeB->id}");
+
+        $this->assertNull(EquipeLivraison::find($equipeA->id));
+        $this->assertFalse($vehiculeA->fresh()->is_active);
+        $this->assertSame($parrain->id, $vehiculeA->fresh()->parrain_id, 'Le parrain reste attaché au véhicule.');
+        $this->assertLignesActives($equipeB, ["livreur:{$z->id}" => 60, "livreur:{$x->id}" => 40]);
     }
 
     public function test_transfert_refuse_vers_le_meme_vehicule(): void

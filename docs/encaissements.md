@@ -93,8 +93,9 @@ valeur envoyée par le navigateur.
   y compris quand les espèces sont le seul mode possible (révisé le 15/10/2026 : l'ancienne simple
   mention « Espèces uniquement. » ne disait pas pourquoi l'opérateur manquait). Quand **aucun**
   mode n'est utilisable (ni caisse, ni compte Mobile Money, ni banque de l'agence), l'encaissement
-  est bloqué et l'alerte passe en **rouge** : « Encaissement impossible à {agence} : vous n'avez ni
-  caisse ni compte Mobile Money actif, et l'agence n'a aucun compte bancaire actif. » En paiement
+  est bloqué et l'alerte passe en **rouge** : « Encaissement bloqué à {agence} : aucune caisse ni
+  aucun compte bancaire actif dans l'agence, et aucun compte Mobile Money actif pour vous. Demandez
+  à votre responsable d'activer un moyen d'encaissement. » En paiement
   sortant (fiches, factures d'achat), rien ne change hormis le rouge du cas bloquant.
 - Un portefeuille n'encaisse que dans son agence de rattachement : pour une commande d'une autre
   agence, l'agent encaisse « à son agence » (ADR 0012), la dette inter-agences étant tracée comme

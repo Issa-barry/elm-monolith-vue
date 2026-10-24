@@ -2,12 +2,9 @@
 
 namespace App\Support\Documents;
 
-use App\Enums\ModeTarification;
-use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
 use App\Models\Organization;
-use App\Support\PhoneFormatter;
 
 /**
  * Facture de vente téléchargeable depuis /backoffice/factures. Montants et quantités repris tels
@@ -35,18 +32,18 @@ final class FactureVenteDocument
         return new DocumentPdf(
             type: 'facture_vente',
             vue: 'pdf.facture_vente',
-            titre: 'FACTURE',
+            titre: 'FACTURE DE VENTE',
             reference: (string) $facture->reference,
             organisation: IdentiteOrganisation::depuis($organisation),
             lignesAgence: IdentiteOrganisation::lignesAgence($facture->site ?? $commande?->site),
             metadonnees: $metadonnees,
-            parties: self::parties($commande),
+            parties: CommandeVenteDonneesDocument::parties($commande),
             colonnes: DocumentPdf::colonnesStandard('Désignation', 'Total'),
             lignes: ($commande?->lignes ?? collect())->map(fn (CommandeVenteLigne $ligne) => [
                 'cellules' => [
-                    $ligne->libelle_snapshot ?? $ligne->variante?->produit?->nom ?? '—',
-                    (string) self::quantiteFacturee($ligne),
-                    DocumentPdf::montant(self::prixUnitaire($commande, $ligne)),
+                    CommandeVenteDonneesDocument::designation($ligne),
+                    (string) CommandeVenteDonneesDocument::quantiteRetenue($ligne),
+                    DocumentPdf::montant(CommandeVenteDonneesDocument::prixUnitaire($commande, $ligne)),
                     DocumentPdf::montant($ligne->total_ligne),
                 ],
                 'detail' => null,
@@ -54,54 +51,6 @@ final class FactureVenteDocument
             totaux: self::totaux($facture),
             filigrane: $facture->isAnnulee() ? 'ANNULÉE' : null,
         );
-    }
-
-    /**
-     * Quantité qui a servi au dernier calcul de `total_ligne` : livrée (réception ou retour),
-     * sinon chargée, sinon préparée (précommande), sinon demandée.
-     */
-    private static function quantiteFacturee(CommandeVenteLigne $ligne): int
-    {
-        return (int) ($ligne->quantite_livree ?? $ligne->quantite_chargee ?? $ligne->quantite_preparee ?? $ligne->quantite_demandee ?? 0);
-    }
-
-    private static function prixUnitaire(CommandeVente $commande, CommandeVenteLigne $ligne): float
-    {
-        return $commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE
-            ? (float) $ligne->prix_usine_snapshot
-            : (float) $ligne->prix_vente_snapshot;
-    }
-
-    /**
-     * CLIENT puis VÉHICULE, côte à côte. Bloc CLIENT seulement si un client est associé, avec ses
-     * seules coordonnées renseignées (nom, adresse, téléphone, email) : la fiche client ne porte ni
-     * raison sociale, ni RCCM, ni NIF, rien n'est donc inventé.
-     *
-     * @return list<array{titre: string, lignes: list<string>}>
-     */
-    private static function parties(?CommandeVente $commande): array
-    {
-        $parties = [];
-
-        $client = $commande?->client;
-        $coordonnees = $client ? array_values(array_filter([
-            $client->nom_complet ?: null,
-            collect([$client->adresse, $client->ville, $client->pays])->map(fn ($v) => trim((string) $v))->filter()->implode(', ') ?: null,
-            filled($client->telephone) ? PhoneFormatter::display($client->telephone) : null,
-            filled($client->email) ? trim($client->email) : null,
-        ])) : [];
-        if ($coordonnees) {
-            $parties[] = ['titre' => 'CLIENT', 'lignes' => $coordonnees];
-        }
-
-        if ($vehicule = $commande?->vehicule) {
-            $parties[] = ['titre' => 'VÉHICULE', 'lignes' => array_values(array_filter([
-                $vehicule->nom_vehicule ?: '—',
-                $vehicule->immatriculation ?: null,
-            ]))];
-        }
-
-        return $parties;
     }
 
     /** @return list<array{cle: string, valeur: string}> */

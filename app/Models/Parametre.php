@@ -169,6 +169,8 @@ class Parametre extends Model
 
     // ── Cache ─────────────────────────────────────────────────────────────────
 
+    private const ABSENT = '__parametre_absent__';
+
     private static function cacheKey(string $orgId, string $cle): string
     {
         return "parametre_{$orgId}_{$cle}";
@@ -176,16 +178,20 @@ class Parametre extends Model
 
     // ── Lecture / écriture ────────────────────────────────────────────────────
 
+    /**
+     * Le cache garde la valeur stockée ou le marqueur ABSENT, jamais le défaut :
+     * Laravel ne met pas `null` en cache (relancerait la requête à chaque appel),
+     * et deux appelants d'une même clé peuvent passer des défauts différents.
+     */
     public static function get(string $orgId, string $cle, mixed $default = null): mixed
     {
-        return Cache::remember(self::cacheKey($orgId, $cle), 3600, function () use ($orgId, $cle, $default) {
+        $valeur = Cache::remember(self::cacheKey($orgId, $cle), 3600, function () use ($orgId, $cle) {
             $param = static::where('organization_id', $orgId)->where('cle', $cle)->first();
-            if (! $param) {
-                return $default;
-            }
 
-            return self::castValue($param->valeur, $param->type);
+            return $param ? (self::castValue($param->valeur, $param->type) ?? self::ABSENT) : self::ABSENT;
         });
+
+        return $valeur === self::ABSENT ? $default : $valeur;
     }
 
     public static function set(string $orgId, string $cle, mixed $valeur): void

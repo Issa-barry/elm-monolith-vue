@@ -548,10 +548,10 @@ function handleSubmit() {
                         responsable.
                     </template>
                     <template v-else>
-                        Encaissement impossible {{ dansAgence }} : vous n'avez
-                        ni caisse ni compte Mobile Money actif, et l'agence n'a
-                        aucun compte bancaire actif. Contactez votre
-                        responsable.
+                        Encaissement bloqué {{ dansAgence }} : aucune caisse ni
+                        aucun compte bancaire actif dans l'agence, et aucun
+                        compte Mobile Money actif pour vous. Demandez à votre
+                        responsable d'activer un moyen d'encaissement.
                     </template>
                 </p>
                 <!-- Espèces impossibles (aucune caisse dédiée active sur ce site) : message visible en

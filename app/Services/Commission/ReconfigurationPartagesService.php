@@ -33,6 +33,11 @@ use InvalidArgumentException;
  * alignée automatiquement sur le nouveau barème, à la même date d'effet, au moment où le barème
  * est appliqué (directement ou à la publication). Une équipe sans livreur actif est ignorée.
  *
+ * Véhicule parrainé (décision du 20/10/2026, cf. docs/parrainage-vehicule.md) : jamais aligné
+ * automatiquement, même avec un seul livreur et une part de parrain à 0 GNF — l'équipe passe par
+ * la grille, le parrain y figurant comme un membre requis. Un brouillon Logistique y ajoute le
+ * partage Distribution de ces véhicules, qui suit le barème Logistique (COMM-005).
+ *
  * Le brouillon ne change RIEN à l'opérationnel : barème et partages en vigueur restent ceux
  * utilisés par les commandes et la génération jusqu'à la publication, qui écrit barème + partages
  * dans une seule transaction, à la même date d'effet (aujourd'hui).
@@ -193,14 +198,25 @@ class ReconfigurationPartagesService
 
         $aujourdhui = Carbon::today();
         $categories = Categorie::whereIn('id', $categorieIds)->pluck('nom', 'id');
-        $partagesReels = EquipeLivraisonPartageCategorie::where('processus_id', $processus->id)
+
+        // Distribution d'un véhicule parrainé : partage propre, mais barème Logistique (COMM-005) —
+        // un brouillon Logistique doit donc aussi le faire reconfigurer. Ignorée si la distribution
+        // a son propre barème (elle n'est alors pas concernée par ce brouillon).
+        $distribution = $processus->code === CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
+            ? CommissionProcessus::where('organization_id', $orgId)->where('code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT)->first()
+            : null;
+        if ($distribution && CommissionProcessusDefaults::processusResolutionBareme($distribution)->id !== $processus->id) {
+            $distribution = null;
+        }
+
+        $partagesReels = EquipeLivraisonPartageCategorie::whereIn('processus_id', array_filter([$processus->id, $distribution?->id]))
             ->whereIn('equipe_id', $equipes->pluck('id'))
             ->whereIn('categorie_id', $categorieIds)
             ->actifA($aujourdhui)
             ->get()
-            ->groupBy(fn (EquipeLivraisonPartageCategorie $p) => $p->equipe_id.'|'.$p->categorie_id);
+            ->groupBy(fn (EquipeLivraisonPartageCategorie $p) => $p->equipe_id.'|'.$p->categorie_id.'|'.$p->processus_id);
         $partagesPrepares = $brouillon
-            ? $brouillon->partages()->get()->groupBy(fn (CommissionBaremeBrouillonPartage $p) => $p->equipe_id.'|'.$p->categorie_id)
+            ? $brouillon->partages()->get()->groupBy(fn (CommissionBaremeBrouillonPartage $p) => $p->equipe_id.'|'.$p->categorie_id.'|'.($p->processus_id ?? $brouillon->processus_id))
             : collect();
 
         $baremesEnVigueur = [];
@@ -212,104 +228,136 @@ class ReconfigurationPartagesService
             $vehicule = $equipe->vehicule;
             $typeId = $vehicule->type_vehicule_id;
             $membres = $equipe->membres->filter(fn (EquipeLivreur $m) => $m->livreur !== null)->values();
-            $requis = $membres->filter(fn (EquipeLivreur $m) => $m->livreur->is_active)->pluck('livreur_id')->all();
+            $requisLivreurs = $membres->filter(fn (EquipeLivreur $m) => $m->livreur->is_active)->pluck('livreur_id')->all();
 
-            foreach ($categorieIds as $categorieId) {
-                $cible = CommissionBaremeConfigurationService::baremeLivreurDepuisLignes($lignes, $categorieId, $typeId);
-                if ($cible <= 0) {
-                    continue;
-                }
+            $partagesEquipe = [$processus];
+            if ($distribution && $vehicule->parrain_id && $vehicule->livraison_logistique) {
+                $partagesEquipe[] = $distribution;
+            }
 
-                $cleBareme = $categorieId.'|'.$typeId;
-                $baremesEnVigueur[$cleBareme] ??= CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
-                    $orgId, $processus->id, $categorieId, $typeId, $aujourdhui,
-                );
-                if ($cible === $baremesEnVigueur[$cleBareme]) {
-                    continue;
-                }
+            foreach ($partagesEquipe as $processusPartage) {
+                $parrain = CommissionPartageLivraisonCategorieChecker::parrainRemunere($equipe, $processusPartage->code);
+                $requis = $parrain ? [...$requisLivreurs, $parrain->id] : $requisLivreurs;
 
-                $cle = $equipe->id.'|'.$categorieId;
-                $reel = $partagesReels->get($cle, collect());
-                if (self::conforme($reel->map(fn ($p) => [$p->livreur_id, $p->montant_unitaire]), $cible, $requis) === null) {
-                    continue;
-                }
+                foreach ($categorieIds as $categorieId) {
+                    $cible = CommissionBaremeConfigurationService::baremeLivreurDepuisLignes($lignes, $categorieId, $typeId);
+                    if ($cible <= 0) {
+                        continue;
+                    }
 
-                // Décision du 25/09/2026 : un seul livreur actif → aucune répartition à décider, sa
-                // part suit automatiquement le barème (versionnée à l'application du barème, cf.
-                // appliquerAutomatiques()), quel que soit son partage actuel, même déjà faux.
-                if (count($requis) === 1) {
-                    $automatiques[] = [
+                    $cleBareme = $categorieId.'|'.$typeId;
+                    $baremesEnVigueur[$cleBareme] ??= CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
+                        $orgId, $processus->id, $categorieId, $typeId, $aujourdhui,
+                    );
+                    if ($cible === $baremesEnVigueur[$cleBareme]) {
+                        continue;
+                    }
+
+                    $cle = $equipe->id.'|'.$categorieId.($processusPartage->id === $processus->id ? '' : '|'.$processusPartage->code);
+                    $reel = $partagesReels->get($equipe->id.'|'.$categorieId.'|'.$processusPartage->id, collect());
+                    if (self::conforme($reel->map(fn ($p) => [$p->beneficiaire_id, $p->montant_unitaire]), $cible, $requis) === null) {
+                        continue;
+                    }
+
+                    // Décision du 25/09/2026 : un seul livreur actif → aucune répartition à décider,
+                    // sa part suit automatiquement le barème (versionnée à l'application du barème,
+                    // cf. appliquerAutomatiques()), quel que soit son partage actuel, même déjà faux.
+                    // Jamais pour un véhicule parrainé (décision du 20/10/2026) : la répartition avec
+                    // le parrain, même à 0 GNF, reste une décision explicite, dans la grille.
+                    if (count($requisLivreurs) === 1 && ! $parrain) {
+                        $automatiques[] = [
+                            'equipe_id' => $equipe->id,
+                            'categorie_id' => $categorieId,
+                            'livreur_id' => $requisLivreurs[0],
+                            'montant' => $cible,
+                        ];
+
+                        continue;
+                    }
+
+                    // Aucun livreur actif : anomalie (non conforme, bloquée à la commande) — signalée,
+                    // jamais ajustée. Plusieurs livreurs sur un véhicule INACTIF : il ne peut prendre
+                    // aucune commande ; signalé sans bloquer la publication, il restera refusé à la
+                    // commande (COMM-015) tant que son partage n'est pas corrigé.
+                    if (count($requisLivreurs) === 0 || ! $vehicule->is_active) {
+                        $signales[] = [
+                            'equipe_id' => $equipe->id,
+                            'vehicule_nom' => $vehicule->nom_vehicule,
+                            'categorie_nom' => $categories->get($categorieId, $categorieId),
+                            'motif' => count($requisLivreurs) === 0 ? 'sans_livreur' : 'vehicule_inactif',
+                        ];
+
+                        continue;
+                    }
+
+                    $signature = self::signature($requis, $reel->pluck('id')->all());
+                    $prepare = $partagesPrepares->get($equipe->id.'|'.$categorieId.'|'.$processusPartage->id, collect());
+                    $montantsReels = $reel->mapWithKeys(fn ($p) => [$p->beneficiaire_id => (int) $p->montant_unitaire]);
+                    $montantsPrepares = $prepare->mapWithKeys(fn (CommissionBaremeBrouillonPartage $p) => [($p->livreur_id ?? $p->parrain_id) => (int) $p->montant_unitaire]);
+
+                    [$statut, $motif] = match (true) {
+                        $prepare->isEmpty() => [self::STATUT_A_CORRIGER, null],
+                        $prepare->contains(fn (CommissionBaremeBrouillonPartage $p) => $p->signature_equipe !== $signature) => [
+                            self::STATUT_A_REVALIDER,
+                            'L\'équipe ou son partage a changé depuis la préparation : vérifiez et enregistrez à nouveau.',
+                        ],
+                        default => (function () use ($prepare, $cible, $requis) {
+                            $erreur = self::conforme($prepare->map(fn ($p) => [$p->livreur_id ?? $p->parrain_id, $p->montant_unitaire]), $cible, $requis);
+
+                            return $erreur === null ? [self::STATUT_CONFORME, null] : [self::STATUT_A_CORRIGER, $erreur];
+                        })(),
+                    };
+
+                    $lignesMembres = $membres->map(fn (EquipeLivreur $m) => [
+                        'type' => EquipeLivraisonPartageCategorie::TYPE_LIVREUR,
+                        'beneficiaire_id' => $m->livreur_id,
+                        'livreur_id' => $m->livreur_id,
+                        'parrain_id' => null,
+                        'nom' => $m->livreur->nom_complet ?? $m->livreur_id,
+                        'role' => $m->role,
+                        'ordre' => (int) $m->ordre,
+                        'requis' => in_array($m->livreur_id, $requis, true),
+                        'actuel' => $montantsReels->get($m->livreur_id),
+                        'prepare' => $montantsPrepares->get($m->livreur_id),
+                    ])->all();
+
+                    if ($parrain) {
+                        $lignesMembres[] = [
+                            'type' => EquipeLivraisonPartageCategorie::TYPE_PARRAIN,
+                            'beneficiaire_id' => $parrain->id,
+                            'livreur_id' => null,
+                            'parrain_id' => $parrain->id,
+                            'nom' => $parrain->nom_complet,
+                            'role' => EquipeLivraisonPartageCategorie::TYPE_PARRAIN,
+                            'ordre' => 9999,
+                            'requis' => true,
+                            'actuel' => $montantsReels->get($parrain->id),
+                            'prepare' => $montantsPrepares->get($parrain->id),
+                        ];
+                    }
+
+                    $groupes[] = [
+                        'cle' => $cle,
                         'equipe_id' => $equipe->id,
-                        'categorie_id' => $categorieId,
-                        'livreur_id' => $requis[0],
-                        'montant' => $cible,
-                    ];
-
-                    continue;
-                }
-
-                // Aucun livreur actif : anomalie (non conforme, bloquée à la commande) — signalée,
-                // jamais ajustée. Plusieurs livreurs sur un véhicule INACTIF : il ne peut prendre
-                // aucune commande ; signalé sans bloquer la publication, il restera refusé à la
-                // commande (COMM-015) tant que son partage n'est pas corrigé.
-                if (count($requis) === 0 || ! $vehicule->is_active) {
-                    $signales[] = [
-                        'equipe_id' => $equipe->id,
+                        'processus_id' => $processusPartage->id,
+                        'processus_code' => $processusPartage->code,
+                        'vehicule_id' => $vehicule->id,
                         'vehicule_nom' => $vehicule->nom_vehicule,
+                        'immatriculation' => $vehicule->immatriculation,
+                        'site_id' => $vehicule->site_id,
+                        'site_nom' => $vehicule->site?->nom,
+                        'type_vehicule_id' => $typeId,
+                        'type_vehicule_nom' => $vehicule->typeVehicule?->nom,
+                        'categorie_id' => $categorieId,
                         'categorie_nom' => $categories->get($categorieId, $categorieId),
-                        'motif' => count($requis) === 0 ? 'sans_livreur' : 'vehicule_inactif',
+                        'bareme_actuel' => $baremesEnVigueur[$cleBareme],
+                        'bareme_cible' => $cible,
+                        'total_actuel' => (int) $reel->sum('montant_unitaire'),
+                        'membres' => self::avecProposition($lignesMembres, $cible),
+                        'statut' => $statut,
+                        'motif' => $motif,
                     ];
-
-                    continue;
                 }
-
-                $signature = self::signature($requis, $reel->pluck('id')->all());
-                $prepare = $partagesPrepares->get($cle, collect());
-                $montantsReels = $reel->pluck('montant_unitaire', 'livreur_id')->map(fn ($m) => (int) $m);
-                $montantsPrepares = $prepare->pluck('montant_unitaire', 'livreur_id')->map(fn ($m) => (int) $m);
-
-                [$statut, $motif] = match (true) {
-                    $prepare->isEmpty() => [self::STATUT_A_CORRIGER, null],
-                    $prepare->contains(fn (CommissionBaremeBrouillonPartage $p) => $p->signature_equipe !== $signature) => [
-                        self::STATUT_A_REVALIDER,
-                        'L\'équipe ou son partage a changé depuis la préparation : vérifiez et enregistrez à nouveau.',
-                    ],
-                    default => (function () use ($prepare, $cible, $requis) {
-                        $erreur = self::conforme($prepare->map(fn ($p) => [$p->livreur_id, $p->montant_unitaire]), $cible, $requis);
-
-                        return $erreur === null ? [self::STATUT_CONFORME, null] : [self::STATUT_A_CORRIGER, $erreur];
-                    })(),
-                };
-
-                $lignesMembres = $membres->map(fn (EquipeLivreur $m) => [
-                    'livreur_id' => $m->livreur_id,
-                    'nom' => $m->livreur->nom_complet ?? $m->livreur_id,
-                    'role' => $m->role,
-                    'ordre' => (int) $m->ordre,
-                    'requis' => in_array($m->livreur_id, $requis, true),
-                    'actuel' => $montantsReels->get($m->livreur_id),
-                    'prepare' => $montantsPrepares->get($m->livreur_id),
-                ])->all();
-
-                $groupes[] = [
-                    'cle' => $cle,
-                    'equipe_id' => $equipe->id,
-                    'vehicule_id' => $vehicule->id,
-                    'vehicule_nom' => $vehicule->nom_vehicule,
-                    'immatriculation' => $vehicule->immatriculation,
-                    'site_id' => $vehicule->site_id,
-                    'site_nom' => $vehicule->site?->nom,
-                    'type_vehicule_id' => $typeId,
-                    'type_vehicule_nom' => $vehicule->typeVehicule?->nom,
-                    'categorie_id' => $categorieId,
-                    'categorie_nom' => $categories->get($categorieId, $categorieId),
-                    'bareme_actuel' => $baremesEnVigueur[$cleBareme],
-                    'bareme_cible' => $cible,
-                    'total_actuel' => (int) $reel->sum('montant_unitaire'),
-                    'membres' => self::avecProposition($lignesMembres, $cible),
-                    'statut' => $statut,
-                    'motif' => $motif,
-                ];
             }
         }
 
@@ -360,7 +408,9 @@ class ReconfigurationPartagesService
             $aEcrire = [];
 
             foreach ($saisies as $saisie) {
-                $cle = $saisie['equipe_id'].'|'.$saisie['categorie_id'];
+                $processusSaisi = $saisie['processus_code'] ?? null;
+                $cle = $saisie['equipe_id'].'|'.$saisie['categorie_id']
+                    .($processusSaisi && $processusSaisi !== $brouillon->processus->code ? '|'.$processusSaisi : '');
                 $groupe = $groupes->get($cle);
 
                 if (! $groupe) {
@@ -369,17 +419,22 @@ class ReconfigurationPartagesService
                     continue;
                 }
 
+                // Une part désigne un livreur de l'équipe ou le parrain du véhicule — jamais une
+                // autre personne, ni un parrain remplacé depuis l'affichage.
                 $membres = collect($groupe['membres']);
-                $horsEquipe = collect($saisie['parts'])->pluck('livreur_id')->diff($membres->pluck('livreur_id'));
-                if ($horsEquipe->isNotEmpty()) {
-                    $erreurs["groupes.{$cle}"] = 'Un livreur ne fait plus partie de l\'équipe (rafraîchissez la page).';
+                $typesMembres = $membres->pluck('type', 'beneficiaire_id');
+                $horsEquipe = collect($saisie['parts'])->contains(fn (array $p) => isset($p['livreur_id'])
+                    ? $typesMembres->get($p['livreur_id']) !== EquipeLivraisonPartageCategorie::TYPE_LIVREUR
+                    : $typesMembres->get($p['parrain_id'] ?? '') !== EquipeLivraisonPartageCategorie::TYPE_PARRAIN);
+                if ($horsEquipe) {
+                    $erreurs["groupes.{$cle}"] = 'Un bénéficiaire ne fait plus partie de l\'équipe ou n\'est plus le parrain du véhicule (rafraîchissez la page).';
 
                     continue;
                 }
 
-                $parts = collect($saisie['parts'])->map(fn (array $p) => [$p['livreur_id'], $p['montant_unitaire']]);
-                $requis = $membres->where('requis', true)->pluck('livreur_id')->all();
-                $erreur = self::conforme($parts, $groupe['bareme_cible'], $requis, $membres->pluck('nom', 'livreur_id')->all());
+                $parts = collect($saisie['parts'])->map(fn (array $p) => [$p['livreur_id'] ?? $p['parrain_id'], $p['montant_unitaire']]);
+                $requis = $membres->where('requis', true)->pluck('beneficiaire_id')->all();
+                $erreur = self::conforme($parts, $groupe['bareme_cible'], $requis, $membres->pluck('nom', 'beneficiaire_id')->all());
 
                 if ($erreur !== null) {
                     $erreurs["groupes.{$cle}"] = "{$groupe['vehicule_nom']} · {$groupe['categorie_nom']} : {$erreur}";
@@ -387,7 +442,7 @@ class ReconfigurationPartagesService
                     continue;
                 }
 
-                $aEcrire[] = [$groupe, $saisie['parts'], self::signatureGroupe($brouillon->processus_id, $groupe)];
+                $aEcrire[] = [$groupe, $saisie['parts'], self::signatureGroupe($groupe)];
             }
 
             if (! empty($erreurs)) {
@@ -395,9 +450,12 @@ class ReconfigurationPartagesService
             }
 
             foreach ($aEcrire as [$groupe, $parts, $signature]) {
+                $processusId = $groupe['processus_id'] === $brouillon->processus_id ? null : $groupe['processus_id'];
+
                 CommissionBaremeBrouillonPartage::where('brouillon_id', $brouillon->id)
                     ->where('equipe_id', $groupe['equipe_id'])
                     ->where('categorie_id', $groupe['categorie_id'])
+                    ->when($processusId, fn ($q) => $q->where('processus_id', $processusId), fn ($q) => $q->whereNull('processus_id'))
                     ->delete();
 
                 foreach ($parts as $p) {
@@ -405,7 +463,9 @@ class ReconfigurationPartagesService
                         'brouillon_id' => $brouillon->id,
                         'equipe_id' => $groupe['equipe_id'],
                         'categorie_id' => $groupe['categorie_id'],
-                        'livreur_id' => $p['livreur_id'],
+                        'processus_id' => $processusId,
+                        'livreur_id' => $p['livreur_id'] ?? null,
+                        'parrain_id' => isset($p['livreur_id']) ? null : ($p['parrain_id'] ?? null),
                         'montant_unitaire' => (int) $p['montant_unitaire'],
                         'signature_equipe' => $signature,
                         'updated_by' => $userId,
@@ -459,12 +519,14 @@ class ReconfigurationPartagesService
 
             $dateEffet = Carbon::today();
             foreach ($groupes as $groupe) {
-                $montants = collect($groupe['membres'])
-                    ->filter(fn (array $m) => $m['prepare'] !== null)
+                $prepares = collect($groupe['membres'])->filter(fn (array $m) => $m['prepare'] !== null);
+                $montants = $prepares
+                    ->where('type', EquipeLivraisonPartageCategorie::TYPE_LIVREUR)
                     ->mapWithKeys(fn (array $m) => [$m['livreur_id'] => $m['prepare']])
                     ->all();
+                $partParrain = $prepares->firstWhere('type', EquipeLivraisonPartageCategorie::TYPE_PARRAIN)['prepare'] ?? null;
 
-                PartageLivraisonVersionService::versionner($groupe['equipe_id'], $processus->id, $groupe['categorie_id'], $montants, $dateEffet);
+                PartageLivraisonVersionService::versionner($groupe['equipe_id'], $groupe['processus_id'], $groupe['categorie_id'], $montants, $dateEffet, $partParrain);
             }
 
             ActivationEquipesBrouillonService::activerSiPartageConforme(
@@ -549,10 +611,10 @@ class ReconfigurationPartagesService
     }
 
     /** @param  array<string, mixed>  $groupe */
-    private static function signatureGroupe(string $processusId, array $groupe): string
+    private static function signatureGroupe(array $groupe): string
     {
-        $requis = collect($groupe['membres'])->where('requis', true)->pluck('livreur_id')->all();
-        $reel = EquipeLivraisonPartageCategorie::where('processus_id', $processusId)
+        $requis = collect($groupe['membres'])->where('requis', true)->pluck('beneficiaire_id')->all();
+        $reel = EquipeLivraisonPartageCategorie::where('processus_id', $groupe['processus_id'])
             ->where('equipe_id', $groupe['equipe_id'])
             ->where('categorie_id', $groupe['categorie_id'])
             ->actifA(Carbon::today())

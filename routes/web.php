@@ -235,7 +235,9 @@ use App\Http\Controllers\UserInvitation\ForceDestroyUserInvitationController;
 use App\Http\Controllers\UserInvitation\ResendUserInvitationController;
 use App\Http\Controllers\UserInvitation\StoreUserInvitationController;
 use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\Vehicules\Parrain\DestroyParrainController;
 use App\Http\Controllers\Vehicules\Parrain\RechercherTelephoneParrainController;
+use App\Http\Controllers\Vehicules\Parrain\RepartitionsParrainController;
 use App\Http\Controllers\Vehicules\Parrain\StoreParrainController;
 use App\Http\Controllers\Vehicules\Parrain\UpdateParrainController;
 use App\Http\Controllers\Ventes\AnnulerCommandeVenteController;
@@ -269,6 +271,7 @@ use App\Http\Controllers\Ventes\ShowCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreCommandeVenteController;
 use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
 use App\Http\Controllers\Ventes\StorePrecommandeController;
+use App\Http\Controllers\Ventes\TelechargerBonCommandeVenteController;
 use App\Http\Controllers\Ventes\TelechargerFactureVenteController;
 use App\Http\Controllers\Ventes\UpdateCommandeVenteController;
 use App\Http\Controllers\Ventes\ValiderCommandeVenteController;
@@ -486,6 +489,7 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/annulation-exceptionnelle/code', DemanderCodeAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.code');
             Route::post('ventes/{commande_vente}/annulation-exceptionnelle', ConfirmerAnnulationExceptionnelleController::class)->middleware('throttle:10,1')->name('ventes.annulation-exceptionnelle.confirmer');
             Route::post('ventes/{commande_vente}/commissions/relancer', RelancerCommissionsCommandeVenteController::class)->name('ventes.commissions.relancer');
+            Route::get('ventes/{commande_vente}/pdf', TelechargerBonCommandeVenteController::class)->name('ventes.pdf');
             Route::get('factures', IndexFactureVenteController::class)->name('factures.index');
             // Encaisser dans son agence une commande d'une autre agence (ADR 0012) : recherche par
             // référence exacte, lecture seule — l'encaissement passe par encaissements.store.
@@ -588,8 +592,10 @@ Route::prefix('backoffice')->group(function () {
             // Parrainage (phase 1, cf. docs/parrainage-vehicule.md) : protégé par les mêmes
             // permissions que le véhicule (vehicules.update), pas de permission dédiée.
             Route::get('vehicules/{vehicule}/parrain/rechercher', RechercherTelephoneParrainController::class)->name('vehicules.parrain.rechercher');
+            Route::get('vehicules/{vehicule}/parrain/repartitions', RepartitionsParrainController::class)->name('vehicules.parrain.repartitions');
             Route::post('vehicules/{vehicule}/parrain', StoreParrainController::class)->name('vehicules.parrain.store');
             Route::put('vehicules/{vehicule}/parrain', UpdateParrainController::class)->name('vehicules.parrain.update');
+            Route::delete('vehicules/{vehicule}/parrain', DestroyParrainController::class)->name('vehicules.parrain.destroy');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');
@@ -907,6 +913,7 @@ Route::prefix('backoffice')->group(function () {
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
             Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
+            Route::get('fiches/parrains', [PaiementFicheController::class, 'indexParrains'])->name('fiches.parrains');
             Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
             Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
             Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
@@ -1118,10 +1125,17 @@ if (app()->environment('e2e')) {
             ->name('e2e.diagnostics.commande-vente-commissions');
         Route::match(['post', 'delete'], 'e2e/fixtures/permission-annulation-exceptionnelle', [CommissionE2eFixturesController::class, 'permissionAnnulationExceptionnelle'])
             ->name('e2e.fixtures.permission-annulation-exceptionnelle');
+        Route::post('e2e/fixtures/parrain-commission/{vehicule}/{type}', [CommissionE2eFixturesController::class, 'parrainOperation'])
+            ->whereIn('type', ['vente', 'transfert'])
+            ->name('e2e.fixtures.parrain-operation');
+        Route::get('e2e/fixtures/parrain-commission/{vehicule}/etat', [CommissionE2eFixturesController::class, 'parrainEtat'])
+            ->name('e2e.fixtures.parrain-etat');
     });
-    // Crée sa propre organisation et y connecte la session : aucun utilisateur préalable requis.
+    // Créent leur propre organisation et y connectent la session : aucun utilisateur préalable requis.
     Route::post('e2e/fixtures/partages-livreur', [CommissionE2eFixturesController::class, 'partagesLivreur'])
         ->name('e2e.fixtures.partages-livreur');
+    Route::post('e2e/fixtures/parrain-commission', [CommissionE2eFixturesController::class, 'parrainCommission'])
+        ->name('e2e.fixtures.parrain-commission');
 }
 
 require __DIR__.'/settings.php';

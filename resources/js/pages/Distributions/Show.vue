@@ -32,6 +32,7 @@ import {
     CheckCircle,
     CheckCircle2,
     ExternalLink,
+    Eye,
     FileText,
     HandCoins,
     MoreVertical,
@@ -706,7 +707,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
                         commande.can_valider_reception ||
-                        commande.can_annuler
+                        commande.can_annuler ||
+                        can('ventes.read')
                     "
                     class="absolute right-4"
                 >
@@ -716,13 +718,28 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <MoreVertical class="h-5 w-5" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-52">
+                        <DropdownMenuContent align="end" class="w-64">
                             <DropdownMenuItem
                                 class="cursor-pointer"
                                 @click="ticketDialogVisible = true"
                             >
                                 <Printer class="h-4 w-4" />
                                 Imprimer ticket
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="can('ventes.read')"
+                                as-child
+                                data-testid="telecharger-bon-mobile"
+                            >
+                                <a
+                                    :href="`/backoffice/ventes/${commande.id}/pdf?preview=1`"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="flex w-full cursor-pointer items-center gap-2"
+                                >
+                                    <Eye class="h-4 w-4" />
+                                    Voir le bon de commande
+                                </a>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -839,6 +856,20 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                         <Printer class="mr-2 h-4 w-4" />
                         Ticket
+                    </Button>
+
+                    <Button
+                        v-if="can('ventes.read')"
+                        as="a"
+                        variant="outline"
+                        size="sm"
+                        :href="`/backoffice/ventes/${commande.id}/pdf?preview=1`"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="telecharger-bon"
+                    >
+                        <Eye class="mr-2 h-4 w-4" />
+                        Voir le bon de commande
                     </Button>
 
                     <!-- Modifier (brouillon) -->

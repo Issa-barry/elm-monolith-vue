@@ -8,6 +8,7 @@ use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\ModeRemiseGrossiste;
 use App\Enums\NatureOperation;
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Parametre;
@@ -130,6 +131,52 @@ class CommissionProcessusDefaults
             $codesDisponibles,
             fn (string $code) => self::estApplicablePourVehicule($code, $vehicule),
         ));
+    }
+
+    /**
+     * Processus dont l'enveloppe Livreur est aussi partagée avec le parrain du véhicule (décision
+     * du 20/10/2026, cf. docs/parrainage-vehicule.md) : toute commission livreur, sauf le transfert
+     * logistique entre sites.
+     */
+    public const PROCESSUS_REMUNERANT_LE_PARRAIN = [
+        CommissionProcessus::CODE_VENTE,
+        CommissionProcessus::CODE_TRANSFERT_GROSSISTE,
+        CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
+    ];
+
+    public static function remunereLeParrain(string $code): bool
+    {
+        return in_array($code, self::PROCESSUS_REMUNERANT_LE_PARRAIN, true);
+    }
+
+    /**
+     * Processus pouvant porter un partage d'équipe : les trois processus configurables, plus
+     * `distribution_client` — qui garde le barème de `logistique_transfert` (COMM-005) mais a son
+     * propre partage dès que le véhicule a un parrain, puisque le parrain y est rémunéré et jamais
+     * sur un transfert entre sites.
+     *
+     * @return array<int, string>
+     */
+    public static function codesPartageEquipe(): array
+    {
+        return [...CommissionRegleController::processusCodesDisponibles(), CommissionProcessus::CODE_DISTRIBUTION_CLIENT];
+    }
+
+    /**
+     * Partages que l'équipe de CE véhicule doit tenir : processus permis par ses usages, plus la
+     * distribution s'il a un parrain et l'usage Logistique.
+     *
+     * @return array<int, string>
+     */
+    public static function codesPartageEquipePourVehicule(Vehicule $vehicule): array
+    {
+        $codes = self::codesApplicablesPourVehicule($vehicule, CommissionRegleController::processusCodesDisponibles());
+
+        if ($vehicule->parrain_id && self::estApplicablePourVehicule(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, $vehicule)) {
+            $codes[] = CommissionProcessus::CODE_DISTRIBUTION_CLIENT;
+        }
+
+        return $codes;
     }
 
     /**
