@@ -565,7 +565,22 @@ test('tableau desktop : toutes les colonnes restent accessibles par défilement 
     await page.screenshot({ path: info.outputPath('tableau-horizontal.png') });
     await expect(tableau).toContainText('Partages');
     await expect(tableau).toContainText('Statut');
+    const entetes = await tableau
+        .locator('thead tr')
+        .first()
+        .locator('th')
+        .allTextContents();
+    const indexParrain = entetes.findIndex((entete) =>
+        entete.includes('Parrain'),
+    );
+    expect(indexParrain).toBeGreaterThanOrEqual(0);
     const premiereLigne = tableau.locator('tbody tr').first();
+    await expect(premiereLigne.locator('td').nth(indexParrain)).toContainText(
+        'Moussa SIDIBÉ',
+    );
+    await expect(premiereLigne.locator('td').nth(indexParrain)).toContainText(
+        '+224 622 60 26 93',
+    );
     await expect(
         premiereLigne.getByText('Abarry', { exact: true }),
     ).toHaveCount(1);

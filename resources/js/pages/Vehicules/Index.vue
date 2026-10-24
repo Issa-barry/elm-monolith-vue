@@ -64,6 +64,9 @@ interface Vehicule {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
+    parrain_nom_complet: string | null;
+    parrain_telephone: string | null;
+    parrain_code_phone_pays: string | null;
     agence_nom: string | null;
     equipe_nom: string | null;
     livreur_principal_nom: string | null;
@@ -718,6 +721,32 @@ function confirmDelete(v: Vehicule) {
                                         formatPhoneDisplay(
                                             data.proprietaire_telephone,
                                             data.proprietaire_code_phone_pays,
+                                        )
+                                    }}
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- Parrain -->
+                    <Column
+                        field="parrain_nom_complet"
+                        header="Parrain"
+                        style="min-width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <div class="leading-tight">
+                                <div class="text-muted-foreground">
+                                    {{ data.parrain_nom_complet ?? '—' }}
+                                </div>
+                                <div
+                                    v-if="data.parrain_telephone"
+                                    class="mt-1 text-xs text-muted-foreground/80 tabular-nums"
+                                >
+                                    {{
+                                        formatPhoneDisplay(
+                                            data.parrain_telephone,
+                                            data.parrain_code_phone_pays,
                                         )
                                     }}
                                 </div>
