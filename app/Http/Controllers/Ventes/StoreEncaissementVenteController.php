@@ -15,6 +15,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class StoreEncaissementVenteController extends Controller
 {
@@ -78,7 +79,7 @@ class StoreEncaissementVenteController extends Controller
         // encaissement finalement non persisté.
         try {
             DB::transaction(function () use ($facture_vente, $commande, $data, $siteEncaissementId, $estAcompte) {
-                $etaitPayee = $facture_vente->isPayee();
+                $etaitPayee = $this->verrouillerEtControlerRestant($facture_vente, (float) $data['montant'])->isPayee();
 
                 // Auto-transition LIVRAISON_EN_COURS → LIVREE AVANT l'encaissement :
                 // EncaissementVente::created (seul point désormais responsable de
@@ -165,5 +166,33 @@ class StoreEncaissementVenteController extends Controller
         }
 
         return redirect()->back()->with('success', 'Encaissement enregistre.');
+    }
+
+    /**
+     * Le `max:` de la validation est lu hors transaction : deux saisies simultanées de la même facture
+     * (double envoi, deux onglets, relance réseau) y voyaient le même restant dû et s'enregistraient
+     * toutes les deux — incident VTE-221026-080 du 22/10/2026, 2 × 450 000 GNF pour 450 000 facturés.
+     * Le verrou sur la facture sérialise les saisies ; le restant est relu après l'avoir obtenu, par
+     * une lecture verrouillante (jamais l'instantané REPEATABLE READ d'avant le verrou).
+     */
+    private function verrouillerEtControlerRestant(FactureVente $facture, float $montant): FactureVente
+    {
+        $verrouillee = FactureVente::query()->whereKey($facture->id)->lockForUpdate()->firstOrFail();
+
+        $encaisse = (float) EncaissementVente::query()
+            ->where('facture_vente_id', $verrouillee->id)
+            ->lockForUpdate()
+            ->sum('montant');
+        $restant = max(0.0, round((float) $verrouillee->montant_net - ($encaisse - $verrouillee->montantRembourse()), 2));
+
+        if ($montant > $restant) {
+            throw ValidationException::withMessages([
+                'montant' => $restant <= 0
+                    ? 'Cette facture est déjà soldée : cet encaissement a déjà été enregistré.'
+                    : 'Le montant ne peut pas depasser le restant du.',
+            ]);
+        }
+
+        return $verrouillee;
     }
 }

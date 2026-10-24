@@ -23,6 +23,10 @@ enum AuditEvent: string
     case FRAIS_DELETED = 'frais_deleted';
     case PAYMENT_CANCELLED = 'payment_cancelled';
     case STATUS_CHANGED = 'status_changed';
+    case COMMENTED = 'commented';
+    case ANOMALIE_DETECTEE = 'anomalie_detectee';
+    case ANOMALIE_ECART_DISPARU = 'anomalie_ecart_disparu';
+    case ANOMALIE_REAPPARUE = 'anomalie_reapparue';
 
     public function label(): string
     {
@@ -46,6 +50,10 @@ enum AuditEvent: string
             self::FRAIS_DELETED => 'Dépense supprimée',
             self::PAYMENT_CANCELLED => 'Paiement annulé',
             self::STATUS_CHANGED => 'Changement de statut',
+            self::COMMENTED => 'Commentaire',
+            self::ANOMALIE_DETECTEE => 'Anomalie détectée',
+            self::ANOMALIE_ECART_DISPARU => 'Écart disparu',
+            self::ANOMALIE_REAPPARUE => 'Écart réapparu',
         };
     }
 
@@ -71,6 +79,10 @@ enum AuditEvent: string
             self::FRAIS_DELETED => 'red',
             self::PAYMENT_CANCELLED => 'red',
             self::STATUS_CHANGED => 'amber',
+            self::COMMENTED => 'slate',
+            self::ANOMALIE_DETECTEE => 'red',
+            self::ANOMALIE_ECART_DISPARU => 'emerald',
+            self::ANOMALIE_REAPPARUE => 'orange',
         };
     }
 }

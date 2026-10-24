@@ -7,6 +7,8 @@ use App\Enums\ModePaiement;
 use App\Enums\OperateurMobileMoney;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\VenteComptabilisationService;
+use App\Services\Ventes\ControleEncaissements\DetecteurAnomaliesEncaissement;
+use App\Services\Ventes\ControleEncaissements\SurveillanceEncaissements;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -100,6 +102,11 @@ class EncaissementVente extends Model
             // échec ici annule l'ensemble, cohérent avec le commentaire déjà présent
             // sur cette transaction ("doivent réussir ou échouer ensemble").
             app(VenteComptabilisationService::class)->comptabiliserEncaissementVente($e);
+
+            // Contrôle des encaissements (ADR 0036) : après la comptabilisation ci-dessus et après
+            // validation de la transaction — détecte un surplus ou un doublon, quel que soit l'écran.
+            SurveillanceEncaissements::apresOperation($e->facture_vente_id, 'Encaissement de '
+                .DetecteurAnomaliesEncaissement::gnf((float) $e->montant).' par '.(Auth::user()?->name ?? 'le système'));
         });
 
         static::deleted(function (EncaissementVente $e) {
@@ -116,6 +123,9 @@ class EncaissementVente extends Model
             if ($facture) {
                 static::contrepasserPieces($e, $facture->organization_id);
             }
+
+            SurveillanceEncaissements::apresOperation($e->facture_vente_id, 'Suppression de l\'encaissement de '
+                .DetecteurAnomaliesEncaissement::gnf((float) $e->montant).' par '.(Auth::user()?->name ?? 'le système'), [$e->id]);
         });
     }
 
