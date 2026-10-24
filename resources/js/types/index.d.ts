@@ -41,6 +41,8 @@ export type StandalonePermission =
     | 'ventes.qte.update'
     | 'ventes.prix.update'
     | 'ventes.exporter'
+    | 'ventes.rembourser'
+    | 'ventes.annuler_exceptionnel'
     | 'imports-flotte.create'
     | 'imports-flotte.read'
     | 'imports-produits.create'
