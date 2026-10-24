@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EncaissementVente;
 use App\Services\AuditLogService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class DestroyEncaissementVenteController extends Controller
@@ -39,28 +40,36 @@ class DestroyEncaissementVenteController extends Controller
             ]);
         }
 
-        // Audit: log on the parent commande before deletion
-        $commande = $facture->commande;
-        if ($commande) {
-            $this->auditService->record(
-                $commande,
-                AuditEvent::ENCAISSEMENT_DELETED,
-                auth()->user(),
-                [
-                    'montant' => (float) $encaissement_vente->montant,
-                    'mode_paiement' => $encaissement_vente->mode_paiement?->value,
-                    'date_encaissement' => $encaissement_vente->date_encaissement?->toDateString(),
-                ],
-                null,
-            );
-        }
+        // Trace d'audit, suppression, recalcul du statut et contrepassation comptable (hook
+        // EncaissementVente::deleted) réussissent ou échouent ensemble : un échec de contrepassation
+        // ne doit jamais laisser un encaissement supprimé dont l'écriture compte encore en caisse.
+        try {
+            DB::transaction(function () use ($encaissement_vente, $facture) {
+                $commande = $facture->commande;
+                if ($commande) {
+                    $this->auditService->record(
+                        $commande,
+                        AuditEvent::ENCAISSEMENT_DELETED,
+                        auth()->user(),
+                        [
+                            'montant' => (float) $encaissement_vente->montant,
+                            'mode_paiement' => $encaissement_vente->mode_paiement?->value,
+                            'date_encaissement' => $encaissement_vente->date_encaissement?->toDateString(),
+                        ],
+                        null,
+                    );
+                }
 
-        // recalculStatut()/cloturerSiComplete() ne sont pas rappelés ici : le hook
-        // EncaissementVente::deleted (app/Models/EncaissementVente.php) les exécute déjà
-        // pour toute suppression, quel que soit l'appelant — même raison que
-        // StoreEncaissementVenteController ci-dessus (éviter un double déclenchement de la
-        // génération de commission).
-        $encaissement_vente->delete();
+                // recalculStatut()/cloturerSiComplete() ne sont pas rappelés ici : le hook
+                // EncaissementVente::deleted (app/Models/EncaissementVente.php) les exécute déjà
+                // pour toute suppression, quel que soit l'appelant — même raison que
+                // StoreEncaissementVenteController (éviter un double déclenchement de la
+                // génération de commission).
+                $encaissement_vente->delete();
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Encaissement non supprimé : {$e->getMessage()}"]);
+        }
 
         return redirect()->back()->with('success', 'Encaissement supprime.');
     }

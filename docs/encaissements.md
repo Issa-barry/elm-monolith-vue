@@ -322,6 +322,30 @@ création unique (`$facture->encaissements()->create()`), quel que soit l'écran
 frontend reproduit ces règles pour l'UX (champs conditionnels, bouton désactivé) mais n'est jamais
 la seule protection.
 
+### Jamais plus que le restant dû, même en saisies simultanées (24/10/2026)
+
+Incident VTE-221026-080 (22/10/2026) : deux encaissements espèces de 450 000 GNF enregistrés dans la
+même seconde pour une facture de 450 000 GNF (encaissé 900 000). Le plafond `montant ≤ montant_restant`
+n'était lu qu'à la validation, hors transaction : deux requêtes concurrentes (double envoi, deux
+onglets, relance réseau) voyaient le même restant et passaient toutes les deux.
+
+Désormais `StoreEncaissementVenteController` verrouille la facture (`lockForUpdate`) au début de la
+transaction et relit l'encaissé par une lecture verrouillante avant de créer l'encaissement : la
+seconde saisie attend la première, voit le restant à jour et est refusée sur le champ `montant`
+(« Cette facture est déjà soldée : cet encaissement a déjà été enregistré. » si le restant est nul).
+Côté écran, `PaymentCard` ignore tout nouvel envoi tant que `processing` est vrai. Test :
+`EncaissementVenteTest::test_saisie_concurrente_ne_depasse_jamais_le_restant_du`. Vérifié aussi
+sous MySQL avec deux processus réels : l'ancien code enregistrait 2 × 450 000 pour 450 000 quand la
+seconde requête écrivait juste après la première ; le nouveau refuse la seconde.
+
+### Suppression d'un encaissement : tout ou rien (24/10/2026)
+
+`DestroyEncaissementVenteController` englobe la trace d'audit, la suppression, le recalcul du
+statut de la facture et la contrepassation des écritures (hook `EncaissementVente::deleted`) dans
+une seule transaction : si la contrepassation échoue, rien n'est supprimé et l'utilisateur reçoit
+« Encaissement non supprimé : … ». Avant, l'encaissement disparaissait alors que son écriture
+comptait encore en caisse. Test : `test_echec_de_contrepassation_annule_la_suppression`.
+
 ## Acompte de précommande (ADR 0019)
 
 Cf. [precommandes.md](precommandes.md). L'acompte versé à la création d'une précommande est un

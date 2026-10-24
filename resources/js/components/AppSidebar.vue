@@ -54,6 +54,11 @@ const transfertsAReceptionner = computed(
 const mouvementsFondsAConfirmer = computed(
     () => ((page.props as any).mouvements_fonds_a_confirmer as number) ?? 0,
 );
+// Contrôle des encaissements (ADR 0036) : anomalies « Nouvelle » du périmètre de l'utilisateur.
+const anomaliesEncaissementATraiter = computed(
+    () =>
+        ((page.props as any).anomalies_encaissement?.a_traiter as number) ?? 0,
+);
 // Espèces remises à l'agent, en attente de SA confirmation (ADR 0018) : badge sur « Ma situation ».
 const approvisionnementsAConfirmer = computed(
     () => ((page.props as any).approvisionnements_a_confirmer as number) ?? 0,
@@ -410,6 +415,19 @@ const mainNavItems = computed((): NavItem[] => {
                                   },
                               ]
                             : []),
+                        ...(can('encaissements.surveiller')
+                            ? [
+                                  {
+                                      title: 'Contrôle encaissements',
+                                      href: '/backoffice/comptabilite/tresorerie/controle-encaissements',
+                                      badge:
+                                          anomaliesEncaissementATraiter.value >
+                                          0
+                                              ? anomaliesEncaissementATraiter.value
+                                              : undefined,
+                                  },
+                              ]
+                            : []),
                     ],
                 },
                 {
@@ -428,6 +446,31 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Journal financier',
                     href: '/backoffice/comptabilite/journal',
+                },
+            ],
+        });
+    } else if (can('encaissements.surveiller')) {
+        // Contrôle des encaissements (ADR 0036) sans le reste de la comptabilité : une personne
+        // chargée du suivi (ex. assistante de direction) n'y voit que cette entrée.
+        items.push({
+            title: 'Comptabilité',
+            href: '/backoffice/comptabilite/tresorerie/controle-encaissements',
+            icon: Calculator,
+            group: 'Finance',
+            items: [
+                {
+                    title: 'Trésorerie',
+                    href: '/backoffice/comptabilite/tresorerie/controle-encaissements',
+                    items: [
+                        {
+                            title: 'Contrôle encaissements',
+                            href: '/backoffice/comptabilite/tresorerie/controle-encaissements',
+                            badge:
+                                anomaliesEncaissementATraiter.value > 0
+                                    ? anomaliesEncaissementATraiter.value
+                                    : undefined,
+                        },
+                    ],
                 },
             ],
         });

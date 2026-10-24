@@ -4,9 +4,12 @@ namespace App\Models;
 
 use App\Enums\ModePaiement;
 use App\Enums\OperateurMobileMoney;
+use App\Services\Ventes\ControleEncaissements\DetecteurAnomaliesEncaissement;
+use App\Services\Ventes\ControleEncaissements\SurveillanceEncaissements;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Remboursement d'un client (ADR 0019) — sortie réelle de trésorerie depuis un support de l'agence de
@@ -48,6 +51,16 @@ class RemboursementVente extends Model
             'operateur_mobile_money' => OperateurMobileMoney::class,
             'date_remboursement' => 'date:Y-m-d',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Contrôle des encaissements (ADR 0036) : un remboursement fait disparaître le trop-perçu
+        // de la facture — contrôlé après validation de la transaction (montant_rembourse à jour).
+        static::created(function (RemboursementVente $r) {
+            SurveillanceEncaissements::apresOperation($r->facture_vente_id, 'Remboursement de '
+                .DetecteurAnomaliesEncaissement::gnf((float) $r->montant).' par '.(Auth::user()?->name ?? 'le système'));
+        });
     }
 
     public function commande(): BelongsTo
