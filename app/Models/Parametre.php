@@ -100,6 +100,13 @@ class Parametre extends Model
     public const CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE = 'ventes_declencheur_commission_logistique';
 
     /**
+     * PARRAIN-022 : date (AAAA-MM-JJ) à partir de laquelle une vente est refusée sur un partage dont
+     * la part du parrain reste à répartir. Absente = garde-fou pas encore activé (mise en conformité
+     * progressive des véhicules déjà parrainés) : l'état « À répartir » s'affiche sans bloquer.
+     */
+    public const CLE_REPARTITION_PARRAIN_OBLIGATOIRE_DU = 'ventes_repartition_parrain_obligatoire_du';
+
+    /**
      * Niveau de confirmation des annulations exceptionnelles (cf. AnnulationExceptionnelleService,
      * ModeConfirmationAnnulationExceptionnelle) — défaut EMAIL_CODE (décision produit du
      * 24/09/2026) : une organisation qui n'a jamais configuré ce paramètre exige le code envoyé
@@ -387,6 +394,35 @@ class Parametre extends Model
         $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE, DeclencheurCommissionVente::FACTURE_ENCAISSEE->value);
 
         return DeclencheurCommissionVente::tryFrom($valeur) ?? DeclencheurCommissionVente::FACTURE_ENCAISSEE;
+    }
+
+    public static function getRepartitionParrainObligatoireDu(string $orgId): ?string
+    {
+        $valeur = self::get($orgId, self::CLE_REPARTITION_PARRAIN_OBLIGATOIRE_DU);
+
+        return is_string($valeur) && $valeur !== '' ? $valeur : null;
+    }
+
+    /** Le garde-fou PARRAIN-022 s'applique-t-il à une opération datée de $date ? */
+    public static function repartitionParrainObligatoire(string $orgId, \DateTimeInterface $date): bool
+    {
+        $debut = self::getRepartitionParrainObligatoireDu($orgId);
+
+        return $debut !== null && $date->format('Y-m-d') >= $debut;
+    }
+
+    public static function setRepartitionParrainObligatoireDu(string $orgId, ?string $date): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_REPARTITION_PARRAIN_OBLIGATOIRE_DU],
+            [
+                'valeur' => $date,
+                'type' => self::TYPE_STRING,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Date à partir de laquelle une vente est refusée tant que la part du parrain n\'est pas répartie',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_REPARTITION_PARRAIN_OBLIGATOIRE_DU));
     }
 
     public static function setDeclencheurCommissionVente(string $orgId, DeclencheurCommissionVente $declencheur): void

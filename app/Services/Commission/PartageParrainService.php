@@ -22,55 +22,63 @@ use InvalidArgumentException;
  * - ajout : une ligne parrain à 0 GNF dans chaque partage existant, et un partage Distribution
  *   propre (copie du partage Logistique + parrain à 0) si le véhicule a l'usage Logistique — aucun
  *   montant ne change, aucune opération n'est bloquée ;
- * - remplacement : la ligne passe au nouveau parrain ;
+ * - remplacement : le nouveau parrain démarre à 0 GNF (à définir) à partir d'aujourd'hui ;
  * - retrait : la ligne disparaît, le partage Distribution est clos (la distribution reprend le
  *   partage Logistique).
  *
- * Une part POSITIVE n'est jamais transférée ni retirée d'office (décision du 20/10/2026) : le
- * changement doit apporter la nouvelle répartition complète de chaque partage concerné
- * (groupesARepartir()), validée puis enregistrée dans la même transaction — refus sinon.
- *
- * Format d'une répartition : processus_code, categorie_id, parts (livreur_id, montant_unitaire),
- * part_parrain (part du NOUVEAU parrain ; absente pour un retrait).
+ * Part POSITIVE de l'ancien parrain (PARRAIN-024, décision du 24/10/2026) : jamais transférée au
+ * nouveau parrain. Un livreur seul la récupère (le partage reste complet) ; avec plusieurs
+ * livreurs, leurs montants ne changent pas : le partage passe « À faire » jusqu'à la répartition
+ * dans l'onglet Équipe. L'ancien parrain conserve toutes les commissions acquises jusque-là, payées
+ * ou restant à payer — rien n'est réattribué.
  */
 class PartageParrainService
 {
     /**
      * À appeler dans la transaction qui vient d'enregistrer `vehicules.parrain_id`.
      *
-     * @param  array<int, array<string, mixed>>  $repartitions
-     *
-     * @throws ValidationException si une part positive n'est pas répartie, ou si une répartition
-     *                             fournie n'est pas conforme
+     * @return list<string> partages laissés « À faire » (plusieurs livreurs), libellés
      */
-    public static function appliquerChangementDeParrain(Vehicule $vehicule, ?string $ancienParrainId, array $repartitions = []): void
+    public static function appliquerChangementDeParrain(Vehicule $vehicule, ?string $ancienParrainId): array
     {
         $nouveauParrainId = $vehicule->parrain_id;
         if ($nouveauParrainId === $ancienParrainId) {
-            return;
+            return [];
         }
 
         $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->first();
         if (! $equipe) {
-            return;
+            return [];
         }
 
         $aujourdhui = Carbon::today();
-        $parCle = self::validerRepartitions($vehicule, $equipe, $nouveauParrainId, $repartitions, $aujourdhui);
+        $aRepartir = [];
 
         foreach ([CommissionProcessus::CODE_VENTE, CommissionProcessus::CODE_TRANSFERT_GROSSISTE] as $code) {
             $processus = CommissionProcessus::where('organization_id', $vehicule->organization_id)->where('code', $code)->first();
             if ($processus) {
-                self::reporterSurLePartage($equipe, $processus, $nouveauParrainId, $aujourdhui, $parCle);
+                self::reporterSurLePartage($equipe, $processus, $nouveauParrainId, $aujourdhui, $aRepartir);
             }
         }
 
-        self::reporterSurLaDistribution($vehicule, $equipe, $nouveauParrainId, $aujourdhui, $parCle);
+        self::reporterSurLaDistribution($vehicule, $equipe, $nouveauParrainId, $aujourdhui, $aRepartir);
+
+        return array_values($aRepartir);
     }
 
     /**
-     * Partages dont la part du parrain actuel est positive, à refaire en entier pour le remplacer
-     * ou le retirer — avec ce qu'il faut pour les afficher (barème, membres et montants actuels).
+     * Le parrain actuel reçoit une part positive : le changer ou le retirer modifie la répartition
+     * de l'équipe — même droit que la modale Équipe (`equipes-livraison.update`, PARRAIN-016).
+     */
+    public static function aUnePartPositive(Vehicule $vehicule): bool
+    {
+        return $vehicule->parrain_id !== null && self::groupesARepartir($vehicule)->isNotEmpty();
+    }
+
+    /**
+     * Partages dont la part du parrain actuel est positive, touchés par son remplacement ou son
+     * retrait (PARRAIN-024) — avec ce qu'il faut pour en annoncer les conséquences (barème, membres
+     * et montants actuels).
      * `au_retrait` : faux pour une distribution qui reprend le partage Logistique au retrait (son
      * partage propre est alors clos, rien à répartir).
      *
@@ -78,12 +86,92 @@ class PartageParrainService
      */
     public static function groupesARepartir(Vehicule $vehicule, ?Carbon $date = null): Collection
     {
+        return self::groupes($vehicule, $date ?? Carbon::today(), positivesSeulement: true);
+    }
+
+    /**
+     * Tous les partages où le parrain actuel figure (part nulle comprise), même format que
+     * groupesARepartir() — saisie de la part du parrain dans l'onglet Parrain (PARRAIN-024).
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function groupesDuParrain(Vehicule $vehicule, ?Carbon $date = null): Collection
+    {
+        if (! $vehicule->parrain_id) {
+            return collect();
+        }
+
+        return self::groupes($vehicule, $date ?? Carbon::today(), positivesSeulement: false);
+    }
+
+    /**
+     * Livreurs actifs de l'équipe : chacun doit figurer dans une répartition.
+     *
+     * @return Collection<int, string>
+     */
+    public static function membresRequis(EquipeLivraison $equipe): Collection
+    {
+        return $equipe->membres()->with('livreur')->get()
+            ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
+            ->pluck('livreur_id');
+    }
+
+    /**
+     * Contrôle d'une répartition d'un partage (somme exacte du barème, livreurs actifs seulement,
+     * part du parrain présente s'il y en a un, absente sinon) — commun au changement de parrain et
+     * à la saisie de sa part.
+     *
+     * @param  array<string, mixed>  $groupe  élément de groupes()
+     * @param  array<string, mixed>  $repartition  parts (livreur_id, montant_unitaire), part_parrain
+     * @param  Collection<int, string>  $requis
+     *
+     * @throws ValidationException
+     */
+    public static function validerGroupe(array $groupe, array $repartition, ?string $parrainId, Collection $requis): void
+    {
+        $partParrain = $repartition['part_parrain'] ?? null;
+        $libelle = $groupe['processus_label'].' · '.$groupe['categorie_nom'];
+
+        if (($parrainId === null) !== ($partParrain === null)) {
+            throw ValidationException::withMessages([
+                'repartitions' => $parrainId === null
+                    ? "{$libelle} : aucune part de parrain après son retrait."
+                    : "{$libelle} : la part du parrain doit être renseignée (0 GNF accepté).",
+            ]);
+        }
+
+        $membres = collect($repartition['parts'])->map(fn (array $p) => (object) [
+            'beneficiaire_id' => $p['livreur_id'],
+            'montant_unitaire' => $p['montant_unitaire'],
+        ]);
+        if ($membres->pluck('beneficiaire_id')->diff($requis)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'repartitions' => "{$libelle} : un livreur ne fait plus partie de l'équipe (rafraîchissez la page).",
+            ]);
+        }
+        if ($partParrain !== null) {
+            $membres->push((object) ['beneficiaire_id' => $parrainId, 'montant_unitaire' => $partParrain]);
+        }
+
+        try {
+            CommissionPartageLivraisonValidator::valider(
+                $membres,
+                $groupe['bareme'],
+                $parrainId === null ? $requis : $requis->concat([$parrainId]),
+            );
+        } catch (InvalidArgumentException $e) {
+            throw ValidationException::withMessages(['repartitions' => "{$libelle} : {$e->getMessage()}"]);
+        }
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private static function groupes(Vehicule $vehicule, Carbon $date, bool $positivesSeulement): Collection
+    {
         $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->first();
         if (! $equipe) {
             return collect();
         }
 
-        $date ??= Carbon::today();
         $orgId = $vehicule->organization_id;
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->whereIn('code', CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN)
@@ -92,8 +180,11 @@ class PartageParrainService
 
         $partsPositives = EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
             ->whereIn('processus_id', $processus->keys())
-            ->whereNotNull('parrain_id')
-            ->where('montant_unitaire', '>', 0)
+            ->when(
+                $positivesSeulement,
+                fn ($q) => $q->whereNotNull('parrain_id')->where('montant_unitaire', '>', 0),
+                fn ($q) => $q->where('parrain_id', $vehicule->parrain_id),
+            )
             ->actifA($date)
             ->get();
 
@@ -121,6 +212,8 @@ class PartageParrainService
                     $vehicule->organization_id, $bareme->id, $ligneParrain->categorie_id, $vehicule->type_vehicule_id, $date,
                 ),
                 'part_parrain_actuelle' => (int) $ligneParrain->montant_unitaire,
+                // PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe.
+                'droits_parrain_depuis' => $ligneParrain->droits_parrain_depuis?->toDateString(),
                 'au_retrait' => $bareme->id === $proc->id,
                 'membres' => $membres->map(fn (EquipeLivreur $m) => [
                     'livreur_id' => $m->livreur_id,
@@ -129,116 +222,51 @@ class PartageParrainService
                     'montant_actuel' => (int) ($montants->get($m->livreur_id) ?? 0),
                 ])->all(),
             ];
-        })->values();
+        })
+            // Ordre métier des onglets Équipe, puis catégorie.
+            ->sortBy(fn (array $g) => [array_search($g['processus_code'], CommissionProcessusDefaults::codesPartageEquipe(), true), $g['categorie_nom']])
+            ->values();
     }
 
-    /**
-     * Chaque partage à refaire doit être fourni, conforme (somme exacte, chaque livreur actif
-     * présent, part du nouveau parrain renseignée — absente pour un retrait) ; aucun autre n'est
-     * accepté.
-     *
-     * @param  array<int, array<string, mixed>>  $repartitions
-     * @return Collection<string, array<string, mixed>> processus_code|categorie_id => répartition
-     */
-    private static function validerRepartitions(Vehicule $vehicule, EquipeLivraison $equipe, ?string $nouveauParrainId, array $repartitions, Carbon $date): Collection
-    {
-        $aRepartir = self::groupesARepartir($vehicule, $date)
-            ->when($nouveauParrainId === null, fn (Collection $g) => $g->where('au_retrait', true))
-            ->keyBy(fn (array $g) => $g['processus_code'].'|'.$g['categorie_id']);
-        $parCle = collect($repartitions)->keyBy(fn (array $r) => $r['processus_code'].'|'.$r['categorie_id']);
-
-        $manquants = $aRepartir->keys()->diff($parCle->keys());
-        if ($manquants->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'repartitions' => sprintf(
-                    'Le parrain actuel reçoit une part des commissions : refaites la répartition complète de %s avant de %s.',
-                    $manquants->map(fn (string $cle) => $aRepartir[$cle]['processus_label'].' · '.$aRepartir[$cle]['categorie_nom'])->implode(', '),
-                    $nouveauParrainId === null ? 'le retirer' : 'le remplacer',
-                ),
-            ]);
-        }
-
-        if ($parCle->keys()->diff($aRepartir->keys())->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'repartitions' => 'Une répartition envoyée ne concerne pas ce changement de parrain (rafraîchissez la page).',
-            ]);
-        }
-
-        $requis = $equipe->membres()->with('livreur')->get()
-            ->filter(fn (EquipeLivreur $m) => $m->livreur && $m->livreur->is_active)
-            ->pluck('livreur_id');
-
-        foreach ($parCle as $cle => $repartition) {
-            $groupe = $aRepartir[$cle];
-            $partParrain = $repartition['part_parrain'] ?? null;
-            $libelle = $groupe['processus_label'].' · '.$groupe['categorie_nom'];
-
-            if (($nouveauParrainId === null) !== ($partParrain === null)) {
-                throw ValidationException::withMessages([
-                    'repartitions' => $nouveauParrainId === null
-                        ? "{$libelle} : aucune part de parrain après son retrait."
-                        : "{$libelle} : la part du nouveau parrain doit être renseignée (0 GNF accepté).",
-                ]);
-            }
-
-            $membres = collect($repartition['parts'])->map(fn (array $p) => (object) [
-                'beneficiaire_id' => $p['livreur_id'],
-                'montant_unitaire' => $p['montant_unitaire'],
-            ]);
-            if ($membres->pluck('beneficiaire_id')->diff($requis)->isNotEmpty()) {
-                throw ValidationException::withMessages([
-                    'repartitions' => "{$libelle} : un livreur ne fait plus partie de l'équipe (rafraîchissez la page).",
-                ]);
-            }
-            if ($partParrain !== null) {
-                $membres->push((object) ['beneficiaire_id' => $nouveauParrainId, 'montant_unitaire' => $partParrain]);
-            }
-
-            try {
-                CommissionPartageLivraisonValidator::valider(
-                    $membres,
-                    $groupe['bareme'],
-                    $nouveauParrainId === null ? $requis : $requis->concat([$nouveauParrainId]),
-                );
-            } catch (InvalidArgumentException $e) {
-                throw ValidationException::withMessages(['repartitions' => "{$libelle} : {$e->getMessage()}"]);
-            }
-        }
-
-        return $parCle;
-    }
-
-    /** @param  Collection<string, array<string, mixed>>  $repartitions */
-    private static function reporterSurLePartage(EquipeLivraison $equipe, CommissionProcessus $processus, ?string $nouveauParrainId, Carbon $date, Collection $repartitions): void
+    /** @param  array<string, string>  $aRepartir  processus_code|categorie_id => libellé, complété ici */
+    private static function reporterSurLePartage(EquipeLivraison $equipe, CommissionProcessus $processus, ?string $nouveauParrainId, Carbon $date, array &$aRepartir): void
     {
         foreach (self::versionsActives($equipe, $processus, $date) as $categorieId => $lignes) {
-            $repartition = $repartitions->get($processus->code.'|'.$categorieId);
-
-            if ($repartition) {
-                PartageLivraisonVersionService::versionner(
-                    $equipe->id,
-                    $processus->id,
-                    $categorieId,
-                    collect($repartition['parts'])->mapWithKeys(fn (array $p) => [$p['livreur_id'] => (int) $p['montant_unitaire']])->all(),
-                    $date,
-                    isset($repartition['part_parrain']) ? (int) $repartition['part_parrain'] : null,
-                );
-
-                continue;
-            }
-
             $ligneParrain = $lignes->first(fn (EquipeLivraisonPartageCategorie $p) => $p->estParrain());
             if ($ligneParrain?->parrain_id === $nouveauParrainId) {
                 continue;
             }
 
+            $montants = self::montantsLivreurs($lignes);
+            $partAncien = (int) ($ligneParrain?->montant_unitaire ?? 0);
+            if ($partAncien > 0 && count($montants) === 1) {
+                $montants[array_key_first($montants)] += $partAncien;
+            } elseif ($partAncien > 0) {
+                // Plusieurs livreurs : à refaire seulement si leur total ne tombe plus sur le barème
+                // (la part de l'ancien pouvait déjà attendre la répartition de l'équipe).
+                $vehicule = $equipe->vehicule;
+                $bareme = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
+                    $equipe->organization_id,
+                    CommissionProcessusDefaults::processusResolutionBareme($processus)->id,
+                    $categorieId,
+                    $vehicule?->type_vehicule_id,
+                    $date,
+                );
+                if (array_sum($montants) !== $bareme) {
+                    $aRepartir[$processus->code.'|'.$categorieId] = CommissionRegleController::processusLabel($processus->code)
+                        .' · '.(Categorie::whereKey($categorieId)->value('nom') ?? $categorieId);
+                }
+            }
+
+            // Une date de début des droits en attente concernait l'ancien parrain : abandonnée.
             PartageLivraisonVersionService::versionner(
                 $equipe->id,
                 $processus->id,
                 $categorieId,
-                self::montantsLivreurs($lignes),
+                $montants,
                 $date,
                 $nouveauParrainId !== null ? 0 : null,
+                droitsEnAttenteTraites: true,
             );
         }
     }
@@ -249,9 +277,9 @@ class PartageParrainService
      * organisation qui aurait configuré un barème Distribution propre a déjà son propre partage :
      * traité comme Vente.
      *
-     * @param  Collection<string, array<string, mixed>>  $repartitions
+     * @param  array<string, string>  $aRepartir
      */
-    private static function reporterSurLaDistribution(Vehicule $vehicule, EquipeLivraison $equipe, ?string $nouveauParrainId, Carbon $date, Collection $repartitions): void
+    private static function reporterSurLaDistribution(Vehicule $vehicule, EquipeLivraison $equipe, ?string $nouveauParrainId, Carbon $date, array &$aRepartir): void
     {
         $orgId = $vehicule->organization_id;
         $distribution = CommissionProcessus::where('organization_id', $orgId)
@@ -259,7 +287,7 @@ class PartageParrainService
             ->first();
 
         if ($distribution && CommissionProcessusDefaults::processusResolutionBareme($distribution)->id === $distribution->id) {
-            self::reporterSurLePartage($equipe, $distribution, $nouveauParrainId, $date, $repartitions);
+            self::reporterSurLePartage($equipe, $distribution, $nouveauParrainId, $date, $aRepartir);
 
             return;
         }
@@ -282,7 +310,7 @@ class PartageParrainService
         $distribution ??= CommissionProcessusDefaults::resoudreOuCreer($orgId, CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
 
         if (self::versionsActives($equipe, $distribution, $date)->isNotEmpty()) {
-            self::reporterSurLePartage($equipe, $distribution, $nouveauParrainId, $date, $repartitions);
+            self::reporterSurLePartage($equipe, $distribution, $nouveauParrainId, $date, $aRepartir);
 
             return;
         }

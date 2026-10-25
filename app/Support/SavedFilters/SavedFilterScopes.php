@@ -112,6 +112,7 @@ final class SavedFilterScopes
                     'livreur' => $search,
                     'client' => $search,
                     'numero_commande' => $search,
+                    'recherche' => $search,
                 ],
             ],
             // Page Précommandes (ADR 0019) : mêmes critères que la liste Ventes, plus le retard.
@@ -165,6 +166,7 @@ final class SavedFilterScopes
                         }
                     }],
                     'partage' => [Rule::in(['a_faire', 'fait'])],
+                    'parrain_part' => [Rule::in(['a_definir', 'definie'])],
                 ],
             ],
             'commissions-livreurs' => $commission,

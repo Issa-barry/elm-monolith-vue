@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Throwable;
 
@@ -120,6 +121,72 @@ class CommissionEnveloppeGenerator
                 $ctx, $identite, CommissionProcessusDefaults::processusResolutionBareme($identite), $existantes,
             ),
         );
+    }
+
+    /**
+     * Régénération ciblée de l'enveloppe Livreur d'une commande (PARRAIN-023 : part du parrain
+     * prise rétroactivement) — même principe que le retour partiel (CommissionTriggerService::
+     * onRetourEnregistre()) : l'enveloppe est supprimée (unicité source × cible) puis recréée à sa
+     * date de gain d'origine, avec le partage d'équipe en vigueur à cette date. Les autres cibles
+     * (propriétaire, site, consultant) ne sont jamais touchées. À appeler dans une transaction :
+     * une erreur (partage non conforme au barème de la date) lève une ValidationException et
+     * annule tout.
+     *
+     * @throws ValidationException
+     */
+    public static function regenererEnveloppeEquipe(CommandeVente $commande): void
+    {
+        // Même verrou que la génération normale (executerAvecTentative()) : une génération ou un
+        // recalcul simultané sur cette commande attend la fin de celui-ci, puis retrouve
+        // l'enveloppe déjà remplacée (idempotence par cible).
+        CommandeVente::whereKey($commande->id)->lockForUpdate()->value('id');
+
+        $enveloppe = CommissionEnveloppe::where('source_type', CommandeVente::class)
+            ->where('source_id', $commande->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->first();
+        if (! $enveloppe) {
+            return;
+        }
+
+        $earnedAt = Carbon::parse($enveloppe->earned_at);
+        $enveloppe->lignes()->delete();
+        $enveloppe->parts()->delete();
+        $enveloppe->delete();
+
+        $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
+            $commande->nature_operation,
+            $commande->client?->type,
+            $commande->mode_remise_grossiste,
+        );
+        $identite = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $commande->organization_id, 'code' => $processusCode],
+            [...CommissionProcessusDefaults::pour($commande->organization_id, $processusCode), 'statut' => CommissionActivationStatut::ACTIF->value],
+        );
+        $existantes = CommissionEnveloppe::where('source_type', CommandeVente::class)
+            ->where('source_id', $commande->id)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->get();
+
+        ['erreurs' => $erreurs] = self::genererDepuisContexte(
+            self::contexteDepuisCommandeVente($commande->fresh(['lignes', 'vehicule', 'client']), $earnedAt),
+            $identite,
+            CommissionProcessusDefaults::processusResolutionBareme($identite),
+            $existantes,
+            ciblesAutorisees: [CommissionCibleType::CODE_EQUIPE_LIVRAISON],
+        );
+
+        if (! empty($erreurs)) {
+            throw ValidationException::withMessages([
+                'repartitions' => sprintf(
+                    'Commission de la commande %s (%s) impossible à recalculer : %s',
+                    $commande->reference,
+                    $earnedAt->format('d/m/Y'),
+                    implode(' ', array_column($erreurs, 'message')),
+                ),
+            ]);
+        }
     }
 
     /**
@@ -574,7 +641,11 @@ class CommissionEnveloppeGenerator
      * @param  Collection<int, CommissionEnveloppe>  $existantes
      * @return array{erreurs: list<array{cible: string, cle: string, code: string, message: string, montant_attendu: ?float, contexte: array<string, mixed>}>, creees: list<string>}
      */
-    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes): array
+    /**
+     * @param  list<string>|null  $ciblesAutorisees  restreint la génération à ces cibles (régénération
+     *                                               ciblée, cf. regenererEnveloppeEquipe())
+     */
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes, ?array $ciblesAutorisees = null): array
     {
         $vehicule = $ctx->vehicule;
 
@@ -970,6 +1041,18 @@ class CommissionEnveloppeGenerator
                     ];
                 }
             }
+        }
+
+        if ($ciblesAutorisees !== null) {
+            $enveloppesACreer = array_filter(
+                $enveloppesACreer,
+                fn (string $cle) => in_array(explode(':', $cle)[0], $ciblesAutorisees, true),
+                ARRAY_FILTER_USE_KEY,
+            );
+            $erreurs = array_values(array_filter(
+                $erreurs,
+                fn (array $erreur) => in_array($erreur['cible'], $ciblesAutorisees, true),
+            ));
         }
 
         if ($completion) {

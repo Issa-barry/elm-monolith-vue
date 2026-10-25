@@ -218,7 +218,12 @@ class CommissionE2eFixturesController extends Controller
         Parametre::setDeclencheurCommissionVente($orgId, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
         Parametre::setVentesAutoriserStockNegatif($orgId, true);
 
-        $resultat = DB::transaction(function () use ($orgId, $site, $suffixe) {
+        // `livreurs=1` : un seul livreur (tout le barème) — calcul automatique de la part du parrain.
+        $equipeInitiale = (int) $request->input('livreurs', 2) === 1
+            ? ['chauffeur' => 1000]
+            : ['chauffeur' => 600, 'convoyeur' => 400];
+
+        $resultat = DB::transaction(function () use ($orgId, $site, $suffixe, $equipeInitiale) {
             $categorie = Categorie::create(['organization_id' => $orgId, 'nom' => "E2E Sachet {$suffixe}", 'statut' => 'actif']);
             $vehicule = Vehicule::create([
                 'organization_id' => $orgId,
@@ -235,7 +240,7 @@ class CommissionE2eFixturesController extends Controller
             $equipe = EquipeLivraison::create(['organization_id' => $orgId, 'vehicule_id' => $vehicule->id, 'is_active' => true]);
 
             $livreurs = [];
-            foreach (['chauffeur' => 600, 'convoyeur' => 400] as $role => $montant) {
+            foreach ($equipeInitiale as $role => $montant) {
                 $livreur = Livreur::factory()->create([
                     'organization_id' => $orgId,
                     'is_active' => true,

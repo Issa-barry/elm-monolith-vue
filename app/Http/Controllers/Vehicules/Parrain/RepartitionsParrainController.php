@@ -8,9 +8,9 @@ use App\Services\Commission\PartageParrainService;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Partages à refaire pour remplacer ou retirer le parrain du véhicule (ceux où il reçoit une part
- * positive), avec barème, membres et montants actuels — alimente l'étape « Nouvelle répartition »
- * de ParrainDialog.vue. Lecture seule.
+ * Partages où le parrain du véhicule reçoit une part positive, avec barème, membres et montants
+ * actuels — alimente la confirmation des conséquences de son remplacement ou de son retrait
+ * (ParrainDialog.vue, PARRAIN-024). Lecture seule.
  */
 class RepartitionsParrainController extends Controller
 {

@@ -182,7 +182,7 @@ class PeriodeCalculatorService
      *
      * @param  Collection<int, mixed>  $dates
      */
-    public function traiterPeriodesPourDates(string $organizationId, Collection $dates): void
+    public function traiterPeriodesPourDates(string $organizationId, Collection $dates, bool $strict = false): void
     {
         $jours = $dates->map(fn ($d) => Carbon::parse($d)->toDateString())->unique()->values();
         if ($jours->isEmpty()) {
@@ -200,9 +200,15 @@ class PeriodeCalculatorService
         $validation = app(PeriodeValidationService::class);
 
         foreach ($periodes as $periode) {
-            $validation->rouvrirSiDesynchronisee($periode);
+            $validation->rouvrirSiDesynchronisee($periode, $strict);
             $this->calculerSiNecessaire($periode->refresh());
             $validation->validerSiComplete($periode->refresh());
+
+            // Mode strict (PARRAIN-023) : une période restée validée sur des fiches périmées
+            // ferait payer d'anciens montants — refus, l'appelant annule toute l'opération.
+            if ($strict && $validation->estDesynchronisee($periode->refresh())) {
+                throw new \RuntimeException("les fiches de la période {$periode->reference} n'ont pas pu être mises à jour.");
+            }
         }
     }
 

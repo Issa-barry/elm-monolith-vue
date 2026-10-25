@@ -5,16 +5,15 @@ namespace App\Http\Controllers\Vehicules\Parrain;
 use App\Http\Controllers\Controller;
 use App\Models\Vehicule;
 use App\Services\Commission\PartageParrainService;
-use App\Support\Parrainage\RepartitionsParrain;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Retire le parrain du véhicule (sa Personne et son rôle Parrain restent, il peut parrainer
- * d'autres véhicules). Sa ligne disparaît des partages, effet le jour même ; s'il recevait une part
- * positive, la nouvelle répartition de l'équipe doit être jointe et validée dans la même
- * transaction — cf. PartageParrainService.
+ * d'autres véhicules). Sa ligne disparaît des partages, effet le jour même ; il conserve toutes les
+ * commissions déjà acquises. Une part positive revient au livreur seul, ou laisse le partage
+ * « À faire » avec plusieurs livreurs (PARRAIN-024, cf. PartageParrainService).
  */
 class DestroyParrainController extends Controller
 {
@@ -23,16 +22,19 @@ class DestroyParrainController extends Controller
         $this->authorize('update', $vehicule);
         abort_if(! $vehicule->parrain_id, 404, "Ce véhicule n'a pas de parrain à retirer.");
 
-        $repartitions = RepartitionsParrain::valider($request);
+        // Modifier la répartition de l'équipe : même droit que la modale Équipe (PARRAIN-016).
+        if (PartageParrainService::aUnePartPositive($vehicule)) {
+            abort_unless($request->user()->can('equipes-livraison.update'), 403);
+        }
 
-        DB::transaction(function () use ($vehicule, $repartitions) {
+        $aRepartir = DB::transaction(function () use ($vehicule) {
+            $vehicule = Vehicule::whereKey($vehicule->id)->lockForUpdate()->firstOrFail();
             $ancienParrainId = $vehicule->parrain_id;
             $vehicule->update(['parrain_id' => null]);
 
-            PartageParrainService::appliquerChangementDeParrain($vehicule, $ancienParrainId, $repartitions);
+            return PartageParrainService::appliquerChangementDeParrain($vehicule, $ancienParrainId);
         });
 
-        return redirect()->route('vehicules.show', $vehicule)
-            ->with('success', 'Parrain retiré du véhicule.');
+        return ParrainRedirection::apresChangement($vehicule, 'Parrain retiré du véhicule.', $aRepartir);
     }
 }

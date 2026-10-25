@@ -357,7 +357,8 @@ Pour ajouter des contrôles directement dans la barre (hors drawer) :
 Deux façons de placer le bouton **Filtres** dans l'en-tête de page, à côté de « Nouveau » :
 
 - **`trigger-only`** — tous les champs vont dans le tiroir et la page n'a pas de barre de filtres
-  (Ventes, Produits, Supports…).
+  (Produits, Supports…). Ventes ajoute `quick-bar` : ses champs `inline` vont dans la barre rapide
+  du tableau (cf. « Barre rapide du tableau »).
 - **`triggerTarget`** — la page garde des champs directement dans la barre (`inline: true`) **et** déplace
   le bouton **Filtres** (donc le tiroir des champs sans `inline`) dans l'en-tête. C'est **une seule instance**
   de `DataFilters` : le bouton est simplement téléporté (`<Teleport>`), l'état reste partagé. Le bouton
@@ -388,6 +389,55 @@ const filtresHote = ref<HTMLElement | null>(null)
 
 ---
 
+## Barre rapide du tableau (`QuickFilters.vue` + `quick-bar`)
+
+Mise en place le 25/10/2026 sur la liste **Ventes** (`/backoffice/ventes`) uniquement, en première
+étape. Distribution et Précommandes, servies par la même page, gardent tous leurs critères dans le
+panneau.
+
+```
+┌ carte du tableau ───────────────────────────────────────────────────────────────┐
+│ [🔍 Rechercher une vente…]        [N° commande] [Livreur] [Véhicule]   Effacer  │  ← QuickFilters
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Référence │ Véhicule │ Livreur │ …                                              │  ← DataTable
+```
+
+- L'en-tête de page ne change pas : `ListPageActions` garde l'ordre Exporter → Filtres → Nouveau, et
+  `DataFilters` reste en **`trigger-only`**, avec un bouton toujours libellé **« Filtres »**.
+- Les champs de la barre sont les champs `inline: true` de `filterFields`. Avec `quick-bar`,
+  `DataFilters` les retire du panneau, mais les conserve à l'application du panneau. Ils ne comptent
+  pas dans le badge, et le « Réinitialiser » du panneau ne les efface pas. Retirer une vue
+  enregistrée efface tout.
+- `QuickFilters.vue` reçoit les mêmes `fields` (filtrés), les **valeurs appliquées renvoyées par le
+  serveur** (`values`), `baseParams` et `savedFilterScope`. Chaque saisie (après 400 ms, ou tout de
+  suite avec Entrée) repart de ces valeurs et ne remplace que son critère, puis envoie `all=1`. La
+  croix d'un champ n'efface que ce champ ; « Effacer » vide la barre et garde le panneau.
+- Aucun filtrage local : sur Ventes, la recherche mobile passe aussi par `recherche` côté serveur.
+  Le panneau reste dans la barre mobile, à côté de la recherche.
+- La recherche s'appelle **`recherche`**, jamais `search`. Elle est traitée par le contrôleur sur les
+  champs métier, dans un seul `OR` regroupé qui n'élargit jamais le périmètre (organisation,
+  agences, nature de la liste).
+
+| Liste | Recherche (`recherche`) | Filtres rapides | Panneau « Filtres » |
+|---|---|---|---|
+| Ventes | référence, client (nom, téléphone), véhicule (nom, immatriculation), livreur de l'équipe (nom, téléphone) | `numero_commande` (référence de la vente), `livreur`, `vehicule` | Agence (`site_ids[]`), Statut commande, Statut facture, Statut commission, Période, Propriétaire, Client |
+
+```vue
+<ListPageActions>
+    <template #filters>
+        <DataFilters trigger-only quick-bar url="/backoffice/ventes" :values="filterValues" :fields="filterFields" … />
+    </template>
+</ListPageActions>
+
+<div class="overflow-hidden rounded-xl border bg-card">
+    <QuickFilters url="/backoffice/ventes" :fields="champsBarreRapide" search-key="recherche"
+        :values="filterValues" :base-params="{ periode: 'all' }" saved-filter-scope="ventes" />
+    <DataTable … />
+</div>
+```
+
+---
+
 ## Réinitialisation
 
 Clic sur **Réinitialiser** (dans la barre ou dans le drawer) :
@@ -395,6 +445,8 @@ Clic sur **Réinitialiser** (dans la barre ou dans le drawer) :
 2. Vide `search`
 3. Appelle `router.get(url, baseParams)` si `url` est fourni
 4. Émet `@reset`
+
+Avec `quick-bar`, le « Réinitialiser » du panneau garde les champs de la barre rapide (cf. ci-dessus).
 
 ---
 
@@ -412,6 +464,7 @@ Listes activées :
 | `precommandes` | `/backoffice/precommandes` | `statuts`, `en_retard`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `site_ids`, `site_scope` | `ventes.update` |
 | `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
 | `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
+| `ventes` | `/backoffice/ventes` | `periode`, `statuts`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `recherche`, `site_ids`, `site_scope` | `ventes.update` |
 | `tresorerie-supports` | `/backoffice/comptabilite/tresorerie/supports` | `statut`, `type`, `nature`, `agent_id`, `site_ids`, `site_scope` | `tresorerie.gerer_soldes_ouverture` |
 
 Les supports de trésorerie reprennent l'accès de leur liste : `tresorerie.read` **ou**

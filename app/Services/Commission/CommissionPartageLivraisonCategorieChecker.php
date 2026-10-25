@@ -8,6 +8,7 @@ use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
+use App\Models\Parametre;
 use App\Models\Parrain;
 use App\Models\Produit;
 use Carbon\CarbonInterface;
@@ -32,6 +33,11 @@ use InvalidArgumentException;
  */
 class CommissionPartageLivraisonCategorieChecker
 {
+    /** PARRAIN-022 : part du parrain à 0 GNF jamais confirmée, après la date d'activation. */
+    public const CODE_PARRAIN_A_REPARTIR = 'parrain_a_repartir';
+
+    public const MOTIF_PARRAIN_A_REPARTIR = 'la part du parrain n\'a pas été répartie (0 GNF non confirmé) : définissez-la dans l\'onglet Parrain du véhicule, ou confirmez qu\'il ne reçoit aucune part pour le moment.';
+
     /**
      * Enveloppe PAR_UNITE_VENDUE à distribuer entre livreurs pour cette catégorie/processus — 0
      * si aucune règle active ne la couvre (décision AMOA #4 : absence de règle = 0, jamais une
@@ -179,9 +185,13 @@ class CommissionPartageLivraisonCategorieChecker
         $membresRequis = self::membresRequis($equipe, $processusPartage->code);
         $parrainAttenduId = self::parrainRemunere($equipe, $processusPartage->code)?->id;
         $categories = Categorie::whereIn('id', $categorieIds)->get()->keyBy('id');
+        // PARRAIN-022 : à partir de la date d'activation de l'organisation, une part du parrain à
+        // 0 GNF jamais confirmée par une personne rend le partage non conforme.
+        $repartitionParrainExigee = $parrainAttenduId !== null
+            && Parametre::repartitionParrainObligatoire($organizationId, $date);
 
         return $categorieIds
-            ->map(function (string $categorieId) use ($organizationId, $equipe, $processusBareme, $processusPartage, $typeVehiculeId, $date, $membresRequis, $parrainAttenduId, $categories) {
+            ->map(function (string $categorieId) use ($organizationId, $equipe, $processusBareme, $processusPartage, $typeVehiculeId, $date, $membresRequis, $parrainAttenduId, $categories, $repartitionParrainExigee) {
                 $bareme = self::resoudreEnveloppe($organizationId, $processusBareme->id, $categorieId, $typeVehiculeId, $date);
                 if ($bareme <= 0) {
                     return null;
@@ -199,6 +209,19 @@ class CommissionPartageLivraisonCategorieChecker
                         $bareme,
                         $membresRequis->keys(),
                     );
+
+                    if ($repartitionParrainExigee && self::partParrainARepartir($partages)) {
+                        return [
+                            'categorie_id' => $categorieId,
+                            'categorie_nom' => $categories->get($categorieId)?->nom ?? $categorieId,
+                            'bareme' => $bareme,
+                            'total_configure' => (int) $partages->sum('montant_unitaire'),
+                            'ecart' => 0,
+                            'membres_manquants' => [],
+                            'motif' => self::MOTIF_PARRAIN_A_REPARTIR,
+                            'code' => self::CODE_PARRAIN_A_REPARTIR,
+                        ];
+                    }
 
                     return null;
                 } catch (InvalidArgumentException $e) {
@@ -324,6 +347,17 @@ class CommissionPartageLivraisonCategorieChecker
         }
     }
 
+    /**
+     * PARRAIN-022 : la ligne du parrain est à 0 GNF sans confirmation d'une personne — partage
+     * complet, mais répartition métier non faite.
+     *
+     * @param  Collection<int, EquipeLivraisonPartageCategorie>  $lignes
+     */
+    public static function partParrainARepartir(Collection $lignes): bool
+    {
+        return $lignes->contains(fn (EquipeLivraisonPartageCategorie $p) => $p->partParrainARepartir());
+    }
+
     /** Parrain du véhicule de l'équipe, s'il est rémunéré sur ce processus. */
     public static function parrainRemunere(EquipeLivraison $equipe, string $processusCode): ?Parrain
     {
@@ -342,6 +376,10 @@ class CommissionPartageLivraisonCategorieChecker
      */
     public static function libelleNonConformite(array $nc): string
     {
+        if (($nc['code'] ?? null) === self::CODE_PARRAIN_A_REPARTIR) {
+            return sprintf('%s : %s', $nc['categorie_nom'], self::MOTIF_PARRAIN_A_REPARTIR);
+        }
+
         $bareme = number_format($nc['bareme'], 0, ',', ' ');
 
         if ($nc['total_configure'] === null) {

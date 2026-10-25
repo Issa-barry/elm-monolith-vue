@@ -8,7 +8,6 @@ use App\Models\Personne;
 use App\Models\Vehicule;
 use App\Services\Commission\PartageParrainService;
 use App\Support\Parrainage\ParrainValidationMessages;
-use App\Support\Parrainage\RepartitionsParrain;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,7 +30,12 @@ class StoreParrainController extends Controller
         $this->authorize('update', $vehicule);
 
         $orgId = $vehicule->organization_id;
-        $repartitions = RepartitionsParrain::valider($request);
+
+        // Remplacer un parrain qui a une part modifie la répartition de l'équipe : même droit que
+        // la modale Équipe (PARRAIN-016).
+        if (PartageParrainService::aUnePartPositive($vehicule)) {
+            abort_unless($request->user()->can('equipes-livraison.update'), 403);
+        }
 
         if ($request->filled('personne_id')) {
             $data = $request->validate([
@@ -68,25 +72,25 @@ class StoreParrainController extends Controller
             ]);
         }
 
-        // Le partage des commissions suit le parrain dans la même transaction (ligne à 0 GNF pour un
-        // nouveau parrain, transfert d'une part nulle) ; un parrain remplacé qui a une part positive
-        // impose la nouvelle répartition complète, jointe ($repartitions) et validée ici — cf.
-        // PartageParrainService. Personne résolue dans la transaction : un refus ne laisse aucune
+        // Le partage des commissions suit le parrain dans la même transaction : le nouveau parrain
+        // démarre à 0 GNF à partir d'aujourd'hui ; l'ancien conserve ses commissions acquises, sa
+        // part revient au livreur seul ou laisse le partage « À faire » (PARRAIN-024, cf.
+        // PartageParrainService). Personne résolue dans la transaction : un refus ne laisse aucune
         // identité créée.
-        DB::transaction(function () use ($orgId, $resoudrePersonne, $vehicule, $repartitions) {
+        $aRepartir = DB::transaction(function () use ($orgId, $resoudrePersonne, $vehicule) {
             $personne = $resoudrePersonne();
             $parrain = Parrain::firstOrCreate(
                 ['organization_id' => $orgId, 'personne_id' => $personne->id],
                 ['is_active' => true],
             );
 
+            $vehicule = Vehicule::whereKey($vehicule->id)->lockForUpdate()->firstOrFail();
             $ancienParrainId = $vehicule->parrain_id;
             $vehicule->update(['parrain_id' => $parrain->id]);
 
-            PartageParrainService::appliquerChangementDeParrain($vehicule, $ancienParrainId, $repartitions);
+            return PartageParrainService::appliquerChangementDeParrain($vehicule, $ancienParrainId);
         });
 
-        return redirect()->route('vehicules.show', $vehicule)
-            ->with('success', 'Parrain associé au véhicule.');
+        return ParrainRedirection::apresChangement($vehicule, 'Parrain associé au véhicule.', $aRepartir);
     }
 }
