@@ -25,6 +25,7 @@ use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use App\Services\VehiculeCapaciteService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -149,8 +150,9 @@ class TransfertLogistiqueController extends Controller
             }
         }
 
-        $query->when($search, fn ($q) => $q->where('reference', 'like', "%{$search}%"))
-            ->orderByDesc('created_at');
+        $query->when($search, fn ($q) => $q->where('reference', 'like', "%{$search}%"));
+        $filtres = $this->appliquerFiltresIndex($query, $request);
+        $query->orderByDesc('created_at');
 
         $transferts = $query->get();
 
@@ -212,12 +214,67 @@ class TransfertLogistiqueController extends Controller
             'filtre_statut' => $statut,
             'filtre_depart_site_ids' => $departSiteIds,
             'filtre_arrivee_site_ids' => $arriveeSiteIds,
+            'filtres' => $filtres,
             'vue' => $vue,
             'is_admin' => $toutesAgences,
             'user_site_ids' => $toutesAgences ? [] : $siteIds->values()->map(fn ($id) => (string) $id)->all(),
             'can_create' => auth()->user()->can('create', TransfertLogistique::class),
             'types_ecart' => TypeEcartLogistique::options(),
         ]);
+    }
+
+    /**
+     * Filtres Période / Véhicule / Livreur des listes Transferts et Réceptions.
+     * Période = date de création du transfert (celle de sa référence TRF-JJMMAA-NNN).
+     * Livreur = membre de l'équipe du transfert, ou à défaut de l'équipe actuelle du véhicule.
+     *
+     * @return array{date_debut: ?string, date_fin: ?string, vehicule: ?string, livreur: ?string}
+     */
+    private function appliquerFiltresIndex(Builder $query, Request $request): array
+    {
+        $date = fn (string $cle) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input($cle))
+            ? $request->input($cle)
+            : null;
+        $texte = fn (string $cle) => trim((string) $request->input($cle, '')) ?: null;
+
+        $filtres = [
+            'date_debut' => $date('date_debut'),
+            'date_fin' => $date('date_fin'),
+            'vehicule' => $texte('vehicule'),
+            'livreur' => $texte('livreur'),
+        ];
+
+        if ($filtres['date_debut']) {
+            $query->whereDate('created_at', '>=', $filtres['date_debut']);
+        }
+        if ($filtres['date_fin']) {
+            $query->whereDate('created_at', '<=', $filtres['date_fin']);
+        }
+
+        if ($vehicule = $filtres['vehicule']) {
+            $like = "%{$vehicule}%";
+            $query->whereHas('vehicule', fn ($v) => $v->where(fn ($v) => $v
+                ->where('nom_vehicule', 'like', $like)
+                ->orWhere('immatriculation', 'like', $like)));
+        }
+
+        if ($livreur = $filtres['livreur']) {
+            $like = "%{$livreur}%";
+            $correspond = fn ($l) => $l->where(fn ($l) => $l
+                ->where('livreurs.nom_complet', 'like', $like)
+                ->orWhereHas('personne', fn ($p) => $p->where(fn ($p) => $p
+                    ->where('nom', 'like', $like)
+                    ->orWhere('prenom', 'like', $like)
+                    ->orWhere('telephone', 'like', $like))));
+
+            $query->where(fn ($q) => $q
+                ->whereHas('equipeLivraison.livreurs', $correspond)
+                ->orWhere(fn ($q) => $q
+                    ->whereNull('equipe_livraison_id')
+                    ->whereHas('vehicule.equipe.livreurs', $correspond)));
+        }
+
+        return $filtres;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────

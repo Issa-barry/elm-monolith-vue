@@ -10,6 +10,7 @@ use App\Enums\DeclencheurCommissionVente;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
+use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -22,6 +23,8 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\PaiementFiche;
+use App\Models\PaiementPeriode;
 use App\Models\Parametre;
 use App\Models\Parrain;
 use App\Models\Produit;
@@ -756,6 +759,37 @@ class ParrainPartageCommissionTest extends TestCase
             [$this->categorie->id],
             Carbon::today(),
         )->count();
+    }
+
+    public function test_la_premiere_commission_du_parrain_cree_sa_periode_et_sa_fiche(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->assertSame(0, PaiementPeriode::where('organization_id', $this->org->id)->where('type', TypePeriodePaiement::PARRAIN->value)->count(), 'Aucune période Parrains au départ : aucun écran de période ouvert.');
+
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+
+        // PARRAIN-017 : la fiche apparaît dans « Paiements parrains » sans action manuelle.
+        $fiche = PaiementFiche::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+            ->where('beneficiaire_id', $parrain->id)
+            ->first();
+        $this->assertNotNull($fiche, 'La fiche du parrain doit être créée dès la génération de sa commission.');
+        $this->assertEquals(20000.0, (float) $fiche->montant_net);
+    }
+
+    public function test_les_commissions_suivantes_du_parrain_ne_creent_ni_periode_ni_fiche_en_double(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 50);
+
+        $this->assertSame(1, PaiementPeriode::where('organization_id', $this->org->id)->where('type', TypePeriodePaiement::PARRAIN->value)->count());
+        $fiches = PaiementFiche::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)->where('beneficiaire_id', $parrain->id)->get();
+        $this->assertCount(1, $fiches, 'Une seule fiche par parrain et par période.');
+        $this->assertEquals(30000.0, (float) $fiches->first()->montant_net, '20 000 + 10 000, chaque vente une seule fois.');
+        $this->assertSame(2, $fiches->first()->lignes()->count());
     }
 
     public function test_retirer_un_parrain_ne_bloque_que_les_partages_desequilibres(): void
