@@ -6,6 +6,7 @@ use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\Vehicule;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +20,8 @@ use Illuminate\Validation\ValidationException;
  * (CommissionPartageLivraisonCategorieChecker::nonConformites()), partage par partage, à partir de
  * la date d'activation de l'organisation.
  *
- * La grille « Définir la part du parrain » enregistre en une transaction la nouvelle répartition de
- * chaque partage où il figure, avec les contrôles du changement de parrain
+ * La saisie de sa part dans l'onglet Parrain (PARRAIN-024, definirParts()) enregistre en une
+ * transaction chaque partage où il figure, avec les contrôles du changement de parrain
  * (PartageParrainService::validerGroupe()) — jamais plus que le barème, jamais un second moteur.
  */
 class PartParrainService
@@ -72,6 +73,75 @@ class PartParrainService
     }
 
     /**
+     * Saisie en place de l'onglet Parrain (PARRAIN-024) : seule la part du parrain est saisie, par
+     * partage. Un seul livreur : il reçoit le reste du barème, le partage reste conforme. Plusieurs
+     * livreurs : leurs montants ne sont jamais modifiés d'office — le partage est enregistré tel
+     * quel, déséquilibré, donc « À faire » et les ventes refusées (juge commun) jusqu'à la
+     * nouvelle répartition dans l'onglet Équipe. Une date de début passée y reste en attente : la
+     * répartition faite dans la modale Équipe s'appliquera depuis cette date, avec le recalcul de
+     * PARRAIN-023 — jamais de recalcul sur un partage déséquilibré. Une date future exige un
+     * partage complet.
+     *
+     * @param  array<int, array{processus_code: string, categorie_id: string, part_parrain: int}>  $parts
+     * @return array{bilan: array<string, mixed>|null, a_repartir: list<string>} partages à refaire dans Équipe (libellés)
+     *
+     * @throws ValidationException
+     */
+    public static function definirParts(Vehicule $vehicule, string $parrainIdAffiche, array $parts, bool $confirmerPartNulle, ?Carbon $dateEffet = null, bool $remplacerPlanification = false): array
+    {
+        $aujourdhui = Carbon::today();
+        $date = ($dateEffet ?? $aujourdhui)->copy()->startOfDay();
+        $groupes = PartageParrainService::groupesDuParrain($vehicule, $aujourdhui)
+            ->keyBy(fn (array $g) => $g['processus_code'].'|'.$g['categorie_id']);
+
+        $repartitions = [];
+        $aRepartir = [];
+        foreach ($parts as $saisie) {
+            $cle = $saisie['processus_code'].'|'.$saisie['categorie_id'];
+            $groupe = $groupes->get($cle);
+            if ($groupe === null) {
+                // Partage inconnu : definir() refuse la saisie (« rafraîchissez la page »).
+                $repartitions[] = ['processus_code' => $saisie['processus_code'], 'categorie_id' => $saisie['categorie_id'], 'parts' => [], 'part_parrain' => (int) $saisie['part_parrain']];
+
+                continue;
+            }
+
+            $libelle = $groupe['processus_label'].' · '.$groupe['categorie_nom'];
+            $part = (int) $saisie['part_parrain'];
+            if ($part < 0 || $part > $groupe['bareme']) {
+                throw ValidationException::withMessages([
+                    'parts' => sprintf('%s : la part ne peut pas dépasser le barème de %s GNF.', $libelle, number_format($groupe['bareme'], 0, ',', ' ')),
+                ]);
+            }
+
+            $membres = collect($groupe['membres']);
+            $montants = $membres->count() === 1
+                ? [$membres->first()['livreur_id'] => $groupe['bareme'] - $part]
+                : $membres->mapWithKeys(fn (array $m) => [$m['livreur_id'] => (int) $m['montant_actuel']])->all();
+
+            $repartitions[] = [
+                'processus_code' => $groupe['processus_code'],
+                'categorie_id' => $groupe['categorie_id'],
+                'parts' => collect($montants)->map(fn (int $m, string $id) => ['livreur_id' => $id, 'montant_unitaire' => $m])->values()->all(),
+                'part_parrain' => $part,
+            ];
+
+            if (array_sum($montants) + $part !== $groupe['bareme']) {
+                if ($date->gt($aujourdhui)) {
+                    throw ValidationException::withMessages([
+                        'date_effet' => "{$libelle} : plusieurs livreurs se partagent cette enveloppe, leur répartition est à refaire dans l'onglet Équipe. Une date de début future n'est possible qu'avec une répartition complète : enregistrez la part à la date du jour (ou à une date passée), puis répartissez l'équipe.",
+                    ]);
+                }
+                $aRepartir[$cle] = $libelle;
+            }
+        }
+
+        $bilan = self::definir($vehicule, $parrainIdAffiche, $repartitions, $confirmerPartNulle, $dateEffet, $remplacerPlanification, array_keys($aRepartir));
+
+        return ['bilan' => $bilan, 'a_repartir' => array_values($aRepartir)];
+    }
+
+    /**
      * Enregistre la part du parrain sur tous ses partages (une répartition par partage, chacune
      * conforme), en une transaction. Un partage où sa part reste à 0 exige la confirmation
      * explicite (« aucune part pour le moment »), enregistrée sur sa ligne.
@@ -81,26 +151,22 @@ class PartParrainService
      * gagnées depuis recalculée (RecalculRetroactifParrainService), au plus tôt le lendemain de la
      * dernière période clôturée.
      *
+     * `$aRefaireDansEquipe` : partages (processus_code|categorie_id) enregistrés déséquilibrés par la
+     * saisie en place (definirParts(), plusieurs livreurs) — seuls leurs livreurs sont contrôlés.
+     *
      * @param  array<int, array<string, mixed>>  $repartitions
+     * @param  list<string>  $aRefaireDansEquipe
      * @return array{recalculees: list<string>, exclues: list<array{reference: string, motif: string}>}|null bilan du recalcul rétroactif
      *
      * @throws ValidationException
      */
-    public static function definir(Vehicule $vehicule, string $parrainIdAffiche, array $repartitions, bool $confirmerPartNulle, ?Carbon $dateEffet = null, bool $remplacerPlanification = false): ?array
+    public static function definir(Vehicule $vehicule, string $parrainIdAffiche, array $repartitions, bool $confirmerPartNulle, ?Carbon $dateEffet = null, bool $remplacerPlanification = false, array $aRefaireDansEquipe = []): ?array
     {
         $aujourdhui = Carbon::today();
         $dateEffet = ($dateEffet ?? $aujourdhui)->copy()->startOfDay();
 
         if ($dateEffet->lt($aujourdhui)) {
-            $minimum = RecalculRetroactifParrainService::dateMinimale($vehicule->organization_id);
-            if ($minimum !== null && $dateEffet->lt($minimum)) {
-                throw ValidationException::withMessages([
-                    'date_effet' => sprintf(
-                        'La date de début des droits ne peut pas précéder une période de paiement clôturée : au plus tôt le %s.',
-                        $minimum->format('d/m/Y'),
-                    ),
-                ]);
-            }
+            self::verifierDateDebutDroits($vehicule, $dateEffet);
         }
 
         $planification = self::planification($vehicule);
@@ -113,7 +179,7 @@ class PartParrainService
             ]);
         }
 
-        return DB::transaction(function () use ($vehicule, $parrainIdAffiche, $repartitions, $confirmerPartNulle, $dateEffet, $aujourdhui, $planification) {
+        return DB::transaction(function () use ($vehicule, $parrainIdAffiche, $repartitions, $confirmerPartNulle, $dateEffet, $aujourdhui, $planification, $aRefaireDansEquipe) {
             $vehicule = Vehicule::whereKey($vehicule->id)->lockForUpdate()->firstOrFail();
             $parrainId = $vehicule->parrain_id;
 
@@ -142,7 +208,18 @@ class PartParrainService
 
             $requis = PartageParrainService::membresRequis($equipe);
             foreach ($parCle as $cle => $repartition) {
-                PartageParrainService::validerGroupe($attendus[$cle], $repartition, $parrainId, $requis);
+                if (! in_array($cle, $aRefaireDansEquipe, true)) {
+                    PartageParrainService::validerGroupe($attendus[$cle], $repartition, $parrainId, $requis);
+
+                    continue;
+                }
+
+                $livreurs = collect($repartition['parts'])->pluck('livreur_id')->sort()->values()->all();
+                if ($livreurs !== $requis->sort()->values()->all()) {
+                    throw ValidationException::withMessages([
+                        'parts' => "L'équipe du véhicule a changé entre-temps : rafraîchissez la page.",
+                    ]);
+                }
             }
 
             if (! $confirmerPartNulle && $parCle->contains(fn (array $r) => (int) $r['part_parrain'] === 0)) {
@@ -155,19 +232,41 @@ class PartParrainService
                 ->whereIn('code', $parCle->pluck('processus_code')->unique())
                 ->pluck('id', 'code');
 
+            $antidate = false;
             foreach ($parCle as $cle => $repartition) {
                 $processusId = $processus[$repartition['processus_code']];
+                $montants = collect($repartition['parts'])->mapWithKeys(fn (array $p) => [$p['livreur_id'] => (int) $p['montant_unitaire']])->all();
+
+                if (in_array($cle, $aRefaireDansEquipe, true)) {
+                    // Partage « À faire » (PARRAIN-024) : enregistré aujourd'hui ; une date passée
+                    // reste en attente de la répartition de l'équipe — aucun recalcul d'ici là.
+                    $enAttente = $dateEffet->lt($aujourdhui) ? $dateEffet : null;
+                    if ($planification === null
+                        && self::inchange($attendus[$cle], $repartition)
+                        && $attendus[$cle]['droits_parrain_depuis'] === $enAttente?->toDateString()) {
+                        self::confirmerPartNulleSansNouvelleVersion($equipe->id, $processusId, $repartition['categorie_id'], $parrainId);
+
+                        continue;
+                    }
+
+                    PartageLivraisonVersionService::versionner(
+                        $equipe->id,
+                        $processusId,
+                        $repartition['categorie_id'],
+                        $montants,
+                        $aujourdhui,
+                        (int) $repartition['part_parrain'],
+                        confirmerPartParrainNulle: $confirmerPartNulle,
+                        remplacerPlanification: true,
+                        droitsParrainDepuis: $enAttente,
+                        droitsEnAttenteTraites: true,
+                    );
+
+                    continue;
+                }
 
                 if ($planification === null && $dateEffet->equalTo($aujourdhui) && self::inchange($attendus[$cle], $repartition)) {
-                    // Rien ne change : seule la décision sur une part nulle est enregistrée.
-                    EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
-                        ->where('processus_id', $processusId)
-                        ->where('categorie_id', $repartition['categorie_id'])
-                        ->where('parrain_id', $parrainId)
-                        ->where('montant_unitaire', 0)
-                        ->whereNull('part_parrain_confirmee_at')
-                        ->actifA($aujourdhui)
-                        ->update(['part_parrain_confirmee_at' => now()]);
+                    self::confirmerPartNulleSansNouvelleVersion($equipe->id, $processusId, $repartition['categorie_id'], $parrainId);
 
                     continue;
                 }
@@ -176,18 +275,89 @@ class PartParrainService
                     $equipe->id,
                     $processusId,
                     $repartition['categorie_id'],
-                    collect($repartition['parts'])->mapWithKeys(fn (array $p) => [$p['livreur_id'] => (int) $p['montant_unitaire']])->all(),
+                    $montants,
                     $dateEffet,
                     (int) $repartition['part_parrain'],
                     confirmerPartParrainNulle: $confirmerPartNulle,
                     remplacerPlanification: true,
+                    droitsEnAttenteTraites: true,
                 );
+                $antidate = $antidate || $dateEffet->lt($aujourdhui);
             }
 
-            return $dateEffet->lt($aujourdhui)
+            // Recalcul rétroactif sur les seuls partages complets antidatés.
+            return $antidate
                 ? RecalculRetroactifParrainService::recalculer($vehicule, $dateEffet)
                 : null;
         });
+    }
+
+    /** Rien ne change sur ce partage : seule la décision sur une part nulle est enregistrée. */
+    private static function confirmerPartNulleSansNouvelleVersion(string $equipeId, string $processusId, string $categorieId, string $parrainId): void
+    {
+        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processusId)
+            ->where('categorie_id', $categorieId)
+            ->where('parrain_id', $parrainId)
+            ->where('montant_unitaire', 0)
+            ->whereNull('part_parrain_confirmee_at')
+            ->actifA(Carbon::today())
+            ->update(['part_parrain_confirmee_at' => now()]);
+    }
+
+    /**
+     * Date de début des droits au plus tôt (null : aucune limite) : le lendemain de la dernière
+     * période Livreurs ou Parrains clôturée (PARRAIN-023) et, si le véhicule a déjà eu un autre
+     * parrain, le jour de son remplacement — les commissions acquises par l'ancien parrain, payées
+     * ou non, ne lui sont jamais reprises (PARRAIN-024).
+     */
+    public static function dateMinimaleDroits(Vehicule $vehicule): ?Carbon
+    {
+        return collect([
+            RecalculRetroactifParrainService::dateMinimale($vehicule->organization_id),
+            self::finDesDroitsDuParrainPrecedent($vehicule),
+        ])->filter()->max();
+    }
+
+    /** @throws ValidationException date de début des droits trop ancienne */
+    public static function verifierDateDebutDroits(Vehicule $vehicule, CarbonInterface $date): void
+    {
+        $periodes = RecalculRetroactifParrainService::dateMinimale($vehicule->organization_id);
+        if ($periodes !== null && $date->lt($periodes)) {
+            throw ValidationException::withMessages([
+                'date_effet' => sprintf(
+                    'La date de début des droits ne peut pas précéder une période de paiement clôturée : au plus tôt le %s.',
+                    $periodes->format('d/m/Y'),
+                ),
+            ]);
+        }
+
+        $remplacement = self::finDesDroitsDuParrainPrecedent($vehicule);
+        if ($remplacement !== null && $date->lt($remplacement)) {
+            throw ValidationException::withMessages([
+                'date_effet' => sprintf(
+                    'Le parrain actuel a remplacé le précédent le %s : ses droits ne peuvent pas commencer avant (les commissions de l\'ancien parrain lui restent acquises).',
+                    $remplacement->format('d/m/Y'),
+                ),
+            ]);
+        }
+    }
+
+    /** Jour où les droits d'un parrain précédent du véhicule ont pris fin (null : aucun). */
+    private static function finDesDroitsDuParrainPrecedent(Vehicule $vehicule): ?Carbon
+    {
+        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->first();
+        if (! $equipe) {
+            return null;
+        }
+
+        $fin = EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
+            ->whereNotNull('parrain_id')
+            ->when($vehicule->parrain_id, fn ($q, string $id) => $q->where('parrain_id', '!=', $id))
+            ->whereNotNull('effective_to')
+            ->max('effective_to');
+
+        return $fin ? Carbon::parse($fin)->startOfDay() : null;
     }
 
     /**

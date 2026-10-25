@@ -48,6 +48,7 @@ class EquipeLivraisonPartageCategorie extends Model
         'part_pourcentage',
         'montant_unitaire',
         'part_parrain_confirmee_at',
+        'droits_parrain_depuis',
         'effective_from',
         'effective_to',
     ];
@@ -60,6 +61,7 @@ class EquipeLivraisonPartageCategorie extends Model
             'effective_from' => 'date',
             'effective_to' => 'date',
             'part_parrain_confirmee_at' => 'datetime',
+            'droits_parrain_depuis' => 'date',
         ];
     }
 

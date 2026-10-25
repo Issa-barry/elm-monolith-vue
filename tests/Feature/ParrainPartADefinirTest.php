@@ -9,16 +9,19 @@ use App\Enums\CommissionUniteCalcul;
 use App\Features\ModuleFeature;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\PaiementFiche;
 use App\Models\Parrain;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\Commission\PartageParrainService;
@@ -34,9 +37,11 @@ use Tests\TestCase;
 /**
  * Part du parrain « à définir » / « définie » (PARRAIN-021) : état métier distinct de la conformité
  * du partage, jamais bloquant. Une part entièrement nulle n'est « définie » que si un utilisateur
- * l'a confirmée ; la grille enregistre tous les partages du parrain en une transaction, avec les
- * contrôles du changement de parrain. Barème Livreur 1 000 GNF/pack en Vente et en Logistique
- * (la distribution d'un véhicule parrainé garde le barème Logistique).
+ * l'a confirmée. Saisie en place de l'onglet Parrain (PARRAIN-024) : la part du parrain seule, par
+ * partage, en une transaction ; un livreur seul reçoit le reste du barème, plusieurs livreurs gardent
+ * leurs montants et le partage passe « À faire » jusqu'à la répartition dans l'onglet Équipe.
+ * Barème Livreur 1 000 GNF/pack en Vente et en Logistique (la distribution d'un véhicule parrainé
+ * garde le barème Logistique) ; équipe chauffeur 600 / convoyeur 400.
  */
 class ParrainPartADefinirTest extends TestCase
 {
@@ -141,31 +146,52 @@ class ParrainPartADefinirTest extends TestCase
     }
 
     /**
-     * Répartition Vente et Distribution (même montants), au format de la grille.
+     * Part du parrain sur Vente et Distribution, au format de la saisie en place.
      *
      * @return list<array<string, mixed>>
      */
-    private function repartitions(int $chauffeur, int $convoyeur, int $parrain): array
+    private function parts(int $vente, ?int $distribution = null): array
     {
-        return array_map(fn (string $code) => [
-            'processus_code' => $code,
-            'categorie_id' => $this->categorie->id,
-            'parts' => [
-                ['livreur_id' => $this->chauffeur->id, 'montant_unitaire' => $chauffeur],
-                ['livreur_id' => $this->convoyeur->id, 'montant_unitaire' => $convoyeur],
-            ],
-            'part_parrain' => $parrain,
-        ], [CommissionProcessus::CODE_VENTE, CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
+        return [
+            ['processus_code' => CommissionProcessus::CODE_VENTE, 'categorie_id' => $this->categorie->id, 'part_parrain' => $vente],
+            ['processus_code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 'categorie_id' => $this->categorie->id, 'part_parrain' => $distribution ?? $vente],
+        ];
     }
 
-    /** @param  list<array<string, mixed>>  $repartitions */
-    private function definir(array $repartitions, bool $confirmer = false, ?string $parrainId = null)
+    /** @param  list<array<string, mixed>>  $parts */
+    private function definir(array $parts, bool $confirmer = false, ?string $parrainId = null, ?string $date = null)
     {
-        return $this->actingAs($this->user)->put(route('vehicules.parrain.part.update', $this->vehicule), [
+        return $this->actingAs($this->user)->put(route('vehicules.parrain.part.update', $this->vehicule), array_filter([
             'parrain_id' => $parrainId ?? $this->vehicule->fresh()->parrain_id,
-            'repartitions' => $repartitions,
+            'parts' => $parts,
             'confirmer_part_nulle' => $confirmer,
-        ]);
+            'date_effet' => $date,
+        ], fn ($v) => $v !== null));
+    }
+
+    /** Le convoyeur quitte l'équipe : le chauffeur est le seul livreur. */
+    private function unSeulLivreur(): void
+    {
+        EquipeLivreur::where('livreur_id', $this->convoyeur->id)->delete();
+    }
+
+    /** @return array<string, string> processus => statut du partage (onglet Équipe) */
+    private function statutsPartage(): array
+    {
+        return PartageConformiteVehiculesService::statuts($this->org->id, collect([$this->vehicule->fresh()]))[$this->vehicule->id];
+    }
+
+    /** Non-conformités du juge commun des ventes, à la date du jour. */
+    private function refusVente(string $processusCode): int
+    {
+        return CommissionPartageLivraisonCategorieChecker::nonConformites(
+            $this->org->id,
+            $this->equipe->fresh(),
+            $processusCode,
+            $this->vehicule->fresh()->type_vehicule_id,
+            [$this->categorie->id],
+            Carbon::today(),
+        )->count();
     }
 
     private function statut(): ?string
@@ -268,22 +294,102 @@ class ParrainPartADefinirTest extends TestCase
             ->assertJsonPath('groupes.0.part_parrain_actuelle', 0);
     }
 
-    public function test_une_part_positive_rend_la_part_definie_sur_tous_les_partages(): void
+    public function test_un_seul_livreur_recoit_le_reste_du_bareme_et_le_partage_reste_fait(): void
     {
         $parrain = $this->parrainer();
+        $this->unSeulLivreur();
+        $fiches = PaiementFiche::count();
+        $enveloppes = CommissionEnveloppe::count();
 
-        $this->definir($this->repartitions(500, 300, 200))->assertSessionHasNoErrors()->assertRedirect();
+        $this->definir($this->parts(200))->assertSessionHasNoErrors()->assertSessionMissing('warning');
 
         $this->assertSame(PartParrainService::DEFINIE, $this->statut());
-        $this->assertSame(0, $this->partsARepartir());
-        $attendu = ["livreur:{$this->chauffeur->id}" => 500, "livreur:{$this->convoyeur->id}" => 300, "parrain:{$parrain->id}" => 200];
+        $attendu = ["livreur:{$this->chauffeur->id}" => 800, "parrain:{$parrain->id}" => 200];
         ksort($attendu);
         $this->assertSame($attendu, $this->lignesActives($this->vente));
         $this->assertSame($attendu, $this->lignesActives($this->distribution()));
-        // Le transfert entre sites ne paie jamais le parrain : intact.
+        $this->assertSame('fait', $this->statutsPartage()[CommissionProcessus::CODE_VENTE]);
+        $this->assertSame(0, $this->refusVente(CommissionProcessus::CODE_VENTE), 'Ventes autorisées.');
+        // Ni commission ni fiche de paiement à la simple saisie de la part.
+        $this->assertSame($fiches, PaiementFiche::count());
+        $this->assertSame($enveloppes, CommissionEnveloppe::count());
+    }
+
+    public function test_plusieurs_livreurs_gardent_leurs_montants_et_le_partage_passe_a_faire(): void
+    {
+        $parrain = $this->parrainer();
+
+        $this->definir($this->parts(200))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'onglet Équipe') && str_contains($m, 'Ventes'));
+
+        $this->assertSame(PartParrainService::DEFINIE, $this->statut());
+        $attendu = ["livreur:{$this->chauffeur->id}" => 600, "livreur:{$this->convoyeur->id}" => 400, "parrain:{$parrain->id}" => 200];
+        ksort($attendu);
+        $this->assertSame($attendu, $this->lignesActives($this->vente), 'Montants des livreurs jamais modifiés d\'office.');
+        $statuts = $this->statutsPartage();
+        $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_VENTE]);
+        $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
+        $this->assertSame(1, $this->refusVente(CommissionProcessus::CODE_VENTE), 'Ventes refusées jusqu\'à la répartition.');
+        // Le transfert entre sites ne paie jamais le parrain : intact et conforme.
         $logistique = ["livreur:{$this->chauffeur->id}" => 600, "livreur:{$this->convoyeur->id}" => 400];
         ksort($logistique);
         $this->assertSame($logistique, $this->lignesActives($this->logistique));
+        $this->assertSame('fait', $statuts[CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]);
+    }
+
+    public function test_seul_le_partage_modifie_passe_a_faire(): void
+    {
+        $this->parrainer();
+
+        // Vente : 200 ; Distribution : 0 confirmé (inchangée).
+        $this->definir($this->parts(200, 0), confirmer: true)->assertSessionHasNoErrors();
+
+        $statuts = $this->statutsPartage();
+        $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_VENTE]);
+        $this->assertSame('fait', $statuts[CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
+        $this->assertSame(0, $this->refusVente(CommissionProcessus::CODE_DISTRIBUTION_CLIENT));
+    }
+
+    public function test_la_repartition_refaite_dans_lequipe_redevient_faite(): void
+    {
+        $parrain = $this->parrainer();
+        $this->definir($this->parts(200, 0), confirmer: true)->assertSessionHasNoErrors();
+
+        $this->actingAs($this->user)->patch(route('equipes-livraison.update', $this->equipe), [
+            'vehicule_id' => $this->vehicule->id,
+            'processus_code' => CommissionProcessus::CODE_VENTE,
+            'membres' => array_map(fn (int $i) => [
+                'livreur_id' => [$this->chauffeur, $this->convoyeur][$i]->id,
+                'nom_complet' => [$this->chauffeur, $this->convoyeur][$i]->nom_complet,
+                'telephone' => '+2246200000'.($i + 10),
+                'role' => $i === 0 ? 'chauffeur' : 'convoyeur',
+                'ordre' => $i,
+            ], [0, 1]),
+            'partages_categorie' => [[
+                'categorie_id' => $this->categorie->id,
+                'parts' => [
+                    ['membre_ordre' => 0, 'montant_unitaire' => 500],
+                    ['membre_ordre' => 1, 'montant_unitaire' => 300],
+                ],
+                'part_parrain' => 200,
+            ]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('fait', $this->statutsPartage()[CommissionProcessus::CODE_VENTE]);
+        $this->assertSame(0, $this->refusVente(CommissionProcessus::CODE_VENTE));
+        $this->assertSame(200, $this->lignesActives($this->vente)["parrain:{$parrain->id}"], 'La part saisie dans l\'onglet Parrain est conservée.');
+    }
+
+    public function test_plusieurs_livreurs_avec_une_date_future_sont_refuses_sans_rien_enregistrer(): void
+    {
+        $this->parrainer();
+        $avant = $this->lignesActives($this->vente);
+
+        $this->definir($this->parts(200), confirmer: true, date: '2026-10-30')->assertSessionHasErrors('date_effet');
+
+        $this->assertSame($avant, $this->lignesActives($this->vente));
+        $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
     }
 
     public function test_une_part_nulle_exige_une_confirmation_qui_est_enregistree(): void
@@ -291,10 +397,10 @@ class ParrainPartADefinirTest extends TestCase
         $this->parrainer();
         $avant = EquipeLivraisonPartageCategorie::count();
 
-        $this->definir($this->repartitions(600, 400, 0))->assertSessionHasErrors('confirmer_part_nulle');
+        $this->definir($this->parts(0))->assertSessionHasErrors('confirmer_part_nulle');
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
 
-        $this->definir($this->repartitions(600, 400, 0), confirmer: true)->assertSessionHasNoErrors();
+        $this->definir($this->parts(0), confirmer: true)->assertSessionHasNoErrors();
 
         $this->assertSame(PartParrainService::DEFINIE, $this->statut());
         $this->assertSame(0, $this->partsARepartir());
@@ -304,16 +410,16 @@ class ParrainPartADefinirTest extends TestCase
     public function test_remettre_la_part_a_zero_apres_une_part_positive_redemande_une_confirmation(): void
     {
         $this->parrainer();
-        $this->definir($this->repartitions(500, 300, 200))->assertSessionHasNoErrors();
+        $this->definir($this->parts(200))->assertSessionHasNoErrors();
 
-        $this->definir($this->repartitions(600, 400, 0))->assertSessionHasErrors('confirmer_part_nulle');
+        $this->definir($this->parts(0))->assertSessionHasErrors('confirmer_part_nulle');
         $this->assertSame(PartParrainService::DEFINIE, $this->statut(), 'Refusé : la part positive reste en place.');
     }
 
     public function test_changer_de_parrain_remet_la_confirmation_a_vide(): void
     {
         $this->parrainer();
-        $this->definir($this->repartitions(600, 400, 0), confirmer: true)->assertSessionHasNoErrors();
+        $this->definir($this->parts(0), confirmer: true)->assertSessionHasNoErrors();
         $this->assertSame(PartParrainService::DEFINIE, $this->statut());
 
         $this->parrainer();
@@ -325,7 +431,7 @@ class ParrainPartADefinirTest extends TestCase
     public function test_changer_de_parrain_par_lecran_remet_la_part_a_definir(): void
     {
         $this->parrainer();
-        $this->definir($this->repartitions(600, 400, 0), confirmer: true)->assertSessionHasNoErrors();
+        $this->definir($this->parts(0), confirmer: true)->assertSessionHasNoErrors();
 
         $this->actingAs($this->user)->post(route('vehicules.parrain.store', $this->vehicule), [
             'nom_complet' => 'Nouveau Parrain',
@@ -341,7 +447,7 @@ class ParrainPartADefinirTest extends TestCase
     {
         $this->assertNull($this->statut());
 
-        $this->definir($this->repartitions(500, 300, 200), parrainId: 'aucun')->assertSessionHasErrors('repartitions');
+        $this->definir($this->parts(200), parrainId: 'aucun')->assertSessionHasErrors('repartitions');
         $this->assertSame([600, 400], collect($this->lignesActives($this->vente))->sortDesc()->values()->all());
 
         $this->actingAs($this->user)->get(route('vehicules.show', $this->vehicule))
@@ -357,7 +463,7 @@ class ParrainPartADefinirTest extends TestCase
         $this->actingAs($sansDroit)->getJson(route('vehicules.parrain.part', $this->vehicule))->assertForbidden();
         $this->actingAs($sansDroit)->put(route('vehicules.parrain.part.update', $this->vehicule), [
             'parrain_id' => $this->vehicule->fresh()->parrain_id,
-            'repartitions' => $this->repartitions(500, 300, 200),
+            'parts' => $this->parts(200),
         ])->assertForbidden();
 
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
@@ -368,7 +474,7 @@ class ParrainPartADefinirTest extends TestCase
         $parrain = $this->parrainer();
         $avant = $this->lignesActives($this->vente);
 
-        $this->definir($this->repartitions(600, 400, 200))->assertSessionHasErrors('repartitions');
+        $this->definir($this->parts(1200))->assertSessionHasErrors('parts');
 
         $this->assertSame($avant, $this->lignesActives($this->vente));
         $this->assertArrayHasKey("parrain:{$parrain->id}", $avant);
@@ -379,10 +485,8 @@ class ParrainPartADefinirTest extends TestCase
     {
         $this->parrainer();
         $avantVente = $this->lignesActives($this->vente);
-        $repartitions = $this->repartitions(500, 300, 200);
-        $repartitions[1]['part_parrain'] = 300; // Distribution : 500 + 300 + 300 > 1 000
-
-        $this->definir($repartitions)->assertSessionHasErrors('repartitions');
+        // Vente valide (200), Distribution au-delà du barème (1 500 > 1 000).
+        $this->definir($this->parts(200, 1500))->assertSessionHasErrors('parts');
 
         $this->assertSame($avantVente, $this->lignesActives($this->vente), 'La Vente, pourtant valide, n\'est pas enregistrée seule.');
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
@@ -392,7 +496,7 @@ class ParrainPartADefinirTest extends TestCase
     {
         $this->parrainer();
 
-        $this->definir([$this->repartitions(500, 300, 200)[0]])->assertSessionHasErrors('repartitions');
+        $this->definir([$this->parts(200)[0]])->assertSessionHasErrors('repartitions');
 
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
     }
@@ -400,7 +504,7 @@ class ParrainPartADefinirTest extends TestCase
     public function test_la_confirmation_ne_rend_pas_conforme_un_partage_qui_ne_lest_pas(): void
     {
         $this->parrainer();
-        $this->definir($this->repartitions(600, 400, 0), confirmer: true)->assertSessionHasNoErrors();
+        $this->definir($this->parts(0), confirmer: true)->assertSessionHasNoErrors();
 
         // Le barème Vente passe à 1 200 : le partage (1 000) n'est plus conforme, confirmation ou non.
         CommissionRegle::where('processus_id', $this->vente->id)->update(['montant' => 1200]);

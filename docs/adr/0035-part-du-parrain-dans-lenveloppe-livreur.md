@@ -161,7 +161,7 @@ Mise en œuvre : `PartageLivraisonVersionService::versionner()` accepte une date
 future (versions postérieures bornées à leur début, jamais supprimées) ; régénération ciblée de la
 seule enveloppe Livreur (`CommissionEnveloppeGenerator::regenererEnveloppeEquipe()`, même principe
 que le retour partiel) ; `RecalculRetroactifParrainService` (exclusions, bilan, réouverture des
-périodes). Tests : `ParrainDroitsRetroactifsTest`, `PartParrainDialog.spec.ts`.
+périodes). Tests : `ParrainDroitsRetroactifsTest`, `PartParrainDialog.spec.ts` (remplacé au lot 8).
 
 Conséquence assumée : un livreur parti de l'équipe pendant la période perd sa part non payée sur
 les commandes recalculées ; un ajustement manuel non payé est remplacé par le recalcul.
@@ -172,6 +172,45 @@ que depuis la grille, après confirmation ; (A3) journal d'audit des décisions 
 (A4) recalcul sans effet quand la commission serait identique ; (A6) verrou de la commande pendant
 la régénération. Point de procédure (A5) : les parts Livreur recalculées sont à revalider, la
 période Livreurs reste ouverte jusque-là.
+
+## Lot 8 — part du parrain saisie en place (2026-10-24, PARRAIN-024)
+
+Retour d'usage : la grille en fenêtre (et l'étape « Parrain associé » qui y menait) obligeait à
+répartir toute l'équipe pour fixer la part du parrain. Décisions de l'utilisateur :
+
+- la part du parrain se saisit **directement dans l'onglet Parrain** (montants modifiables dans le
+  tableau, Enregistrer / Annuler, date de début des droits), sans fenêtre ni stepper ;
+- **un seul livreur** : il reçoit le reste du barème, le partage reste « Fait » ;
+- **plusieurs livreurs** : effet immédiat — leurs montants ne changent pas, le partage passe
+  « À faire » et les ventes concernées sont refusées jusqu'à la nouvelle répartition dans l'onglet
+  Équipe (option « part en attente », sans blocage des ventes, écartée) ;
+- la modale Équipe garde la ligne du parrain modifiable ; les deux écrans lisent les mêmes partages ;
+- rétroactivité avec plusieurs livreurs : la date de début passée reste en attente et s'applique à
+  la répartition faite dans la modale Équipe, avec confirmation et bilan (option « compléter la
+  répartition dans l'onglet Parrain » écartée : l'onglet ne porte que le montant du parrain) ;
+- changement de parrain : le nouveau démarre à 0 GNF à partir d'aujourd'hui, l'ancien conserve
+  toutes ses commissions acquises (payées ou non) ; retrait et changement sans répartition jointe,
+  conséquences confirmées.
+
+Contradiction résolue explicitement : PARRAIN-011/012 exigeaient qu'une part du parrain soit
+toujours enregistrée avec une répartition complète. Ils sont réécrits : une répartition incomplète
+peut être enregistrée au statut « À faire », jamais utilisable — ventes refusées quelle que soit la
+date d'activation (le moteur ne sait pas calculer une commission sur un partage déséquilibré),
+aucune commission générée, aucune date de début appliquée, aucun recalcul. Garde-fou ajouté : les
+droits d'un nouveau parrain ne commencent jamais avant le remplacement de l'ancien (ses commissions
+non payées ne peuvent pas lui être reprises par un recalcul rétroactif).
+
+Mise en œuvre : `PartParrainService::definirParts()` construit les répartitions (livreur seul =
+barème − part ; plusieurs livreurs = montants actuels) et délègue à `definir()` (contrôles,
+versionnement, planification, rétroactivité), qui ne contrôle que les livreurs des partages laissés
+« À faire » ; date en attente `equipe_livraison_partages_categorie.droits_parrain_depuis` (migration
+non destructive), appliquée par `EquipeLivraisonController` (`confirmer_droits_parrain`) ;
+`PartageParrainService::appliquerChangementDeParrain()` sans répartition jointe ;
+`PartParrainService::dateMinimaleDroits()` ; `PartParrainEdition.vue` remplace
+`PartParrainDialog.vue`, `ParrainDialog.vue` confirme les conséquences. Tests :
+`ParrainPartADefinirTest`, `ParrainPartageCommissionTest`, `ParrainDroitsRetroactifsTest`,
+`PartParrainEdition.spec.ts`, `ParrainDialog.spec.ts`, E2E `parrain-commission.spec.ts`
+(synchronisation des onglets, changement de parrain).
 
 ## Conséquences
 

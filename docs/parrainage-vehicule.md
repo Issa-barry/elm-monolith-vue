@@ -110,30 +110,41 @@ et [commissions.md](commissions.md).
   exigée dans chaque partage qui le rémunère (enregistrement de l'équipe, commande, chargement, liste
   des véhicules) ; une ligne désignant un autre parrain que le parrain actuel rend le partage non
   conforme (`verifierParrainAJour()`).
-- **PARRAIN-011 — Garde-fou serveur.** `PartageLivraisonVersionService::versionner()` ferme la
-  version active en bloc : toute nouvelle version d'un véhicule parrainé, sur un processus qui le
-  rémunère, doit porter explicitement la part du parrain — jamais complétée ni recalculée par le
-  serveur (refus `ValidationException`) ; une part de parrain est refusée partout ailleurs.
+- **PARRAIN-011 — Garde-fou serveur** (révisé le 24/10/2026, PARRAIN-024).
+  `PartageLivraisonVersionService::versionner()` ferme la version active en bloc : toute nouvelle
+  version d'un véhicule parrainé, sur un processus qui le rémunère, doit porter explicitement la
+  part du parrain — jamais complétée ni recalculée par le serveur (refus `ValidationException`) ;
+  une part de parrain est refusée partout ailleurs. Seule exception : avec un livreur seul, la part
+  **du livreur** est calculée (barème − part du parrain). Une répartition **incomplète** (somme ≠
+  barème, plusieurs livreurs) peut être enregistrée : elle porte le statut **« À faire »** et n'est
+  **jamais utilisable**, quelle que soit la date d'activation de PARRAIN-022 — ventes,
+  modifications, prévisualisations et chargements refusés par le juge commun, aucune commission
+  générée ni relancée, jamais de date de début passée ou future appliquée, jamais de recalcul
+  rétroactif — jusqu'à la répartition complète dans l'onglet Équipe.
 - **PARRAIN-012 — Ajout, remplacement, retrait** (`PartageParrainService`, dans la transaction de
-  `StoreParrainController`, effet le jour même ; la part du parrain peut ensuite prendre effet à une
-  date choisie, passée ou future, cf. PARRAIN-023) : un nouveau parrain reçoit une
-  ligne à 0 GNF dans chaque partage existant, et le partage Distribution est créé (copie du partage
-  Logistique + parrain à 0) — aucun montant ne change. Ces lignes à 0 GNF, créées par le système, ne
-  valent **pas** décision : elles restent « À répartir » (PARRAIN-022, qui remplace ici l'ancienne
-  règle « aucune opération n'est bloquée »). Une part nulle passe au nouveau parrain, sans sa
-  confirmation (la décision portait sur l'ancien parrain) ; au retrait, elle disparaît et la distribution reprend le partage
-  Logistique. **Une part positive n'est jamais transférée ni retirée automatiquement** : le
-  changement (remplacement par `StoreParrainController`, retrait par `DestroyParrainController`)
-  doit joindre la nouvelle répartition complète de chaque partage où il reçoit une part
-  (`repartitions`, cf. `PartageParrainService::groupesARepartir()` et
-  `GET vehicules/{vehicule}/parrain/repartitions`), validée puis enregistrée avec le changement
-  dans une seule transaction — refusé sinon, rien n'est enregistré. Au retrait, le partage
-  Distribution (barème Logistique) est clos, sans répartition à refaire.
+  `StoreParrainController` / `DestroyParrainController`, effet le jour même ; révisé le 24/10/2026,
+  PARRAIN-024) :
+  - **ajout** : le parrain reçoit une ligne à 0 GNF dans chaque partage existant, et le partage
+    Distribution est créé (copie du partage Logistique + parrain à 0) — aucun montant ne change ;
+    ces lignes à 0 GNF, créées par le système, ne valent **pas** décision : elles restent
+    « À répartir » (PARRAIN-022) ; l'onglet Parrain passe ensuite en saisie de sa part ;
+  - **remplacement** : le nouveau parrain **démarre à 0 GNF à partir d'aujourd'hui** (à définir) ;
+    **l'ancien conserve toutes ses commissions acquises**, payées ou restant à payer (ses parts et
+    ses fiches restent à son nom, rien n'est réattribué) ; une part nulle confirmée ne passe pas au
+    nouveau parrain ; ses droits ne peuvent jamais commencer avant le remplacement (PARRAIN-023) ;
+  - **retrait** : sa ligne disparaît ; au retrait, le partage Distribution est clos (la
+    distribution reprend le partage Logistique) ; il conserve lui aussi ses commissions acquises ;
+  - **part positive de l'ancien parrain** : jamais transférée au nouveau. Un livreur seul la
+    récupère (le partage reste complet) ; avec plusieurs livreurs, leurs montants ne changent pas :
+    le partage passe « À faire » (PARRAIN-011) si leur total ne tombe plus sur le barème. Aucune
+    répartition n'est jointe au changement : une confirmation en annonce les conséquences par
+    partage (`ParrainDialog.vue`, d'après `GET vehicules/{vehicule}/parrain/repartitions`) ; un
+    message orange nomme les partages à refaire.
 - **PARRAIN-016 — Droits.** Ajouter un parrain, ou changer un parrain sans part : `vehicules.update`.
-  Joindre une répartition (changer ou retirer un parrain qui a une part) : en plus
-  `equipes-livraison.update`, vérifié par le serveur (`RepartitionsParrain`) ; les boutons
-  « Changer de parrain » et « Retirer le parrain » ne s'affichent que si l'utilisateur peut aller au
-  bout.
+  Changer ou retirer un parrain qui a une part (la répartition de l'équipe change) : en plus
+  `equipes-livraison.update`, vérifié par le serveur (`PartageParrainService::aUnePartPositive()`)
+  ; les boutons « Changer de parrain » et « Retirer le parrain » ne s'affichent que si
+  l'utilisateur peut aller au bout.
 - **PARRAIN-013 — Changement de barème.** Une équipe parrainée (même part à 0) n'est jamais alignée
   automatiquement : elle passe par la grille de reconfiguration, le parrain y figurant comme membre
   requis ; un brouillon Logistique y ajoute son partage Distribution
@@ -166,12 +177,12 @@ Distribution.
   (à 0 au départ, comme les livreurs).
 - `Reconfiguration.vue` : le parrain est un membre de la grille (rôle « Parrain »), champ « Parrain »
   dans « Appliquer par rôle », partages Distribution signalés dans un brouillon Logistique.
-- Onglet Parrain (`Vehicules/Show.vue`) : part par processus et catégorie, « Définir / Modifier la
-  part du parrain » (grille unique, PARRAIN-021 — remplace l'ancien « Modifier la répartition » qui
-  ouvrait la modale Équipe d'un seul processus), « Changer de parrain », « Retirer le parrain » ;
+- Onglet Parrain (`Vehicules/Show.vue`) : part par processus et catégorie, « Modifier les parts » (saisie en place, PARRAIN-024 — remplace la grille en fenêtre de PARRAIN-021 et
+  l'ancien « Modifier la répartition » qui ouvrait la modale Équipe d'un seul processus),
+  « Changer de parrain », « Retirer le parrain » ;
   `ParrainDialog.vue` enchaîne
-  identité puis « Nouvelle répartition » quand le parrain a une part, ou une simple confirmation de
-  retrait sinon.
+  identité puis confirmation des conséquences quand le parrain a une part (PARRAIN-024, aucune
+  répartition à saisir), ou une simple confirmation de retrait sinon.
 
 **Paiement (lot 3, 23/10/2026)** :
 - **PARRAIN-017 — Fiche « Parrain » à la quinzaine.** Type de période `parrain` (référence
@@ -259,19 +270,53 @@ Distribution.
   - **répartition planifiée** (date future) : jamais écrasée en silence — la modale Équipe, le
     transfert d'un livreur, la reconfiguration après changement de barème et le changement de
     parrain sont refusés tant qu'elle existe (`versionner()`, message renvoyant à l'onglet Parrain) ;
-    seule la grille de la part du parrain la remplace, après confirmation explicite (case
-    « Remplacer la répartition planifiée du … »), sans laisser de période sans répartition.
+    seule la saisie de la part du parrain (onglet Parrain) la remplace, après confirmation
+    explicite (case « Remplacer la répartition planifiée du … »), sans laisser de période sans
+    répartition.
+- **PARRAIN-024 — Part du parrain saisie en place, dans l'onglet Parrain** (décision du
+  24/10/2026, remplace la grille en fenêtre de PARRAIN-021, l'étape « Parrain associé » de l'ajout,
+  et — pour cette saisie seulement — la règle « répartition complète jointe » de PARRAIN-012) :
+  - « Modifier les parts » rend les montants modifiables directement dans le
+    tableau de l'onglet (`PartParrainEdition.vue`), une part par partage (processus × catégorie),
+    avec la date de début des droits ; « Enregistrer » ou « Annuler » (valeurs d'origine). Après
+    l'association d'un parrain, la fenêtre se ferme et l'onglet passe directement en saisie ;
+  - **un seul livreur** : il reçoit le reste du barème (barème − part du parrain), calculé par le
+    serveur ; le partage reste conforme (« Fait »), rien à refaire dans l'onglet Équipe ;
+  - **plusieurs livreurs** : leurs montants ne sont **jamais** modifiés d'office ; le partage est
+    enregistré tel quel, sa somme ne tombe plus sur le barème : il passe **« À faire »**
+    (PARRAIN-011) et les ventes concernées sont **refusées** jusqu'à la nouvelle répartition dans
+    l'onglet Équipe ; un message orange nomme les partages à refaire ;
+  - **plusieurs livreurs et date de début passée** : la date reste **en attente** sur la ligne du
+    parrain (`droits_parrain_depuis`) — aucun recalcul d'ici là. La répartition faite ensuite dans
+    la modale Équipe s'applique depuis cette date, après une **confirmation explicite** (case
+    « Cette répartition s'appliquera depuis cette date… », exigée aussi par le serveur,
+    `confirmer_droits_parrain`), avec le recalcul de PARRAIN-023 dans la même transaction (mêmes
+    exclusions, protections A1 à A6 et bilan affiché). La date est revérifiée à ce moment (période
+    clôturée entre-temps, remplacement du parrain) ; tant qu'elle est en attente, toute autre
+    écriture du partage (transfert de livreur, reconfiguration) est refusée — jamais perdue en
+    silence ; l'onglet Parrain l'indique (« due depuis le … — répartition à faire dans l'onglet
+    Équipe ») ; un remplacement du parrain l'abandonne (elle concernait l'ancien) ;
+  - **plusieurs livreurs et date future** : refusée — une répartition à refaire ne se planifie
+    pas ;
+  - seuls les partages dont la somme ne tombe plus juste passent « À faire » : les autres
+    processus et catégories gardent leur état ;
+  - la modale Équipe reste l'endroit où se répartit l'équipe : la part du parrain y est reprise et
+    y reste modifiable, et l'onglet Parrain affiche toujours la part en vigueur ;
+  - rien n'est généré à l'enregistrement (ni commission, ni fiche de paiement) ; une date passée
+    applique PARRAIN-023 (recalcul, exclusions, bilan) ;
+  - contrôles serveur (`PartParrainService::definirParts()`, qui s'appuie sur `definir()`) : part
+    entière entre 0 et le barème, chaque partage du parrain fourni, confirmation d'une part nulle
+    (PARRAIN-022), planification (PARRAIN-023), parrain et équipe inchangés entre-temps ; tout ou
+    rien, dans une seule transaction.
 - **PARRAIN-021 — « À définir » ou « Définie » au niveau du véhicule**, déduit des partages : à
   définir dès qu'un partage où il est rémunéré est « à répartir » (`PartParrainService::statut()` /
   `statuts()`, une requête pour la liste).
 - **Parcours** :
-  - après l'association d'un parrain, `ParrainDialog.vue` annonce sa part à 0 GNF et propose
-    « Définir sa part maintenant » ou « Plus tard » ;
-  - onglet Parrain : bandeau « Part du parrain à définir » et bouton « Définir / Modifier la part
-    du parrain », qui ouvre `PartParrainDialog.vue` — une seule grille pour tous les partages où il
-    est rémunéré (Vente, Transfert grossiste, Distribution × catégorie), même éditeur que la modale
-    Équipe ; chaque partage laissé à 0 GNF exige la case « Le parrain ne reçoit aucune part pour
-    le moment sur … » ;
+  - après l'association d'un parrain, la fenêtre se ferme et l'onglet Parrain passe en saisie de sa
+    part (PARRAIN-024) ;
+  - onglet Parrain : bandeau « Part du parrain à définir » et bouton « Modifier les parts », qui rend les montants modifiables sur place (PARRAIN-024) pour tous les partages
+    où il est rémunéré (Vente, Transfert grossiste, Distribution × catégorie) ; chaque partage
+    laissé à 0 GNF exige la case « Le parrain ne reçoit aucune part pour le moment sur … » ;
   - modale Équipe : même case par catégorie quand la part du parrain est à 0 GNF ; sans elle, le
     partage reste « À répartir » ;
   - **un seul livreur et un parrain** (`CommissionMontantFixeEditor.vue`, toutes les saisies) : la
@@ -287,13 +332,15 @@ Distribution.
     dans le tableau des commissions, et date à partir de laquelle les ventes sont refusées ;
   - liste des véhicules : ligne « Parrain » (À définir / Définie) dans la colonne Partages et
     filtre « Part du parrain » (`parrain_part`), pour retrouver les véhicules repris.
-- **Enregistrement** (`PUT vehicules/{vehicule}/parrain/part`, `DefinirPartParrainController`) :
-  `vehicules.update` + `equipes-livraison.update` (sinon actions masquées et message « un responsable
-  des équipes de livraison doit la définir ») ; chaque partage du parrain doit être fourni et
-  conforme (`PartageParrainService::validerGroupe()`, mêmes contrôles que le changement de parrain :
-  somme exacte du barème, livreurs actifs, part du parrain présente) ; tout est enregistré dans une
-  seule transaction, refusé en bloc sinon ; un partage inchangé n'est pas reversionné ; un parrain
-  changé entre-temps est refusé.
+- **Enregistrement** (`PUT vehicules/{vehicule}/parrain/part`, `DefinirPartParrainController`,
+  champ `parts` : processus, catégorie, part du parrain) : `vehicules.update` +
+  `equipes-livraison.update` (sinon actions masquées et message « un responsable des équipes de
+  livraison doit la définir ») ; chaque partage du parrain doit être fourni ; un partage complet
+  (un seul livreur, ou somme toujours juste) passe les contrôles du changement de parrain
+  (`PartageParrainService::validerGroupe()` : somme exacte du barème, livreurs actifs, part du
+  parrain présente) ; un partage laissé « À faire » (plusieurs livreurs, PARRAIN-024) n'est
+  contrôlé que sur ses livreurs ; tout est enregistré dans une seule transaction, refusé en bloc
+  sinon ; un partage inchangé n'est pas reversionné ; un parrain changé entre-temps est refusé.
 
 **Vérification (lot 4, 23/10/2026)** : parcours complet couvert par
 `tests/e2e/commissions/parrain-commission.spec.ts` (de l'ajout du parrain au paiement partiel de sa

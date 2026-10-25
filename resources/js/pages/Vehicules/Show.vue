@@ -10,7 +10,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
-import PartParrainDialog from '@/pages/Vehicules/partials/PartParrainDialog.vue';
+import PartParrainEdition from '@/pages/Vehicules/partials/PartParrainEdition.vue';
 import SituationTab from '@/pages/Vehicules/partials/SituationTab.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -80,6 +80,8 @@ interface PartageCategorieDetail {
     part_parrain?: number | null;
     /** PARRAIN-022 : part nulle confirmée par une personne. */
     part_parrain_confirmee?: boolean;
+    /** PARRAIN-024 : date de début des droits du parrain en attente de cette répartition. */
+    droits_parrain_depuis?: string | null;
 }
 
 interface EquipeData {
@@ -187,6 +189,8 @@ const props = defineProps<{
         a_repartir: boolean;
         /** PARRAIN-023 : date de début de la part en vigueur (AAAA-MM-JJ). */
         depuis: string | null;
+        /** PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe. */
+        droits_en_attente?: string | null;
     }>;
     /** Parrain exigé dans la répartition du processus actif, null sinon. */
     parrain_partage: { id: string; nom_complet: string } | null;
@@ -478,7 +482,31 @@ function partsCommissionMembre(livreurId: string | null) {
 }
 
 const showParrainDialog = ref(false);
-const showPartParrainDialog = ref(false);
+/** Saisie en place de la part du parrain dans l'onglet Parrain (PARRAIN-024). */
+const editionPartParrain = ref(false);
+const libelleTransfertsExclus = computed(() =>
+    props.processus_options.some((o) => o.value === 'logistique_transfert')
+        ? (props.processus_options.find(
+              (o) => o.value === 'logistique_transfert',
+          )?.label ?? 'Transferts logistiques')
+        : null,
+);
+
+// Partages à refaire dans l'onglet Équipe après la saisie de la part du parrain : avertissement
+// orange (opération autorisée, attention requise).
+const flashWarning = computed(
+    () => (page.props as any).flash?.warning as string | undefined,
+);
+watch(flashWarning, (msg) => {
+    if (!msg) return;
+    toast.add({
+        group: 'top',
+        severity: 'warn',
+        summary: 'Attention',
+        detail: msg,
+        life: 8000,
+    });
+});
 const partParrainADefinir = computed(
     () => props.parrain_part?.statut === 'a_definir',
 );
@@ -1532,6 +1560,7 @@ function formatGNF(val: number): string {
                                                             option.value,
                                                         )
                                                     "
+                                                    :data-testid="`statut-partage-${option.value}-${cat.categorie_id}`"
                                                     class="px-4 py-3"
                                                 >
                                                     <span
@@ -1710,7 +1739,10 @@ function formatGNF(val: number): string {
                                         </p>
                                     </div>
                                     <Button
-                                        v-if="peutDefinirPartParrain"
+                                        v-if="
+                                            peutDefinirPartParrain &&
+                                            !editionPartParrain
+                                        "
                                         :variant="
                                             partParrainADefinir
                                                 ? 'default'
@@ -1718,17 +1750,19 @@ function formatGNF(val: number): string {
                                         "
                                         size="sm"
                                         data-testid="parrain-definir-part-onglet-btn"
-                                        @click="showPartParrainDialog = true"
+                                        @click="editionPartParrain = true"
                                     >
-                                        {{
-                                            partParrainADefinir
-                                                ? 'Définir la part du parrain'
-                                                : 'Modifier la part du parrain'
-                                        }}
+                                        Modifier les parts
                                     </Button>
                                 </div>
+                                <PartParrainEdition
+                                    v-if="editionPartParrain"
+                                    :vehicule-id="vehicule.id"
+                                    :transferts-label="libelleTransfertsExclus"
+                                    @fermer="editionPartParrain = false"
+                                />
                                 <div
-                                    v-if="partParrainADefinir"
+                                    v-else-if="partParrainADefinir"
                                     class="flex items-start gap-2 border-b bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                                     data-testid="parrain-part-a-definir"
                                 >
@@ -1755,14 +1789,17 @@ function formatGNF(val: number): string {
                                     </p>
                                 </div>
                                 <p
-                                    v-if="parrain_remuneration.length === 0"
+                                    v-if="
+                                        !editionPartParrain &&
+                                        parrain_remuneration.length === 0
+                                    "
                                     class="px-4 py-4 text-xs text-muted-foreground"
                                 >
                                     Aucune part configurée : le véhicule n'a pas
                                     encore d'équipe ou de répartition.
                                 </p>
                                 <table
-                                    v-else
+                                    v-else-if="!editionPartParrain"
                                     class="w-full text-sm"
                                     data-testid="parrain-remuneration"
                                 >
@@ -1821,7 +1858,21 @@ function formatGNF(val: number): string {
                                                 >
                                                 {{ formatGNF(r.montant) }}
                                                 <span
-                                                    v-if="r.depuis"
+                                                    v-if="r.droits_en_attente"
+                                                    class="block font-sans text-[11px] font-medium text-orange-600"
+                                                    data-testid="parrain-droits-en-attente"
+                                                    >due depuis le
+                                                    {{
+                                                        r.droits_en_attente
+                                                            .split('-')
+                                                            .reverse()
+                                                            .join('/')
+                                                    }}
+                                                    — répartition à faire dans
+                                                    l'onglet Équipe</span
+                                                >
+                                                <span
+                                                    v-else-if="r.depuis"
                                                     class="block font-sans text-[11px] text-muted-foreground"
                                                     >depuis le
                                                     {{
@@ -1977,13 +2028,6 @@ function formatGNF(val: number): string {
         :livreur-id="livreurATransferer"
     />
 
-    <PartParrainDialog
-        v-if="vehicule.parrain_id"
-        v-model:visible="showPartParrainDialog"
-        :vehicule-id="vehicule.id"
-        :parrain-nom="vehicule.parrain_nom_complet ?? 'Parrain'"
-    />
-
     <ParrainDialog
         v-model:visible="showParrainDialog"
         :vehicule-id="vehicule.id"
@@ -1991,8 +2035,7 @@ function formatGNF(val: number): string {
         :part-positive="parrainAUnePart"
         :peut-definir-part="can('equipes-livraison.update')"
         :a-une-equipe="!!vehicule.equipe_id"
-        :message-blocage="messageBlocagePartParrain"
-        @definir-part="showPartParrainDialog = true"
+        @definir-part="editionPartParrain = true"
         :parrain-actuel="
             vehicule.parrain_id
                 ? {

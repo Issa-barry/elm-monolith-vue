@@ -29,6 +29,10 @@ class PartageLivraisonVersionService
     /**
      * @param  array<string, int>  $montantsParLivreur  livreur_id => GNF/pack
      * @param  ?int  $montantParrain  part du parrain du véhicule, GNF/pack
+     * @param  ?CarbonInterface  $droitsParrainDepuis  PARRAIN-024 : date de début des droits du parrain
+     *                                                 en attente de la répartition de l'équipe (partage « À faire »)
+     * @param  bool  $droitsEnAttenteTraites  l'appelant applique ou remplace une date en attente
+     *                                        (modale Équipe, onglet Parrain) — refus sinon
      *
      * @throws ValidationException si la part du parrain manque, ou n'a pas lieu d'être
      */
@@ -41,6 +45,8 @@ class PartageLivraisonVersionService
         ?int $montantParrain = null,
         bool $confirmerPartParrainNulle = false,
         bool $remplacerPlanification = false,
+        ?CarbonInterface $droitsParrainDepuis = null,
+        bool $droitsEnAttenteTraites = false,
     ): void {
         $parrainId = self::parrainRemunereId($equipeId, $processusId);
 
@@ -59,7 +65,7 @@ class PartageLivraisonVersionService
         $date = $dateEffet->toDateString();
 
         // PARRAIN-023 : une répartition planifiée (date de début future) n'est jamais écrasée en
-        // silence — seule la grille de la part du parrain peut la remplacer, explicitement.
+        // silence — seule la saisie de la part du parrain (onglet Parrain) peut la remplacer, explicitement.
         $planifiee = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
             ->where('processus_id', $processusId)
             ->where('categorie_id', $categorieId)
@@ -74,6 +80,22 @@ class PartageLivraisonVersionService
                     Categorie::whereKey($categorieId)->value('nom') ?? $categorieId,
                 ),
             ]);
+        }
+
+        // PARRAIN-024 : des droits du parrain en attente (date passée saisie dans l'onglet Parrain)
+        // ne s'appliquent qu'à la répartition faite dans la modale Équipe — jamais perdus en silence
+        // par un transfert de livreur ou une reconfiguration.
+        if ($parrainId !== null && ! $droitsEnAttenteTraites) {
+            $enAttente = self::droitsEnAttente($equipeId, $processusId, $categorieId, $parrainId);
+            if ($enAttente !== null) {
+                throw ValidationException::withMessages([
+                    'partages' => sprintf(
+                        'La part du parrain est due depuis le %s pour la catégorie %s : faites d\'abord la répartition de l\'équipe (onglet Équipe du véhicule), ou changez la date dans l\'onglet Parrain.',
+                        $enAttente->format('d/m/Y'),
+                        Categorie::whereKey($categorieId)->value('nom') ?? $categorieId,
+                    ),
+                ]);
+            }
         }
 
         $confirmeeAt = $parrainId !== null
@@ -129,13 +151,30 @@ class PartageLivraisonVersionService
                 'part_pourcentage' => 0,
                 'montant_unitaire' => (int) $ligne['montant'],
                 'part_parrain_confirmee_at' => isset($ligne['parrain_id']) ? $confirmeeAt : null,
+                'droits_parrain_depuis' => isset($ligne['parrain_id']) ? $droitsParrainDepuis?->toDateString() : null,
                 'effective_from' => $date,
                 'effective_to' => null,
             ]);
         }
     }
 
-    /** Parrain du véhicule de l'équipe si ce processus le rémunère, null sinon. */
+    /**
+     * PARRAIN-024 : date de début des droits du parrain en attente sur la version en vigueur d'un
+     * partage (null : aucune).
+     */
+    public static function droitsEnAttente(string $equipeId, string $processusId, string $categorieId, string $parrainId): ?Carbon
+    {
+        $date = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processusId)
+            ->where('categorie_id', $categorieId)
+            ->where('parrain_id', $parrainId)
+            ->whereNull('effective_to')
+            ->whereNotNull('droits_parrain_depuis')
+            ->value('droits_parrain_depuis');
+
+        return $date ? Carbon::parse($date)->startOfDay() : null;
+    }
+
     /**
      * PARRAIN-022 — date de décision de la part du parrain dans la nouvelle version : une part
      * positive vaut décision ; une part nulle n'est confirmée que sur demande explicite d'une
@@ -161,6 +200,7 @@ class PartageLivraisonVersionService
             : null;
     }
 
+    /** Parrain du véhicule de l'équipe si ce processus le rémunère, null sinon. */
     public static function parrainRemunereId(string $equipeId, string $processusId): ?string
     {
         $code = CommissionProcessus::whereKey($processusId)->value('code');

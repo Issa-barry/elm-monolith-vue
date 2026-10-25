@@ -59,6 +59,8 @@ interface PartageCategorieExistant {
     part_parrain?: number | null;
     /** PARRAIN-022 : part nulle déjà confirmée par une personne. */
     part_parrain_confirmee?: boolean;
+    /** PARRAIN-024 : date de début des droits du parrain en attente de cette répartition. */
+    droits_parrain_depuis?: string | null;
 }
 
 interface EquipeExistante {
@@ -183,6 +185,7 @@ watch(
         step.value = 1;
         hasChanges.value = false;
         showConfirmClose.value = false;
+        confirmerDroitsParrain.value = false;
         Object.keys(serverErrors).forEach((k) => delete serverErrors[k]);
         isSubmitting.value = false;
 
@@ -429,6 +432,23 @@ const partParrainParCategorie = ref<Record<string, number>>({});
  */
 const confirmationPartParrainNulle = ref<Record<string, boolean>>({});
 
+/**
+ * PARRAIN-024 : part du parrain due depuis une date passée (saisie dans l'onglet Parrain) — cette
+ * répartition s'appliquera depuis cette date, avec le recalcul des commissions non payées :
+ * confirmation explicite exigée, vérifiée aussi par le serveur.
+ */
+const droitsParrainEnAttente = computed(() => {
+    if (!props.parrain) return [];
+    return categoriesAvecPartageLivraison.value.flatMap((cat) => {
+        const date = props.equipe?.partages_categorie?.find(
+            (p) => p.categorie_id === cat.categorie_id,
+        )?.droits_parrain_depuis;
+        return date ? [{ categorie: cat.categorie_nom, date }] : [];
+    });
+});
+const confirmerDroitsParrain = ref(false);
+const enFr = (iso: string) => iso.split('-').reverse().join('/');
+
 function membreLabels(): string[] {
     const roleCounts: Record<string, number> = {};
     return membres.value.map((m) => {
@@ -558,6 +578,11 @@ const categoriesNonEquilibrees = computed(() =>
 
 function goToStep3() {
     if (!partageValide.value) return;
+    if (
+        droitsParrainEnAttente.value.length > 0 &&
+        !confirmerDroitsParrain.value
+    )
+        return;
     step.value = 3;
 }
 
@@ -620,6 +645,7 @@ function buildPayload() {
         // Le partage saisi ne remplace que CE processus — jamais un fallback implicite vers
         // vente (cf. EquipeLivraisonController::syncPartagesCategorie()).
         processus_code: props.processusActif,
+        confirmer_droits_parrain: confirmerDroitsParrain.value,
     };
 
     return {
@@ -1058,7 +1084,34 @@ const hasStep1Errors = computed(() =>
                 </div>
             </div>
 
-            <p class="text-xs text-muted-foreground">
+            <label
+                v-if="droitsParrainEnAttente.length > 0"
+                class="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+                data-testid="confirmer-droits-parrain"
+            >
+                <Checkbox
+                    :model-value="confirmerDroitsParrain"
+                    class="mt-0.5"
+                    @update:model-value="
+                        (v) => (confirmerDroitsParrain = v === true)
+                    "
+                />
+                <span>
+                    La part du parrain est due depuis le
+                    <span
+                        v-for="(d, i) in droitsParrainEnAttente"
+                        :key="d.categorie"
+                        class="font-semibold"
+                        >{{ i > 0 ? ', ' : '' }}{{ enFr(d.date) }} ({{
+                            d.categorie
+                        }})</span
+                    >. Cette répartition s'appliquera depuis cette date : les
+                    commissions non payées des commandes livrées depuis seront
+                    recalculées (les commissions payées et les périodes
+                    clôturées ne changent pas). Je confirme.
+                </span>
+            </label>
+            <p v-else class="text-xs text-muted-foreground">
                 La nouvelle répartition s'applique aux opérations à venir ; les
                 commissions déjà calculées ne changent pas.
             </p>
@@ -1232,7 +1285,11 @@ const hasStep1Errors = computed(() =>
                     v-else-if="step === 2"
                     type="button"
                     size="sm"
-                    :disabled="!partageValide"
+                    :disabled="
+                        !partageValide ||
+                        (droitsParrainEnAttente.length > 0 &&
+                            !confirmerDroitsParrain)
+                    "
                     @click="goToStep3"
                 >
                     Suivant

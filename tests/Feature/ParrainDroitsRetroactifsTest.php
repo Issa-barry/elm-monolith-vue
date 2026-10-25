@@ -228,8 +228,28 @@ class ParrainDroitsRetroactifsTest extends TestCase
         );
     }
 
+    /** Saisie en place de l'onglet Parrain (PARRAIN-024) : la part du parrain seule, Vente. */
+    private function definirPart(int $part, string $date)
+    {
+        return $this->actingAs($this->user)->put(route('vehicules.parrain.part.update', $this->vehicule), [
+            'parrain_id' => $this->vehicule->fresh()->parrain_id,
+            'date_effet' => $date,
+            'confirmer_part_nulle' => true,
+            'parts' => [[
+                'processus_code' => CommissionProcessus::CODE_VENTE,
+                'categorie_id' => $this->categorie->id,
+                'part_parrain' => $part,
+            ]],
+        ]);
+    }
+
+    private function droitsEnAttente(Parrain $parrain): ?string
+    {
+        return PartageLivraisonVersionService::droitsEnAttente($this->equipe->id, $this->vente->id, $this->categorie->id, $parrain->id)?->toDateString();
+    }
+
     /** Modale Équipe (processus Vente) : livreurs + part du parrain. */
-    private function enregistrerEquipe(int $chauffeur, int $convoyeur, int $parrain)
+    private function enregistrerEquipe(int $chauffeur, int $convoyeur, int $parrain, bool $confirmerDroits = false)
     {
         return $this->actingAs($this->user)->patch(route('equipes-livraison.update', $this->equipe), [
             'vehicule_id' => $this->vehicule->id,
@@ -250,6 +270,7 @@ class ParrainDroitsRetroactifsTest extends TestCase
                 'part_parrain' => $parrain,
                 'confirmer_part_parrain_nulle' => true,
             ]],
+            'confirmer_droits_parrain' => $confirmerDroits,
         ]);
     }
 
@@ -472,23 +493,111 @@ class ParrainDroitsRetroactifsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('date_effet_min', null);
 
+        // Saisie en place (PARRAIN-024) : une date passée exige un partage complet — un seul
+        // livreur, qui reçoit le reste du barème.
+        EquipeLivreur::where('livreur_id', $this->convoyeur->id)->delete();
+
         $this->actingAs($this->user)->put(route('vehicules.parrain.part.update', $this->vehicule), [
             'parrain_id' => $parrain->id,
             'date_effet' => '2026-10-01',
             'confirmer_part_nulle' => false,
-            'repartitions' => [[
+            'parts' => [[
                 'processus_code' => CommissionProcessus::CODE_VENTE,
                 'categorie_id' => $this->categorie->id,
-                'parts' => [
-                    ['livreur_id' => $this->chauffeur->id, 'montant_unitaire' => 500],
-                    ['livreur_id' => $this->convoyeur->id, 'montant_unitaire' => 300],
-                ],
                 'part_parrain' => 200,
             ]],
         ])->assertSessionHasNoErrors()
             ->assertSessionHas('success', fn (string $m) => str_contains($m, '1 commande(s) recalculée(s) depuis le 01/10/2026'));
 
-        $this->assertSame(20000.0, $this->partsEquipe($commande)["parrain:{$parrain->id}"]);
+        $this->assertSame(
+            ["livreur:{$this->chauffeur->id}" => 80000.0, "parrain:{$parrain->id}" => 20000.0],
+            $this->partsEquipe($commande),
+        );
+    }
+
+    // ── Plusieurs livreurs : date de début en attente de la répartition (PARRAIN-024) ──
+
+    public function test_plusieurs_livreurs_la_date_passee_attend_la_repartition_de_lequipe_puis_recalcule(): void
+    {
+        $commande = $this->vendre(100);           // 02/10
+        Carbon::setTestNow('2026-10-05 10:00:00');
+        $parrain = $this->parrainer();
+
+        $this->definirPart(200, '2026-10-01')
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'onglet Équipe'));
+
+        // Partage déséquilibré : jamais de recalcul, la date reste en attente.
+        $this->assertSame('2026-10-01', $this->droitsEnAttente($parrain));
+        $partsAvant = ["livreur:{$this->chauffeur->id}" => 60000.0, "livreur:{$this->convoyeur->id}" => 40000.0];
+        $this->assertPartsEquipe($partsAvant, $commande);
+
+        // Sans confirmation explicite : refusé, rien ne change.
+        $this->enregistrerEquipe(500, 300, 200)->assertSessionHasErrors('confirmer_droits_parrain');
+        $this->assertPartsEquipe($partsAvant, $commande);
+        $this->assertSame('2026-10-01', $this->droitsEnAttente($parrain));
+
+        $this->enregistrerEquipe(500, 300, 200, confirmerDroits: true)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn (string $m) => str_contains($m, '1 commande(s) recalculée(s) depuis le 01/10/2026'));
+
+        $this->assertPartsEquipe([
+            "livreur:{$this->chauffeur->id}" => 50000.0,
+            "livreur:{$this->convoyeur->id}" => 30000.0,
+            "parrain:{$parrain->id}" => 20000.0,
+        ], $commande);
+        $this->assertNull($this->droitsEnAttente($parrain), 'Date appliquée : plus rien en attente.');
+        $this->assertSame('2026-10-01', EquipeLivraisonPartageCategorie::where('equipe_id', $this->equipe->id)
+            ->where('parrain_id', $parrain->id)->whereNull('effective_to')->value('effective_from')?->toDateString());
+    }
+
+    public function test_des_droits_en_attente_ne_sont_jamais_perdus_par_une_autre_ecriture(): void
+    {
+        Carbon::setTestNow('2026-10-05 10:00:00');
+        $parrain = $this->parrainer();
+        $this->definirPart(200, '2026-10-01')->assertSessionHasNoErrors();
+
+        // Transfert de livreur, reconfiguration… : refusés tant que la répartition n'est pas faite.
+        try {
+            PartageLivraisonVersionService::versionner(
+                $this->equipe->id,
+                $this->vente->id,
+                $this->categorie->id,
+                [$this->chauffeur->id => 500, $this->convoyeur->id => 300],
+                Carbon::today(),
+                200,
+            );
+            $this->fail('Une écriture qui ignore la date en attente doit être refusée.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('01/10/2026', $e->errors()['partages'][0]);
+        }
+
+        $this->assertSame('2026-10-01', $this->droitsEnAttente($parrain));
+    }
+
+    public function test_un_nouveau_parrain_ne_reprend_jamais_les_commissions_de_lancien(): void
+    {
+        $ancien = $this->parrainer();
+        $this->definir([$this->chauffeur->id => 500, $this->convoyeur->id => 300], 200, '2026-10-02');
+        $commande = $this->vendre(100);           // 02/10 : 20 000 GNF pour l'ancien parrain
+
+        Carbon::setTestNow('2026-10-05 10:00:00');
+        $nouveau = $this->parrainer();
+
+        // Ses droits ne peuvent pas commencer avant son arrivée : l'historique de l'ancien est acquis.
+        $this->definirPart(150, '2026-10-01')->assertSessionHasErrors('date_effet');
+        $this->actingAs($this->user)->getJson(route('vehicules.parrain.part', $this->vehicule))
+            ->assertJsonPath('date_effet_min', '2026-10-05');
+
+        $this->assertSame(20000.0, $this->partsEquipe($commande)["parrain:{$ancien->id}"]);
+        $this->assertArrayNotHasKey("parrain:{$nouveau->id}", $this->partsEquipe($commande));
+
+        // Sa fiche de la quinzaine reste la sienne.
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($this->org->id, TypePeriodePaiement::PARRAIN, Carbon::parse('2026-10-02'));
+        app(PeriodeCalculatorService::class)->calculerSiNecessaire($periode);
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->sole();
+        $this->assertSame($ancien->id, $fiche->beneficiaire_id);
+        $this->assertEquals(20000.0, (float) $fiche->montant_net);
     }
 
     // ── Corrections de la revue (A1 à A4) ────────────────────────────────────

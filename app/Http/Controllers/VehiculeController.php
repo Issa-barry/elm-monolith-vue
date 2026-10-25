@@ -524,6 +524,8 @@ class VehiculeController extends Controller
                 'a_repartir' => $p->partParrainARepartir(),
                 // PARRAIN-023 : date de début de la part en vigueur.
                 'depuis' => $p->effective_from?->toDateString(),
+                // PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe.
+                'droits_en_attente' => $p->droits_parrain_depuis?->toDateString(),
             ])
             // Ordre métier des onglets Équipe : Ventes, Transferts logistiques, Transferts
             // grossistes, Distribution client.
@@ -917,6 +919,8 @@ class VehiculeController extends Controller
                     'part_parrain' => $ligneParrain ? (int) $ligneParrain->montant_unitaire : null,
                     // PARRAIN-022 : part nulle déjà confirmée par une personne (case pré-cochée).
                     'part_parrain_confirmee' => $ligneParrain !== null && ! $ligneParrain->partParrainARepartir(),
+                    // PARRAIN-024 : date de début des droits du parrain en attente de cette répartition.
+                    'droits_parrain_depuis' => $ligneParrain?->droits_parrain_depuis?->toDateString(),
                 ];
             })
             ->values()
