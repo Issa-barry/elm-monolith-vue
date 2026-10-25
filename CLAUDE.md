@@ -38,6 +38,11 @@ Toute page de liste (Index) avec des filtres doit utiliser
 
 - **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
   Les pages font leur propre filtre texte via un champ `type: 'text'` avec `inline: true`.
+- **Barre rapide du tableau (Ventes seulement, 25/10/2026)** : recherche `recherche` + filtres texte
+  fréquents en tête du tableau via `components/filters/QuickFilters.vue`, avec
+  `<DataFilters trigger-only quick-bar>` dans l'en-tête (bouton « Filtres » inchangé, aucun champ en
+  double, filtrage serveur). Ne pas l'étendre à une autre liste sans demande explicite
+  (`docs/filters.md`, « Barre rapide du tableau »).
 - Ordre standard de la barre : **[Agence] → [Statut] → [Autres filtres inline] → [Bouton Filtres]**.
   - Les champs affichés directement dans la barre ont `inline: true` dans `filterFields`.
   - Les champs avancés (sans `inline`) vont dans le drawer (bouton **Filtres**).

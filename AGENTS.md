@@ -58,6 +58,13 @@ Toute page de liste (Index) doit suivre la structure d'en-tête standard, porté
   champs au-dessus du tableau. Le drawer reste l'unique endroit où les champs sont affichés.
 - **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
   Les pages font leur propre filtre texte via un champ `type: 'text'`.
+- **Exception, barre rapide du tableau (Ventes seulement, 25/10/2026)** : la recherche `recherche`
+  et quelques filtres texte fréquents (champs `inline: true`) s'affichent en tête de la carte du
+  tableau via `resources/js/components/filters/QuickFilters.vue`, avec
+  `<DataFilters trigger-only quick-bar>` dans l'en-tête (bouton « Filtres » inchangé). Les champs ne
+  sont jamais affichés deux fois, la recherche est traitée côté serveur et chaque saisie conserve
+  les autres filtres. Ne l'étends pas à une autre liste sans demande explicite (cf.
+  `docs/filters.md`, « Barre rapide du tableau »).
 - Ordre des champs dans le drawer : **Agence (auto, si données multi-sites) → Statut → Recherche →
   période/dates → autres filtres métier** (véhicule, client, propriétaire, type, catégorie,
   montant...).

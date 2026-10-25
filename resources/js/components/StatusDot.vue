@@ -31,8 +31,14 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
+    // Anomalie du contrôle des encaissements close sans régularisation (motif obligatoire).
+    fausse_alerte: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions (CommissionAnomalieStatut) : commission finalement générée.
     regularisee: 'bg-emerald-500',
+    // Contrôle des encaissements (StatutAnomalieEncaissement, ADR 0036) : clôturée après disparition
+    // de l'écart ; alerte envoyée (AnomalieEncaissementNotification).
+    resolue: 'bg-emerald-500',
+    envoyee: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -95,6 +101,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Monitoring des commissions : commission attendue mais absente (erreur réelle à corriger).
     non_generee: 'bg-red-500',
     echec_recurrent: 'bg-red-500',
+    // Alerte du contrôle des encaissements non délivrée (SMTP, quota) : retentée au contrôle suivant.
+    echec: 'bg-red-500',
     // MessageLog.status — cf. commentaire "sent" plus haut.
     failed: 'bg-red-500',
     rupture: 'bg-red-500',
@@ -109,6 +117,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partiellement_paye: 'bg-orange-500',
     partiellement_verse: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    // Contrôle des encaissements : anomalie détectée, pas encore prise en charge.
+    nouvelle: 'bg-amber-500',
     // Précommande en cours de préparation (StatutCommandeVente::A_PREPARER).
     a_preparer: 'bg-orange-500',
     // Bon de commande fournisseur en attente de validation / reçu en partie (StatutCommandeAchat).
@@ -133,6 +143,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur à faire / véhicule sans équipe : commandes refusées sur la catégorie.
     a_faire: 'bg-orange-500',
     sans_equipe: 'bg-orange-500',
+    // Part du parrain (PARRAIN-021/022) : à définir / à répartir = part à 0 GNF jamais confirmée
+    // (ventes refusées après la date d'activation de l'organisation) ; définie = décidée.
+    a_repartir: 'bg-orange-500',
+    a_definir: 'bg-amber-500',
+    definie: 'bg-emerald-500',
     modifie: 'bg-blue-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',

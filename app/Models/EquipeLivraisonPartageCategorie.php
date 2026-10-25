@@ -47,6 +47,8 @@ class EquipeLivraisonPartageCategorie extends Model
         'parrain_id',
         'part_pourcentage',
         'montant_unitaire',
+        'part_parrain_confirmee_at',
+        'droits_parrain_depuis',
         'effective_from',
         'effective_to',
     ];
@@ -58,6 +60,8 @@ class EquipeLivraisonPartageCategorie extends Model
             'montant_unitaire' => 'integer',
             'effective_from' => 'date',
             'effective_to' => 'date',
+            'part_parrain_confirmee_at' => 'datetime',
+            'droits_parrain_depuis' => 'date',
         ];
     }
 
@@ -84,6 +88,18 @@ class EquipeLivraisonPartageCategorie extends Model
     public function estParrain(): bool
     {
         return $this->parrain_id !== null;
+    }
+
+    /**
+     * PARRAIN-022 : part du parrain à 0 GNF jamais confirmée par une personne (créée par le
+     * système) — le partage est complet mais la répartition métier reste à faire. Une part positive
+     * vaut toujours décision.
+     */
+    public function partParrainARepartir(): bool
+    {
+        return $this->estParrain()
+            && (int) $this->montant_unitaire === 0
+            && $this->part_parrain_confirmee_at === null;
     }
 
     public function equipe(): BelongsTo

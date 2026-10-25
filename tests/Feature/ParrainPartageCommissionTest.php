@@ -10,6 +10,7 @@ use App\Enums\DeclencheurCommissionVente;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
+use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -22,6 +23,8 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\PaiementFiche;
+use App\Models\PaiementPeriode;
 use App\Models\Parametre;
 use App\Models\Parrain;
 use App\Models\Produit;
@@ -576,123 +579,135 @@ class ParrainPartageCommissionTest extends TestCase
         ], $this->partageActif($this->vente));
     }
 
-    public function test_remplacer_un_parrain_qui_a_une_part_est_refuse(): void
+    /** Le convoyeur quitte l'équipe : le chauffeur seul porte le partage Vente (800 + parrain 200). */
+    private function unSeulLivreurAvecParrain(): void
     {
-        $ancien = $this->ajouterParrain($this->vehicule);
+        EquipeLivreur::where('livreur_id', $this->convoyeur->id)->delete();
+        PartageLivraisonVersionService::versionner(
+            $this->equipe->id,
+            $this->vente->id,
+            $this->categorie->id,
+            [$this->chauffeur->id => 800],
+            Carbon::today(),
+            200,
+        );
+    }
+
+    private function statutVente(): string
+    {
+        return PartageConformiteVehiculesService::statuts($this->org->id, collect([$this->vehicule->fresh()]))[$this->vehicule->id][CommissionProcessus::CODE_VENTE];
+    }
+
+    public function test_remplacer_un_parrain_qui_a_une_part_le_nouveau_demarre_a_zero_et_le_partage_passe_a_faire(): void
+    {
+        $this->ajouterParrain($this->vehicule);
         $this->repartir($this->vente, 500, 300, 200);
         $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
             ->post(route('vehicules.parrain.store', $this->vehicule), ['personne_id' => $nouveau->personne_id])
-            ->assertSessionHasErrors('repartitions');
-
-        $this->assertSame($ancien->id, $this->vehicule->fresh()->parrain_id);
-        $this->assertEquals([
-            "livreur:{$this->chauffeur->id}" => 500,
-            "livreur:{$this->convoyeur->id}" => 300,
-            "parrain:{$ancien->id}" => 200,
-        ], $this->partageActif($this->vente));
-    }
-
-    /** @return list<array<string, mixed>> répartition Vente de la catégorie, au format du parcours combiné */
-    private function repartitionVente(int $chauffeur, int $convoyeur, ?int $parrain): array
-    {
-        $repartition = [
-            'processus_code' => CommissionProcessus::CODE_VENTE,
-            'categorie_id' => $this->categorie->id,
-            'parts' => [
-                ['livreur_id' => $this->chauffeur->id, 'montant_unitaire' => $chauffeur],
-                ['livreur_id' => $this->convoyeur->id, 'montant_unitaire' => $convoyeur],
-            ],
-        ];
-        if ($parrain !== null) {
-            $repartition['part_parrain'] = $parrain;
-        }
-
-        return [$repartition];
-    }
-
-    public function test_remplacer_un_parrain_qui_a_une_part_avec_la_nouvelle_repartition(): void
-    {
-        $this->ajouterParrain($this->vehicule);
-        $this->repartir($this->vente, 500, 300, 200);
-        $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('vehicules.parrain.store', $this->vehicule), [
-                'personne_id' => $nouveau->personne_id,
-                'repartitions' => $this->repartitionVente(550, 300, 150),
-            ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('vehicules.show', $this->vehicule));
+            ->assertRedirect(route('vehicules.show', $this->vehicule))
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'onglet Équipe'));
 
         $this->assertSame($nouveau->id, $this->vehicule->fresh()->parrain_id);
-        $this->assertEquals([
-            "livreur:{$this->chauffeur->id}" => 550,
-            "livreur:{$this->convoyeur->id}" => 300,
-            "parrain:{$nouveau->id}" => 150,
-        ], $this->partageActif($this->vente));
-    }
-
-    public function test_une_nouvelle_repartition_desequilibree_annule_tout_le_changement(): void
-    {
-        $ancien = $this->ajouterParrain($this->vehicule);
-        $this->repartir($this->vente, 500, 300, 200);
-        $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('vehicules.parrain.store', $this->vehicule), [
-                'personne_id' => $nouveau->personne_id,
-                'repartitions' => $this->repartitionVente(500, 300, 300),
-            ])
-            ->assertSessionHasErrors('repartitions');
-
-        $this->assertSame($ancien->id, $this->vehicule->fresh()->parrain_id);
+        // Jamais de transfert de la part de l'ancien : le nouveau démarre à 0, les livreurs gardent leurs montants.
         $this->assertEquals([
             "livreur:{$this->chauffeur->id}" => 500,
             "livreur:{$this->convoyeur->id}" => 300,
-            "parrain:{$ancien->id}" => 200,
+            "parrain:{$nouveau->id}" => 0,
         ], $this->partageActif($this->vente));
+        $this->assertSame('a_faire', $this->statutVente());
     }
 
-    public function test_joindre_une_repartition_exige_le_droit_de_modifier_lequipe(): void
+    public function test_remplacer_un_parrain_dont_la_part_attendait_la_repartition_ne_laisse_rien_a_refaire(): void
     {
         $this->ajouterParrain($this->vehicule);
+        // Part saisie dans l'onglet Parrain, équipe pas encore répartie : 600 + 400 + 200 (« À faire »).
+        $this->repartir($this->vente, 600, 400, 200);
+        $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.parrain.store', $this->vehicule), ['personne_id' => $nouveau->personne_id])
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 600,
+            "livreur:{$this->convoyeur->id}" => 400,
+            "parrain:{$nouveau->id}" => 0,
+        ], $this->partageActif($this->vente));
+        $this->assertSame('a_repartir', $this->statutVente(), 'Complet : seule la part nulle du nouveau parrain reste à décider.');
+    }
+
+    public function test_remplacer_un_parrain_avec_un_seul_livreur_lui_rend_la_part_de_lancien(): void
+    {
+        $this->ajouterParrain($this->vehicule);
+        $this->unSeulLivreurAvecParrain();
+        $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.parrain.store', $this->vehicule), ['personne_id' => $nouveau->personne_id])
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 1000,
+            "parrain:{$nouveau->id}" => 0,
+        ], $this->partageActif($this->vente));
+        // Complet, mais la part nulle du nouveau parrain reste à décider (PARRAIN-022).
+        $this->assertSame('a_repartir', $this->statutVente());
+    }
+
+    public function test_changer_un_parrain_qui_a_une_part_exige_le_droit_de_modifier_lequipe(): void
+    {
+        $ancien = $this->ajouterParrain($this->vehicule);
         $this->repartir($this->vente, 500, 300, 200);
         $nouveau = Parrain::factory()->create(['organization_id' => $this->org->id]);
         $sansDroitEquipe = $this->makeUserWithPermissions($this->org, ['vehicules.read', 'vehicules.update']);
         $sansDroitEquipe->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->actingAs($sansDroitEquipe)
-            ->post(route('vehicules.parrain.store', $this->vehicule), [
-                'personne_id' => $nouveau->personne_id,
-                'repartitions' => $this->repartitionVente(550, 300, 150),
-            ])
+            ->post(route('vehicules.parrain.store', $this->vehicule), ['personne_id' => $nouveau->personne_id])
             ->assertForbidden();
+        $this->actingAs($sansDroitEquipe)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertForbidden();
+
+        $this->assertSame($ancien->id, $this->vehicule->fresh()->parrain_id);
     }
 
-    public function test_retirer_un_parrain_qui_a_une_part_redistribue_lenveloppe_a_lequipe(): void
+    public function test_retirer_un_parrain_qui_a_une_part_laisse_le_partage_a_faire_avec_plusieurs_livreurs(): void
     {
         $this->ajouterParrain($this->vehicule);
         $this->repartir($this->vente, 500, 300, 200);
 
         $this->actingAs($this->user)
             ->delete(route('vehicules.parrain.destroy', $this->vehicule))
-            ->assertSessionHasErrors('repartitions');
-        $this->assertNotNull($this->vehicule->fresh()->parrain_id);
-
-        $this->actingAs($this->user)
-            ->delete(route('vehicules.parrain.destroy', $this->vehicule), [
-                'repartitions' => $this->repartitionVente(600, 400, null),
-            ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('vehicules.show', $this->vehicule));
+            ->assertRedirect(route('vehicules.show', $this->vehicule))
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'onglet Équipe'));
 
         $this->assertNull($this->vehicule->fresh()->parrain_id);
         $this->assertEquals([
-            "livreur:{$this->chauffeur->id}" => 600,
-            "livreur:{$this->convoyeur->id}" => 400,
+            "livreur:{$this->chauffeur->id}" => 500,
+            "livreur:{$this->convoyeur->id}" => 300,
         ], $this->partageActif($this->vente));
+        $this->assertSame('a_faire', $this->statutVente());
+    }
+
+    public function test_retirer_un_parrain_avec_un_seul_livreur_lui_rend_toute_lenveloppe(): void
+    {
+        $this->ajouterParrain($this->vehicule);
+        $this->unSeulLivreurAvecParrain();
+
+        $this->actingAs($this->user)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        $this->assertEquals(["livreur:{$this->chauffeur->id}" => 1000], $this->partageActif($this->vente));
+        $this->assertSame('fait', $this->statutVente());
     }
 
     public function test_les_repartitions_a_refaire_sont_exposees_pour_le_parcours_combine(): void
@@ -731,6 +746,101 @@ class ParrainPartageCommissionTest extends TestCase
             ->get(route('vehicules.show', ['vehicule' => $this->vehicule, 'processus' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('parrain_partage', null));
+    }
+
+    /** Juge commun des ventes : non-conformités du processus, à la date du jour. */
+    private function refusOperations(string $processusCode): int
+    {
+        return CommissionPartageLivraisonCategorieChecker::nonConformites(
+            $this->org->id,
+            $this->equipe->fresh(),
+            $processusCode,
+            $this->vehicule->fresh()->type_vehicule_id,
+            [$this->categorie->id],
+            Carbon::today(),
+        )->count();
+    }
+
+    public function test_la_premiere_commission_du_parrain_cree_sa_periode_et_sa_fiche(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->assertSame(0, PaiementPeriode::where('organization_id', $this->org->id)->where('type', TypePeriodePaiement::PARRAIN->value)->count(), 'Aucune période Parrains au départ : aucun écran de période ouvert.');
+
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+
+        // PARRAIN-017 : la fiche apparaît dans « Paiements parrains » sans action manuelle.
+        $fiche = PaiementFiche::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+            ->where('beneficiaire_id', $parrain->id)
+            ->first();
+        $this->assertNotNull($fiche, 'La fiche du parrain doit être créée dès la génération de sa commission.');
+        $this->assertEquals(20000.0, (float) $fiche->montant_net);
+    }
+
+    public function test_les_commissions_suivantes_du_parrain_ne_creent_ni_periode_ni_fiche_en_double(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 50);
+
+        $this->assertSame(1, PaiementPeriode::where('organization_id', $this->org->id)->where('type', TypePeriodePaiement::PARRAIN->value)->count());
+        $fiches = PaiementFiche::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)->where('beneficiaire_id', $parrain->id)->get();
+        $this->assertCount(1, $fiches, 'Une seule fiche par parrain et par période.');
+        $this->assertEquals(30000.0, (float) $fiches->first()->montant_net, '20 000 + 10 000, chaque vente une seule fois.');
+        $this->assertSame(2, $fiches->first()->lignes()->count());
+    }
+
+    public function test_retirer_un_parrain_ne_bloque_que_les_partages_desequilibres(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $distribution = CommissionProcessus::where('organization_id', $this->org->id)->where('code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT)->firstOrFail();
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->repartir($distribution, 500, 300, 200);
+        $avant = $this->vendre(NatureOperation::DISTRIBUTION_CLIENT, 100);
+        $partsAvant = $this->partsEquipe(CommandeVente::class, $avant->id);
+        $this->assertSame(20000.0, $partsAvant["parrain:{$parrain->id}"]);
+
+        $this->actingAs($this->user)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'Ventes') && ! str_contains($m, 'Distribution'));
+
+        // Seule la Vente (500 + 300 ≠ 1 000) est bloquée ; transfert et distribution restent ouverts.
+        $this->assertSame('a_faire', $this->statutVente());
+        $this->assertSame(1, $this->refusOperations(CommissionProcessus::CODE_VENTE));
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT));
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_DISTRIBUTION_CLIENT));
+
+        // Distribution : historique intact, versions closes jamais supprimées ; la suivante reprend
+        // le partage Logistique — une seule enveloppe, sans parrain.
+        $this->assertEquals($partsAvant, $this->partsEquipe(CommandeVente::class, $avant->id));
+        $this->assertSame(1, EquipeLivraisonPartageCategorie::where('processus_id', $distribution->id)
+            ->where('parrain_id', $parrain->id)->where('montant_unitaire', 200)->whereNotNull('effective_to')->count());
+        $apres = $this->vendre(NatureOperation::DISTRIBUTION_CLIENT, 100);
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 60000.0,
+            "livreur:{$this->convoyeur->id}" => 40000.0,
+        ], $this->partsEquipe(CommandeVente::class, $apres->id));
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $apres->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->count());
+    }
+
+    public function test_retirer_un_parrain_dont_le_total_des_livreurs_est_deja_complet_ne_bloque_rien(): void
+    {
+        $this->ajouterParrain($this->vehicule);
+        // Part saisie, équipe pas encore répartie : 600 + 400 + 200.
+        $this->repartir($this->vente, 600, 400, 200);
+
+        $this->actingAs($this->user)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        // Contrôle complet (somme, livreurs actifs, aucune ligne de parrain), pas seulement le total.
+        $this->assertSame('fait', $this->statutVente());
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_VENTE));
     }
 
     public function test_retirer_un_parrain_sans_part_rend_la_distribution_au_partage_logistique(): void
@@ -841,8 +951,10 @@ class ParrainPartageCommissionTest extends TestCase
         $this->ajouterParrain($this->vehicule);
         $statuts = PartageConformiteVehiculesService::statuts($this->org->id, Vehicule::with('equipe.membres.livreur')->whereKey($this->vehicule->id)->get());
 
-        $this->assertSame(PartageConformiteVehiculesService::FAIT, $statuts[$this->vehicule->id][CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
-        $this->assertSame(PartageConformiteVehiculesService::FAIT, $statuts[$this->vehicule->id][CommissionProcessus::CODE_VENTE]);
+        // PARRAIN-022 : partages complets, mais la part du parrain à 0 GNF créée par le système
+        // reste à répartir tant qu'une personne ne l'a pas définie ou confirmée.
+        $this->assertSame(PartageConformiteVehiculesService::A_REPARTIR, $statuts[$this->vehicule->id][CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
+        $this->assertSame(PartageConformiteVehiculesService::A_REPARTIR, $statuts[$this->vehicule->id][CommissionProcessus::CODE_VENTE]);
     }
 
     public function test_la_reprise_ajoute_la_ligne_du_parrain_aux_vehicules_deja_parraines(): void

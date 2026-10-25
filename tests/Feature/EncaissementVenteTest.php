@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AuditEvent;
 use App\Enums\StatutFactureVente;
+use App\Models\AuditLog;
 use App\Models\CommandeVente;
 use App\Models\CompteComptable;
 use App\Models\CompteTresorerie;
@@ -15,6 +17,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
+use App\Services\Ventes\SaisieEncaissementVente;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -138,6 +141,48 @@ class EncaissementVenteTest extends TestCase
         );
 
         $response->assertSessionHasErrors('montant');
+    }
+
+    /**
+     * Incident VTE-221026-080 (22/10/2026) : deux saisies simultanées voyaient le même restant dû et
+     * s'enregistraient toutes les deux. On rejoue l'autre saisie entre la validation de celle-ci et
+     * sa transaction : le restant doit être relu sous verrou, et la seconde refusée.
+     */
+    public function test_saisie_concurrente_ne_depasse_jamais_le_restant_du(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $this->app->extend(SaisieEncaissementVente::class, fn (SaisieEncaissementVente $saisie) => new class($saisie) extends SaisieEncaissementVente
+        {
+            public function __construct(private readonly SaisieEncaissementVente $reelle) {}
+
+            public function preparer(User $user, FactureVente $facture, array $data): array
+            {
+                $prepare = $this->reelle->preparer($user, $facture, $data);
+                $facture->encaissements()->create([
+                    'montant' => 5000,
+                    'date_encaissement' => now()->toDateString(),
+                    'mode_paiement' => 'especes',
+                    'site_encaissement_id' => $prepare['site_encaissement_id'],
+                    'compte_tresorerie_id' => $prepare['compte_tresorerie_id'] ?? null,
+                ]);
+
+                return $prepare;
+            }
+        });
+
+        $response = $this->actingAs($user)->post(route('encaissements.store', $facture), [
+            'montant' => 5000,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        $response->assertSessionHasErrors([
+            'montant' => 'Cette facture est déjà soldée : cet encaissement a déjà été enregistré.',
+        ]);
+        $this->assertSame(1, EncaissementVente::where('facture_vente_id', $facture->id)->count());
+        $this->assertEquals(5000, $facture->fresh()->montant_encaisse);
+        $this->assertEquals(StatutFactureVente::PAYEE, $facture->fresh()->statut_facture);
     }
 
     public function test_encaissement_refuse_sur_facture_annulee(): void
@@ -472,6 +517,32 @@ class EncaissementVenteTest extends TestCase
             ->assertStatus(403);
 
         $this->assertNotNull($enc->fresh());
+    }
+
+    /**
+     * La suppression n'était englobée dans aucune transaction : un échec de la contrepassation
+     * (hook EncaissementVente::deleted) laissait l'encaissement supprimé et sa trace d'audit écrite,
+     * mais l'écriture comptable toujours en caisse.
+     */
+    public function test_echec_de_contrepassation_annule_la_suppression(): void
+    {
+        ['facture' => $facture, 'commande' => $commande, 'user' => $user] = $this->creerContexte();
+        $this->avecPermissionSuppression($user);
+        $enc = $facture->encaissements()->create([
+            'montant' => 2000, 'date_encaissement' => now()->toDateString(), 'mode_paiement' => 'especes',
+        ]);
+        EncaissementVente::deleted(fn () => throw new \RuntimeException('contrepassation impossible'));
+
+        $this->actingAs($user)
+            ->delete(route('encaissements.destroy', $enc))
+            ->assertSessionHasErrors(['comptabilisation' => 'Encaissement non supprimé : contrepassation impossible']);
+
+        $this->assertNotNull($enc->fresh());
+        $this->assertEquals(2000.0, (float) $facture->fresh()->montant_encaisse);
+        $this->assertFalse(AuditLog::query()
+            ->where('auditable_id', $commande->id)
+            ->where('event_code', AuditEvent::ENCAISSEMENT_DELETED->value)
+            ->exists());
     }
 
     private function avecPermissionSuppression(User $user): User

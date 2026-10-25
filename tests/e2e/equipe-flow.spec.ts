@@ -299,7 +299,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     const suivantStep1 = dialog.getByRole('button', { name: /suivant/i });
     await expect(suivantStep1).toBeEnabled({ timeout: 10_000 });
     await suivantStep1.click();
-    await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
+    await expect(dialog.getByText(/répartition des commissions/i).first()).toBeVisible(
         {
             timeout: 5_000,
         },
@@ -568,7 +568,7 @@ test('étape 1 : conflit de téléphone avec un livreur d\'un AUTRE véhicule d�
     // "Répartition" tant que le conflit n'est pas résolu — réglé "en amont", pas
     // seulement découvert après un aller-retour complet du formulaire.
     //
-    // "Répartition livreurs"/"Membres" sont aussi les libellés de navigation du
+    // "Répartition des commissions"/"Membres" sont aussi les libellés de navigation du
     // stepper, toujours présents dans le DOM quel que soit l'étape active (cf.
     // classe "hidden sm:inline" — visible dès le viewport par défaut des tests) :
     // les utiliser pour vérifier qu'on N'A PAS avancé serait toujours faux. Le
@@ -585,7 +585,7 @@ test('étape 1 : conflit de téléphone avec un livreur d\'un AUTRE véhicule d�
     await expect(error0).not.toBeVisible({ timeout: 10_000 });
     await dialog.getByRole('button', { name: /suivant/i }).click();
     await expect(
-        dialog.getByText(/répartition livreurs/i).first(),
+        dialog.getByText(/répartition des commissions/i).first(),
     ).toBeVisible({ timeout: 5_000 });
 });
 

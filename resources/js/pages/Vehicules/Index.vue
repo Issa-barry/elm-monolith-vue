@@ -64,6 +64,9 @@ interface Vehicule {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
+    parrain_nom_complet: string | null;
+    parrain_telephone: string | null;
+    parrain_code_phone_pays: string | null;
     agence_nom: string | null;
     equipe_nom: string | null;
     livreur_principal_nom: string | null;
@@ -76,6 +79,8 @@ interface Vehicule {
     usage_label: string;
     /** processus_code → fait | a_faire | non_requis | sans_equipe | non_applicable */
     partages_commission: Record<string, string>;
+    /** Part du parrain (PARRAIN-021) : rappel, jamais bloquant ; null sans parrain. */
+    parrain_part: 'a_definir' | 'definie' | null;
 }
 
 const props = defineProps<{
@@ -110,9 +115,15 @@ const PARTAGE_PROCESSUS: Array<{ code: string; label: string }> = [
     { code: 'distribution_client', label: 'Distribution' },
 ];
 
+const PART_PARRAIN_LABEL: Record<string, string> = {
+    a_definir: 'À définir',
+    definie: 'Définie',
+};
+
 const PARTAGE_LABEL: Record<string, string> = {
     fait: 'Fait',
     a_faire: 'À faire',
+    a_repartir: 'À répartir',
     sans_equipe: 'Sans équipe',
     non_requis: 'Non requis',
 };
@@ -175,6 +186,15 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'a_faire', label: 'Au moins un partage à faire' },
             { value: 'fait', label: 'Tous les partages faits' },
+        ],
+    },
+    {
+        key: 'parrain_part',
+        label: 'Part du parrain',
+        type: 'select',
+        options: [
+            { value: 'a_definir', label: 'Part du parrain à définir' },
+            { value: 'definie', label: 'Part du parrain définie' },
         ],
     },
 ]);
@@ -567,7 +587,9 @@ function confirmDelete(v: Vehicule) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="filteredVehicules"
                     :paginator="filteredVehicules.length > 20"
@@ -576,8 +598,20 @@ function confirmDelete(v: Vehicule) {
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    table-class="w-full"
-                    :pt="{ bodyRow: bodyRowPt }"
+                    table-style="width: max-content; min-width: 100%"
+                    :pt="{
+                        root: { class: 'w-full min-w-0' },
+                        table: { class: 'whitespace-nowrap' },
+                        tableContainer: {
+                            class: 'overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                            tabindex: 0,
+                            role: 'region',
+                            'aria-label':
+                                'Tableau des véhicules, défilement horizontal disponible',
+                            'data-testid': 'vehicules-table-scroll',
+                        },
+                        bodyRow: bodyRowPt,
+                    }"
                     @row-click="onRowClick"
                 >
                     <!-- Photo -->
@@ -711,6 +745,32 @@ function confirmDelete(v: Vehicule) {
                         </template>
                     </Column>
 
+                    <!-- Parrain -->
+                    <Column
+                        field="parrain_nom_complet"
+                        header="Parrain"
+                        style="min-width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <div class="leading-tight">
+                                <div class="text-muted-foreground">
+                                    {{ data.parrain_nom_complet ?? '—' }}
+                                </div>
+                                <div
+                                    v-if="data.parrain_telephone"
+                                    class="mt-1 text-xs text-muted-foreground/80 tabular-nums"
+                                >
+                                    {{
+                                        formatPhoneDisplay(
+                                            data.parrain_telephone,
+                                            data.parrain_code_phone_pays,
+                                        )
+                                    }}
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+
                     <!-- Équipe -->
                     <Column
                         field="equipe_nom"
@@ -720,19 +780,26 @@ function confirmDelete(v: Vehicule) {
                         <template #body="{ data }">
                             <div class="leading-tight">
                                 <div class="text-muted-foreground">
-                                    {{ data.equipe_nom ?? '—' }}
-                                    <span
-                                        v-if="data.equipe_nom"
-                                        class="ml-1 text-xs text-muted-foreground/70"
-                                    >
-                                        ·
-                                        {{ data.equipe_membres.length }}
-                                        {{
-                                            data.equipe_membres.length > 1
-                                                ? 'membres'
-                                                : 'membre'
-                                        }}
-                                    </span>
+                                    <template v-if="data.equipe_nom">
+                                        <template
+                                            v-if="
+                                                data.equipe_nom.trim() !==
+                                                data.nom_vehicule.trim()
+                                            "
+                                            >{{ data.equipe_nom }} ·
+                                        </template>
+                                        <span
+                                            class="text-xs text-muted-foreground/70"
+                                        >
+                                            {{ data.equipe_membres.length }}
+                                            {{
+                                                data.equipe_membres.length > 1
+                                                    ? 'membres'
+                                                    : 'membre'
+                                            }}
+                                        </span>
+                                    </template>
+                                    <span v-else>—</span>
                                 </div>
                                 <div
                                     v-if="data.livreur_principal_nom"
@@ -776,7 +843,10 @@ function confirmDelete(v: Vehicule) {
                     <Column header="Partages" style="width: 170px">
                         <template #body="{ data }">
                             <div
-                                v-if="partagesAffiches(data).length"
+                                v-if="
+                                    partagesAffiches(data).length ||
+                                    data.parrain_part
+                                "
                                 class="flex flex-col gap-1"
                                 :data-testid="`partages-${data.id}`"
                             >
@@ -791,6 +861,24 @@ function confirmDelete(v: Vehicule) {
                                     <StatusDot
                                         :status="p.statut"
                                         :label="PARTAGE_LABEL[p.statut]"
+                                        size="sm"
+                                    />
+                                </div>
+                                <div
+                                    v-if="data.parrain_part"
+                                    class="flex items-center justify-between gap-2 border-t pt-1 text-xs"
+                                    :data-testid="`part-parrain-${data.id}`"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Parrain</span
+                                    >
+                                    <StatusDot
+                                        :status="data.parrain_part"
+                                        :label="
+                                            PART_PARRAIN_LABEL[
+                                                data.parrain_part
+                                            ]
+                                        "
                                         size="sm"
                                     />
                                 </div>

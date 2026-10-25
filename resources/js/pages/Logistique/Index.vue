@@ -102,6 +102,12 @@ const props = defineProps<{
     filtre_statut: string | null;
     filtre_depart_site_ids: string[];
     filtre_arrivee_site_ids: string[];
+    filtres: {
+        date_debut: string | null;
+        date_fin: string | null;
+        vehicule: string | null;
+        livreur: string | null;
+    };
     vue: 'transferts' | 'receptions';
     can_create: boolean;
     types_ecart: StatutOption[];
@@ -170,6 +176,27 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Site arrivée',
         disabled: !props.is_admin && props.vue === 'receptions',
     },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'text',
+        placeholder: 'Nom ou immatriculation…',
+        inline: true,
+    },
+    {
+        key: 'livreur',
+        label: 'Livreur',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+        inline: true,
+    },
+    {
+        key: 'date',
+        label: 'Période',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
+    },
 ]);
 
 const filterValues = computed(() => ({
@@ -182,6 +209,10 @@ const filterValues = computed(() => ({
         !props.is_admin && props.vue === 'receptions'
             ? props.user_site_ids
             : (props.filtre_arrivee_site_ids ?? []),
+    date_debut: props.filtres?.date_debut ?? '',
+    date_fin: props.filtres?.date_fin ?? '',
+    vehicule: props.filtres?.vehicule ?? '',
+    livreur: props.filtres?.livreur ?? '',
 }));
 
 const filteredTransferts = computed(() => props.transferts);

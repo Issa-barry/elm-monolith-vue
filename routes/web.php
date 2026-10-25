@@ -72,6 +72,7 @@ use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\CompteTresorerieController;
+use App\Http\Controllers\Comptabilite\ControleEncaissementsController;
 use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\InterAgencesController;
@@ -235,7 +236,9 @@ use App\Http\Controllers\UserInvitation\ForceDestroyUserInvitationController;
 use App\Http\Controllers\UserInvitation\ResendUserInvitationController;
 use App\Http\Controllers\UserInvitation\StoreUserInvitationController;
 use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\Vehicules\Parrain\DefinirPartParrainController;
 use App\Http\Controllers\Vehicules\Parrain\DestroyParrainController;
+use App\Http\Controllers\Vehicules\Parrain\PartParrainController;
 use App\Http\Controllers\Vehicules\Parrain\RechercherTelephoneParrainController;
 use App\Http\Controllers\Vehicules\Parrain\RepartitionsParrainController;
 use App\Http\Controllers\Vehicules\Parrain\StoreParrainController;
@@ -593,6 +596,8 @@ Route::prefix('backoffice')->group(function () {
             // permissions que le véhicule (vehicules.update), pas de permission dédiée.
             Route::get('vehicules/{vehicule}/parrain/rechercher', RechercherTelephoneParrainController::class)->name('vehicules.parrain.rechercher');
             Route::get('vehicules/{vehicule}/parrain/repartitions', RepartitionsParrainController::class)->name('vehicules.parrain.repartitions');
+            Route::get('vehicules/{vehicule}/parrain/part', PartParrainController::class)->name('vehicules.parrain.part');
+            Route::put('vehicules/{vehicule}/parrain/part', DefinirPartParrainController::class)->name('vehicules.parrain.part.update');
             Route::post('vehicules/{vehicule}/parrain', StoreParrainController::class)->name('vehicules.parrain.store');
             Route::put('vehicules/{vehicule}/parrain', UpdateParrainController::class)->name('vehicules.parrain.update');
             Route::delete('vehicules/{vehicule}/parrain', DestroyParrainController::class)->name('vehicules.parrain.destroy');
@@ -896,6 +901,15 @@ Route::prefix('backoffice')->group(function () {
                 // Inter-agences (ADR 0012) : dettes nées des encaissements reçus pour une autre agence
                 // et leur règlement (création + envoi en une opération).
                 Route::get('inter-agences', [InterAgencesController::class, 'index'])->name('inter-agences.index');
+                // Contrôle des encaissements (ADR 0036) : anomalies, alertes, traitement contrôlé.
+                Route::get('controle-encaissements', [ControleEncaissementsController::class, 'index'])->name('controle-encaissements.index');
+                Route::post('controle-encaissements/analyser', [ControleEncaissementsController::class, 'analyser'])->middleware('throttle:6,1')->name('controle-encaissements.analyser');
+                Route::get('controle-encaissements/{anomalie}', [ControleEncaissementsController::class, 'show'])->name('controle-encaissements.show');
+                Route::post('controle-encaissements/{anomalie}/prendre-en-charge', [ControleEncaissementsController::class, 'prendreEnCharge'])->name('controle-encaissements.prendre-en-charge');
+                Route::post('controle-encaissements/{anomalie}/commentaires', [ControleEncaissementsController::class, 'commenter'])->name('controle-encaissements.commenter');
+                Route::post('controle-encaissements/{anomalie}/resoudre', [ControleEncaissementsController::class, 'resoudre'])->name('controle-encaissements.resoudre');
+                Route::post('controle-encaissements/{anomalie}/fausse-alerte', [ControleEncaissementsController::class, 'fausseAlerte'])->name('controle-encaissements.fausse-alerte');
+
                 Route::get('inter-agences/{debiteur}/{creancier}', [InterAgencesController::class, 'show'])->name('inter-agences.show');
                 Route::post('inter-agences/{debiteur}/{creancier}/reglements', [InterAgencesController::class, 'storeReglement'])->name('inter-agences.reglements.store');
 

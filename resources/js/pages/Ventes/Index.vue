@@ -6,6 +6,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
+import QuickFilters from '@/components/filters/QuickFilters.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
 import type {
     EncaissementAgences,
@@ -136,6 +137,7 @@ interface Filters {
     livreur: string | null;
     numero_commande: string | null;
     client: string | null;
+    recherche: string | null;
     en_retard: string | null;
 }
 
@@ -203,6 +205,15 @@ const urlListe = computed(
         })[props.liste],
 );
 const estListePrecommandes = computed(() => props.liste === 'precommandes');
+// Barre rapide du tableau (recherche + N° commande, Livreur, Véhicule) : liste Ventes seulement
+// pour l'instant ; Distribution et Précommandes gardent tous leurs critères dans le panneau.
+const barreRapide = computed(() => props.liste === 'ventes');
+const CLES_BARRE_RAPIDE = [
+    'recherche',
+    'numero_commande',
+    'livreur',
+    'vehicule',
+];
 // Nouvelle vente : jamais proposée depuis la liste des précommandes, pour ne pas créer une vente
 // en croyant précommander (deux points d'entrée distincts, ADR 0019).
 const peutProposerVente = computed(
@@ -404,7 +415,6 @@ const filterFields = computed<FilterField[]>(() => [
             ? filtresStatutPrecommande.value
             : filtresStatut,
         placeholder: 'Tous les statuts',
-        inline: true,
     },
     ...(estListePrecommandes.value
         ? [
@@ -414,6 +424,16 @@ const filterFields = computed<FilterField[]>(() => [
                   type: 'select',
                   options: [{ value: '1', label: 'En retard' }],
                   placeholder: 'Retard : toutes',
+              } satisfies FilterField,
+          ]
+        : []),
+    ...(barreRapide.value
+        ? [
+              {
+                  key: 'recherche',
+                  label: 'Rechercher une vente',
+                  type: 'text',
+                  placeholder: 'Rechercher une vente…',
                   inline: true,
               } satisfies FilterField,
           ]
@@ -477,13 +497,21 @@ const filterValues = computed(() => ({
     ...props.filters,
 }));
 
+// Champs `inline` affichés par la barre rapide, dans l'ordre de la barre.
+const champsBarreRapide = computed(() =>
+    CLES_BARRE_RAPIDE.map((cle) =>
+        filterFields.value.find((f) => f.key === cle),
+    ).filter((f): f is FilterField => f !== undefined),
+);
+
 const commandesFiltrees = computed(() => props.commandes);
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
+// Avec la barre rapide, la recherche mobile passe par le serveur comme sur ordinateur.
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
-    if (!q) return props.commandes;
+    if (barreRapide.value || !q) return props.commandes;
     return props.commandes.filter(
         (c) =>
             c.reference.toLowerCase().includes(q) ||
@@ -967,8 +995,33 @@ function confirmDelete(c: Commande) {
                 />
             </div>
 
+            <!-- Barre rapide (Ventes) : recherche et filtres rapides côté serveur, panneau à côté -->
+            <QuickFilters
+                v-if="barreRapide"
+                class="border-t"
+                :url="urlListe"
+                :fields="champsBarreRapide"
+                search-key="recherche"
+                :values="filterValues"
+                :base-params="{ periode: 'all' }"
+                :saved-filter-scope="scopeVues"
+            >
+                <DataFilters
+                    trigger-only
+                    quick-bar
+                    :url="urlListe"
+                    :saved-filter-scope="scopeVues"
+                    :base-params="{ periode: 'all' }"
+                    :values="filterValues"
+                    :sites="sites"
+                    :result-count="commandesFiltrees.length"
+                    :fields="filterFields"
+                />
+            </QuickFilters>
+
             <!-- Search + Filtres -->
             <div
+                v-else
                 class="flex flex-wrap items-center gap-2 border-t border-b px-4 py-2"
             >
                 <div class="relative flex-1">
@@ -1077,6 +1130,7 @@ function confirmDelete(c: Commande) {
                         <template #filters>
                             <DataFilters
                                 trigger-only
+                                :quick-bar="barreRapide"
                                 :url="urlListe"
                                 :saved-filter-scope="scopeVues"
                                 :base-params="{ periode: 'all' }"
@@ -1265,6 +1319,15 @@ function confirmDelete(c: Commande) {
             <div
                 class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
             >
+                <QuickFilters
+                    v-if="barreRapide"
+                    :url="urlListe"
+                    :fields="champsBarreRapide"
+                    search-key="recherche"
+                    :values="filterValues"
+                    :base-params="{ periode: 'all' }"
+                    :saved-filter-scope="scopeVues"
+                />
                 <DataTable
                     :value="commandesFiltrees"
                     :paginator="commandesFiltrees.length > 20"

@@ -236,6 +236,19 @@ describe('PaymentCard — espèces et caisse dédiée', () => {
         ]);
     });
 
+    it('ne soumet jamais une seconde fois tant que le premier envoi est en cours', async () => {
+        const wrapper = monter({ especesDisponibles: true });
+
+        await confirmer(wrapper).trigger('click');
+        await wrapper.setProps({ processing: true });
+
+        expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
+        confirmer(wrapper).element.click();
+        await nextTick();
+
+        expect(wrapper.emitted('submit')).toHaveLength(1);
+    });
+
     it('retire la sélection espèces si la caisse disparaît pendant que la fenêtre est ouverte', async () => {
         const wrapper = monter({ especesDisponibles: true });
         expect(select(wrapper).props('modelValue')).toBe('especes');

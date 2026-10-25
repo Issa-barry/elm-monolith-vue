@@ -15,7 +15,7 @@
  * gestion (dépôt), hors périmètre de ce refactor.
  */
 import InputNumber from 'primevue/inputnumber';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 export interface CommissionMontantFixeMembre {
     id: string;
@@ -37,14 +37,73 @@ const emit = defineEmits<{
     'update:partParrain': [number];
 }>();
 
+const avecParrain = computed(() => !!props.parrain);
+
+/**
+ * Un seul livreur et un parrain : la répartition est entièrement déterminée par le barème —
+ * l'utilisateur saisit une part, l'autre se calcule (barème − part saisie). Avec plusieurs
+ * livreurs, rien n'est recalculé d'office : leurs montants restent ceux saisis. Le calcul ne vaut
+ * jamais confirmation d'une part nulle du parrain (PARRAIN-022, confirmée à part).
+ */
+const calculAuto = computed(
+    () =>
+        avecParrain.value &&
+        props.modelValue.length === 1 &&
+        !props.readonly &&
+        props.enveloppeUnitaire > 0,
+);
+/** Champ saisi en dernier : l'autre est affiché comme calculé. */
+const champSaisi = ref<'livreur' | 'parrain' | null>(null);
+const alerteLimite = ref<string | null>(null);
+
+/** Part entière entre 0 et le barème ; un dépassement est ramené au barème et signalé. */
+function borner(val: number | null): number {
+    const v = Math.max(0, Math.round(val ?? 0));
+    if (v > props.enveloppeUnitaire) {
+        alerteLimite.value = `La part ne peut pas dépasser ${formatGNF(props.enveloppeUnitaire)}. Elle a été ramenée à ${formatGNF(props.enveloppeUnitaire)}.`;
+        return props.enveloppeUnitaire;
+    }
+    // La valeur plafonnée revient au blur : le message reste tant qu'une part plus basse n'est
+    // pas saisie.
+    if (v < props.enveloppeUnitaire) {
+        alerteLimite.value = null;
+    }
+    return v;
+}
+
 function onMontantChange(id: string, val: number | null) {
+    if (calculAuto.value) {
+        const livreur = borner(val);
+        champSaisi.value = 'livreur';
+        emit('update:modelValue', [
+            { ...props.modelValue[0], montant_unitaire: livreur },
+        ]);
+        emit('update:partParrain', props.enveloppeUnitaire - livreur);
+        return;
+    }
+
     const list = props.modelValue.map((m) =>
         m.id === id ? { ...m, montant_unitaire: val ?? 0 } : m,
     );
     emit('update:modelValue', list);
 }
 
-const avecParrain = computed(() => !!props.parrain);
+function onPartParrainChange(val: number | null) {
+    if (calculAuto.value) {
+        const parrain = borner(val);
+        champSaisi.value = 'parrain';
+        emit('update:partParrain', parrain);
+        emit('update:modelValue', [
+            {
+                ...props.modelValue[0],
+                montant_unitaire: props.enveloppeUnitaire - parrain,
+            },
+        ]);
+        return;
+    }
+
+    emit('update:partParrain', val ?? 0);
+}
 const montantParrain = computed(() =>
     avecParrain.value ? (props.partParrain ?? 0) : 0,
 );
@@ -150,6 +209,13 @@ defineExpose({
                             "
                             @update:model-value="onMontantChange(m.id, $event)"
                         />
+                        <p
+                            v-if="calculAuto && champSaisi === 'parrain'"
+                            class="mt-1 text-right text-[11px] text-muted-foreground"
+                            data-testid="partage-livreur-calcule"
+                        >
+                            Calculé : barème − part du parrain
+                        </p>
                     </td>
                 </tr>
             </tbody>
@@ -183,15 +249,39 @@ defineExpose({
                                 width: '100%',
                             }"
                             @input="
-                                emit(
-                                    'update:partParrain',
-                                    ($event.value as number | null) ?? 0,
+                                onPartParrainChange(
+                                    $event.value as number | null,
                                 )
                             "
-                            @update:model-value="
-                                emit('update:partParrain', $event ?? 0)
-                            "
+                            @update:model-value="onPartParrainChange($event)"
                         />
+                        <p
+                            v-if="calculAuto && champSaisi === 'livreur'"
+                            class="mt-1 text-right text-[11px] text-muted-foreground"
+                            data-testid="partage-parrain-calcule"
+                        >
+                            Calculé : barème − part du livreur
+                        </p>
+                    </td>
+                </tr>
+                <tr v-if="calculAuto">
+                    <td
+                        colspan="2"
+                        class="px-3 pb-2.5 text-xs text-muted-foreground"
+                        data-testid="partage-calcul-auto"
+                    >
+                        Un seul livreur : saisissez la part du parrain ou celle
+                        du livreur, l'autre est calculée pour que le total reste
+                        égal au barème.
+                    </td>
+                </tr>
+                <tr v-if="alerteLimite">
+                    <td
+                        colspan="2"
+                        class="px-3 pb-2.5 text-xs font-medium text-orange-600"
+                        data-testid="partage-alerte-limite"
+                    >
+                        {{ alerteLimite }}
                     </td>
                 </tr>
             </tbody>

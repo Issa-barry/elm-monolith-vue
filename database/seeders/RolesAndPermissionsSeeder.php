@@ -144,6 +144,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.confirmer_retour', 'tresorerie.verser',
             'tresorerie.gerer_soldes_ouverture', 'tresorerie.valider_supports', 'tresorerie.supprimer_supports',
             'tresorerie.exporter',
+            'encaissements.surveiller', 'encaissements.traiter_anomalies',
             // Rapports
             'rapports.read_own',        'rapports.read',
             // RH

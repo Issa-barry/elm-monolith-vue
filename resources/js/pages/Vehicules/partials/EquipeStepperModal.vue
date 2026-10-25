@@ -3,6 +3,7 @@ import CommissionMontantFixeEditor, {
     type CommissionMontantFixeMembre,
 } from '@/components/commission/CommissionMontantFixeEditor.vue';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
@@ -56,6 +57,10 @@ interface PartageCategorieExistant {
     parts: Array<{ livreur_id: string; montant_unitaire: number }>;
     /** Part du parrain du véhicule (null : aucune ligne parrain). */
     part_parrain?: number | null;
+    /** PARRAIN-022 : part nulle déjà confirmée par une personne. */
+    part_parrain_confirmee?: boolean;
+    /** PARRAIN-024 : date de début des droits du parrain en attente de cette répartition. */
+    droits_parrain_depuis?: string | null;
 }
 
 interface EquipeExistante {
@@ -180,6 +185,7 @@ watch(
         step.value = 1;
         hasChanges.value = false;
         showConfirmClose.value = false;
+        confirmerDroitsParrain.value = false;
         Object.keys(serverErrors).forEach((k) => delete serverErrors[k]);
         isSubmitting.value = false;
 
@@ -407,7 +413,7 @@ async function goToStep2() {
     step.value = 2;
 }
 
-// ── Étape 2 : Répartition livreurs PAR CATÉGORIE, propriétaire hors partage ─
+// ── Étape 2 : Répartition des commissions PAR CATÉGORIE (livreurs et parrain), propriétaire hors partage ─
 // Chaque catégorie ayant son propre barème Livreur (Paramètres →
 // Commissions), sa répartition entre livreurs est elle aussi définie
 // indépendamment, en montants GNF entiers fixes dont la somme doit égaler
@@ -419,6 +425,29 @@ const partagesParCategorie = ref<Record<string, CommissionMontantFixeMembre[]>>(
 );
 /** Part du parrain par catégorie (seulement si le processus actif le rémunère). */
 const partParrainParCategorie = ref<Record<string, number>>({});
+/**
+ * PARRAIN-022 : part du parrain laissée à 0 GNF confirmée explicitement (« aucune part pour le
+ * moment »). Sans confirmation, le partage reste « À répartir » (ventes refusées après la date
+ * d'activation de l'organisation).
+ */
+const confirmationPartParrainNulle = ref<Record<string, boolean>>({});
+
+/**
+ * PARRAIN-024 : part du parrain due depuis une date passée (saisie dans l'onglet Parrain) — cette
+ * répartition s'appliquera depuis cette date, avec le recalcul des commissions non payées :
+ * confirmation explicite exigée, vérifiée aussi par le serveur.
+ */
+const droitsParrainEnAttente = computed(() => {
+    if (!props.parrain) return [];
+    return categoriesAvecPartageLivraison.value.flatMap((cat) => {
+        const date = props.equipe?.partages_categorie?.find(
+            (p) => p.categorie_id === cat.categorie_id,
+        )?.droits_parrain_depuis;
+        return date ? [{ categorie: cat.categorie_nom, date }] : [];
+    });
+});
+const confirmerDroitsParrain = ref(false);
+const enFr = (iso: string) => iso.split('-').reverse().join('/');
 
 function membreLabels(): string[] {
     const roleCounts: Record<string, number> = {};
@@ -432,6 +461,7 @@ function initPartagesParCategorie() {
     const labels = membreLabels();
     const result: Record<string, CommissionMontantFixeMembre[]> = {};
     const parrains: Record<string, number> = {};
+    const confirmations: Record<string, boolean> = {};
 
     for (const cat of categoriesAvecPartageLivraison.value) {
         const existant = props.equipe?.partages_categorie?.find(
@@ -463,11 +493,23 @@ function initPartagesParCategorie() {
         result[cat.categorie_id] = parts;
         if (props.parrain) {
             parrains[cat.categorie_id] = existant?.part_parrain ?? 0;
+            confirmations[cat.categorie_id] =
+                (existant?.part_parrain ?? 0) === 0 &&
+                existant?.part_parrain_confirmee === true;
         }
     }
 
     partagesParCategorie.value = result;
     partParrainParCategorie.value = parrains;
+    confirmationPartParrainNulle.value = confirmations;
+}
+
+function onConfirmationPartParrainNulle(categorieId: string, valeur: boolean) {
+    markChanged();
+    confirmationPartParrainNulle.value = {
+        ...confirmationPartParrainNulle.value,
+        [categorieId]: valeur,
+    };
 }
 
 function onPartParrainChange(categorieId: string, montant: number) {
@@ -536,6 +578,11 @@ const categoriesNonEquilibrees = computed(() =>
 
 function goToStep3() {
     if (!partageValide.value) return;
+    if (
+        droitsParrainEnAttente.value.length > 0 &&
+        !confirmerDroitsParrain.value
+    )
+        return;
     step.value = 3;
 }
 
@@ -598,6 +645,7 @@ function buildPayload() {
         // Le partage saisi ne remplace que CE processus — jamais un fallback implicite vers
         // vente (cf. EquipeLivraisonController::syncPartagesCategorie()).
         processus_code: props.processusActif,
+        confirmer_droits_parrain: confirmerDroitsParrain.value,
     };
 
     return {
@@ -621,6 +669,12 @@ function buildPayload() {
                 ? {
                       part_parrain:
                           partParrainParCategorie.value[cat.categorie_id] ?? 0,
+                      confirmer_part_parrain_nulle:
+                          (partParrainParCategorie.value[cat.categorie_id] ??
+                              0) === 0 &&
+                          confirmationPartParrainNulle.value[
+                              cat.categorie_id
+                          ] === true,
                   }
                 : {}),
         })),
@@ -740,7 +794,7 @@ const hasStep1Errors = computed(() =>
                             n === 1
                                 ? 'Membres'
                                 : n === 2
-                                  ? 'Répartition livreurs'
+                                  ? 'Répartition des commissions'
                                   : 'Récapitulatif'
                         }}
                     </span>
@@ -995,10 +1049,69 @@ const hasStep1Errors = computed(() =>
                             onPartParrainChange(cat.categorie_id, $event)
                         "
                     />
+                    <label
+                        v-if="
+                            parrain &&
+                            cat.montant_livraison > 0 &&
+                            (partParrainParCategorie[cat.categorie_id] ?? 0) ===
+                                0
+                        "
+                        class="mt-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs dark:border-amber-900/50 dark:bg-amber-950/20"
+                        :data-testid="`confirmer-part-parrain-nulle-${cat.categorie_id}`"
+                    >
+                        <Checkbox
+                            :model-value="
+                                confirmationPartParrainNulle[
+                                    cat.categorie_id
+                                ] === true
+                            "
+                            class="mt-0.5"
+                            @update:model-value="
+                                (v) =>
+                                    onConfirmationPartParrainNulle(
+                                        cat.categorie_id,
+                                        v === true,
+                                    )
+                            "
+                        />
+                        <span>
+                            Le parrain ne reçoit
+                            <span class="font-semibold">aucune part</span>
+                            pour le moment sur cette catégorie. Sans cette
+                            confirmation, le partage reste « À répartir ».
+                        </span>
+                    </label>
                 </div>
             </div>
 
-            <p class="text-xs text-muted-foreground">
+            <label
+                v-if="droitsParrainEnAttente.length > 0"
+                class="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+                data-testid="confirmer-droits-parrain"
+            >
+                <Checkbox
+                    :model-value="confirmerDroitsParrain"
+                    class="mt-0.5"
+                    @update:model-value="
+                        (v) => (confirmerDroitsParrain = v === true)
+                    "
+                />
+                <span>
+                    La part du parrain est due depuis le
+                    <span
+                        v-for="(d, i) in droitsParrainEnAttente"
+                        :key="d.categorie"
+                        class="font-semibold"
+                        >{{ i > 0 ? ', ' : '' }}{{ enFr(d.date) }} ({{
+                            d.categorie
+                        }})</span
+                    >. Cette répartition s'appliquera depuis cette date : les
+                    commissions non payées des commandes livrées depuis seront
+                    recalculées (les commissions payées et les périodes
+                    clôturées ne changent pas). Je confirme.
+                </span>
+            </label>
+            <p v-else class="text-xs text-muted-foreground">
                 La nouvelle répartition s'applique aux opérations à venir ; les
                 commissions déjà calculées ne changent pas.
             </p>
@@ -1121,7 +1234,7 @@ const hasStep1Errors = computed(() =>
                     </tbody>
                 </table>
                 <p v-else class="px-4 py-2.5 text-xs text-muted-foreground">
-                    Aucune répartition livreurs pour cette catégorie.
+                    Aucune répartition des commissions pour cette catégorie.
                 </p>
             </div>
         </div>
@@ -1172,7 +1285,11 @@ const hasStep1Errors = computed(() =>
                     v-else-if="step === 2"
                     type="button"
                     size="sm"
-                    :disabled="!partageValide"
+                    :disabled="
+                        !partageValide ||
+                        (droitsParrainEnAttente.length > 0 &&
+                            !confirmerDroitsParrain)
+                    "
                     @click="goToStep3"
                 >
                     Suivant
