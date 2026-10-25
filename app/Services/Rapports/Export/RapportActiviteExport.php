@@ -86,9 +86,9 @@ class RapportActiviteExport implements WithMultipleSheets
     {
         return new RapportFeuille(
             'Ventes',
-            ['Facture', 'Date', 'Client', 'Agent', 'Créée à', 'Encaissée à', 'Montant', 'Encaissé', 'Reste', 'Statut'],
+            ['Facture', 'Date', 'Client', 'Véhicule', 'Agent', 'Créée à', 'Encaissée à', 'Montant', 'Encaissé', 'Reste', 'Statut'],
             array_map(fn (array $l) => [
-                $l['reference'], $l['date'], $l['client'], $l['agent'], $l['site_nom'], $l['encaisse_a'],
+                $l['reference'], $l['date'], $l['client'], $l['vehicule_nom'], $l['agent'], $l['site_nom'], $l['encaisse_a'],
                 $l['montant'], $l['encaisse'], $l['reste'], $l['statut_label'],
             ], $this->rapport['ventes']['lignes']),
         );
@@ -110,9 +110,9 @@ class RapportActiviteExport implements WithMultipleSheets
     {
         return new RapportFeuille(
             'Dettes clients',
-            ['Facture', 'Date', 'Ancienneté (jours)', 'Client', 'Agent', 'Créée à', 'Encaissée à', 'Montant', 'Encaissé', 'Reste', 'Statut'],
+            ['Facture', 'Date', 'Ancienneté (jours)', 'Client', 'Véhicule', 'Agent', 'Créée à', 'Encaissée à', 'Montant', 'Encaissé', 'Reste', 'Statut'],
             array_map(fn (array $l) => [
-                $l['reference'], $l['date'], $l['anciennete_jours'], $l['client'], $l['agent'], $l['site_nom'], $l['encaisse_a'],
+                $l['reference'], $l['date'], $l['anciennete_jours'], $l['client'], $l['vehicule_nom'], $l['agent'], $l['site_nom'], $l['encaisse_a'],
                 $l['montant'], $l['encaisse'], $l['reste'], $l['statut_label'],
             ], $this->rapport['creances']['lignes']),
         );

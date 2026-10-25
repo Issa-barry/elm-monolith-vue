@@ -12,6 +12,7 @@ const facture = (surcharge: Partial<LigneFacture> = {}): LigneFacture => ({
     date: '2026-09-29',
     client: null,
     agent: 'Moussa',
+    vehicule_nom: null,
     site_nom: 'Matoto',
     encaisse_a: 'Matoto',
     montant: 10_800_000,
@@ -62,6 +63,28 @@ describe('Rapport — Créée à / Encaissée à', () => {
         expect(entetes(wrapper)).not.toContain('Agence');
         expect(wrapper.get('[data-testid="facture-encaissee-a"]').text()).toBe(
             'Kindia',
+        );
+    });
+
+    it('affiche le véhicule de la vente, ou un tiret sans véhicule', () => {
+        const wrapper = mount(ListeFactures, {
+            props: {
+                lignes: [
+                    facture({ id: 'f1', vehicule_nom: 'Tricycle 07' }),
+                    facture({ id: 'f2', vehicule_nom: null }),
+                ],
+                afficherAgent: false,
+                vide: '—',
+            },
+        });
+
+        expect(entetes(wrapper)).toContain('Véhicule');
+        const cellules = wrapper
+            .findAll('[data-testid="facture-vehicule"]')
+            .map((td) => td.text());
+        expect(cellules).toEqual(['Tricycle 07', '—']);
+        expect(wrapper.get('[data-testid="liste-mobile"]').text()).toContain(
+            'Tricycle 07',
         );
     });
 

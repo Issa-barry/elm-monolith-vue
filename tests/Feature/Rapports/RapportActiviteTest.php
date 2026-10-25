@@ -12,6 +12,7 @@ use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\Vehicule;
 use App\Services\Rapports\Export\RapportActiviteExport;
 use App\Services\Tresorerie\MouvementFondsService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
@@ -231,7 +232,8 @@ class RapportActiviteTest extends TestCase
 
             $titres = array_map(fn ($feuille) => $feuille->title(), $export->sheets());
 
-            return count($ventes) === 1 && $ventes[0][3] === 'Moussa Sidibé'
+            // Colonnes : Facture, Date, Client, Véhicule, Agent…
+            return count($ventes) === 1 && $ventes[0][4] === 'Moussa Sidibé'
                 && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents'];
         });
     }
@@ -658,6 +660,21 @@ class RapportActiviteTest extends TestCase
         $this->assertSame('Kouria', $vente['encaisse_a']);
         $this->assertEquals(300_000, $vente['encaisse']);
         $this->assertSame([], $a['encaissements']['lignes']);
+    }
+
+    public function test_les_ventes_et_dettes_affichent_le_vehicule_de_la_commande(): void
+    {
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Tricycle 07']);
+        $avecVehicule = $this->vente($this->siteA, $this->agentA, 100_000);
+        CommandeVente::whereKey($avecVehicule->commande_vente_id)->update(['vehicule_id' => $vehicule->id]);
+        $sansVehicule = $this->vente($this->siteA, $this->agentA, 50_000);
+
+        $rapport = $this->props($this->agentA, 'ma-situation')['rapport'];
+
+        $ventes = collect($rapport['ventes']['lignes'])->keyBy('id');
+        $this->assertSame('Tricycle 07', $ventes[$avecVehicule->id]['vehicule_nom']);
+        $this->assertNull($ventes[$sansVehicule->id]['vehicule_nom']);
+        $this->assertSame('Tricycle 07', collect($rapport['creances']['lignes'])->firstWhere('id', $avecVehicule->id)['vehicule_nom']);
     }
 
     public function test_ma_situation_de_l_agent_trace_l_encaissement_fait_pour_une_autre_agence(): void
