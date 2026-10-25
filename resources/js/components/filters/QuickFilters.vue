@@ -134,14 +134,14 @@ function clearAll() {
 function inputClass(key: string): string[] {
     return [
         'h-9 w-full rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50',
-        local[key] ? 'pr-8' : 'pr-3',
+        local[key] ? 'pr-8' : 'pr-2.5 sm:pr-3',
     ];
 }
 </script>
 
 <template>
-    <!-- Mobile : recherche, champs rapides, puis actions. Tablette : recherche (+ Effacer), puis
-         les champs sur une ligne. Grand écran : recherche à gauche, champs alignés à droite. -->
+    <!-- Filtres rapides à gauche, recherche à droite. Sous 1280 px : les filtres rapides sur une
+         ligne (grille), puis la recherche ; sur mobile, les actions du panneau en dessous. -->
     <div
         data-testid="quick-filters"
         role="search"
@@ -149,8 +149,48 @@ function inputClass(key: string): string[] {
         class="flex flex-wrap items-center gap-2 border-b bg-card px-4 py-3"
     >
         <div
+            v-if="otherFields.length"
+            class="grid w-full gap-2 xl:flex xl:w-auto xl:items-center"
+            :style="{ gridTemplateColumns: gridColumns }"
+        >
+            <div
+                v-for="field in otherFields"
+                :key="field.key"
+                class="relative min-w-0 xl:w-40"
+            >
+                <input
+                    :value="local[field.key]"
+                    type="text"
+                    :data-testid="`quick-filter-${field.key}`"
+                    :aria-label="field.label"
+                    :placeholder="field.label"
+                    :title="field.placeholder"
+                    :disabled="field.disabled ?? false"
+                    :class="[inputClass(field.key), 'pl-2.5 sm:pl-3']"
+                    @input="
+                        onInput(
+                            field.key,
+                            ($event.target as HTMLInputElement).value,
+                        )
+                    "
+                    @keydown.enter.prevent="submit"
+                />
+                <button
+                    v-if="local[field.key]"
+                    type="button"
+                    :data-testid="`quick-filter-clear-${field.key}`"
+                    :aria-label="`Effacer ${field.label}`"
+                    class="absolute top-1/2 right-2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                    @click="clearField(field.key)"
+                >
+                    <X class="h-3.5 w-3.5" />
+                </button>
+            </div>
+        </div>
+
+        <div
             v-if="searchField"
-            class="relative order-1 min-w-0 basis-full sm:flex-1 sm:basis-0 xl:max-w-xs"
+            class="relative min-w-0 flex-1 basis-48 xl:ml-auto xl:w-80 xl:flex-none xl:basis-auto"
         >
             <Search
                 class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -186,10 +226,7 @@ function inputClass(key: string): string[] {
             </button>
         </div>
 
-        <div
-            v-if="hasActive"
-            class="order-3 flex shrink-0 items-center sm:order-1 xl:order-3"
-        >
+        <div v-if="hasActive" class="flex shrink-0 items-center">
             <button
                 type="button"
                 data-testid="quick-filters-reset"
@@ -201,48 +238,8 @@ function inputClass(key: string): string[] {
         </div>
 
         <!-- Contrôles additionnels (ex. bouton du panneau sur mobile) -->
-        <div v-if="$slots.default" class="order-3 flex items-center gap-2">
+        <div v-if="$slots.default" class="flex w-full items-center gap-2">
             <slot />
-        </div>
-
-        <div
-            v-if="otherFields.length"
-            class="order-2 grid w-full gap-2 xl:ml-auto xl:flex xl:w-auto xl:items-center"
-            :style="{ gridTemplateColumns: gridColumns }"
-        >
-            <div
-                v-for="field in otherFields"
-                :key="field.key"
-                class="relative min-w-0 xl:w-40"
-            >
-                <input
-                    :value="local[field.key]"
-                    type="text"
-                    :data-testid="`quick-filter-${field.key}`"
-                    :aria-label="field.label"
-                    :placeholder="field.label"
-                    :title="field.placeholder"
-                    :disabled="field.disabled ?? false"
-                    :class="[inputClass(field.key), 'pl-3']"
-                    @input="
-                        onInput(
-                            field.key,
-                            ($event.target as HTMLInputElement).value,
-                        )
-                    "
-                    @keydown.enter.prevent="submit"
-                />
-                <button
-                    v-if="local[field.key]"
-                    type="button"
-                    :data-testid="`quick-filter-clear-${field.key}`"
-                    :aria-label="`Effacer ${field.label}`"
-                    class="absolute top-1/2 right-2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                    @click="clearField(field.key)"
-                >
-                    <X class="h-3.5 w-3.5" />
-                </button>
-            </div>
         </div>
     </div>
 </template>

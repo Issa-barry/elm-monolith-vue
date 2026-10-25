@@ -34,6 +34,7 @@ use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodeCalculatorService;
+use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -389,6 +390,7 @@ class CommissionEnveloppeGenerator
                 // Un incident côté période ne doit jamais faire échouer la génération elle-même.
                 if (! empty($enveloppesCreees)) {
                     try {
+                        self::ouvrirPeriodesParrain($ctx->organizationId, $enveloppesCreees);
                         app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees(
                             $ctx->organizationId,
                             Carbon::parse($existantes->isNotEmpty() ? $existantes->min('earned_at') : $ctx->earnedAt),
@@ -572,6 +574,27 @@ class CommissionEnveloppeGenerator
      * BeneficiaireUserResolver). Même garantie d'isolation que
      * alerterCommissionManquante() : jamais de rethrow vers l'appelant.
      */
+    /**
+     * PARRAIN-017 : la part d'un parrain apparaît sur sa fiche de quinzaine sans action manuelle. Les
+     * périodes de paiement se créent à la demande (écran de la période, prévision de trésorerie) et
+     * le recalcul ne traite que celles qui existent : la période « Parrains » qui couvre la commission
+     * est donc ouverte ici si elle manque, avant ce recalcul.
+     *
+     * @param  list<string>  $enveloppeIds
+     */
+    private static function ouvrirPeriodesParrain(string $organizationId, array $enveloppeIds): void
+    {
+        $dates = CommissionEnveloppe::whereIn('id', $enveloppeIds)
+            ->whereHas('parts', fn ($q) => $q->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN))
+            ->pluck('earned_at')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->unique();
+
+        foreach ($dates as $date) {
+            app(PeriodePaiementService::class)->getOrCreatePeriod($organizationId, TypePeriodePaiement::PARRAIN, Carbon::parse($date));
+        }
+    }
+
     /**
      * @param  list<string>  $enveloppeIds  enveloppes créées par CETTE génération
      */

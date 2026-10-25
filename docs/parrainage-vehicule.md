@@ -190,6 +190,10 @@ Distribution.
   période (`PeriodeCalculatorService::calculerParrains()`), une ligne par vente, **sans déduction**
   (aucune dépense n'est imputable à un parrain). Agence de paiement = site du véhicule, qui
   suit ses réaffectations comme la fiche du livreur (ADR 0020, `FicheSiteResponsableService`).
+  La fiche naît dès la génération de la commission : la période « Parrains » qui la couvre est
+  créée si elle n'existe pas encore (`CommissionEnveloppeGenerator::ouvrirPeriodesParrain()`,
+  correctif du 25/10/2026 — avant, elle n'apparaissait qu'après l'ouverture d'un écran de période
+  ou de la prévision de trésorerie).
 - **PARRAIN-018 — Validation automatique.** Sa part étant validée d'office, la période « Parrain »
   se valide d'elle-même (`PeriodeValidationService::TYPES_AUTOMATIQUES`) ; paiement par le
   mécanisme commun des fiches (décaissement depuis un support, ADR 0009 ; fiche figée et fiche
