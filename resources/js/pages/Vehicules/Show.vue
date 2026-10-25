@@ -484,6 +484,8 @@ function partsCommissionMembre(livreurId: string | null) {
 const showParrainDialog = ref(false);
 /** Saisie en place de la part du parrain dans l'onglet Parrain (PARRAIN-024). */
 const editionPartParrain = ref(false);
+/** AAAA-MM-JJ → JJ/MM/AAAA. */
+const enFr = (iso: string) => iso.split('-').reverse().join('/');
 const libelleTransfertsExclus = computed(() =>
     props.processus_options.some((o) => o.value === 'logistique_transfert')
         ? (props.processus_options.find(
@@ -1761,33 +1763,6 @@ function formatGNF(val: number): string {
                                     :transferts-label="libelleTransfertsExclus"
                                     @fermer="editionPartParrain = false"
                                 />
-                                <div
-                                    v-else-if="partParrainADefinir"
-                                    class="flex items-start gap-2 border-b bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                                    data-testid="parrain-part-a-definir"
-                                >
-                                    <TriangleAlert
-                                        class="mt-0.5 h-4 w-4 shrink-0"
-                                    />
-                                    <p>
-                                        <span class="font-semibold"
-                                            >Part du parrain à définir.</span
-                                        >
-                                        Sa part est de 0 GNF, sans confirmation,
-                                        sur au moins un partage : il n'y reçoit
-                                        rien tant qu'elle n'est pas répartie.
-                                        {{ messageBlocagePartParrain }}
-                                        <template
-                                            v-if="!peutDefinirPartParrain"
-                                        >
-                                            {{
-                                                vehicule.equipe_id
-                                                    ? 'Un responsable des équipes de livraison doit la définir.'
-                                                    : "Configurez d'abord l'équipe du véhicule."
-                                            }}
-                                        </template>
-                                    </p>
-                                </div>
                                 <p
                                     v-if="
                                         !editionPartParrain &&
@@ -1812,6 +1787,9 @@ function formatGNF(val: number): string {
                                             </th>
                                             <th class="px-4 py-2 font-medium">
                                                 Catégorie
+                                            </th>
+                                            <th class="px-4 py-2 font-medium">
+                                                Date début
                                             </th>
                                             <th
                                                 class="px-4 py-2 text-right font-medium"
@@ -1841,6 +1819,34 @@ function formatGNF(val: number): string {
                                                 {{ r.categorie_nom }}
                                             </td>
                                             <td
+                                                class="px-4 py-2.5 tabular-nums"
+                                                data-testid="parrain-date-debut"
+                                            >
+                                                <template
+                                                    v-if="r.droits_en_attente"
+                                                >
+                                                    <span
+                                                        class="font-medium text-orange-600"
+                                                        >{{
+                                                            enFr(
+                                                                r.droits_en_attente,
+                                                            )
+                                                        }}</span
+                                                    >
+                                                    <span
+                                                        class="block text-[11px] text-orange-600"
+                                                        data-testid="parrain-droits-en-attente"
+                                                        >en attente de la
+                                                        répartition (onglet
+                                                        Équipe)</span
+                                                    >
+                                                </template>
+                                                <template v-else-if="r.depuis">
+                                                    {{ enFr(r.depuis) }}
+                                                </template>
+                                                <template v-else>—</template>
+                                            </td>
+                                            <td
                                                 v-if="r.exclu"
                                                 class="px-4 py-2.5 text-right text-xs"
                                             >
@@ -1857,31 +1863,6 @@ function formatGNF(val: number): string {
                                                     >À répartir</span
                                                 >
                                                 {{ formatGNF(r.montant) }}
-                                                <span
-                                                    v-if="r.droits_en_attente"
-                                                    class="block font-sans text-[11px] font-medium text-orange-600"
-                                                    data-testid="parrain-droits-en-attente"
-                                                    >due depuis le
-                                                    {{
-                                                        r.droits_en_attente
-                                                            .split('-')
-                                                            .reverse()
-                                                            .join('/')
-                                                    }}
-                                                    — répartition à faire dans
-                                                    l'onglet Équipe</span
-                                                >
-                                                <span
-                                                    v-else-if="r.depuis"
-                                                    class="block font-sans text-[11px] text-muted-foreground"
-                                                    >depuis le
-                                                    {{
-                                                        r.depuis
-                                                            .split('-')
-                                                            .reverse()
-                                                            .join('/')
-                                                    }}</span
-                                                >
                                             </td>
                                         </tr>
                                     </tbody>

@@ -4,6 +4,7 @@ import DataFilters, {
 } from '@/components/filters/DataFilters.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import FilterSearchSelect from '@/components/filters/FilterSearchSelect.vue';
+import SavedViews from '@/components/filters/SavedViews.vue';
 import { shallowMount } from '@vue/test-utils';
 import Select from 'primevue/select';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -623,6 +624,115 @@ describe('DataFilters — options dépendantes (optionsFrom)', () => {
         expect(routerGet).toHaveBeenCalledWith(
             '/depenses',
             { proprietaire_id: 'diallo', vehicule_ids: ['fanta'] },
+            expect.anything(),
+        );
+    });
+});
+
+describe('DataFilters — panneau à côté d’une barre rapide (trigger-only + quickBar)', () => {
+    const champsBarre: FilterField[] = [
+        {
+            key: 'statut',
+            label: 'Statut',
+            type: 'select',
+            options: [{ value: 'livree', label: 'Livrée' }],
+        },
+        { key: 'client', label: 'Client', type: 'text' },
+        { key: 'recherche', label: 'Recherche', type: 'text', inline: true },
+        { key: 'livreur', label: 'Livreur', type: 'text', inline: true },
+    ];
+
+    const valeursAppliquees = {
+        statut: 'livree',
+        recherche: 'VTE-1',
+        livreur: 'Diallo',
+    };
+
+    const monterPanneau = (quickBar = true) =>
+        shallowMount(DataFilters, {
+            props: {
+                url: '/backoffice/ventes',
+                values: valeursAppliquees,
+                fields: champsBarre,
+                resultCount: 3,
+                triggerOnly: true,
+                quickBar,
+                savedFilterScope: 'ventes',
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+
+    beforeEach(() => routerGet.mockClear());
+
+    it('garde le libellé exact « Filtres » sur le bouton du panneau', () => {
+        expect(monterPanneau().getComponent(FilterDrawer).props('title')).toBe(
+            'Filtres',
+        );
+    });
+
+    it('n’affiche pas dans le panneau les champs de la barre rapide', () => {
+        const wrapper = monterPanneau();
+
+        expect(
+            wrapper.find('[data-testid="filter-field-statut"]').exists(),
+        ).toBe(true);
+        expect(
+            wrapper.find('[data-testid="filter-field-client"]').exists(),
+        ).toBe(true);
+        expect(
+            wrapper.find('[data-testid="filter-field-recherche"]').exists(),
+        ).toBe(false);
+        expect(
+            wrapper.find('[data-testid="filter-field-livreur"]').exists(),
+        ).toBe(false);
+    });
+
+    it('les garde dans le panneau sans barre rapide (comportement inchangé)', () => {
+        const wrapper = monterPanneau(false);
+
+        expect(
+            wrapper.find('[data-testid="filter-field-livreur"]').exists(),
+        ).toBe(true);
+        expect(wrapper.getComponent(FilterDrawer).props('activeCount')).toBe(3);
+    });
+
+    it('ne compte dans le badge que les critères du panneau', () => {
+        expect(
+            monterPanneau().getComponent(FilterDrawer).props('activeCount'),
+        ).toBe(1);
+    });
+
+    it('conserve les filtres rapides en appliquant le panneau', () => {
+        monterPanneau().getComponent(FilterDrawer).vm.$emit('apply');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/backoffice/ventes',
+            {
+                statut: 'livree',
+                recherche: 'VTE-1',
+                livreur: 'Diallo',
+                all: '1',
+            },
+            expect.anything(),
+        );
+    });
+
+    it('« Réinitialiser » du panneau n’efface pas les filtres rapides', () => {
+        monterPanneau().getComponent(FilterDrawer).vm.$emit('reset');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/backoffice/ventes',
+            { recherche: 'VTE-1', livreur: 'Diallo', all: '1' },
+            expect.anything(),
+        );
+    });
+
+    it('retirer la vue enregistrée efface tout, barre rapide comprise', () => {
+        monterPanneau().getComponent(SavedViews).vm.$emit('clear');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/backoffice/ventes',
+            { all: '1' },
             expect.anything(),
         );
     });

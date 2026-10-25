@@ -314,7 +314,9 @@ Distribution.
 - **Parcours** :
   - après l'association d'un parrain, la fenêtre se ferme et l'onglet Parrain passe en saisie de sa
     part (PARRAIN-024) ;
-  - onglet Parrain : bandeau « Part du parrain à définir » et bouton « Modifier les parts », qui rend les montants modifiables sur place (PARRAIN-024) pour tous les partages
+  - onglet Parrain : tableau Processus / Catégorie / Date début (date d'effet de la part, ou date
+    en attente de la répartition de l'équipe) / GNF par pack, une part à décider signalée « À
+    répartir » sur sa ligne (pas de bandeau) ; bouton « Modifier les parts », qui rend les montants modifiables sur place (PARRAIN-024) pour tous les partages
     où il est rémunéré (Vente, Transfert grossiste, Distribution × catégorie) ; chaque partage
     laissé à 0 GNF exige la case « Le parrain ne reçoit aucune part pour le moment sur … » ;
   - modale Équipe : même case par catégorie quand la part du parrain est à 0 GNF ; sans elle, le

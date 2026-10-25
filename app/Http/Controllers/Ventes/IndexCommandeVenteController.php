@@ -33,7 +33,10 @@ class IndexCommandeVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
-        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $request->validate([
+            'saved_view' => ['nullable', 'ulid'],
+            'recherche' => ['nullable', 'string', 'max:255'],
+        ]);
         // « Mes vues » : un scope par liste ; Distribution n'en a pas encore.
         $scopeVues = match (true) {
             $request->routeIs('ventes.index') => 'ventes',
@@ -57,6 +60,7 @@ class IndexCommandeVenteController extends Controller
         $livreur = $request->input('livreur');
         $numeroCommande = $request->input('numero_commande');
         $client = $request->input('client');
+        $recherche = trim((string) $request->input('recherche', ''));
 
         $query = CommandeVente::with([
             'vehicule.proprietaire',
@@ -106,6 +110,28 @@ class IndexCommandeVenteController extends Controller
 
         if ($numeroCommande) {
             $query->where('reference', 'like', "%{$numeroCommande}%");
+        }
+
+        // Recherche rapide de la barre du tableau : mêmes champs que les filtres dédiés, regroupés
+        // dans un seul OR pour ne jamais élargir le périmètre (organisation, agences, nature).
+        if ($recherche !== '') {
+            $like = "%{$recherche}%";
+            $query->where(fn ($q) => $q
+                ->where('reference', 'like', $like)
+                ->orWhereHas('client', fn ($c) => $c->where(fn ($c) => $c
+                    ->where('nom_complet', 'like', $like)
+                    ->orWhere('nom', 'like', $like)
+                    ->orWhere('prenom', 'like', $like)
+                    ->orWhere('telephone', 'like', $like)))
+                ->orWhereHas('vehicule', fn ($v) => $v->where(fn ($v) => $v
+                    ->where('nom_vehicule', 'like', $like)
+                    ->orWhere('immatriculation', 'like', $like)))
+                ->orWhereHas('vehicule.equipe.livreurs', fn ($l) => $l->where(fn ($l) => $l
+                    ->where('livreurs.nom_complet', 'like', $like)
+                    ->orWhereHas('personne', fn ($p) => $p->where(fn ($p) => $p
+                        ->where('nom', 'like', $like)
+                        ->orWhere('prenom', 'like', $like)
+                        ->orWhere('telephone', 'like', $like))))));
         }
 
         if ($vehicule) {
@@ -323,6 +349,7 @@ class IndexCommandeVenteController extends Controller
                 'livreur' => $livreur,
                 'numero_commande' => $numeroCommande,
                 'client' => $client,
+                'recherche' => $recherche !== '' ? $recherche : null,
                 'en_retard' => $enRetard ? '1' : null,
             ],
         ]);

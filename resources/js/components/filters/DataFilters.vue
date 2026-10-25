@@ -98,6 +98,12 @@ const props = withDefaults(
         /** Élément où déplacer le bouton « Filtres » (ex. en-tête, à côté de « Nouveau ») ; les champs `inline` restent dans la barre */
         triggerTarget?: HTMLElement | null;
         savedFilterScope?: string;
+        /**
+         * Avec `triggerOnly` : les champs `inline` sont affichés par la barre rapide du tableau
+         * (QuickFilters.vue), pas dans le panneau. Ils restent conservés à l'application du panneau,
+         * ne comptent pas dans son badge et ne sont pas effacés par son « Réinitialiser ».
+         */
+        quickBar?: boolean;
     }>(),
     {
         baseParams: () => ({}),
@@ -108,6 +114,7 @@ const props = withDefaults(
         hideResultCount: false,
         triggerOnly: false,
         triggerTarget: null,
+        quickBar: false,
     },
 );
 
@@ -384,13 +391,16 @@ function applyFilters() {
     appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
 }
 
-function resetFilters() {
+/** `toutEffacer` : retrait d'une vue enregistrée — vide aussi la barre rapide. */
+function resetFilters(toutEffacer = false) {
+    const garderBarreRapide = separateQuickFields.value && !toutEffacer;
     if (toutesAgences.value) {
         localSiteIds.value = [];
     }
 
     for (const field of props.fields) {
         if (field.disabled) continue;
+        if (garderBarreRapide && field.inline) continue;
         if (field.type === 'period') {
             const [sk, ek] = periodKeys(field);
             localValues.value[field.key] = field.defaultValue ?? '';
@@ -406,6 +416,13 @@ function resetFilters() {
         } else {
             localValues.value[field.key] = '';
         }
+    }
+
+    // Les champs de la barre rapide survivent au « Réinitialiser » du panneau.
+    if (garderBarreRapide) {
+        applyFilters();
+        emit('reset');
+        return;
     }
 
     appliedSiteIds.value = [...localSiteIds.value];
@@ -431,8 +448,9 @@ function resetFilters() {
 
 const inlineFields = computed(() => props.fields.filter((f) => f.inline));
 const drawerFields = computed(() => props.fields.filter((f) => !f.inline));
+const separateQuickFields = computed(() => props.triggerOnly && props.quickBar);
 const displayedDrawerFields = computed(() =>
-    props.triggerOnly ? props.fields : drawerFields.value,
+    props.triggerOnly && !props.quickBar ? props.fields : drawerFields.value,
 );
 
 // ── Compteurs ─────────────────────────────────────────────────────────────────
@@ -467,7 +485,9 @@ const drawerFilterCount = computed(() => countActiveFields(drawerFields.value));
 const activeFilterCount = computed(
     () =>
         drawerFilterCount.value +
-        countActiveFields(inlineFields.value) +
+        (separateQuickFields.value
+            ? 0
+            : countActiveFields(inlineFields.value)) +
         (toutesAgences.value && localSiteIds.value.length > 0 ? 1 : 0),
 );
 
@@ -665,7 +685,7 @@ const hasActiveFilters = computed(
                 :get-filters="buildParams"
                 :describe="describeSavedFilters"
                 @apply="applySavedView"
-                @clear="resetFilters"
+                @clear="resetFilters(true)"
             />
             <div
                 v-if="
@@ -684,7 +704,7 @@ const hasActiveFilters = computed(
                     "
                     :apply-disabled="!pendingChange"
                     @apply="applyFilters"
-                    @reset="resetFilters"
+                    @reset="resetFilters()"
                 >
                     <div class="space-y-5">
                         <Button
@@ -972,7 +992,7 @@ const hasActiveFilters = computed(
                 type="button"
                 data-testid="filters-reset"
                 class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                @click="resetFilters"
+                @click="resetFilters()"
             >
                 Réinitialiser
             </button>

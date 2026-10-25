@@ -248,8 +248,8 @@ class ParrainDroitsRetroactifsTest extends TestCase
         return PartageLivraisonVersionService::droitsEnAttente($this->equipe->id, $this->vente->id, $this->categorie->id, $parrain->id)?->toDateString();
     }
 
-    /** Modale Équipe (processus Vente) : livreurs + part du parrain. */
-    private function enregistrerEquipe(int $chauffeur, int $convoyeur, int $parrain, bool $confirmerDroits = false)
+    /** Modale Équipe (processus Vente) : livreurs + part du parrain (null : véhicule sans parrain). */
+    private function enregistrerEquipe(int $chauffeur, int $convoyeur, ?int $parrain, bool $confirmerDroits = false)
     {
         return $this->actingAs($this->user)->patch(route('equipes-livraison.update', $this->equipe), [
             'vehicule_id' => $this->vehicule->id,
@@ -267,9 +267,10 @@ class ParrainDroitsRetroactifsTest extends TestCase
                     ['membre_ordre' => 0, 'montant_unitaire' => $chauffeur],
                     ['membre_ordre' => 1, 'montant_unitaire' => $convoyeur],
                 ],
+            ] + ($parrain === null ? [] : [
                 'part_parrain' => $parrain,
                 'confirmer_part_parrain_nulle' => true,
-            ]],
+            ])],
             'confirmer_droits_parrain' => $confirmerDroits,
         ]);
     }
@@ -290,10 +291,10 @@ class ParrainDroitsRetroactifsTest extends TestCase
     }
 
     /** @param  array<string, float>  $attendu */
-    private function assertPartsEquipe(array $attendu, CommandeVente $commande): void
+    private function assertPartsEquipe(array $attendu, CommandeVente $commande, string $message = ''): void
     {
         ksort($attendu);
-        $this->assertSame($attendu, $this->partsEquipe($commande));
+        $this->assertSame($attendu, $this->partsEquipe($commande), $message);
     }
 
     private function enveloppeProprietaire(CommandeVente $commande): CommissionEnveloppe
@@ -598,6 +599,77 @@ class ParrainDroitsRetroactifsTest extends TestCase
         $fiche = PaiementFiche::where('periode_id', $periode->id)->sole();
         $this->assertSame($ancien->id, $fiche->beneficiaire_id);
         $this->assertEquals(20000.0, (float) $fiche->montant_net);
+    }
+
+    // ── Retrait du parrain (PARRAIN-012 révisé, PARRAIN-024) ──────────────────
+
+    public function test_retirer_le_parrain_lui_laisse_ses_commissions_et_sa_fiche_et_arrete_ses_droits(): void
+    {
+        $parrain = $this->parrainer();
+        $this->definir([$this->chauffeur->id => 500, $this->convoyeur->id => 300], 200, '2026-10-02');
+        $commande = $this->vendre(100);           // 02/10 : 20 000 GNF pour le parrain
+        Carbon::setTestNow('2026-10-05 10:00:00');
+
+        $this->actingAs($this->user)->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'onglet Équipe'));
+
+        // Commissions acquises intactes, à son nom ; le parrain n'est jamais supprimé.
+        $this->assertNull($this->vehicule->fresh()->parrain_id);
+        $this->assertPartsEquipe([
+            "livreur:{$this->chauffeur->id}" => 50000.0,
+            "livreur:{$this->convoyeur->id}" => 30000.0,
+            "parrain:{$parrain->id}" => 20000.0,
+        ], $commande);
+        $this->assertTrue(Parrain::whereKey($parrain->id)->exists());
+
+        // Sa fiche de la quinzaine reste la sienne, calculée après le retrait.
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($this->org->id, TypePeriodePaiement::PARRAIN, Carbon::parse('2026-10-02'));
+        app(PeriodeCalculatorService::class)->calculerSiNecessaire($periode);
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->sole();
+        $this->assertSame($parrain->id, $fiche->beneficiaire_id);
+        $this->assertEquals(20000.0, (float) $fiche->montant_net);
+
+        // Droits arrêtés : l'équipe répartie à nouveau, plus aucune part de parrain.
+        $this->enregistrerEquipe(600, 400, null)->assertSessionHasNoErrors();
+        $apres = $this->vendre(10);
+        $this->assertPartsEquipe([
+            "livreur:{$this->chauffeur->id}" => 6000.0,
+            "livreur:{$this->convoyeur->id}" => 4000.0,
+        ], $apres);
+    }
+
+    public function test_retirer_le_parrain_abandonne_sa_date_en_attente_sans_aucun_recalcul(): void
+    {
+        $commande = $this->vendre(100);           // 02/10, avant le parrain
+        Carbon::setTestNow('2026-10-05 10:00:00');
+        $parrain = $this->parrainer();
+        $this->definirPart(200, '2026-10-01')->assertSessionHasNoErrors();
+        $this->assertSame('2026-10-01', $this->droitsEnAttente($parrain));
+
+        // 600 + 400 = barème : le partage redevient complet, rien à refaire.
+        $this->actingAs($this->user)->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        $this->assertPartsEquipe([
+            "livreur:{$this->chauffeur->id}" => 60000.0,
+            "livreur:{$this->convoyeur->id}" => 40000.0,
+        ], $commande, 'Aucun recalcul : la date en attente est abandonnée.');
+        $this->assertNull($this->droitsEnAttente($parrain));
+        $this->assertSame(1, EquipeLivraisonPartageCategorie::where('parrain_id', $parrain->id)
+            ->whereNotNull('droits_parrain_depuis')->whereNotNull('effective_to')->count(), 'Historique conservé, jamais supprimé.');
+
+        // Plus rien ne retient les autres écritures du partage (transfert, reconfiguration).
+        PartageLivraisonVersionService::versionner(
+            $this->equipe->id,
+            $this->vente->id,
+            $this->categorie->id,
+            [$this->chauffeur->id => 700, $this->convoyeur->id => 300],
+            Carbon::today(),
+        );
+        $this->assertSame(700, (int) EquipeLivraisonPartageCategorie::where('livreur_id', $this->chauffeur->id)
+            ->where('processus_id', $this->vente->id)->whereNull('effective_to')->value('montant_unitaire'));
     }
 
     // ── Corrections de la revue (A1 à A4) ────────────────────────────────────

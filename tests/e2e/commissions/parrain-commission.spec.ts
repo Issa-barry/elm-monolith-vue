@@ -154,7 +154,11 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     // Véhicule Vente + Logistique : la distribution a sa propre ligne, jamais le transfert.
     await expect(remuneration).toContainText(/distribution/i);
     await expect(remuneration).not.toContainText(/transfert logistique/i);
-    await expect(page.getByTestId('parrain-part-a-definir')).toBeVisible();
+    // Plus de bandeau : chaque part encore à décider est signalée sur sa ligne.
+    await expect(
+        remuneration.locator('tr', { hasText: 'Vente' }),
+    ).toContainText(/à répartir/i);
+    await expect(remuneration.locator('thead')).toContainText(/date début/i);
     // Véhicule Logistique : les transferts entre sites sont signalés, jamais rémunérés.
     await expect(
         page.getByTestId('parrain-ligne-transfert-exclu'),
@@ -211,7 +215,11 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await page.getByTestId('part-parrain-enregistrer-btn').click();
     await expect(edition).toBeHidden({ timeout: 15_000 });
 
-    await expect(page.getByTestId('parrain-part-a-definir')).toBeHidden();
+    await expect(
+        page
+            .getByTestId('parrain-remuneration')
+            .locator('tr', { hasText: 'Vente' }),
+    ).not.toContainText(/à répartir/i);
     await expect(
         page
             .getByTestId('parrain-remuneration')

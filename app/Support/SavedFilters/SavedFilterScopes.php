@@ -112,6 +112,7 @@ final class SavedFilterScopes
                     'livreur' => $search,
                     'client' => $search,
                     'numero_commande' => $search,
+                    'recherche' => $search,
                 ],
             ],
             // Page Précommandes (ADR 0019) : mêmes critères que la liste Ventes, plus le retard.

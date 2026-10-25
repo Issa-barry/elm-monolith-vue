@@ -745,6 +745,70 @@ class ParrainPartageCommissionTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('parrain_partage', null));
     }
 
+    /** Juge commun des ventes : non-conformités du processus, à la date du jour. */
+    private function refusOperations(string $processusCode): int
+    {
+        return CommissionPartageLivraisonCategorieChecker::nonConformites(
+            $this->org->id,
+            $this->equipe->fresh(),
+            $processusCode,
+            $this->vehicule->fresh()->type_vehicule_id,
+            [$this->categorie->id],
+            Carbon::today(),
+        )->count();
+    }
+
+    public function test_retirer_un_parrain_ne_bloque_que_les_partages_desequilibres(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $distribution = CommissionProcessus::where('organization_id', $this->org->id)->where('code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT)->firstOrFail();
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->repartir($distribution, 500, 300, 200);
+        $avant = $this->vendre(NatureOperation::DISTRIBUTION_CLIENT, 100);
+        $partsAvant = $this->partsEquipe(CommandeVente::class, $avant->id);
+        $this->assertSame(20000.0, $partsAvant["parrain:{$parrain->id}"]);
+
+        $this->actingAs($this->user)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('warning', fn (string $m) => str_contains($m, 'Ventes') && ! str_contains($m, 'Distribution'));
+
+        // Seule la Vente (500 + 300 ≠ 1 000) est bloquée ; transfert et distribution restent ouverts.
+        $this->assertSame('a_faire', $this->statutVente());
+        $this->assertSame(1, $this->refusOperations(CommissionProcessus::CODE_VENTE));
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT));
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_DISTRIBUTION_CLIENT));
+
+        // Distribution : historique intact, versions closes jamais supprimées ; la suivante reprend
+        // le partage Logistique — une seule enveloppe, sans parrain.
+        $this->assertEquals($partsAvant, $this->partsEquipe(CommandeVente::class, $avant->id));
+        $this->assertSame(1, EquipeLivraisonPartageCategorie::where('processus_id', $distribution->id)
+            ->where('parrain_id', $parrain->id)->where('montant_unitaire', 200)->whereNotNull('effective_to')->count());
+        $apres = $this->vendre(NatureOperation::DISTRIBUTION_CLIENT, 100);
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 60000.0,
+            "livreur:{$this->convoyeur->id}" => 40000.0,
+        ], $this->partsEquipe(CommandeVente::class, $apres->id));
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $apres->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->count());
+    }
+
+    public function test_retirer_un_parrain_dont_le_total_des_livreurs_est_deja_complet_ne_bloque_rien(): void
+    {
+        $this->ajouterParrain($this->vehicule);
+        // Part saisie, équipe pas encore répartie : 600 + 400 + 200.
+        $this->repartir($this->vente, 600, 400, 200);
+
+        $this->actingAs($this->user)
+            ->delete(route('vehicules.parrain.destroy', $this->vehicule))
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        // Contrôle complet (somme, livreurs actifs, aucune ligne de parrain), pas seulement le total.
+        $this->assertSame('fait', $this->statutVente());
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_VENTE));
+    }
+
     public function test_retirer_un_parrain_sans_part_rend_la_distribution_au_partage_logistique(): void
     {
         $this->ajouterParrain($this->vehicule);
