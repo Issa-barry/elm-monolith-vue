@@ -51,17 +51,18 @@ const valeur = (wrapper: ReturnType<typeof monter>, cle: string) =>
 describe('QuickFilters — barre rapide du tableau', () => {
     beforeEach(() => routerGet.mockClear());
 
-    it('affiche la recherche puis N° commande, Livreur et Véhicule, sans libellé « search »', () => {
+    it('affiche N° commande, Livreur et Véhicule, puis la recherche à droite', () => {
         const wrapper = monter();
 
         const champsAffiches = wrapper
             .findAll('input')
             .map((i) => i.attributes('data-testid'));
+        // Filtres rapides à gauche, recherche à droite (même ordre pour le clavier).
         expect(champsAffiches).toEqual([
-            'quick-filter-recherche',
             'quick-filter-numero_commande',
             'quick-filter-livreur',
             'quick-filter-vehicule',
+            'quick-filter-recherche',
         ]);
         expect(champ(wrapper, 'recherche').attributes('placeholder')).toBe(
             'Rechercher une vente…',

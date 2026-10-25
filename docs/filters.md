@@ -397,11 +397,14 @@ panneau.
 
 ```
 ┌ carte du tableau ───────────────────────────────────────────────────────────────┐
-│ [🔍 Rechercher une vente…]        [N° commande] [Livreur] [Véhicule]   Effacer  │  ← QuickFilters
+│ [N° commande] [Livreur] [Véhicule]        [🔍 Rechercher une vente…]   Effacer  │  ← QuickFilters
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ Référence │ Véhicule │ Livreur │ …                                              │  ← DataTable
 ```
 
+- Disposition : filtres rapides à gauche, recherche à droite, sur une seule ligne à partir de
+  1280 px. En dessous, les filtres rapides forment une grille sur une ligne, puis la recherche ;
+  sur mobile, « Mes vues » et « Filtres » viennent ensuite. L'ordre au clavier suit l'affichage.
 - L'en-tête de page ne change pas : `ListPageActions` garde l'ordre Exporter → Filtres → Nouveau, et
   `DataFilters` reste en **`trigger-only`**, avec un bouton toujours libellé **« Filtres »**.
 - Les champs de la barre sont les champs `inline: true` de `filterFields`. Avec `quick-bar`,
