@@ -25,6 +25,7 @@ use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageConformiteVehiculesService;
+use App\Services\Commission\PartParrainService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
@@ -201,10 +202,12 @@ class VehiculeController extends Controller
             ->orderBy('nom_vehicule')
             ->get();
         $partages = PartageConformiteVehiculesService::statuts($orgId, $modeles);
+        $partsParrain = PartParrainService::statuts($modeles);
 
         $vehicules = $modeles->map(fn (Vehicule $v) => [
             ...$this->vehiculeData($v),
             'partages_commission' => $partages[$v->id] ?? [],
+            'parrain_part' => $partsParrain[$v->id] ?? null,
         ]);
 
         return Inertia::render('Vehicules/Index', [
@@ -482,6 +485,12 @@ class VehiculeController extends Controller
             // Onglet Parrain : sa part actuelle par processus et catégorie (lecture seule) ; une part
             // positive impose de refaire la répartition pour le remplacer ou le retirer.
             'parrain_remuneration' => $this->remunerationParrain($vehicule),
+            // PARRAIN-021/022 : part à définir / définie ; à partir de la date d'activation de
+            // l'organisation, une part « à répartir » refuse les ventes du partage concerné.
+            'parrain_part' => [
+                'statut' => PartParrainService::statut($vehicule),
+                'repartition_obligatoire_du' => Parametre::getRepartitionParrainObligatoireDu($vehicule->organization_id),
+            ],
             // Parrain présenté dans la modale Équipe pour le processus actif (ligne exigée).
             'parrain_partage' => $vehicule->parrain && CommissionProcessusDefaults::remunereLeParrain($processusCode)
                 ? ['id' => $vehicule->parrain->id, 'nom_complet' => $vehicule->parrain->nom_complet]
@@ -489,7 +498,7 @@ class VehiculeController extends Controller
         ]);
     }
 
-    /** @return list<array{processus_code: string, processus_label: string, categorie_nom: string, montant: int}> */
+    /** @return list<array{processus_code: string, processus_label: string, categorie_nom: string, montant: int, a_repartir: bool, depuis: ?string}> */
     private function remunerationParrain(Vehicule $vehicule): array
     {
         if (! $vehicule->parrain_id || ! $vehicule->equipe) {
@@ -512,8 +521,15 @@ class VehiculeController extends Controller
                 'processus_label' => CommissionRegleController::processusLabel($processus->get($p->processus_id)->code),
                 'categorie_nom' => $p->categorie?->nom ?? '—',
                 'montant' => (int) $p->montant_unitaire,
+                'a_repartir' => $p->partParrainARepartir(),
+                // PARRAIN-023 : date de début de la part en vigueur.
+                'depuis' => $p->effective_from?->toDateString(),
+                // PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe.
+                'droits_en_attente' => $p->droits_parrain_depuis?->toDateString(),
             ])
-            ->sortBy(fn (array $r) => [$r['processus_label'], $r['categorie_nom']])
+            // Ordre métier des onglets Équipe : Ventes, Transferts logistiques, Transferts
+            // grossistes, Distribution client.
+            ->sortBy(fn (array $r) => [array_search($r['processus_code'], CommissionProcessusDefaults::codesPartageEquipe(), true), $r['categorie_nom']])
             ->values()
             ->all();
     }
@@ -901,6 +917,10 @@ class VehiculeController extends Controller
                     ])->values()->all(),
                     // Part du parrain du véhicule sur cette catégorie (null : pas de ligne parrain).
                     'part_parrain' => $ligneParrain ? (int) $ligneParrain->montant_unitaire : null,
+                    // PARRAIN-022 : part nulle déjà confirmée par une personne (case pré-cochée).
+                    'part_parrain_confirmee' => $ligneParrain !== null && ! $ligneParrain->partParrainARepartir(),
+                    // PARRAIN-024 : date de début des droits du parrain en attente de cette répartition.
+                    'droits_parrain_depuis' => $ligneParrain?->droits_parrain_depuis?->toDateString(),
                 ];
             })
             ->values()
@@ -959,7 +979,10 @@ class VehiculeController extends Controller
                 try {
                     CommissionPartageLivraisonCategorieChecker::verifierParrainAJour($lignes, $parrainAttenduId);
                     CommissionPartageLivraisonValidator::valider($lignes, $enveloppe, $membresRequis);
-                    $statuts[$categorieId][$code] = 'fait';
+                    // PARRAIN-022 : complet, mais part du parrain à 0 GNF jamais confirmée.
+                    $statuts[$categorieId][$code] = $parrainAttenduId && CommissionPartageLivraisonCategorieChecker::partParrainARepartir($lignes)
+                        ? 'a_repartir'
+                        : 'fait';
                 } catch (\InvalidArgumentException) {
                     $statuts[$categorieId][$code] = 'a_faire';
                 }

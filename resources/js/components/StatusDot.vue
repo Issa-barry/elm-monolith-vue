@@ -143,6 +143,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur à faire / véhicule sans équipe : commandes refusées sur la catégorie.
     a_faire: 'bg-orange-500',
     sans_equipe: 'bg-orange-500',
+    // Part du parrain (PARRAIN-021/022) : à définir / à répartir = part à 0 GNF jamais confirmée
+    // (ventes refusées après la date d'activation de l'organisation) ; définie = décidée.
+    a_repartir: 'bg-orange-500',
+    a_definir: 'bg-amber-500',
+    definie: 'bg-emerald-500',
     modifie: 'bg-blue-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',

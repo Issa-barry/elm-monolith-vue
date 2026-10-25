@@ -18,10 +18,13 @@ use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageLivraisonVersionService;
+use App\Services\Commission\PartParrainService;
+use App\Services\Commission\RecalculRetroactifParrainService;
 use Illuminate\Contracts\Validation\ImplicitRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -148,7 +151,9 @@ class EquipeLivraisonController extends Controller
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
         $typeVehiculeId = $vehiculeSelectionne?->type_vehicule_id;
-        DB::transaction(function () use ($data, $orgId, $proprietaireId, $equipes_livraison, $oldVehiculeId, $nomVehicule, $typeVehiculeId) {
+        $bilanParrain = null;
+        $droitsParrainDepuis = null;
+        DB::transaction(function () use ($data, $orgId, $proprietaireId, $equipes_livraison, $oldVehiculeId, $nomVehicule, $typeVehiculeId, &$bilanParrain, &$droitsParrainDepuis) {
             // is_active n'est jamais lu depuis la requête (05/10/2026) : une équipe brouillon ne
             // s'active que par ActivationEquipesBrouillonService ci-dessous, une équipe active n'est
             // jamais désactivée par un enregistrement.
@@ -179,13 +184,35 @@ class EquipeLivraisonController extends Controller
                 ]);
             }
 
-            $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code'], $typeVehiculeId);
+            $droitsParrainDepuis = $this->syncPartagesCategorie(
+                $equipes_livraison->id,
+                $data['partages_categorie'] ?? [],
+                $livreurIdParOrdre,
+                $orgId,
+                $data['processus_code'],
+                $typeVehiculeId,
+                (bool) ($data['confirmer_droits_parrain'] ?? false),
+            );
+
+            // PARRAIN-024 : répartition appliquée depuis la date de début des droits en attente —
+            // recalcul de PARRAIN-023 dans la même transaction (tout ou rien).
+            if ($droitsParrainDepuis !== null) {
+                $bilanParrain = RecalculRetroactifParrainService::recalculer(
+                    Vehicule::findOrFail($data['vehicule_id']),
+                    $droitsParrainDepuis,
+                );
+            }
 
             ActivationEquipesBrouillonService::activerSiPartageConforme($orgId, [$equipes_livraison->id]);
         });
 
+        $message = 'Équipe mise à jour avec succès.';
+        if ($bilanParrain !== null) {
+            $message .= ' '.RecalculRetroactifParrainService::resume($bilanParrain, $droitsParrainDepuis);
+        }
+
         return redirect()->route('vehicules.show', $equipes_livraison->vehicule_id)
-            ->with('success', 'Équipe mise à jour avec succès.');
+            ->with('success', $message);
     }
 
     public function destroy(EquipeLivraison $equipes_livraison): RedirectResponse
@@ -681,6 +708,12 @@ class EquipeLivraisonController extends Controller
             // Part du parrain du véhicule (GNF/pack), prise sur la même enveloppe : exigée quand le
             // processus le rémunère, refusée sinon (cf. validatePartagesCategorie()).
             'partages_categorie.*.part_parrain' => 'nullable|integer|min:0',
+            // PARRAIN-022 : part du parrain laissée à 0 GNF confirmée explicitement (« aucune part
+            // pour le moment ») — sinon elle reste « à répartir ».
+            'partages_categorie.*.confirmer_part_parrain_nulle' => 'nullable|boolean',
+            // PARRAIN-024 : la répartition s'applique depuis la date de début des droits du parrain
+            // en attente, avec le recalcul des commissions non payées — confirmation explicite.
+            'confirmer_droits_parrain' => 'nullable|boolean',
             'partages_categorie.*.parts.*.membre_ordre' => [
                 'required', 'integer', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
@@ -1063,8 +1096,10 @@ class EquipeLivraisonController extends Controller
         string $orgId,
         string $processusCode = CommissionProcessus::CODE_VENTE,
         ?string $typeVehiculeId = null,
-    ): void {
+        bool $confirmerDroitsParrain = false,
+    ): ?Carbon {
         $maintenant = now()->startOfDay();
+        $droitsAppliquesDepuis = null;
         $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
         // Barème lu pour la date d'effet (distribution : celui de Logistique, COMM-005) ; les lignes
         // de partage restent celles du processus soumis.
@@ -1104,8 +1139,39 @@ class EquipeLivraisonController extends Controller
 
             $partParrain = isset($pc['part_parrain']) ? (int) $pc['part_parrain'] : null;
 
-            PartageLivraisonVersionService::versionner($equipeId, $processus->id, $pc['categorie_id'], $montants, $dateEffet, $partParrain);
+            // PARRAIN-024 : droits du parrain en attente (date passée saisie dans l'onglet Parrain) —
+            // cette répartition, complète, s'applique depuis cette date.
+            $parrainId = $partParrain !== null ? PartageLivraisonVersionService::parrainRemunereId($equipeId, $processus->id) : null;
+            $enAttente = $parrainId !== null
+                ? PartageLivraisonVersionService::droitsEnAttente($equipeId, $processus->id, $pc['categorie_id'], $parrainId)
+                : null;
+            if ($enAttente !== null) {
+                if (! $confirmerDroitsParrain) {
+                    throw ValidationException::withMessages([
+                        'confirmer_droits_parrain' => sprintf(
+                            'La part du parrain est due depuis le %s : confirmez que cette répartition s\'applique depuis cette date (les commissions non payées des commandes livrées depuis seront recalculées).',
+                            $enAttente->format('d/m/Y'),
+                        ),
+                    ]);
+                }
+                PartParrainService::verifierDateDebutDroits(EquipeLivraison::findOrFail($equipeId)->vehicule, $enAttente);
+                $dateEffet = $enAttente;
+                $droitsAppliquesDepuis = $droitsAppliquesDepuis === null ? $enAttente : $droitsAppliquesDepuis->min($enAttente);
+            }
+
+            PartageLivraisonVersionService::versionner(
+                $equipeId,
+                $processus->id,
+                $pc['categorie_id'],
+                $montants,
+                $dateEffet,
+                $partParrain,
+                confirmerPartParrainNulle: (bool) ($pc['confirmer_part_parrain_nulle'] ?? false),
+                droitsEnAttenteTraites: $enAttente !== null,
+            );
         }
+
+        return $droitsAppliquesDepuis;
     }
 
     /**

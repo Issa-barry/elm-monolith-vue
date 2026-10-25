@@ -44,6 +44,8 @@ const props = defineProps<{
     seuil_impayes_max: number;
     declencheur_commission_vente: string;
     declencheurs_commission_vente_options: DeclencheurOption[];
+    /** PARRAIN-022 : AAAA-MM-JJ, null = garde-fou pas encore activé. */
+    repartition_parrain_obligatoire_du: string | null;
     annulation_exceptionnelle_confirmation: string;
     annulation_exceptionnelle_confirmation_options: ModeConfirmationOption[];
     /** `parametres.update` ET `ventes.annuler_exceptionnel` — cf. UpdateVenteParametrageController. */
@@ -76,6 +78,8 @@ const form = useForm({
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
     declencheur_commission_vente: props.declencheur_commission_vente,
+    repartition_parrain_obligatoire_du:
+        props.repartition_parrain_obligatoire_du ?? '',
     annulation_exceptionnelle_confirmation:
         props.annulation_exceptionnelle_confirmation,
     precommande_acompte_obligatoire: props.precommande_acompte_obligatoire,
@@ -408,6 +412,41 @@ function onSeuilBlur() {
                                 <span class="text-sm">{{ option.label }}</span>
                             </label>
                         </div>
+                    </div>
+
+                    <div class="space-y-2 border-t px-5 py-4">
+                        <label
+                            for="repartition-parrain-obligatoire-du"
+                            class="text-sm font-medium text-foreground"
+                        >
+                            Part du parrain — répartition obligatoire à partir
+                            du
+                        </label>
+                        <p class="text-xs text-muted-foreground">
+                            À partir de cette date, une vente est refusée sur un
+                            partage dont la part du parrain n'a pas été répartie
+                            (0 GNF jamais confirmé). Avant, l'état « À répartir
+                            » s'affiche sans bloquer : le temps de répartir les
+                            véhicules déjà parrainés (filtre « Part du parrain »
+                            de la liste des véhicules). Laissez vide pour ne pas
+                            encore bloquer.
+                        </p>
+                        <input
+                            id="repartition-parrain-obligatoire-du"
+                            v-model="form.repartition_parrain_obligatoire_du"
+                            type="date"
+                            :disabled="form.processing"
+                            class="h-9 rounded-md border bg-background px-3 text-sm"
+                            data-testid="repartition-parrain-obligatoire-du"
+                        />
+                        <p
+                            v-if="
+                                form.errors.repartition_parrain_obligatoire_du
+                            "
+                            class="text-xs text-destructive"
+                        >
+                            {{ form.errors.repartition_parrain_obligatoire_du }}
+                        </p>
                     </div>
                 </div>
 

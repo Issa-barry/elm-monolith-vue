@@ -33,12 +33,14 @@ class UpdateVenteParametrageController extends Controller
             'controle_impayes_actif' => ['required', 'boolean'],
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
             'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
+            'repartition_parrain_obligatoire_du' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'annulation_exceptionnelle_confirmation' => ['sometimes', Rule::enum(ModeConfirmationAnnulationExceptionnelle::class)],
             // Acompte des précommandes (ADR 0019, D6) : taux saisi librement par l'organisation.
             'precommande_acompte_obligatoire' => ['sometimes', 'boolean'],
             'precommande_acompte_min_pct' => ['required_with:precommande_acompte_obligatoire', 'integer', 'min:0', 'max:100'],
         ], [
             'precommande_acompte_min_pct.max' => "Le taux d'acompte ne peut pas dépasser 100 %.",
+            'repartition_parrain_obligatoire_du.date_format' => "La date d'activation doit être une date valide.",
         ]);
 
         // Acompte obligatoire ⇒ taux strictement positif : un acompte « obligatoire » de 0 % n'exigerait
@@ -112,6 +114,10 @@ class UpdateVenteParametrageController extends Controller
 
         if ($modeConfirmation !== null) {
             Parametre::setModeConfirmationAnnulationExceptionnelle($orgId, $modeConfirmation);
+        }
+
+        if (array_key_exists('repartition_parrain_obligatoire_du', $validated)) {
+            Parametre::setRepartitionParrainObligatoireDu($orgId, $validated['repartition_parrain_obligatoire_du']);
         }
 
         if (array_key_exists('precommande_acompte_obligatoire', $validated)) {

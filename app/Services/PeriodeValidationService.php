@@ -180,7 +180,7 @@ class PeriodeValidationService
      * Les pièces comptables des fiches recalculées (non figées) sont contrepassées avant le
      * recalcul, sinon la revalidation engagerait la dette une seconde fois.
      */
-    public function rouvrirSiDesynchronisee(PaiementPeriode $periode): bool
+    public function rouvrirSiDesynchronisee(PaiementPeriode $periode, bool $strict = false): bool
     {
         if (! $periode->isValidee() || ! in_array($periode->type, self::TYPES_AUTOMATIQUES, true)) {
             return false;
@@ -226,10 +226,31 @@ class PeriodeValidationService
                 'error' => $e->getMessage(),
             ]);
 
+            // Mode strict (PARRAIN-023, recalcul rétroactif) : l'appelant a déjà remplacé des
+            // commissions dans la même transaction — l'échec doit tout annuler, jamais laisser
+            // une fiche validée sur des montants périmés.
+            if ($strict) {
+                throw $e;
+            }
+
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * La période validée ne reflète-t-elle plus ses commissions (commission hors fiche, ou fiche
+     * non figée portant une commission annulée/supprimée) ?
+     */
+    public function estDesynchronisee(PaiementPeriode $periode): bool
+    {
+        if (! $periode->isValidee()) {
+            return false;
+        }
+
+        return app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode)['nombre'] > 0
+            || $this->lignesObsoletes($periode) > 0;
     }
 
     /**

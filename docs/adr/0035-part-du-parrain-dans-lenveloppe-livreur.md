@@ -108,6 +108,110 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
   (`SELECT organization_id, numero, libelle FROM compta_comptes WHERE numero IN
   ('622500','467210','467220') AND libelle NOT LIKE '%arrain%';` — résultat attendu : aucune ligne).
 
+## Lot 5 — part du parrain « à définir » (2026-10-23)
+
+Constat : à l'ajout d'un parrain, sa part est à 0 GNF et tous les partages restent « Fait »
+(PARRAIN-010, inchangé) ; rien ne distinguait une part pas encore décidée d'une part volontairement
+nulle, et la répartition se faisait processus par processus dans la modale Équipe.
+
+Décision (validée le 23/10/2026, PARRAIN-021, révisée par le lot 6) : un état métier « À
+définir » / « Définie » — non bloquant dans cette première version, voir le lot 6. Une part
+nulle n'est « définie » que si une personne l'a **confirmée** (confirmation portée par la ligne du
+parrain depuis le lot 6, vide pour les lignes existantes, perdue à tout changement de parrain). Une
+grille unique dans l'onglet Parrain
+remplace le passage par la modale Équipe ; enregistrement transactionnel avec les contrôles du
+changement de parrain (aucun second moteur). Repérage dans la liste des véhicules (filtre et
+repère). Tests : `ParrainPartADefinirTest`, `PartParrainDialog.spec.ts`, parcours E2E mis à jour.
+
+## Lot 6 — garde-fou des ventes (2026-10-23, PARRAIN-022)
+
+Constat : une ligne de parrain à 0 GNF créée par le système rend le partage « Fait » ; rien ne
+distinguait une répartition réellement décidée d'une étape oubliée.
+
+Décision (validée le 23/10/2026 ; remplace « aucune opération n'est bloquée » de PARRAIN-012 et
+« jamais bloquant » de PARRAIN-021) :
+1. Une part à 0 GNF n'est une décision que si une personne l'a confirmée
+   (`equipe_livraison_partages_categorie.part_parrain_confirmee_at`) ; une part positive l'est
+   toujours. Aucune décision attribuée rétroactivement (lignes existantes vides).
+2. Blocage **par partage** (processus × catégorie), porté par le juge commun des partages :
+   création, modification, précommande, aperçu, chargement ; jamais le transfert entre sites, ni
+   les encaissements, ni les véhicules non parrainés.
+3. Confirmation explicite dans la modale Équipe et dans la grille de la part du parrain.
+4. **Mise en conformité progressive** : date d'activation par organisation (Paramètres → Ventes),
+   vide par défaut ; avant elle, « À répartir » s'affiche sans bloquer. À fixer après comptage des
+   véhicules parrainés en production.
+5. Les commandes créées avant l'activation sont contrôlées au chargement.
+
+La colonne `vehicules.parrain_part_confirmee_at` du lot 5 (jamais déployée) est abandonnée au profit
+de la confirmation par ligne. Tests : `ParrainRepartitionGardeFouTest`, `ParrainPartADefinirTest`.
+
+## Lot 7 — date de début des droits du parrain (2026-10-24, PARRAIN-023)
+
+Besoin : un parrain créé le 5 peut avoir droit à sa part depuis le 1er (ou seulement à partir du 16).
+
+Décision (validée le 24/10/2026 ; remplace « jamais rétroactif » de PARRAIN-012) :
+1. Date de début des droits choisie dans la grille de la part du parrain ; future = effet à cette
+   date ; passée = répartition antidatée et recalcul **automatique** des commandes depuis.
+2. **Option B** : commissions non payées seulement, validées et ajustées à la main comprises ;
+   périodes validées rouvertes (contrepassation puis revalidation, mécanisme commun).
+3. **Équipe actuelle** appliquée à toute la période rétroactive.
+4. Limite : toute période non clôturée (Livreurs et Parrains).
+
+Mise en œuvre : `PartageLivraisonVersionService::versionner()` accepte une date d'effet passée ou
+future (versions postérieures bornées à leur début, jamais supprimées) ; régénération ciblée de la
+seule enveloppe Livreur (`CommissionEnveloppeGenerator::regenererEnveloppeEquipe()`, même principe
+que le retour partiel) ; `RecalculRetroactifParrainService` (exclusions, bilan, réouverture des
+périodes). Tests : `ParrainDroitsRetroactifsTest`, `PartParrainDialog.spec.ts` (remplacé au lot 8).
+
+Conséquence assumée : un livreur parti de l'équipe pendant la période perd sa part non payée sur
+les commandes recalculées ; un ajustement manuel non payé est remplacé par le recalcul.
+
+Revue avant intégration (24/10/2026), corrections : (A1) réouverture des périodes en mode strict
+dans la même transaction — un échec annule tout ; (A2) une répartition planifiée n'est remplacée
+que depuis la grille, après confirmation ; (A3) journal d'audit des décisions humaines remplacées ;
+(A4) recalcul sans effet quand la commission serait identique ; (A6) verrou de la commande pendant
+la régénération. Point de procédure (A5) : les parts Livreur recalculées sont à revalider, la
+période Livreurs reste ouverte jusque-là.
+
+## Lot 8 — part du parrain saisie en place (2026-10-24, PARRAIN-024)
+
+Retour d'usage : la grille en fenêtre (et l'étape « Parrain associé » qui y menait) obligeait à
+répartir toute l'équipe pour fixer la part du parrain. Décisions de l'utilisateur :
+
+- la part du parrain se saisit **directement dans l'onglet Parrain** (montants modifiables dans le
+  tableau, Enregistrer / Annuler, date de début des droits), sans fenêtre ni stepper ;
+- **un seul livreur** : il reçoit le reste du barème, le partage reste « Fait » ;
+- **plusieurs livreurs** : effet immédiat — leurs montants ne changent pas, le partage passe
+  « À faire » et les ventes concernées sont refusées jusqu'à la nouvelle répartition dans l'onglet
+  Équipe (option « part en attente », sans blocage des ventes, écartée) ;
+- la modale Équipe garde la ligne du parrain modifiable ; les deux écrans lisent les mêmes partages ;
+- rétroactivité avec plusieurs livreurs : la date de début passée reste en attente et s'applique à
+  la répartition faite dans la modale Équipe, avec confirmation et bilan (option « compléter la
+  répartition dans l'onglet Parrain » écartée : l'onglet ne porte que le montant du parrain) ;
+- changement de parrain : le nouveau démarre à 0 GNF à partir d'aujourd'hui, l'ancien conserve
+  toutes ses commissions acquises (payées ou non) ; retrait et changement sans répartition jointe,
+  conséquences confirmées.
+
+Contradiction résolue explicitement : PARRAIN-011/012 exigeaient qu'une part du parrain soit
+toujours enregistrée avec une répartition complète. Ils sont réécrits : une répartition incomplète
+peut être enregistrée au statut « À faire », jamais utilisable — ventes refusées quelle que soit la
+date d'activation (le moteur ne sait pas calculer une commission sur un partage déséquilibré),
+aucune commission générée, aucune date de début appliquée, aucun recalcul. Garde-fou ajouté : les
+droits d'un nouveau parrain ne commencent jamais avant le remplacement de l'ancien (ses commissions
+non payées ne peuvent pas lui être reprises par un recalcul rétroactif).
+
+Mise en œuvre : `PartParrainService::definirParts()` construit les répartitions (livreur seul =
+barème − part ; plusieurs livreurs = montants actuels) et délègue à `definir()` (contrôles,
+versionnement, planification, rétroactivité), qui ne contrôle que les livreurs des partages laissés
+« À faire » ; date en attente `equipe_livraison_partages_categorie.droits_parrain_depuis` (migration
+non destructive), appliquée par `EquipeLivraisonController` (`confirmer_droits_parrain`) ;
+`PartageParrainService::appliquerChangementDeParrain()` sans répartition jointe ;
+`PartParrainService::dateMinimaleDroits()` ; `PartParrainEdition.vue` remplace
+`PartParrainDialog.vue`, `ParrainDialog.vue` confirme les conséquences. Tests :
+`ParrainPartADefinirTest`, `ParrainPartageCommissionTest`, `ParrainDroitsRetroactifsTest`,
+`PartParrainEdition.spec.ts`, `ParrainDialog.spec.ts`, E2E `parrain-commission.spec.ts`
+(synchronisation des onglets, changement de parrain).
+
 ## Conséquences
 
 - Les commissions existantes ne sont ni recalculées ni modifiées ; sans parrain, rien ne change.

@@ -10,6 +10,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import ParrainDialog from '@/pages/Vehicules/partials/ParrainDialog.vue';
+import PartParrainEdition from '@/pages/Vehicules/partials/PartParrainEdition.vue';
 import SituationTab from '@/pages/Vehicules/partials/SituationTab.vue';
 import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -75,6 +76,12 @@ interface MembreEquipeDetail {
 interface PartageCategorieDetail {
     categorie_id: string;
     parts: Array<{ livreur_id: string; montant_unitaire: number }>;
+    /** Part du parrain sur ce processus (null : pas de ligne parrain). */
+    part_parrain?: number | null;
+    /** PARRAIN-022 : part nulle confirmée par une personne. */
+    part_parrain_confirmee?: boolean;
+    /** PARRAIN-024 : date de début des droits du parrain en attente de cette répartition. */
+    droits_parrain_depuis?: string | null;
 }
 
 interface EquipeData {
@@ -149,7 +156,7 @@ interface BaremeCommissionCategorie {
     montant_livraison: number;
 }
 
-type StatutPartageCommission = 'fait' | 'a_faire' | 'non_requis';
+type StatutPartageCommission = 'fait' | 'a_faire' | 'a_repartir' | 'non_requis';
 
 const props = defineProps<{
     vehicule: VehiculeData;
@@ -178,9 +185,24 @@ const props = defineProps<{
         processus_label: string;
         categorie_nom: string;
         montant: number;
+        /** PARRAIN-022 : 0 GNF jamais confirmé par une personne. */
+        a_repartir: boolean;
+        /** PARRAIN-023 : date de début de la part en vigueur (AAAA-MM-JJ). */
+        depuis: string | null;
+        /** PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe. */
+        droits_en_attente?: string | null;
     }>;
     /** Parrain exigé dans la répartition du processus actif, null sinon. */
     parrain_partage: { id: string; nom_complet: string } | null;
+    /**
+     * Part du parrain à définir / définie (PARRAIN-021/022), déduite des partages. À partir de
+     * `repartition_obligatoire_du` (réglage de l'organisation, null = pas encore activé), une
+     * vente est refusée sur un partage « À répartir ». statut null sans parrain.
+     */
+    parrain_part: {
+        statut: 'a_definir' | 'definie' | null;
+        repartition_obligatoire_du: string | null;
+    };
 }>();
 
 const page = usePage();
@@ -227,8 +249,9 @@ function statutPartage(
 function libelleColonnePartage(processusCode: string): string {
     const labels: Record<string, string> = {
         vente: 'Partage vente',
+        logistique_transfert: 'Partage logistique',
+        transfert_grossiste: 'Partage grossiste',
         distribution_client: 'Partage distribution',
-        logistique_transfert: 'Partage transfert',
     };
 
     return labels[processusCode] ?? 'Partage';
@@ -358,6 +381,83 @@ const partageProcessusConfigure = computed(() =>
     ),
 );
 
+/** Ordre métier des processus, le même partout (onglets Équipe, onglet Parrain, grilles). */
+const ORDRE_PROCESSUS = [
+    'vente',
+    'logistique_transfert',
+    'transfert_grossiste',
+    'distribution_client',
+];
+
+/**
+ * Ligne « Parrain du véhicule » du tableau de l'équipe (hors équipe : aucune action de livreur) :
+ * sa part par catégorie sur le processus affiché, prise sur l'enveloppe des livreurs.
+ */
+const partsParrainProcessusActif = computed(() =>
+    (props.equipe?.partages_categorie ?? [])
+        .filter(
+            (pc) => pc.part_parrain !== null && pc.part_parrain !== undefined,
+        )
+        .map((pc) => ({
+            categorie:
+                props.baremes_commission_categories.find(
+                    (b) => b.categorie_id === pc.categorie_id,
+                )?.categorie_nom ?? 'Catégorie non disponible',
+            montant: pc.part_parrain as number,
+            a_repartir: pc.part_parrain === 0 && !pc.part_parrain_confirmee,
+        })),
+);
+
+/** Total réparti (livreurs + parrain) face au barème Livreur, par catégorie. */
+const totauxRepartition = computed(() =>
+    (props.equipe?.partages_categorie ?? [])
+        .map((pc) => {
+            const bareme = props.baremes_commission_categories.find(
+                (b) => b.categorie_id === pc.categorie_id,
+            );
+            return {
+                categorie: bareme?.categorie_nom ?? 'Catégorie non disponible',
+                bareme: bareme?.montant_livraison ?? 0,
+                total:
+                    pc.parts.reduce((s, p) => s + p.montant_unitaire, 0) +
+                    (pc.part_parrain ?? 0),
+            };
+        })
+        .filter((t) => t.bareme > 0),
+);
+
+/**
+ * Onglet Parrain : ses parts dans l'ordre métier, avec les transferts entre sites signalés comme
+ * jamais rémunérés quand le véhicule fait de la logistique.
+ */
+const lignesPartParrain = computed(() => {
+    const lignes = props.parrain_remuneration.map((r) => ({
+        ...r,
+        exclu: false,
+    }));
+    if (
+        props.processus_options.some((o) => o.value === 'logistique_transfert')
+    ) {
+        lignes.push({
+            processus_code: 'logistique_transfert',
+            processus_label:
+                props.processus_options.find(
+                    (o) => o.value === 'logistique_transfert',
+                )?.label ?? 'Transferts logistiques',
+            categorie_nom: '—',
+            montant: 0,
+            a_repartir: false,
+            depuis: null,
+            exclu: true,
+        });
+    }
+    return lignes.sort(
+        (a, b) =>
+            ORDRE_PROCESSUS.indexOf(a.processus_code) -
+            ORDRE_PROCESSUS.indexOf(b.processus_code),
+    );
+});
+
 function partsCommissionMembre(livreurId: string | null) {
     if (!livreurId || !props.equipe) return [];
 
@@ -382,6 +482,51 @@ function partsCommissionMembre(livreurId: string | null) {
 }
 
 const showParrainDialog = ref(false);
+/** Saisie en place de la part du parrain dans l'onglet Parrain (PARRAIN-024). */
+const editionPartParrain = ref(false);
+const libelleTransfertsExclus = computed(() =>
+    props.processus_options.some((o) => o.value === 'logistique_transfert')
+        ? (props.processus_options.find(
+              (o) => o.value === 'logistique_transfert',
+          )?.label ?? 'Transferts logistiques')
+        : null,
+);
+
+// Partages à refaire dans l'onglet Équipe après la saisie de la part du parrain : avertissement
+// orange (opération autorisée, attention requise).
+const flashWarning = computed(
+    () => (page.props as any).flash?.warning as string | undefined,
+);
+watch(flashWarning, (msg) => {
+    if (!msg) return;
+    toast.add({
+        group: 'top',
+        severity: 'warn',
+        summary: 'Attention',
+        detail: msg,
+        life: 8000,
+    });
+});
+const partParrainADefinir = computed(
+    () => props.parrain_part?.statut === 'a_definir',
+);
+const peutDefinirPartParrain = computed(
+    () => can('equipes-livraison.update') && !!props.vehicule.equipe_id,
+);
+/** Effet de la part « à répartir » sur les ventes, selon la date d'activation (PARRAIN-022). */
+const messageBlocagePartParrain = computed(() => {
+    const debut = props.parrain_part?.repartition_obligatoire_du;
+    if (!debut) {
+        return 'Les ventes continuent normalement pour le moment.';
+    }
+    const [annee, mois, jour] = debut.split('-').map(Number);
+    const date = new Date(annee, mois - 1, jour);
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    return date <= aujourdhui
+        ? 'Les ventes concernées sont refusées tant qu’elle n’est pas répartie.'
+        : `Les ventes concernées seront refusées à partir du ${date.toLocaleDateString('fr-FR')} si elle n’est pas répartie.`;
+});
 const parrainDialogMode = ref<'ajouter' | 'changer' | 'modifier' | 'retirer'>(
     'ajouter',
 );
@@ -847,6 +992,31 @@ function formatGNF(val: number): string {
 
                         <div class="space-y-5">
                             <div
+                                v-if="partParrainADefinir"
+                                class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                                data-testid="equipe-rappel-part-parrain"
+                            >
+                                <p class="flex items-start gap-2">
+                                    <TriangleAlert
+                                        class="mt-0.5 h-4 w-4 shrink-0"
+                                    />
+                                    <span>
+                                        Parrain
+                                        {{ vehicule.parrain_nom_complet }} :
+                                        part à définir (0 GNF).
+                                        {{ messageBlocagePartParrain }}
+                                    </span>
+                                </p>
+                                <button
+                                    type="button"
+                                    class="text-xs font-medium underline-offset-2 hover:underline"
+                                    @click="choisirOnglet('parrain')"
+                                >
+                                    Voir l'onglet Parrain
+                                </button>
+                            </div>
+
+                            <div
                                 v-if="distribution_chauffeur_motif"
                                 class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
                             >
@@ -1101,6 +1271,175 @@ function formatGNF(val: number): string {
                                                 </Button>
                                             </td>
                                         </tr>
+                                        <template v-if="vehicule.parrain_id">
+                                            <tr class="bg-muted/20">
+                                                <td
+                                                    colspan="5"
+                                                    class="px-4 pt-3 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                                                >
+                                                    Parrain du véhicule — hors
+                                                    équipe, sa part est prise
+                                                    sur l'enveloppe des livreurs
+                                                </td>
+                                            </tr>
+                                            <tr
+                                                class="bg-muted/10"
+                                                data-testid="equipe-ligne-parrain"
+                                            >
+                                                <td
+                                                    data-label="Parrain"
+                                                    class="px-4 py-3 font-medium"
+                                                >
+                                                    {{
+                                                        vehicule.parrain_nom_complet
+                                                    }}
+                                                </td>
+                                                <td
+                                                    data-label="Téléphone"
+                                                    class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                                >
+                                                    {{
+                                                        vehicule.parrain_telephone
+                                                            ? formatPhoneDisplay(
+                                                                  vehicule.parrain_telephone,
+                                                              )
+                                                            : '—'
+                                                    }}
+                                                </td>
+                                                <td
+                                                    data-label="Rôle"
+                                                    class="px-4 py-3 text-muted-foreground"
+                                                >
+                                                    Parrain
+                                                </td>
+                                                <td
+                                                    :data-label="
+                                                        'Part — ' +
+                                                        processusActifLabel
+                                                    "
+                                                    data-wide
+                                                    class="px-4 py-3"
+                                                >
+                                                    <span
+                                                        v-if="!parrain_partage"
+                                                        class="text-xs text-muted-foreground"
+                                                    >
+                                                        Non rémunéré sur les
+                                                        transferts entre sites
+                                                    </span>
+                                                    <div
+                                                        v-else-if="
+                                                            partsParrainProcessusActif.length >
+                                                            0
+                                                        "
+                                                        class="space-y-1"
+                                                    >
+                                                        <p
+                                                            v-for="part in partsParrainProcessusActif"
+                                                            :key="
+                                                                part.categorie
+                                                            "
+                                                            class="flex items-baseline justify-between gap-3 text-xs"
+                                                        >
+                                                            <span
+                                                                class="truncate text-muted-foreground"
+                                                                :title="
+                                                                    part.categorie
+                                                                "
+                                                            >
+                                                                {{
+                                                                    part.categorie
+                                                                }}
+                                                            </span>
+                                                            <span
+                                                                class="shrink-0 font-mono font-semibold text-foreground tabular-nums"
+                                                            >
+                                                                <span
+                                                                    v-if="
+                                                                        part.a_repartir
+                                                                    "
+                                                                    class="mr-1.5 font-sans font-medium text-orange-600"
+                                                                    >À
+                                                                    répartir</span
+                                                                >
+                                                                {{
+                                                                    formatGNF(
+                                                                        part.montant,
+                                                                    )
+                                                                }}
+                                                                / unité
+                                                            </span>
+                                                        </p>
+                                                    </div>
+                                                    <span
+                                                        v-else
+                                                        class="text-xs text-muted-foreground"
+                                                    >
+                                                        Aucune part
+                                                    </span>
+                                                </td>
+                                                <td data-wide class="px-4 py-3">
+                                                    <button
+                                                        type="button"
+                                                        class="text-xs font-medium text-primary hover:underline"
+                                                        @click="
+                                                            choisirOnglet(
+                                                                'parrain',
+                                                            )
+                                                        "
+                                                    >
+                                                        Voir l'onglet Parrain
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr
+                                            v-if="
+                                                partageProcessusConfigure &&
+                                                totauxRepartition.length > 0
+                                            "
+                                            class="border-t bg-muted/20"
+                                            data-testid="equipe-total-reparti"
+                                        >
+                                            <td
+                                                colspan="3"
+                                                data-label="Total"
+                                                class="px-4 py-3 text-sm font-semibold"
+                                            >
+                                                Total réparti
+                                            </td>
+                                            <td
+                                                data-label="Total réparti / barème"
+                                                data-wide
+                                                class="px-4 py-3"
+                                            >
+                                                <p
+                                                    v-for="t in totauxRepartition"
+                                                    :key="t.categorie"
+                                                    class="flex items-baseline justify-between gap-3 text-xs"
+                                                >
+                                                    <span
+                                                        class="truncate text-muted-foreground"
+                                                        >{{ t.categorie }}</span
+                                                    >
+                                                    <span
+                                                        class="shrink-0 font-mono font-semibold tabular-nums"
+                                                        :class="
+                                                            t.total === t.bareme
+                                                                ? 'text-emerald-600'
+                                                                : 'text-orange-600'
+                                                        "
+                                                    >
+                                                        {{ formatGNF(t.total) }}
+                                                        / barème
+                                                        {{
+                                                            formatGNF(t.bareme)
+                                                        }}
+                                                    </span>
+                                                </p>
+                                            </td>
+                                            <td />
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -1221,6 +1560,7 @@ function formatGNF(val: number): string {
                                                             option.value,
                                                         )
                                                     "
+                                                    :data-testid="`statut-partage-${option.value}-${cat.categorie_id}`"
                                                     class="px-4 py-3"
                                                 >
                                                     <span
@@ -1250,6 +1590,21 @@ function formatGNF(val: number): string {
                                                             class="h-3.5 w-3.5"
                                                         />
                                                         À faire
+                                                    </span>
+                                                    <span
+                                                        v-else-if="
+                                                            statutPartage(
+                                                                cat.categorie_id,
+                                                                option.value,
+                                                            ) === 'a_repartir'
+                                                        "
+                                                        class="inline-flex items-center gap-1.5 font-medium text-orange-600"
+                                                        title="Part du parrain à 0 GNF jamais confirmée"
+                                                    >
+                                                        <TriangleAlert
+                                                            class="h-3.5 w-3.5"
+                                                        />
+                                                        À répartir
                                                     </span>
                                                     <span
                                                         v-else
@@ -1385,29 +1740,66 @@ function formatGNF(val: number): string {
                                     </div>
                                     <Button
                                         v-if="
-                                            can('equipes-livraison.update') &&
-                                            vehicule.equipe_id
+                                            peutDefinirPartParrain &&
+                                            !editionPartParrain
                                         "
-                                        variant="outline"
+                                        :variant="
+                                            partParrainADefinir
+                                                ? 'default'
+                                                : 'outline'
+                                        "
                                         size="sm"
-                                        data-testid="parrain-modifier-repartition-btn"
-                                        @click="
-                                            choisirOnglet('equipe');
-                                            showStepperModal = true;
-                                        "
+                                        data-testid="parrain-definir-part-onglet-btn"
+                                        @click="editionPartParrain = true"
                                     >
-                                        Modifier la répartition
+                                        Modifier les parts
                                     </Button>
                                 </div>
+                                <PartParrainEdition
+                                    v-if="editionPartParrain"
+                                    :vehicule-id="vehicule.id"
+                                    :transferts-label="libelleTransfertsExclus"
+                                    @fermer="editionPartParrain = false"
+                                />
+                                <div
+                                    v-else-if="partParrainADefinir"
+                                    class="flex items-start gap-2 border-b bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                    data-testid="parrain-part-a-definir"
+                                >
+                                    <TriangleAlert
+                                        class="mt-0.5 h-4 w-4 shrink-0"
+                                    />
+                                    <p>
+                                        <span class="font-semibold"
+                                            >Part du parrain à définir.</span
+                                        >
+                                        Sa part est de 0 GNF, sans confirmation,
+                                        sur au moins un partage : il n'y reçoit
+                                        rien tant qu'elle n'est pas répartie.
+                                        {{ messageBlocagePartParrain }}
+                                        <template
+                                            v-if="!peutDefinirPartParrain"
+                                        >
+                                            {{
+                                                vehicule.equipe_id
+                                                    ? 'Un responsable des équipes de livraison doit la définir.'
+                                                    : "Configurez d'abord l'équipe du véhicule."
+                                            }}
+                                        </template>
+                                    </p>
+                                </div>
                                 <p
-                                    v-if="parrain_remuneration.length === 0"
+                                    v-if="
+                                        !editionPartParrain &&
+                                        parrain_remuneration.length === 0
+                                    "
                                     class="px-4 py-4 text-xs text-muted-foreground"
                                 >
                                     Aucune part configurée : le véhicule n'a pas
                                     encore d'équipe ou de répartition.
                                 </p>
                                 <table
-                                    v-else
+                                    v-else-if="!editionPartParrain"
                                     class="w-full text-sm"
                                     data-testid="parrain-remuneration"
                                 >
@@ -1430,8 +1822,17 @@ function formatGNF(val: number): string {
                                     </thead>
                                     <tbody class="divide-y">
                                         <tr
-                                            v-for="r in parrain_remuneration"
+                                            v-for="r in lignesPartParrain"
                                             :key="`${r.processus_code}|${r.categorie_nom}`"
+                                            :class="{
+                                                'text-muted-foreground':
+                                                    r.exclu,
+                                            }"
+                                            :data-testid="
+                                                r.exclu
+                                                    ? 'parrain-ligne-transfert-exclu'
+                                                    : undefined
+                                            "
                                         >
                                             <td class="px-4 py-2.5">
                                                 {{ r.processus_label }}
@@ -1440,9 +1841,47 @@ function formatGNF(val: number): string {
                                                 {{ r.categorie_nom }}
                                             </td>
                                             <td
+                                                v-if="r.exclu"
+                                                class="px-4 py-2.5 text-right text-xs"
+                                            >
+                                                Jamais rémunéré (transferts
+                                                entre sites)
+                                            </td>
+                                            <td
+                                                v-else
                                                 class="px-4 py-2.5 text-right font-mono tabular-nums"
                                             >
+                                                <span
+                                                    v-if="r.a_repartir"
+                                                    class="mr-2 font-sans text-xs font-medium text-orange-600"
+                                                    >À répartir</span
+                                                >
                                                 {{ formatGNF(r.montant) }}
+                                                <span
+                                                    v-if="r.droits_en_attente"
+                                                    class="block font-sans text-[11px] font-medium text-orange-600"
+                                                    data-testid="parrain-droits-en-attente"
+                                                    >due depuis le
+                                                    {{
+                                                        r.droits_en_attente
+                                                            .split('-')
+                                                            .reverse()
+                                                            .join('/')
+                                                    }}
+                                                    — répartition à faire dans
+                                                    l'onglet Équipe</span
+                                                >
+                                                <span
+                                                    v-else-if="r.depuis"
+                                                    class="block font-sans text-[11px] text-muted-foreground"
+                                                    >depuis le
+                                                    {{
+                                                        r.depuis
+                                                            .split('-')
+                                                            .reverse()
+                                                            .join('/')
+                                                    }}</span
+                                                >
                                             </td>
                                         </tr>
                                     </tbody>
@@ -1594,6 +2033,9 @@ function formatGNF(val: number): string {
         :vehicule-id="vehicule.id"
         :mode="parrainDialogMode"
         :part-positive="parrainAUnePart"
+        :peut-definir-part="can('equipes-livraison.update')"
+        :a-une-equipe="!!vehicule.equipe_id"
+        @definir-part="editionPartParrain = true"
         :parrain-actuel="
             vehicule.parrain_id
                 ? {
