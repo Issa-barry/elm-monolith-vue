@@ -12,17 +12,24 @@ use App\Models\PaieLigne;
 use App\Models\PaiePaiement;
 use App\Models\PaiePeriode;
 use App\Models\Site;
+use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\Comptabilite\PaiementSalaireService;
+use App\Services\Comptabilite\ValidationPeriodePaieService;
 use App\Services\PaieCalculService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class SalaireController extends Controller
 {
@@ -42,7 +49,11 @@ class SalaireController extends Controller
         'en_attente' => 'bg-zinc-400 dark:bg-zinc-500',
     ];
 
-    public function __construct(private PaieCalculService $paieCalc, private SiteScopeService $siteScope) {}
+    public function __construct(
+        private PaieCalculService $paieCalc,
+        private SiteScopeService $siteScope,
+        private PaiementSalaireService $paiementSalaire,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -55,32 +66,21 @@ class SalaireController extends Controller
         $filtreStatut = (string) $request->input('statut', '');
         $search = trim((string) $request->input('search', ''));
 
-        $toutesAgences = $user->voitToutesLesAgences();
-        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
-        $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+        $sites = $this->sitesFiltrables($user, $orgId);
+        $filtreSiteIds = $this->filtreSiteIds($request, $user);
 
         $periode = $this->paieCalc->getOrGenererPeriode($orgId, $filtreMois, $filtreAnnee);
+
+        // « Payer » n'est proposé que si le serveur l'accepterait : permission, période validée et
+        // salarié dans les agences d'écriture de l'utilisateur (règle 3 des standards UI).
+        $peutPayerPeriode = $periode !== null && $user->can('pay', $periode);
 
         $lignes = collect();
 
         if ($periode) {
-            $query = PaieLigne::with(['employe.site', 'contrat'])
-                ->where('paie_periode_id', $periode->id);
-
-            if ($filtreStatut !== '') {
-                $query->where('statut', $filtreStatut);
-            }
-
-            if ($toutesAgences && ! empty($filtreSiteIds)) {
-                $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
-            }
-
-            if (! $toutesAgences && ! empty($siteIds)) {
-                $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $siteIds));
-            }
-
-            $allLignes = $query->get()->sortBy(fn ($l) => $l->employe?->nom_complet ?? '');
+            $allLignes = $this->lignesDuPerimetre($periode, $user, $filtreSiteIds, $filtreStatut)
+                ->get()
+                ->sortBy(fn ($l) => $l->employe?->nom_complet ?? '');
 
             if ($search !== '') {
                 $s = mb_strtolower($search);
@@ -106,6 +106,9 @@ class SalaireController extends Controller
                 'reste_a_payer' => (float) $l->reste_a_payer,
                 'statut' => $l->statut?->value ?? 'en_attente',
                 'statut_label' => $l->statut?->label() ?? 'En attente',
+                'peut_payer' => $peutPayerPeriode
+                    && $l->employe !== null
+                    && $this->paiementSalaire->peutPayerEmploye($l->employe, $user),
             ])->values();
         }
 
@@ -137,7 +140,13 @@ class SalaireController extends Controller
                 'annee' => $periode->annee,
                 'label' => $periode->labelPeriode(),
                 'statut' => $periode->statut?->value,
+                'statut_label' => $periode->statut?->label(),
+                'payable' => $periode->peutEtrePayee(),
             ] : null,
+            'can_valider_periode' => $periode !== null
+                && ValidationPeriodePaieService::estValidable($periode)
+                && $user->can('validate', $periode)
+                && $periode->lignes()->exists(),
             'periodes_disponibles' => $periodesDisponibles,
             'filtre_mois' => $filtreMois,
             'filtre_annee' => $filtreAnnee,
@@ -166,13 +175,22 @@ class SalaireController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $maxPaiement = (float) $ligne->reste_a_payer;
-        if ((float) $data['montant'] > $maxPaiement + 0.01) {
-            return back()->withErrors(['montant' => "Le montant dépasse le reste à payer ({$maxPaiement} GNF)."]);
+        try {
+            $this->paiementSalaire->payerLigne(
+                $ligne,
+                auth()->user(),
+                (float) $data['montant'],
+                $data['mode_paiement'],
+                $data['date_paiement'],
+                $data['note'] ?? null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['montant' => $e->getMessage()]);
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
         }
-
-        $ligne->paiements()->create($data);
-        $this->paieCalc->recalculerApresPaiement($ligne);
 
         $employe = $ligne->employe;
         $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
@@ -194,6 +212,7 @@ class SalaireController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $employe = Employe::where('organization_id', $orgId)->findOrFail($employeId);
+        $this->assertEmployeConsultable($employe, auth()->user());
 
         $lignes = PaieLigne::with('periode')
             ->where('employe_id', $employeId)
@@ -206,6 +225,14 @@ class SalaireController extends Controller
         $totalNet = (float) $lignes->sum('net');
         $totalVerse = (float) $lignes->sum('deja_paye');
         $totalReste = (float) $lignes->sum('reste_a_payer');
+
+        // Seuls les mois validés sont payables : le bouton propose ce reste-là, pas le reste total.
+        $restePayable = (float) $lignes
+            ->filter(fn (PaieLigne $l) => $l->periode->peutEtrePayee())
+            ->sum('reste_a_payer');
+        $canPayer = auth()->user()->can('comptabilite.payer')
+            && $this->paiementSalaire->peutPayerEmploye($employe, auth()->user())
+            && $restePayable > 0;
 
         $commissionDetails = $lignes->map(fn (PaieLigne $l) => [
             'id' => $l->id,
@@ -266,7 +293,8 @@ class SalaireController extends Controller
             'expenses' => $expenses,
             'payments' => $payments,
             'modes_paiement' => self::MODES_PAIEMENT,
-            'can_payer' => auth()->user()->can('comptabilite.payer'),
+            'reste_payable' => $restePayable,
+            'can_payer' => $canPayer,
         ]);
     }
 
@@ -284,16 +312,20 @@ class SalaireController extends Controller
         ]);
 
         try {
-            $this->paieCalc->payerEmploye(
-                employeId: $employeId,
-                orgId: $orgId,
-                montant: (float) $data['montant'],
-                modePaiement: $data['mode_paiement'],
-                paidAt: now()->toDateString(),
-                note: $data['note'] ?? null,
+            $this->paiementSalaire->payerEmploye(
+                $employe,
+                auth()->user(),
+                (float) $data['montant'],
+                $data['mode_paiement'],
+                now()->toDateString(),
+                $data['note'] ?? null,
             );
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
         }
 
         $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
@@ -320,11 +352,7 @@ class SalaireController extends Controller
             ->where('annee', $filtreAnnee)
             ->first();
 
-        $lignes = $periode
-            ? PaieLigne::with(['employe.site', 'contrat'])
-                ->where('paie_periode_id', $periode->id)
-                ->get()
-            : collect();
+        $lignes = $periode ? $this->lignesExportees($request, $periode)->get() : collect();
 
         $periodeLabel = $periode?->labelPeriode() ?? 'Aucune période';
         $filename = 'salaires-'.now()->format('Y-m-d').'.csv';
@@ -368,8 +396,7 @@ class SalaireController extends Controller
             ->first();
 
         $lignes = $periode
-            ? PaieLigne::with(['employe.site', 'contrat'])
-                ->where('paie_periode_id', $periode->id)
+            ? $this->lignesExportees($request, $periode)
                 ->get()
                 ->sortBy(fn ($l) => $l->employe?->nom_complet ?? '')
                 ->map(fn ($l) => [
@@ -401,5 +428,58 @@ class SalaireController extends Controller
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download('salaires-'.$filtreMois.'-'.$filtreAnnee.'.pdf');
+    }
+
+    /**
+     * Lignes d'une période visibles par l'utilisateur : périmètre de consultation des agences
+     * (SiteScopeService), puis filtres de l'écran. Sans agence rattachée ni vision 360°, aucune ligne.
+     */
+    private function lignesDuPerimetre(PaiePeriode $periode, User $user, array $filtreSiteIds, string $filtreStatut): Builder
+    {
+        return PaieLigne::with(['employe.site', 'contrat'])
+            ->where('paie_periode_id', $periode->id)
+            ->when($filtreStatut !== '', fn (Builder $q) => $q->where('statut', $filtreStatut))
+            ->when($filtreSiteIds !== [], fn (Builder $q) => $q->whereHas('employe', fn (Builder $e) => $e->whereIn('site_id', $filtreSiteIds)))
+            ->when(! $user->voitToutesLesAgences(), fn (Builder $q) => $q->whereHas('employe', fn (Builder $e) => $this->siteScope->applyToQuery($e, $user)));
+    }
+
+    private function lignesExportees(Request $request, PaiePeriode $periode): Builder
+    {
+        $user = auth()->user();
+
+        return $this->lignesDuPerimetre($periode, $user, $this->filtreSiteIds($request, $user), (string) $request->input('statut', ''));
+    }
+
+    /** Filtre Agence de l'écran : seulement pour qui voit toutes les agences (sinon, son périmètre). */
+    private function filtreSiteIds(Request $request, User $user): array
+    {
+        return $user->voitToutesLesAgences()
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : [];
+    }
+
+    /** @return Collection<int, Site|array{id: string, nom: string}> */
+    private function sitesFiltrables(User $user, string $orgId): Collection
+    {
+        if ($user->voitToutesLesAgences()) {
+            return Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
+        }
+
+        return $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom'])
+            ->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])
+            ->values();
+    }
+
+    private function assertEmployeConsultable(Employe $employe, User $user): void
+    {
+        if ($user->voitToutesLesAgences()) {
+            return;
+        }
+
+        abort_unless(
+            $employe->site_id !== null && $this->siteScope->accessibleSiteIds($user)->contains($employe->site_id),
+            403,
+            'Ce salarié ne relève pas de vos agences.',
+        );
     }
 }

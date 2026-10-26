@@ -83,6 +83,7 @@ use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\Salaires\ValiderPeriodePaieController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
@@ -1031,6 +1032,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('salaires.index');
             Route::post('salaires/{ligne}/payer', [SalaireController::class, 'payerLigne'])
                 ->name('salaires.payer');
+            Route::post('salaires/periodes/{paiePeriode}/valider', ValiderPeriodePaieController::class)
+                ->name('salaires.periodes.valider');
             Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
                 ->name('salaires.excel');
             Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])

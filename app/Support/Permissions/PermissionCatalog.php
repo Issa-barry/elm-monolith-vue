@@ -51,7 +51,9 @@ final class PermissionCatalog
         'ventes.qte.update' => 'Ventes — modifier une quantité déjà chargée',
         'ventes.prix.update' => 'Ventes — modifier un prix unitaire',
         'rh-paie.validate' => 'Paie — valider une période',
-        'rh-paie.pay' => 'Paie — payer une période',
+        // Plus vérifiée depuis le 26/10/2026 : payer un salaire exige `comptabilite.payer`
+        // (PaiePolicy::pay). Conservée car des rôles en base la référencent.
+        'rh-paie.pay' => 'Paie — payer une période (sans effet : remplacée par Comptabilité — payer)',
         'rh-paie.close' => 'Paie — clôturer une période',
         'imports-flotte.create' => 'Import flotte — lancer un import',
         'imports-flotte.read' => 'Import flotte — consulter les imports',

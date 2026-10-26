@@ -35,9 +35,13 @@ class PaiePolicy
             && $user->organization_id === $periode->organization_id;
     }
 
+    /**
+     * Payer un salaire relève de la Comptabilité : `comptabilite.payer`, la même permission que le
+     * bouton « Payer » (décision du 26/10/2026, docs/paie.md). `rh-paie.pay` n'ouvre plus ce droit.
+     */
     public function pay(User $user, PaiePeriode $periode): bool
     {
-        return $user->can('rh-paie.pay')
+        return $user->can('comptabilite.payer')
             && $user->organization_id === $periode->organization_id
             && $periode->peutEtrePayee();
     }

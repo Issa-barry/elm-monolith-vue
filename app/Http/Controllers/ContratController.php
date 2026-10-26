@@ -8,7 +8,9 @@ use App\Models\Contrat;
 use App\Models\Employe;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -76,29 +78,23 @@ class ContratController extends Controller
 
         $data = $request->validate($this->rules($request), $this->messages());
 
-        // Vérifier que l'employé appartient à l'organisation
-        $employe = Employe::where('id', $data['employe_id'])
-            ->where('organization_id', $orgId)
-            ->firstOrFail();
-
-        // Un seul contrat actif par employé
-        $dejaActif = Contrat::where('employe_id', $employe->id)
-            ->where('statut_contrat', StatutContrat::ACTIF->value)
-            ->exists();
-
-        if ($dejaActif) {
-            return back()->withErrors(['employe_id' => 'Cet employé a déjà un contrat actif. Terminez-le avant d\'en créer un nouveau.']);
-        }
-
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
             $data['date_fin'] = null;
         }
 
-        Contrat::create(array_merge($data, [
-            'organization_id' => $orgId,
-            'statut_contrat' => StatutContrat::ACTIF->value,
-        ]));
+        // Verrou sur l'employé : deux créations simultanées ne peuvent pas produire deux contrats actifs.
+        $employe = DB::transaction(function () use ($data, $orgId) {
+            $employe = $this->verrouillerEmploye($data['employe_id'], $orgId);
+            $this->assertAucunAutreContratActif($employe->id);
+
+            Contrat::create(array_merge($data, [
+                'organization_id' => $orgId,
+                'statut_contrat' => StatutContrat::ACTIF->value,
+            ]));
+
+            return $employe;
+        });
 
         return redirect()->route('employes.edit', $employe)
             ->with('success', 'Contrat créé avec succès.');
@@ -131,14 +127,32 @@ class ContratController extends Controller
     {
         $this->authorize('update', $contrat);
 
-        $data = $request->validate($this->rules($request, $contrat), $this->messages());
+        // Organisation du contrat, pas celle de l'acteur : le Gate::before du super administrateur
+        // laisse passer la Policy, l'employé cible doit rester dans l'organisation du contrat.
+        $orgId = $contrat->organization_id;
+
+        $data = $request->validate($this->rules($request), $this->messages());
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
             $data['date_fin'] = null;
         }
 
-        $contrat->update($data);
+        // Statut non envoyé : le statut actuel est conservé (la colonne n'accepte pas null).
+        if (($data['statut_contrat'] ?? null) === null) {
+            unset($data['statut_contrat']);
+        }
+
+        DB::transaction(function () use ($contrat, $data, $orgId) {
+            $employe = $this->verrouillerEmploye($data['employe_id'], $orgId);
+
+            $statutFinal = $data['statut_contrat'] ?? $contrat->statut_contrat->value;
+            if ($statutFinal === StatutContrat::ACTIF->value) {
+                $this->assertAucunAutreContratActif($employe->id, $contrat->id);
+            }
+
+            $contrat->update($data);
+        });
 
         return redirect()->route('employes.edit', $contrat->employe_id)
             ->with('success', 'Contrat mis à jour.');
@@ -155,7 +169,34 @@ class ContratController extends Controller
             ->with('success', 'Contrat supprimé.');
     }
 
-    private function rules(Request $request, ?Contrat $contrat = null): array
+    private function verrouillerEmploye(string $employeId, string $orgId): Employe
+    {
+        return Employe::whereKey($employeId)
+            ->where('organization_id', $orgId)
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+
+    /** Un seul contrat actif par employé, en création comme en modification. */
+    private function assertAucunAutreContratActif(string $employeId, ?string $saufContratId = null): void
+    {
+        $dejaActif = Contrat::where('employe_id', $employeId)
+            ->where('statut_contrat', StatutContrat::ACTIF->value)
+            ->when($saufContratId, fn ($q) => $q->whereKeyNot($saufContratId))
+            ->exists();
+
+        if ($dejaActif) {
+            throw ValidationException::withMessages([
+                'employe_id' => 'Cet employé a déjà un contrat actif. Terminez-le avant d\'en créer ou d\'en activer un autre.',
+            ]);
+        }
+    }
+
+    /**
+     * L'appartenance de l'employé à l'organisation est contrôlée par verrouillerEmploye() (404, comme
+     * à la création), pas ici.
+     */
+    private function rules(Request $request): array
     {
         $isCdd = $request->input('type_contrat') === TypeContrat::CDD->value;
 

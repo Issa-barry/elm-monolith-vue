@@ -4,14 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\PaieLigne;
 use App\Models\PaiePaiement;
-use App\Services\PaieCalculService;
+use App\Services\Comptabilite\PaiementSalaireService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
+/**
+ * Ancien écran Paie (RH) — conservé jusqu'au retrait prévu de ce circuit. Les paiements passent par
+ * le même service que Comptabilité > Paiement salaire (verrou, reste relu sous verrou, agence).
+ */
 class PaiePaiementController extends Controller
 {
-    public function store(Request $request, PaieLigne $ligne, PaieCalculService $service): RedirectResponse
+    public function store(Request $request, PaieLigne $ligne, PaiementSalaireService $paiements): RedirectResponse
     {
         $this->authorize('pay', $ligne->periode);
 
@@ -22,30 +28,31 @@ class PaiePaiementController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $maxPaiement = (float) $ligne->reste_a_payer;
-        if ((float) $data['montant'] > $maxPaiement + 0.01) {
-            return back()->withErrors(['montant' => "Le montant dépasse le reste à payer ({$maxPaiement})."]);
-        }
-
         try {
-            DB::transaction(function () use ($ligne, $data, $service) {
-                $ligne->paiements()->create($data);
-                $service->recalculerApresPaiement($ligne);
-            });
-        } catch (\RuntimeException $e) {
+            $paiements->payerLigne(
+                $ligne,
+                $request->user(),
+                (float) $data['montant'],
+                $data['mode_paiement'],
+                $data['date_paiement'],
+                $data['note'] ?? null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['montant' => $e->getMessage()]);
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
+        } catch (RuntimeException $e) {
             return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
         }
 
         return back()->with('success', 'Paiement enregistré.');
     }
 
-    public function destroy(PaiePaiement $paiement, PaieCalculService $service): RedirectResponse
+    public function destroy(Request $request, PaiePaiement $paiement, PaiementSalaireService $paiements): RedirectResponse
     {
-        $ligne = $paiement->ligne;
-        $this->authorize('pay', $ligne->periode);
+        $this->authorize('pay', $paiement->ligne->periode);
 
-        $paiement->delete();
-        $service->recalculerApresPaiement($ligne);
+        $paiements->annulerPaiement($paiement, $request->user());
 
         return back()->with('success', 'Paiement supprimé.');
     }
