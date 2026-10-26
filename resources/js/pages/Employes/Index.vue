@@ -51,6 +51,7 @@ interface Employe {
     statut: string;
     statut_label: string;
     site: string | null;
+    service_libelle: string | null;
     contrat_actif: ContratActif | null;
 }
 
@@ -63,15 +64,20 @@ type Filters = {
     statut?: string;
     type_employe?: string;
     type_contrat?: string;
+    service_rh_id?: string;
+    site_ids?: string[];
     search?: string;
 };
 
 const props = defineProps<{
     employes: Employe[];
     filters: Filters;
+    // Agences du filtre : toutes, ou celles de l'utilisateur (périmètre appliqué par le serveur).
+    sites: { id: string; nom: string }[];
     statut_options: Option[];
     type_employe_options: Option[];
     type_contrat_options: Option[];
+    service_options: Option[];
 }>();
 
 const { can } = usePermissions();
@@ -89,6 +95,13 @@ const filterFields: FilterField[] = [
         label: 'Statut',
         type: 'select',
         options: props.statut_options,
+        inline: true,
+    },
+    {
+        key: 'service_rh_id',
+        label: 'Service',
+        type: 'select',
+        options: props.service_options,
     },
     {
         key: 'type_employe',
@@ -195,6 +208,7 @@ function confirmDelete(e: Employe) {
                 url="/backoffice/employes"
                 :values="filters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="employes.length"
             />
 
@@ -314,6 +328,20 @@ function confirmDelete(e: Employe) {
                         <template #body="{ data }">
                             <span class="text-sm text-muted-foreground">{{
                                 data.site ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Service -->
+                    <Column
+                        field="service_libelle"
+                        header="Service"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-sm text-muted-foreground">{{
+                                data.service_libelle ?? '—'
                             }}</span>
                         </template>
                     </Column>

@@ -6,6 +6,8 @@ use App\Enums\StatutContrat;
 use App\Enums\TypeContrat;
 use App\Models\Contrat;
 use App\Models\Employe;
+use App\Models\Site;
+use App\Services\SiteScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,11 +22,24 @@ class ContratController extends Controller
     {
         $this->authorize('viewAny', Contrat::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['statut_contrat', 'type_contrat']);
+        $filtreSiteIds = $user->voitToutesLesAgences()
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : [];
 
-        $query = Contrat::with(['employe:id,personne_id,matricule', 'employe.personne'])
+        $query = Contrat::with(['employe:id,personne_id,matricule,site_id', 'employe.personne'])
             ->where('organization_id', $orgId);
+
+        // Périmètre de consultation : contrats des employés de ses agences (ADR 0025).
+        if (! $user->voitToutesLesAgences()) {
+            $query->whereHas('employe', fn ($e) => app(SiteScopeService::class)->applyToQuery($e, $user));
+        }
+
+        if ($filtreSiteIds !== []) {
+            $query->whereHas('employe', fn ($e) => $e->whereIn('site_id', $filtreSiteIds));
+        }
 
         if (! empty($filters['statut_contrat'])) {
             $query->where('statut_contrat', $filters['statut_contrat']);
@@ -37,9 +52,14 @@ class ContratController extends Controller
         $contrats = $query->orderByDesc('date_debut')->get()
             ->map(fn (Contrat $c) => $this->toRow($c));
 
+        $sites = $user->voitToutesLesAgences()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
         return Inertia::render('Contrats/Index', [
             'contrats' => $contrats,
-            'filters' => $filters,
+            'filters' => [...$filters, 'site_ids' => $filtreSiteIds],
+            'sites' => $sites->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values(),
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
         ]);
@@ -76,7 +96,7 @@ class ContratController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403);
 
-        $data = $request->validate($this->rules($request), $this->messages());
+        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
@@ -131,7 +151,7 @@ class ContratController extends Controller
         // laisse passer la Policy, l'employé cible doit rester dans l'organisation du contrat.
         $orgId = $contrat->organization_id;
 
-        $data = $request->validate($this->rules($request), $this->messages());
+        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
@@ -242,7 +262,21 @@ class ContratController extends Controller
             'statut_contrat_label' => $c->statut_contrat->label(),
             'date_debut' => $c->date_debut?->format('Y-m-d'),
             'date_fin' => $c->date_fin?->format('Y-m-d'),
-            'salaire_base' => $c->salaire_base,
+            // Salaire : seulement avec `rh-remunerations.read`.
+            'salaire_base' => auth()->user()?->can('rh-remunerations.read') ? $c->salaire_base : null,
         ];
+    }
+
+    /**
+     * Le salaire ne se saisit qu'avec `rh-remunerations.read` : sans cette permission, la valeur
+     * envoyée est ignorée (le salaire existant reste intact en modification).
+     */
+    private function sansSalaireNonAutorise(array $data): array
+    {
+        if (! auth()->user()->can('rh-remunerations.read')) {
+            unset($data['salaire_base']);
+        }
+
+        return $data;
     }
 }

@@ -929,6 +929,11 @@ class CommissionEnveloppeGenerator
                     // Le parrain est une ligne du même partage : sa part sort de cette enveloppe,
                     // le total de l'équipe reste quantité × barème.
                     foreach ($partages as $partage) {
+                        // Part du parrain à 0 GNF : rien à lui verser — aucune part, donc aucune ligne
+                        // de fiche à 0 qui rouvrirait sa période (et ses écritures) pour rien.
+                        if ($partage->estParrain() && (int) $partage->montant_unitaire === 0) {
+                            continue;
+                        }
                         $type = $partage->estParrain() ? CommissionEnveloppePart::TYPE_PARRAIN : CommissionEnveloppePart::TYPE_LIVREUR;
                         $cleBeneficiaire = $type.':'.$partage->beneficiaire_id;
                         $montantMembre = $quantiteCategorie * (int) $partage->montant_unitaire;

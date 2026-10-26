@@ -3,6 +3,7 @@
 namespace App\Services\Rh;
 
 use App\Models\FonctionRh;
+use App\Models\ServiceRh;
 use Illuminate\Support\Str;
 
 /**
@@ -13,6 +14,9 @@ use Illuminate\Support\Str;
  * dupliqué volontairement plutôt que de coupler FonctionRh à RoleNamingService (deux référentiels
  * distincts). Contrairement aux rôles, une fonction RH n'a pas de "nom technique" Spatie à
  * générer — seuls `libelle` et `code` existent.
+ *
+ * Sert aussi aux services RH (ServiceRh, même règle de code et d'unicité) : paramètre `$modele`,
+ * FonctionRh par défaut.
  */
 class FonctionRhNamingService
 {
@@ -24,18 +28,18 @@ class FonctionRhNamingService
      * ("Contrôleur" → "CON"). En cas de collision, étend progressivement avec les lettres
      * suivantes du dernier mot, puis un suffixe numérique en dernier recours.
      */
-    public function uniqueTrinome(string $libelle, string $organizationId, ?string $ignoreId = null): string
+    public function uniqueTrinome(string $libelle, string $organizationId, ?string $ignoreId = null, string $modele = FonctionRh::class): string
     {
         $words = $this->significantWords($libelle);
         if ($words === []) {
-            return $this->uniqueNumericCode('FON', $organizationId, $ignoreId);
+            return $this->uniqueNumericCode($modele === ServiceRh::class ? 'SRV' : 'FON', $organizationId, $ignoreId, $modele);
         }
 
         $base = count($words) === 1
             ? Str::upper(Str::substr($words[0], 0, 3))
             : Str::upper(implode('', array_map(fn ($w) => Str::substr($w, 0, 1), $words)));
 
-        if (! $this->codeTaken($base, $organizationId, $ignoreId)) {
+        if (! $this->codeTaken($base, $organizationId, $ignoreId, $modele)) {
             return $base;
         }
 
@@ -45,12 +49,12 @@ class FonctionRhNamingService
 
         for ($extra = 2; $extra <= $lastWordLength; $extra++) {
             $candidate = $prefix.Str::substr($lastWord, 0, $extra);
-            if (! $this->codeTaken($candidate, $organizationId, $ignoreId)) {
+            if (! $this->codeTaken($candidate, $organizationId, $ignoreId, $modele)) {
                 return $candidate;
             }
         }
 
-        return $this->uniqueNumericCode($base, $organizationId, $ignoreId);
+        return $this->uniqueNumericCode($base, $organizationId, $ignoreId, $modele);
     }
 
     /** Normalise un trinôme saisi manuellement — ne garantit pas l'unicité, cf. codeTaken(). */
@@ -59,29 +63,31 @@ class FonctionRhNamingService
         return Str::upper(trim($code));
     }
 
-    public function codeTaken(string $code, string $organizationId, ?string $ignoreId = null): bool
+    /** @param class-string<FonctionRh|ServiceRh> $modele */
+    public function codeTaken(string $code, string $organizationId, ?string $ignoreId = null, string $modele = FonctionRh::class): bool
     {
-        return FonctionRh::where('organization_id', $organizationId)
+        return $modele::where('organization_id', $organizationId)
             ->where('code', $code)
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
     }
 
-    public function libelleTaken(string $libelle, string $organizationId, ?string $ignoreId = null): bool
+    /** @param class-string<FonctionRh|ServiceRh> $modele */
+    public function libelleTaken(string $libelle, string $organizationId, ?string $ignoreId = null, string $modele = FonctionRh::class): bool
     {
-        return FonctionRh::where('organization_id', $organizationId)
+        return $modele::where('organization_id', $organizationId)
             ->where('libelle', $libelle)
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
     }
 
-    private function uniqueNumericCode(string $base, string $organizationId, ?string $ignoreId): string
+    private function uniqueNumericCode(string $base, string $organizationId, ?string $ignoreId, string $modele): string
     {
         $suffix = 2;
         do {
             $candidate = "{$base}{$suffix}";
             $suffix++;
-        } while ($this->codeTaken($candidate, $organizationId, $ignoreId));
+        } while ($this->codeTaken($candidate, $organizationId, $ignoreId, $modele));
 
         return $candidate;
     }

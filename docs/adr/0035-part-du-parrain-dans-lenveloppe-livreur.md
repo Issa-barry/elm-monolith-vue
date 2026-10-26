@@ -25,8 +25,8 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
    comme un livreur : GNF fixes par pack, par catégorie et par processus, somme exactement égale au
    barème Livreur. Le total de l'enveloppe ne change donc jamais (quantité × barème). Aucune
    nouvelle table, aucun nouveau barème.
-2. **Opérations rémunérées** : toute commission livreur, sauf le transfert logistique entre sites
-   (vente, transfert grossiste, distribution client).
+2. **Opérations rémunérées** : toute commission livreur (vente, transfert grossiste, distribution
+   client et, depuis le lot 9 du 25/10/2026, transfert logistique entre sites).
 3. **Distribution** : elle garde le barème Logistique (COMM-005, un seul barème à maintenir) mais a
    son propre partage pour un véhicule parrainé — le partage Logistique reste sans parrain. La
    génération lit ce partage s'il existe à la date de l'opération, sinon le partage Logistique.
@@ -211,6 +211,21 @@ non destructive), appliquée par `EquipeLivraisonController` (`confirmer_droits_
 `ParrainPartADefinirTest`, `ParrainPartageCommissionTest`, `ParrainDroitsRetroactifsTest`,
 `PartParrainEdition.spec.ts`, `ParrainDialog.spec.ts`, E2E `parrain-commission.spec.ts`
 (synchronisation des onglets, changement de parrain).
+
+## Lot 9 — transferts entre sites (2026-10-25, PARRAIN-025)
+
+Décision de l'utilisateur : le parrain peut recevoir une part sur les transferts logistiques entre
+sites, comme sur les autres processus. Contradiction signalée avec la décision du 20/10/2026
+(« pas les transferts entre sites ») et assumée. Un transfert porte un seul véhicule : aucun risque de
+double commission. Véhicules déjà parrainés : ligne à 0 GNF confirmée à l'activation (reprise),
+pour ne bloquer aucun transfert ; nouveaux parrains : 0 GNF à répartir, comme ailleurs. Pas de
+recalcul rétroactif des transferts : une date de début passée s'y applique à partir du jour même.
+
+Mise en œuvre : `CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN` (les gardes du
+versionnement, de la conformité, de l'équipe et des fiches en dépendent) ;
+`PartageParrainService::appliquerChangementDeParrain()` traite aussi le partage Logistique ;
+`PartParrainService::definir()` ne date jamais un partage Logistique avant aujourd'hui ; onglet
+Parrain sans la ligne « Jamais rémunéré ».
 
 ## Conséquences
 

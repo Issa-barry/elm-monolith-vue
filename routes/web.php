@@ -191,6 +191,10 @@ use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
+use App\Http\Controllers\Rh\Services\IndexServiceRhController;
+use App\Http\Controllers\Rh\Services\StoreServiceRhController;
+use App\Http\Controllers\Rh\Services\ToggleServiceRhController;
+use App\Http\Controllers\Rh\Services\UpdateServiceRhController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
 use App\Http\Controllers\Role\EditRoleController;
@@ -848,6 +852,11 @@ Route::prefix('backoffice')->group(function () {
                 ->only(['index', 'store', 'update']);
             Route::patch('fonctions-rh/{fonction_rh}/toggle', [FonctionRhController::class, 'toggle'])
                 ->name('fonctions-rh.toggle');
+            // Services RH : référentiel par organisation (permission rh-referentiels.gerer).
+            Route::get('services-rh', IndexServiceRhController::class)->name('services-rh.index');
+            Route::post('services-rh', StoreServiceRhController::class)->name('services-rh.store');
+            Route::put('services-rh/{serviceRh}', UpdateServiceRhController::class)->name('services-rh.update');
+            Route::patch('services-rh/{serviceRh}/toggle', ToggleServiceRhController::class)->name('services-rh.toggle');
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)

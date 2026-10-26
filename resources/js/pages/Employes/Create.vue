@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
+import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
@@ -21,6 +22,8 @@ defineProps<{
     statut_options: Option[];
     sites: Option[];
     fonctions: Option[];
+    services: Option[];
+    mode_paiement_options: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -38,6 +41,23 @@ const form = useForm({
     site_id: null as string | null,
     fonction_rh_id: null as string | null,
     statut: 'actif',
+    // Dossier salarié (facultatif)
+    service_rh_id: null as string | null,
+    date_embauche: '',
+    date_sortie: '',
+    motif_sortie: '',
+    date_naissance: '',
+    lieu_naissance: '',
+    sexe: '',
+    nationalite: '',
+    contact_urgence_nom: '',
+    contact_urgence_lien: '',
+    contact_urgence_telephone: '',
+    numero_cnss: '',
+    paiement_mode: '',
+    paiement_etablissement: '',
+    paiement_numero_compte: '',
+    paiement_titulaire: '',
 });
 
 function submit() {
@@ -232,6 +252,12 @@ function submit() {
                         </div>
                     </div>
                 </div>
+
+                <EmployeDossierFields
+                    v-model:form="form"
+                    :services="services"
+                    :mode-paiement-options="mode_paiement_options"
+                />
 
                 <div class="flex items-center justify-between">
                     <Link href="/backoffice/employes">

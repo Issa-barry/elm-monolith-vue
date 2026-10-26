@@ -339,8 +339,7 @@ class ParrainDroitsRetroactifsTest extends TestCase
         $this->assertPartsEquipe([
             "livreur:{$this->chauffeur->id}" => 6000.0,
             "livreur:{$this->convoyeur->id}" => 4000.0,
-            "parrain:{$parrain->id}" => 0.0,
-        ], $avant);
+        ], $avant, 'Part du parrain à 0 GNF : aucune part créée.');
 
         Carbon::setTestNow('2026-10-05 09:00:00');
         $apres = $this->vendre(10);

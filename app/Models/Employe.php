@@ -26,18 +26,32 @@ class Employe extends Model
         'type_employe',
         'site_id',
         'fonction_rh_id',
+        'service_rh_id',
         'statut',
+        'date_embauche',
+        'date_sortie',
+        'motif_sortie',
+        'numero_cnss',
+        'contact_urgence_nom',
+        'contact_urgence_lien',
+        'contact_urgence_telephone',
     ];
 
     // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
     // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
     protected $appends = ['nom_complet', 'nom', 'prenom', 'email', 'telephone'];
 
+    // Donnée sensible : jamais dans une sérialisation brute, exposée explicitement par
+    // EmployeController seulement avec `rh-employes.donnees_sensibles`.
+    protected $hidden = ['numero_cnss'];
+
     protected function casts(): array
     {
         return [
             'type_employe' => TypeEmploye::class,
             'statut' => StatutEmploye::class,
+            'date_embauche' => 'date',
+            'date_sortie' => 'date',
         ];
     }
 
@@ -90,6 +104,17 @@ class Employe extends Model
     public function fonction(): BelongsTo
     {
         return $this->belongsTo(FonctionRh::class, 'fonction_rh_id');
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(ServiceRh::class, 'service_rh_id');
+    }
+
+    /** Donnée sensible : à n'exposer qu'avec `rh-employes.donnees_sensibles`. */
+    public function coordonneesPaiement(): HasOne
+    {
+        return $this->hasOne(EmployeCoordonneesPaiement::class);
     }
 
     public function affectations(): HasMany

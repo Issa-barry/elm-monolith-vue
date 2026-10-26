@@ -169,6 +169,31 @@ class EmployeAffectationServiceTest extends TestCase
         $this->assertTrue($user->sites()->where('sites.id', $siteB->id)->exists(), 'accès au nouveau site accordé');
     }
 
+    public function test_apres_un_transfert_le_compte_n_a_qu_un_seul_site_par_defaut(): void
+    {
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'matricule' => 'EMP-DEF',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
+        ]);
+        $user = User::factory()->create(['organization_id' => $this->org->id, 'personne_id' => $personne->id]);
+        $siteA = $this->site();
+        $siteB = $this->site();
+        $autre = $this->site();
+        // Compte déjà rattaché à une autre agence, marquée par défaut.
+        $user->sites()->attach($autre->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->service->definir($employe, $siteA, null, $this->acteur);
+        $this->service->definir($employe, $siteB, null, $this->acteur);
+
+        $defauts = $user->fresh()->sites()->wherePivot('is_default', true)->pluck('sites.id');
+        $this->assertSame([$siteB->id], $defauts->all());
+        $this->assertTrue($user->fresh()->sites()->where('sites.id', $autre->id)->exists(), 'l\'autre agence reste accessible');
+    }
+
     public function test_sans_user_associe_le_transfert_ne_leve_aucune_erreur(): void
     {
         $employe = Employe::factory()->create(['organization_id' => $this->org->id, 'site_id' => null]);

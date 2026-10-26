@@ -11,9 +11,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * CRUD de fonctions RH en self-service, strictement isolé par organisation — mirroring du gating
- * des contrôleurs Role\* (aucune permission granulaire dédiée : écran de paramétrage organisationnel,
- * pas une ressource métier CRUD). Une fonction ne contient jamais de permission.
+ * CRUD de fonctions RH en self-service, strictement isolé par organisation. Accès : permission
+ * `rh-referentiels.gerer` (fonctions et services RH), qui remplace depuis le 27/10/2026 le contrôle
+ * codé en dur sur le rôle admin_entreprise. Une fonction ne contient jamais de permission.
  *
  * Aucune fonction système, aucune suggestion de profil d'accès (décision finale du 2026-08-21) :
  * chaque organisation construit son propre vocabulaire de zéro. Pas de destroy() : une fonction
@@ -26,7 +26,7 @@ class FonctionRhController extends Controller
 
     public function index(): Response
     {
-        abort_unless(auth()->user()->isAdmin(), 403);
+        abort_unless($this->canManage(), 403);
 
         $fonctions = FonctionRh::where('organization_id', auth()->user()->organization_id)
             ->withCount('employes')
@@ -146,8 +146,6 @@ class FonctionRhController extends Controller
 
     private function canManage(): bool
     {
-        $user = auth()->user();
-
-        return $user && ($user->isSuperAdmin() || $user->hasRole('admin_entreprise'));
+        return (bool) auth()->user()?->can('rh-referentiels.gerer');
     }
 }

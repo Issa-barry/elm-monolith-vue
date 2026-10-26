@@ -54,8 +54,12 @@ même principe de barème dynamique au transfert logistique interne.
     « Partages » de la liste des véhicules — même juge, `PartageConformiteVehiculesService`). Le
     contrôle (`ActivationEquipesBrouillonService`) est fait après chaque écriture de partage :
     enregistrement de l'équipe (« Gérer l'équipe »), changement de véhicule d'un livreur,
-    application directe d'un barème (équipes à un seul livreur alignées) et publication d'un
-    brouillon de barème ;
+    application directe d'un barème (équipes à un seul livreur alignées), publication d'un
+    brouillon de barème et, depuis le 25/10/2026, onglet **Parrain** (part du parrain, ajout,
+    remplacement ou retrait du parrain). Incident du 25/10 (véhicule Achour) : le dernier partage
+    fait depuis l'onglet Parrain laissait l'équipe inactive alors que tout était « Fait ». Les
+    équipes restées inactives malgré un partage conforme s'activent avec
+    `php artisan equipes:activer-brouillons-conformes` (aperçu), puis `--appliquer` ;
   - **`is_active` n'est jamais lu depuis la requête** (création comme modification d'équipe) : une
     création manuelle est active, un enregistrement conserve l'état existant, et seul ce contrôle
     de conformité active un brouillon — une requête forgée ne peut ni activer un brouillon sans

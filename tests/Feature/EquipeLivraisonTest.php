@@ -1324,6 +1324,37 @@ class EquipeLivraisonTest extends TestCase
         $this->assertTrue(EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail()->is_active);
     }
 
+    /**
+     * Rattrapage (25/10/2026) : une équipe brouillon devenue conforme sans passer par un chemin qui
+     * déclenche l'activation reste inactive — la commande l'active, avec son véhicule, seulement
+     * avec --appliquer, et laisse en brouillon celle dont le partage est encore à faire.
+     */
+    public function test_la_commande_de_rattrapage_active_seulement_les_brouillons_conformes(): void
+    {
+        $vehiculeConforme = $this->makeVehicule();
+        [$equipeConforme, $membres] = $this->equipeBrouillon($vehiculeConforme);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipeConforme->id,
+            'processus_id' => CommissionProcessus::where('organization_id', $this->org->id)->where('code', CommissionProcessus::CODE_VENTE)->value('id'),
+            'categorie_id' => $this->categorieDefaut()->id,
+            'livreur_id' => $membres[0]['livreur_id'],
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+        ]);
+        $vehiculeAFaire = $this->makeVehicule();
+        [$equipeAFaire] = $this->equipeBrouillon($vehiculeAFaire);
+
+        $this->artisan('equipes:activer-brouillons-conformes')->assertSuccessful();
+        $this->assertFalse($equipeConforme->fresh()->is_active, 'Aperçu : rien n\'est modifié.');
+
+        $this->artisan('equipes:activer-brouillons-conformes', ['--appliquer' => true])->assertSuccessful();
+        $this->assertTrue($equipeConforme->fresh()->is_active);
+        $this->assertTrue($vehiculeConforme->fresh()->is_active);
+        $this->assertFalse($equipeAFaire->fresh()->is_active, 'Partage encore à faire : reste un brouillon.');
+        $this->assertFalse($vehiculeAFaire->fresh()->is_active);
+    }
+
     public function test_une_equipe_active_nest_jamais_desactivee_par_un_enregistrement(): void
     {
         $vehicule = $this->makeVehicule();

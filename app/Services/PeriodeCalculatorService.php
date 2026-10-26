@@ -23,6 +23,7 @@ use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Services\Commission\FicheSiteResponsableService;
+use App\Support\Fiches\BeneficiaireFiche;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -751,7 +752,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PARRAIN, $parrainId, $parrain->nom_complet ?: $parrainId, $this->resolveSitePrincipal($montantParSite), $lignes)) {
+            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PARRAIN, $parrainId, BeneficiaireFiche::nomParrain($parrain), $this->resolveSitePrincipal($montantParSite), $lignes)) {
                 $count++;
             }
         }

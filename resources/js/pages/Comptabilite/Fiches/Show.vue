@@ -5,6 +5,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { FicheAPayer } from '@/types/commission';
 import type { StatutCommissionResolu } from '@/types/commission-status';
@@ -46,6 +47,8 @@ interface Fiche extends StatutCommissionResolu {
     reference: string;
     beneficiaire_type: string;
     beneficiaire_nom: string;
+    /** Téléphone actuel du livreur, propriétaire ou parrain (null sinon). */
+    beneficiaire_telephone: string | null;
     site: { id: string; nom: string } | null;
     periode: {
         id: string;
@@ -158,6 +161,13 @@ function exportPdf() {
                     </div>
                     <p class="mt-1 text-sm font-medium">
                         {{ fiche.beneficiaire_nom }}
+                        <span
+                            v-if="fiche.beneficiaire_telephone"
+                            class="ml-2 font-normal text-muted-foreground tabular-nums"
+                            >{{
+                                formatPhoneDisplay(fiche.beneficiaire_telephone)
+                            }}</span
+                        >
                     </p>
                     <div
                         class="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground"

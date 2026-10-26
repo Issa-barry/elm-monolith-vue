@@ -95,11 +95,30 @@ et [commissions.md](commissions.md).
   La somme livreurs + parrain doit égaler exactement le barème Livreur (même juge,
   `CommissionPartageLivraisonValidator`) : l'enveloppe reste quantité × barème. Exemple
   (fictif) : barème 1 000 GNF/pack, chauffeur 500, convoyeur 300, parrain 200.
-- **PARRAIN-008 — Opérations rémunérées.** Toute commission livreur du véhicule, **sauf le transfert
-  logistique entre sites** : vente classique (`vente`), vente Grossiste livrée
-  (`transfert_grossiste`), distribution client (`distribution_client`) —
-  `CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN`. Une ligne parrain sur le partage
-  Logistique est refusée.
+- **PARRAIN-008 — Opérations rémunérées** (révisé le 25/10/2026, PARRAIN-025). Toute commission
+  livreur du véhicule : vente classique (`vente`), transfert logistique entre sites
+  (`logistique_transfert`), vente Grossiste livrée (`transfert_grossiste`), distribution client
+  (`distribution_client`) — `CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN`. La part
+  reste celle configurée (0 GNF par défaut).
+- **PARRAIN-025 — Transferts entre sites** (décision du 25/10/2026, remplace l'exclusion de
+  PARRAIN-008 et la décision du 20/10/2026) :
+  - un transfert ne porte qu'un véhicule et son équipe : le parrain rémunéré est celui de ce
+    véhicule, sa part prise sur l'enveloppe Livreur du transfert (total inchangé), selon le partage
+    Logistique de l'équipe — mêmes règles que les autres processus (somme exacte, part nulle à
+    confirmer, « À faire » avec plusieurs livreurs, refus d'un partage non conforme) ;
+  - **nouveau parrain** : ligne à 0 GNF « à répartir » sur les transferts comme ailleurs
+    (PARRAIN-012, PARRAIN-022) ;
+  - **véhicules déjà parrainés** (reprise `2026_10_25_220000_backfill_parrain_partages_logistique`) :
+    nouvelle version du partage Logistique à la date d'exécution de la reprise (activation effective
+    de la règle), livreurs inchangés, part du parrain à **0 GNF confirmée** — aucun transfert bloqué ;
+    autres processus, versions passées et commissions intactes ; rejouable ;
+  - **jamais rétroactif** : les transferts déjà réalisés ne sont pas recalculés ; une date de début
+    des droits passée (PARRAIN-023) s'applique aux transferts à partir du jour même, et une date en
+    attente de la répartition de l'équipe ne les concerne pas ;
+  - la distribution garde son partage propre (PARRAIN-009).
+  - **part à 0 GNF = aucune part de commission** (tous processus) : le générateur ne crée pas de
+    part de parrain à 0, donc ni ligne de fiche à 0, ni réouverture de la période Parrains et de
+    ses écritures à chaque opération (`CommissionEnveloppeGenerator`).
 - **PARRAIN-009 — Distribution : partage propre, barème Logistique.** La distribution garde le
   barème Logistique (COMM-005), mais un véhicule parrainé à usage Logistique a son propre partage
   Distribution (avec le parrain), le partage Logistique restant sans parrain. La génération lit le
@@ -194,6 +213,12 @@ Distribution.
   créée si elle n'existe pas encore (`CommissionEnveloppeGenerator::ouvrirPeriodesParrain()`,
   correctif du 25/10/2026 — avant, elle n'apparaissait qu'après l'ouverture d'un écran de période
   ou de la prévision de trésorerie).
+  Rattrapage des commissions générées avant ce correctif : `php artisan commissions:parrains-rattrapage`
+  (simulation, aucune écriture), puis `--appliquer` (option `--organisation=<id>`) —
+  `RattrapageFichesParrainService` retrouve les parts de parrain non annulées, non payées et absentes
+  de toute fiche, ouvre leur période si elle manque et la recalcule par le circuit normal (mode
+  strict, une transaction par période) ; ni vente ni commission régénérée, fiches payées intactes,
+  période clôturée ignorée et signalée, idempotent.
 - **PARRAIN-018 — Validation automatique.** Sa part étant validée d'office, la période « Parrain »
   se valide d'elle-même (`PeriodeValidationService::TYPES_AUTOMATIQUES`) ; paiement par le
   mécanisme commun des fiches (décaissement depuis un support, ADR 0009 ; fiche figée et fiche
@@ -232,8 +257,8 @@ Distribution.
     `parrain_a_repartir` — création (web et API), modification, précommande et changement de mode de
     remise, aperçu du formulaire, chargement (commandes créées avant l'activation comprises). Refus
     avant toute écriture : ni commande, ni ligne, ni mouvement de stock, ni écriture comptable.
-  - Jamais concernés : transfert logistique entre sites (le parrain n'y est pas rémunéré), véhicules
-    non parrainés, encaissements.
+  - Jamais concernés : véhicules non parrainés, encaissements. Les transferts entre sites le sont
+    depuis PARRAIN-025.
 - **PARRAIN-023 — Date de début des droits** (décisions du 24/10/2026, remplace « jamais
   rétroactif » de PARRAIN-012). La grille de la part du parrain porte une « Date de début des
   droits » (aujourd'hui par défaut) :
@@ -243,7 +268,7 @@ Distribution.
     depuis cette date est **recalculée automatiquement** (`RecalculRetroactifParrainService`,
     `CommissionEnveloppeGenerator::regenererEnveloppeEquipe()`) : part du parrain prise sur
     l'enveloppe, parts des livreurs réduites d'autant, total inchangé ; propriétaire, site,
-    consultant et transferts entre sites jamais touchés ;
+    consultant jamais touchés, transferts entre sites jamais recalculés (PARRAIN-025) ;
   - **option B** : seules les commissions **non payées** sont recalculées — validées par une
     personne et **ajustées à la main comprises** (l'ajustement est remplacé) ; une période validée
     est rouverte (écritures contrepassées, fiches recalculées, revalidation) par le mécanisme commun
@@ -332,8 +357,7 @@ Distribution.
     recalculée d'office. Ce calcul ne vaut jamais confirmation d'une part nulle (PARRAIN-022) ;
   - onglet Équipe : ligne « Parrain du véhicule » (hors équipe, sans action de livreur) sous les
     livreurs, et « Total réparti » face au barème par catégorie ; ordre des processus identique
-    partout (Ventes, Transferts logistiques, Transferts grossistes, Distribution client), les
-    transferts entre sites signalés « jamais rémunéré » dans l'onglet Parrain ;
+    partout (Ventes, Transferts logistiques, Transferts grossistes, Distribution client) ;
   - onglet Équipe : rappel « part à définir » avec lien vers l'onglet Parrain, état « À répartir »
     dans le tableau des commissions, et date à partir de laquelle les ventes sont refusées ;
   - liste des véhicules : ligne « Parrain » (À définir / Définie) dans la colonne Partages et

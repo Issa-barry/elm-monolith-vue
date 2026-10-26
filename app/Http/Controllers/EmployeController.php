@@ -7,12 +7,16 @@ use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Enums\TypeEmploye;
 use App\Models\Employe;
+use App\Models\EmployeCoordonneesPaiement;
 use App\Models\FonctionRh;
 use App\Models\Personne;
+use App\Models\ServiceRh;
 use App\Models\Site;
+use App\Models\User;
 use App\Services\MatriculeService;
 use App\Services\PhoneCountryInfo;
 use App\Services\Rh\EmployeAffectationService;
+use App\Services\SiteScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -94,15 +98,52 @@ class EmployeController extends Controller
             ->all();
     }
 
+    private function serviceOptions(string $orgId, ?string $serviceActuelId = null): array
+    {
+        // Services actifs, plus le service actuel de l'employé même s'il a été désactivé depuis.
+        return ServiceRh::where('organization_id', $orgId)
+            ->where(fn ($q) => $q->where('is_active', true)->when($serviceActuelId, fn ($q2) => $q2->orWhere('id', $serviceActuelId)))
+            ->orderBy('libelle')
+            ->get(['id', 'libelle'])
+            ->map(fn (ServiceRh $s) => ['value' => $s->id, 'label' => $s->libelle])
+            ->values()
+            ->all();
+    }
+
+    /** Agences proposées par le filtre Agence : toutes, ou celles de l'utilisateur. */
+    private function siteFiltreOptions(User $user, string $orgId): array
+    {
+        $sites = $user->voitToutesLesAgences()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
+        return $sites->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values()->all();
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Employe::class);
 
-        $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['statut', 'type_employe', 'type_contrat', 'search']);
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $filters = $request->only(['statut', 'type_employe', 'type_contrat', 'service_rh_id', 'search']);
+        $filtreSiteIds = $user->voitToutesLesAgences()
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : [];
 
-        $query = Employe::with(['personne', 'site:id,nom,code', 'fonction:id,libelle', 'contratActif'])
+        $query = Employe::with(['personne', 'site:id,nom,code', 'fonction:id,libelle', 'service:id,libelle', 'contratActif'])
             ->where('organization_id', $orgId);
+
+        // Périmètre de consultation : ses agences, sauf vision de toutes les agences (ADR 0025).
+        app(SiteScopeService::class)->applyToQuery($query, $user);
+
+        if ($filtreSiteIds !== []) {
+            $query->whereIn('site_id', $filtreSiteIds);
+        }
+
+        if (! empty($filters['service_rh_id'])) {
+            $query->where('service_rh_id', $filters['service_rh_id']);
+        }
 
         if (! empty($filters['statut'])) {
             $query->where('statut', $filters['statut']);
@@ -139,10 +180,12 @@ class EmployeController extends Controller
 
         return Inertia::render('Employes/Index', [
             'employes' => $employes,
-            'filters' => $filters,
+            'filters' => [...$filters, 'site_ids' => $filtreSiteIds],
+            'sites' => $this->siteFiltreOptions($user, $orgId),
             'statut_options' => StatutEmploye::options(),
             'type_employe_options' => TypeEmploye::options(),
             'type_contrat_options' => TypeContrat::options(),
+            'service_options' => $this->serviceOptions($orgId),
         ]);
     }
 
@@ -157,6 +200,8 @@ class EmployeController extends Controller
             'statut_options' => StatutEmploye::options(),
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
+            'services' => $this->serviceOptions($orgId),
+            'mode_paiement_options' => $this->modePaiementOptions(),
         ]);
     }
 
@@ -227,16 +272,7 @@ class EmployeController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403);
 
-        $data = $request->validate([
-            'nom' => 'required|string|max:100',
-            'prenom' => 'required|string|max:100',
-            'email' => ['nullable', 'email', 'max:255'],
-            'telephone' => 'nullable|string|max:50',
-            'type_employe' => ['required', Rule::in(TypeEmploye::values())],
-            'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
-            'statut' => ['required', Rule::in(StatutEmploye::values())],
-        ], $this->messages());
+        $data = $request->validate($this->regles($orgId), $this->messages());
 
         $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId);
 
@@ -246,6 +282,7 @@ class EmployeController extends Controller
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
             'email' => $data['email'] ?? null,
+            ...$this->identiteCivile($data),
         ];
 
         $employe = DB::transaction(function () use ($orgId, $data, $identite, $telephoneInfo) {
@@ -269,7 +306,10 @@ class EmployeController extends Controller
                 'matricule' => app(MatriculeService::class)->generate($orgId, Employe::class),
                 'type_employe' => $data['type_employe'],
                 'statut' => $data['statut'],
+                ...$this->dossierEmploye($data),
             ]);
+
+            $this->enregistrerDonneesSensibles($employe, $data);
 
             // Le site/la fonction passent TOUJOURS par EmployeAffectationService — jamais une
             // écriture directe de employes.site_id ici, sans quoi le cache et l'historique
@@ -344,6 +384,8 @@ class EmployeController extends Controller
             'statut_options' => StatutEmploye::options(),
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
+            'services' => $this->serviceOptions($orgId, $employe->service_rh_id),
+            'mode_paiement_options' => $this->modePaiementOptions(),
         ]);
     }
 
@@ -351,9 +393,60 @@ class EmployeController extends Controller
     {
         $this->authorize('update', $employe);
 
-        $orgId = auth()->user()->organization_id;
+        // Organisation de l'employé, pas celle de l'acteur : le Gate::before du super
+        // administrateur laisse passer la Policy.
+        $orgId = $employe->organization_id;
 
-        $data = $request->validate([
+        $data = $request->validate($this->regles($orgId), $this->messages());
+
+        $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId, $employe->id);
+
+        $telephoneInfo = filled($data['telephone'] ?? null) ? $this->resolveTelephone($data['telephone']) : null;
+        if ($telephoneInfo !== null) {
+            $this->assertTelephoneUniqueInOrg($telephoneInfo['telephone'], $orgId, $employe->personne_id);
+        } else {
+            $this->assertTelephonePeutEtreEfface($employe->personne);
+        }
+
+        DB::transaction(function () use ($employe, $data, $telephoneInfo) {
+            $employe->personne->update([
+                'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
+                'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
+                'email' => $data['email'] ?? null,
+                'telephone' => $telephoneInfo['telephone'] ?? null,
+                'telephone_normalise' => $telephoneInfo !== null ? Personne::normaliserTelephone($telephoneInfo['telephone']) : null,
+                'code_pays' => $telephoneInfo['code_pays'] ?? null,
+                'pays' => $telephoneInfo['pays'] ?? null,
+                'code_phone_pays' => $telephoneInfo['code_phone_pays'] ?? null,
+                ...$this->identiteCivile($data),
+            ]);
+
+            $employe->update([
+                'type_employe' => $data['type_employe'],
+                'statut' => $data['statut'],
+                ...$this->dossierEmploye($data),
+            ]);
+
+            $this->enregistrerDonneesSensibles($employe, $data);
+
+            // cf. store() : jamais d'écriture directe de employes.site_id/fonction_rh_id, toujours
+            // via EmployeAffectationService (cache + historique synchronisés en un seul appel).
+            $site = isset($data['site_id']) ? Site::find($data['site_id']) : null;
+            $fonction = isset($data['fonction_rh_id']) ? FonctionRh::find($data['fonction_rh_id']) : null;
+            app(EmployeAffectationService::class)->definir($employe, $site, $fonction, auth()->user());
+        });
+
+        return redirect()->route('employes.edit', $employe)
+            ->with('success', "{$employe->nom_complet} a été mis à jour.");
+    }
+
+    /**
+     * Règles communes à la création et à la modification. Les champs du dossier sont tous
+     * facultatifs : les dossiers existants restent valides sans saisie complémentaire.
+     */
+    private function regles(string $orgId): array
+    {
+        return [
             'nom' => 'required|string|max:100',
             'prenom' => 'required|string|max:100',
             'email' => ['nullable', 'email', 'max:255'],
@@ -361,40 +454,115 @@ class EmployeController extends Controller
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
             'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
+            'service_rh_id' => ['nullable', Rule::exists('services_rh', 'id')->where('organization_id', $orgId)],
             'statut' => ['required', Rule::in(StatutEmploye::values())],
-        ], $this->messages());
+            // Identité civile (portée par Personne)
+            'date_naissance' => ['nullable', 'date', 'before:today'],
+            'lieu_naissance' => ['nullable', 'string', 'max:100'],
+            'sexe' => ['nullable', Rule::in(['M', 'F'])],
+            'nationalite' => ['nullable', 'string', 'max:60'],
+            // Dossier
+            'date_embauche' => ['nullable', 'date'],
+            'date_sortie' => ['nullable', 'date', 'after_or_equal:date_embauche'],
+            'motif_sortie' => ['nullable', 'string', 'max:255'],
+            'contact_urgence_nom' => ['nullable', 'string', 'max:150'],
+            'contact_urgence_lien' => ['nullable', 'string', 'max:50'],
+            'contact_urgence_telephone' => ['nullable', 'string', 'max:30'],
+            // Données sensibles : ignorées sans `rh-employes.donnees_sensibles` (cf. enregistrerDonneesSensibles())
+            'numero_cnss' => ['nullable', 'string', 'max:30'],
+            'paiement_mode' => ['nullable', Rule::in(array_keys(EmployeCoordonneesPaiement::MODES))],
+            'paiement_etablissement' => ['nullable', 'string', 'max:100'],
+            'paiement_numero_compte' => ['nullable', 'string', 'max:60'],
+            'paiement_titulaire' => ['nullable', 'string', 'max:150'],
+        ];
+    }
 
-        $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId, $employe->id);
+    /** @return array<string, mixed> */
+    private function identiteCivile(array $data): array
+    {
+        return [
+            'date_naissance' => $data['date_naissance'] ?? null,
+            'lieu_naissance' => $data['lieu_naissance'] ?? null,
+            'sexe' => $data['sexe'] ?? null,
+            'nationalite' => $data['nationalite'] ?? null,
+        ];
+    }
 
-        $telephoneInfo = filled($data['telephone'] ?? null) ? $this->resolveTelephone($data['telephone']) : null;
-        if ($telephoneInfo !== null) {
-            $this->assertTelephoneUniqueInOrg($telephoneInfo['telephone'], $orgId, $employe->personne_id);
+    /** @return array<string, mixed> */
+    private function dossierEmploye(array $data): array
+    {
+        return [
+            'service_rh_id' => $data['service_rh_id'] ?? null,
+            'date_embauche' => $data['date_embauche'] ?? null,
+            'date_sortie' => $data['date_sortie'] ?? null,
+            'motif_sortie' => $data['motif_sortie'] ?? null,
+            'contact_urgence_nom' => $data['contact_urgence_nom'] ?? null,
+            'contact_urgence_lien' => $data['contact_urgence_lien'] ?? null,
+            'contact_urgence_telephone' => $data['contact_urgence_telephone'] ?? null,
+        ];
+    }
+
+    /**
+     * N° CNSS et coordonnées de paiement : seulement avec `rh-employes.donnees_sensibles`. Sans cette
+     * permission, les valeurs envoyées sont ignorées et les données existantes restent intactes.
+     * Mode de paiement vide = coordonnées supprimées.
+     */
+    private function enregistrerDonneesSensibles(Employe $employe, array $data): void
+    {
+        if (! auth()->user()->can('rh-employes.donnees_sensibles')) {
+            return;
         }
 
-        $employe->personne->update([
-            'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
-            'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
-            'email' => $data['email'] ?? null,
-            'telephone' => $telephoneInfo['telephone'] ?? null,
-            'telephone_normalise' => $telephoneInfo !== null ? Personne::normaliserTelephone($telephoneInfo['telephone']) : null,
-            'code_pays' => $telephoneInfo['code_pays'] ?? null,
-            'pays' => $telephoneInfo['pays'] ?? null,
-            'code_phone_pays' => $telephoneInfo['code_phone_pays'] ?? null,
-        ]);
+        $employe->update(['numero_cnss' => $data['numero_cnss'] ?? null]);
 
-        $employe->update([
-            'type_employe' => $data['type_employe'],
-            'statut' => $data['statut'],
-        ]);
+        if (blank($data['paiement_mode'] ?? null)) {
+            $employe->coordonneesPaiement()->delete();
 
-        // cf. store() : jamais d'écriture directe de employes.site_id/fonction_rh_id, toujours
-        // via EmployeAffectationService (cache + historique synchronisés en un seul appel).
-        $site = isset($data['site_id']) ? Site::find($data['site_id']) : null;
-        $fonction = isset($data['fonction_rh_id']) ? FonctionRh::find($data['fonction_rh_id']) : null;
-        app(EmployeAffectationService::class)->definir($employe, $site, $fonction, auth()->user());
+            return;
+        }
 
-        return redirect()->route('employes.edit', $employe)
-            ->with('success', "{$employe->nom_complet} a été mis à jour.");
+        $employe->coordonneesPaiement()->updateOrCreate(
+            ['employe_id' => $employe->id],
+            [
+                'organization_id' => $employe->organization_id,
+                'mode' => $data['paiement_mode'],
+                'etablissement' => $data['paiement_etablissement'] ?? null,
+                'numero_compte' => $data['paiement_numero_compte'] ?? null,
+                'titulaire' => $data['paiement_titulaire'] ?? null,
+            ],
+        );
+    }
+
+    /**
+     * Effacer le téléphone depuis la fiche employé est refusé quand la personne a aussi un autre rôle
+     * (compte, client, livreur…) : ce numéro sert à la reconnaître partout dans l'application.
+     */
+    private function assertTelephonePeutEtreEfface(Personne $personne): void
+    {
+        if (blank($personne->telephone)) {
+            return;
+        }
+
+        $autresRoles = collect([
+            'user' => 'compte utilisateur', 'client' => 'client', 'livreur' => 'livreur',
+            'proprietaire' => 'propriétaire', 'fournisseur' => 'fournisseur',
+            'prestataire' => 'prestataire', 'parrain' => 'parrain',
+        ])->filter(fn (string $libelle, string $relation) => $personne->{$relation}()->exists());
+
+        if ($autresRoles->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'telephone' => 'Ce numéro identifie aussi cette personne comme '.$autresRoles->implode(', ')
+                    .' : il ne peut pas être effacé depuis la fiche employé (vous pouvez le remplacer).',
+            ]);
+        }
+    }
+
+    private function modePaiementOptions(): array
+    {
+        return collect(EmployeCoordonneesPaiement::MODES)
+            ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+            ->values()
+            ->all();
     }
 
     /**
@@ -451,6 +619,9 @@ class EmployeController extends Controller
             'site' => $e->site ? "{$e->site->nom} ({$e->site->code})" : null,
             'fonction_rh_id' => $e->fonction_rh_id,
             'fonction_libelle' => $e->fonction?->libelle,
+            'service_rh_id' => $e->service_rh_id,
+            'service_libelle' => $e->service?->libelle,
+            'date_embauche' => $e->date_embauche?->format('d/m/Y'),
             'contrat_actif' => $contrat ? [
                 'id' => $contrat->id,
                 'type_contrat' => $contrat->type_contrat->value,
@@ -464,12 +635,30 @@ class EmployeController extends Controller
     private function toDetail(Employe $employe): array
     {
         $employe->load([
-            'personne', 'site:id,nom,code', 'fonction:id,libelle', 'contratActif',
+            'personne', 'site:id,nom,code', 'fonction:id,libelle', 'service:id,libelle', 'contratActif',
             'contrats' => fn ($q) => $q->orderByDesc('date_debut'),
             'affectations.site:id,nom,code', 'affectations.fonction:id,libelle',
         ]);
 
+        $user = auth()->user();
+        $voitSalaires = $user->can('rh-remunerations.read');
+        $personne = $employe->personne;
+
         return array_merge($this->toRow($employe), [
+            // Identité civile
+            'date_naissance' => $personne?->date_naissance?->format('Y-m-d'),
+            'lieu_naissance' => $personne?->lieu_naissance,
+            'sexe' => $personne?->sexe,
+            'nationalite' => $personne?->nationalite,
+            // Dossier (date au format du champ de saisie ; l'affichage la reformate)
+            'date_embauche_iso' => $employe->date_embauche?->format('Y-m-d'),
+            'date_sortie' => $employe->date_sortie?->format('Y-m-d'),
+            'motif_sortie' => $employe->motif_sortie,
+            'contact_urgence_nom' => $employe->contact_urgence_nom,
+            'contact_urgence_lien' => $employe->contact_urgence_lien,
+            'contact_urgence_telephone' => $employe->contact_urgence_telephone,
+            // Absent (null) sans la permission : jamais envoyé au navigateur.
+            'donnees_sensibles' => $user->can('rh-employes.donnees_sensibles') ? $this->donneesSensibles($employe) : null,
             'contrats' => $employe->contrats->map(fn ($c) => [
                 'id' => $c->id,
                 'type_contrat' => $c->type_contrat->value,
@@ -478,7 +667,8 @@ class EmployeController extends Controller
                 'statut_contrat_label' => $c->statut_contrat->label(),
                 'date_debut' => $c->date_debut?->format('d/m/Y'),
                 'date_fin' => $c->date_fin?->format('d/m/Y'),
-                'salaire_base' => $c->salaire_base,
+                // Salaire : seulement avec `rh-remunerations.read`.
+                'salaire_base' => $voitSalaires ? $c->salaire_base : null,
             ])->values(),
             // Historique d'affectation (site + fonction) — le plus récent en premier, cf.
             // Employe::affectations() (orderByDesc('debut_at')).
@@ -494,6 +684,21 @@ class EmployeController extends Controller
         ]);
     }
 
+    /** @return array{numero_cnss: ?string, paiement_mode: ?string, paiement_mode_label: ?string, paiement_etablissement: ?string, paiement_numero_compte: ?string, paiement_titulaire: ?string} */
+    private function donneesSensibles(Employe $employe): array
+    {
+        $coordonnees = $employe->coordonneesPaiement;
+
+        return [
+            'numero_cnss' => $employe->numero_cnss,
+            'paiement_mode' => $coordonnees?->mode,
+            'paiement_mode_label' => $coordonnees ? (EmployeCoordonneesPaiement::MODES[$coordonnees->mode] ?? $coordonnees->mode) : null,
+            'paiement_etablissement' => $coordonnees?->etablissement,
+            'paiement_numero_compte' => $coordonnees?->numero_compte,
+            'paiement_titulaire' => $coordonnees?->titulaire,
+        ];
+    }
+
     private function messages(): array
     {
         return [
@@ -505,6 +710,11 @@ class EmployeController extends Controller
             'statut.required' => 'Le statut est obligatoire.',
             'statut.in' => 'Statut invalide.',
             'site_id.exists' => 'Site invalide.',
+            'service_rh_id.exists' => 'Service invalide.',
+            'date_naissance.before' => 'La date de naissance doit être antérieure à aujourd\'hui.',
+            'date_sortie.after_or_equal' => 'La date de sortie ne peut pas précéder la date d\'embauche.',
+            'sexe.in' => 'Sexe invalide.',
+            'paiement_mode.in' => 'Mode de paiement invalide.',
         ];
     }
 }

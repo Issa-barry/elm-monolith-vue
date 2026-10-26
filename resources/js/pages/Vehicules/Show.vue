@@ -427,36 +427,16 @@ const totauxRepartition = computed(() =>
 );
 
 /**
- * Onglet Parrain : ses parts dans l'ordre métier, avec les transferts entre sites signalés comme
- * jamais rémunérés quand le véhicule fait de la logistique.
+ * Onglet Parrain : ses parts dans l'ordre métier — tous les processus qui le rémunèrent, transferts
+ * entre sites compris depuis PARRAIN-025.
  */
-const lignesPartParrain = computed(() => {
-    const lignes = props.parrain_remuneration.map((r) => ({
-        ...r,
-        exclu: false,
-    }));
-    if (
-        props.processus_options.some((o) => o.value === 'logistique_transfert')
-    ) {
-        lignes.push({
-            processus_code: 'logistique_transfert',
-            processus_label:
-                props.processus_options.find(
-                    (o) => o.value === 'logistique_transfert',
-                )?.label ?? 'Transferts logistiques',
-            categorie_nom: '—',
-            montant: 0,
-            a_repartir: false,
-            depuis: null,
-            exclu: true,
-        });
-    }
-    return lignes.sort(
+const lignesPartParrain = computed(() =>
+    [...props.parrain_remuneration].sort(
         (a, b) =>
             ORDRE_PROCESSUS.indexOf(a.processus_code) -
             ORDRE_PROCESSUS.indexOf(b.processus_code),
-    );
-});
+    ),
+);
 
 function partsCommissionMembre(livreurId: string | null) {
     if (!livreurId || !props.equipe) return [];
@@ -486,13 +466,7 @@ const showParrainDialog = ref(false);
 const editionPartParrain = ref(false);
 /** AAAA-MM-JJ → JJ/MM/AAAA. */
 const enFr = (iso: string) => iso.split('-').reverse().join('/');
-const libelleTransfertsExclus = computed(() =>
-    props.processus_options.some((o) => o.value === 'logistique_transfert')
-        ? (props.processus_options.find(
-              (o) => o.value === 'logistique_transfert',
-          )?.label ?? 'Transferts logistiques')
-        : null,
-);
+
 
 // Partages à refaire dans l'onglet Équipe après la saisie de la part du parrain : avertissement
 // orange (opération autorisée, attention requise).
@@ -1326,8 +1300,8 @@ function formatGNF(val: number): string {
                                                         v-if="!parrain_partage"
                                                         class="text-xs text-muted-foreground"
                                                     >
-                                                        Non rémunéré sur les
-                                                        transferts entre sites
+                                                        Non rémunéré sur ce
+                                                        processus
                                                     </span>
                                                     <div
                                                         v-else-if="
@@ -1736,8 +1710,7 @@ function formatGNF(val: number): string {
                                             class="text-xs text-muted-foreground"
                                         >
                                             Prise sur l'enveloppe des livreurs,
-                                            par pack — jamais sur les transferts
-                                            entre sites.
+                                            par pack, sur chaque processus.
                                         </p>
                                     </div>
                                     <Button
@@ -1760,7 +1733,6 @@ function formatGNF(val: number): string {
                                 <PartParrainEdition
                                     v-if="editionPartParrain"
                                     :vehicule-id="vehicule.id"
-                                    :transferts-label="libelleTransfertsExclus"
                                     @fermer="editionPartParrain = false"
                                 />
                                 <p
@@ -1802,15 +1774,7 @@ function formatGNF(val: number): string {
                                         <tr
                                             v-for="r in lignesPartParrain"
                                             :key="`${r.processus_code}|${r.categorie_nom}`"
-                                            :class="{
-                                                'text-muted-foreground':
-                                                    r.exclu,
-                                            }"
-                                            :data-testid="
-                                                r.exclu
-                                                    ? 'parrain-ligne-transfert-exclu'
-                                                    : undefined
-                                            "
+                                            :data-testid="`parrain-ligne-${r.processus_code}`"
                                         >
                                             <td class="px-4 py-2.5">
                                                 {{ r.processus_label }}
@@ -1847,14 +1811,6 @@ function formatGNF(val: number): string {
                                                 <template v-else>—</template>
                                             </td>
                                             <td
-                                                v-if="r.exclu"
-                                                class="px-4 py-2.5 text-right text-xs"
-                                            >
-                                                Jamais rémunéré (transferts
-                                                entre sites)
-                                            </td>
-                                            <td
-                                                v-else
                                                 class="px-4 py-2.5 text-right font-mono tabular-nums"
                                             >
                                                 <span

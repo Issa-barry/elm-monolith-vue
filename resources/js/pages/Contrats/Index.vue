@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -42,12 +43,15 @@ interface Option {
 type Filters = {
     statut_contrat?: string;
     type_contrat?: string;
+    site_ids?: string[];
     search?: string;
 };
 
 const props = defineProps<{
     contrats: Contrat[];
     filters: Filters;
+    // Agences du filtre (agence de l'employé) ; périmètre appliqué par le serveur.
+    sites: { id: string; nom: string }[];
     type_contrat_options: Option[];
     statut_contrat_options: Option[];
 }>();
@@ -84,11 +88,6 @@ const filteredContrats = computed(() => props.contrats);
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdi: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-};
-const STATUT_CLASS: Record<string, string> = {
-    actif: 'bg-emerald-100 text-emerald-700',
-    termine: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    rompu: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 function confirmDelete(c: Contrat) {
@@ -143,6 +142,7 @@ function confirmDelete(c: Contrat) {
                 url="/backoffice/contrats"
                 :values="filters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="filteredContrats.length"
             />
 
@@ -194,12 +194,10 @@ function confirmDelete(c: Contrat) {
 
                     <Column header="Statut" style="width: 110px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="STATUT_CLASS[data.statut_contrat]"
-                            >
-                                {{ data.statut_contrat_label }}
-                            </span>
+                            <StatusDot
+                                :status="data.statut_contrat"
+                                :label="data.statut_contrat_label"
+                            />
                         </template>
                     </Column>
 

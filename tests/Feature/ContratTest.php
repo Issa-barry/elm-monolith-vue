@@ -356,6 +356,69 @@ class ContratTest extends TestCase
         $this->assertSame('2025-02-01', $fresh->date_debut->format('Y-m-d'));
     }
 
+    // ── Salaire : réservé à rh-remunerations.read (27/10/2026) ───────────────
+
+    public function test_sans_rh_remunerations_read_le_salaire_n_est_ni_saisi_ni_affiche(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 3_000_000,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $contrat = Contrat::where('employe_id', $employe->id)->firstOrFail();
+        $this->assertNull($contrat->salaire_base);
+    }
+
+    public function test_sans_rh_remunerations_read_une_modification_garde_le_salaire_existant(): void
+    {
+        $employe = $this->makeEmploye();
+        $contrat = $this->makeContrat($employe, ['salaire_base' => 2_000_000]);
+
+        $this->actingAs($this->user)
+            ->get(route('contrats.edit', $contrat))
+            ->assertInertia(fn ($page) => $page->where('contrat.salaire_base', null));
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contrat), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertEquals(2_000_000, (float) $contrat->fresh()->salaire_base);
+    }
+
+    public function test_avec_rh_remunerations_read_le_salaire_est_saisi_et_affiche(): void
+    {
+        Permission::firstOrCreate(['name' => 'rh-remunerations.read', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('rh-remunerations.read');
+        $employe = $this->makeEmploye();
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 3_000_000,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $contrat = Contrat::where('employe_id', $employe->id)->firstOrFail();
+        $this->assertEquals(3_000_000, (float) $contrat->salaire_base);
+
+        $this->actingAs($this->user)
+            ->get(route('contrats.edit', $contrat))
+            ->assertInertia(fn ($page) => $page->where('contrat.salaire_base', fn ($v) => (float) $v === 3_000_000.0));
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_modifies_contrat(): void

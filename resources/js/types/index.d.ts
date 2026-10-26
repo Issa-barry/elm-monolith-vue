@@ -67,7 +67,10 @@ export type StandalonePermission =
     | 'factures-fournisseurs.valider'
     | 'factures-fournisseurs.annuler'
     | 'factures-fournisseurs.payer'
-    | 'sites.lecture_toutes_agences';
+    | 'sites.lecture_toutes_agences'
+    | 'rh-employes.donnees_sensibles'
+    | 'rh-remunerations.read'
+    | 'rh-referentiels.gerer';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

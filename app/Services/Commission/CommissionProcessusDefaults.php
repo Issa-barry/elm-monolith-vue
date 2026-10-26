@@ -134,12 +134,14 @@ class CommissionProcessusDefaults
     }
 
     /**
-     * Processus dont l'enveloppe Livreur est aussi partagée avec le parrain du véhicule (décision
-     * du 20/10/2026, cf. docs/parrainage-vehicule.md) : toute commission livreur, sauf le transfert
-     * logistique entre sites.
+     * Processus dont l'enveloppe Livreur est aussi partagée avec le parrain du véhicule (cf.
+     * docs/parrainage-vehicule.md) : toute commission livreur — ventes, transferts grossistes,
+     * distributions et, depuis le 25/10/2026 (PARRAIN-025), transferts logistiques entre sites
+     * (le parrain du véhicule du transfert). La part reste celle configurée : 0 GNF par défaut.
      */
     public const PROCESSUS_REMUNERANT_LE_PARRAIN = [
         CommissionProcessus::CODE_VENTE,
+        CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
         CommissionProcessus::CODE_TRANSFERT_GROSSISTE,
         CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
     ];
