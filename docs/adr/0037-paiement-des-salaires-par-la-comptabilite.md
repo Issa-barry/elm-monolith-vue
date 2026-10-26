@@ -42,6 +42,19 @@ L'audit RH du 26/10/2026 a établi que :
 - Dépenses employé injectant une prime en paie : comportement inchangé tant que l'inventaire des
   données de production n'est pas fait.
 
+## Amendement du 2026-10-26 — dépenses et paie
+
+Inventaire de production (lecture seule) : paie jamais utilisée, aucune dépense dont le bénéficiaire
+est un salarié, deux types « Employé » sans effet sur la paie. Décisions :
+
+6. Une dépense ne peut que **retenir** sur le salaire (`type_paie` : avance, retenue, absence, autre
+   déduction), et seulement pour un type « Employé ». `prime` et `autre_gain` sont refusés.
+7. Une dépense sans effet sur la paie n'est **plus retenue par défaut** comme « autre déduction » :
+   un remboursement de frais ne réduit jamais le salaire. Un ancien type `prime` / `autre_gain`
+   n'est plus repris.
+8. Champ « Effet sur la paie » ajouté à *Dépenses → Types* (il n'existait pas : `type_paie` n'était
+   modifiable nulle part dans l'interface).
+
 ## Conséquences
 
 - Un utilisateur qui n'avait que `rh-paie.pay` ne peut plus payer ; il lui faut `comptabilite.payer`.

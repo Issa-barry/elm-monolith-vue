@@ -43,6 +43,23 @@ L'ancien écran *Paie* rangé sous RH (`/backoffice/paie`) est conservé en l'é
 - Paiement global d'un salarié : répartition du plus ancien mois au plus récent (FIFO), refusée si
   le montant touche un mois non validé.
 
+## Dépenses et paie
+
+Seule une dépense **validée**, dont le bénéficiaire est un salarié et dont le type porte une
+**retenue**, entre dans la paie du mois de la dépense (`PaieCalculService::importerDepenses`, appelé
+au calcul et à chaque (dé)validation d'une dépense).
+
+| Effet du type de dépense (`type_paie`) | Paie |
+|---|---|
+| `avance`, `retenue`, `absence`, `autre_deduction` | Retenu sur le salaire (avance, retenue…) |
+| Aucun (« hors paie ») | Jamais repris : remboursement de frais, indemnité payée en caisse… |
+| `prime`, `autre_gain` | Interdit depuis le 26/10/2026 ; un ancien type configuré ainsi n'est plus repris |
+
+- Une prime ou un autre gain vient du référentiel RH (à venir), jamais d'une dépense.
+- Réglage : *Dépenses → Types*, champ **Effet sur la paie**, affiché pour un type « Employé »
+  seulement (refusé côté serveur pour les autres catégories). Exemple : AVANCE SUR SALAIRE-SALARIE →
+  « Retenu sur le salaire : Avance sur salaire » ; REMBOURSEMENT-SALARIE → « Aucun — hors paie ».
+
 ## Exports
 
 CSV et PDF de *Paiement salaire* : mêmes filtres que l'écran (mois, année, statut, agences) et même
@@ -63,4 +80,5 @@ périmètre d'agences.
 - Le paiement n'est rattaché à aucun support de trésorerie (mode de paiement seul) ; lot 6.
 
 Tests : `SalaireValidationPeriodeTest`, `SalairePaiementSecuriteTest`, `SalairePayerLigneTest`,
-`SalaireEmployeDetailTest`, `PaieTest`, `ContratTest`.
+`SalaireEmployeDetailTest`, `PaieTest`, `ContratTest`, `DepenseComptabiliteTest` (dépenses → paie),
+`DepenseTypeTest` (effet sur la paie).

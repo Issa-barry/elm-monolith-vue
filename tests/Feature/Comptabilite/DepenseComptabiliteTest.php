@@ -147,12 +147,16 @@ class DepenseComptabiliteTest extends TestCase
         ]);
     }
 
+    /**
+     * Depuis le 26/10/2026, seule une dépense dont le type porte une retenue entre en paie : un type
+     * sans `type_paie` n'est plus retenu par défaut (docs/paie.md). L'avance est donc explicite.
+     */
     private function makeDepenseType(): DepenseType
     {
         return DepenseType::factory()->employe()->create([
             'organization_id' => $this->org->id,
             'libelle' => 'Avance salaire',
-            'type_paie' => null,
+            'type_paie' => TypeVariablePaie::AVANCE->value,
         ]);
     }
 
@@ -179,7 +183,7 @@ class DepenseComptabiliteTest extends TestCase
 
         $this->assertDatabaseHas('paie_variables', [
             'paie_ligne_id' => $ligne->id,
-            'type' => TypeVariablePaie::AUTRE_DEDUCTION->value,
+            'type' => TypeVariablePaie::AVANCE->value,
             'montant' => '80000.00',
         ]);
     }
@@ -277,6 +281,115 @@ class DepenseComptabiliteTest extends TestCase
         $this->assertEquals(80_000, (float) $ligne->deductions);
         $this->assertEquals(1_920_000, (float) $ligne->net);
         $this->assertEquals(1_920_000, (float) $ligne->reste_a_payer);
+    }
+
+    // ── Seules les retenues entrent en paie (décision du 26/10/2026) ──────────
+
+    /** Dépense validée du salarié, d'un type d'effet donné sur la paie. */
+    private function depenseValidee(Employe $employe, ?string $typePaie, float $montant, string $libelle): Depense
+    {
+        $type = DepenseType::factory()->employe()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => $libelle,
+            'type_paie' => $typePaie,
+        ]);
+
+        return Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'employe',
+            'beneficiaire_id' => $employe->id,
+            'montant' => $montant,
+            'date_depense' => '2026-06-10',
+        ]);
+    }
+
+    private function recalculer(PaieLigne $ligne, PaiePeriode $periode): PaieLigne
+    {
+        $this->service->importerDepenses($ligne, $periode);
+        $ligne->load('variables');
+        $this->service->calculerLigne($ligne);
+
+        return $ligne->fresh();
+    }
+
+    public function test_un_remboursement_de_frais_sans_effet_sur_la_paie_n_est_pas_retenu(): void
+    {
+        [$employe, $contrat] = $this->makeEmployeAvecContrat(2_000_000);
+        $periode = $this->makePeriode(6, 2026);
+        $ligne = $this->makeLigne($employe, $contrat, $periode, 2_000_000);
+        $this->depenseValidee($employe, null, 150_000, 'REMBOURSEMENT-SALARIE');
+
+        $ligne = $this->recalculer($ligne, $periode);
+
+        $this->assertDatabaseMissing('paie_variables', ['paie_ligne_id' => $ligne->id]);
+        $this->assertEquals(0, (float) $ligne->deductions);
+        $this->assertEquals(2_000_000, (float) $ligne->net);
+    }
+
+    public function test_un_ancien_type_prime_ou_autre_gain_n_est_pas_repris(): void
+    {
+        [$employe, $contrat] = $this->makeEmployeAvecContrat(2_000_000);
+        $periode = $this->makePeriode(6, 2026);
+        $ligne = $this->makeLigne($employe, $contrat, $periode, 2_000_000);
+        // Types créés avant la restriction de type_paie (directement en base).
+        $this->depenseValidee($employe, TypeVariablePaie::PRIME->value, 300_000, 'Indemnité employé');
+        $this->depenseValidee($employe, TypeVariablePaie::AUTRE_GAIN->value, 100_000, 'Autre gain');
+
+        $ligne = $this->recalculer($ligne, $periode);
+
+        $this->assertDatabaseMissing('paie_variables', ['paie_ligne_id' => $ligne->id]);
+        $this->assertEquals(2_000_000, (float) $ligne->brut);
+        $this->assertEquals(2_000_000, (float) $ligne->net);
+    }
+
+    public function test_avance_et_retenues_restent_deduites_et_le_remboursement_ignore(): void
+    {
+        [$employe, $contrat] = $this->makeEmployeAvecContrat(2_000_000);
+        $periode = $this->makePeriode(6, 2026);
+        $ligne = $this->makeLigne($employe, $contrat, $periode, 2_000_000);
+        $this->depenseValidee($employe, TypeVariablePaie::AVANCE->value, 200_000, 'AVANCE SUR SALAIRE-SALARIE');
+        $this->depenseValidee($employe, TypeVariablePaie::RETENUE->value, 50_000, 'Retenue salaire');
+        $this->depenseValidee($employe, TypeVariablePaie::ABSENCE->value, 30_000, 'Absence');
+        $this->depenseValidee($employe, TypeVariablePaie::AUTRE_DEDUCTION->value, 20_000, 'Achat personnel employé');
+        $this->depenseValidee($employe, null, 150_000, 'REMBOURSEMENT-SALARIE');
+
+        $ligne = $this->recalculer($ligne, $periode);
+
+        $this->assertCount(4, $ligne->variables);
+        $this->assertEquals(200_000, (float) $ligne->total_avances);
+        $this->assertEquals(50_000, (float) $ligne->total_retenues);
+        $this->assertEquals(30_000, (float) $ligne->total_absences);
+        $this->assertEquals(20_000, (float) $ligne->total_autres_deductions);
+        $this->assertEquals(300_000, (float) $ligne->deductions);
+        $this->assertEquals(1_700_000, (float) $ligne->net);
+    }
+
+    public function test_valider_un_remboursement_ne_modifie_pas_la_ligne_de_paie(): void
+    {
+        [$employe, $contrat] = $this->makeEmployeAvecContrat(1_500_000);
+        $periode = $this->makePeriode(6, 2026);
+        $ligne = $this->makeLigne($employe, $contrat, $periode, 1_500_000);
+        $type = DepenseType::factory()->employe()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => 'REMBOURSEMENT-SALARIE',
+            'type_paie' => null,
+        ]);
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'employe',
+            'beneficiaire_id' => $employe->id,
+            'montant' => 100_000,
+            'date_depense' => '2026-06-15',
+        ]);
+
+        $depense->update(['statut' => StatutDepense::VALIDE->value]);
+
+        $this->assertDatabaseMissing('paie_variables', ['paie_ligne_id' => $ligne->id]);
+        $this->assertEquals(1_500_000, (float) $ligne->fresh()->net);
     }
 
     public function test_importer_depenses_supprime_variables_precedentes_et_reimporte(): void

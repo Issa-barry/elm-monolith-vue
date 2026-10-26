@@ -160,7 +160,9 @@ class DepenseTypesSeeder extends Seeder
             'categorie' => 'employe',
             'commentaire_obligatoire' => true,
             'justificatif_obligatoire' => false,
-            'type_paie' => 'prime',
+            // Hors paie : une prime ou une indemnité de salaire vient du référentiel RH, jamais d'une
+            // dépense (docs/paie.md).
+            'type_paie' => null,
         ],
         [
             'code' => 'retenue_salaire',
@@ -178,7 +180,9 @@ class DepenseTypesSeeder extends Seeder
             'categorie' => 'employe',
             'commentaire_obligatoire' => true,
             'justificatif_obligatoire' => false,
-            'type_paie' => null,
+            // Remboursé par le salarié : retenu sur son salaire. Explicite, car un type sans effet
+            // sur la paie n'est plus repris.
+            'type_paie' => 'autre_deduction',
         ],
 
         // ── Dépense interne ──────────────────────────────────────────────────

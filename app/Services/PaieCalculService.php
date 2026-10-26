@@ -166,6 +166,12 @@ class PaieCalculService
         });
     }
 
+    /**
+     * Reprend en paie les dépenses validées du salarié pour le mois, si leur type porte une retenue
+     * (avance, retenue, absence, autre déduction). Un type sans effet sur la paie (remboursement de
+     * frais…) ou un ancien type « prime » / « autre gain » n'est jamais repris : les primes viennent
+     * du référentiel RH (docs/paie.md).
+     */
     public function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
     {
         $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
@@ -181,13 +187,15 @@ class PaieCalculService
             ->get();
 
         foreach ($depenses as $depense) {
+            $typePaie = TypeVariablePaie::tryFrom($depense->depenseType?->type_paie ?? '');
+            if ($typePaie === null || ! $typePaie->estDeduction()) {
+                continue;
+            }
+
             $libelle = $depense->depenseType->libelle ?? 'Dépense';
             if ($depense->commentaire) {
                 $libelle .= ' — '.$depense->commentaire;
             }
-
-            $typePaie = TypeVariablePaie::tryFrom($depense->depenseType->type_paie ?? '')
-                ?? TypeVariablePaie::AUTRE_DEDUCTION;
 
             $ligne->variables()->create([
                 'depense_id' => $depense->id,

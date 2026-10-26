@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Depenses\Types;
 
 use App\Enums\CategorieDepense;
+use App\Enums\TypeVariablePaie;
 use App\Http\Controllers\Controller;
 use App\Models\DepenseType;
 use Inertia\Inertia;
@@ -23,6 +24,11 @@ class IndexDepenseTypeController extends Controller
         return Inertia::render('Depenses/Types/Index', [
             'types' => $this->typesPourOrganisation(auth()->user()->organization_id),
             'categories' => CategorieDepense::options(),
+            // Effets possibles sur la paie d'un type « Employé » : retenues seulement.
+            'type_paie_options' => array_map(
+                fn (TypeVariablePaie $t) => ['value' => $t->value, 'label' => $t->label()],
+                TypeVariablePaie::retenues(),
+            ),
         ]);
     }
 
