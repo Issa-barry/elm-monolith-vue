@@ -19,10 +19,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
     Eye,
+    History,
     MoreVertical,
     Pencil,
     Plus,
     Trash2,
+    Upload,
     UserRound,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -195,12 +197,37 @@ function confirmDelete(e: Employe) {
                         }}
                     </p>
                 </div>
-                <Link
-                    v-if="can('rh-employes.create')"
-                    href="/backoffice/employes/create"
-                >
-                    <Button><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button>
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <!-- Import des dossiers et contrats : mêmes droits que côté serveur (ImportRhPolicy) -->
+                    <Link
+                        v-if="can('imports-rh.read')"
+                        href="/backoffice/employes/imports"
+                    >
+                        <Button variant="outline">
+                            <History class="mr-2 h-4 w-4" />Imports
+                        </Button>
+                    </Link>
+                    <Link
+                        v-if="
+                            can('imports-rh.create') &&
+                            can('rh-employes.update')
+                        "
+                        href="/backoffice/employes/imports/nouveau"
+                    >
+                        <Button variant="outline">
+                            <Upload class="mr-2 h-4 w-4" />Mettre à jour par
+                            fichier
+                        </Button>
+                    </Link>
+                    <Link
+                        v-if="can('rh-employes.create')"
+                        href="/backoffice/employes/create"
+                    >
+                        <Button
+                            ><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button
+                        >
+                    </Link>
+                </div>
             </div>
 
             <!-- Filtres -->

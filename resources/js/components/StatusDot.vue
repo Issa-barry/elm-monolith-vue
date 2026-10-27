@@ -81,6 +81,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
     // Contrat de travail rompu (StatutContrat::ROMPU) : fin anticipée, pas une erreur.
     rompu: 'bg-zinc-400 dark:bg-zinc-500',
+    // Import RH abandonné avant confirmation (StatutImportRh::ABANDONNE) : rien n'a été appliqué.
+    abandonne: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).

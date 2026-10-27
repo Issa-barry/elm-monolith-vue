@@ -104,7 +104,9 @@ class UserTest extends TestCase
      * `encaissements.surveiller` et `encaissements.traiter_anomalies` (24/10/2026, contrôle des
      * encaissements — cf. ControleEncaissementsController, ADR 0036) = 225, puis
      * `rh-employes.donnees_sensibles`, `rh-remunerations.read` et `rh-referentiels.gerer`
-     * (27/10/2026, dossier salarié — cf. EmployeController, ContratController, docs/rh-employes-identite.md) = 228.
+     * (27/10/2026, dossier salarié — cf. EmployeController, ContratController, docs/rh-employes-identite.md) = 228,
+     * puis `imports-rh.create` et `imports-rh.read` (27/10/2026, import des dossiers et contrats RH —
+     * cf. ImportRhPolicy, docs/import-dossiers-rh.md) = 230.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -114,7 +116,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(228, $map);
+        $this->assertCount(230, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

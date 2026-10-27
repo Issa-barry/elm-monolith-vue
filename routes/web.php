@@ -191,6 +191,14 @@ use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
+use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
+use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
+use App\Http\Controllers\Rh\Imports\CreateImportRhController;
+use App\Http\Controllers\Rh\Imports\ErreursImportRhController;
+use App\Http\Controllers\Rh\Imports\ExporterDossiersRhController;
+use App\Http\Controllers\Rh\Imports\IndexImportRhController;
+use App\Http\Controllers\Rh\Imports\ShowImportRhController;
+use App\Http\Controllers\Rh\Imports\StoreImportRhController;
 use App\Http\Controllers\Rh\Services\IndexServiceRhController;
 use App\Http\Controllers\Rh\Services\StoreServiceRhController;
 use App\Http\Controllers\Rh\Services\ToggleServiceRhController;
@@ -836,6 +844,18 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : RH (Ressources humaines) ────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
+            // Import des dossiers et contrats (docs/import-dossiers-rh.md) — déclaré AVANT la
+            // ressource employes, sinon employes/{employe} intercepterait employes/imports.
+            Route::get('employes/export-maj', ExporterDossiersRhController::class)->name('employes.export-maj');
+            Route::prefix('employes/imports')->name('employes.imports.')->group(function () {
+                Route::get('/', IndexImportRhController::class)->name('index');
+                Route::get('nouveau', CreateImportRhController::class)->name('create');
+                Route::post('/', StoreImportRhController::class)->name('store');
+                Route::get('{importRh}', ShowImportRhController::class)->name('show');
+                Route::post('{importRh}/confirmer', ConfirmImportRhController::class)->name('confirm');
+                Route::post('{importRh}/abandonner', AbandonnerImportRhController::class)->name('abandon');
+                Route::get('{importRh}/erreurs', ErreursImportRhController::class)->name('erreurs');
+            });
             Route::resource('employes', EmployeController::class);
             Route::patch('employes/{employe}/transferer-site', [EmployeController::class, 'transfererSite'])
                 ->name('employes.transferer-site');

@@ -153,6 +153,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',           'rh-paie.delete',
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
             'rh-employes.donnees_sensibles', 'rh-remunerations.read', 'rh-referentiels.gerer',
+            'imports-rh.create',        'imports-rh.read',
             // Administration
             'users.create',             'users.read',             'users.update',
             'communications.read',      'communications.manage',

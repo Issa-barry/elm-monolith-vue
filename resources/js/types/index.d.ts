@@ -70,7 +70,9 @@ export type StandalonePermission =
     | 'sites.lecture_toutes_agences'
     | 'rh-employes.donnees_sensibles'
     | 'rh-remunerations.read'
-    | 'rh-referentiels.gerer';
+    | 'rh-referentiels.gerer'
+    | 'imports-rh.create'
+    | 'imports-rh.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**
