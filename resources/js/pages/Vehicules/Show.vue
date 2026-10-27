@@ -467,7 +467,6 @@ const editionPartParrain = ref(false);
 /** AAAA-MM-JJ → JJ/MM/AAAA. */
 const enFr = (iso: string) => iso.split('-').reverse().join('/');
 
-
 // Partages à refaire dans l'onglet Équipe après la saisie de la part du parrain : avertissement
 // orange (opération autorisée, attention requise).
 const flashWarning = computed(
