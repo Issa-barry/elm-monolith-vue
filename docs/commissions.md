@@ -171,6 +171,9 @@ même principe de barème dynamique au transfert logistique interne.
     la commission générée au départ sur la quantité chargée **reste due, même si toute la
     marchandise revient** — conséquence assumée par le propriétaire du produit, provisoire. Le
     monitoring traite `retourne` comme `annule` (aucune génération manquante relancée).
+- **COMM-023** (27/10/2026) — La commission Livreurs d'une vente va à l'**équipe qui a chargé**,
+  figée sur la commande (`commandes_ventes.equipe_livraison_id`), même si l'équipe du véhicule est
+  remplacée ou supprimée avant le calcul. Cf. section « Équipe figée au chargement » plus bas.
 
 ## Modèle
 
@@ -462,7 +465,8 @@ exécute ce déplacement comme une opération unique :
   à configurer ce qui ne l'était pas avant.
 - **Équipe de départ vidée par le transfert** (le livreur en était le dernier membre) : dissoute
   automatiquement (soft-delete + désactivation du véhicule, même code que `destroy()`), aucune
-  répartition n'est demandée dans ce cas.
+  répartition n'est demandée dans ce cas. Les ventes déjà chargées par cette équipe lui restent
+  acquises (COMM-023).
 - **Équipe d'arrivée inexistante** (véhicule cible sans équipe) : créée à la volée avec le seul
   livreur transféré, sans forcer de partage (même logique que ci-dessus).
 - **Une seule transaction DB, commit unique** : rien n'est écrit en base tant que les
@@ -1636,3 +1640,30 @@ Cf. [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md) et
   déduction, payée par l'agence du véhicule ; charge 622500, dette 467210 (PARRAIN-017 à 020).
 - Tests : `tests/Feature/ParrainPartageCommissionTest.php`,
   `tests/Feature/Comptabilite/ParrainFichePaiementTest.php`.
+
+## Équipe figée au chargement (27/10/2026, COMM-023)
+
+Incident VTE-231026-150 : chargée le 23/10 à 14:36 par l'équipe de MAMADOU SAMBA DIALLO, dont
+l'équipe a été supprimée à 16:37 ; la commission, calculée à l'encaissement (20:31), n'a trouvé
+aucune équipe sur le véhicule. La relance ne pouvait pas aboutir : la nouvelle équipe (24/10) n'a
+de partage qu'à partir de sa création, et une relance partielle se fait à la date d'origine
+(COMM-018).
+
+- **Règle.** La validation du chargement (`CommandeVenteService::validerChargement()`) et la vente
+  comptoir (`PdvCheckoutService`, chargée dès sa création) figent l'équipe actuelle du véhicule
+  dans `commandes_ventes.equipe_livraison_id`. La commission Livreurs est calculée sur cette équipe
+  (`CommandeVente::equipeLivraisonPourCommission()`), même supprimée depuis : son partage
+  (`equipe_livraison_partages_categorie`) est conservé et versionné, il est lu à la date de gain
+  comme d'habitude.
+- **Repli.** Équipe figée absente (commande chargée avant le 27/10/2026, ou véhicule sans équipe au
+  chargement) ou n'appartenant pas au véhicule de la commande : équipe actuelle du véhicule,
+  comportement antérieur. Aucune reprise automatique de l'historique.
+- **Groupe de commission.** Le `CommissionGroupe` du véhicule reste la cible ; ses membres ne sont
+  resynchronisés que depuis l'équipe actuelle, jamais depuis une ancienne équipe figée
+  (`CommissionGroupeSyncService::groupeEquipeLivraisonVehicule()`).
+- **Hors périmètre.** Transferts logistiques (équipe actuelle du véhicule, inchangé) ; affichage
+  du livreur sur la fiche commande (toujours l'équipe actuelle du véhicule).
+- **Régularisation d'une commande antérieure.** Renseigner `equipe_livraison_id` avec l'équipe
+  qui a chargé (équipe dont `created_at` ≤ `chargement_valide_at` < `deleted_at`), puis « Relancer
+  la génération » depuis la fiche commande : la part Livreurs est créée à la date d'origine.
+- Tests : `tests/Feature/CommissionTriggerVenteTest.php` (section COMM-023).

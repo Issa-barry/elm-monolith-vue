@@ -12,6 +12,7 @@ use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\EquipeLivraison;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -90,6 +91,8 @@ class PdvCheckoutService
                 'organization_id' => $user->organization_id,
                 'site_id' => $siteId,
                 'vehicule_id' => $data['vehicule_id'] ?? null,
+                // COMM-023 : vente comptoir = chargée et en livraison dès sa création.
+                'equipe_livraison_id' => EquipeLivraison::idPourVehicule($vehiculePourNature?->id),
                 'client_id' => $data['client_id'] ?? null,
                 'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
                 'total_commande' => $total,

@@ -26,6 +26,14 @@ class EquipeLivraison extends Model
         'taux_commission_proprietaire',
     ];
 
+    /**
+     * Équipe actuelle d'un véhicule, résolue comme la relation Vehicule::equipe().
+     */
+    public static function idPourVehicule(?string $vehiculeId): ?string
+    {
+        return $vehiculeId ? self::where('vehicule_id', $vehiculeId)->value('id') : null;
+    }
+
     public function getNomAttribute(): string
     {
         return $this->vehicule?->nom_vehicule ?? '—';

@@ -46,6 +46,7 @@ class CommandeVente extends Model
         'organization_id',
         'site_id',
         'vehicule_id',
+        'equipe_livraison_id',
         'client_id',
         'client_vehicule_id',
         'reference',
@@ -145,6 +146,30 @@ class CommandeVente extends Model
     public function vehicule(): BelongsTo
     {
         return $this->belongsTo(Vehicule::class);
+    }
+
+    /**
+     * Équipe du véhicule figée au chargement (COMM-023), même supprimée depuis : c'est elle qui
+     * reçoit la commission Livreurs. Null pour une commande antérieure à la règle ou sans
+     * équipe au chargement.
+     */
+    public function equipeLivraison(): BelongsTo
+    {
+        return $this->belongsTo(EquipeLivraison::class, 'equipe_livraison_id')->withTrashed();
+    }
+
+    /**
+     * Équipe qui reçoit la commission Livreurs : celle figée au chargement si elle appartient
+     * bien au véhicule de la commande, sinon l'équipe actuelle du véhicule.
+     */
+    public function equipeLivraisonPourCommission(): ?EquipeLivraison
+    {
+        $figee = $this->equipeLivraison;
+        if ($figee && $figee->vehicule_id === $this->vehicule_id) {
+            return $figee;
+        }
+
+        return $this->vehicule?->equipe;
     }
 
     public function client(): BelongsTo
