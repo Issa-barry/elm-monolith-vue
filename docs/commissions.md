@@ -1497,11 +1497,32 @@ générée » en était la seule trace.
     dernière génération ne trouve plus rien à verser pour cette cible.
 
   Il n'y a pas de statut « en cours » : la relance est synchrone, sous verrou de l'opération.
+- **Erreur imprévue pendant la génération** (27/10/2026, incident TRF-271026-016) : toute exception,
+  pas seulement une erreur métier, est enregistrée comme tentative ERREUR (motif technique, envoyée
+  à Sentry) et apparaît donc ici, relançable. Avant, elle annulait la tentative sans trace, alors
+  que l'approbation web de la réception restait enregistrée : transfert approuvé, bouton
+  « Approuver » disparu, aucune commission, rien au monitoring. L'approbation web et la génération
+  sont désormais dans une seule transaction, comme l'API mobile.
 - **Jamais une anomalie** : absence de barème, barème à 0, site aux commissions désactivées
   (COMM-013), cible non applicable (véhicule non éligible, pas de site). Aucune commission n'est
-  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4). Une opération
-  dont la génération n'a **jamais été déclenchée** n'a pas de tentative : elle relève de
-  `commissions:auditer-ventes`.
+  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4).
+- **Opérations sans aucune tentative** (COMM-020 étendue le 28/10/2026, incident TRF-271026-016) :
+  une opération dont le fait générateur est passé sans tentative **ni** commission est une anomalie
+  « Non générée », motif « Calcul jamais lancé » (`AUCUNE_TENTATIVE`), colonne « Aucune tentative »
+  (`CommissionMonitoringService::anomaliesSansTentative()`). Fait générateur, selon le déclencheur
+  **actuel** de l'organisation :
+  - transfert : réception approuvée (`RECEPTION_EFFECTUEE`) ou transfert parti, en livraison,
+    réceptionné ou clôturé (`CHARGEMENT_VALIDE`) ;
+  - vente : réception validée (distribution, Grossiste livré) ; sinon chargement validé
+    (`CHARGEMENT_VALIDE`) ou facture payée (`FACTURE_ENCAISSEE`).
+
+  Exclus : opérations créées avant le 03/09/2026 (moteur générique seul, COMM-007 ; avant, pas de
+  tentative), annulées, retournées. Limite : une vente directe sans véhicule sous
+  `CHARGEMENT_VALIDE` n'est pas couverte (rien ne la distingue sûrement d'une vente comptoir, qui
+  n'est jamais déclenchée dans ce cas). La relance passe par le moteur officiel (verrou de
+  l'opération, idempotence par cible : jamais de doublon), sans retoucher le statut métier de
+  l'opération ; elle laisse une tentative, l'anomalie disparaît donc de la liste et le bilan de
+  relance dit « régularisée », « sans objet » (aucun barème) ou l'échec rencontré.
 - **Motif structuré.** Depuis ce chantier, chaque erreur de cible est aussi enregistrée dans
   `detail_erreur.cibles[]` avec :
   - un `code` (`CommissionMotifNonGeneration` : partage Livreur non conforme ou manquant, équipe,

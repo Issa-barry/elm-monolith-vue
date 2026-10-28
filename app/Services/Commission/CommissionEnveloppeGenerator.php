@@ -36,7 +36,10 @@ use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
+use Illuminate\Database\ConcurrencyErrorDetector;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\LostConnectionDetector;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -411,15 +414,27 @@ class CommissionEnveloppeGenerator
                     $motif = empty($erreursCibles) ? null : implode(' | ', $erreursCibles);
                     DB::afterCommit(fn () => self::alerterCommissionManquante($ctx, $declencheurUserId, $motif, $declenchePar));
                 }
-            } catch (InvalidArgumentException $e) {
-                // Filet de sécurité pour une erreur métier vraiment imprévue : depuis le
-                // chantier 2A, genererDepuisContexte() ne lève plus cette exception pour les cas
-                // connus (cible dont le bénéficiaire est introuvable) — elle les retourne à la
-                // place, cf. ci-dessus.
-                Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
-                    'source_type' => $ctx->sourceType,
-                    'source_id' => $ctx->sourceId,
-                ]);
+            } catch (Throwable $e) {
+                // Filet de sécurité pour toute erreur imprévue : depuis le chantier 2A,
+                // genererDepuisContexte() retourne les cas métier connus au lieu de lever. Toute
+                // autre erreur (base, code) devient une tentative ERREUR visible et relançable au
+                // monitoring — jamais une génération annulée sans trace (incident TRF-271026-016 :
+                // réception approuvée, aucune tentative, aucune commission). Exception : deadlock,
+                // délai de verrou ou connexion perdue — MySQL a pu annuler TOUTE la transaction,
+                // la tentative ne serait pas réellement enregistrée. On laisse remonter : l'appelant
+                // annule l'opération entière (approbation comprise) et l'utilisateur réessaie.
+                if (self::transactionCompromise($e)) {
+                    throw $e;
+                }
+
+                if ($e instanceof InvalidArgumentException) {
+                    Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
+                        'source_type' => $ctx->sourceType,
+                        'source_id' => $ctx->sourceId,
+                    ]);
+                } else {
+                    report($e);
+                }
 
                 CommissionGenerationAttempt::create([
                     'organization_id' => $ctx->organizationId,
@@ -448,6 +463,13 @@ class CommissionEnveloppeGenerator
                 // reste "à régulariser", jamais rollbackée.
             }
         });
+    }
+
+    private static function transactionCompromise(Throwable $e): bool
+    {
+        return $e instanceof DeadlockException
+            || (new ConcurrencyErrorDetector)->causedByConcurrencyError($e)
+            || (new LostConnectionDetector)->causedByLostConnection($e);
     }
 
     /**

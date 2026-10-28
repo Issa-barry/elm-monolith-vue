@@ -7,9 +7,12 @@ use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\DeclencheurCommissionLogistique;
+use App\Enums\DeclencheurCommissionVente;
+use App\Enums\ModeRemiseGrossiste;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
+use App\Enums\StatutFactureVente;
 use App\Enums\StatutTransfert;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
@@ -23,6 +26,7 @@ use App\Models\Prestataire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -44,13 +48,20 @@ use Throwable;
  *    (récurrent à partir de SEUIL_ECHEC_RECURRENT tentatives en échec).
  *
  * « Aucun barème » et « barème à 0 » ne produisent jamais d'anomalie : le moteur ne les trace
- * pas comme des erreurs (aucune commission n'est due, décision AMOA #4). Une opération dont la
- * génération n'a JAMAIS été déclenchée n'a pas de tentative : elle relève de
- * `commissions:auditer-ventes`, pas de ce monitoring.
+ * pas comme des erreurs (aucune commission n'est due, décision AMOA #4). Une opération dont le
+ * fait générateur est passé sans AUCUNE tentative ni enveloppe est aussi une anomalie NON_GENEREE
+ * (motif AUCUNE_TENTATIVE, cf. anomaliesSansTentative()) : elle disparaît dès la relance, qui
+ * laisse une tentative.
  */
 class CommissionMonitoringService
 {
     public const SEUIL_ECHEC_RECURRENT = 3;
+
+    /**
+     * Début de la détection des opérations sans tentative : moteur générique seul (COMM-007).
+     * Avant, les commissions logistiques n'avaient pas de tentative et seraient signalées à tort.
+     */
+    public const DEBUT_DETECTION_SANS_TENTATIVE = '2026-09-03';
 
     private const FORMAT_DATE_HEURE = 'd/m/Y H:i';
 
@@ -88,6 +99,21 @@ class CommissionMonitoringService
      * @return Collection<int, array<string, mixed>>
      */
     public function anomalies(string $organizationId, ?Collection $siteIdsAutorises = null, ?array $sourceIds = null): Collection
+    {
+        $lignes = $this->anomaliesDesTentatives($organizationId, $siteIdsAutorises, $sourceIds)
+            ->concat($this->anomaliesSansTentative($organizationId, $siteIdsAutorises, $sourceIds));
+
+        return $this->enrichirNoms($lignes)
+            ->sortByDesc('detectee_le_iso')
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, string>|null  $siteIdsAutorises
+     * @param  list<string>|null  $sourceIds
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function anomaliesDesTentatives(string $organizationId, ?Collection $siteIdsAutorises, ?array $sourceIds): Collection
     {
         $sourcesEnEchec = CommissionGenerationAttempt::query()
             ->where('organization_id', $organizationId)
@@ -131,9 +157,133 @@ class CommissionMonitoringService
             }
         }
 
-        return $this->enrichirNoms($lignes)
-            ->sortByDesc('detectee_le_iso')
+        return $lignes;
+    }
+
+    /**
+     * Opérations dont le fait générateur de commission est passé sans AUCUNE tentative ni
+     * enveloppe (COMM-020 étendue, 28/10/2026 — incident TRF-271026-016 : réception approuvée,
+     * génération annulée par une erreur imprévue sans laisser de trace). Fait générateur =
+     * événement qui appelle réellement le moteur selon le déclencheur ACTUEL de l'organisation
+     * (cf. CommissionTriggerService) :
+     *  - transfert : réception approuvée (RECEPTION_EFFECTUEE) ou départ (CHARGEMENT_VALIDE) ;
+     *  - vente : réception validée (distribution, Grossiste livré) ; sinon chargement validé
+     *    (CHARGEMENT_VALIDE) ou facture payée (FACTURE_ENCAISSEE).
+     * Jamais avant DEBUT_DETECTION_SANS_TENTATIVE (moteur générique seul) ; jamais une opération
+     * annulée ou retournée. Une vente directe sans véhicule sous CHARGEMENT_VALIDE n'est pas
+     * couverte : rien ne distingue de façon sûre une vente comptoir (jamais déclenchée).
+     *
+     * @param  Collection<int, string>|null  $siteIdsAutorises
+     * @param  list<string>|null  $sourceIds
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function anomaliesSansTentative(string $organizationId, ?Collection $siteIdsAutorises, ?array $sourceIds): Collection
+    {
+        $depuis = Carbon::parse(self::DEBUT_DETECTION_SANS_TENTATIVE)->startOfDay();
+        $sansTrace = fn (string $sourceType, string $table) => fn (Builder $q) => $q
+            ->whereNotExists(fn ($s) => $s->from('commission_generation_attempts')
+                ->where('source_type', $sourceType)->whereColumn('source_id', "{$table}.id"))
+            ->whereNotExists(fn ($s) => $s->from('commission_enveloppes')
+                ->where('source_type', $sourceType)->whereColumn('source_id', "{$table}.id"));
+
+        $declencheurLogistique = Parametre::getDeclencheurCommissionLogistique($organizationId);
+        $transferts = TransfertLogistique::query()
+            ->with(['siteSource:id,nom'])
+            ->where('organization_id', $organizationId)
+            ->where('created_at', '>=', $depuis)
+            ->whereNotIn('statut', [StatutTransfert::ANNULE->value, StatutTransfert::RETOURNE->value])
+            ->when(
+                $declencheurLogistique === DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE,
+                fn (Builder $q) => $q->where('validation_reception', 'accord'),
+                fn (Builder $q) => $q->whereIn('statut', [StatutTransfert::TRANSIT->value, StatutTransfert::RECEPTION->value, StatutTransfert::CLOTURE->value]),
+            )
+            ->when($sourceIds !== null, fn (Builder $q) => $q->whereIn('id', $sourceIds))
+            ->where($sansTrace(TransfertLogistique::class, 'transferts_logistiques'))
+            ->get();
+
+        $chargementValide = Parametre::getDeclencheurCommissionVente($organizationId) === DeclencheurCommissionVente::CHARGEMENT_VALIDE;
+        $ventes = CommandeVente::query()
+            ->with(['client', 'site:id,nom'])
+            ->where('organization_id', $organizationId)
+            ->where('created_at', '>=', $depuis)
+            ->whereNotIn('statut', [StatutCommandeVente::ANNULEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value, StatutCommandeVente::RETOURNEE->value])
+            ->where(fn (Builder $q) => $q
+                ->whereNotNull('reception_validee_at')
+                ->orWhere(fn (Builder $sansReception) => $sansReception
+                    ->where('nature_operation', '!=', NatureOperation::DISTRIBUTION_CLIENT->value)
+                    ->where(fn (Builder $m) => $m->whereNull('mode_remise_grossiste')->orWhere('mode_remise_grossiste', '!=', ModeRemiseGrossiste::LIVRAISON->value))
+                    ->when(
+                        $chargementValide,
+                        fn (Builder $d) => $d->whereNotNull('chargement_valide_at'),
+                        fn (Builder $d) => $d->whereHas('facture', fn (Builder $f) => $f->where('statut_facture', StatutFactureVente::PAYEE->value)),
+                    )))
+            ->when($sourceIds !== null, fn (Builder $q) => $q->whereIn('id', $sourceIds))
+            ->where($sansTrace(CommandeVente::class, 'commandes_ventes'))
+            ->get();
+
+        $processus = CommissionProcessus::where('organization_id', $organizationId)->get()->keyBy('code');
+
+        return $transferts->concat($ventes)
+            ->filter(fn (Model $source) => $siteIdsAutorises === null || $siteIdsAutorises->contains($this->siteId($source)))
+            ->map(fn (Model $source) => $this->ligneSansTentative($source, $chargementValide, $processus))
             ->values();
+    }
+
+    /**
+     * @param  Collection<string, CommissionProcessus>  $processusParCode
+     * @return array<string, mixed>
+     */
+    private function ligneSansTentative(Model $source, bool $venteAuChargement, Collection $processusParCode): array
+    {
+        $type = $source instanceof TransfertLogistique ? 'transfert' : 'vente';
+        $processusCode = $source instanceof TransfertLogistique
+            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
+            : CommissionProcessusDefaults::identiteCodePourVente($source->nature_operation, $source->client?->type, $source->mode_remise_grossiste);
+        $processus = $processusParCode->get($processusCode);
+
+        [$evenement, $date] = match (true) {
+            $source instanceof TransfertLogistique && $source->validation_reception === 'accord' => ['réception approuvée', $source->validated_at],
+            $source instanceof TransfertLogistique => ['transfert parti', $source->date_depart_reelle],
+            $source->reception_validee_at !== null => ['réception validée', $source->reception_validee_at],
+            $venteAuChargement => ['chargement validé', $source->chargement_valide_at],
+            default => ['facture payée', $source->livree_at],
+        };
+        $detection = $date ? Carbon::parse($date) : $source->created_at;
+        $motif = CommissionMotifNonGeneration::AUCUNE_TENTATIVE;
+        $message = "Aucune tentative de génération enregistrée alors que l'opération a atteint son déclencheur ({$evenement}).";
+        $statut = CommissionAnomalieStatut::NON_GENEREE;
+
+        return [
+            'id' => implode('~', [$type, $source->id, 'aucune', self::CLE_OPERATION]),
+            'statut' => $statut->value,
+            'statut_label' => $statut->label(),
+            'ouverte' => true,
+            'relancable' => true,
+            'raison_sans_objet' => null,
+            'source_type' => $type,
+            'source_id' => $source->id,
+            'cle' => self::CLE_OPERATION,
+            'cible' => null,
+            'cible_label' => self::libelleCible(null),
+            'processus_code' => $processusCode,
+            'processus_label' => $processus?->libelle ?? $processusCode,
+            'motif_code' => $motif->value,
+            'motif_label' => $motif->label(),
+            'action_corrective' => $motif->actionCorrective(),
+            'message' => $message,
+            'erreurs' => [['code' => $motif->value, 'message' => $message, 'contexte' => []]],
+            'montant_attendu' => null,
+            'detectee_le' => $detection?->format(self::FORMAT_DATE_HEURE),
+            'detectee_le_iso' => $detection?->toIso8601String(),
+            'derniere_tentative_le' => null,
+            'nb_tentatives_echouees' => 0,
+            'nb_tentatives' => 0,
+            'regularisee_le' => null,
+            'montant_regularise' => null,
+            'tentatives' => [],
+            'enveloppes_generees' => [],
+            ...$this->infosSource($type, $source),
+        ];
     }
 
     /**
@@ -164,7 +314,7 @@ class CommissionMonitoringService
         $resultat = ['regularisees' => [], 'sans_objet' => [], 'echecs' => [], 'ignorees' => count($anomalieIds) - $aRelancer->count()];
 
         foreach ($aRelancer as $anomalie) {
-            $maintenant = $apres->get($anomalie['id']);
+            $maintenant = $apres->get($anomalie['id']) ?? $this->etatApresPremiereTentative($organizationId, $anomalie, $apres);
             $libelle = "{$anomalie['reference']} — {$anomalie['cible_label']}";
 
             match ($maintenant['statut'] ?? null) {
@@ -175,6 +325,34 @@ class CommissionMonitoringService
         }
 
         return $resultat;
+    }
+
+    /**
+     * Une anomalie « aucune tentative » n'existe plus après sa relance, qui a laissé une tentative :
+     * son résultat se lit sur l'opération — anomalie ouverte (nouvel échec), enveloppe créée
+     * (régularisée) ou rien de dû (sans objet : aucun barème applicable).
+     *
+     * @param  array<string, mixed>  $anomalie
+     * @param  Collection<string, array<string, mixed>>  $apres
+     * @return array<string, mixed>|null
+     */
+    private function etatApresPremiereTentative(string $organizationId, array $anomalie, Collection $apres): ?array
+    {
+        if ($anomalie['motif_code'] !== CommissionMotifNonGeneration::AUCUNE_TENTATIVE->value) {
+            return null;
+        }
+
+        $ouverte = $apres->first(fn (array $a) => $a['source_id'] === $anomalie['source_id'] && $a['ouverte']);
+        if ($ouverte !== null) {
+            return $ouverte;
+        }
+
+        $genere = CommissionEnveloppe::where('organization_id', $organizationId)
+            ->where('source_type', self::TYPES_SOURCE[$anomalie['source_type']])
+            ->where('source_id', $anomalie['source_id'])
+            ->exists();
+
+        return ['statut' => $genere ? CommissionAnomalieStatut::REGULARISEE->value : CommissionAnomalieStatut::SANS_OBJET->value];
     }
 
     /** Nombre d'anomalies ouvertes d'une opération — indicateur de la fiche commande. */
