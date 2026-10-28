@@ -1,12 +1,15 @@
 # Paie des salariés
 
-Décision : [ADR 0037](adr/0037-paiement-des-salaires-par-la-comptabilite.md). État au 26/10/2026, après
-le lot 0 (sécurisation du circuit existant). La conception cible RH → Comptabilité (référentiel des
-primes, transmission mensuelle figée) n'est pas encore réalisée.
+Décision : [ADR 0037](adr/0037-paiement-des-salaires-par-la-comptabilite.md). État au 28/10/2026, après
+le lot 0 (sécurisation du circuit existant) et le lot 2 (référentiel des primes et avantages,
+[primes-avantages.md](primes-avantages.md), ADR 0038). L'attribution des primes aux salariés
+(lot 3) et la transmission mensuelle figée vers la Comptabilité ne sont pas encore réalisées : la
+paie ne lit pas encore le référentiel.
 
 ## Responsabilités
 
-- **RH** : salariés, contrats (salaire de base). Écrans *RH → Employés* et *RH → Contrats*.
+- **RH** : salariés, contrats (salaire de base), référentiel des types de primes et avantages.
+  Écrans *RH → Employés*, *RH → Contrats* et *Paramètres → RH → Primes et avantages*.
 - **Comptabilité** : validation de la période, paiement, écriture comptable. Écran
   *Comptabilité → Paiement salaire* (`/backoffice/comptabilite/salaires`).
 
@@ -55,7 +58,8 @@ au calcul et à chaque (dé)validation d'une dépense).
 | Aucun (« hors paie ») | Jamais repris : remboursement de frais, indemnité payée en caisse… |
 | `prime`, `autre_gain` | Interdit depuis le 26/10/2026 ; un ancien type configuré ainsi n'est plus repris |
 
-- Une prime ou un autre gain vient du référentiel RH (à venir), jamais d'une dépense.
+- Une prime ou un autre gain vient du référentiel RH ([primes-avantages.md](primes-avantages.md) ;
+  attribution aux salariés au lot 3), jamais d'une dépense.
 - Réglage : *Dépenses → Types*, champ **Effet sur la paie**, affiché pour un type « Employé »
   seulement (refusé côté serveur pour les autres catégories). Exemple : AVANCE SUR SALAIRE-SALARIE →
   « Retenu sur le salaire : Avance sur salaire » ; REMBOURSEMENT-SALARIE → « Aucun — hors paie ».

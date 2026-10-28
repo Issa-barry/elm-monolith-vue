@@ -203,6 +203,12 @@ use App\Http\Controllers\Rh\Services\IndexServiceRhController;
 use App\Http\Controllers\Rh\Services\StoreServiceRhController;
 use App\Http\Controllers\Rh\Services\ToggleServiceRhController;
 use App\Http\Controllers\Rh\Services\UpdateServiceRhController;
+use App\Http\Controllers\Rh\TypesRemuneration\ChangerStatutTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\DestroyTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\HistoriqueTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\IndexTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\StoreTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\UpdateTypeRemunerationController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
 use App\Http\Controllers\Role\EditRoleController;
@@ -877,6 +883,17 @@ Route::prefix('backoffice')->group(function () {
             Route::post('services-rh', StoreServiceRhController::class)->name('services-rh.store');
             Route::put('services-rh/{serviceRh}', UpdateServiceRhController::class)->name('services-rh.update');
             Route::patch('services-rh/{serviceRh}/toggle', ToggleServiceRhController::class)->name('services-rh.toggle');
+            // Primes et avantages : référentiel par organisation (docs/primes-avantages.md, ADR 0038).
+            Route::prefix('types-remuneration')->name('types-remuneration.')->group(function () {
+                Route::get('/', IndexTypeRemunerationController::class)->name('index');
+                Route::post('/', StoreTypeRemunerationController::class)->name('store');
+                Route::put('{typeRemuneration}', UpdateTypeRemunerationController::class)->name('update');
+                Route::delete('{typeRemuneration}', DestroyTypeRemunerationController::class)->name('destroy');
+                Route::get('{typeRemuneration}/historique', HistoriqueTypeRemunerationController::class)->name('historique');
+                Route::patch('{typeRemuneration}/{action}', ChangerStatutTypeRemunerationController::class)
+                    ->whereIn('action', ['valider', 'fermer', 'desactiver', 'reactiver'])
+                    ->name('statut');
+            });
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)

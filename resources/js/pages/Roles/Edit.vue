@@ -90,6 +90,7 @@ const resourceLabels: Record<string, string> = {
     'rh-employes': 'RH — Employés',
     'rh-contrats': 'RH — Contrats',
     'rh-paie': 'Paie / Salaires',
+    'rh-types-remuneration': 'RH — Primes et avantages',
     // Administration
     users: 'Utilisateurs',
     // Paramètres

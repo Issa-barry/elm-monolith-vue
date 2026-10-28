@@ -154,6 +154,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
             'rh-employes.donnees_sensibles', 'rh-remunerations.read', 'rh-referentiels.gerer',
             'imports-rh.create',        'imports-rh.read',
+            // Primes et avantages : gestion seulement — la validation reste au super administrateur (ADR 0038).
+            'rh-types-remuneration.create', 'rh-types-remuneration.read', 'rh-types-remuneration.update', 'rh-types-remuneration.delete',
             // Administration
             'users.create',             'users.read',             'users.update',
             'communications.read',      'communications.manage',
