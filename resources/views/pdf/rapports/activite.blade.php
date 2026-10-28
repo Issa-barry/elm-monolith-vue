@@ -94,13 +94,13 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
 <p class="note">Encaissé {{ $gnf($v['resume']['encaisse']) }} GNF et reste {{ $gnf($v['resume']['reste']) }} GNF sur ces ventes (état actuel).
     @if ($v['resume']['annulees_nombre'] > 0) {{ $v['resume']['annulees_nombre'] }} vente(s) annulée(s) ou retournée(s) exclue(s) du chiffre d'affaires. @endif</p>
 <table class="data">
-    <thead><tr><th>Facture</th><th>Date</th><th>Client</th><th>Agent</th><th>Créée à</th><th>Encaissée à</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
+    <thead><tr><th>Facture</th><th>Date</th><th>Client</th><th>Véhicule</th><th>Agent</th><th>Créée à</th><th>Encaissée à</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
     <tbody>
     @forelse ($v['lignes'] as $l)
-        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td><td>{{ $l['encaisse_a'] ?? '—' }}</td>
+        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['vehicule_nom'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td><td>{{ $l['encaisse_a'] ?? '—' }}</td>
             <td class="right">{{ $gnf($l['montant']) }}</td><td class="right">{{ $gnf($l['encaisse']) }}</td><td class="right">{{ $gnf($l['reste']) }}</td><td>{{ $l['statut_label'] }}</td></tr>
     @empty
-        <tr><td colspan="10" class="vide">Aucune vente sur la période.</td></tr>
+        <tr><td colspan="11" class="vide">Aucune vente sur la période.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -136,16 +136,16 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
 <h2>Dettes clients</h2>
 <p class="note">{{ $c['resume']['impayees'] }} impayée(s), {{ $c['resume']['partielles'] }} partielle(s) — état au moment de l'export, toutes dates confondues.</p>
 <table class="data">
-    <thead><tr><th>Facture</th><th>Date</th><th class="right">Jours</th><th>Client</th><th>Agent</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
+    <thead><tr><th>Facture</th><th>Date</th><th class="right">Jours</th><th>Client</th><th>Véhicule</th><th>Agent</th><th class="right">Montant</th><th class="right">Encaissé</th><th class="right">Reste</th><th>Statut</th></tr></thead>
     <tbody>
     @forelse ($c['lignes'] as $l)
-        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td class="right">{{ $l['anciennete_jours'] }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td>
+        <tr><td>{{ $l['reference'] }}</td><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td class="right">{{ $l['anciennete_jours'] }}</td><td>{{ $l['client'] ?? '—' }}</td><td>{{ $l['vehicule_nom'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td>
             <td class="right">{{ $gnf($l['montant']) }}</td><td class="right">{{ $gnf($l['encaisse']) }}</td><td class="right">{{ $gnf($l['reste']) }}</td><td>{{ $l['statut_label'] }}</td></tr>
     @empty
-        <tr><td colspan="9" class="vide">Aucune dette client en cours.</td></tr>
+        <tr><td colspan="10" class="vide">Aucune dette client en cours.</td></tr>
     @endforelse
     @if (count($c['lignes']) > 0)
-        <tr class="total"><td colspan="7" class="right">RESTE DÛ</td><td class="right">{{ $gnf($c['resume']['reste']) }}</td><td></td></tr>
+        <tr class="total"><td colspan="8" class="right">RESTE DÛ</td><td class="right">{{ $gnf($c['resume']['reste']) }}</td><td></td></tr>
     @endif
     </tbody>
 </table>

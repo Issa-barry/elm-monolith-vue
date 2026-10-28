@@ -58,6 +58,25 @@ interface EmployeData {
     statut_label: string;
     site: string | null;
     fonction_libelle: string | null;
+    service_libelle: string | null;
+    date_embauche: string | null;
+    date_sortie: string | null;
+    motif_sortie: string | null;
+    date_naissance: string | null;
+    lieu_naissance: string | null;
+    sexe: string | null;
+    nationalite: string | null;
+    contact_urgence_nom: string | null;
+    contact_urgence_lien: string | null;
+    contact_urgence_telephone: string | null;
+    // null sans la permission rh-employes.donnees_sensibles (jamais envoyé)
+    donnees_sensibles: {
+        numero_cnss: string | null;
+        paiement_mode_label: string | null;
+        paiement_etablissement: string | null;
+        paiement_numero_compte: string | null;
+        paiement_titulaire: string | null;
+    } | null;
     contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
     contrats: ContratRow[];
     affectations: AffectationRow[];
@@ -93,11 +112,14 @@ const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
-const STATUT_CONTRAT_CLASS: Record<string, string> = {
-    actif: 'bg-emerald-100 text-emerald-700',
-    termine: 'bg-zinc-100 text-zinc-600',
-    rompu: 'bg-red-100 text-red-700',
-};
+const SEXE_LABEL: Record<string, string> = { F: 'Femme', M: 'Homme' };
+
+/** Date ISO (AAAA-MM-JJ) → JJ/MM/AAAA, sans dépendre du fuseau du navigateur. */
+function dateFr(iso: string | null): string {
+    if (!iso) return '—';
+    const [annee, mois, jour] = iso.split('-');
+    return `${jour}/${mois}/${annee}`;
+}
 </script>
 
 <template>
@@ -218,6 +240,178 @@ const STATUT_CONTRAT_CLASS: Record<string, string> = {
                         </dl>
                     </div>
 
+                    <!-- Dossier -->
+                    <div class="overflow-hidden rounded-xl border bg-card">
+                        <div class="border-b px-5 py-4">
+                            <h3
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Dossier
+                            </h3>
+                        </div>
+                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Service
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{ employe.service_libelle ?? '—' }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Date d'embauche
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{ employe.date_embauche ?? '—' }}
+                                </dd>
+                            </div>
+                            <div v-if="employe.date_sortie">
+                                <dt class="text-xs text-muted-foreground">
+                                    Date de sortie
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{ dateFr(employe.date_sortie) }}
+                                </dd>
+                            </div>
+                            <div v-if="employe.motif_sortie">
+                                <dt class="text-xs text-muted-foreground">
+                                    Motif de sortie
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{ employe.motif_sortie }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Naissance
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{ dateFr(employe.date_naissance) }}
+                                    <span
+                                        v-if="employe.lieu_naissance"
+                                        class="font-normal text-muted-foreground"
+                                        >à {{ employe.lieu_naissance }}</span
+                                    >
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Sexe · nationalité
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{
+                                        employe.sexe
+                                            ? SEXE_LABEL[employe.sexe]
+                                            : '—'
+                                    }}
+                                    · {{ employe.nationalite ?? '—' }}
+                                </dd>
+                            </div>
+                            <div class="col-span-2">
+                                <dt class="text-xs text-muted-foreground">
+                                    Contact d'urgence
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    <template
+                                        v-if="employe.contact_urgence_nom"
+                                    >
+                                        {{ employe.contact_urgence_nom }}
+                                        <span
+                                            v-if="employe.contact_urgence_lien"
+                                            class="font-normal text-muted-foreground"
+                                            >({{
+                                                employe.contact_urgence_lien
+                                            }})</span
+                                        >
+                                        <span
+                                            v-if="
+                                                employe.contact_urgence_telephone
+                                            "
+                                        >
+                                            ·
+                                            {{
+                                                employe.contact_urgence_telephone
+                                            }}</span
+                                        >
+                                    </template>
+                                    <template v-else>—</template>
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- Données sensibles : envoyées par le serveur seulement avec la permission -->
+                    <div
+                        v-if="employe.donnees_sensibles"
+                        class="overflow-hidden rounded-xl border bg-card"
+                        data-testid="employe-donnees-sensibles"
+                    >
+                        <div class="border-b px-5 py-4">
+                            <h3
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Données sensibles
+                            </h3>
+                        </div>
+                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    N° CNSS
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{
+                                        employe.donnees_sensibles.numero_cnss ??
+                                        '—'
+                                    }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-muted-foreground">
+                                    Paiement du salaire
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{
+                                        employe.donnees_sensibles
+                                            .paiement_mode_label ?? '—'
+                                    }}
+                                    <template
+                                        v-if="
+                                            employe.donnees_sensibles
+                                                .paiement_numero_compte
+                                        "
+                                    >
+                                        ·
+                                        {{
+                                            employe.donnees_sensibles
+                                                .paiement_etablissement
+                                        }}
+                                        {{
+                                            employe.donnees_sensibles
+                                                .paiement_numero_compte
+                                        }}
+                                    </template>
+                                </dd>
+                            </div>
+                            <div
+                                v-if="
+                                    employe.donnees_sensibles.paiement_titulaire
+                                "
+                                class="col-span-2"
+                            >
+                                <dt class="text-xs text-muted-foreground">
+                                    Titulaire du compte
+                                </dt>
+                                <dd class="mt-0.5 font-medium">
+                                    {{
+                                        employe.donnees_sensibles
+                                            .paiement_titulaire
+                                    }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
                     <!-- Compte utilisateur & profil d'accès -->
                     <div class="overflow-hidden rounded-xl border bg-card">
                         <div class="border-b px-5 py-4">
@@ -307,16 +501,10 @@ const STATUT_CONTRAT_CLASS: Record<string, string> = {
                                         >
                                             {{ c.type_contrat_label }}
                                         </span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                            :class="
-                                                STATUT_CONTRAT_CLASS[
-                                                    c.statut_contrat
-                                                ]
-                                            "
-                                        >
-                                            {{ c.statut_contrat_label }}
-                                        </span>
+                                        <StatusDot
+                                            :status="c.statut_contrat"
+                                            :label="c.statut_contrat_label"
+                                        />
                                     </div>
                                     <p class="text-xs text-muted-foreground">
                                         Du {{ c.date_debut }}
@@ -327,8 +515,22 @@ const STATUT_CONTRAT_CLASS: Record<string, string> = {
                                             (indéterminé)</template
                                         >
                                     </p>
+                                    <!-- Salaire : transmis seulement avec rh-remunerations.read -->
+                                    <p
+                                        v-if="c.salaire_base"
+                                        class="text-xs text-muted-foreground"
+                                    >
+                                        Salaire de base :
+                                        {{
+                                            Number(
+                                                c.salaire_base,
+                                            ).toLocaleString('fr-FR')
+                                        }}
+                                        GNF
+                                    </p>
                                 </div>
                                 <Link
+                                    v-if="can('rh-contrats.update')"
                                     :href="`/backoffice/contrats/${c.id}/edit`"
                                 >
                                     <Button

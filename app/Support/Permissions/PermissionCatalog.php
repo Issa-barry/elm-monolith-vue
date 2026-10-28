@@ -51,8 +51,15 @@ final class PermissionCatalog
         'ventes.qte.update' => 'Ventes — modifier une quantité déjà chargée',
         'ventes.prix.update' => 'Ventes — modifier un prix unitaire',
         'rh-paie.validate' => 'Paie — valider une période',
-        'rh-paie.pay' => 'Paie — payer une période',
+        // Plus vérifiée depuis le 26/10/2026 : payer un salaire exige `comptabilite.payer`
+        // (PaiePolicy::pay). Conservée car des rôles en base la référencent.
+        'rh-paie.pay' => 'Paie — payer une période (sans effet : remplacée par Comptabilité — payer)',
         'rh-paie.close' => 'Paie — clôturer une période',
+        'rh-employes.donnees_sensibles' => 'Employés — voir et modifier les données sensibles (n° CNSS, coordonnées de paiement)',
+        'rh-remunerations.read' => 'Employés — voir les salaires et rémunérations (contrats, fiche employé)',
+        'rh-referentiels.gerer' => 'RH — gérer les fonctions et services',
+        'imports-rh.create' => 'Import RH — mettre à jour les dossiers et contrats par fichier Excel',
+        'imports-rh.read' => 'Import RH — consulter les imports',
         'imports-flotte.create' => 'Import flotte — lancer un import',
         'imports-flotte.read' => 'Import flotte — consulter les imports',
         'imports-vehicules-maj.create' => 'Import véhicules — lancer une mise à jour en masse',
@@ -246,6 +253,8 @@ final class PermissionCatalog
             'label' => 'RH & Paie',
             'resources' => ['rh-employes', 'rh-contrats', 'rh-paie'],
             'standalone' => [
+                'Dossier salarié' => ['rh-employes.donnees_sensibles', 'rh-remunerations.read', 'rh-referentiels.gerer'],
+                'Import RH' => ['imports-rh.create', 'imports-rh.read'],
                 'Paie' => ['rh-paie.validate', 'rh-paie.pay', 'rh-paie.close'],
             ],
         ],

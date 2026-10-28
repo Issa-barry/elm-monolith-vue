@@ -166,6 +166,12 @@ class PaieCalculService
         });
     }
 
+    /**
+     * Reprend en paie les dépenses validées du salarié pour le mois, si leur type porte une retenue
+     * (avance, retenue, absence, autre déduction). Un type sans effet sur la paie (remboursement de
+     * frais…) ou un ancien type « prime » / « autre gain » n'est jamais repris : les primes viennent
+     * du référentiel RH (docs/paie.md).
+     */
     public function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
     {
         $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
@@ -181,13 +187,15 @@ class PaieCalculService
             ->get();
 
         foreach ($depenses as $depense) {
+            $typePaie = TypeVariablePaie::tryFrom($depense->depenseType?->type_paie ?? '');
+            if ($typePaie === null || ! $typePaie->estDeduction()) {
+                continue;
+            }
+
             $libelle = $depense->depenseType->libelle ?? 'Dépense';
             if ($depense->commentaire) {
                 $libelle .= ' — '.$depense->commentaire;
             }
-
-            $typePaie = TypeVariablePaie::tryFrom($depense->depenseType->type_paie ?? '')
-                ?? TypeVariablePaie::AUTRE_DEDUCTION;
 
             $ligne->variables()->create([
                 'depense_id' => $depense->id,
@@ -216,46 +224,6 @@ class PaieCalculService
             'reste_a_payer' => $resteAPayer,
             'statut' => $statut,
         ]);
-    }
-
-    /**
-     * Paiement global d'un salarié : répartit un montant en FIFO (période la
-     * plus ancienne d'abord) sur ses lignes de paie impayées, sur toutes les
-     * périodes — l'utilisateur paie un solde total, pas une période précise.
-     */
-    public function payerEmploye(string $employeId, string $orgId, float $montant, string $modePaiement, string $paidAt, ?string $note = null): void
-    {
-        $lignes = PaieLigne::with('periode')
-            ->where('employe_id', $employeId)
-            ->whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('reste_a_payer', '>', 0)
-            ->get()
-            ->sortBy(fn (PaieLigne $l) => sprintf('%04d-%02d', $l->periode->annee, $l->periode->mois));
-
-        $totalDisponible = (float) $lignes->sum('reste_a_payer');
-        if ($montant > $totalDisponible + 0.01) {
-            throw new \InvalidArgumentException("Le montant dépasse le reste à payer ({$totalDisponible} GNF).");
-        }
-
-        $touched = PeriodePayabilityChecker::touchedUntilAmount($lignes, $montant, fn ($l) => (float) $l->reste_a_payer);
-        PeriodePayabilityChecker::assertLignesPayables($touched);
-
-        $restant = $montant;
-        foreach ($lignes as $ligne) {
-            if ($restant <= 0.01) {
-                break;
-            }
-
-            $alloue = min($restant, (float) $ligne->reste_a_payer);
-            $ligne->paiements()->create([
-                'montant' => $alloue,
-                'date_paiement' => $paidAt,
-                'mode_paiement' => $modePaiement,
-                'note' => $note,
-            ]);
-            $this->recalculerApresPaiement($ligne);
-            $restant -= $alloue;
-        }
     }
 
     private function joursActifs(Contrat $contrat, Carbon $debut, Carbon $fin, int $joursMois): float

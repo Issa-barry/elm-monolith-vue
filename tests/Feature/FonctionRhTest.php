@@ -9,6 +9,7 @@ use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -28,9 +29,15 @@ class FonctionRhTest extends TestCase
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 
+    /**
+     * Depuis le 27/10/2026, l'accès passe par la permission `rh-referentiels.gerer` (et non plus par
+     * le nom du rôle) ; admin_entreprise la reçoit par migration de rattrapage, reproduite ici.
+     */
     private function admin(Organization $org): User
     {
-        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'rh-referentiels.gerer', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web'])
+            ->givePermissionTo('rh-referentiels.gerer');
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $this->attachSite($org, $user);

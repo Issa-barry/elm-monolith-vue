@@ -78,6 +78,9 @@ Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
 - **Agence = agence de la commande** (filtre Agence et colonne **« Créée à »**). La colonne
   **« Encaissée à »** indique où les paiements de la facture ont été reçus (plusieurs agences
   possibles, séparées par une virgule) — ADR 0012.
+- Colonne **« Véhicule »** (25/10/2026) : véhicule de la commande (`commandes_ventes.vehicule_id`),
+  « — » pour une vente sans véhicule. Affichage seulement, aucun filtre ni calcul. Même colonne dans
+  les Dettes clients, l'Excel et le PDF.
 
 ### Encaissements (RAP-005)
 

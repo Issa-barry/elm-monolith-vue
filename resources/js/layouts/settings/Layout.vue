@@ -85,6 +85,19 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
         groups.push({ title: 'Gestion', items: gestionItems });
     }
 
+    // Référentiels RH (permission dédiée), seulement si le module RH est actif.
+    const moduleRhActif =
+        ((page.props as any).module_flags?.rh as boolean | undefined) !== false;
+    if (moduleRhActif && can('rh-referentiels.gerer')) {
+        groups.push({
+            title: 'RH',
+            items: [
+                { title: 'Fonctions RH', href: '/backoffice/fonctions-rh' },
+                { title: 'Services RH', href: '/backoffice/services-rh' },
+            ],
+        });
+    }
+
     if (can('parametres.update')) {
         groups.push({
             title: 'Administration',

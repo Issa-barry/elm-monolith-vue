@@ -28,6 +28,8 @@ const props = defineProps<{
     payments: CommissionPaymentRow[];
     expenses: CommissionExpenseRow[];
     modes_paiement: ModePaiementOption[];
+    // Reste des seuls mois validés : le paiement d'un mois non validé est refusé.
+    reste_payable: number;
     can_payer: boolean;
 }>();
 
@@ -51,8 +53,8 @@ const showPaiementDialog = ref(false);
                 eyebrow="Salarié"
                 :title="employe.nom"
                 :telephone="employe.telephone"
-                :can-pay="can_payer && commission_summary.reste_a_payer > 0"
-                :pay-label="`Payer ${formatGNF(commission_summary.reste_a_payer)}`"
+                :can-pay="can_payer && reste_payable > 0"
+                :pay-label="`Payer ${formatGNF(reste_payable)}`"
                 @pay="showPaiementDialog = true"
             />
 
@@ -140,7 +142,7 @@ const showPaiementDialog = ref(false);
     <CommissionPaymentDialog
         v-model:visible="showPaiementDialog"
         :beneficiaire-nom="employe.nom"
-        :solde-a-payer="commission_summary.reste_a_payer"
+        :solde-a-payer="reste_payable"
         :modes-paiement="modes_paiement"
         :payment-route="`/backoffice/comptabilite/salaires/employes/${employe.id}/paiements`"
     />

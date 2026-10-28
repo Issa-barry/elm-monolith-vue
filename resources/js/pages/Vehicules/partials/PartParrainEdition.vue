@@ -35,8 +35,6 @@ interface Groupe {
 
 const props = defineProps<{
     vehiculeId: string;
-    /** Le véhicule fait de la logistique : ligne « jamais rémunéré » affichée pour mémoire. */
-    transfertsLabel?: string | null;
 }>();
 
 const emit = defineEmits<{ fermer: [] }>();
@@ -300,14 +298,6 @@ defineExpose({ peutEnregistrer, modifie });
                             >
                                 {{ alertes[cle(g)] }}
                             </p>
-                        </td>
-                    </tr>
-                    <tr v-if="transfertsLabel" class="text-muted-foreground">
-                        <td class="px-4 py-2.5">{{ transfertsLabel }}</td>
-                        <td class="px-4 py-2.5">—</td>
-                        <td></td>
-                        <td class="px-4 py-2.5 text-right text-xs">
-                            Jamais rémunéré (transferts entre sites)
                         </td>
                     </tr>
                 </tbody>

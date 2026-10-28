@@ -36,9 +36,11 @@ class PaieTest extends TestCase
 
         $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
+        // comptabilite.payer : depuis le 26/10/2026, payer un salaire (même par l'ancienne route
+        // Paie RH) exige la permission de la Comptabilité (PaiePolicy::pay).
         $this->user = $this->makeUser([
             'rh-paie.read', 'rh-paie.create', 'rh-paie.update', 'rh-paie.delete',
-            'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close',
+            'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer',
         ]);
     }
 
@@ -449,7 +451,8 @@ class PaieTest extends TestCase
         $autreUser = User::factory()->create(['organization_id' => $autreOrg->id]);
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $autreUser->assignRole('admin_entreprise');
-        $autreUser->givePermissionTo(['rh-paie.read', 'rh-paie.pay']);
+        Permission::firstOrCreate(['name' => 'comptabilite.payer', 'guard_name' => 'web']);
+        $autreUser->givePermissionTo(['rh-paie.read', 'rh-paie.pay', 'comptabilite.payer']);
         $autreUser->sites()->attach($autreSite->id, ['role' => 'employe', 'is_default' => true]);
 
         $periode = PaiePeriode::create([

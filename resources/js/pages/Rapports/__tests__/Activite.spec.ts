@@ -421,6 +421,7 @@ describe('Rapports/Activite', () => {
                         date: '2026-09-26',
                         client: 'Client A',
                         agent: null,
+                        vehicule_nom: null,
                         site_nom: 'Matoto',
                         encaisse_a: null,
                         montant: 800_000,

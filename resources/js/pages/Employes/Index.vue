@@ -19,10 +19,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
     Eye,
+    History,
     MoreVertical,
     Pencil,
     Plus,
     Trash2,
+    Upload,
     UserRound,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -51,6 +53,7 @@ interface Employe {
     statut: string;
     statut_label: string;
     site: string | null;
+    service_libelle: string | null;
     contrat_actif: ContratActif | null;
 }
 
@@ -63,15 +66,20 @@ type Filters = {
     statut?: string;
     type_employe?: string;
     type_contrat?: string;
+    service_rh_id?: string;
+    site_ids?: string[];
     search?: string;
 };
 
 const props = defineProps<{
     employes: Employe[];
     filters: Filters;
+    // Agences du filtre : toutes, ou celles de l'utilisateur (périmètre appliqué par le serveur).
+    sites: { id: string; nom: string }[];
     statut_options: Option[];
     type_employe_options: Option[];
     type_contrat_options: Option[];
+    service_options: Option[];
 }>();
 
 const { can } = usePermissions();
@@ -89,6 +97,13 @@ const filterFields: FilterField[] = [
         label: 'Statut',
         type: 'select',
         options: props.statut_options,
+        inline: true,
+    },
+    {
+        key: 'service_rh_id',
+        label: 'Service',
+        type: 'select',
+        options: props.service_options,
     },
     {
         key: 'type_employe',
@@ -182,12 +197,37 @@ function confirmDelete(e: Employe) {
                         }}
                     </p>
                 </div>
-                <Link
-                    v-if="can('rh-employes.create')"
-                    href="/backoffice/employes/create"
-                >
-                    <Button><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button>
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <!-- Import des dossiers et contrats : mêmes droits que côté serveur (ImportRhPolicy) -->
+                    <Link
+                        v-if="can('imports-rh.read')"
+                        href="/backoffice/employes/imports"
+                    >
+                        <Button variant="outline">
+                            <History class="mr-2 h-4 w-4" />Imports
+                        </Button>
+                    </Link>
+                    <Link
+                        v-if="
+                            can('imports-rh.create') &&
+                            can('rh-employes.update')
+                        "
+                        href="/backoffice/employes/imports/nouveau"
+                    >
+                        <Button variant="outline">
+                            <Upload class="mr-2 h-4 w-4" />Mettre à jour par
+                            fichier
+                        </Button>
+                    </Link>
+                    <Link
+                        v-if="can('rh-employes.create')"
+                        href="/backoffice/employes/create"
+                    >
+                        <Button
+                            ><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button
+                        >
+                    </Link>
+                </div>
             </div>
 
             <!-- Filtres -->
@@ -195,6 +235,7 @@ function confirmDelete(e: Employe) {
                 url="/backoffice/employes"
                 :values="filters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="employes.length"
             />
 
@@ -314,6 +355,20 @@ function confirmDelete(e: Employe) {
                         <template #body="{ data }">
                             <span class="text-sm text-muted-foreground">{{
                                 data.site ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Service -->
+                    <Column
+                        field="service_libelle"
+                        header="Service"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-sm text-muted-foreground">{{
+                                data.service_libelle ?? '—'
                             }}</span>
                         </template>
                     </Column>

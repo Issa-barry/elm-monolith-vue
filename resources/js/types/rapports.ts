@@ -6,6 +6,8 @@ export interface LigneFacture {
     date: string;
     client: string | null;
     agent: string | null;
+    /** Véhicule de la commande, null pour une vente sans véhicule. */
+    vehicule_nom: string | null;
     /** « Créée à » : agence de la commande. */
     site_nom: string | null;
     /** « Encaissée à » : agence(s) où ses encaissements ont été reçus (ADR 0012), null sans encaissement. */

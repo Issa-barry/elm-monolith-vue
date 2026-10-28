@@ -42,7 +42,7 @@ const groupes = [
 
 async function monter() {
     const wrapper = mount(PartParrainEdition, {
-        props: { vehiculeId: 'v1', transfertsLabel: 'Transferts logistiques' },
+        props: { vehiculeId: 'v1' },
         global: { plugins: [PrimeVue] },
     });
     await flushPromises();
@@ -90,12 +90,12 @@ describe('PartParrainEdition — saisie en place de la part du parrain (PARRAIN-
         vi.restoreAllMocks();
     });
 
-    it('affiche une ligne modifiable par partage, et les transferts jamais rémunérés', async () => {
+    it('affiche une ligne modifiable par partage, sans ligne « jamais rémunéré »', async () => {
         const w = await monter();
 
         expect(champ(w, 'vente').exists()).toBe(true);
         expect(champ(w, 'distribution_client').exists()).toBe(true);
-        expect(w.text()).toContain('Jamais rémunéré');
+        expect(w.text()).not.toContain('Jamais rémunéré');
     });
 
     it("prend la date du jour du serveur, jamais l'horloge du poste", async () => {

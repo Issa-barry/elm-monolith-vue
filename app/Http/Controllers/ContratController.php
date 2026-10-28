@@ -6,8 +6,12 @@ use App\Enums\StatutContrat;
 use App\Enums\TypeContrat;
 use App\Models\Contrat;
 use App\Models\Employe;
+use App\Models\Site;
+use App\Services\Rh\ContratService;
+use App\Services\SiteScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,11 +22,24 @@ class ContratController extends Controller
     {
         $this->authorize('viewAny', Contrat::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['statut_contrat', 'type_contrat']);
+        $filtreSiteIds = $user->voitToutesLesAgences()
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : [];
 
-        $query = Contrat::with(['employe:id,personne_id,matricule', 'employe.personne'])
+        $query = Contrat::with(['employe:id,personne_id,matricule,site_id', 'employe.personne'])
             ->where('organization_id', $orgId);
+
+        // Périmètre de consultation : contrats des employés de ses agences (ADR 0025).
+        if (! $user->voitToutesLesAgences()) {
+            $query->whereHas('employe', fn ($e) => app(SiteScopeService::class)->applyToQuery($e, $user));
+        }
+
+        if ($filtreSiteIds !== []) {
+            $query->whereHas('employe', fn ($e) => $e->whereIn('site_id', $filtreSiteIds));
+        }
 
         if (! empty($filters['statut_contrat'])) {
             $query->where('statut_contrat', $filters['statut_contrat']);
@@ -35,9 +52,14 @@ class ContratController extends Controller
         $contrats = $query->orderByDesc('date_debut')->get()
             ->map(fn (Contrat $c) => $this->toRow($c));
 
+        $sites = $user->voitToutesLesAgences()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
         return Inertia::render('Contrats/Index', [
             'contrats' => $contrats,
-            'filters' => $filters,
+            'filters' => [...$filters, 'site_ids' => $filtreSiteIds],
+            'sites' => $sites->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values(),
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
         ]);
@@ -74,33 +96,12 @@ class ContratController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403);
 
-        $data = $request->validate($this->rules($request), $this->messages());
+        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
 
-        // Vérifier que l'employé appartient à l'organisation
-        $employe = Employe::where('id', $data['employe_id'])
-            ->where('organization_id', $orgId)
-            ->firstOrFail();
+        // Règle « un seul contrat actif », sous verrou de l'employé : commune avec l'import RH.
+        $contrat = app(ContratService::class)->creer($data, $orgId);
 
-        // Un seul contrat actif par employé
-        $dejaActif = Contrat::where('employe_id', $employe->id)
-            ->where('statut_contrat', StatutContrat::ACTIF->value)
-            ->exists();
-
-        if ($dejaActif) {
-            return back()->withErrors(['employe_id' => 'Cet employé a déjà un contrat actif. Terminez-le avant d\'en créer un nouveau.']);
-        }
-
-        // CDI => date_fin null
-        if ($data['type_contrat'] === TypeContrat::CDI->value) {
-            $data['date_fin'] = null;
-        }
-
-        Contrat::create(array_merge($data, [
-            'organization_id' => $orgId,
-            'statut_contrat' => StatutContrat::ACTIF->value,
-        ]));
-
-        return redirect()->route('employes.edit', $employe)
+        return redirect()->route('employes.edit', $contrat->employe_id)
             ->with('success', 'Contrat créé avec succès.');
     }
 
@@ -131,14 +132,34 @@ class ContratController extends Controller
     {
         $this->authorize('update', $contrat);
 
-        $data = $request->validate($this->rules($request, $contrat), $this->messages());
+        // Organisation du contrat, pas celle de l'acteur : le Gate::before du super administrateur
+        // laisse passer la Policy, l'employé cible doit rester dans l'organisation du contrat.
+        $orgId = $contrat->organization_id;
+
+        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
             $data['date_fin'] = null;
         }
 
-        $contrat->update($data);
+        // Statut non envoyé : le statut actuel est conservé (la colonne n'accepte pas null).
+        if (($data['statut_contrat'] ?? null) === null) {
+            unset($data['statut_contrat']);
+        }
+
+        $contrats = app(ContratService::class);
+
+        DB::transaction(function () use ($contrat, $data, $orgId, $contrats) {
+            $employe = $contrats->verrouillerEmploye($data['employe_id'], $orgId);
+
+            $statutFinal = $data['statut_contrat'] ?? $contrat->statut_contrat->value;
+            if ($statutFinal === StatutContrat::ACTIF->value) {
+                $contrats->assertAucunAutreContratActif($employe->id, $contrat->id);
+            }
+
+            $contrat->update($data);
+        });
 
         return redirect()->route('employes.edit', $contrat->employe_id)
             ->with('success', 'Contrat mis à jour.');
@@ -155,7 +176,11 @@ class ContratController extends Controller
             ->with('success', 'Contrat supprimé.');
     }
 
-    private function rules(Request $request, ?Contrat $contrat = null): array
+    /**
+     * L'appartenance de l'employé à l'organisation est contrôlée par ContratService::verrouillerEmploye() (404, comme
+     * à la création), pas ici.
+     */
+    private function rules(Request $request): array
     {
         $isCdd = $request->input('type_contrat') === TypeContrat::CDD->value;
 
@@ -201,7 +226,21 @@ class ContratController extends Controller
             'statut_contrat_label' => $c->statut_contrat->label(),
             'date_debut' => $c->date_debut?->format('Y-m-d'),
             'date_fin' => $c->date_fin?->format('Y-m-d'),
-            'salaire_base' => $c->salaire_base,
+            // Salaire : seulement avec `rh-remunerations.read`.
+            'salaire_base' => auth()->user()?->can('rh-remunerations.read') ? $c->salaire_base : null,
         ];
+    }
+
+    /**
+     * Le salaire ne se saisit qu'avec `rh-remunerations.read` : sans cette permission, la valeur
+     * envoyée est ignorée (le salaire existant reste intact en modification).
+     */
+    private function sansSalaireNonAutorise(array $data): array
+    {
+        if (! auth()->user()->can('rh-remunerations.read')) {
+            unset($data['salaire_base']);
+        }
+
+        return $data;
     }
 }

@@ -150,10 +150,12 @@ class ParrainPartADefinirTest extends TestCase
      *
      * @return list<array<string, mixed>>
      */
-    private function parts(int $vente, ?int $distribution = null): array
+    private function parts(int $vente, ?int $distribution = null, ?int $logistique = null): array
     {
         return [
             ['processus_code' => CommissionProcessus::CODE_VENTE, 'categorie_id' => $this->categorie->id, 'part_parrain' => $vente],
+            // PARRAIN-025 : les transferts entre sites rémunèrent aussi le parrain.
+            ['processus_code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 'categorie_id' => $this->categorie->id, 'part_parrain' => $logistique ?? $distribution ?? $vente],
             ['processus_code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 'categorie_id' => $this->categorie->id, 'part_parrain' => $distribution ?? $vente],
         ];
     }
@@ -242,7 +244,7 @@ class ParrainPartADefinirTest extends TestCase
         ])->assertRedirect();
 
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
-        $this->assertSame(2, $this->partsARepartir(), 'Vente et Distribution : lignes à 0 GNF créées par le système.');
+        $this->assertSame(3, $this->partsARepartir(), 'Vente, Transferts logistiques et Distribution : lignes à 0 GNF créées par le système.');
 
         // PARRAIN-022 : partage complet mais « à répartir » (ligne à 0 GNF créée par le système).
         $statuts = PartageConformiteVehiculesService::statuts($this->org->id, collect([$this->vehicule->fresh()]));
@@ -276,11 +278,13 @@ class ParrainPartADefinirTest extends TestCase
         $this->actingAs($this->user)->get(route('vehicules.show', $this->vehicule))
             ->assertInertia(fn ($page) => $page
                 ->where('parrain_remuneration.0.processus_code', CommissionProcessus::CODE_VENTE)
-                ->where('parrain_remuneration.1.processus_code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT));
+                ->where('parrain_remuneration.1.processus_code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+                ->where('parrain_remuneration.2.processus_code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT));
 
         $this->actingAs($this->user)->getJson(route('vehicules.parrain.part', $this->vehicule))
             ->assertJsonPath('groupes.0.processus_code', CommissionProcessus::CODE_VENTE)
-            ->assertJsonPath('groupes.1.processus_code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
+            ->assertJsonPath('groupes.1.processus_code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+            ->assertJsonPath('groupes.2.processus_code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
     }
 
     public function test_la_grille_liste_tous_les_partages_du_parrain_part_nulle_comprise(): void
@@ -290,7 +294,7 @@ class ParrainPartADefinirTest extends TestCase
         $this->actingAs($this->user)->getJson(route('vehicules.parrain.part', $this->vehicule))
             ->assertOk()
             ->assertJsonPath('statut', PartParrainService::A_DEFINIR)
-            ->assertJsonCount(2, 'groupes')
+            ->assertJsonCount(3, 'groupes')
             ->assertJsonPath('groupes.0.part_parrain_actuelle', 0);
     }
 
@@ -315,6 +319,53 @@ class ParrainPartADefinirTest extends TestCase
         $this->assertSame($enveloppes, CommissionEnveloppe::count());
     }
 
+    /**
+     * Incident du 25/10/2026 (véhicule Achour) : le dernier partage d'une équipe brouillon (import
+     * flotte) fait depuis l'onglet Parrain laissait l'équipe inactive — toute distribution refusée
+     * alors que tous les partages affichaient « Fait ». L'onglet Parrain déclenche désormais la même
+     * activation que « Gérer l'équipe ».
+     */
+    public function test_une_equipe_brouillon_sactive_quand_le_partage_du_parrain_est_le_dernier_a_faire(): void
+    {
+        $this->parrainer();
+        $this->unSeulLivreur();
+        // Vente et Distribution : le chauffeur seul à 600 GNF sur un barème de 1 000, « À faire ».
+        EquipeLivraisonPartageCategorie::where('livreur_id', $this->convoyeur->id)
+            ->where('processus_id', '!=', $this->logistique->id)
+            ->delete();
+        $this->equipe->update(['is_active' => false]);
+        $this->assertSame('a_faire', $this->statutsPartage()[CommissionProcessus::CODE_VENTE]);
+
+        $this->definir($this->parts(200))->assertSessionHasNoErrors();
+
+        $this->assertTrue($this->equipe->fresh()->is_active);
+        $this->assertTrue($this->vehicule->fresh()->is_active);
+    }
+
+    public function test_associer_un_parrain_active_une_equipe_brouillon_au_partage_conforme(): void
+    {
+        $this->equipe->update(['is_active' => false]);
+
+        $this->actingAs($this->user)->post(route('vehicules.parrain.store', $this->vehicule), [
+            'nom_complet' => 'Ousmane Test',
+            'telephone' => '622000111',
+            'code_pays' => 'GN',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue($this->equipe->fresh()->is_active);
+    }
+
+    public function test_une_equipe_brouillon_au_partage_a_faire_reste_inactive_apres_la_part_du_parrain(): void
+    {
+        $this->parrainer();
+        $this->equipe->update(['is_active' => false]);
+
+        // Deux livreurs : leurs montants ne bougent pas, le partage passe « À faire ».
+        $this->definir($this->parts(200))->assertSessionHasNoErrors();
+
+        $this->assertFalse($this->equipe->fresh()->is_active);
+    }
+
     public function test_plusieurs_livreurs_gardent_leurs_montants_et_le_partage_passe_a_faire(): void
     {
         $parrain = $this->parrainer();
@@ -331,11 +382,9 @@ class ParrainPartADefinirTest extends TestCase
         $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_VENTE]);
         $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_DISTRIBUTION_CLIENT]);
         $this->assertSame(1, $this->refusVente(CommissionProcessus::CODE_VENTE), 'Ventes refusées jusqu\'à la répartition.');
-        // Le transfert entre sites ne paie jamais le parrain : intact et conforme.
-        $logistique = ["livreur:{$this->chauffeur->id}" => 600, "livreur:{$this->convoyeur->id}" => 400];
-        ksort($logistique);
-        $this->assertSame($logistique, $this->lignesActives($this->logistique));
-        $this->assertSame('fait', $statuts[CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]);
+        // PARRAIN-025 : le transfert entre sites suit la même règle (part prise sur son enveloppe).
+        $this->assertSame($attendu, $this->lignesActives($this->logistique));
+        $this->assertSame('a_faire', $statuts[CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]);
     }
 
     public function test_seul_le_partage_modifie_passe_a_faire(): void
@@ -424,7 +473,7 @@ class ParrainPartADefinirTest extends TestCase
 
         $this->parrainer();
 
-        $this->assertSame(2, $this->partsARepartir());
+        $this->assertSame(3, $this->partsARepartir());
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
     }
 
@@ -439,7 +488,7 @@ class ParrainPartADefinirTest extends TestCase
             'code_pays' => 'GN',
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame(2, $this->partsARepartir());
+        $this->assertSame(3, $this->partsARepartir());
         $this->assertSame(PartParrainService::A_DEFINIR, $this->statut());
     }
 

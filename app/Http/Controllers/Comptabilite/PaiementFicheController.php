@@ -18,6 +18,7 @@ use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\Tresorerie\DecaissementFicheResolver;
+use App\Support\Fiches\BeneficiaireFiche;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -29,6 +30,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PaiementFicheController extends Controller
 {
+    /** @var array<string, array{nom: string, telephone: ?string}> bénéficiaires résolus (BeneficiaireFiche) */
+    private array $beneficiaires = [];
+
     public function indexLivreurs(Request $request): Response
     {
         return $this->renderIndex($request, 'livreur');
@@ -78,6 +82,7 @@ class PaiementFicheController extends Controller
             }
         }
 
+        $this->beneficiaires = BeneficiaireFiche::resoudre($fiches->getCollection());
         $fiches->through(fn (PaiementFiche $f) => $this->transform($f, $teamStatusParPeriode));
 
         $statsQuery = $this->buildQuery($orgId, $type, $filters);
@@ -130,6 +135,8 @@ class PaiementFicheController extends Controller
         if ($fiche->beneficiaire_type !== 'salarie' && $fiche->periode !== null) {
             $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationCombineParBeneficiaire($fiche->periode);
         }
+
+        $this->beneficiaires = BeneficiaireFiche::resoudre(collect([$fiche]));
 
         // Fiche salarié : consultable et imprimable, jamais payable ici (circuit Paie, ADR 0009).
         $canPayer = $fiche->beneficiaire_type !== 'salarie' && auth()->user()->can('payer', $fiche);
@@ -214,15 +221,16 @@ class PaiementFicheController extends Controller
         $this->applyFilters($query, $filters);
 
         $fiches = $query->with(['site', 'periode', 'payeur'])->orderBy('beneficiaire_nom')->get();
+        $beneficiaires = BeneficiaireFiche::resoudre($fiches);
 
         $filename = 'fiches-paiement-'.($type ?? 'toutes').'-'.now()->format('Y-m-d').'.csv';
 
-        return response()->streamDownload(function () use ($fiches) {
+        return response()->streamDownload(function () use ($fiches, $beneficiaires) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
 
             fputcsv($handle, [
-                'Agence', 'Période', 'Référence', 'Type bénéficiaire', 'Nom bénéficiaire',
+                'Agence', 'Période', 'Référence', 'Type bénéficiaire', 'Nom bénéficiaire', 'Téléphone bénéficiaire',
                 'Montant brut', 'Déductions', 'Net à payer', 'Statut',
                 'Date paiement', 'Mode paiement', 'Payé par', 'Signature',
             ], ';');
@@ -233,7 +241,8 @@ class PaiementFicheController extends Controller
                     $f->periode?->reference ?? '',
                     $f->reference,
                     $f->beneficiaire_type,
-                    $f->beneficiaire_nom,
+                    $beneficiaires["{$f->beneficiaire_type}:{$f->beneficiaire_id}"]['nom'] ?? $f->beneficiaire_nom,
+                    $beneficiaires["{$f->beneficiaire_type}:{$f->beneficiaire_id}"]['telephone'] ?? '',
                     number_format((float) $f->montant_brut, 0, ',', ' '),
                     number_format((float) $f->total_deductions, 0, ',', ' '),
                     number_format((float) $f->montant_net, 0, ',', ' '),
@@ -299,7 +308,8 @@ class PaiementFicheController extends Controller
             'id' => $f->id,
             'reference' => $f->reference,
             'beneficiaire_type' => $f->beneficiaire_type,
-            'beneficiaire_nom' => $f->beneficiaire_nom,
+            'beneficiaire_nom' => $this->beneficiaires["{$f->beneficiaire_type}:{$f->beneficiaire_id}"]['nom'] ?? $f->beneficiaire_nom,
+            'beneficiaire_telephone' => $this->beneficiaires["{$f->beneficiaire_type}:{$f->beneficiaire_id}"]['telephone'] ?? null,
             'site' => $f->site ? ['id' => $f->site->id, 'nom' => $f->site->nom] : null,
             'periode_reference' => $f->periode?->reference,
             'periode_id' => $f->periode_id,

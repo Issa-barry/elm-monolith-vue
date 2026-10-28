@@ -282,6 +282,143 @@ class ContratTest extends TestCase
             ->assertStatus(403);
     }
 
+    // ── update : organisation et contrat actif unique ─────────────────────────
+
+    public function test_update_refuse_de_rattacher_le_contrat_a_un_employe_d_une_autre_organisation(): void
+    {
+        $employe = $this->makeEmploye();
+        $contrat = $this->makeContrat($employe);
+        $otherOrg = Organization::factory()->create();
+        $otherEmploye = $this->makeEmploye(['organization_id' => $otherOrg->id, 'matricule' => '999997']);
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contrat), [
+                'employe_id' => $otherEmploye->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+            ])
+            ->assertStatus(404);
+
+        $this->assertSame($employe->id, $contrat->fresh()->employe_id);
+    }
+
+    public function test_update_refuse_d_activer_un_second_contrat(): void
+    {
+        $employe = $this->makeEmploye();
+        $this->makeContrat($employe);
+        $ancien = $this->makeContrat($employe, ['statut_contrat' => StatutContrat::TERMINE->value, 'date_debut' => '2024-01-01']);
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $ancien), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2024-01-01',
+                'statut_contrat' => 'actif',
+            ])
+            ->assertSessionHasErrors('employe_id');
+
+        $this->assertSame(StatutContrat::TERMINE, $ancien->fresh()->statut_contrat);
+    }
+
+    public function test_update_refuse_de_deplacer_un_contrat_actif_vers_un_employe_qui_en_a_deja_un(): void
+    {
+        $employeA = $this->makeEmploye();
+        $employeB = $this->makeEmploye();
+        $contratA = $this->makeContrat($employeA);
+        $this->makeContrat($employeB);
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contratA), [
+                'employe_id' => $employeB->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+            ])
+            ->assertSessionHasErrors('employe_id');
+
+        $this->assertSame($employeA->id, $contratA->fresh()->employe_id);
+    }
+
+    public function test_update_sans_statut_conserve_le_statut_actuel(): void
+    {
+        $employe = $this->makeEmploye();
+        $contrat = $this->makeContrat($employe);
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contrat), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-02-01',
+            ])
+            ->assertRedirect(route('employes.edit', $employe));
+
+        $fresh = $contrat->fresh();
+        $this->assertSame(StatutContrat::ACTIF, $fresh->statut_contrat);
+        $this->assertSame('2025-02-01', $fresh->date_debut->format('Y-m-d'));
+    }
+
+    // ── Salaire : réservé à rh-remunerations.read (27/10/2026) ───────────────
+
+    public function test_sans_rh_remunerations_read_le_salaire_n_est_ni_saisi_ni_affiche(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 3_000_000,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $contrat = Contrat::where('employe_id', $employe->id)->firstOrFail();
+        $this->assertNull($contrat->salaire_base);
+    }
+
+    public function test_sans_rh_remunerations_read_une_modification_garde_le_salaire_existant(): void
+    {
+        $employe = $this->makeEmploye();
+        $contrat = $this->makeContrat($employe, ['salaire_base' => 2_000_000]);
+
+        $this->actingAs($this->user)
+            ->get(route('contrats.edit', $contrat))
+            ->assertInertia(fn ($page) => $page->where('contrat.salaire_base', null));
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contrat), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertEquals(2_000_000, (float) $contrat->fresh()->salaire_base);
+    }
+
+    public function test_avec_rh_remunerations_read_le_salaire_est_saisi_et_affiche(): void
+    {
+        Permission::firstOrCreate(['name' => 'rh-remunerations.read', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('rh-remunerations.read');
+        $employe = $this->makeEmploye();
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdi',
+                'date_debut' => '2025-01-01',
+                'salaire_base' => 3_000_000,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $contrat = Contrat::where('employe_id', $employe->id)->firstOrFail();
+        $this->assertEquals(3_000_000, (float) $contrat->salaire_base);
+
+        $this->actingAs($this->user)
+            ->get(route('contrats.edit', $contrat))
+            ->assertInertia(fn ($page) => $page->where('contrat.salaire_base', fn ($v) => (float) $v === 3_000_000.0));
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_modifies_contrat(): void

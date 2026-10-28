@@ -216,7 +216,7 @@ class CommissionEnveloppeGenerator
 
     private static function contexteDepuisCommandeVente(CommandeVente $commande, ?Carbon $earnedAt = null): CommissionOperationContext
     {
-        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
+        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site', 'equipeLivraison']);
 
         // Une commande à réception explicite (cf. CommandeVente::requiertReceptionExplicite() :
         // distribution_client, Grossiste + Livraison depuis le 06/09/2026) se calcule sur les
@@ -244,6 +244,7 @@ class CommissionEnveloppeGenerator
             quantiteField: $quantiteField,
             lignes: $commande->lignes,
             vehiculeEligibleCommission: (bool) $commande->commission_eligible_snapshot,
+            equipeLivraison: $commande->equipeLivraisonPourCommission(),
         );
     }
 
@@ -273,6 +274,7 @@ class CommissionEnveloppeGenerator
             // (contrairement à une CommandeVente) — aucun équivalent de
             // commission_eligible_snapshot ici, comportement inchangé.
             vehiculeEligibleCommission: true,
+            equipeLivraison: $transfert->vehicule?->equipe,
             notifSourceLabel: 'transfert_logistique',
             notifLibelleOperation: 'Le transfert logistique',
             notifVerbeEvenement: $verbeEvenement,
@@ -813,7 +815,11 @@ class CommissionEnveloppeGenerator
             }
 
             if ($cibleCode === CommissionCibleType::CODE_EQUIPE_LIVRAISON) {
-                if (! $vehicule->equipe) {
+                // COMM-023 : pour une vente, l'équipe figée au chargement, même remplacée ou
+                // supprimée depuis ; sinon l'équipe actuelle du véhicule.
+                $equipe = $ctx->equipeLivraison;
+
+                if (! $equipe) {
                     $erreurs[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::EQUIPE_LIVRAISON_MANQUANTE, 'aucune équipe de livraison configurée pour le véhicule.', $montantTotal, [
                         'vehicule_id' => $vehicule->id,
                     ]);
@@ -821,12 +827,15 @@ class CommissionEnveloppeGenerator
                     continue;
                 }
 
-                // Toujours synchronisé pour disposer d'un CommissionGroupe stable (cible_id,
-                // traçabilité inchangée) — le partage réel n'est cependant plus calculé via ce
-                // groupe : le partage Livreur est défini PAR CATÉGORIE (ET PAR PROCESSUS), en
-                // montants GNF entiers fixes (equipe_livraison_partages_categorie), jamais un
-                // pourcentage.
-                $groupe = CommissionGroupeSyncService::syncEquipeLivraisonVehicule($vehicule);
+                // CommissionGroupe stable du véhicule (cible_id, traçabilité inchangée) — le
+                // partage réel n'est plus calculé via ce groupe : le partage Livreur est défini PAR
+                // CATÉGORIE (ET PAR PROCESSUS), en montants GNF entiers fixes
+                // (equipe_livraison_partages_categorie), jamais un pourcentage. Ses membres ne sont
+                // resynchronisés que depuis l'équipe actuelle du véhicule, jamais depuis une
+                // ancienne équipe figée au chargement.
+                $groupe = $equipe->id === $vehicule->equipe?->id
+                    ? CommissionGroupeSyncService::syncEquipeLivraisonVehicule($vehicule)
+                    : CommissionGroupeSyncService::groupeEquipeLivraisonVehicule($vehicule);
 
                 $parCategorie = collect($contributions)->groupBy(
                     fn (array $c) => $c['categorie']?->id ?? 'sans_categorie'
@@ -846,7 +855,7 @@ class CommissionEnveloppeGenerator
                     if ($categorieId === 'sans_categorie') {
                         $montantAttenduEquipe += (float) $contribsCategorie->sum('montant');
                         $erreursEquipe[] = self::erreurCible($cibleCode, CommissionMotifNonGeneration::CATEGORIE_MANQUANTE, 'une ligne sans catégorie ne peut pas résoudre de partage Livreur.', null, [
-                            'equipe_id' => $vehicule->equipe->id,
+                            'equipe_id' => $equipe->id,
                         ]);
                         $repartitionEchouee = true;
 
@@ -881,7 +890,7 @@ class CommissionEnveloppeGenerator
                     $quantiteCategorie = (int) $contribsCategorie->sum('quantite');
                     $montantAttenduEquipe += $quantiteCategorie * $enveloppeUnitaire;
                     $contexteCategorie = [
-                        'equipe_id' => $vehicule->equipe->id,
+                        'equipe_id' => $equipe->id,
                         'categorie_id' => $categorieId,
                         'quantite' => $quantiteCategorie,
                         'enveloppe_unitaire' => $enveloppeUnitaire,
@@ -890,7 +899,7 @@ class CommissionEnveloppeGenerator
                     $partages = CommissionPartageLivraisonCategorieChecker::partagesActifsPourGeneration(
                         $processusIdentite,
                         $processusBareme,
-                        $vehicule->equipe->id,
+                        $equipe->id,
                         $categorieId,
                         $earnedAt,
                     );
@@ -929,6 +938,11 @@ class CommissionEnveloppeGenerator
                     // Le parrain est une ligne du même partage : sa part sort de cette enveloppe,
                     // le total de l'équipe reste quantité × barème.
                     foreach ($partages as $partage) {
+                        // Part du parrain à 0 GNF : rien à lui verser — aucune part, donc aucune ligne
+                        // de fiche à 0 qui rouvrirait sa période (et ses écritures) pour rien.
+                        if ($partage->estParrain() && (int) $partage->montant_unitaire === 0) {
+                            continue;
+                        }
                         $type = $partage->estParrain() ? CommissionEnveloppePart::TYPE_PARRAIN : CommissionEnveloppePart::TYPE_LIVREUR;
                         $cleBeneficiaire = $type.':'.$partage->beneficiaire_id;
                         $montantMembre = $quantiteCategorie * (int) $partage->montant_unitaire;

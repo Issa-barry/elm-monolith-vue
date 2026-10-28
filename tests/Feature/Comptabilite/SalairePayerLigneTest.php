@@ -21,6 +21,10 @@ use Tests\TestCase;
  * Le paiement d'une ligne de paie ne doit être possible que si sa PaiePeriode est
  * VALIDE_RH/PAYE — même règle que PaiePaiementController, désormais partagée via
  * PaiePolicy::pay() (voir SalaireController::payerLigne).
+ *
+ * Depuis le 26/10/2026, payer un salaire exige `comptabilite.payer` (la permission du bouton) et
+ * non plus `rh-paie.pay` : le premier test, qui refusait `comptabilite.payer` seule, est remplacé
+ * par les deux tests de permission ci-dessous (décision : le paiement relève de la Comptabilité).
  */
 class SalairePayerLigneTest extends TestCase
 {
@@ -98,10 +102,27 @@ class SalairePayerLigneTest extends TestCase
             ->firstOrFail();
     }
 
-    public function test_payer_ligne_refuse_si_permission_comptabilite_payer_seule(): void
+    public function test_payer_ligne_autorise_avec_comptabilite_payer_seule(): void
     {
         $ligne = $this->makeLigne(StatutPeriodePaie::VALIDE_RH);
         $user = $this->makeUser(['comptabilite.payer']); // pas de rh-paie.pay
+
+        $this->actingAs($user)
+            ->post(route('comptabilite.salaires.payer', $ligne), [
+                'montant' => 100_000,
+                'date_paiement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertEquals(100_000, (float) $ligne->fresh()->deja_paye);
+    }
+
+    public function test_payer_ligne_refuse_avec_rh_paie_pay_seule(): void
+    {
+        $ligne = $this->makeLigne(StatutPeriodePaie::VALIDE_RH);
+        $user = $this->makeUser(['rh-paie.pay']); // pas de comptabilite.payer
 
         $this->actingAs($user)
             ->post(route('comptabilite.salaires.payer', $ligne), [

@@ -672,4 +672,156 @@ class CommissionTriggerVenteTest extends TestCase
             Parametre::getDeclencheurCommissionVente($this->org->id),
         );
     }
+
+    // ── COMM-023 : équipe figée au chargement ───────────────────────────────
+
+    /** Reproduit EquipeLivraisonController::destroy() (et le transfert du dernier livreur). */
+    private function supprimerEquipe(Vehicule $vehicule): EquipeLivraison
+    {
+        $equipe = $vehicule->fresh()->equipe;
+        Vehicule::whereKey($vehicule->id)->update(['is_active' => false]);
+        $equipe->membres()->delete();
+        $equipe->delete();
+
+        return $equipe;
+    }
+
+    private function creerNouvelleEquipe(Vehicule $vehicule): Livreur
+    {
+        $livreur = Livreur::factory()->create(['organization_id' => $vehicule->organization_id]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $vehicule->organization_id,
+            'vehicule_id' => $vehicule->id,
+            'is_active' => true,
+        ]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id,
+            'categorie_id' => Categorie::where('organization_id', $vehicule->organization_id)->where('nom', 'Défaut')->value('id'),
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($vehicule->organization_id, CommissionProcessus::CODE_VENTE)->id,
+            'livreur_id' => $livreur->id,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 300,
+            'effective_from' => now()->toDateString(),
+        ]);
+        Vehicule::whereKey($vehicule->id)->update(['is_active' => true]);
+
+        return $livreur;
+    }
+
+    /** @return array<string, float> beneficiaire_id => montant des parts de l'enveloppe Livreurs */
+    private function partsEquipe(CommandeVente $commande): array
+    {
+        $enveloppe = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)
+            ->first();
+        $this->assertNotNull($enveloppe, 'Enveloppe Livreurs attendue.');
+
+        return CommissionEnveloppePart::where('enveloppe_id', $enveloppe->id)
+            ->pluck('montant_brut', 'beneficiaire_id')
+            ->map(fn ($m) => (float) $m)
+            ->all();
+    }
+
+    public function test_validation_du_chargement_fige_l_equipe_du_vehicule(): void
+    {
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $this->makeProduit());
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $this->assertSame($vehicule->equipe->id, $commande->equipe_livraison_id);
+    }
+
+    public function test_equipe_supprimee_apres_chargement_la_commission_va_a_l_equipe_qui_a_charge(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $anciensMembres = $vehicule->equipe->membres->pluck('livreur_id', 'role');
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $this->makeProduit());
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $this->supprimerEquipe($vehicule);
+        $this->encaisserIntegralement($commande);
+
+        $this->assertEquals([
+            $anciensMembres['chauffeur'] => 400.0,
+            $anciensMembres['convoyeur'] => 200.0,
+        ], $this->partsEquipe($commande));
+    }
+
+    public function test_equipe_remplacee_apres_chargement_la_nouvelle_equipe_ne_recoit_rien(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $chauffeurInitial = $vehicule->equipe->membres->firstWhere('role', 'chauffeur')->livreur_id;
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $this->makeProduit());
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $this->supprimerEquipe($vehicule);
+        $nouveauLivreur = $this->creerNouvelleEquipe($vehicule);
+        $this->encaisserIntegralement($commande);
+
+        $parts = $this->partsEquipe($commande);
+        $this->assertSame(400.0, $parts[$chauffeurInitial]);
+        $this->assertArrayNotHasKey($nouveauLivreur->id, $parts);
+    }
+
+    public function test_commande_sans_equipe_figee_garde_l_equipe_actuelle_du_vehicule(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $this->makeProduit());
+        $commande = $this->validerChargementComplet($commande, $ligne);
+        // Commande chargée avant COMM-023 : aucune équipe figée.
+        $commande->update(['equipe_livraison_id' => null]);
+
+        $this->supprimerEquipe($vehicule);
+        $nouveauLivreur = $this->creerNouvelleEquipe($vehicule);
+        $this->encaisserIntegralement($commande);
+
+        $this->assertEquals([$nouveauLivreur->id => 600.0], $this->partsEquipe($commande));
+    }
+
+    /**
+     * Régularisation de VTE-231026-150 (27/10/2026) : commande chargée avant COMM-023, équipe
+     * supprimée avant le calcul → commission Livreurs partielle. Renseigner l'équipe qui a chargé
+     * puis relancer depuis la fiche commande génère sa part, à la date d'origine.
+     */
+    public function test_regularisation_en_renseignant_l_equipe_qui_a_charge_puis_relance(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $chauffeurInitial = $vehicule->equipe->membres->firstWhere('role', 'chauffeur')->livreur_id;
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $this->makeProduit());
+        $commande = $this->validerChargementComplet($commande, $ligne);
+        $equipeQuiACharge = $commande->equipe_livraison_id;
+        $commande->update(['equipe_livraison_id' => null]);
+
+        $this->supprimerEquipe($vehicule);
+        $this->encaisserIntegralement($commande);
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+        ]);
+        $nouveauLivreur = $this->creerNouvelleEquipe($vehicule);
+        $earnedAtOrigine = CommissionEnveloppe::where('source_id', $commande->id)->min('earned_at');
+
+        $this->travelTo(now()->addDays(4));
+        CommandeVente::whereKey($commande->id)->update(['equipe_livraison_id' => $equipeQuiACharge]);
+        $this->actingAs($this->user)
+            ->post(route('ventes.commissions.relancer', $commande))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $parts = $this->partsEquipe($commande);
+        $this->assertSame(400.0, $parts[$chauffeurInitial]);
+        $this->assertArrayNotHasKey($nouveauLivreur->id, $parts);
+        $this->assertEquals(
+            $earnedAtOrigine,
+            CommissionEnveloppe::where('source_id', $commande->id)
+                ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)
+                ->value('earned_at'),
+        );
+    }
 }
