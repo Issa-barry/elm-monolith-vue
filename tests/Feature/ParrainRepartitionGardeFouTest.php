@@ -28,6 +28,7 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageConformiteVehiculesService;
+use App\Services\Commission\PartageLivraisonVersionService;
 use App\Services\Commission\PartageParrainService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -444,17 +445,19 @@ class ParrainRepartitionGardeFouTest extends TestCase
         $distribution = $juge(CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
         $this->assertCount(1, $distribution, 'Distribution non répartie : refusée.');
         $this->assertSame(CommissionPartageLivraisonCategorieChecker::CODE_PARRAIN_A_REPARTIR, $distribution->first()['code']);
-        $this->assertCount(0, $juge(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT), 'Transfert entre sites : jamais concerné.');
+        // PARRAIN-025 : le transfert entre sites suit la même règle — part à 0 non confirmée, refusée.
+        $logistique = $juge(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $this->assertCount(1, $logistique, 'Transfert non réparti : refusé comme les autres processus.');
+        $this->assertSame(CommissionPartageLivraisonCategorieChecker::CODE_PARRAIN_A_REPARTIR, $logistique->first()['code']);
     }
 
-    public function test_le_transfert_entre_sites_nest_jamais_bloque_au_titre_du_parrain(): void
+    public function test_le_transfert_entre_sites_exige_la_part_du_parrain_et_accepte_un_zero_confirme(): void
     {
         $this->activer();
         $logistique = CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
         $this->regle($logistique, 1000);
         $this->partage($this->equipe, $logistique, [$this->livreurs[0]->id => 600, $this->livreurs[1]->id => 400]);
-
-        $nonConformites = CommissionPartageLivraisonCategorieChecker::nonConformites(
+        $juge = fn () => CommissionPartageLivraisonCategorieChecker::nonConformites(
             $this->org->id,
             $this->equipe->fresh(),
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
@@ -463,7 +466,16 @@ class ParrainRepartitionGardeFouTest extends TestCase
             Carbon::today(),
         );
 
-        $this->assertCount(0, $nonConformites);
+        // Partage d'avant PARRAIN-025, sans ligne du parrain : transfert refusé.
+        $this->assertCount(1, $juge());
+
+        // Part à 0 confirmée (reprise ou décision) : transfert autorisé.
+        PartageLivraisonVersionService::versionner(
+            $this->equipe->id, $logistique->id, $this->categorie->id,
+            [$this->livreurs[0]->id => 600, $this->livreurs[1]->id => 400],
+            Carbon::today(), 0, confirmerPartParrainNulle: true,
+        );
+        $this->assertCount(0, $juge());
     }
 
     /** @return array<string, mixed> */

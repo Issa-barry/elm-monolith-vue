@@ -7,16 +7,26 @@ import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
+    CircleCheck,
     Download,
     Eye,
     FileText,
@@ -44,6 +54,7 @@ interface LignePaie {
     reste_a_payer: number;
     statut: string;
     statut_label: string;
+    peut_payer: boolean;
 }
 
 const props = defineProps<{
@@ -61,7 +72,10 @@ const props = defineProps<{
         annee: number;
         label: string;
         statut: string | null;
+        statut_label: string | null;
+        payable: boolean;
     } | null;
+    can_valider_periode: boolean;
     periodes_disponibles: { mois: number; annee: number; label: string }[];
     filtre_mois: number;
     filtre_annee: number;
@@ -141,11 +155,49 @@ const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
 }));
 
+// Les exports reprennent les filtres de l'écran ; le serveur applique en plus le périmètre d'agences.
 function buildParams() {
     const p = new URLSearchParams();
     p.set('mois', String(props.filtre_mois));
     p.set('annee', String(props.filtre_annee));
+    if (props.filtre_statut) p.set('statut', props.filtre_statut);
+    (props.filtre_site_ids ?? []).forEach((id) => p.append('site_ids[]', id));
     return p;
+}
+
+const showValidation = ref(false);
+const validationEnCours = ref(false);
+const validationErreur = ref('');
+const CROIX_INACTIVE =
+    '[&>button:last-child]:pointer-events-none [&>button:last-child]:opacity-40';
+
+function ouvrirValidation() {
+    validationErreur.value = '';
+    showValidation.value = true;
+}
+
+function validerPeriode() {
+    if (!props.periode) return;
+    validationEnCours.value = true;
+    validationErreur.value = '';
+    router.post(
+        `/backoffice/comptabilite/salaires/periodes/${props.periode.id}/valider`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showValidation.value = false;
+            },
+            onError: (e) => {
+                validationErreur.value =
+                    (e as Record<string, string>).periode ??
+                    'La période n’a pas pu être validée.';
+            },
+            onFinish: () => {
+                validationEnCours.value = false;
+            },
+        },
+    );
 }
 
 function exportExcel() {
@@ -251,8 +303,33 @@ const periodeCourante = computed(
                             kpis.nb_salaries !== 1 ? 's' : ''
                         }}
                     </p>
+                    <div
+                        v-if="periode?.statut"
+                        class="mt-2 flex flex-wrap items-center gap-2 text-sm"
+                        data-testid="salaire-periode-statut"
+                    >
+                        <StatusDot
+                            :status="periode.statut"
+                            :label="periode.statut_label ?? periode.statut"
+                        />
+                        <span
+                            v-if="!periode.payable"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Les salaires seront payables une fois la période
+                            validée.
+                        </span>
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <Button
+                        v-if="can_valider_periode"
+                        data-testid="salaire-valider-periode"
+                        @click="ouvrirValidation"
+                    >
+                        <CircleCheck class="mr-1.5 h-4 w-4" />
+                        Valider la période
+                    </Button>
                     <button
                         type="button"
                         class="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm hover:bg-muted/50 disabled:opacity-40"
@@ -503,6 +580,7 @@ const periodeCourante = computed(
                                             <template
                                                 v-if="
                                                     can_payer &&
+                                                    l.peut_payer &&
                                                     l.reste_a_payer > 0
                                                 "
                                             >
@@ -558,6 +636,55 @@ const periodeCourante = computed(
         :errors="paiementErrors"
         @submit="handlePaiementSubmit"
     />
+
+    <Dialog
+        :open="showValidation"
+        @update:open="
+            (ouvert: boolean) => {
+                if (!ouvert && !validationEnCours) showValidation = false;
+            }
+        "
+    >
+        <DialogContent
+            class="sm:max-w-md"
+            :class="{ [CROIX_INACTIVE]: validationEnCours }"
+        >
+            <DialogHeader>
+                <DialogTitle
+                    >Valider la période {{ periode?.label }} ?</DialogTitle
+                >
+                <DialogDescription>
+                    Les montants affichés deviennent définitifs : les variables
+                    de paie ne pourront plus être modifiées et les salaires
+                    pourront être payés.
+                </DialogDescription>
+            </DialogHeader>
+            <p
+                v-if="validationErreur"
+                class="text-sm text-red-600 dark:text-red-400"
+            >
+                {{ validationErreur }}
+            </p>
+            <DialogFooter>
+                <Button
+                    variant="outline"
+                    :disabled="validationEnCours"
+                    @click="showValidation = false"
+                >
+                    Annuler
+                </Button>
+                <Button
+                    :disabled="validationEnCours"
+                    :aria-busy="validationEnCours"
+                    data-testid="salaire-valider-periode-confirmer"
+                    @click="validerPeriode"
+                >
+                    <Spinner v-if="validationEnCours" class="mr-1.5" />
+                    Valider
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 
     <AuditDrawer
         v-model:visible="showAudit"

@@ -9,6 +9,7 @@ use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\EquipeLivraison;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\ProduitVariante;
@@ -411,9 +412,12 @@ class CommandeVenteService
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
             self::decrementerStock($commande);
 
+            // COMM-023 : l'équipe qui charge est celle qui recevra la commission Livreurs, même si
+            // l'équipe du véhicule change ou est supprimée avant le calcul.
             $commande->update([
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'chargement_valide_at' => now(),
+                'equipe_livraison_id' => EquipeLivraison::idPourVehicule($commande->vehicule_id),
             ]);
 
             self::activerFacture($commande);

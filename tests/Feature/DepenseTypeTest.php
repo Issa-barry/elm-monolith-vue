@@ -210,6 +210,82 @@ class DepenseTypeTest extends TestCase
         ]);
     }
 
+    // ── Effet sur la paie (type_paie) : retenues seulement ──────────────────
+
+    public function test_un_type_employe_peut_etre_une_avance_sur_salaire(): void
+    {
+        $type = DepenseType::factory()->employe()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => 'AVANCE SUR SALAIRE-SALARIE',
+            'type_paie' => null,
+        ]);
+
+        $this->put("/backoffice/depenses/types/{$type->id}", [
+            'libelle' => 'AVANCE SUR SALAIRE-SALARIE',
+            'categorie' => CategorieDepense::EMPLOYE->value,
+            'type_paie' => 'avance',
+            'is_active' => true,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('avance', $type->fresh()->type_paie);
+    }
+
+    public function test_une_depense_ne_peut_plus_creer_de_prime_ni_d_autre_gain(): void
+    {
+        foreach (['prime', 'autre_gain'] as $gain) {
+            $this->post('/backoffice/depenses/types', [
+                'libelle' => "Type {$gain}",
+                'categorie' => CategorieDepense::EMPLOYE->value,
+                'type_paie' => $gain,
+            ])->assertSessionHasErrors('type_paie');
+        }
+
+        $this->assertDatabaseMissing('depense_types', ['type_paie' => 'prime']);
+        $this->assertDatabaseMissing('depense_types', ['type_paie' => 'autre_gain']);
+    }
+
+    public function test_un_type_existant_ne_peut_pas_passer_en_prime(): void
+    {
+        $type = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id, 'type_paie' => null]);
+
+        $this->put("/backoffice/depenses/types/{$type->id}", [
+            'libelle' => $type->libelle,
+            'categorie' => CategorieDepense::EMPLOYE->value,
+            'type_paie' => 'prime',
+            'is_active' => true,
+        ])->assertSessionHasErrors('type_paie');
+
+        $this->assertNull($type->fresh()->type_paie);
+    }
+
+    public function test_seul_un_type_employe_peut_avoir_un_effet_sur_la_paie(): void
+    {
+        $this->post('/backoffice/depenses/types', [
+            'libelle' => 'Carburant',
+            'categorie' => CategorieDepense::VEHICULE->value,
+            'type_paie' => 'retenue',
+        ])->assertSessionHasErrors('type_paie');
+    }
+
+    public function test_un_remboursement_de_frais_reste_hors_paie(): void
+    {
+        $this->post('/backoffice/depenses/types', [
+            'libelle' => 'REMBOURSEMENT-SALARIE',
+            'categorie' => CategorieDepense::EMPLOYE->value,
+            'type_paie' => '',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(DepenseType::where('libelle', 'REMBOURSEMENT-SALARIE')->firstOrFail()->type_paie);
+    }
+
+    public function test_l_ecran_ne_propose_que_les_retenues(): void
+    {
+        $this->get('/backoffice/depenses/types')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('type_paie_options', 4)
+                ->where('type_paie_options.0.value', 'avance'));
+    }
+
     public function test_update_does_not_change_code(): void
     {
         $type = DepenseType::factory()->interne()->create([

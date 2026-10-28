@@ -101,6 +101,9 @@ class EmployeAffectationService
         }
 
         if ($nouveauSite !== null) {
+            // Le site de l'affectation devient le seul site par défaut du compte : sans cette remise
+            // à zéro, un compte rattaché à plusieurs agences gardait deux sites « par défaut ».
+            $user->sites()->newPivotQuery()->update(['is_default' => false]);
             $user->sites()->syncWithoutDetaching([
                 $nouveauSite->id => ['role' => 'employe', 'is_default' => true],
             ]);

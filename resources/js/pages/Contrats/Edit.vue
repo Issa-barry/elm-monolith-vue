@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed } from 'vue';
+
+// Salaire : saisi et affiché seulement avec rh-remunerations.read (ignoré par le serveur sinon).
+const { can } = usePermissions();
 
 interface Option {
     value: string;
@@ -164,7 +168,10 @@ function submit() {
                                 {{ form.errors.date_fin }}
                             </p>
                         </div>
-                        <div class="sm:col-span-2">
+                        <div
+                            v-if="can('rh-remunerations.read')"
+                            class="sm:col-span-2"
+                        >
                             <label class="mb-1.5 block text-sm font-medium"
                                 >Salaire de base (GNF)</label
                             >

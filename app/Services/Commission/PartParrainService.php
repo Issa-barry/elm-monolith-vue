@@ -235,12 +235,17 @@ class PartParrainService
             $antidate = false;
             foreach ($parCle as $cle => $repartition) {
                 $processusId = $processus[$repartition['processus_code']];
+                // PARRAIN-025 : les transferts entre sites ne sont jamais recalculés rétroactivement —
+                // une date de début passée s'y applique à partir d'aujourd'hui.
+                $dateGroupe = $repartition['processus_code'] === CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT && $dateEffet->lt($aujourdhui)
+                    ? $aujourdhui
+                    : $dateEffet;
                 $montants = collect($repartition['parts'])->mapWithKeys(fn (array $p) => [$p['livreur_id'] => (int) $p['montant_unitaire']])->all();
 
                 if (in_array($cle, $aRefaireDansEquipe, true)) {
                     // Partage « À faire » (PARRAIN-024) : enregistré aujourd'hui ; une date passée
                     // reste en attente de la répartition de l'équipe — aucun recalcul d'ici là.
-                    $enAttente = $dateEffet->lt($aujourdhui) ? $dateEffet : null;
+                    $enAttente = $dateGroupe->lt($aujourdhui) ? $dateGroupe : null;
                     if ($planification === null
                         && self::inchange($attendus[$cle], $repartition)
                         && $attendus[$cle]['droits_parrain_depuis'] === $enAttente?->toDateString()) {
@@ -265,7 +270,7 @@ class PartParrainService
                     continue;
                 }
 
-                if ($planification === null && $dateEffet->equalTo($aujourdhui) && self::inchange($attendus[$cle], $repartition)) {
+                if ($planification === null && $dateGroupe->equalTo($aujourdhui) && self::inchange($attendus[$cle], $repartition)) {
                     self::confirmerPartNulleSansNouvelleVersion($equipe->id, $processusId, $repartition['categorie_id'], $parrainId);
 
                     continue;
@@ -276,14 +281,17 @@ class PartParrainService
                     $processusId,
                     $repartition['categorie_id'],
                     $montants,
-                    $dateEffet,
+                    $dateGroupe,
                     (int) $repartition['part_parrain'],
                     confirmerPartParrainNulle: $confirmerPartNulle,
                     remplacerPlanification: true,
                     droitsEnAttenteTraites: true,
                 );
-                $antidate = $antidate || $dateEffet->lt($aujourdhui);
+                $antidate = $antidate || $dateGroupe->lt($aujourdhui);
             }
+
+            // Équipe brouillon : le partage du parrain était peut-être le dernier à faire.
+            ActivationEquipesBrouillonService::activerSiPartageConforme($vehicule->organization_id, [$equipe->id]);
 
             // Recalcul rétroactif sur les seuls partages complets antidatés.
             return $antidate

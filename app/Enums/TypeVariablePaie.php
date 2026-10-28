@@ -38,6 +38,23 @@ enum TypeVariablePaie: string
         return array_column(self::cases(), 'value');
     }
 
+    /**
+     * Effets qu'un type de dépense peut avoir sur la paie : des retenues uniquement. Une prime ou un
+     * autre gain vient du référentiel RH, jamais d'une dépense (décision du 26/10/2026, docs/paie.md).
+     *
+     * @return list<self>
+     */
+    public static function retenues(): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $case) => $case->estDeduction()));
+    }
+
+    /** @return list<string> */
+    public static function valeursRetenues(): array
+    {
+        return array_map(fn (self $case) => $case->value, self::retenues());
+    }
+
     public static function options(): array
     {
         return array_map(

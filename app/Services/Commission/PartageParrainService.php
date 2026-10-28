@@ -17,7 +17,7 @@ use InvalidArgumentException;
 /**
  * Répercute sur le partage de l'équipe un parrain ajouté, remplacé ou retiré du véhicule (cf.
  * docs/parrainage-vehicule.md) — effet le jour même, jamais rétroactif. Les processus concernés sont
- * ceux qui rémunèrent le parrain (Vente, Transfert grossiste, Distribution client) :
+ * ceux qui rémunèrent le parrain (Vente, Transfert logistique, Transfert grossiste, Distribution client) :
  *
  * - ajout : une ligne parrain à 0 GNF dans chaque partage existant, et un partage Distribution
  *   propre (copie du partage Logistique + parrain à 0) si le véhicule a l'usage Logistique — aucun
@@ -54,7 +54,7 @@ class PartageParrainService
         $aujourdhui = Carbon::today();
         $aRepartir = [];
 
-        foreach ([CommissionProcessus::CODE_VENTE, CommissionProcessus::CODE_TRANSFERT_GROSSISTE] as $code) {
+        foreach ([CommissionProcessus::CODE_VENTE, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, CommissionProcessus::CODE_TRANSFERT_GROSSISTE] as $code) {
             $processus = CommissionProcessus::where('organization_id', $vehicule->organization_id)->where('code', $code)->first();
             if ($processus) {
                 self::reporterSurLePartage($equipe, $processus, $nouveauParrainId, $aujourdhui, $aRepartir);
@@ -62,6 +62,8 @@ class PartageParrainService
         }
 
         self::reporterSurLaDistribution($vehicule, $equipe, $nouveauParrainId, $aujourdhui, $aRepartir);
+
+        ActivationEquipesBrouillonService::activerSiPartageConforme($vehicule->organization_id, [$equipe->id]);
 
         return array_values($aRepartir);
     }

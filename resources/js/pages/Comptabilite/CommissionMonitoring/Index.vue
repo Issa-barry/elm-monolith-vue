@@ -651,7 +651,11 @@ function montant(val: number | null | undefined): string {
                                 </td>
                                 <td class="min-w-[130px] px-4 py-3">
                                     <p class="tabular-nums">
-                                        {{ a.nb_tentatives_echouees }} en échec
+                                        {{
+                                            a.nb_tentatives === 0
+                                                ? 'Aucune tentative'
+                                                : `${a.nb_tentatives_echouees} en échec`
+                                        }}
                                     </p>
                                     <p class="text-xs text-muted-foreground">
                                         Détectée le {{ a.detectee_le }}

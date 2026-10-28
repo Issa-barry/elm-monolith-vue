@@ -10,6 +10,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     active: 'bg-emerald-500',
     valide: 'bg-emerald-500',
     validee: 'bg-emerald-500',
+    // Période de paie validée (StatutPeriodePaie::VALIDE_RH) : salaires payables.
+    valide_rh: 'bg-emerald-500',
     approuve: 'bg-emerald-500',
     paye: 'bg-emerald-500',
     payee: 'bg-emerald-500',
@@ -49,6 +51,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     fonds_en_transit: 'bg-blue-500',
     envoye: 'bg-blue-500',
     calculee: 'bg-blue-500',
+    // Période de paie calculée, pas encore validée (StatutPeriodePaie::CALCULE).
+    calcule: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
     // Vente encaissée en totalité, en attente du versement des commissions avant clôture
     // (CommandeVente::statutAffichage()).
@@ -75,6 +79,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
     contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Contrat de travail rompu (StatutContrat::ROMPU) : fin anticipée, pas une erreur.
+    rompu: 'bg-zinc-400 dark:bg-zinc-500',
+    // Import RH abandonné avant confirmation (StatutImportRh::ABANDONNE) : rien n'a été appliqué.
+    abandonne: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).

@@ -151,18 +151,15 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await expect(page.getByTestId('parrain-nom')).toHaveText(nomParrain);
     const remuneration = page.getByTestId('parrain-remuneration');
     await expect(remuneration).toContainText('Vente');
-    // Véhicule Vente + Logistique : la distribution a sa propre ligne, jamais le transfert.
+    // Véhicule Vente + Logistique : distribution et transferts entre sites ont leur ligne (PARRAIN-025).
     await expect(remuneration).toContainText(/distribution/i);
-    await expect(remuneration).not.toContainText(/transfert logistique/i);
+    await expect(remuneration).toContainText(/transferts logistiques/i);
     // Plus de bandeau : chaque part encore à décider est signalée sur sa ligne.
     await expect(
         remuneration.locator('tr', { hasText: 'Vente' }),
     ).toContainText(/à répartir/i);
     await expect(remuneration.locator('thead')).toContainText(/date début/i);
-    // Véhicule Logistique : les transferts entre sites sont signalés, jamais rémunérés.
-    await expect(
-        page.getByTestId('parrain-ligne-transfert-exclu'),
-    ).toContainText(/jamais rémunéré/i);
+    await expect(remuneration).not.toContainText(/jamais rémunéré/i);
 
     // Rappels hors de l'onglet : onglet Équipe et liste (filtre « Part du parrain à définir »).
     await page.goto(`/backoffice/vehicules/${f.vehicule.id}?tab=equipe`);
@@ -191,11 +188,13 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     ).toHaveText(/modifier les parts/i);
     await page.getByTestId('parrain-definir-part-onglet-btn').click();
     const edition = page.getByTestId('part-parrain-edition');
-    // Une ligne par partage du parrain : Vente et Distribution (jamais le transfert).
+    // Une ligne par partage du parrain : Vente, Transferts logistiques et Distribution.
     await expect(
         edition.getByTestId('part-parrain-input-distribution_client'),
     ).toBeVisible();
-    await expect(edition).toContainText(/jamais rémunéré/i);
+    await expect(
+        edition.getByTestId('part-parrain-input-logistique_transfert'),
+    ).toBeVisible();
     await saisirMontant(edition.getByTestId('part-parrain-input-vente'), 200);
     // Deux livreurs : leurs montants ne changent pas, répartition à refaire dans Équipe.
     await expect(
@@ -204,9 +203,10 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     await expect(
         edition.getByTestId('part-parrain-avertissement-equipe'),
     ).toContainText(/ventes/i);
-    // PARRAIN-022 : la Distribution reste à 0 GNF — confirmation explicite exigée pour elle seule.
+    // PARRAIN-022 : Distribution et transferts restent à 0 GNF — confirmation explicite exigée.
     const confirmation = edition.getByTestId('part-parrain-confirmer-nulle');
     await expect(confirmation).toContainText(/distribution/i);
+    await expect(confirmation).toContainText(/transferts logistiques/i);
     await expect(confirmation).not.toContainText(/ventes/i);
     await expect(
         page.getByTestId('part-parrain-enregistrer-btn'),
@@ -276,7 +276,7 @@ test('parrain : de la vente au paiement partiel de sa fiche, sans toucher aux li
     expect(somme(vente.parts, 'parrain')).toBe(20_000);
     expect(somme(vente.parts, 'livreur')).toBe(80_000);
 
-    // ── 4. Transfert entre sites : aucune part pour le parrain ──────────────────────
+    // ── 4. Transfert entre sites : part du parrain confirmée à 0 GNF, rien pour lui ───
     const transfert = await post<Operation>(
         page,
         `/e2e/fixtures/parrain-commission/${f.vehicule.id}/transfert`,

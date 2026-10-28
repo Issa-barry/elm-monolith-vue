@@ -58,6 +58,8 @@ interface DepenseType {
 const props = defineProps<{
     types: DepenseType[];
     categories: Option[];
+    // Retenues sur salaire possibles pour un type « Employé » (une dépense ne crée jamais de prime).
+    type_paie_options: Option[];
 }>();
 
 const toast = useToast();
@@ -172,6 +174,8 @@ watch(
     () => form.categorie,
     (categorie) => {
         if (categorie !== 'vehicule') form.commande_obligatoire = false;
+        // Seul un type « Employé » peut retenir sur le salaire.
+        if (categorie !== 'employe') form.type_paie = '';
     },
 );
 
@@ -611,6 +615,43 @@ const categorieColors: Record<string, string> = {
                     class="mt-1 text-xs text-destructive"
                 >
                     {{ form.errors.categorie }}
+                </p>
+            </div>
+
+            <!-- Effet sur la paie (type « Employé » seulement) -->
+            <div v-if="form.categorie === 'employe'">
+                <Label
+                    for="dt-type-paie"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Effet sur la paie
+                </Label>
+                <select
+                    id="dt-type-paie"
+                    v-model="form.type_paie"
+                    data-testid="depense-type-type-paie"
+                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    :class="{ 'border-destructive': form.errors.type_paie }"
+                >
+                    <option value="">Aucun — hors paie</option>
+                    <option
+                        v-for="t in type_paie_options"
+                        :key="t.value"
+                        :value="t.value"
+                    >
+                        Retenu sur le salaire : {{ t.label }}
+                    </option>
+                </select>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Une dépense ne peut que retenir sur le salaire (ex. avance).
+                    Les primes se gèrent dans RH ; un remboursement de frais
+                    reste « hors paie ».
+                </p>
+                <p
+                    v-if="form.errors.type_paie"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.type_paie }}
                 </p>
             </div>
 

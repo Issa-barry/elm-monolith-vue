@@ -239,6 +239,68 @@ class CommissionMonitoringTest extends TestCase
         ]);
     }
 
+    // ── Opérations sans aucune tentative (COMM-020 étendue, 28/10/2026) ───────
+
+    /** Commande chargée sous FACTURE_ENCAISSEE (rien n'est tenté), puis organisation passée en CHARGEMENT_VALIDE. */
+    private function commandeChargeeSansTentative(): CommandeVente
+    {
+        $this->regle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 800);
+        $v = $this->vehicule([500, 300]);
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $commande = $this->commandeChargee($v['vehicule']);
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
+
+        return $commande;
+    }
+
+    public function test_vente_au_declencheur_sans_aucune_tentative_apparait_et_se_regularise_sans_doublon(): void
+    {
+        $commande = $this->commandeChargeeSansTentative();
+        $this->assertSame(0, CommissionGenerationAttempt::where('source_id', $commande->id)->count());
+
+        $a = $this->anomalies()->sole();
+        $this->assertSame($commande->id, $a['source_id']);
+        $this->assertSame(CommissionAnomalieStatut::NON_GENEREE->value, $a['statut']);
+        $this->assertSame(CommissionMotifNonGeneration::AUCUNE_TENTATIVE->value, $a['motif_code']);
+        $this->assertTrue($a['relancable']);
+
+        $this->actingAs($this->user)->from(self::URL)
+            ->post(self::URL.'/relancer', ['anomalies' => [$a['id']]])
+            ->assertRedirect(self::URL)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Commission régularisée avec succès.');
+
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $commande->id)->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->count());
+        $this->assertSame(1, CommissionGenerationAttempt::where('source_id', $commande->id)->count(), 'La régularisation laisse une tentative tracée.');
+        $this->assertCount(0, $this->anomalies());
+
+        $this->actingAs($this->user)->from(self::URL)
+            ->post(self::URL.'/relancer', ['anomalies' => [$a['id']]])
+            ->assertSessionHasErrors('relance');
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $commande->id)->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->count());
+    }
+
+    public function test_sans_tentative_jamais_signale_avant_le_debut_de_detection_ni_annulee_ni_avant_le_declencheur(): void
+    {
+        $ancienne = $this->commandeChargeeSansTentative();
+        CommandeVente::whereKey($ancienne->id)->update(['created_at' => '2026-09-02 23:59:59']);
+
+        $annulee = $this->commandeChargee($this->vehicule([500, 300])['vehicule']);
+        CommissionGenerationAttempt::where('source_id', $annulee->id)->delete();
+        CommissionEnveloppe::where('source_id', $annulee->id)->get()->each(function (CommissionEnveloppe $e) {
+            $e->parts()->delete();
+            $e->lignes()->delete();
+            $e->delete();
+        });
+        CommandeVente::whereKey($annulee->id)->update(['statut' => StatutCommandeVente::ANNULEE->value]);
+
+        // Sous FACTURE_ENCAISSEE, une commande chargée mais non payée n'a pas encore atteint son déclencheur.
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+        $this->commandeChargee($this->vehicule([500, 300])['vehicule']);
+
+        $this->assertCount(0, $this->anomalies());
+    }
+
     // ── Détection ─────────────────────────────────────────────────────────────
 
     public function test_commission_attendue_et_generee_ne_produit_aucune_anomalie(): void

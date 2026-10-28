@@ -5,6 +5,7 @@ import DataFilters, {
 import StatusDot from '@/components/StatusDot.vue';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { StatutCommissionResolu } from '@/types/commission-status';
 import { Head, Link } from '@inertiajs/vue3';
@@ -23,6 +24,8 @@ interface Fiche extends StatutCommissionResolu {
     id: string;
     reference: string;
     beneficiaire_nom: string;
+    /** Téléphone actuel du livreur, propriétaire ou parrain (null sinon). */
+    beneficiaire_telephone: string | null;
     beneficiaire_type: string;
     site: { id: string; nom: string } | null;
     periode_reference: string | null;
@@ -277,6 +280,15 @@ function exportExcel() {
                             >
                                 {{ data.beneficiaire_nom }}
                             </Link>
+                            <span
+                                v-if="data.beneficiaire_telephone"
+                                class="block text-xs text-muted-foreground tabular-nums"
+                                >{{
+                                    formatPhoneDisplay(
+                                        data.beneficiaire_telephone,
+                                    )
+                                }}</span
+                            >
                         </template>
                     </Column>
 

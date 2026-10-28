@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionGenerationDeclenchePar;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMode;
+use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionLogistique;
@@ -16,6 +19,7 @@ use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -30,9 +34,12 @@ use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionMonitoringService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\TransfertLogistiqueService;
 use App\Services\TransfertRetourService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -380,6 +387,107 @@ class CommissionTriggerLogistiqueTest extends TestCase
             1,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count()
         );
+    }
+
+    /**
+     * Incident TRF-271026-016 (27/10/2026) : une erreur imprévue pendant la génération annulait la
+     * tentative mais pas l'accord — réception approuvée, bouton « Approuver » disparu, aucune
+     * tentative donc rien au monitoring. Désormais : tentative ERREUR (erreur technique)
+     * enregistrée, l'accord est conservé, une relance génère la commission.
+     */
+    public function test_erreur_imprevue_a_la_generation_laisse_une_tentative_relancable(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        $panne = true;
+        CommissionEnveloppe::creating(function () use (&$panne) {
+            if ($panne) {
+                throw new \RuntimeException('Panne simulée');
+            }
+        });
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $this->assertEquals('accord', $transfert->fresh()->validation_reception);
+        $this->assertNull($this->enveloppePour($transfert));
+        $tentative = CommissionGenerationAttempt::where('source_id', $transfert->id)->sole();
+        $this->assertSame(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertSame('Panne simulée', $tentative->motif_erreur);
+
+        $panne = false;
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique($transfert->fresh(), 'quantite_recue', CommissionGenerationDeclenchePar::UTILISATEUR, $this->admin->id);
+
+        $this->assertEquals(20000.0, (float) $this->enveloppePour($transfert)->montant_total);
+    }
+
+    /**
+     * Deadlock : MySQL annule toute la transaction, une tentative écrite après coup ne serait pas
+     * réellement enregistrée. L'erreur remonte donc : en production, la transaction du contrôleur
+     * annule aussi l'approbation et l'administrateur réessaie. (Sous RefreshDatabase, Laravel ne
+     * déroule pas le savepoint d'un deadlock imbriqué : seule la remontée est vérifiable ici.)
+     */
+    public function test_deadlock_a_la_generation_remonte_sans_tentative_fantome(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        CommissionEnveloppe::creating(function () {
+            throw new QueryException('mysql', 'insert into commission_enveloppes', [], new \PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock'));
+        });
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertStatus(500);
+
+        $this->assertSame(0, CommissionGenerationAttempt::where('source_id', $transfert->id)->count());
+    }
+
+    /**
+     * TRF-271026-016 : réception approuvée avant le correctif, sans tentative ni commission. Le
+     * monitoring la signale (« Calcul jamais lancé ») et la relance la régularise via le moteur
+     * officiel, sans retoucher l'approbation et sans doublon.
+     */
+    public function test_transfert_approuve_sans_tentative_apparait_au_monitoring_et_se_regularise(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+        $transfert->forceFill(['validation_reception' => 'accord', 'validated_by' => $this->admin->id, 'validated_at' => now()])->save();
+        $monitoring = app(CommissionMonitoringService::class);
+
+        $anomalie = $monitoring->anomalies($this->org->id)->sole();
+        $this->assertSame($transfert->id, $anomalie['source_id']);
+        $this->assertSame(CommissionMotifNonGeneration::AUCUNE_TENTATIVE->value, $anomalie['motif_code']);
+
+        $bilan = $monitoring->relancer($this->org->id, [$anomalie['id']], $this->admin->id);
+        $this->assertCount(1, $bilan['regularisees']);
+        $this->assertEquals(20000.0, (float) $this->enveloppePour($transfert)->montant_total);
+        $this->assertSame('accord', $transfert->fresh()->validation_reception);
+        $this->assertSame(1, CommissionGenerationAttempt::where('source_id', $transfert->id)->count());
+        $this->assertCount(0, $monitoring->anomalies($this->org->id));
+
+        $bilan = $monitoring->relancer($this->org->id, [$anomalie['id'], $anomalie['id']], $this->admin->id);
+        $this->assertSame(2, $bilan['ignorees']);
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $transfert->id)->count());
+    }
+
+    public function test_transfert_sans_tentative_non_approuve_annule_retourne_ou_ancien_n_est_pas_signale(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $this->makeTransfertEnReception(qteRecue: 100);
+        foreach ([['statut' => StatutTransfert::ANNULE->value], ['statut' => StatutTransfert::RETOURNE->value], ['created_at' => '2026-09-02 23:59:59']] as $attributs) {
+            $this->makeTransfertEnReception(qteRecue: 100)
+                ->forceFill(['validation_reception' => 'accord', ...$attributs])->save();
+        }
+
+        $this->assertCount(0, app(CommissionMonitoringService::class)->anomalies($this->org->id));
     }
 
     // ── Approbation admin optionnelle (Parametre::isApprobationReceptionLogistiqueObligatoire) ──

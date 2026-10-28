@@ -107,8 +107,10 @@ class RapportActiviteService
             ->first();
 
         $lignes = $this->avecNoms($valides(), 'cv.created_by')
+            ->leftJoin('vehicules as veh', 'veh.id', '=', 'cv.vehicule_id')
             ->select([
                 'fv.id', 'fv.reference', 'fv.created_at', 'fv.montant_net', 'fv.statut_facture',
+                'veh.nom_vehicule as vehicule_nom',
                 ...$this->colonnesNoms(),
             ])
             ->selectRaw($this->encaisseSql().' as encaisse')
@@ -199,8 +201,10 @@ class RapportActiviteService
             ->first();
 
         $lignes = $this->avecNoms($base(), 'cv.created_by')
+            ->leftJoin('vehicules as veh', 'veh.id', '=', 'cv.vehicule_id')
             ->select([
                 'fv.id', 'fv.reference', 'fv.created_at', 'fv.montant_net', 'fv.statut_facture',
+                'veh.nom_vehicule as vehicule_nom',
                 ...$this->colonnesNoms(),
             ])
             ->selectRaw($this->encaisseSql().' as encaisse')
@@ -527,6 +531,7 @@ class RapportActiviteService
             'date' => CarbonImmutable::parse($l->created_at)->toDateString(),
             'client' => $this->nomClient($l),
             'agent' => $this->nomAgent($l),
+            'vehicule_nom' => $l->vehicule_nom,
             // « Créée à » : agence de la commande ; « Encaissée à » : agence(s) de ses encaissements.
             'site_nom' => $l->site_nom,
             'encaisse_a' => $l->encaisse_a ?? null,

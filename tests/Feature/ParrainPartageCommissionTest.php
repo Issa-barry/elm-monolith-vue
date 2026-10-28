@@ -9,6 +9,7 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutPeriodePaiement;
 use App\Enums\StatutTransfert;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
@@ -40,7 +41,9 @@ use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageConformiteVehiculesService;
 use App\Services\Commission\PartageLivraisonVersionService;
 use App\Services\Commission\PartageParrainService;
+use App\Services\Commission\PartParrainService;
 use App\Services\Commission\ReconfigurationPartagesService;
+use App\Services\PeriodeCalculatorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -338,10 +341,54 @@ class ParrainPartageCommissionTest extends TestCase
         $this->assertSame($parrain->id, $partParrain->resoudreBeneficiaire()?->id);
     }
 
-    public function test_un_transfert_logistique_ne_remunere_jamais_le_parrain(): void
+    public function test_un_transfert_logistique_remunere_le_parrain_sur_lenveloppe_livreur(): void
     {
-        $this->ajouterParrain($this->vehicule);
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->logistique, 500, 300, 200);
 
+        $transfert = $this->transferer(100);
+
+        // PARRAIN-025 : part du parrain du véhicule du transfert, prise sur l'enveloppe (100 000).
+        $parts = $this->partsEquipe(TransfertLogistique::class, $transfert->id);
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 50000.0,
+            "livreur:{$this->convoyeur->id}" => 30000.0,
+            "parrain:{$parrain->id}" => 20000.0,
+        ], $parts);
+        $this->assertEquals(100000.0, array_sum($parts), 'Le total de l\'enveloppe ne change pas.');
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $transfert->id)
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->count(), 'Une seule enveloppe, aucun doublon.');
+    }
+
+    public function test_un_transfert_avec_une_part_nulle_ne_paie_rien_au_parrain(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+
+        $transfert = $this->transferer(100);
+
+        // Aucune part à 0 GNF : ni ligne de fiche, ni réouverture de la période Parrains.
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 60000.0,
+            "livreur:{$this->convoyeur->id}" => 40000.0,
+        ], $this->partsEquipe(TransfertLogistique::class, $transfert->id));
+        $this->assertCount(0, $this->fichesParrain($parrain));
+    }
+
+    public function test_une_part_nulle_du_parrain_ne_rouvre_pas_sa_periode_validee(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $periode = PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->sole();
+        $avant = [$periode->fresh()->statut, $periode->fresh()->calcul_hash, $this->fichesParrain($parrain)->sole()->lignes()->count()];
+
+        $this->transferer(100);   // part du parrain à 0 GNF sur les transferts
+
+        $this->assertSame($avant, [$periode->fresh()->statut, $periode->fresh()->calcul_hash, $this->fichesParrain($parrain)->sole()->lignes()->count()], 'Période et fiche du parrain inchangées.');
+    }
+
+    public function test_un_transfert_sans_parrain_garde_le_partage_des_livreurs(): void
+    {
         $transfert = $this->transferer(100);
 
         $this->assertEquals([
@@ -371,6 +418,7 @@ class ParrainPartageCommissionTest extends TestCase
             CommissionEnveloppe::where('source_id', $commande->id)->value('processus_id'),
             'L\'enveloppe garde l\'identité distribution_client.',
         );
+        // Le partage Logistique porte aussi le parrain (PARRAIN-025), ici à 0 GNF : aucune part.
         $this->assertEquals([
             "livreur:{$this->chauffeur->id}" => 60000.0,
             "livreur:{$this->convoyeur->id}" => 40000.0,
@@ -424,12 +472,12 @@ class ParrainPartageCommissionTest extends TestCase
         $this->repartir($this->vente, 600, 400, null);
     }
 
-    public function test_une_ligne_parrain_est_refusee_sur_un_transfert_logistique(): void
+    public function test_une_version_logistique_sans_la_part_du_parrain_est_refusee(): void
     {
         $this->ajouterParrain($this->vehicule);
 
         $this->expectException(ValidationException::class);
-        $this->repartir($this->logistique, 500, 300, 200);
+        $this->repartir($this->logistique, 600, 400, null);
     }
 
     public function test_une_ligne_parrain_est_refusee_sans_parrain(): void
@@ -553,10 +601,7 @@ class ParrainPartageCommissionTest extends TestCase
         ];
         $this->assertEquals($attendu, $this->partageActif($this->vente));
         $this->assertEquals($attendu, $this->partageActif($distribution));
-        $this->assertEquals([
-            "livreur:{$this->chauffeur->id}" => 600,
-            "livreur:{$this->convoyeur->id}" => 400,
-        ], $this->partageActif($this->logistique));
+        $this->assertEquals($attendu, $this->partageActif($this->logistique));
 
         $this->assertEmpty(CommissionPartageLivraisonCategorieChecker::nonConformites(
             $this->org->id, $this->equipe->fresh(), CommissionProcessus::CODE_VENTE, null, [$this->categorie->id], Carbon::today(),
@@ -745,7 +790,9 @@ class ParrainPartageCommissionTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('vehicules.show', ['vehicule' => $this->vehicule, 'processus' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT]))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('parrain_partage', null));
+            ->assertInertia(fn ($page) => $page
+                ->where('parrain_partage.id', $parrain->id)
+                ->where('parrain_remuneration', fn ($lignes) => collect($lignes)->contains(fn ($l) => $l['processus_code'] === CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)));
     }
 
     /** Juge commun des ventes : non-conformités du processus, à la date du jour. */
@@ -790,6 +837,230 @@ class ParrainPartageCommissionTest extends TestCase
         $this->assertCount(1, $fiches, 'Une seule fiche par parrain et par période.');
         $this->assertEquals(30000.0, (float) $fiches->first()->montant_net, '20 000 + 10 000, chaque vente une seule fois.');
         $this->assertSame(2, $fiches->first()->lignes()->count());
+    }
+
+    // ── Bénéficiaire affiché sur les fiches parrain ───────────────────────────
+
+    private function comptable()
+    {
+        $comptable = $this->makeUserWithPermissions($this->org, ['comptabilite.read']);
+        $comptable->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $comptable;
+    }
+
+    public function test_le_calcul_ne_prend_jamais_lidentifiant_comme_nom_du_parrain(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $parrain->personne->update(['nom_complet' => '', 'prenom' => null, 'nom' => null, 'surnom' => null]);
+        $this->repartir($this->vente, 500, 300, 200);
+
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+
+        $this->assertSame('Parrain sans nom', $this->fichesParrain($parrain)->sole()->beneficiaire_nom);
+    }
+
+    public function test_la_liste_des_fiches_parrain_affiche_son_nom_et_son_telephone_jamais_son_identifiant(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        // Fiche calculée avant le correctif, pour une personne sans nom : l'identifiant enregistré.
+        $this->fichesParrain($parrain)->sole()->update(['beneficiaire_nom' => $parrain->id]);
+        $parrain->personne->update(['nom_complet' => '', 'prenom' => null, 'nom' => null, 'surnom' => null]);
+        $telephone = $parrain->personne->telephone;
+
+        $this->actingAs($this->comptable())->get(route('comptabilite.fiches.parrains'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('fiches.data.0.beneficiaire_nom', 'Parrain sans nom')
+                ->where('fiches.data.0.beneficiaire_telephone', $telephone));
+
+        // Le nom saisi ensuite sur la personne est repris, sans recalcul de la fiche.
+        $parrain->personne->update(['nom_complet' => 'Ousmane SIDIBÉ']);
+        $fiche = $this->fichesParrain($parrain)->sole();
+        $this->actingAs($this->comptable())->get(route('comptabilite.fiches.parrains'))
+            ->assertInertia(fn ($page) => $page->where('fiches.data.0.beneficiaire_nom', 'Ousmane SIDIBÉ'));
+        $this->actingAs($this->comptable())->get(route('comptabilite.fiches.show', $fiche))
+            ->assertInertia(fn ($page) => $page
+                ->where('fiche.beneficiaire_nom', 'Ousmane SIDIBÉ')
+                ->where('fiche.beneficiaire_telephone', $telephone));
+    }
+
+    // ── Rattrapage des fiches parrain manquantes (commissions:parrains-rattrapage) ──
+
+    /** État d'avant le correctif du 25/10 : la commission existe, sa période et sa fiche non. */
+    private function supprimerFichesEtPeriodesParrain(): void
+    {
+        foreach (PaiementFiche::withTrashed()->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)->get() as $fiche) {
+            $fiche->lignes()->delete();
+            $fiche->forceDelete();
+        }
+        PaiementPeriode::withTrashed()->where('organization_id', $this->org->id)
+            ->where('type', TypePeriodePaiement::PARRAIN->value)->forceDelete();
+    }
+
+    private function fichesParrain(Parrain $parrain)
+    {
+        return PaiementFiche::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+            ->where('beneficiaire_id', $parrain->id)->get();
+    }
+
+    public function test_le_rattrapage_simule_sans_ecrire_puis_cree_la_periode_et_la_fiche_une_seule_fois(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $this->supprimerFichesEtPeriodesParrain();
+        $enveloppes = CommissionEnveloppe::count();
+        $partParrain = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)->sole();
+
+        // Simulation : rapport, aucune écriture.
+        $this->artisan('commissions:parrains-rattrapage')
+            ->expectsOutputToContain('Simulation')
+            ->assertExitCode(0);
+        $this->assertSame(0, PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->count());
+        $this->assertCount(0, $this->fichesParrain($parrain));
+
+        // Application : période et fiche créées, rien de régénéré.
+        $this->artisan('commissions:parrains-rattrapage', ['--appliquer' => true])
+            ->expectsOutputToContain('régularisée')
+            ->assertExitCode(0);
+        $this->assertSame(1, PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->count());
+        $fiches = $this->fichesParrain($parrain);
+        $this->assertCount(1, $fiches);
+        $this->assertEquals(20000.0, (float) $fiches->first()->montant_net);
+        $this->assertSame($enveloppes, CommissionEnveloppe::count(), 'Aucune commission régénérée.');
+        $this->assertTrue(CommissionEnveloppePart::whereKey($partParrain->id)->exists(), 'La même part, jamais recréée.');
+
+        // Idempotence : une seconde exécution ne trouve plus rien.
+        $this->artisan('commissions:parrains-rattrapage', ['--appliquer' => true])
+            ->expectsOutputToContain('rien à régulariser')
+            ->assertExitCode(0);
+        $this->assertCount(1, $this->fichesParrain($parrain));
+        $this->assertSame(1, PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->count());
+    }
+
+    public function test_le_rattrapage_ne_touche_pas_une_fiche_deja_payee_dune_autre_periode(): void
+    {
+        Carbon::setTestNow('2026-10-05 10:00:00');
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);   // P1 : fiche payée
+        $payee = $this->fichesParrain($parrain)->sole();
+        $payee->update(['montant_paye' => 20000]);
+
+        Carbon::setTestNow('2026-10-21 10:00:00');
+        $this->vendre(NatureOperation::VENTE_STANDARD, 50);    // P2 : période et fiche perdues
+        $p2 = PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->whereDate('date_debut', '2026-10-16')->sole();
+        foreach ($p2->fiches()->get() as $fiche) {
+            $fiche->lignes()->delete();
+            $fiche->forceDelete();
+        }
+        $p2->forceDelete();
+        $etatPayee = fn () => [...$payee->fresh()->only(['montant_net', 'montant_paye', 'statut']), 'maj' => $payee->fresh()->updated_at->toDateTimeString()];
+        $avant = $etatPayee();
+
+        $this->artisan('commissions:parrains-rattrapage', ['--appliquer' => true])->assertExitCode(0);
+
+        $this->assertSame($avant, $etatPayee(), 'Fiche payée intacte.');
+        $this->assertSame(1, $payee->fresh()->lignes()->count());
+        $nouvelle = $this->fichesParrain($parrain)->where('id', '!=', $payee->id)->sole();
+        $this->assertEquals(10000.0, (float) $nouvelle->montant_net);
+    }
+
+    public function test_le_rattrapage_ignore_une_periode_cloturee(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $periode = PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->sole();
+        foreach ($periode->fiches()->get() as $fiche) {
+            $fiche->lignes()->delete();
+            $fiche->forceDelete();
+        }
+        $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
+
+        $this->artisan('commissions:parrains-rattrapage', ['--appliquer' => true])
+            ->expectsOutputToContain('clôturée')
+            ->assertExitCode(0);
+
+        $this->assertSame(StatutPeriodePaiement::CLOTUREE, $periode->fresh()->statut);
+        $this->assertCount(0, $this->fichesParrain($parrain));
+    }
+
+    public function test_un_echec_du_rattrapage_annule_sa_periode_et_est_rapporte(): void
+    {
+        $this->ajouterParrain($this->vehicule);
+        $this->repartir($this->vente, 500, 300, 200);
+        $this->vendre(NatureOperation::VENTE_STANDARD, 100);
+        $this->supprimerFichesEtPeriodesParrain();
+        $this->mock(PeriodeCalculatorService::class, fn ($m) => $m->shouldReceive('traiterPeriodesPourDates')
+            ->andThrow(new \RuntimeException('période comptable verrouillée')));
+
+        $this->artisan('commissions:parrains-rattrapage', ['--appliquer' => true])
+            ->expectsOutputToContain('période comptable verrouillée')
+            ->assertExitCode(1);
+
+        $this->assertSame(0, PaiementPeriode::where('type', TypePeriodePaiement::PARRAIN->value)->count(), 'Période annulée avec le reste.');
+    }
+
+    // ── Reprise PARRAIN-025 : véhicules déjà parrainés ───────────────────────
+
+    private function repriseLogistique(): void
+    {
+        (require database_path('migrations/2026_10_25_220000_backfill_parrain_partages_logistique.php'))->up();
+    }
+
+    public function test_la_reprise_ajoute_au_partage_logistique_une_part_nulle_confirmee_sans_toucher_au_reste(): void
+    {
+        // Véhicule parrainé avant PARRAIN-025 : son partage Logistique ne porte pas le parrain.
+        $parrain = $this->ajouterParrain($this->vehicule);
+        EquipeLivraisonPartageCategorie::where('processus_id', $this->logistique->id)->whereNotNull('parrain_id')->delete();
+        EquipeLivraisonPartageCategorie::where('processus_id', $this->logistique->id)->update(['effective_to' => null]);
+        $venteAvant = $this->partageActif($this->vente);
+        $commande = $this->vendre(NatureOperation::VENTE_STANDARD, 10);
+        $partsAvant = $this->partsEquipe(CommandeVente::class, $commande->id);
+
+        $this->repriseLogistique();
+        $this->repriseLogistique(); // rejouable
+
+        $lignes = EquipeLivraisonPartageCategorie::where('equipe_id', $this->equipe->id)
+            ->where('processus_id', $this->logistique->id)->whereNull('effective_to')->get();
+        $this->assertCount(3, $lignes, 'Une seule nouvelle version : 2 livreurs + le parrain, sans doublon.');
+        $ligneParrain = $lignes->firstWhere('parrain_id', $parrain->id);
+        $this->assertSame(0, (int) $ligneParrain->montant_unitaire);
+        $this->assertNotNull($ligneParrain->part_parrain_confirmee_at, 'Part nulle confirmée : aucun transfert bloqué.');
+        $this->assertSame(Carbon::today()->toDateString(), $ligneParrain->effective_from->toDateString(), 'Date de début = activation de la règle.');
+        $this->assertEquals([
+            "livreur:{$this->chauffeur->id}" => 600,
+            "livreur:{$this->convoyeur->id}" => 400,
+            "parrain:{$parrain->id}" => 0,
+        ], $this->partageActif($this->logistique));
+        $this->assertEquals($venteAvant, $this->partageActif($this->vente), 'Les autres processus ne changent pas.');
+        $this->assertEquals($partsAvant, $this->partsEquipe(CommandeVente::class, $commande->id), 'Commissions historiques intactes.');
+        $this->assertSame(0, $this->refusOperations(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT));
+    }
+
+    public function test_une_date_de_debut_passee_ne_recalcule_jamais_les_transferts(): void
+    {
+        $parrain = $this->ajouterParrain($this->vehicule);
+        $this->unSeulLivreurAvecParrain();
+        $transfert = $this->transferer(100);   // 21/10 : sans part de parrain
+        $partsAvant = $this->partsEquipe(TransfertLogistique::class, $transfert->id);
+        Carbon::setTestNow('2026-10-23 10:00:00');
+        EquipeLivreur::where('livreur_id', $this->convoyeur->id)->delete();
+
+        PartParrainService::definirParts($this->vehicule->fresh(), $parrain->id, [
+            ['processus_code' => CommissionProcessus::CODE_VENTE, 'categorie_id' => $this->categorie->id, 'part_parrain' => 200],
+            ['processus_code' => CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 'categorie_id' => $this->categorie->id, 'part_parrain' => 200],
+            ['processus_code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 'categorie_id' => $this->categorie->id, 'part_parrain' => 0],
+        ], confirmerPartNulle: true, dateEffet: Carbon::parse('2026-10-21'));
+
+        // La part du parrain s'applique aux transferts à partir d'aujourd'hui seulement.
+        $this->assertSame('2026-10-23', EquipeLivraisonPartageCategorie::where('processus_id', $this->logistique->id)
+            ->where('parrain_id', $parrain->id)->whereNull('effective_to')->value('effective_from')->toDateString());
+        $this->assertEquals($partsAvant, $this->partsEquipe(TransfertLogistique::class, $transfert->id), 'Transfert passé jamais recalculé.');
     }
 
     public function test_retirer_un_parrain_ne_bloque_que_les_partages_desequilibres(): void
@@ -938,7 +1209,7 @@ class ParrainPartageCommissionTest extends TestCase
         $groupeDistribution = $groupes->firstWhere('processus_code', CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
         $this->assertContains('parrain', collect($groupeDistribution['membres'])->pluck('type')->all());
         $groupeLogistique = $groupes->firstWhere('processus_code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
-        $this->assertNotContains('parrain', collect($groupeLogistique['membres'])->pluck('type')->all());
+        $this->assertContains('parrain', collect($groupeLogistique['membres'])->pluck('type')->all(), 'PARRAIN-025 : le parrain est membre du partage Logistique.');
     }
 
     // ── Liste des véhicules, reprise des données ──────────────────────────────

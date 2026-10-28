@@ -54,8 +54,12 @@ même principe de barème dynamique au transfert logistique interne.
     « Partages » de la liste des véhicules — même juge, `PartageConformiteVehiculesService`). Le
     contrôle (`ActivationEquipesBrouillonService`) est fait après chaque écriture de partage :
     enregistrement de l'équipe (« Gérer l'équipe »), changement de véhicule d'un livreur,
-    application directe d'un barème (équipes à un seul livreur alignées) et publication d'un
-    brouillon de barème ;
+    application directe d'un barème (équipes à un seul livreur alignées), publication d'un
+    brouillon de barème et, depuis le 25/10/2026, onglet **Parrain** (part du parrain, ajout,
+    remplacement ou retrait du parrain). Incident du 25/10 (véhicule Achour) : le dernier partage
+    fait depuis l'onglet Parrain laissait l'équipe inactive alors que tout était « Fait ». Les
+    équipes restées inactives malgré un partage conforme s'activent avec
+    `php artisan equipes:activer-brouillons-conformes` (aperçu), puis `--appliquer` ;
   - **`is_active` n'est jamais lu depuis la requête** (création comme modification d'équipe) : une
     création manuelle est active, un enregistrement conserve l'état existant, et seul ce contrôle
     de conformité active un brouillon — une requête forgée ne peut ni activer un brouillon sans
@@ -167,6 +171,9 @@ même principe de barème dynamique au transfert logistique interne.
     la commission générée au départ sur la quantité chargée **reste due, même si toute la
     marchandise revient** — conséquence assumée par le propriétaire du produit, provisoire. Le
     monitoring traite `retourne` comme `annule` (aucune génération manquante relancée).
+- **COMM-023** (27/10/2026) — La commission Livreurs d'une vente va à l'**équipe qui a chargé**,
+  figée sur la commande (`commandes_ventes.equipe_livraison_id`), même si l'équipe du véhicule est
+  remplacée ou supprimée avant le calcul. Cf. section « Équipe figée au chargement » plus bas.
 
 ## Modèle
 
@@ -458,7 +465,8 @@ exécute ce déplacement comme une opération unique :
   à configurer ce qui ne l'était pas avant.
 - **Équipe de départ vidée par le transfert** (le livreur en était le dernier membre) : dissoute
   automatiquement (soft-delete + désactivation du véhicule, même code que `destroy()`), aucune
-  répartition n'est demandée dans ce cas.
+  répartition n'est demandée dans ce cas. Les ventes déjà chargées par cette équipe lui restent
+  acquises (COMM-023).
 - **Équipe d'arrivée inexistante** (véhicule cible sans équipe) : créée à la volée avec le seul
   livreur transféré, sans forcer de partage (même logique que ci-dessus).
 - **Une seule transaction DB, commit unique** : rien n'est écrit en base tant que les
@@ -1489,11 +1497,32 @@ générée » en était la seule trace.
     dernière génération ne trouve plus rien à verser pour cette cible.
 
   Il n'y a pas de statut « en cours » : la relance est synchrone, sous verrou de l'opération.
+- **Erreur imprévue pendant la génération** (27/10/2026, incident TRF-271026-016) : toute exception,
+  pas seulement une erreur métier, est enregistrée comme tentative ERREUR (motif technique, envoyée
+  à Sentry) et apparaît donc ici, relançable. Avant, elle annulait la tentative sans trace, alors
+  que l'approbation web de la réception restait enregistrée : transfert approuvé, bouton
+  « Approuver » disparu, aucune commission, rien au monitoring. L'approbation web et la génération
+  sont désormais dans une seule transaction, comme l'API mobile.
 - **Jamais une anomalie** : absence de barème, barème à 0, site aux commissions désactivées
   (COMM-013), cible non applicable (véhicule non éligible, pas de site). Aucune commission n'est
-  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4). Une opération
-  dont la génération n'a **jamais été déclenchée** n'a pas de tentative : elle relève de
-  `commissions:auditer-ventes`.
+  due dans ces cas, et le moteur ne les trace pas comme des erreurs (décision AMOA #4).
+- **Opérations sans aucune tentative** (COMM-020 étendue le 28/10/2026, incident TRF-271026-016) :
+  une opération dont le fait générateur est passé sans tentative **ni** commission est une anomalie
+  « Non générée », motif « Calcul jamais lancé » (`AUCUNE_TENTATIVE`), colonne « Aucune tentative »
+  (`CommissionMonitoringService::anomaliesSansTentative()`). Fait générateur, selon le déclencheur
+  **actuel** de l'organisation :
+  - transfert : réception approuvée (`RECEPTION_EFFECTUEE`) ou transfert parti, en livraison,
+    réceptionné ou clôturé (`CHARGEMENT_VALIDE`) ;
+  - vente : réception validée (distribution, Grossiste livré) ; sinon chargement validé
+    (`CHARGEMENT_VALIDE`) ou facture payée (`FACTURE_ENCAISSEE`).
+
+  Exclus : opérations créées avant le 03/09/2026 (moteur générique seul, COMM-007 ; avant, pas de
+  tentative), annulées, retournées. Limite : une vente directe sans véhicule sous
+  `CHARGEMENT_VALIDE` n'est pas couverte (rien ne la distingue sûrement d'une vente comptoir, qui
+  n'est jamais déclenchée dans ce cas). La relance passe par le moteur officiel (verrou de
+  l'opération, idempotence par cible : jamais de doublon), sans retoucher le statut métier de
+  l'opération ; elle laisse une tentative, l'anomalie disparaît donc de la liste et le bilan de
+  relance dit « régularisée », « sans objet » (aucun barème) ou l'échec rencontré.
 - **Motif structuré.** Depuis ce chantier, chaque erreur de cible est aussi enregistrée dans
   `detail_erreur.cibles[]` avec :
   - un `code` (`CommissionMotifNonGeneration` : partage Livreur non conforme ou manquant, équipe,
@@ -1632,3 +1661,30 @@ Cf. [ADR 0035](adr/0035-part-du-parrain-dans-lenveloppe-livreur.md) et
   déduction, payée par l'agence du véhicule ; charge 622500, dette 467210 (PARRAIN-017 à 020).
 - Tests : `tests/Feature/ParrainPartageCommissionTest.php`,
   `tests/Feature/Comptabilite/ParrainFichePaiementTest.php`.
+
+## Équipe figée au chargement (27/10/2026, COMM-023)
+
+Incident VTE-231026-150 : chargée le 23/10 à 14:36 par l'équipe de MAMADOU SAMBA DIALLO, dont
+l'équipe a été supprimée à 16:37 ; la commission, calculée à l'encaissement (20:31), n'a trouvé
+aucune équipe sur le véhicule. La relance ne pouvait pas aboutir : la nouvelle équipe (24/10) n'a
+de partage qu'à partir de sa création, et une relance partielle se fait à la date d'origine
+(COMM-018).
+
+- **Règle.** La validation du chargement (`CommandeVenteService::validerChargement()`) et la vente
+  comptoir (`PdvCheckoutService`, chargée dès sa création) figent l'équipe actuelle du véhicule
+  dans `commandes_ventes.equipe_livraison_id`. La commission Livreurs est calculée sur cette équipe
+  (`CommandeVente::equipeLivraisonPourCommission()`), même supprimée depuis : son partage
+  (`equipe_livraison_partages_categorie`) est conservé et versionné, il est lu à la date de gain
+  comme d'habitude.
+- **Repli.** Équipe figée absente (commande chargée avant le 27/10/2026, ou véhicule sans équipe au
+  chargement) ou n'appartenant pas au véhicule de la commande : équipe actuelle du véhicule,
+  comportement antérieur. Aucune reprise automatique de l'historique.
+- **Groupe de commission.** Le `CommissionGroupe` du véhicule reste la cible ; ses membres ne sont
+  resynchronisés que depuis l'équipe actuelle, jamais depuis une ancienne équipe figée
+  (`CommissionGroupeSyncService::groupeEquipeLivraisonVehicule()`).
+- **Hors périmètre.** Transferts logistiques (équipe actuelle du véhicule, inchangé) ; affichage
+  du livreur sur la fiche commande (toujours l'équipe actuelle du véhicule).
+- **Régularisation d'une commande antérieure.** Renseigner `equipe_livraison_id` avec l'équipe
+  qui a chargé (équipe dont `created_at` ≤ `chargement_valide_at` < `deleted_at`), puis « Relancer
+  la génération » depuis la fiche commande : la part Livreurs est créée à la date d'origine.
+- Tests : `tests/Feature/CommissionTriggerVenteTest.php` (section COMM-023).

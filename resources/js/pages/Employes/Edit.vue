@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
+import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -57,6 +60,25 @@ interface EmployeData {
     site: string | null;
     fonction_rh_id: string | null;
     fonction_libelle: string | null;
+    service_rh_id: string | null;
+    date_embauche_iso: string | null;
+    date_sortie: string | null;
+    motif_sortie: string | null;
+    date_naissance: string | null;
+    lieu_naissance: string | null;
+    sexe: string | null;
+    nationalite: string | null;
+    contact_urgence_nom: string | null;
+    contact_urgence_lien: string | null;
+    contact_urgence_telephone: string | null;
+    // null sans la permission rh-employes.donnees_sensibles (jamais envoyé)
+    donnees_sensibles: {
+        numero_cnss: string | null;
+        paiement_mode: string | null;
+        paiement_etablissement: string | null;
+        paiement_numero_compte: string | null;
+        paiement_titulaire: string | null;
+    } | null;
     contrats: ContratRow[];
     contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
     affectations: AffectationRow[];
@@ -68,8 +90,11 @@ const props = defineProps<{
     statut_options: Option[];
     sites: Option[];
     fonctions: Option[];
+    services: Option[];
+    mode_paiement_options: Option[];
 }>();
 
+const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 useFlashToast();
@@ -89,6 +114,26 @@ const form = useForm({
     site_id: props.employe.site_id ?? null,
     fonction_rh_id: props.employe.fonction_rh_id ?? null,
     statut: props.employe.statut,
+    // Dossier salarié
+    service_rh_id: props.employe.service_rh_id ?? null,
+    date_embauche: props.employe.date_embauche_iso ?? '',
+    date_sortie: props.employe.date_sortie ?? '',
+    motif_sortie: props.employe.motif_sortie ?? '',
+    date_naissance: props.employe.date_naissance ?? '',
+    lieu_naissance: props.employe.lieu_naissance ?? '',
+    sexe: props.employe.sexe ?? '',
+    nationalite: props.employe.nationalite ?? '',
+    contact_urgence_nom: props.employe.contact_urgence_nom ?? '',
+    contact_urgence_lien: props.employe.contact_urgence_lien ?? '',
+    contact_urgence_telephone: props.employe.contact_urgence_telephone ?? '',
+    numero_cnss: props.employe.donnees_sensibles?.numero_cnss ?? '',
+    paiement_mode: props.employe.donnees_sensibles?.paiement_mode ?? '',
+    paiement_etablissement:
+        props.employe.donnees_sensibles?.paiement_etablissement ?? '',
+    paiement_numero_compte:
+        props.employe.donnees_sensibles?.paiement_numero_compte ?? '',
+    paiement_titulaire:
+        props.employe.donnees_sensibles?.paiement_titulaire ?? '',
 });
 
 function submit() {
@@ -98,12 +143,6 @@ function submit() {
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdi: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-};
-
-const STATUT_CONTRAT_CLASS: Record<string, string> = {
-    actif: 'bg-emerald-100 text-emerald-700',
-    termine: 'bg-zinc-100 text-zinc-600',
-    rompu: 'bg-red-100 text-red-700',
 };
 
 function deleteContrat(c: ContratRow) {
@@ -171,7 +210,7 @@ function deleteContrat(c: ContratRow) {
                     </div>
                 </div>
                 <Link
-                    v-if="!employe.contrat_actif"
+                    v-if="can('rh-contrats.create') && !employe.contrat_actif"
                     :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                 >
                     <Button variant="outline" size="sm"
@@ -333,6 +372,12 @@ function deleteContrat(c: ContratRow) {
                         </div>
                     </div>
 
+                    <EmployeDossierFields
+                        v-model:form="form"
+                        :services="services"
+                        :mode-paiement-options="mode_paiement_options"
+                    />
+
                     <!-- Historique d'affectation (site + fonction) -->
                     <div
                         v-if="employe.affectations.length > 0"
@@ -396,7 +441,10 @@ function deleteContrat(c: ContratRow) {
                             Contrats
                         </h3>
                         <Link
-                            v-if="!employe.contrat_actif"
+                            v-if="
+                                can('rh-contrats.create') &&
+                                !employe.contrat_actif
+                            "
                             :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                         >
                             <Button variant="outline" size="sm"
@@ -430,16 +478,10 @@ function deleteContrat(c: ContratRow) {
                                     >
                                         {{ c.type_contrat_label }}
                                     </span>
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="
-                                            STATUT_CONTRAT_CLASS[
-                                                c.statut_contrat
-                                            ]
-                                        "
-                                    >
-                                        {{ c.statut_contrat_label }}
-                                    </span>
+                                    <StatusDot
+                                        :status="c.statut_contrat"
+                                        :label="c.statut_contrat_label"
+                                    />
                                 </div>
                                 <p class="text-xs text-muted-foreground">
                                     Du {{ c.date_debut }}
@@ -463,6 +505,7 @@ function deleteContrat(c: ContratRow) {
                             </div>
                             <div class="flex gap-1">
                                 <Link
+                                    v-if="can('rh-contrats.update')"
                                     :href="`/backoffice/contrats/${c.id}/edit`"
                                 >
                                     <Button
@@ -474,6 +517,7 @@ function deleteContrat(c: ContratRow) {
                                     </Button>
                                 </Link>
                                 <Button
+                                    v-if="can('rh-contrats.delete')"
                                     variant="ghost"
                                     size="icon"
                                     class="h-7 w-7 text-destructive hover:text-destructive"

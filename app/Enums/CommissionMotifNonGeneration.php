@@ -24,6 +24,8 @@ enum CommissionMotifNonGeneration: string
     case SITE_MANQUANT = 'site_manquant';
     case PERIODE_FIGEE = 'periode_figee';
     case ERREUR_TECHNIQUE = 'erreur_technique';
+    /** Fait générateur passé sans aucune tentative (COMM-020 étendue, 28/10/2026). */
+    case AUCUNE_TENTATIVE = 'aucune_tentative';
 
     public function label(): string
     {
@@ -38,6 +40,7 @@ enum CommissionMotifNonGeneration: string
             self::SITE_MANQUANT => 'Opération sans site',
             self::PERIODE_FIGEE => 'Période de paiement déjà validée ou clôturée',
             self::ERREUR_TECHNIQUE => 'Erreur de génération',
+            self::AUCUNE_TENTATIVE => 'Calcul jamais lancé',
         };
     }
 
@@ -55,6 +58,7 @@ enum CommissionMotifNonGeneration: string
             self::SITE_MANQUANT => 'Rattachez l\'opération à un site, puis relancez.',
             self::PERIODE_FIGEE => 'Période seulement validée (même déjà payée) : relancez, la période est rouverte et la part va sur une fiche complémentaire. Période clôturée : la part ne peut plus y être ajoutée, régularisez manuellement.',
             self::ERREUR_TECHNIQUE => 'Consultez le message d\'erreur ; si la cause est corrigée, relancez.',
+            self::AUCUNE_TENTATIVE => 'Relancez la génération : elle passe par le moteur officiel et ne crée jamais de commission en double.',
         };
     }
 

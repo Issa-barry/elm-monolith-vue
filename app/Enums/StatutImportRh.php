@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Enums;
+
+enum StatutImportRh: string
+{
+    case ANALYSE = 'analyse';
+    case EN_COURS = 'en_cours';
+    case TERMINE = 'termine';
+    case ECHOUE = 'echoue';
+    case ABANDONNE = 'abandonne';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::ANALYSE => 'Analysé — en attente de confirmation',
+            self::EN_COURS => 'En cours',
+            self::TERMINE => 'Terminé',
+            self::ECHOUE => 'Échoué',
+            self::ABANDONNE => 'Abandonné',
+        };
+    }
+
+    public static function values(): array
+    {
+        return array_column(self::cases(), 'value');
+    }
+}

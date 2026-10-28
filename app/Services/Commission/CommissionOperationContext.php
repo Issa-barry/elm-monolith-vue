@@ -2,6 +2,7 @@
 
 namespace App\Services\Commission;
 
+use App\Models\EquipeLivraison;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Carbon\Carbon;
@@ -42,6 +43,9 @@ final class CommissionOperationContext
         // obligatoire). Ne conditionne QUE Propriétaire/Équipe — SITE et CONSULTANT restent
         // indépendants de ce champ, cf. genererDepuisContexte().
         public readonly bool $vehiculeEligibleCommission = true,
+        // Équipe qui reçoit la commission Livreurs : pour une vente, celle figée au chargement
+        // (COMM-023, éventuellement supprimée depuis) ; sinon l'équipe actuelle du véhicule.
+        public readonly ?EquipeLivraison $equipeLivraison = null,
         public readonly string $notifSourceLabel = 'commande_vente',
         public readonly string $notifLibelleOperation = 'La facture de la commande',
         public readonly string $notifVerbeEvenement = 'encaissée',

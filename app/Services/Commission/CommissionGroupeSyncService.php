@@ -25,6 +25,23 @@ use Illuminate\Support\Collection;
  */
 class CommissionGroupeSyncService
 {
+    /**
+     * CommissionGroupe "équipe livraison" du véhicule, sans toucher à ses membres — pour une
+     * commission versée à une ancienne équipe figée au chargement (COMM-023).
+     */
+    public static function groupeEquipeLivraisonVehicule(Vehicule $vehicule): CommissionGroupe
+    {
+        return CommissionGroupe::firstOrCreate(
+            [
+                'organization_id' => $vehicule->organization_id,
+                'type' => CommissionGroupe::TYPE_EQUIPE_LIVRAISON,
+                'ancrage_type' => CommissionAncrageType::VEHICULE->value,
+                'ancrage_id' => $vehicule->id,
+            ],
+            ['statut' => CommissionActivationStatut::ACTIF->value]
+        );
+    }
+
     public static function syncEquipeLivraisonVehicule(Vehicule $vehicule): ?CommissionGroupe
     {
         $vehicule->loadMissing('equipe.membres.livreur');
@@ -37,15 +54,7 @@ class CommissionGroupeSyncService
         $membres = $equipe->membres;
         $sommeLivreurs = (float) $membres->sum('taux_commission');
 
-        $groupe = CommissionGroupe::firstOrCreate(
-            [
-                'organization_id' => $vehicule->organization_id,
-                'type' => CommissionGroupe::TYPE_EQUIPE_LIVRAISON,
-                'ancrage_type' => CommissionAncrageType::VEHICULE->value,
-                'ancrage_id' => $vehicule->id,
-            ],
-            ['statut' => CommissionActivationStatut::ACTIF->value]
-        );
+        $groupe = self::groupeEquipeLivraisonVehicule($vehicule);
 
         $rescaled = self::calculerRescale($membres, $sommeLivreurs);
 

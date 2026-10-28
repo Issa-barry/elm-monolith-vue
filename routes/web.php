@@ -83,6 +83,7 @@ use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\Salaires\ValiderPeriodePaieController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
@@ -190,6 +191,18 @@ use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
+use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
+use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
+use App\Http\Controllers\Rh\Imports\CreateImportRhController;
+use App\Http\Controllers\Rh\Imports\ErreursImportRhController;
+use App\Http\Controllers\Rh\Imports\ExporterDossiersRhController;
+use App\Http\Controllers\Rh\Imports\IndexImportRhController;
+use App\Http\Controllers\Rh\Imports\ShowImportRhController;
+use App\Http\Controllers\Rh\Imports\StoreImportRhController;
+use App\Http\Controllers\Rh\Services\IndexServiceRhController;
+use App\Http\Controllers\Rh\Services\StoreServiceRhController;
+use App\Http\Controllers\Rh\Services\ToggleServiceRhController;
+use App\Http\Controllers\Rh\Services\UpdateServiceRhController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
 use App\Http\Controllers\Role\EditRoleController;
@@ -831,6 +844,18 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : RH (Ressources humaines) ────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
+            // Import des dossiers et contrats (docs/import-dossiers-rh.md) — déclaré AVANT la
+            // ressource employes, sinon employes/{employe} intercepterait employes/imports.
+            Route::get('employes/export-maj', ExporterDossiersRhController::class)->name('employes.export-maj');
+            Route::prefix('employes/imports')->name('employes.imports.')->group(function () {
+                Route::get('/', IndexImportRhController::class)->name('index');
+                Route::get('nouveau', CreateImportRhController::class)->name('create');
+                Route::post('/', StoreImportRhController::class)->name('store');
+                Route::get('{importRh}', ShowImportRhController::class)->name('show');
+                Route::post('{importRh}/confirmer', ConfirmImportRhController::class)->name('confirm');
+                Route::post('{importRh}/abandonner', AbandonnerImportRhController::class)->name('abandon');
+                Route::get('{importRh}/erreurs', ErreursImportRhController::class)->name('erreurs');
+            });
             Route::resource('employes', EmployeController::class);
             Route::patch('employes/{employe}/transferer-site', [EmployeController::class, 'transfererSite'])
                 ->name('employes.transferer-site');
@@ -847,6 +872,11 @@ Route::prefix('backoffice')->group(function () {
                 ->only(['index', 'store', 'update']);
             Route::patch('fonctions-rh/{fonction_rh}/toggle', [FonctionRhController::class, 'toggle'])
                 ->name('fonctions-rh.toggle');
+            // Services RH : référentiel par organisation (permission rh-referentiels.gerer).
+            Route::get('services-rh', IndexServiceRhController::class)->name('services-rh.index');
+            Route::post('services-rh', StoreServiceRhController::class)->name('services-rh.store');
+            Route::put('services-rh/{serviceRh}', UpdateServiceRhController::class)->name('services-rh.update');
+            Route::patch('services-rh/{serviceRh}/toggle', ToggleServiceRhController::class)->name('services-rh.toggle');
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
@@ -1031,6 +1061,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('salaires.index');
             Route::post('salaires/{ligne}/payer', [SalaireController::class, 'payerLigne'])
                 ->name('salaires.payer');
+            Route::post('salaires/periodes/{paiePeriode}/valider', ValiderPeriodePaieController::class)
+                ->name('salaires.periodes.valider');
             Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
                 ->name('salaires.excel');
             Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
