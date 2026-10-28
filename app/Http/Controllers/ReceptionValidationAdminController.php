@@ -37,20 +37,26 @@ class ReceptionValidationAdminController extends Controller
         ]);
 
         if ($data['decision'] === 'accord') {
-            $transfert_logistique->update([
-                'validation_reception' => 'accord',
-                'validated_by' => auth()->id(),
-                'validated_at' => now(),
-                'validation_motif' => null,
-            ]);
+            // Accord et génération dans une seule transaction, comme l'API mobile
+            // (ValidationAdminController::handleAccord()) : un accord n'est jamais enregistré sans
+            // que sa génération ait laissé une trace (incident TRF-271026-016) — sinon le bouton
+            // « Approuver » disparaît et le monitoring ne voit rien.
+            DB::transaction(function () use ($transfert_logistique) {
+                $transfert_logistique->update([
+                    'validation_reception' => 'accord',
+                    'validated_by' => auth()->id(),
+                    'validated_at' => now(),
+                    'validation_motif' => null,
+                ]);
 
-            // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que si le
-            // paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement historique) —
-            // sous CHARGEMENT_VALIDE, la commission existe déjà depuis le départ du transfert
-            // (aucune régénération, cf. idempotence de CommissionEnveloppeGenerator). Montant
-            // toujours résolu par CommissionRegle (Paramètres > Commissions > Transferts
-            // logistiques), plus aucune saisie manuelle par transfert depuis le 03/09/2026.
-            CommissionTriggerService::onTransfertReceptionEffectuee($transfert_logistique);
+                // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que si le
+                // paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement historique)
+                // — sous CHARGEMENT_VALIDE, la commission existe déjà depuis le départ du transfert
+                // (aucune régénération, cf. idempotence de CommissionEnveloppeGenerator). Montant
+                // toujours résolu par CommissionRegle (Paramètres > Commissions > Transferts
+                // logistiques), plus aucune saisie manuelle par transfert depuis le 03/09/2026.
+                CommissionTriggerService::onTransfertReceptionEffectuee($transfert_logistique);
+            });
 
             $enveloppe = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
                 ->where('source_id', $transfert_logistique->id)
