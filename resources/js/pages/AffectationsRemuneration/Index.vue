@@ -3,6 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import MontantInput from '@/components/MontantInput.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -344,7 +345,7 @@ const categorieColors: Record<string, string> = {
         'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
 };
 
-function nombreOuNull(valeur: string | number): number | null {
+function nombreOuNull(valeur: string | number | null): number | null {
     return valeur === '' || valeur === null ? null : Number(valeur);
 }
 
@@ -373,7 +374,7 @@ const form = useForm({
     date_debut: '',
     date_fin: '',
     mois_versement: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -495,7 +496,7 @@ const changement = ref<Affectation | null>(null);
 const formChangement = useForm({
     date_effet: '',
     date_fin: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -569,7 +570,7 @@ function enregistrerFin(valider: boolean) {
 const saisiesDe = ref<Affectation | null>(null);
 const formSaisie = useForm({
     mois: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -1211,12 +1212,10 @@ const champSelect =
                         Montant attribué (GNF, par mois)
                         <span class="text-destructive">*</span>
                     </Label>
-                    <Input
+                    <MontantInput
                         id="af-montant"
-                        v-model.number="form.montant"
-                        type="number"
-                        min="0"
-                        step="1"
+                        v-model="form.montant"
+                        class="h-9"
                     />
                     <p
                         v-if="form.errors.montant"
@@ -1404,12 +1403,10 @@ const champSelect =
                     Nouveau montant (GNF, par mois)
                     <span class="text-destructive">*</span>
                 </Label>
-                <Input
+                <MontantInput
                     id="ch-montant"
-                    v-model.number="formChangement.montant"
-                    type="number"
-                    min="0"
-                    step="1"
+                    v-model="formChangement.montant"
+                    class="h-9"
                 />
                 <p
                     v-if="formChangement.errors.montant"
@@ -1704,12 +1701,10 @@ const champSelect =
                             Montant du mois (GNF)
                             <span class="text-destructive">*</span>
                         </Label>
-                        <Input
+                        <MontantInput
                             id="sa-montant"
-                            v-model.number="formSaisie.montant"
-                            type="number"
-                            min="0"
-                            step="1"
+                            v-model="formSaisie.montant"
+                            class="h-9"
                         />
                         <p
                             v-if="formSaisie.errors.montant"

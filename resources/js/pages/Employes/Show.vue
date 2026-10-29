@@ -65,7 +65,7 @@ interface EmployeData {
     motif_sortie: string | null;
     date_naissance: string | null;
     lieu_naissance: string | null;
-    sexe: string | null;
+    civilite_label: string | null;
     nationalite: string | null;
     contact_urgence_nom: string | null;
     contact_urgence_lien: string | null;
@@ -125,8 +125,6 @@ const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdi: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
-
-const SEXE_LABEL: Record<string, string> = { F: 'Femme', M: 'Homme' };
 
 /** Date ISO (AAAA-MM-JJ) → JJ/MM/AAAA, sans dépendre du fuseau du navigateur. */
 function dateFr(iso: string | null): string {
@@ -311,14 +309,10 @@ function dateFr(iso: string | null): string {
                             </div>
                             <div>
                                 <dt class="text-xs text-muted-foreground">
-                                    Sexe · nationalité
+                                    Civilité · nationalité
                                 </dt>
                                 <dd class="mt-0.5 font-medium">
-                                    {{
-                                        employe.sexe
-                                            ? SEXE_LABEL[employe.sexe]
-                                            : '—'
-                                    }}
+                                    {{ employe.civilite_label ?? '—' }}
                                     · {{ employe.nationalite ?? '—' }}
                                 </dd>
                             </div>
@@ -380,14 +374,20 @@ function dateFr(iso: string | null): string {
                                     }}
                                 </dd>
                             </div>
-                            <div>
+                            <!-- Coordonnées saisies avant le 30/10/2026 : lecture seule, le mode est désormais choisi par la Comptabilité au paiement. -->
+                            <div
+                                v-if="
+                                    employe.donnees_sensibles
+                                        .paiement_mode_label
+                                "
+                            >
                                 <dt class="text-xs text-muted-foreground">
-                                    Paiement du salaire
+                                    Paiement du salaire (ancienne saisie)
                                 </dt>
                                 <dd class="mt-0.5 font-medium">
                                     {{
                                         employe.donnees_sensibles
-                                            .paiement_mode_label ?? '—'
+                                            .paiement_mode_label
                                     }}
                                     <template
                                         v-if="
@@ -409,6 +409,8 @@ function dateFr(iso: string | null): string {
                             </div>
                             <div
                                 v-if="
+                                    employe.donnees_sensibles
+                                        .paiement_mode_label &&
                                     employe.donnees_sensibles.paiement_titulaire
                                 "
                                 class="col-span-2"

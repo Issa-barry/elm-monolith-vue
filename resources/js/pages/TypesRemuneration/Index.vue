@@ -4,6 +4,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import MontantInput from '@/components/MontantInput.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -265,7 +266,7 @@ const form = useForm({
     nature_montant: 'fixe',
     proratisable: false,
     cumul_autorise: false,
-    montant_defaut: '' as string | number,
+    montant_defaut: '' as string | number | null,
     taux_defaut: '' as string | number,
     date_debut_application: '',
     date_fin_application: '',
@@ -310,7 +311,7 @@ function openEdit(t: TypeRemuneration) {
     showDialog.value = true;
 }
 
-function nombreOuNull(valeur: string | number): number | null {
+function nombreOuNull(valeur: string | number | null): number | null {
     return valeur === '' || valeur === null ? null : Number(valeur);
 }
 
@@ -966,16 +967,12 @@ function ouvrirHistorique(t: TypeRemuneration) {
                         class="mb-1.5 block text-xs font-medium"
                         >Montant par défaut (GNF)</Label
                     >
-                    <Input
+                    <MontantInput
                         id="tr-montant"
-                        v-model.number="form.montant_defaut"
-                        type="number"
-                        min="0"
-                        step="1"
+                        v-model="form.montant_defaut"
+                        class="h-9"
                         placeholder="Facultatif — proposé à l’attribution"
-                        :class="{
-                            'border-destructive': form.errors.montant_defaut,
-                        }"
+                        :invalid="!!form.errors.montant_defaut"
                     />
                     <p
                         v-if="form.errors.montant_defaut"

@@ -41,12 +41,23 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | Bloc | Champs | Porté par |
 |---|---|---|
 | Dossier | Service, date d'embauche, date de sortie (≥ embauche), motif de sortie | `employes` |
-| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, sexe (F/M), nationalité | `personnes` (partagée avec les autres rôles) |
+| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, civilité (Monsieur / Madame / Mademoiselle), nationalité | `personnes` (partagée avec les autres rôles) |
 | Contact d'urgence | Nom, lien, téléphone (un seul contact) | `employes` |
-| Données sensibles | N° CNSS ; coordonnées de paiement du salaire (mode espèces / Mobile Money / virement, opérateur ou banque, numéro, titulaire) | `employes.numero_cnss`, `employe_coordonnees_paiement` (numéro **chiffré**) |
+| Données sensibles | N° CNSS | `employes.numero_cnss` |
 
 - À la création, une identité civile déjà renseignée sur la Personne réutilisée est conservée ;
   seuls les champs vides sont complétés (même règle que nom/prénom/email).
+- **Civilité (30/10/2026)** : remplace la saisie du sexe (`personnes.civilite`). La colonne
+  `personnes.sexe` est conservée et reste alimentée, déduite de la civilité (Monsieur → M, Madame
+  et Mademoiselle → F). Reprise des valeurs déjà saisies par la migration
+  `2026_10_30_110000_add_civilite_to_personnes_table` : M → Monsieur, F → Madame (Mademoiselle n'est
+  jamais déduite, elle se corrige sur la fiche).
+- **Mode de paiement du salaire (30/10/2026)** : il n'est plus saisi dans le dossier RH. La
+  Comptabilité le choisit au moment du paiement (moyen de paiement de *Paiement salaire*, ADR 0005).
+  Les coordonnées déjà enregistrées (`employe_coordonnees_paiement`, numéro **chiffré**) ne sont ni
+  modifiées ni supprimées : elles restent consultables en lecture seule sur la fiche employé, avec
+  `rh-employes.donnees_sensibles`, sous « Paiement du salaire (ancienne saisie) ». Une valeur
+  `paiement_*` envoyée au serveur est ignorée.
 - **Services RH** : référentiel par organisation, comme les fonctions RH (libellé et code uniques,
   code proposé depuis le libellé, désactivation au lieu de suppression). Écran *Paramètres → RH →
   Services RH*.
@@ -56,7 +67,7 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | Permission | Effet | Rôles servis par la migration de rattrapage |
 |---|---|---|
 | `rh-employes.read` / `.create` / `.update` / `.delete` | Dossier (hors données sensibles et salaires) | inchangé |
-| `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS et les coordonnées de paiement | super_admin, admin_entreprise |
+| `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS ; voir les coordonnées de paiement déjà enregistrées | super_admin, admin_entreprise |
 | `rh-remunerations.read` | Voir et saisir le salaire (fiche employé, contrats) | super_admin, admin_entreprise, manager |
 | `rh-referentiels.gerer` | Gérer les fonctions et services RH | super_admin, admin_entreprise |
 
@@ -77,6 +88,15 @@ agences (ADR 0025) ; un employé sans agence n'apparaît qu'à ces derniers. Fil
 - Effacer le téléphone est refusé quand la Personne porte aussi un compte, ou est aussi client,
   livreur, propriétaire, fournisseur, prestataire ou parrain : ce numéro l'identifie partout. Le
   remplacer reste possible.
+
+## Saisie des montants
+
+Le salaire de base (contrats), le montant par défaut d'un type de prime, le montant d'une prime
+(attribution, changement, saisie du mois) et le montant d'une retenue utilisent le champ commun
+`resources/js/components/MontantInput.vue` : séparateurs de milliers pendant la frappe
+(« 750000 » s'affiche « 750 000 »), montant collé avec espaces ou points accepté. Le serveur reçoit
+toujours un nombre sans séparateur (null si le champ est vide) ; un texte formaté reste refusé par
+la validation. Le salaire n'est plus limité aux multiples de 1 000.
 
 ## Effet sur le compte utilisateur existant
 

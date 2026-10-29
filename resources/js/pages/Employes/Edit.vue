@@ -66,7 +66,7 @@ interface EmployeData {
     motif_sortie: string | null;
     date_naissance: string | null;
     lieu_naissance: string | null;
-    sexe: string | null;
+    civilite: string | null;
     nationalite: string | null;
     contact_urgence_nom: string | null;
     contact_urgence_lien: string | null;
@@ -74,10 +74,6 @@ interface EmployeData {
     // null sans la permission rh-employes.donnees_sensibles (jamais envoyé)
     donnees_sensibles: {
         numero_cnss: string | null;
-        paiement_mode: string | null;
-        paiement_etablissement: string | null;
-        paiement_numero_compte: string | null;
-        paiement_titulaire: string | null;
     } | null;
     contrats: ContratRow[];
     contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
@@ -91,7 +87,7 @@ const props = defineProps<{
     sites: Option[];
     fonctions: Option[];
     services: Option[];
-    mode_paiement_options: Option[];
+    civilite_options: Option[];
 }>();
 
 const { can } = usePermissions();
@@ -121,19 +117,12 @@ const form = useForm({
     motif_sortie: props.employe.motif_sortie ?? '',
     date_naissance: props.employe.date_naissance ?? '',
     lieu_naissance: props.employe.lieu_naissance ?? '',
-    sexe: props.employe.sexe ?? '',
+    civilite: props.employe.civilite ?? '',
     nationalite: props.employe.nationalite ?? '',
     contact_urgence_nom: props.employe.contact_urgence_nom ?? '',
     contact_urgence_lien: props.employe.contact_urgence_lien ?? '',
     contact_urgence_telephone: props.employe.contact_urgence_telephone ?? '',
     numero_cnss: props.employe.donnees_sensibles?.numero_cnss ?? '',
-    paiement_mode: props.employe.donnees_sensibles?.paiement_mode ?? '',
-    paiement_etablissement:
-        props.employe.donnees_sensibles?.paiement_etablissement ?? '',
-    paiement_numero_compte:
-        props.employe.donnees_sensibles?.paiement_numero_compte ?? '',
-    paiement_titulaire:
-        props.employe.donnees_sensibles?.paiement_titulaire ?? '',
 });
 
 function submit() {
@@ -172,7 +161,7 @@ function deleteContrat(c: ContratRow) {
         ><title>{{ employe.prenom }} {{ employe.nom }}</title></Head
     >
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="mx-auto w-full max-w-7xl p-4 sm:p-6">
             <!-- Header -->
             <div class="mb-6 flex items-start justify-between">
                 <div class="flex items-center gap-4">
@@ -375,7 +364,7 @@ function deleteContrat(c: ContratRow) {
                     <EmployeDossierFields
                         v-model:form="form"
                         :services="services"
-                        :mode-paiement-options="mode_paiement_options"
+                        :civilite-options="civilite_options"
                     />
 
                     <!-- Historique d'affectation (site + fonction) -->

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Civilite;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\EmployeCoordonneesPaiement;
@@ -99,7 +100,7 @@ class EmployeDossierTest extends TestCase
                 'date_embauche' => '2024-03-01',
                 'date_naissance' => '1990-05-12',
                 'lieu_naissance' => 'Conakry',
-                'sexe' => 'F',
+                'civilite' => 'mademoiselle',
                 'nationalite' => 'Guinéenne',
                 'contact_urgence_nom' => 'Mamadou Diallo',
                 'contact_urgence_lien' => 'Frère',
@@ -113,7 +114,86 @@ class EmployeDossierTest extends TestCase
         $this->assertSame('Mamadou Diallo', $employe->contact_urgence_nom);
         $this->assertSame('1990-05-12', $employe->personne->date_naissance->format('Y-m-d'));
         $this->assertSame('Conakry', $employe->personne->lieu_naissance);
+        $this->assertSame(Civilite::MADEMOISELLE, $employe->personne->civilite);
+        // Sexe déduit de la civilité, pour garder l'ancienne colonne cohérente.
         $this->assertSame('F', $employe->personne->sexe);
+    }
+
+    public function test_la_civilite_remplace_le_sexe_et_se_modifie(): void
+    {
+        $employe = $this->employe($this->site);
+        $user = $this->utilisateur(self::CRUD);
+
+        $this->actingAs($user)
+            ->get(route('employes.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('civilite_options', [
+                    ['value' => 'monsieur', 'label' => 'Monsieur'],
+                    ['value' => 'madame', 'label' => 'Madame'],
+                    ['value' => 'mademoiselle', 'label' => 'Mademoiselle'],
+                ])
+                ->missing('mode_paiement_options'));
+
+        $this->actingAs($user)
+            ->put(route('employes.update', $employe), $this->payload([
+                'telephone' => $employe->telephone,
+                'site_id' => $this->site->id,
+                'civilite' => 'monsieur',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $personne = $employe->personne->fresh();
+        $this->assertSame(Civilite::MONSIEUR, $personne->civilite);
+        $this->assertSame('M', $personne->sexe);
+
+        $this->actingAs($user)
+            ->get(route('employes.show', $employe))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employe.civilite', 'monsieur')
+                ->where('employe.civilite_label', 'Monsieur'));
+
+        // Civilité effacée : le sexe déduit l'est aussi.
+        $this->actingAs($user)
+            ->put(route('employes.update', $employe), $this->payload([
+                'telephone' => $employe->telephone,
+                'site_id' => $this->site->id,
+                'civilite' => '',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($employe->personne->fresh()->civilite);
+        $this->assertNull($employe->personne->fresh()->sexe);
+    }
+
+    public function test_une_civilite_inconnue_est_refusee(): void
+    {
+        $this->actingAs($this->utilisateur(self::CRUD))
+            ->post(route('employes.store'), $this->payload(['civilite' => 'F']))
+            ->assertSessionHasErrors(['civilite' => 'Civilité invalide.']);
+
+        $this->assertSame(0, Employe::count());
+    }
+
+    public function test_la_migration_reprend_le_sexe_deja_saisi_sans_rien_supprimer(): void
+    {
+        $homme = $this->employe()->personne;
+        $femme = $this->employe()->personne;
+        $inconnu = $this->employe()->personne;
+        $dejaRenseignee = $this->employe()->personne;
+        DB::table('personnes')->where('id', $homme->id)->update(['sexe' => 'M', 'civilite' => null]);
+        DB::table('personnes')->where('id', $femme->id)->update(['sexe' => 'F', 'civilite' => null]);
+        DB::table('personnes')->where('id', $dejaRenseignee->id)->update(['sexe' => 'F', 'civilite' => 'mademoiselle']);
+
+        $migration = require database_path('migrations/2026_10_30_110000_add_civilite_to_personnes_table.php');
+        $migration->up();
+        $migration->up(); // rejouable
+
+        $this->assertSame('monsieur', DB::table('personnes')->where('id', $homme->id)->value('civilite'));
+        $this->assertSame('madame', DB::table('personnes')->where('id', $femme->id)->value('civilite'));
+        $this->assertNull(DB::table('personnes')->where('id', $inconnu->id)->value('civilite'));
+        $this->assertSame('mademoiselle', DB::table('personnes')->where('id', $dejaRenseignee->id)->value('civilite'));
+        // L'ancienne colonne est conservée telle quelle.
+        $this->assertSame('F', DB::table('personnes')->where('id', $femme->id)->value('sexe'));
     }
 
     public function test_les_champs_du_dossier_sont_facultatifs(): void
@@ -147,7 +227,7 @@ class EmployeDossierTest extends TestCase
 
     // ── Données sensibles ─────────────────────────────────────────────────────
 
-    public function test_les_donnees_sensibles_sont_enregistrees_et_le_numero_de_compte_chiffre(): void
+    public function test_le_numero_cnss_est_enregistre_avec_la_permission(): void
     {
         $employe = $this->employe($this->site);
         $user = $this->utilisateur([...self::CRUD, 'rh-employes.donnees_sensibles']);
@@ -157,23 +237,75 @@ class EmployeDossierTest extends TestCase
                 'telephone' => $employe->telephone,
                 'site_id' => $this->site->id,
                 'numero_cnss' => 'CNSS-123',
-                'paiement_mode' => 'mobile_money',
-                'paiement_etablissement' => 'Orange',
-                'paiement_numero_compte' => '620123456',
-                'paiement_titulaire' => 'Aïssatou Diallo',
             ]))
             ->assertSessionHasNoErrors();
 
         $this->assertSame('CNSS-123', $employe->fresh()->numero_cnss);
-        $coordonnees = EmployeCoordonneesPaiement::where('employe_id', $employe->id)->firstOrFail();
-        $this->assertSame('620123456', $coordonnees->numero_compte);
-        $brut = DB::table('employe_coordonnees_paiement')->where('employe_id', $employe->id)->value('numero_compte');
-        $this->assertNotSame('620123456', $brut);
 
         $this->actingAs($user)
             ->get(route('employes.show', $employe))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('employe.donnees_sensibles.numero_cnss', 'CNSS-123')
+                ->where('employe.donnees_sensibles.paiement_mode', null));
+    }
+
+    /**
+     * Le mode de paiement du salaire est choisi par la Comptabilité (30/10/2026) : le dossier RH ne
+     * crée, ne modifie ni ne supprime plus les coordonnées de paiement. Celles déjà enregistrées
+     * restent intactes, chiffrées et consultables sur la fiche.
+     */
+    public function test_le_dossier_rh_ne_modifie_plus_les_coordonnees_de_paiement(): void
+    {
+        $employe = $this->employe($this->site);
+        $existantes = EmployeCoordonneesPaiement::create([
+            'organization_id' => $this->org->id,
+            'employe_id' => $employe->id,
+            'mode' => 'mobile_money',
+            'etablissement' => 'Orange',
+            'numero_compte' => '620123456',
+            'titulaire' => 'Aïssatou Diallo',
+        ]);
+        $user = $this->utilisateur([...self::CRUD, 'rh-employes.donnees_sensibles']);
+
+        // Valeurs envoyées par un ancien formulaire : ignorées.
+        $this->actingAs($user)
+            ->put(route('employes.update', $employe), $this->payload([
+                'telephone' => $employe->telephone,
+                'site_id' => $this->site->id,
+                'paiement_mode' => 'virement',
+                'paiement_numero_compte' => '000',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        // Formulaire actuel, sans aucun champ de paiement : rien n'est supprimé.
+        $this->actingAs($user)
+            ->put(route('employes.update', $employe), $this->payload([
+                'telephone' => $employe->telephone,
+                'site_id' => $this->site->id,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $coordonnees = EmployeCoordonneesPaiement::where('employe_id', $employe->id)->sole();
+        $this->assertSame($existantes->id, $coordonnees->id);
+        $this->assertSame('mobile_money', $coordonnees->mode);
+        $this->assertSame('620123456', $coordonnees->numero_compte);
+        $brut = DB::table('employe_coordonnees_paiement')->where('employe_id', $employe->id)->value('numero_compte');
+        $this->assertNotSame('620123456', $brut);
+
+        $autre = $this->employe($this->site);
+        $this->actingAs($user)
+            ->put(route('employes.update', $autre), $this->payload([
+                'telephone' => $autre->telephone,
+                'site_id' => $this->site->id,
+                'paiement_mode' => 'especes',
+            ]))
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseMissing('employe_coordonnees_paiement', ['employe_id' => $autre->id]);
+
+        $this->actingAs($user)
+            ->get(route('employes.show', $employe))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employe.donnees_sensibles.paiement_mode_label', 'Mobile Money')
                 ->where('employe.donnees_sensibles.paiement_numero_compte', '620123456'));
     }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MontantInput from '@/components/MontantInput.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -44,7 +45,10 @@ const form = useForm({
     type_contrat: props.contrat.type_contrat,
     date_debut: props.contrat.date_debut ?? '',
     date_fin: props.contrat.date_fin ?? '',
-    salaire_base: props.contrat.salaire_base ?? '',
+    salaire_base:
+        props.contrat.salaire_base === null
+            ? null
+            : Number(props.contrat.salaire_base),
     statut_contrat: props.contrat.statut_contrat,
 });
 
@@ -58,7 +62,7 @@ function submit() {
 <template>
     <Head><title>Modifier le contrat</title></Head>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="mx-auto w-full max-w-2xl p-4 sm:p-6">
             <div class="mb-6 flex items-center gap-4">
                 <Link href="/backoffice/contrats">
                     <Button variant="ghost" size="icon"
@@ -70,7 +74,7 @@ function submit() {
                 </h1>
             </div>
 
-            <form class="max-w-xl space-y-6" @submit.prevent="submit">
+            <form class="space-y-6" @submit.prevent="submit">
                 <div class="space-y-5 rounded-xl border bg-card p-6 shadow-sm">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium"
@@ -172,16 +176,24 @@ function submit() {
                             v-if="can('rh-remunerations.read')"
                             class="sm:col-span-2"
                         >
-                            <label class="mb-1.5 block text-sm font-medium"
-                                >Salaire de base (GNF)</label
+                            <label
+                                for="contrat-salaire"
+                                class="mb-1.5 block text-sm font-medium"
+                                >Salaire de base</label
                             >
-                            <input
+                            <MontantInput
+                                id="contrat-salaire"
                                 v-model="form.salaire_base"
-                                type="number"
-                                min="0"
-                                step="1000"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                unite="GNF"
+                                placeholder="Ex : 750 000"
+                                :invalid="!!form.errors.salaire_base"
                             />
+                            <p
+                                v-if="form.errors.salaire_base"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.salaire_base }}
+                            </p>
                         </div>
                     </div>
                 </div>

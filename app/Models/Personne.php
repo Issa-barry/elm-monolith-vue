@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Civilite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -26,13 +27,14 @@ class Personne extends Model
         'organization_id', 'nom', 'prenom', 'nom_complet', 'surnom',
         'telephone', 'telephone_normalise', 'email',
         'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
-        'date_naissance', 'lieu_naissance', 'sexe', 'nationalite',
+        'date_naissance', 'lieu_naissance', 'civilite', 'sexe', 'nationalite',
     ];
 
     protected function casts(): array
     {
         return [
             'date_naissance' => 'date',
+            'civilite' => Civilite::class,
         ];
     }
 

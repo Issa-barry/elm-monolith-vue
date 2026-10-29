@@ -11,7 +11,8 @@ interface Option {
 /**
  * Champs du dossier salarié partagés par la création et la modification d'un employé : dossier
  * (embauche, sortie, service), identité civile, contact d'urgence et, avec
- * `rh-employes.donnees_sensibles`, n° CNSS et coordonnées de paiement. Tous facultatifs.
+ * `rh-employes.donnees_sensibles`, n° CNSS. Tous facultatifs. Le mode de paiement du salaire
+ * n'est pas saisi ici : la Comptabilité le choisit au paiement.
  */
 export interface DossierSalarieForm {
     service_rh_id: string | null;
@@ -20,22 +21,18 @@ export interface DossierSalarieForm {
     motif_sortie: string;
     date_naissance: string;
     lieu_naissance: string;
-    sexe: string;
+    civilite: string;
     nationalite: string;
     contact_urgence_nom: string;
     contact_urgence_lien: string;
     contact_urgence_telephone: string;
     numero_cnss: string;
-    paiement_mode: string;
-    paiement_etablissement: string;
-    paiement_numero_compte: string;
-    paiement_titulaire: string;
     errors: Partial<Record<string, string>>;
 }
 
 defineProps<{
     services: Option[];
-    modePaiementOptions: Option[];
+    civiliteOptions: Option[];
 }>();
 
 const form = defineModel<DossierSalarieForm>('form', { required: true });
@@ -44,11 +41,6 @@ const { can } = usePermissions();
 const voitDonneesSensibles = computed(() =>
     can('rh-employes.donnees_sensibles'),
 );
-
-const SEXE_OPTIONS: Option[] = [
-    { value: 'F', label: 'Femme' },
-    { value: 'M', label: 'Homme' },
-];
 
 const champ =
     'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
@@ -183,18 +175,27 @@ const champ =
             </div>
             <div>
                 <label
-                    for="dossier-sexe"
+                    for="dossier-civilite"
                     class="mb-1.5 block text-sm font-medium"
-                    >Sexe</label
+                    >Civilité</label
                 >
                 <Select
-                    v-model="form.sexe"
-                    input-id="dossier-sexe"
-                    :options="[{ value: '', label: '—' }, ...SEXE_OPTIONS]"
+                    v-model="form.civilite"
+                    input-id="dossier-civilite"
+                    :options="[
+                        { value: '', label: '— Non renseignée —' },
+                        ...civiliteOptions,
+                    ]"
                     option-label="label"
                     option-value="value"
                     class="w-full"
                 />
+                <p
+                    v-if="form.errors.civilite"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.civilite }}
+                </p>
             </div>
             <div>
                 <label
@@ -277,8 +278,9 @@ const champ =
                 Données sensibles
             </h3>
             <p class="mt-1 text-xs text-muted-foreground">
-                Visibles seulement par les profils autorisés. Le numéro de
-                compte est chiffré.
+                Visibles seulement par les profils autorisés. Le mode de
+                paiement du salaire est choisi par la Comptabilité au moment du
+                paiement.
             </p>
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
@@ -295,76 +297,6 @@ const champ =
                     :class="champ"
                 />
             </div>
-            <div>
-                <label
-                    for="dossier-paiement-mode"
-                    class="mb-1.5 block text-sm font-medium"
-                    >Mode de paiement du salaire</label
-                >
-                <Select
-                    v-model="form.paiement_mode"
-                    input-id="dossier-paiement-mode"
-                    :options="[
-                        { value: '', label: '— Non renseigné —' },
-                        ...modePaiementOptions,
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full"
-                />
-            </div>
-            <template
-                v-if="form.paiement_mode && form.paiement_mode !== 'especes'"
-            >
-                <div>
-                    <label
-                        for="dossier-paiement-etablissement"
-                        class="mb-1.5 block text-sm font-medium"
-                        >{{
-                            form.paiement_mode === 'mobile_money'
-                                ? 'Opérateur'
-                                : 'Banque'
-                        }}</label
-                    >
-                    <input
-                        id="dossier-paiement-etablissement"
-                        v-model="form.paiement_etablissement"
-                        type="text"
-                        :class="champ"
-                    />
-                </div>
-                <div>
-                    <label
-                        for="dossier-paiement-numero"
-                        class="mb-1.5 block text-sm font-medium"
-                        >{{
-                            form.paiement_mode === 'mobile_money'
-                                ? 'Numéro Mobile Money'
-                                : 'N° de compte'
-                        }}</label
-                    >
-                    <input
-                        id="dossier-paiement-numero"
-                        v-model="form.paiement_numero_compte"
-                        type="text"
-                        autocomplete="off"
-                        :class="champ"
-                    />
-                </div>
-                <div class="sm:col-span-2">
-                    <label
-                        for="dossier-paiement-titulaire"
-                        class="mb-1.5 block text-sm font-medium"
-                        >Titulaire du compte</label
-                    >
-                    <input
-                        id="dossier-paiement-titulaire"
-                        v-model="form.paiement_titulaire"
-                        type="text"
-                        :class="champ"
-                    />
-                </div>
-            </template>
         </div>
     </div>
 </template>

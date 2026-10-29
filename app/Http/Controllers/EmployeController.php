@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Civilite;
 use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
@@ -205,7 +206,7 @@ class EmployeController extends Controller
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
             'services' => $this->serviceOptions($orgId),
-            'mode_paiement_options' => $this->modePaiementOptions(),
+            'civilite_options' => Civilite::options(),
         ]);
     }
 
@@ -413,7 +414,7 @@ class EmployeController extends Controller
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
             'services' => $this->serviceOptions($orgId, $employe->service_rh_id),
-            'mode_paiement_options' => $this->modePaiementOptions(),
+            'civilite_options' => Civilite::options(),
         ]);
     }
 
@@ -487,7 +488,7 @@ class EmployeController extends Controller
             // Identité civile (portée par Personne)
             'date_naissance' => ['nullable', 'date', 'before:today'],
             'lieu_naissance' => ['nullable', 'string', 'max:100'],
-            'sexe' => ['nullable', Rule::in(['M', 'F'])],
+            'civilite' => ['nullable', Rule::in(Civilite::values())],
             'nationalite' => ['nullable', 'string', 'max:60'],
             // Dossier
             'date_embauche' => ['nullable', 'date'],
@@ -496,22 +497,25 @@ class EmployeController extends Controller
             'contact_urgence_nom' => ['nullable', 'string', 'max:150'],
             'contact_urgence_lien' => ['nullable', 'string', 'max:50'],
             'contact_urgence_telephone' => ['nullable', 'string', 'max:30'],
-            // Données sensibles : ignorées sans `rh-employes.donnees_sensibles` (cf. enregistrerDonneesSensibles())
+            // Donnée sensible : ignorée sans `rh-employes.donnees_sensibles` (cf. enregistrerDonneesSensibles())
             'numero_cnss' => ['nullable', 'string', 'max:30'],
-            'paiement_mode' => ['nullable', Rule::in(array_keys(EmployeCoordonneesPaiement::MODES))],
-            'paiement_etablissement' => ['nullable', 'string', 'max:100'],
-            'paiement_numero_compte' => ['nullable', 'string', 'max:60'],
-            'paiement_titulaire' => ['nullable', 'string', 'max:150'],
         ];
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Le sexe n'est plus saisi : il est déduit de la civilité pour garder `personnes.sexe` cohérent.
+     *
+     * @return array<string, mixed>
+     */
     private function identiteCivile(array $data): array
     {
+        $civilite = Civilite::tryFrom((string) ($data['civilite'] ?? ''));
+
         return [
             'date_naissance' => $data['date_naissance'] ?? null,
             'lieu_naissance' => $data['lieu_naissance'] ?? null,
-            'sexe' => $data['sexe'] ?? null,
+            'civilite' => $civilite?->value,
+            'sexe' => $civilite?->sexe(),
             'nationalite' => $data['nationalite'] ?? null,
         ];
     }
@@ -531,9 +535,11 @@ class EmployeController extends Controller
     }
 
     /**
-     * N° CNSS et coordonnées de paiement : seulement avec `rh-employes.donnees_sensibles`. Sans cette
-     * permission, les valeurs envoyées sont ignorées et les données existantes restent intactes.
-     * Mode de paiement vide = coordonnées supprimées.
+     * N° CNSS : seulement avec `rh-employes.donnees_sensibles`. Sans cette permission, la valeur
+     * envoyée est ignorée et la donnée existante reste intacte.
+     *
+     * Le mode de paiement du salaire n'est plus saisi dans le dossier RH (choisi par la Comptabilité
+     * au paiement) : les coordonnées déjà enregistrées ne sont ni modifiées ni supprimées ici.
      */
     private function enregistrerDonneesSensibles(Employe $employe, array $data): void
     {
@@ -542,23 +548,6 @@ class EmployeController extends Controller
         }
 
         $employe->update(['numero_cnss' => $data['numero_cnss'] ?? null]);
-
-        if (blank($data['paiement_mode'] ?? null)) {
-            $employe->coordonneesPaiement()->delete();
-
-            return;
-        }
-
-        $employe->coordonneesPaiement()->updateOrCreate(
-            ['employe_id' => $employe->id],
-            [
-                'organization_id' => $employe->organization_id,
-                'mode' => $data['paiement_mode'],
-                'etablissement' => $data['paiement_etablissement'] ?? null,
-                'numero_compte' => $data['paiement_numero_compte'] ?? null,
-                'titulaire' => $data['paiement_titulaire'] ?? null,
-            ],
-        );
     }
 
     /**
@@ -583,14 +572,6 @@ class EmployeController extends Controller
                     .' : il ne peut pas être effacé depuis la fiche employé (vous pouvez le remplacer).',
             ]);
         }
-    }
-
-    private function modePaiementOptions(): array
-    {
-        return collect(EmployeCoordonneesPaiement::MODES)
-            ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
-            ->values()
-            ->all();
     }
 
     /**
@@ -676,7 +657,8 @@ class EmployeController extends Controller
             // Identité civile
             'date_naissance' => $personne?->date_naissance?->format('Y-m-d'),
             'lieu_naissance' => $personne?->lieu_naissance,
-            'sexe' => $personne?->sexe,
+            'civilite' => $personne?->civilite?->value,
+            'civilite_label' => $personne?->civilite?->label(),
             'nationalite' => $personne?->nationalite,
             // Dossier (date au format du champ de saisie ; l'affichage la reformate)
             'date_embauche_iso' => $employe->date_embauche?->format('Y-m-d'),
@@ -712,7 +694,11 @@ class EmployeController extends Controller
         ]);
     }
 
-    /** @return array{numero_cnss: ?string, paiement_mode: ?string, paiement_mode_label: ?string, paiement_etablissement: ?string, paiement_numero_compte: ?string, paiement_titulaire: ?string} */
+    /**
+     * Les coordonnées de paiement saisies avant le 30/10/2026 restent consultables sur la fiche
+     * (lecture seule) : elles ne sont plus modifiables depuis le dossier RH.
+     *
+     * @return array{numero_cnss: ?string, paiement_mode: ?string, paiement_mode_label: ?string, paiement_etablissement: ?string, paiement_numero_compte: ?string, paiement_titulaire: ?string} */
     private function donneesSensibles(Employe $employe): array
     {
         $coordonnees = $employe->coordonneesPaiement;
@@ -741,8 +727,7 @@ class EmployeController extends Controller
             'service_rh_id.exists' => 'Service invalide.',
             'date_naissance.before' => 'La date de naissance doit être antérieure à aujourd\'hui.',
             'date_sortie.after_or_equal' => 'La date de sortie ne peut pas précéder la date d\'embauche.',
-            'sexe.in' => 'Sexe invalide.',
-            'paiement_mode.in' => 'Mode de paiement invalide.',
+            'civilite.in' => 'Civilité invalide.',
         ];
     }
 }
