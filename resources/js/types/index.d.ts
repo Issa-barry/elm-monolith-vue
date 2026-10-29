@@ -35,6 +35,7 @@ export type Resource =
     | 'rh-contrats'
     | 'rh-paie'
     | 'rh-types-remuneration'
+    | 'rh-affectations-remuneration'
     | 'propositions';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type StandalonePermission =
@@ -74,7 +75,12 @@ export type StandalonePermission =
     | 'rh-referentiels.gerer'
     | 'imports-rh.create'
     | 'imports-rh.read'
-    | 'rh-types-remuneration.valider';
+    | 'rh-types-remuneration.valider'
+    | 'rh-affectations-remuneration.valider'
+    | 'rh-transmissions-paie.read'
+    | 'rh-transmissions-paie.preparer'
+    | 'rh-transmissions-paie.valider'
+    | 'rh-transmissions-paie.transmettre';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

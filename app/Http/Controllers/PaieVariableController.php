@@ -21,7 +21,8 @@ class PaieVariableController extends Controller
         }
 
         $data = $request->validate([
-            'type' => ['required', 'string', Rule::in(TypeVariablePaie::values())],
+            // Retenues seulement : les gains viennent de la transmission RH (ADR 0041).
+            'type' => ['required', 'string', Rule::in(TypeVariablePaie::valeursRetenues())],
             'libelle' => ['required', 'string', 'max:150'],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'note' => ['nullable', 'string', 'max:500'],
@@ -43,7 +44,8 @@ class PaieVariableController extends Controller
         }
 
         $data = $request->validate([
-            'type' => ['required', 'string', Rule::in(TypeVariablePaie::values())],
+            // Retenues seulement : les gains viennent de la transmission RH (ADR 0041).
+            'type' => ['required', 'string', Rule::in(TypeVariablePaie::valeursRetenues())],
             'libelle' => ['required', 'string', 'max:150'],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'note' => ['nullable', 'string', 'max:500'],

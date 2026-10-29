@@ -8,6 +8,7 @@ use App\Enums\StatutTypeRemuneration;
 use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Services\AuditLogService;
+use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -120,24 +121,73 @@ class TypeRemunerationService
             'Seul un type « à valider » peut être validé.');
     }
 
-    /** Plus de nouvelle attribution ; les bénéficiaires actuels seront maintenus (lot 3). */
+    /** Plus de nouvelle attribution ; les bénéficiaires actuels sont maintenus. */
     public function fermer(TypeRemuneration $type, User $acteur): TypeRemuneration
     {
         return $this->changerStatut($type, $acteur, [StatutTypeRemuneration::ACTIF], StatutTypeRemuneration::FERME,
             'Seul un type actif peut être fermé aux nouvelles attributions.');
     }
 
-    public function desactiver(TypeRemuneration $type, User $acteur): TypeRemuneration
+    /**
+     * Plus aucun montant de ce type n'est dû à partir de la date d'effet (ADR 0039). Date
+     * obligatoire dès qu'un salarié en bénéficie encore : ses affectations s'arrêtent la veille
+     * (AffectationRemunerationService::arreterPourDesactivation()). Sans bénéficiaire, la
+     * désactivation prend effet le jour même.
+     */
+    public function desactiver(TypeRemuneration $type, User $acteur, ?string $dateEffet = null): TypeRemuneration
     {
-        return $this->changerStatut($type, $acteur, [StatutTypeRemuneration::ACTIF, StatutTypeRemuneration::FERME], StatutTypeRemuneration::INACTIF,
-            'Seul un type actif ou fermé peut être désactivé.');
+        $this->assertMemeOrganisation($type, $acteur);
+        $this->exigerDroitValidation($acteur);
+        $affectations = app(AffectationRemunerationService::class);
+
+        return DB::transaction(function () use ($type, $acteur, $dateEffet, $affectations) {
+            $type = $this->verrouiller($type);
+            if (! in_array($type->statut, [StatutTypeRemuneration::ACTIF, StatutTypeRemuneration::FERME], true)) {
+                throw ValidationException::withMessages(['statut' => 'Seul un type actif ou fermé peut être désactivé.']);
+            }
+
+            $effet = filled($dateEffet) ? Carbon::parse($dateEffet)->startOfDay() : today();
+            if (! filled($dateEffet) && ($nb = $affectations->nbBeneficiairesOuverts($type, $effet)) > 0) {
+                throw ValidationException::withMessages([
+                    'date_effet' => "{$nb} affectation(s) de ce type sont encore en cours ou à venir : indiquez la date à partir de laquelle plus rien n'est versé.",
+                ]);
+            }
+
+            $bilan = $affectations->arreterPourDesactivation($type, $effet, $acteur);
+
+            $ancien = $type->statut;
+            $type->update([
+                'statut' => StatutTypeRemuneration::INACTIF->value,
+                'desactive_au' => $effet->toDateString(),
+                'modifie_par' => $acteur->id,
+            ]);
+
+            $detail = $bilan['terminees'] + $bilan['annulees'] > 0
+                ? " ({$bilan['terminees']} affectation(s) arrêtée(s), {$bilan['annulees']} annulée(s))"
+                : '';
+            $this->journaliser($type, AuditEvent::STATUS_CHANGED, $acteur,
+                ['statut' => $ancien->value], ['statut' => StatutTypeRemuneration::INACTIF->value, 'desactive_au' => $effet->toDateString()],
+                "Type « {$type->libelle} » désactivé au {$effet->format('d/m/Y')}{$detail}");
+
+            return $type;
+        });
     }
 
-    /** Même code, même identifiant : le type redevient attribuable. */
+    /**
+     * Même code, même identifiant : le type redevient attribuable. Les affectations arrêtées par
+     * une désactivation ne reprennent pas d'elles-mêmes : il faut les attribuer à nouveau.
+     */
     public function reactiver(TypeRemuneration $type, User $acteur): TypeRemuneration
     {
-        return $this->changerStatut($type, $acteur, [StatutTypeRemuneration::FERME, StatutTypeRemuneration::INACTIF], StatutTypeRemuneration::ACTIF,
-            'Seul un type fermé ou inactif peut être réactivé.');
+        return DB::transaction(function () use ($type, $acteur) {
+            $type = $this->changerStatut($type, $acteur, [StatutTypeRemuneration::FERME, StatutTypeRemuneration::INACTIF], StatutTypeRemuneration::ACTIF,
+                'Seul un type fermé ou inactif peut être réactivé.');
+            if ($type->desactive_au !== null) {
+                $type->update(['desactive_au' => null]);
+            }
+
+            return $type;
+        });
     }
 
     /**
@@ -335,7 +385,7 @@ class TypeRemunerationService
         }
     }
 
-    /** Point unique du contrôle d'usage (cf. TypeRemuneration::estUtilise(), complété au lot 3). */
+    /** Point unique du contrôle d'usage (cf. TypeRemuneration::estUtilise()). */
     protected function estUtilise(TypeRemuneration $type): bool
     {
         return $type->estUtilise();

@@ -2,9 +2,11 @@
 
 namespace App\Services\Tresorerie\Obligations;
 
+use App\Contracts\Rh\SourceDonneesPaie;
 use App\Models\PaieLigne;
-use App\Services\PaieCalculService;
+use App\Models\PaiePeriode;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 /**
  * Salaires — mensuel, sourcé directement sur PaieLigne/PaiePeriode (jamais via
@@ -14,11 +16,15 @@ use Carbon\CarbonInterface;
  * MOIS entier (whereMonth) — calculer P1 et P2 "salarié" séparément via ce
  * chemin dupliquerait le salaire mensuel complet sur chacune. PaieLigne (un
  * employé x un mois, contrainte unique) n'a pas cette ambiguïté.
+ *
+ * Tant que la Comptabilité n'a pas repris la transmission RH du mois (la période n'a aucune ligne,
+ * ADR 0041), le besoin est estimé par les RH (SourceDonneesPaie::estimationVersements : version
+ * transmise, sinon calcul du moment), avant retenues. Rien n'est enregistré par la prévision.
  */
 class SalaireObligationContributor implements ObligationContributor
 {
     public function __construct(
-        private readonly PaieCalculService $paieCalculService,
+        private readonly SourceDonneesPaie $sourcePaie,
     ) {}
 
     public function colonnes(): array
@@ -33,14 +39,20 @@ class SalaireObligationContributor implements ObligationContributor
 
     public function collecter(string $organizationId, int $annee, int $mois, array &$besoin): void
     {
-        $periode = $this->paieCalculService->getOrGenererPeriode($organizationId, $mois, $annee);
+        $lignes = $this->lignesDuMois($organizationId, $annee, $mois);
 
-        PaieLigne::where('paie_periode_id', $periode->id)
-            ->with('employe:id,site_id')
-            ->get(['id', 'employe_id', 'net', 'reste_a_payer'])
-            ->each(function (PaieLigne $ligne) use (&$besoin) {
-                ObligationAccumulator::ajouter($besoin, $ligne->employe?->site_id, 'salaires', (float) $ligne->reste_a_payer, (float) $ligne->net);
-            });
+        if ($lignes === null) {
+            $this->sourcePaie->estimationVersements($organizationId, $annee, $mois)
+                ->each(function (array $estimation) use (&$besoin) {
+                    ObligationAccumulator::ajouter($besoin, $estimation['site_id'], 'salaires', $estimation['montant'], $estimation['montant']);
+                });
+
+            return;
+        }
+
+        $lignes->each(function (PaieLigne $ligne) use (&$besoin) {
+            ObligationAccumulator::ajouter($besoin, $ligne->employe?->site_id, 'salaires', (float) $ligne->reste_a_payer, (float) $ligne->net);
+        });
     }
 
     public function arrieres(string $organizationId, CarbonInterface $debutMois, array &$arrieres): void
@@ -63,14 +75,28 @@ class SalaireObligationContributor implements ObligationContributor
 
     public function detail(string $organizationId, int $annee, int $mois, ?string $siteId): array
     {
-        $periode = $this->paieCalculService->getOrGenererPeriode($organizationId, $mois, $annee);
+        $lignes = $this->lignesDuMois($organizationId, $annee, $mois);
+
+        if ($lignes === null) {
+            return [
+                'salaires' => $this->sourcePaie->estimationVersements($organizationId, $annee, $mois)
+                    ->filter(fn (array $e) => $e['site_id'] === $siteId && $e['montant'] > 0.0)
+                    ->map(fn (array $e) => [
+                        'id' => 'estimation-'.$e['employe_id'],
+                        'nom' => $e['nom'],
+                        'net' => $e['montant'],
+                        'deja_paye' => 0.0,
+                        'reste_a_payer' => $e['montant'],
+                        'statut' => 'estimation',
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        }
 
         return [
-            'salaires' => PaieLigne::where('paie_periode_id', $periode->id)
-                ->whereHas('employe', fn ($q) => $q->where('site_id', $siteId))
-                ->with(['employe:id,personne_id', 'employe.personne'])
-                ->get()
-                ->filter(fn (PaieLigne $l) => (float) $l->reste_a_payer > 0.0)
+            'salaires' => $lignes
+                ->filter(fn (PaieLigne $l) => $l->employe?->site_id === $siteId && (float) $l->reste_a_payer > 0.0)
                 ->map(fn (PaieLigne $l) => [
                     'id' => $l->id,
                     'nom' => $l->employe?->nom_complet,
@@ -82,5 +108,23 @@ class SalaireObligationContributor implements ObligationContributor
                 ->values()
                 ->all(),
         ];
+    }
+
+    /**
+     * Lignes de paie du mois, ou null si la Comptabilité n'a encore rien repris (estimation RH).
+     *
+     * @return Collection<int, PaieLigne>|null
+     */
+    private function lignesDuMois(string $organizationId, int $annee, int $mois): ?Collection
+    {
+        $periode = PaiePeriode::where('organization_id', $organizationId)
+            ->where('annee', $annee)->where('mois', $mois)
+            ->first();
+
+        $lignes = $periode !== null
+            ? PaieLigne::where('paie_periode_id', $periode->id)->with(['employe:id,site_id,personne_id', 'employe.personne'])->get()
+            : collect();
+
+        return $lignes->isEmpty() ? null : $lignes;
     }
 }

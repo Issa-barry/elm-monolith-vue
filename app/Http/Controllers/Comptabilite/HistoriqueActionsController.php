@@ -24,6 +24,8 @@ class HistoriqueActionsController extends Controller
         'fiches_paiement' => 'Fiches de paiement',
         'journal' => 'Journal comptable',
         'rh_types_remuneration' => 'Primes et avantages',
+        'rh_affectations_remuneration' => 'Primes des salariés',
+        'rh_transmissions_paie' => 'Transmission de paie',
     ];
 
     public function index(Request $request): Response

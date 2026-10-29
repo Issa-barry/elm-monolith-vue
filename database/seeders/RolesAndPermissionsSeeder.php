@@ -156,6 +156,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'imports-rh.create',        'imports-rh.read',
             // Primes et avantages : gestion seulement — la validation reste au super administrateur (ADR 0038).
             'rh-types-remuneration.create', 'rh-types-remuneration.read', 'rh-types-remuneration.update', 'rh-types-remuneration.delete',
+            // Primes des salariés et transmission de paie : proposer et préparer — valider et transmettre
+            // restent au super administrateur (ADR 0039, ADR 0040).
+            'rh-affectations-remuneration.create', 'rh-affectations-remuneration.read',
+            'rh-affectations-remuneration.update', 'rh-affectations-remuneration.delete',
+            'rh-transmissions-paie.read', 'rh-transmissions-paie.preparer',
             // Administration
             'users.create',             'users.read',             'users.update',
             'communications.read',      'communications.manage',
@@ -279,6 +284,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
+            // Lit la transmission RH du mois, qu'elle reprendra en paie (ADR 0040).
+            'rh-transmissions-paie.read',
             'rapports.read_own',      'rapports.read',
         ]);
     }

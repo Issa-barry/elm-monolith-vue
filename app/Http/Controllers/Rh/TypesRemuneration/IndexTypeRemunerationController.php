@@ -9,6 +9,8 @@ use App\Enums\PeriodiciteRemuneration;
 use App\Enums\StatutTypeRemuneration;
 use App\Http\Controllers\Controller;
 use App\Models\TypeRemuneration;
+use App\Services\Rh\AffectationRemunerationService;
+use App\Services\Rh\Paie\CalendrierPaieService;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,6 +53,9 @@ class IndexTypeRemunerationController extends Controller
                 'est_valide' => $t->statut->estValide(),
                 'attribuable' => $t->estAttribuable(now()),
                 'est_utilise' => $t->estUtilise(),
+                // Bénéficiaires encore en cours ou à venir : la désactivation exige alors une date d'effet.
+                'nb_beneficiaires' => app(AffectationRemunerationService::class)->nbBeneficiairesOuverts($t, today()),
+                'desactive_au' => $t->desactive_au?->toDateString(),
                 'cree_par' => $t->auteur?->name,
                 'modifie_par' => $t->modificateur?->name,
                 'valide_par' => $t->valideur?->name,
@@ -66,6 +71,7 @@ class IndexTypeRemunerationController extends Controller
             'periodicites' => PeriodiciteRemuneration::options(),
             'natures_montant' => NatureMontantRemuneration::options(),
             'statuts' => StatutTypeRemuneration::options(),
+            'premier_jour_modifiable' => app(CalendrierPaieService::class)->premierJourModifiable($orgId)?->toDateString(),
         ]);
     }
 }

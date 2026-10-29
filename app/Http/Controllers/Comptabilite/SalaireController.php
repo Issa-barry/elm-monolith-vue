@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Contracts\Rh\SourceDonneesPaie;
 use App\Enums\AuditEvent;
 use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
@@ -12,9 +13,11 @@ use App\Models\PaieLigne;
 use App\Models\PaiePaiement;
 use App\Models\PaiePeriode;
 use App\Models\Site;
+use App\Models\TransmissionPaieLigne;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\Comptabilite\PaiementSalaireService;
+use App\Services\Comptabilite\ReprisePaieService;
 use App\Services\Comptabilite\ValidationPeriodePaieService;
 use App\Services\PaieCalculService;
 use App\Services\SiteScopeService;
@@ -24,6 +27,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
@@ -53,6 +57,8 @@ class SalaireController extends Controller
         private PaieCalculService $paieCalc,
         private SiteScopeService $siteScope,
         private PaiementSalaireService $paiementSalaire,
+        private ReprisePaieService $reprise,
+        private SourceDonneesPaie $sourcePaie,
     ) {}
 
     public function index(Request $request): Response
@@ -69,7 +75,9 @@ class SalaireController extends Controller
         $sites = $this->sitesFiltrables($user, $orgId);
         $filtreSiteIds = $this->filtreSiteIds($request, $user);
 
-        $periode = $this->paieCalc->getOrGenererPeriode($orgId, $filtreMois, $filtreAnnee);
+        $periode = $this->paieCalc->getOrCreerPeriode($orgId, $filtreMois, $filtreAnnee);
+        $etatReprise = $this->reprise->etat($periode);
+        $elementsParSalarie = $this->elementsTransmis($periode);
 
         // « Payer » n'est proposé que si le serveur l'accepterait : permission, période validée et
         // salarié dans les agences d'écriture de l'utilisateur (règle 3 des standards UI).
@@ -98,6 +106,7 @@ class SalaireController extends Controller
                 'salaire_base' => (float) $l->salaire_base,
                 'brut' => (float) $l->brut,
                 'total_primes' => (float) $l->total_primes,
+                'total_avantages_nature' => (float) $l->total_avantages_nature,
                 'total_avances' => (float) $l->total_avances,
                 'total_retenues' => (float) $l->total_retenues,
                 'deductions' => (float) $l->deductions,
@@ -109,6 +118,7 @@ class SalaireController extends Controller
                 'peut_payer' => $peutPayerPeriode
                     && $l->employe !== null
                     && $this->paiementSalaire->peutPayerEmploye($l->employe, $user),
+                'elements' => $elementsParSalarie->get($l->employe_id, []),
             ])->values();
         }
 
@@ -116,6 +126,7 @@ class SalaireController extends Controller
             'nb_salaries' => $lignes->count(),
             'total_brut' => (float) $lignes->sum('brut'),
             'total_net' => (float) $lignes->sum('net'),
+            'total_avantages_nature' => (float) $lignes->sum('total_avantages_nature'),
             'total_paye' => (float) $lignes->sum('deja_paye'),
             'total_reste' => (float) $lignes->sum('reste_a_payer'),
         ];
@@ -143,8 +154,14 @@ class SalaireController extends Controller
                 'statut_label' => $periode->statut?->label(),
                 'payable' => $periode->peutEtrePayee(),
             ] : null,
+            'reprise' => $etatReprise,
+            // Reprendre / valider ne sont proposés que si le serveur l'accepterait (règle 3).
+            'can_reprendre' => $etatReprise['a_reprendre']
+                && $user->can('update', $periode)
+                && $this->reprise->peutReprendre($periode, $user),
             'can_valider_periode' => $periode !== null
                 && ValidationPeriodePaieService::estValidable($periode)
+                && $etatReprise['a_jour']
                 && $user->can('validate', $periode)
                 && $periode->lignes()->exists(),
             'periodes_disponibles' => $periodesDisponibles,
@@ -360,7 +377,7 @@ class SalaireController extends Controller
         return response()->streamDownload(function () use ($lignes, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Période', 'Salarié', 'Poste', 'Agence', 'Salaire base (GNF)', 'Brut (GNF)', 'Primes (GNF)', 'Déductions (GNF)', 'Net (GNF)', 'Déjà payé (GNF)', 'Reste (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Période', 'Salarié', 'Poste', 'Agence', 'Salaire base (GNF)', 'Brut (GNF)', 'Primes (GNF)', 'Déductions (GNF)', 'Net (GNF)', 'Avantages en nature, hors net (GNF)', 'Déjà payé (GNF)', 'Reste (GNF)', 'Statut', 'Signature'], ';');
             foreach ($lignes as $l) {
                 fputcsv($handle, [
                     $periodeLabel,
@@ -372,6 +389,7 @@ class SalaireController extends Controller
                     number_format((float) $l->total_primes, 0, ',', ' '),
                     number_format((float) $l->deductions, 0, ',', ' '),
                     number_format((float) $l->net, 0, ',', ' '),
+                    number_format((float) $l->total_avantages_nature, 0, ',', ' '),
                     number_format((float) $l->deja_paye, 0, ',', ' '),
                     number_format((float) $l->reste_a_payer, 0, ',', ' '),
                     $l->statut?->label() ?? '—',
@@ -428,6 +446,40 @@ class SalaireController extends Controller
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download('salaires-'.$filtreMois.'-'.$filtreAnnee.'.pdf');
+    }
+
+    /**
+     * Détail transmis par les RH, par salarié, lu dans la version reprise (figée). Vide tant que rien
+     * n'est repris, ou si le contenu de la version ne correspond plus à son empreinte.
+     *
+     * @return Collection<string, list<array<string, mixed>>>
+     */
+    private function elementsTransmis(PaiePeriode $periode): Collection
+    {
+        $transmission = $periode->transmission;
+        if ($transmission === null) {
+            return collect();
+        }
+
+        try {
+            $lignes = $this->sourcePaie->lignes($transmission);
+        } catch (ValidationException $e) {
+            report($e);
+
+            return collect();
+        }
+
+        return $lignes
+            ->groupBy('employe_id')
+            ->map(fn (Collection $lignes) => $lignes->map(fn (TransmissionPaieLigne $l) => [
+                'libelle' => $l->libelle,
+                'du' => $l->du->format(self::DATE_FORMAT),
+                'au' => $l->au->format(self::DATE_FORMAT),
+                'jours' => $l->jours,
+                'detail_calcul' => $l->detail_calcul,
+                'montant' => (float) $l->montant,
+                'avantage_nature' => $l->versement === TransmissionPaieLigne::VERSEMENT_VALORISE,
+            ])->values()->all());
     }
 
     /**

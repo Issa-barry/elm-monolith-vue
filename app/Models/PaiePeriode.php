@@ -19,12 +19,16 @@ class PaiePeriode extends Model
         'annee',
         'statut',
         'notes',
+        'transmission_paie_id',
+        'reprise_par',
+        'reprise_le',
     ];
 
     protected $casts = [
         'mois' => 'integer',
         'annee' => 'integer',
         'statut' => StatutPeriodePaie::class,
+        'reprise_le' => 'datetime',
     ];
 
     public function organization(): BelongsTo
@@ -35,6 +39,17 @@ class PaiePeriode extends Model
     public function lignes(): HasMany
     {
         return $this->hasMany(PaieLigne::class, 'paie_periode_id');
+    }
+
+    /** Version de la transmission RH reprise dans la période (ADR 0041). */
+    public function transmission(): BelongsTo
+    {
+        return $this->belongsTo(TransmissionPaie::class, 'transmission_paie_id');
+    }
+
+    public function repreneur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reprise_par');
     }
 
     public function labelPeriode(): string

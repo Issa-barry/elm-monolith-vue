@@ -1,7 +1,8 @@
 # ADR 0038 — Référentiel des primes et avantages
 
 - **Date** : 2026-10-28
-- **Statut** : accepté — lot 2 livré le 2026-10-28 (non commité)
+- **Statut** : accepté — lot 2 livré le 2026-10-28 (commit e0e1d281) ; complété par l'ADR 0039
+  (désactivation datée, type « Salaire de base » abandonné)
 - **Périmètre** : RH, types de primes et d'avantages — cf. [primes-avantages.md](../primes-avantages.md)
 
 ## Contexte
@@ -34,7 +35,8 @@ délégable.
   reportés : le premier au lot 3, avec la reprise du salaire des contrats ; la seconde au lot où la
   Comptabilité les renseigne. Sans attribution ni paie branchée, ils n'auraient aucun effet.
 - La désactivation n'est pas encore datée et ne met fin à aucune attribution : il n'en existe pas
-  avant le lot 3.
+  avant le lot 3. **Mise à jour du 29/10/2026 (ADR 0039)** : désactivation datée livrée au lot 3 ;
+  le type système `SALAIRE_BASE` est abandonné, le salaire de base restant porté par le contrat.
 
 ## Conséquences
 

@@ -72,6 +72,8 @@ interface TypeRemuneration {
     est_valide: boolean;
     attribuable: boolean;
     est_utilise: boolean;
+    nb_beneficiaires: number;
+    desactive_au: string | null;
     cree_par: string | null;
     modifie_par: string | null;
     valide_par: string | null;
@@ -89,6 +91,7 @@ const props = defineProps<{
     periodicites: Option[];
     natures_montant: Option[];
     statuts: Option[];
+    premier_jour_modifiable: string | null;
 }>();
 
 useFlashToast();
@@ -352,6 +355,8 @@ interface Confirmation {
 
 const confirmation = ref<Confirmation | null>(null);
 const confirmationEnCours = ref(false);
+// Désactivation : date à partir de laquelle plus rien n'est versé (obligatoire avec des bénéficiaires).
+const dateEffet = ref('');
 
 const LIBELLES_ACTION: Record<ActionStatut | 'supprimer', string> = {
     valider: 'Valider',
@@ -366,16 +371,23 @@ const EXPLICATIONS_ACTION: Record<ActionStatut | 'supprimer', string> = {
         'Le type devient actif : il pourra être attribué aux salariés (dans sa période d’application).',
     fermer: 'Plus aucune nouvelle attribution. Les salariés qui en bénéficient déjà le conservent.',
     desactiver:
-        'Le type ne pourra plus être attribué. Il reste visible dans l’historique et peut être réactivé.',
+        'Le type ne pourra plus être attribué et plus aucun montant n’en sera versé à partir de la date d’effet. Il reste visible dans l’historique et peut être réactivé.',
     reactiver:
-        'Le type redevient actif avec le même code : il pourra de nouveau être attribué.',
+        'Le type redevient actif avec le même code : il pourra de nouveau être attribué. Les affectations arrêtées ne reprennent pas d’elles-mêmes.',
     supprimer:
         'Le type sera définitivement supprimé. Cette action est réservée aux types qui n’ont jamais été attribués.',
 };
 
 function demander(type: TypeRemuneration, action: Confirmation['action']) {
+    dateEffet.value = '';
     confirmation.value = { type, action };
 }
+
+const dateEffetRequise = computed(
+    () =>
+        confirmation.value?.action === 'desactiver' &&
+        confirmation.value.type.nb_beneficiaires > 0,
+);
 
 function fermerConfirmation(visible: boolean) {
     if (!visible && !confirmationEnCours.value) confirmation.value = null;
@@ -410,7 +422,9 @@ function confirmer() {
     } else {
         router.patch(
             `/backoffice/types-remuneration/${c.type.id}/${c.action}`,
-            {},
+            c.action === 'desactiver' && dateEffet.value
+                ? { date_effet: dateEffet.value }
+                : {},
             options,
         );
     }
@@ -1128,6 +1142,33 @@ function ouvrirHistorique(t: TypeRemuneration) {
         <p v-if="confirmation" class="text-sm text-muted-foreground">
             {{ EXPLICATIONS_ACTION[confirmation.action] }}
         </p>
+        <div
+            v-if="confirmation?.action === 'desactiver'"
+            class="mt-3 space-y-1.5"
+        >
+            <p
+                v-if="confirmation.type.nb_beneficiaires > 0"
+                class="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+                {{ confirmation.type.nb_beneficiaires }} affectation(s) en cours
+                ou à venir : elles s’arrêteront la veille de la date d’effet
+                (celles qui n’auraient commencé qu’après seront annulées).
+            </p>
+            <Label for="tr-date-effet" class="block text-xs font-medium">
+                Plus rien n’est versé à partir du
+                <span v-if="dateEffetRequise" class="text-destructive">*</span>
+            </Label>
+            <Input
+                id="tr-date-effet"
+                v-model="dateEffet"
+                type="date"
+                :min="premier_jour_modifiable ?? undefined"
+            />
+            <p v-if="!dateEffetRequise" class="text-xs text-muted-foreground">
+                Aucun bénéficiaire : vide, la désactivation prend effet
+                aujourd’hui.
+            </p>
+        </div>
         <template #footer>
             <div class="flex justify-end gap-2">
                 <Button
@@ -1143,7 +1184,9 @@ function ouvrirHistorique(t: TypeRemuneration) {
                             ? 'destructive'
                             : 'default'
                     "
-                    :disabled="confirmationEnCours"
+                    :disabled="
+                        confirmationEnCours || (dateEffetRequise && !dateEffet)
+                    "
                     data-testid="type-remuneration-confirmer"
                     @click="confirmer"
                 >

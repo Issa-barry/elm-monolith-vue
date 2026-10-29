@@ -12,10 +12,10 @@ use App\Models\PaieLigne;
 use App\Models\PaiePaiement;
 use App\Models\Personne;
 use App\Models\Site;
-use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 /**
@@ -27,7 +27,7 @@ use Tests\TestCase;
  */
 class PaieComptabilisationServiceTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private Site $site;
 
@@ -65,7 +65,7 @@ class PaieComptabilisationServiceTest extends TestCase
 
     public function test_paiement_salaire_genere_une_ecriture_equilibree_au_site_de_l_employe(): void
     {
-        $periode = app(PaieCalculService::class)->getOrGenererPeriode($this->org->id, 8, 2026);
+        $periode = $this->preparerPaieDepuisRh($this->org, 8, 2026);
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->where('employe_id', $this->employe->id)->firstOrFail();
 
         $paiement = PaiePaiement::create([

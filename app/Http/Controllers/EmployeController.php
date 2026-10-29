@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Enums\TypeEmploye;
+use App\Models\AffectationRemuneration;
 use App\Models\Employe;
 use App\Models\EmployeCoordonneesPaiement;
 use App\Models\FonctionRh;
@@ -15,8 +17,10 @@ use App\Models\Site;
 use App\Models\User;
 use App\Services\MatriculeService;
 use App\Services\PhoneCountryInfo;
+use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\EmployeAffectationService;
 use App\Services\SiteScopeService;
+use App\Support\Rh\AffectationRemunerationPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -343,7 +347,31 @@ class EmployeController extends Controller
             'employe' => array_merge($this->toDetail($employe), [
                 'compte' => $this->compteInfo($employe),
             ]),
+            'primes' => $this->primes($employe),
         ]);
+    }
+
+    /**
+     * Primes et avantages du salarié (hors annulées) : seulement avec
+     * `rh-affectations-remuneration.read` et pour un salarié d'une agence consultable — sinon
+     * null, jamais envoyé au navigateur.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function primes(Employe $employe): ?array
+    {
+        $user = auth()->user();
+        if (! $user->can('rh-affectations-remuneration.read') || ! AffectationRemunerationService::peutConsulter($employe, $user)) {
+            return null;
+        }
+
+        $affectations = AffectationRemuneration::where('employe_id', $employe->id)
+            ->where('statut', '!=', StatutAffectationRemuneration::ANNULEE->value)
+            ->with(AffectationRemunerationPresenter::RELATIONS)
+            ->orderByDesc('date_debut')
+            ->get();
+
+        return (new AffectationRemunerationPresenter($user))->liste($affectations);
     }
 
     /**

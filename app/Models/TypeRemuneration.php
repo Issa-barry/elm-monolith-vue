@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Type de prime ou d'avantage (référentiel RH par organisation, docs/primes-avantages.md). Toutes
@@ -39,6 +40,7 @@ class TypeRemuneration extends Model
         'date_debut_application',
         'date_fin_application',
         'statut',
+        'desactive_au',
         'cree_par',
         'modifie_par',
         'valide_par',
@@ -59,6 +61,7 @@ class TypeRemuneration extends Model
             'taux_defaut' => 'decimal:2',
             'date_debut_application' => 'date',
             'date_fin_application' => 'date',
+            'desactive_au' => 'date',
             'valide_le' => 'datetime',
         ];
     }
@@ -109,13 +112,31 @@ class TypeRemuneration extends Model
             && ($this->date_fin_application === null || $this->date_fin_application->gte($jour));
     }
 
+    public function affectations(): HasMany
+    {
+        return $this->hasMany(AffectationRemuneration::class, 'type_remuneration_id');
+    }
+
     /**
-     * Le type a-t-il servi (attribution à un salarié, élément de paie) ? Aucune table ne le
-     * référence encore : les attributions arrivent au lot 3, qui complétera ce contrôle. Un type
-     * utilisé ne se supprime jamais et ses caractéristiques de calcul sont figées.
+     * Le type a-t-il servi ? Toute affectation, même annulée, compte : elle reste dans
+     * l'historique du salarié. Un type utilisé ne se supprime jamais et ses caractéristiques de
+     * calcul sont figées.
      */
     public function estUtilise(): bool
     {
-        return false;
+        return $this->affectations()->exists();
+    }
+
+    /**
+     * Un montant de ce type est-il dû ce jour-là ? Non pour un type désactivé à partir de sa date
+     * d'effet, même si une affectation était restée ouverte (double garantie, ADR 0039).
+     */
+    public function estDuLe(CarbonInterface $jour): bool
+    {
+        if ($this->statut !== StatutTypeRemuneration::INACTIF) {
+            return true;
+        }
+
+        return $this->desactive_au !== null && $jour->lt($this->desactive_au);
     }
 }

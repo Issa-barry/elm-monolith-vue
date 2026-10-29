@@ -44,6 +44,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
+    // Affectation de prime validée qui n'a pas encore commencé (ADR 0039).
+    a_venir: 'bg-sky-400',
+    // Transmission de paie transmise à la Comptabilité (ADR 0040).
+    transmise: 'bg-emerald-500',
     chargement: 'bg-blue-500',
     chargement_en_cours: 'bg-blue-500',
     livraison_en_cours: 'bg-blue-500',
@@ -86,6 +90,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Type de prime fermé aux nouvelles attributions (StatutTypeRemuneration::FERME) : les
     // bénéficiaires actuels sont maintenus, ce n'est pas une anomalie.
     ferme: 'bg-zinc-400 dark:bg-zinc-500',
+    // Affectation de prime terminée à sa date de fin (état dérivé des dates, ADR 0039).
+    terminee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Transmission de paie : version remplacée par une suivante, ou brouillon abandonné (ADR 0040).
+    remplacee: 'bg-zinc-400 dark:bg-zinc-500',
+    abandonnee: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
