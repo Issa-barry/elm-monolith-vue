@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\Rh\SourceDonneesPaie;
 use App\Contracts\SmsGateway;
 use App\Contracts\WhatsAppGateway;
 use App\Features\ModuleFeature;
@@ -16,6 +17,7 @@ use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
 use App\Services\Communications\NullWhatsAppGateway;
+use App\Services\Rh\Paie\DonneesPaieRhService;
 use App\Services\Sms\NimbaSmsGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -42,6 +44,10 @@ class AppServiceProvider extends ServiceProvider
         // changer cette seule ligne, jamais SmsOtpChannel/OtpService/les
         // contrôleurs.
         $this->app->bind(SmsGateway::class, NimbaSmsGateway::class);
+
+        // Frontière RH → Comptabilité de la paie (ADR 0040) : la Comptabilité lit la transmission
+        // figée du mois, jamais les tables RH.
+        $this->app->bind(SourceDonneesPaie::class, DonneesPaieRhService::class);
 
         // Fournisseur WhatsApp pour les notifications transactionnelles (cf.
         // App\Services\Communications\TransactionalCommunicationDispatcher) —

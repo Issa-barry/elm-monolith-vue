@@ -21,6 +21,9 @@ const props = defineProps<{
     auditableType: string;
     auditableId: string;
     module?: string;
+    // Adresse propre à un module (ex. historique d'un type de prime, hors Comptabilité) ;
+    // par défaut l'historique d'entité de la Comptabilité.
+    endpoint?: string;
 }>();
 
 const emit = defineEmits<{
@@ -85,10 +88,12 @@ async function fetchLogs() {
             auditable_id: props.auditableId,
         });
         if (props.module) params.set('module', props.module);
-        const res = await fetch(
-            `/backoffice/comptabilite/historique/entite?${params.toString()}`,
-            { headers: { Accept: 'application/json' } },
-        );
+        const url = props.endpoint
+            ? props.endpoint
+            : `/backoffice/comptabilite/historique/entite?${params.toString()}`;
+        const res = await fetch(url, {
+            headers: { Accept: 'application/json' },
+        });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         logs.value = await res.json();
     } catch {

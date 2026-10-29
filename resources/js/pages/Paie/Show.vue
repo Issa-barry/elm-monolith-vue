@@ -175,16 +175,20 @@ const showVariableModal = ref(false);
 const selectedLigne = ref<Ligne | null>(null);
 const editingVariable = ref<Variable | null>(null);
 
+// Retenues seulement : les gains viennent de la transmission RH (ADR 0041).
 const typeOptions = [
-    { value: 'prime', label: 'Prime' },
-    { value: 'autre_gain', label: 'Autre gain' },
     { value: 'avance', label: 'Avance sur salaire' },
     { value: 'retenue', label: 'Retenue' },
     { value: 'absence', label: 'Absence' },
     { value: 'autre_deduction', label: 'Autre déduction' },
 ];
 
-const varForm = useForm({ type: 'prime', libelle: '', montant: 0, note: '' });
+const varForm = useForm({
+    type: 'retenue',
+    libelle: '',
+    montant: 0,
+    note: '',
+});
 
 function openVariableModal(ligne: Ligne, variable?: Variable) {
     selectedLigne.value = ligne;
@@ -196,7 +200,7 @@ function openVariableModal(ligne: Ligne, variable?: Variable) {
         varForm.note = variable.note ?? '';
     } else {
         varForm.reset();
-        varForm.type = 'prime';
+        varForm.type = 'retenue';
     }
     showVariableModal.value = true;
 }

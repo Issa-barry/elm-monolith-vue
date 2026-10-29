@@ -37,11 +37,12 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 class DepenseComptabiliteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private PaieCalculService $service;
 
@@ -604,19 +605,24 @@ class DepenseComptabiliteTest extends TestCase
         $this->assertEquals(40_000.0, $contrepassation->totalCredit());
     }
 
-    // ── SalaireController — auto-génération ──────────────────────────────────
+    // ── SalaireController — préparation depuis la transmission RH (ADR 0041) ─
+    //
+    // Avant le lot 5, la première visite du mois générait les lignes depuis les contrats. Les lignes
+    // viennent désormais uniquement de la transmission RH reprise : les trois tests ci-dessous
+    // remplacent ceux de l'auto-génération (même intention : pas de doublon, dépenses déduites).
 
-    public function test_index_auto_genere_periode_et_lignes_a_premiere_visite(): void
+    public function test_index_cree_la_periode_vide_sans_la_deduire_des_contrats(): void
     {
-        [$employe, $contrat] = $this->makeEmployeAvecContrat(1_200_000);
+        $this->makeEmployeAvecContrat(1_200_000);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/salaires?mois=6&annee=2026')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/Salaire/Index')
-                ->has('lignes', 1)
-                ->where('lignes.0.salaire_base', 1_200_000)
+                ->has('lignes', 0)
+                ->where('reprise.courante', null)
+                ->where('can_valider_periode', false)
             );
 
         $this->assertDatabaseHas('paie_periodes', [
@@ -624,25 +630,29 @@ class DepenseComptabiliteTest extends TestCase
             'mois' => 6,
             'annee' => 2026,
         ]);
-
-        $this->assertDatabaseHas('paie_lignes', [
-            'employe_id' => $employe->id,
-        ]);
+        $this->assertDatabaseCount('paie_lignes', 0);
     }
 
-    public function test_index_ne_duplique_pas_les_lignes_a_visite_suivante(): void
+    public function test_index_ne_duplique_pas_les_lignes_reprises_a_visite_suivante(): void
     {
-        [$employe, $contrat] = $this->makeEmployeAvecContrat();
+        [$employe] = $this->makeEmployeAvecContrat(1_200_000);
+        $this->preparerPaieDepuisRh($this->org, 6, 2026);
 
         $this->actingAs($this->user)->get('/backoffice/comptabilite/salaires?mois=6&annee=2026');
-        $this->actingAs($this->user)->get('/backoffice/comptabilite/salaires?mois=6&annee=2026');
+        $this->actingAs($this->user)
+            ->get('/backoffice/comptabilite/salaires?mois=6&annee=2026')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('lignes', 1)
+                ->where('lignes.0.employe_id', $employe->id)
+                ->where('lignes.0.salaire_base', 1_200_000)
+            );
 
         $this->assertDatabaseCount('paie_lignes', 1);
     }
 
     public function test_index_affiche_depenses_validees_comme_deductions(): void
     {
-        [$employe, $contrat] = $this->makeEmployeAvecContrat(1_800_000);
+        [$employe] = $this->makeEmployeAvecContrat(1_800_000);
         $type = $this->makeDepenseType();
 
         Depense::factory()->valide()->create([
@@ -654,6 +664,7 @@ class DepenseComptabiliteTest extends TestCase
             'montant' => 80_000,
             'date_depense' => '2026-06-10',
         ]);
+        $this->preparerPaieDepuisRh($this->org, 6, 2026);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/salaires?mois=6&annee=2026')

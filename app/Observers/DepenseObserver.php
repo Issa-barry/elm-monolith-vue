@@ -89,29 +89,35 @@ class DepenseObserver
         $this->periodeCalculator->recalculerPeriodesConcernees($depense->organization_id, $depense->date_depense);
     }
 
+    /**
+     * Met à jour la paie encore ouverte du salarié : le mois de la dépense et, s'il est déjà validé,
+     * le mois suivant ouvert, où la dépense est régularisée (PaieCalculService::importerDepenses). Une
+     * période validée n'est jamais modifiée (docs/paie.md).
+     */
     private function syncPaieLigne(Depense $depense): void
     {
         $date = $depense->date_depense;
+        $annee = (int) $date->format('Y');
+        $mois = (int) $date->format('m');
 
-        $periode = PaiePeriode::where('organization_id', $depense->organization_id)
-            ->where('mois', (int) $date->format('m'))
-            ->where('annee', (int) $date->format('Y'))
-            ->first();
+        $periodes = PaiePeriode::where('organization_id', $depense->organization_id)
+            ->whereNotIn('statut', PaieCalculService::statutsVerrouilles())
+            ->where(fn ($q) => $q->where('annee', '>', $annee)
+                ->orWhere(fn ($meme) => $meme->where('annee', $annee)->where('mois', '>=', $mois)))
+            ->get();
 
-        if (! $periode) {
-            return;
+        foreach ($periodes as $periode) {
+            $ligne = PaieLigne::where('paie_periode_id', $periode->id)
+                ->where('employe_id', $depense->beneficiaire_id)
+                ->first();
+
+            if (! $ligne) {
+                continue;
+            }
+
+            $this->paieCalc->importerDepenses($ligne, $periode);
+            $ligne->load('variables');
+            $this->paieCalc->calculerLigne($ligne);
         }
-
-        $ligne = PaieLigne::where('paie_periode_id', $periode->id)
-            ->where('employe_id', $depense->beneficiaire_id)
-            ->first();
-
-        if (! $ligne) {
-            return;
-        }
-
-        $this->paieCalc->importerDepenses($ligne, $periode);
-        $ligne->load('variables');
-        $this->paieCalc->calculerLigne($ligne);
     }
 }

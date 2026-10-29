@@ -4,111 +4,47 @@ namespace App\Services;
 
 use App\Enums\StatutDepense;
 use App\Enums\StatutLignePaie;
+use App\Enums\StatutPeriodePaie;
 use App\Enums\TypeVariablePaie;
-use App\Models\Contrat;
 use App\Models\Depense;
-use App\Models\Employe;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
+use App\Models\PaieVariable;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Calcul d'une ligne de paie de la Comptabilité (docs/paie.md, ADR 0041).
+ *
+ * Les gains (salaire de base, primes, indemnités, allocations) et les avantages en nature viennent
+ * uniquement de la transmission RH reprise (App\Services\Comptabilite\ReprisePaieService) : ils sont
+ * copiés sur la ligne et jamais recalculés ici. Ce service n'ajoute que les retenues propres à la
+ * Comptabilité (dépenses validées : avances, retenues…), puis calcule le net et le reste à payer.
+ */
 class PaieCalculService
 {
     /**
-     * Point d'entrée unique pour obtenir la PaiePeriode d'un mois, en
-     * garantissant que ses PaieLigne existent — sans dépendre d'une visite
-     * préalable de l'écran Comptabilité > Salaires (cf. SalaireController::index()
-     * et SalaireObligationContributor, qui appellent tous les deux cette méthode
-     * plutôt que de dupliquer la logique de génération).
+     * Période de paie du mois, créée vide (brouillon) si elle n'existe pas encore. Ses lignes
+     * n'arrivent que par la reprise de la transmission RH : aucune ligne n'est déduite des contrats.
      */
-    public function getOrGenererPeriode(string $orgId, int $mois, int $annee): PaiePeriode
+    public function getOrCreerPeriode(string $orgId, int $mois, int $annee): PaiePeriode
     {
-        $periode = PaiePeriode::firstOrCreate(
+        return PaiePeriode::firstOrCreate(
             ['organization_id' => $orgId, 'mois' => $mois, 'annee' => $annee],
-            ['statut' => 'brouillon'],
+            ['statut' => StatutPeriodePaie::BROUILLON],
         );
-
-        if ($periode->lignes()->count() === 0) {
-            $this->genererLignes($periode);
-            $this->calculerPeriode($periode);
-            $periode->refresh();
-        }
-
-        return $periode;
     }
 
-    public function genererLignes(PaiePeriode $periode): void
-    {
-        $orgId = $periode->organization_id;
-        $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
-        $fin = $debut->copy()->endOfMonth();
-        $joursMois = $debut->daysInMonth;
-
-        $employes = Employe::where('organization_id', $orgId)
-            ->whereHas('contrats', fn ($q) => $q->where('statut_contrat', 'actif')
-                ->where('date_debut', '<=', $fin)
-                ->where(fn ($q2) => $q2->whereNull('date_fin')->orWhere('date_fin', '>=', $debut))
-            )
-            ->with(['contrats' => fn ($q) => $q->where('statut_contrat', 'actif')
-                ->where('date_debut', '<=', $fin)
-                ->where(fn ($q2) => $q2->whereNull('date_fin')->orWhere('date_fin', '>=', $debut))
-                ->orderByDesc('date_debut')
-                ->limit(1),
-            ])
-            ->get();
-
-        DB::transaction(function () use ($employes, $periode, $debut, $fin, $joursMois) {
-            foreach ($employes as $employe) {
-                $contrat = $employe->contrats->first();
-                if (! $contrat) {
-                    continue;
-                }
-
-                if (PaieLigne::where('paie_periode_id', $periode->id)
-                    ->where('employe_id', $employe->id)
-                    ->exists()
-                ) {
-                    continue;
-                }
-
-                $joursActifs = $this->joursActifs($contrat, $debut, $fin, $joursMois);
-                $salaireBase = (float) $contrat->salaire_base;
-                $prorata = $joursActifs < $joursMois
-                    ? round($salaireBase * $joursActifs / $joursMois, 2)
-                    : $salaireBase;
-
-                PaieLigne::create([
-                    'paie_periode_id' => $periode->id,
-                    'employe_id' => $employe->id,
-                    'contrat_id' => $contrat->id,
-                    'salaire_base' => $prorata,
-                    'jours_travailles' => $joursActifs,
-                    'jours_periode' => $joursMois,
-                    'total_primes' => 0,
-                    'total_autres_gains' => 0,
-                    'total_avances' => 0,
-                    'total_retenues' => 0,
-                    'total_absences' => 0,
-                    'total_autres_deductions' => 0,
-                    'brut' => $prorata,
-                    'deductions' => 0,
-                    'net' => $prorata,
-                    'deja_paye' => 0,
-                    'reste_a_payer' => $prorata,
-                    'statut' => StatutLignePaie::EN_ATTENTE,
-                ]);
-            }
-        });
-    }
-
+    /**
+     * Net d'une ligne : gains transmis par RH (salaire de base, primes) moins les retenues. Les
+     * avantages en nature restent hors du brut et du net. Une variable de gain saisie à la main n'est
+     * plus reprise : les gains viennent de la transmission RH.
+     */
     public function calculerLigne(PaieLigne $ligne): void
     {
         $ligne->loadMissing('variables');
 
-        $totaux = [
-            TypeVariablePaie::PRIME->value => 0,
-            TypeVariablePaie::AUTRE_GAIN->value => 0,
+        $retenues = [
             TypeVariablePaie::AVANCE->value => 0,
             TypeVariablePaie::RETENUE->value => 0,
             TypeVariablePaie::ABSENCE->value => 0,
@@ -116,17 +52,13 @@ class PaieCalculService
         ];
 
         foreach ($ligne->variables as $variable) {
-            $totaux[$variable->type->value] += (float) $variable->montant;
+            if ($variable->type->estDeduction()) {
+                $retenues[$variable->type->value] += (float) $variable->montant;
+            }
         }
 
-        $brut = (float) $ligne->salaire_base
-            + $totaux[TypeVariablePaie::PRIME->value]
-            + $totaux[TypeVariablePaie::AUTRE_GAIN->value];
-
-        $deductions = $totaux[TypeVariablePaie::AVANCE->value]
-            + $totaux[TypeVariablePaie::RETENUE->value]
-            + $totaux[TypeVariablePaie::ABSENCE->value]
-            + $totaux[TypeVariablePaie::AUTRE_DEDUCTION->value];
+        $brut = round((float) $ligne->salaire_base + (float) $ligne->total_primes + (float) $ligne->total_autres_gains, 2);
+        $deductions = round(array_sum($retenues), 2);
 
         $net = max(0, $brut - $deductions);
         $dejaPaye = (float) $ligne->deja_paye;
@@ -139,12 +71,10 @@ class PaieCalculService
         };
 
         $ligne->update([
-            'total_primes' => $totaux[TypeVariablePaie::PRIME->value],
-            'total_autres_gains' => $totaux[TypeVariablePaie::AUTRE_GAIN->value],
-            'total_avances' => $totaux[TypeVariablePaie::AVANCE->value],
-            'total_retenues' => $totaux[TypeVariablePaie::RETENUE->value],
-            'total_absences' => $totaux[TypeVariablePaie::ABSENCE->value],
-            'total_autres_deductions' => $totaux[TypeVariablePaie::AUTRE_DEDUCTION->value],
+            'total_avances' => $retenues[TypeVariablePaie::AVANCE->value],
+            'total_retenues' => $retenues[TypeVariablePaie::RETENUE->value],
+            'total_absences' => $retenues[TypeVariablePaie::ABSENCE->value],
+            'total_autres_deductions' => $retenues[TypeVariablePaie::AUTRE_DEDUCTION->value],
             'brut' => $brut,
             'deductions' => $deductions,
             'net' => $net,
@@ -167,19 +97,37 @@ class PaieCalculService
     }
 
     /**
-     * Reprend en paie les dépenses validées du salarié pour le mois, si leur type porte une retenue
-     * (avance, retenue, absence, autre déduction). Un type sans effet sur la paie (remboursement de
-     * frais…) ou un ancien type « prime » / « autre gain » n'est jamais repris : les primes viennent
-     * du référentiel RH (docs/paie.md).
+     * Reprend en paie les dépenses validées du salarié, si leur type porte une retenue (avance,
+     * retenue, absence, autre déduction). Un type sans effet sur la paie (remboursement de frais…) ou
+     * un ancien type « prime » / « autre gain » n'est jamais repris : les primes viennent du
+     * référentiel RH (docs/paie.md).
+     *
+     * Mois de rattachement : celui de la dépense. Si la paie de ce mois est déjà validée et que la
+     * dépense n'y figure pas (validée après coup), elle est reprise en régularisation dans le premier
+     * mois suivant encore ouvert. Une période validée n'est jamais modifiée.
      */
     public function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
     {
-        $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
-        $fin = $debut->copy()->endOfMonth();
+        if ($periode->statut instanceof StatutPeriodePaie && $periode->statut->estVerrouille()) {
+            return;
+        }
+
+        $debutMois = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
+        $fin = $debutMois->copy()->endOfMonth();
+        $debut = $this->debutDesRegularisations($periode, $debutMois);
 
         $ligne->variables()->whereNotNull('depense_id')->delete();
 
-        $depenses = Depense::where('beneficiaire_type', 'employe')
+        $dejaRetenues = PaieVariable::whereNotNull('depense_id')
+            ->whereHas('ligne', fn ($l) => $l->where('employe_id', $ligne->employe_id)
+                ->where('paie_periode_id', '!=', $periode->id)
+                ->whereHas('periode', fn ($p) => $p->where('organization_id', $periode->organization_id)
+                    ->whereIn('statut', self::statutsVerrouilles())))
+            ->pluck('depense_id')
+            ->flip();
+
+        $depenses = Depense::where('organization_id', $periode->organization_id)
+            ->where('beneficiaire_type', 'employe')
             ->where('beneficiaire_id', $ligne->employe_id)
             ->where('statut', StatutDepense::VALIDE->value)
             ->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59'])
@@ -187,6 +135,10 @@ class PaieCalculService
             ->get();
 
         foreach ($depenses as $depense) {
+            if ($dejaRetenues->has($depense->id)) {
+                continue;
+            }
+
             $typePaie = TypeVariablePaie::tryFrom($depense->depenseType?->type_paie ?? '');
             if ($typePaie === null || ! $typePaie->estDeduction()) {
                 continue;
@@ -196,11 +148,14 @@ class PaieCalculService
             if ($depense->commentaire) {
                 $libelle .= ' — '.$depense->commentaire;
             }
+            if ($depense->date_depense->lt($debutMois)) {
+                $libelle = mb_substr($libelle, 0, 125).' (régularisation '.$depense->date_depense->format('m/Y').')';
+            }
 
             $ligne->variables()->create([
                 'depense_id' => $depense->id,
                 'type' => $typePaie,
-                'libelle' => $libelle,
+                'libelle' => mb_substr($libelle, 0, 150),
                 'montant' => (float) $depense->montant,
                 'note' => null,
             ]);
@@ -226,18 +181,33 @@ class PaieCalculService
         ]);
     }
 
-    private function joursActifs(Contrat $contrat, Carbon $debut, Carbon $fin, int $joursMois): float
+    /** @return list<string> */
+    public static function statutsVerrouilles(): array
     {
-        $dateDebut = Carbon::parse($contrat->date_debut)->startOfDay();
-        $dateFin = $contrat->date_fin ? Carbon::parse($contrat->date_fin)->startOfDay() : null;
+        return array_values(array_map(
+            fn (StatutPeriodePaie $s) => $s->value,
+            array_filter(StatutPeriodePaie::cases(), fn (StatutPeriodePaie $s) => $s->estVerrouille()),
+        ));
+    }
 
-        $effectifDebut = $dateDebut->gt($debut) ? $dateDebut : $debut->copy()->startOfDay();
-        $effectifFin = ($dateFin && $dateFin->lt($fin)) ? $dateFin : $fin->copy()->startOfDay();
+    /**
+     * Premier jour dont une dépense peut encore être reprise dans cette période : le mois lui-même,
+     * plus les mois précédents consécutifs déjà validés (leurs dépenses tardives y sont régularisées).
+     */
+    private function debutDesRegularisations(PaiePeriode $periode, Carbon $debutMois): Carbon
+    {
+        $verrouilles = PaiePeriode::where('organization_id', $periode->organization_id)
+            ->whereIn('statut', self::statutsVerrouilles())
+            ->get(['annee', 'mois'])
+            ->mapWithKeys(fn (PaiePeriode $p) => [sprintf('%04d-%02d', $p->annee, $p->mois) => true]);
 
-        if ($effectifDebut->gt($effectifFin)) {
-            return 0;
+        $debut = $debutMois->copy();
+        $precedent = $debutMois->copy()->subMonthNoOverflow();
+        while ($verrouilles->has($precedent->format('Y-m'))) {
+            $debut = $precedent->copy();
+            $precedent->subMonthNoOverflow();
         }
 
-        return (float) ($effectifDebut->diffInDays($effectifFin) + 1);
+        return $debut;
     }
 }
