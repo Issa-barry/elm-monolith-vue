@@ -83,6 +83,7 @@ use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\RemisesAgencesController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\Salaires\ReprendreTransmissionPaieController;
 use App\Http\Controllers\Comptabilite\Salaires\ValiderPeriodePaieController;
 use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
@@ -191,6 +192,7 @@ use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
+use App\Http\Controllers\Rh\AffectationRemunerationController;
 use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
 use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
 use App\Http\Controllers\Rh\Imports\CreateImportRhController;
@@ -199,10 +201,18 @@ use App\Http\Controllers\Rh\Imports\ExporterDossiersRhController;
 use App\Http\Controllers\Rh\Imports\IndexImportRhController;
 use App\Http\Controllers\Rh\Imports\ShowImportRhController;
 use App\Http\Controllers\Rh\Imports\StoreImportRhController;
+use App\Http\Controllers\Rh\SaisieRemunerationController;
 use App\Http\Controllers\Rh\Services\IndexServiceRhController;
 use App\Http\Controllers\Rh\Services\StoreServiceRhController;
 use App\Http\Controllers\Rh\Services\ToggleServiceRhController;
 use App\Http\Controllers\Rh\Services\UpdateServiceRhController;
+use App\Http\Controllers\Rh\TransmissionPaieController;
+use App\Http\Controllers\Rh\TypesRemuneration\ChangerStatutTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\DestroyTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\HistoriqueTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\IndexTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\StoreTypeRemunerationController;
+use App\Http\Controllers\Rh\TypesRemuneration\UpdateTypeRemunerationController;
 use App\Http\Controllers\Role\CreateRoleController;
 use App\Http\Controllers\Role\DestroyRoleController;
 use App\Http\Controllers\Role\EditRoleController;
@@ -877,6 +887,43 @@ Route::prefix('backoffice')->group(function () {
             Route::post('services-rh', StoreServiceRhController::class)->name('services-rh.store');
             Route::put('services-rh/{serviceRh}', UpdateServiceRhController::class)->name('services-rh.update');
             Route::patch('services-rh/{serviceRh}/toggle', ToggleServiceRhController::class)->name('services-rh.toggle');
+            // Primes et avantages : référentiel par organisation (docs/primes-avantages.md, ADR 0038).
+            Route::prefix('types-remuneration')->name('types-remuneration.')->group(function () {
+                Route::get('/', IndexTypeRemunerationController::class)->name('index');
+                Route::post('/', StoreTypeRemunerationController::class)->name('store');
+                Route::put('{typeRemuneration}', UpdateTypeRemunerationController::class)->name('update');
+                Route::delete('{typeRemuneration}', DestroyTypeRemunerationController::class)->name('destroy');
+                Route::get('{typeRemuneration}/historique', HistoriqueTypeRemunerationController::class)->name('historique');
+                Route::patch('{typeRemuneration}/{action}', ChangerStatutTypeRemunerationController::class)
+                    ->whereIn('action', ['valider', 'fermer', 'desactiver', 'reactiver'])
+                    ->name('statut');
+            });
+            // Primes des salariés : affectations datées et montants mensuels (ADR 0039).
+            Route::prefix('affectations-remuneration')->name('affectations-remuneration.')->group(function () {
+                Route::get('/', [AffectationRemunerationController::class, 'index'])->name('index');
+                Route::post('/', [AffectationRemunerationController::class, 'store'])->name('store');
+                Route::patch('saisies/{saisie}/valider', [SaisieRemunerationController::class, 'valider'])->name('saisies.valider');
+                Route::delete('saisies/{saisie}', [SaisieRemunerationController::class, 'destroy'])->name('saisies.destroy');
+                Route::put('{affectation}', [AffectationRemunerationController::class, 'update'])->name('update');
+                Route::post('{affectation}/changement-montant', [AffectationRemunerationController::class, 'changerMontant'])->name('changement-montant');
+                Route::post('{affectation}/fin', [AffectationRemunerationController::class, 'demanderFin'])->name('fin');
+                Route::delete('{affectation}/fin', [AffectationRemunerationController::class, 'retirerDemandeFin'])->name('fin.retirer');
+                Route::patch('{affectation}/valider', [AffectationRemunerationController::class, 'valider'])->name('valider');
+                Route::patch('{affectation}/annuler', [AffectationRemunerationController::class, 'annuler'])->name('annuler');
+                Route::get('{affectation}/historique', [AffectationRemunerationController::class, 'historique'])->name('historique');
+                Route::post('{affectation}/saisies', [SaisieRemunerationController::class, 'store'])->name('saisies.store');
+            });
+            // Transmission mensuelle RH → Comptabilité, figée et versionnée (ADR 0040).
+            Route::prefix('transmissions-paie')->name('transmissions-paie.')->group(function () {
+                Route::get('/', [TransmissionPaieController::class, 'index'])->name('index');
+                Route::post('/', [TransmissionPaieController::class, 'preparer'])->name('preparer');
+                Route::get('{transmission}', [TransmissionPaieController::class, 'show'])->name('show');
+                Route::get('{transmission}/historique', [TransmissionPaieController::class, 'historique'])->name('historique');
+                Route::post('{transmission}/recalculer', [TransmissionPaieController::class, 'recalculer'])->name('recalculer');
+                Route::post('{transmission}/abandonner', [TransmissionPaieController::class, 'abandonner'])->name('abandonner');
+                Route::post('{transmission}/valider', [TransmissionPaieController::class, 'valider'])->name('valider');
+                Route::post('{transmission}/transmettre', [TransmissionPaieController::class, 'transmettre'])->name('transmettre');
+            });
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
@@ -1063,6 +1110,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('salaires.payer');
             Route::post('salaires/periodes/{paiePeriode}/valider', ValiderPeriodePaieController::class)
                 ->name('salaires.periodes.valider');
+            Route::post('salaires/periodes/{paiePeriode}/reprendre', ReprendreTransmissionPaieController::class)
+                ->name('salaires.periodes.reprendre');
             Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
                 ->name('salaires.excel');
             Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])

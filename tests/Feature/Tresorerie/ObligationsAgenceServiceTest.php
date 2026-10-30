@@ -272,17 +272,21 @@ class ObligationsAgenceServiceTest extends TestCase
     }
 
     // ── 9. Salarié sans PaieLigne préalable ──────────────────────────────────────
+    //
+    // Avant le lot 5, la prévision générait les lignes de paie du mois depuis les contrats. Les
+    // lignes viennent désormais uniquement de la reprise de la transmission RH (ADR 0041) : le
+    // salarié est compté par l'estimation des RH, et la prévision n'écrit plus rien.
 
-    public function test_genere_automatiquement_les_lignes_de_paie_du_mois(): void
+    public function test_estime_les_salaires_sans_ligne_de_paie_et_n_ecrit_rien(): void
     {
         $site = $this->defaultSite();
         $this->makeEmploye($site, 900_000);
 
-        $this->assertDatabaseMissing('paie_lignes', ['salaire_base' => 900_000]);
+        $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
 
-        $this->service->calculerPourMois($this->org->id, 2026, 8);
-
-        $this->assertDatabaseHas('paie_lignes', ['salaire_base' => 900_000]);
+        $this->assertSame(900_000.0, $this->rowFor($rows, $site)['salaires']);
+        $this->assertDatabaseCount('paie_lignes', 0);
+        $this->assertDatabaseCount('paie_periodes', 0);
     }
 
     // ── 4. Regroupement par site + 11. total par agence ──────────────────────────

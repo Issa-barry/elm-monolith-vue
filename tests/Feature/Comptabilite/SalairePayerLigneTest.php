@@ -7,14 +7,13 @@ use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
 use App\Models\PaieLigne;
-use App\Models\PaiePeriode;
 use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
-use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 /**
@@ -28,7 +27,7 @@ use Tests\TestCase;
  */
 class SalairePayerLigneTest extends TestCase
 {
-    use RefreshDatabase;
+    use PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private Organization $org;
 
@@ -82,20 +81,8 @@ class SalairePayerLigneTest extends TestCase
             'statut_contrat' => 'actif',
         ]);
 
-        $periode = PaiePeriode::create([
-            'organization_id' => $this->org->id,
-            'mois' => 1,
-            'annee' => 2025,
-            'statut' => StatutPeriodePaie::VALIDE_RH,
-        ]);
-
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
-
-        // La ligne est générée avec la période VALIDE_RH pour permettre le calcul
-        // (verrouillé sinon), puis on bascule au statut voulu pour le test.
-        $periode->update(['statut' => $statutPeriode->value]);
+        // Paie préparée comme en production (transmission RH reprise), puis statut voulu pour le test.
+        $periode = $this->preparerPaieDepuisRh($this->org, 1, 2025, $statutPeriode);
 
         return PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)

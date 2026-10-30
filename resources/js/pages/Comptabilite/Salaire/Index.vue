@@ -32,10 +32,34 @@ import {
     FileText,
     HandCoins,
     History,
+    ListTree,
     MoreHorizontal,
+    RefreshCw,
     Users,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+
+interface ElementTransmis {
+    libelle: string;
+    du: string;
+    au: string;
+    jours: number;
+    detail_calcul: string;
+    montant: number;
+    avantage_nature: boolean;
+}
+
+interface VersionTransmission {
+    id: string;
+    version: number;
+    statut: string;
+    nb_salaries: number;
+    total_verse: number;
+    total_valorise: number;
+    transmise_le?: string | null;
+    reprise_le?: string | null;
+    reprise_par?: string | null;
+}
 
 interface LignePaie {
     id: string;
@@ -46,6 +70,7 @@ interface LignePaie {
     salaire_base: number;
     brut: number;
     total_primes: number;
+    total_avantages_nature: number;
     total_avances: number;
     total_retenues: number;
     deductions: number;
@@ -55,6 +80,7 @@ interface LignePaie {
     statut: string;
     statut_label: string;
     peut_payer: boolean;
+    elements: ElementTransmis[];
 }
 
 const props = defineProps<{
@@ -63,6 +89,7 @@ const props = defineProps<{
         nb_salaries: number;
         total_brut: number;
         total_net: number;
+        total_avantages_nature: number;
         total_paye: number;
         total_reste: number;
     };
@@ -75,6 +102,13 @@ const props = defineProps<{
         statut_label: string | null;
         payable: boolean;
     } | null;
+    reprise: {
+        courante: VersionTransmission | null;
+        reprise: VersionTransmission | null;
+        a_jour: boolean;
+        a_reprendre: boolean;
+    };
+    can_reprendre: boolean;
     can_valider_periode: boolean;
     periodes_disponibles: { mois: number; annee: number; label: string }[];
     filtre_mois: number;
@@ -200,6 +234,47 @@ function validerPeriode() {
     );
 }
 
+const showReprise = ref(false);
+const repriseEnCours = ref(false);
+const repriseErreur = ref('');
+
+function ouvrirReprise() {
+    repriseErreur.value = '';
+    showReprise.value = true;
+}
+
+function reprendreTransmission() {
+    if (!props.periode || !props.reprise.courante) return;
+    repriseEnCours.value = true;
+    repriseErreur.value = '';
+    router.post(
+        `/backoffice/comptabilite/salaires/periodes/${props.periode.id}/reprendre`,
+        { transmission_id: props.reprise.courante.id },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showReprise.value = false;
+            },
+            onError: (e) => {
+                repriseErreur.value =
+                    (e as Record<string, string>).reprise ??
+                    'La transmission n’a pas pu être reprise.';
+            },
+            onFinish: () => {
+                repriseEnCours.value = false;
+            },
+        },
+    );
+}
+
+const showElements = ref(false);
+const elementsLigne = ref<LignePaie | null>(null);
+
+function openElements(l: LignePaie) {
+    elementsLigne.value = l;
+    showElements.value = true;
+}
+
 function exportExcel() {
     window.open(
         '/backoffice/comptabilite/salaires/export/excel?' + buildParams(),
@@ -323,6 +398,14 @@ const periodeCourante = computed(
                 </div>
                 <div class="flex items-center gap-2">
                     <Button
+                        v-if="can_reprendre"
+                        data-testid="salaire-reprendre-transmission"
+                        @click="ouvrirReprise"
+                    >
+                        <RefreshCw class="mr-1.5 h-4 w-4" />
+                        Reprendre la transmission RH
+                    </Button>
+                    <Button
                         v-if="can_valider_periode"
                         data-testid="salaire-valider-periode"
                         @click="ouvrirValidation"
@@ -349,6 +432,52 @@ const periodeCourante = computed(
                         PDF
                     </button>
                 </div>
+            </div>
+
+            <!-- Transmission RH du mois -->
+            <div
+                v-if="!reprise.courante"
+                class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+                data-testid="salaire-transmission-etat"
+            >
+                Aucune transmission RH pour {{ periodeCourante }}. La paie se
+                prépare à partir de la version validée et transmise par les RH
+                (RH → Transmission de paie).
+            </div>
+            <div
+                v-else-if="reprise.a_reprendre"
+                class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                data-testid="salaire-transmission-etat"
+            >
+                <template v-if="reprise.reprise">
+                    Les RH ont transmis la version
+                    {{ reprise.courante.version }} le
+                    {{ reprise.courante.transmise_le }}. La paie affichée vient
+                    encore de la version {{ reprise.reprise.version }} :
+                    reprenez la nouvelle version avant de valider la période.
+                </template>
+                <template v-else>
+                    Version {{ reprise.courante.version }} transmise par les RH
+                    le {{ reprise.courante.transmise_le }} :
+                    {{ reprise.courante.nb_salaries }} salarié{{
+                        reprise.courante.nb_salaries !== 1 ? 's' : ''
+                    }}, {{ fmt(reprise.courante.total_verse) }} à verser. Elle
+                    doit être reprise pour préparer la paie.
+                </template>
+            </div>
+            <div
+                v-else-if="reprise.reprise"
+                class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+                data-testid="salaire-transmission-etat"
+            >
+                Paie préparée à partir de la version
+                {{ reprise.reprise.version }} transmise par les RH, reprise le
+                {{ reprise.reprise.reprise_le
+                }}{{
+                    reprise.reprise.reprise_par
+                        ? ' par ' + reprise.reprise.reprise_par
+                        : ''
+                }}. Les montants transmis ne se modifient pas ici.
             </div>
 
             <!-- KPIs -->
@@ -384,6 +513,13 @@ const periodeCourante = computed(
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ fmt(kpis.total_net) }}
+                    </p>
+                    <p
+                        v-if="kpis.total_avantages_nature > 0"
+                        class="mt-0.5 text-xs text-muted-foreground"
+                    >
+                        Avantages en nature, hors net :
+                        {{ fmt(kpis.total_avantages_nature) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -430,7 +566,13 @@ const periodeCourante = computed(
                     class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
                 >
                     <Users class="h-12 w-12 opacity-30" />
-                    <p class="text-sm">Aucune fiche de paie pour ce filtre.</p>
+                    <p v-if="!reprise.reprise" class="text-sm">
+                        Aucune paie préparée : reprenez d'abord la transmission
+                        RH du mois.
+                    </p>
+                    <p v-else class="text-sm">
+                        Aucune fiche de paie pour ce filtre.
+                    </p>
                 </div>
 
                 <div v-else-if="lignes.length > 0" class="overflow-x-auto">
@@ -456,6 +598,12 @@ const periodeCourante = computed(
                                     class="px-5 py-3.5 text-right font-medium text-muted-foreground"
                                 >
                                     Primes
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                    title="Valorisés, jamais compris dans le net à payer"
+                                >
+                                    Avantages en nature
                                 </th>
                                 <th
                                     class="px-5 py-3.5 text-right font-medium text-muted-foreground"
@@ -521,6 +669,15 @@ const periodeCourante = computed(
                                     }}
                                 </td>
                                 <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{
+                                        l.total_avantages_nature > 0
+                                            ? fmt(l.total_avantages_nature)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
                                     class="px-5 py-3 text-right font-semibold text-red-600 tabular-nums dark:text-red-400"
                                 >
                                     {{
@@ -575,6 +732,16 @@ const periodeCourante = computed(
                                                     <Eye class="mr-2 h-4 w-4" />
                                                     Voir détail
                                                 </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                v-if="l.elements.length > 0"
+                                                class="cursor-pointer"
+                                                @click="openElements(l)"
+                                            >
+                                                <ListTree
+                                                    class="mr-2 h-4 w-4"
+                                                />
+                                                Détail transmis par les RH
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <template
@@ -683,6 +850,117 @@ const periodeCourante = computed(
                     Valider
                 </Button>
             </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog
+        :open="showReprise"
+        @update:open="
+            (ouvert: boolean) => {
+                if (!ouvert && !repriseEnCours) showReprise = false;
+            }
+        "
+    >
+        <DialogContent
+            class="sm:max-w-md"
+            :class="{ [CROIX_INACTIVE]: repriseEnCours }"
+        >
+            <DialogHeader>
+                <DialogTitle>
+                    Reprendre la version {{ reprise.courante?.version }} ?
+                </DialogTitle>
+                <DialogDescription>
+                    Les montants transmis par les RH ({{
+                        reprise.courante?.nb_salaries
+                    }}
+                    salarié{{ reprise.courante?.nb_salaries !== 1 ? 's' : '' }},
+                    {{ fmt(reprise.courante?.total_verse) }} à verser) sont
+                    copiés tels quels dans la paie de {{ periodeCourante }},
+                    puis les retenues issues des dépenses validées sont
+                    déduites. Les avantages en nature restent hors du net à
+                    payer.
+                    <template v-if="reprise.reprise">
+                        Les lignes de la version
+                        {{ reprise.reprise.version }} sont remplacées.
+                    </template>
+                </DialogDescription>
+            </DialogHeader>
+            <p
+                v-if="repriseErreur"
+                class="text-sm text-red-600 dark:text-red-400"
+            >
+                {{ repriseErreur }}
+            </p>
+            <DialogFooter>
+                <Button
+                    variant="outline"
+                    :disabled="repriseEnCours"
+                    @click="showReprise = false"
+                >
+                    Annuler
+                </Button>
+                <Button
+                    :disabled="repriseEnCours"
+                    :aria-busy="repriseEnCours"
+                    data-testid="salaire-reprendre-transmission-confirmer"
+                    @click="reprendreTransmission"
+                >
+                    <Spinner v-if="repriseEnCours" class="mr-1.5" />
+                    Reprendre
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="showElements">
+        <DialogContent class="sm:max-w-2xl">
+            <DialogHeader>
+                <DialogTitle>
+                    Détail transmis — {{ elementsLigne?.employe_nom }}
+                </DialogTitle>
+                <DialogDescription>
+                    Version {{ reprise.reprise?.version }} transmise par les RH,
+                    figée. Les avantages en nature sont valorisés, hors net à
+                    payer.
+                </DialogDescription>
+            </DialogHeader>
+            <div class="max-h-[60vh] overflow-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b text-left text-muted-foreground">
+                            <th class="py-2 pr-3 font-medium">Élément</th>
+                            <th class="py-2 pr-3 font-medium">Période</th>
+                            <th class="py-2 pr-3 font-medium">Calcul</th>
+                            <th class="py-2 text-right font-medium">Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr
+                            v-for="(e, i) in elementsLigne?.elements ?? []"
+                            :key="i"
+                        >
+                            <td class="py-2 pr-3">
+                                {{ e.libelle }}
+                                <span
+                                    v-if="e.avantage_nature"
+                                    class="block text-xs text-muted-foreground"
+                                >
+                                    Avantage en nature — hors net
+                                </span>
+                            </td>
+                            <td class="py-2 pr-3 whitespace-nowrap">
+                                {{ e.du }} → {{ e.au }} ({{ e.jours }} j)
+                            </td>
+                            <td class="py-2 pr-3 text-xs text-muted-foreground">
+                                {{ e.detail_calcul }}
+                            </td>
+                            <td class="py-2 text-right tabular-nums">
+                                {{ fmt(e.montant) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </DialogContent>
     </Dialog>
 

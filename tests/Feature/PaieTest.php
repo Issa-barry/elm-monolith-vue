@@ -18,11 +18,12 @@ use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 class PaieTest extends TestCase
 {
-    use RefreshDatabase;
+    use PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private Organization $org;
 
@@ -102,6 +103,23 @@ class PaieTest extends TestCase
         ], $overrides));
     }
 
+    /**
+     * Lignes de la période préparées comme en production (transmission RH du mois reprise par la
+     * Comptabilité, ADR 0041), puis retour au statut que le test a demandé.
+     */
+    private function preparerLignes(PaiePeriode $periode): PaiePeriode
+    {
+        $statut = $periode->statut;
+        $periode->update(['statut' => StatutPeriodePaie::BROUILLON]);
+
+        return $this->preparerPaieDepuisRh(
+            Organization::findOrFail($periode->organization_id),
+            $periode->mois,
+            $periode->annee,
+            $statut === StatutPeriodePaie::BROUILLON ? null : $statut,
+        );
+    }
+
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_retourne_200(): void
@@ -158,9 +176,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)
@@ -173,13 +189,17 @@ class PaieTest extends TestCase
         $this->assertEquals(StatutLignePaie::CALCULE, $ligne->statut);
     }
 
-    public function test_calcul_avec_prime_et_retenue(): void
+    /**
+     * Depuis la reprise de la transmission RH (ADR 0041), les gains viennent uniquement des RH : une
+     * ancienne variable de prime saisie à la main n'est plus comptée, une retenue l'est toujours.
+     * (Remplace test_calcul_avec_prime_et_retenue, qui attendait la prime manuelle dans le brut.)
+     */
+    public function test_calcul_ignore_une_prime_manuelle_et_deduit_la_retenue(): void
     {
         $periode = $this->makePeriode(['mois' => 2, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 500_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)
@@ -199,12 +219,12 @@ class PaieTest extends TestCase
             'montant' => 20_000,
         ]);
 
-        $service->calculerLigne($ligne);
+        app(PaieCalculService::class)->calculerLigne($ligne->fresh());
         $ligne->refresh();
 
-        $this->assertEquals(550_000, (float) $ligne->brut);
+        $this->assertEquals(500_000, (float) $ligne->brut);
         $this->assertEquals(20_000, (float) $ligne->deductions);
-        $this->assertEquals(530_000, (float) $ligne->net);
+        $this->assertEquals(480_000, (float) $ligne->net);
     }
 
     // ── prorata ───────────────────────────────────────────────────────────────
@@ -215,8 +235,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-16', null, 310_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)
@@ -235,8 +254,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)
@@ -253,9 +271,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -278,9 +294,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -302,9 +316,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 500_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -322,9 +334,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -389,9 +399,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -420,9 +428,7 @@ class PaieTest extends TestCase
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
@@ -483,9 +489,7 @@ class PaieTest extends TestCase
             'statut_contrat' => 'actif',
         ]);
 
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerLignes($periode);
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
         $this->actingAs($autreUser)
@@ -505,23 +509,38 @@ class PaieTest extends TestCase
 
     // ── modification bloquée sur période verrouillée ──────────────────────────
 
+    public function test_une_variable_de_gain_est_refusee(): void
+    {
+        $periode = $this->makePeriode();
+        $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
+        $periode = $this->preparerLignes($periode);
+        $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
+
+        foreach (['prime', 'autre_gain'] as $type) {
+            $this->actingAs($this->user)
+                ->post(route('paie-variables.store', $ligne), [
+                    'type' => $type,
+                    'libelle' => 'Bonus',
+                    'montant' => 10_000,
+                ])
+                ->assertSessionHasErrors('type');
+        }
+        $this->assertSame(0, PaieVariable::count());
+    }
+
     public function test_variable_bloquee_si_periode_verrouillee(): void
     {
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
-        $service = app(PaieCalculService::class);
-        $periode->update(['statut' => StatutPeriodePaie::CALCULE]);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
-        $periode->update(['statut' => StatutPeriodePaie::VALIDE_RH]);
+        $periode = $this->preparerLignes($periode);
 
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->firstOrFail();
 
         $this->actingAs($this->user)
             ->post(route('paie-variables.store', $ligne), [
-                'type' => 'prime',
-                'libelle' => 'Bonus',
+                'type' => 'retenue',
+                'libelle' => 'Retenue',
                 'montant' => 10_000,
             ])
             ->assertSessionHasErrors('statut');

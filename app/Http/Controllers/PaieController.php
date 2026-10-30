@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatutPeriodePaie;
 use App\Models\PaiePeriode;
-use App\Services\PaieCalculService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -159,22 +158,6 @@ class PaieController extends Controller
                 'delete' => $request->user()->can('delete', $paie),
             ],
         ]);
-    }
-
-    public function calculer(Request $request, PaiePeriode $paie, PaieCalculService $service): RedirectResponse
-    {
-        $this->authorize('update', $paie);
-
-        if (! $paie->statut->peutTransitionnerVers(StatutPeriodePaie::CALCULE)) {
-            return back()->withErrors(['statut' => 'Transition non autorisée depuis le statut actuel.']);
-        }
-
-        $service->genererLignes($paie);
-        $service->calculerPeriode($paie);
-
-        $paie->update(['statut' => StatutPeriodePaie::CALCULE]);
-
-        return back()->with('success', 'Période calculée.');
     }
 
     public function valider(PaiePeriode $paie): RedirectResponse

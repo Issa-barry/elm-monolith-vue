@@ -27,6 +27,9 @@ enum AuditEvent: string
     case ANOMALIE_DETECTEE = 'anomalie_detectee';
     case ANOMALIE_ECART_DISPARU = 'anomalie_ecart_disparu';
     case ANOMALIE_REAPPARUE = 'anomalie_reapparue';
+    // RH : fin d'effet d'une affectation de prime, transmission mensuelle à la Comptabilité (ADR 0039, 0040).
+    case ENDED = 'ended';
+    case TRANSMITTED = 'transmitted';
 
     public function label(): string
     {
@@ -54,6 +57,8 @@ enum AuditEvent: string
             self::ANOMALIE_DETECTEE => 'Anomalie détectée',
             self::ANOMALIE_ECART_DISPARU => 'Écart disparu',
             self::ANOMALIE_REAPPARUE => 'Écart réapparu',
+            self::ENDED => "Fin d'effet",
+            self::TRANSMITTED => 'Transmis',
         };
     }
 
@@ -83,6 +88,8 @@ enum AuditEvent: string
             self::ANOMALIE_DETECTEE => 'red',
             self::ANOMALIE_ECART_DISPARU => 'emerald',
             self::ANOMALIE_REAPPARUE => 'orange',
+            self::ENDED => 'slate',
+            self::TRANSMITTED => 'green',
         };
     }
 }
