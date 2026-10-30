@@ -15,7 +15,15 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Briefcase, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import {
+    Briefcase,
+    Download,
+    Eye,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Trash2,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
@@ -234,8 +242,45 @@ function confirmDelete(c: Contrat) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
-                                        class="w-40"
+                                        class="w-56"
                                     >
+                                        <template
+                                            v-if="can('rh-contrats.read')"
+                                        >
+                                            <DropdownMenuItem
+                                                as-child
+                                                data-testid="action-voir-contrat-pdf"
+                                            >
+                                                <a
+                                                    :href="`/backoffice/contrats/${data.id}/pdf?preview=1`"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="flex w-full cursor-pointer items-center gap-2"
+                                                >
+                                                    <Eye class="h-4 w-4" />Voir
+                                                    le contrat (PDF)
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                as-child
+                                                data-testid="action-telecharger-contrat-pdf"
+                                            >
+                                                <a
+                                                    :href="`/backoffice/contrats/${data.id}/pdf`"
+                                                    class="flex w-full cursor-pointer items-center gap-2"
+                                                >
+                                                    <Download
+                                                        class="h-4 w-4"
+                                                    />Télécharger le PDF
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator
+                                                v-if="
+                                                    can('rh-contrats.update') ||
+                                                    can('rh-contrats.delete')
+                                                "
+                                            />
+                                        </template>
                                         <DropdownMenuItem
                                             v-if="can('rh-contrats.update')"
                                             as-child

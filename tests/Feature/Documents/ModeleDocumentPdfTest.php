@@ -2,29 +2,37 @@
 
 namespace Tests\Feature\Documents;
 
+use App\Enums\Civilite;
 use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutContrat;
 use App\Enums\StatutFactureFournisseur;
 use App\Enums\StatutFactureVente;
+use App\Enums\TypeContrat;
 use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\Contrat;
+use App\Models\Employe;
 use App\Models\EncaissementVente;
 use App\Models\FactureFournisseur;
 use App\Models\FactureFournisseurLigne;
 use App\Models\FactureVente;
+use App\Models\FonctionRh;
 use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Personne;
+use App\Models\ServiceRh;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Support\Documents\BonCommandeAchatDocument;
 use App\Support\Documents\BonCommandeVenteDocument;
 use App\Support\Documents\CharteDocument;
+use App\Support\Documents\ContratDocument;
 use App\Support\Documents\DocumentPdf;
 use App\Support\Documents\DocumentPdfPagination;
 use App\Support\Documents\DocumentPdfRenderer;
@@ -68,6 +76,7 @@ class ModeleDocumentPdfTest extends TestCase
             'bon_commande_achat' => BonCommandeAchatDocument::depuis($this->bonCommande(), $this->org),
             'facture_vente' => FactureVenteDocument::depuis($this->factureVente(), $this->org),
             'bon_commande_vente' => BonCommandeVenteDocument::depuis($this->commandeVente(), $this->org),
+            'contrat_travail' => ContratDocument::depuis($this->contrat(), $this->org, true),
         ];
     }
 
@@ -117,6 +126,59 @@ class ModeleDocumentPdfTest extends TestCase
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['bon_commande_achat']));
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['facture_vente']));
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['bon_commande_vente']));
+        $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['contrat_travail']));
+    }
+
+    public function test_le_recapitulatif_de_contrat_cdi_reprend_le_dossier_rh(): void
+    {
+        $document = ContratDocument::depuis($this->contrat(), $this->org, true);
+        $html = $this->rendre($document);
+
+        foreach ([
+            'RÉCAPITULATIF DU CONTRAT', 'Monsieur Thierno Oumar DIALLO', 'Matricule : 373601',
+            'Né(e) le 02/03/1994 à Labé', 'Nationalité : Guinéenne', 'Chauffeur-livreur', 'Logistique', 'Agence : Matoto',
+            'CDI — contrat à durée indéterminée', '15/01/2026', 'Sans date de fin', '10/01/2026',
+            '750 000 GNF', 'L’employeur', 'Le salarié', ContratDocument::MENTION, 'pas un contrat de travail complet',
+            'période d’essai',
+        ] as $attendu) {
+            $this->assertStringContainsString($attendu, $html);
+        }
+        $this->assertSame('CTR-373601-20260115', $document->reference);
+        $this->assertSame('CTR-373601-20260115.pdf', $document->nomFichier());
+        $this->assertNull($document->filigrane);
+        // Pas de tableau de lignes ni de bloc notes / totaux : ce n'est pas une facture.
+        $this->assertStringNotContainsString('Aucune ligne.', $html);
+        $this->assertStringNotContainsString('NOTES', $html);
+    }
+
+    public function test_le_recapitulatif_de_contrat_cdd_et_les_statuts(): void
+    {
+        $html = $this->rendre(ContratDocument::depuis($this->contrat(['type_contrat' => TypeContrat::CDD, 'date_fin' => '2026-12-31']), $this->org, true));
+        $this->assertStringContainsString('CDD — contrat à durée déterminée', $html);
+        $this->assertStringContainsString('31/12/2026', $html);
+
+        $this->assertSame('TERMINÉ', ContratDocument::depuis($this->contrat(['statut_contrat' => StatutContrat::TERMINE]), $this->org, true)->filigrane);
+        $this->assertSame('ROMPU', ContratDocument::depuis($this->contrat(['statut_contrat' => StatutContrat::ROMPU]), $this->org, true)->filigrane);
+    }
+
+    public function test_un_recapitulatif_de_contrat_incomplet_est_signale_et_jamais_presente_comme_definitif(): void
+    {
+        $contrat = $this->contrat(['type_contrat' => TypeContrat::CDD, 'date_fin' => null, 'salaire_base' => null], avecFonction: false);
+        $document = ContratDocument::depuis($contrat, $this->org, true);
+        $html = $this->rendre($document);
+
+        $this->assertSame('INCOMPLET', $document->filigrane);
+        $this->assertSame('danger', $document->encadre['ton']);
+        $this->assertStringContainsString('Document incomplet', $html);
+        $this->assertStringContainsString('Informations absentes du dossier RH : date de fin du CDD, salaire de base, fonction.', $html);
+    }
+
+    public function test_le_salaire_n_apparait_qu_avec_la_permission_de_voir_les_salaires(): void
+    {
+        $html = $this->rendre(ContratDocument::depuis($this->contrat(), $this->org, false));
+
+        $this->assertStringNotContainsString('750 000', $html);
+        $this->assertStringContainsString('Réservé aux profils autorisés', $html);
     }
 
     public function test_facture_d_achat_conserve_ses_donnees_et_filigranes(): void
@@ -548,6 +610,29 @@ class ModeleDocumentPdfTest extends TestCase
         $commande->setRelation('facture', null);
 
         return $commande;
+    }
+
+    /** @param  array<string, mixed>  $attributs */
+    private function contrat(array $attributs = [], bool $avecFonction = true): Contrat
+    {
+        $contrat = (new Contrat)->forceFill(array_merge([
+            'id' => '01JCONTRAT0000000000000001', 'type_contrat' => TypeContrat::CDI, 'statut_contrat' => StatutContrat::ACTIF,
+            'date_debut' => '2026-01-15', 'date_fin' => null, 'salaire_base' => '750000.00',
+        ], $attributs));
+
+        $employe = (new Employe)->forceFill([
+            'matricule' => '373601', 'fonction_rh_id' => $avecFonction ? 'fonction' : null, 'date_embauche' => '2026-01-10',
+        ]);
+        $employe->setRelation('personne', (new Personne)->forceFill([
+            'prenom' => 'Thierno Oumar', 'nom' => 'DIALLO', 'civilite' => Civilite::MONSIEUR,
+            'date_naissance' => '1994-03-02', 'lieu_naissance' => 'Labé', 'nationalite' => 'Guinéenne',
+        ]));
+        $employe->setRelation('fonction', $avecFonction ? new FonctionRh(['libelle' => 'Chauffeur-livreur']) : null);
+        $employe->setRelation('service', new ServiceRh(['libelle' => 'Logistique']));
+        $employe->setRelation('site', new Site(['nom' => 'Matoto', 'ville' => 'Conakry']));
+        $contrat->setRelation('employe', $employe);
+
+        return $contrat;
     }
 
     private function utilisateur(string $prenom, string $nom): User

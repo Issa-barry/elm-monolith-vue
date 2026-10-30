@@ -1,3 +1,4 @@
+@if($document->totaux || $document->notes)
 <div class="resume">
     <table class="pied-resume"><tbody><tr>
         <td style="width: 50%; padding-right: 28px;">
@@ -13,6 +14,7 @@
         </td>
     </tr></tbody></table>
 </div>
+@endif
 
 @if($document->encadre)
     <div class="encadre">

@@ -193,6 +193,7 @@ use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\Rh\AffectationRemunerationController;
+use App\Http\Controllers\Rh\Contrats\TelechargerContratController;
 use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
 use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
 use App\Http\Controllers\Rh\Imports\CreateImportRhController;
@@ -925,6 +926,8 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('{transmission}/transmettre', [TransmissionPaieController::class, 'transmettre'])->name('transmettre');
             });
             Route::resource('contrats', ContratController::class)->except(['show']);
+            // Récapitulatif PDF d'un contrat (docs/rh-contrat-pdf.md) ; ?preview=1 = aperçu.
+            Route::get('contrats/{contrat}/pdf', TelechargerContratController::class)->name('contrats.pdf');
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
             Route::get('paie', [PaieController::class, 'index'])->name('paie.index');

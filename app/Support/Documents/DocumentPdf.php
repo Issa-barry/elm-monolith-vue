@@ -3,7 +3,7 @@
 namespace App\Support\Documents;
 
 /**
- * Données d'une facture ou d'un bon, prêtes à afficher par le modèle officiel partagé
+ * Données d'une facture, d'un bon ou d'un récapitulatif RH, prêtes à afficher par le modèle officiel partagé
  * (composant `x-pdf.document`, docs/documents-pdf.md). Les constructeurs propres à chaque type
  * (FactureAchatDocument, BonCommandeAchatDocument, FactureVenteDocument) traduisent le métier
  * en textes déjà formatés : le modèle n'interroge aucun modèle Eloquent.
@@ -22,6 +22,11 @@ final class DocumentPdf
      * @param  array{ton: 'ok'|'attention'|'danger', titre: string, lignes: list<string>}|null  $encadre
      * @param  string|null  $mention  mention légale propre au type, en pied de chaque page
      * @param  string|null  $infoPied  complément du pied de page (date de génération…)
+     * @param  list<array{titre: string, lignes: list<array{cle: string, valeur: string}>}>  $sections  blocs « libellé : valeur »
+     * @param  list<array{titre: string, lignes: list<string>}>  $signatures  emplacements de signature, en fin de document
+     *
+     * Sans colonnes, le tableau des lignes n'est pas affiché ; sans totaux ni notes, le bloc
+     * notes / totaux non plus (l'encadré reste affiché).
      */
     public function __construct(
         public readonly string $type,
@@ -40,6 +45,8 @@ final class DocumentPdf
         public readonly ?string $filigrane = null,
         public readonly ?string $mention = null,
         public readonly ?string $infoPied = null,
+        public readonly array $sections = [],
+        public readonly array $signatures = [],
     ) {}
 
     public function nomFichier(): string
