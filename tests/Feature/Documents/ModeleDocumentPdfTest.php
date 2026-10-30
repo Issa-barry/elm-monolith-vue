@@ -2,14 +2,19 @@
 
 namespace Tests\Feature\Documents;
 
+use App\Enums\CategorieTypeRemuneration;
 use App\Enums\Civilite;
+use App\Enums\ModeCalculRemuneration;
 use App\Enums\ModeTarification;
+use App\Enums\NatureMontantRemuneration;
+use App\Enums\PeriodiciteRemuneration;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutContrat;
 use App\Enums\StatutFactureFournisseur;
 use App\Enums\StatutFactureVente;
 use App\Enums\TypeContrat;
+use App\Models\AffectationRemuneration;
 use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
@@ -23,12 +28,15 @@ use App\Models\FactureFournisseurLigne;
 use App\Models\FactureVente;
 use App\Models\FonctionRh;
 use App\Models\Fournisseur;
+use App\Models\ModeleContrat;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\ServiceRh;
 use App\Models\Site;
+use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Rh\DocumentContratService;
 use App\Support\Documents\BonCommandeAchatDocument;
 use App\Support\Documents\BonCommandeVenteDocument;
 use App\Support\Documents\CharteDocument;
@@ -39,6 +47,7 @@ use App\Support\Documents\DocumentPdfRenderer;
 use App\Support\Documents\FactureAchatDocument;
 use App\Support\Documents\FactureVenteDocument;
 use App\Support\Documents\IdentiteOrganisation;
+use App\Support\Rh\Contrats\TrameModeleContrat;
 use Dompdf\Canvas;
 use Dompdf\Frame;
 use Illuminate\Support\Carbon;
@@ -76,7 +85,7 @@ class ModeleDocumentPdfTest extends TestCase
             'bon_commande_achat' => BonCommandeAchatDocument::depuis($this->bonCommande(), $this->org),
             'facture_vente' => FactureVenteDocument::depuis($this->factureVente(), $this->org),
             'bon_commande_vente' => BonCommandeVenteDocument::depuis($this->commandeVente(), $this->org),
-            'contrat_travail' => ContratDocument::depuis($this->contrat(), $this->org, true),
+            'contrat_travail' => ContratDocument::depuis($this->instantaneContrat(), $this->org),
         ];
     }
 
@@ -129,56 +138,39 @@ class ModeleDocumentPdfTest extends TestCase
         $this->assertStringNotContainsString('original du fournisseur', $this->rendre($documents['contrat_travail']));
     }
 
-    public function test_le_recapitulatif_de_contrat_cdi_reprend_le_dossier_rh(): void
+    public function test_le_contrat_de_travail_genere_reprend_l_instantane(): void
     {
-        $document = ContratDocument::depuis($this->contrat(), $this->org, true);
+        $document = ContratDocument::depuis($this->instantaneContrat(), $this->org);
         $html = $this->rendre($document);
 
         foreach ([
-            'RÉCAPITULATIF DU CONTRAT', 'Monsieur Thierno Oumar DIALLO', 'Matricule : 373601',
-            'Né(e) le 02/03/1994 à Labé', 'Nationalité : Guinéenne', 'Chauffeur-livreur', 'Logistique', 'Agence : Matoto',
-            'CDI — contrat à durée indéterminée', '15/01/2026', 'Sans date de fin', '10/01/2026',
-            '750 000 GNF', 'L’employeur', 'Le salarié', ContratDocument::MENTION, 'pas un contrat de travail complet',
-            'période d’essai',
+            'CONTRAT DE TRAVAIL', 'CONTRAT DE TRAVAIL À DURÉE INDÉTERMINÉE', 'Monsieur Thierno Oumar DIALLO', 'Matricule : 373601',
+            'Né(e) le 02/03/1994 à Labé', 'Nationalité : Guinéenne', 'Agence : Matoto', 'Représenté par Mamadou BAH, Directeur général',
+            'Article 1 — Objet du contrat', 'Article 7 — Rémunération', 'salaire de base mensuel de 750 000 GNF',
+            'Prime de transport (50 000 GNF par mois)', 'Chauffeur-livreur', 'Fait à Conakry',
+            'L’employeur', 'Le salarié', 'Lu et approuvé', 'V1',
         ] as $attendu) {
             $this->assertStringContainsString($attendu, $html);
         }
-        $this->assertSame('CTR-373601-20260115', $document->reference);
-        $this->assertSame('CTR-373601-20260115.pdf', $document->nomFichier());
+        $this->assertSame('CTR-373601-20260115-V1', $document->reference);
+        $this->assertSame('CTR-373601-20260115-V1.pdf', $document->nomFichier());
         $this->assertNull($document->filigrane);
+        $this->assertStringNotContainsString('{{', $html);
         // Pas de tableau de lignes ni de bloc notes / totaux : ce n'est pas une facture.
         $this->assertStringNotContainsString('Aucune ligne.', $html);
         $this->assertStringNotContainsString('NOTES', $html);
     }
 
-    public function test_le_recapitulatif_de_contrat_cdd_et_les_statuts(): void
+    public function test_le_texte_des_articles_est_toujours_echappe(): void
     {
-        $html = $this->rendre(ContratDocument::depuis($this->contrat(['type_contrat' => TypeContrat::CDD, 'date_fin' => '2026-12-31']), $this->org, true));
-        $this->assertStringContainsString('CDD — contrat à durée déterminée', $html);
-        $this->assertStringContainsString('31/12/2026', $html);
+        $instantane = $this->instantaneContrat();
+        $instantane['articles'] = [['titre' => 'Clause <b>test</b>', 'paragraphes' => ["<script>alert(1)</script>\nLigne 2"]]];
 
-        $this->assertSame('TERMINÉ', ContratDocument::depuis($this->contrat(['statut_contrat' => StatutContrat::TERMINE]), $this->org, true)->filigrane);
-        $this->assertSame('ROMPU', ContratDocument::depuis($this->contrat(['statut_contrat' => StatutContrat::ROMPU]), $this->org, true)->filigrane);
-    }
+        $html = $this->rendre(ContratDocument::depuis($instantane, $this->org));
 
-    public function test_un_recapitulatif_de_contrat_incomplet_est_signale_et_jamais_presente_comme_definitif(): void
-    {
-        $contrat = $this->contrat(['type_contrat' => TypeContrat::CDD, 'date_fin' => null, 'salaire_base' => null], avecFonction: false);
-        $document = ContratDocument::depuis($contrat, $this->org, true);
-        $html = $this->rendre($document);
-
-        $this->assertSame('INCOMPLET', $document->filigrane);
-        $this->assertSame('danger', $document->encadre['ton']);
-        $this->assertStringContainsString('Document incomplet', $html);
-        $this->assertStringContainsString('Informations absentes du dossier RH : date de fin du CDD, salaire de base, fonction.', $html);
-    }
-
-    public function test_le_salaire_n_apparait_qu_avec_la_permission_de_voir_les_salaires(): void
-    {
-        $html = $this->rendre(ContratDocument::depuis($this->contrat(), $this->org, false));
-
-        $this->assertStringNotContainsString('750 000', $html);
-        $this->assertStringContainsString('Réservé aux profils autorisés', $html);
+        $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
+        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;<br />', $html);
+        $this->assertStringContainsString('Clause &lt;b&gt;test&lt;/b&gt;', $html);
     }
 
     public function test_facture_d_achat_conserve_ses_donnees_et_filigranes(): void
@@ -612,27 +604,44 @@ class ModeleDocumentPdfTest extends TestCase
         return $commande;
     }
 
-    /** @param  array<string, mixed>  $attributs */
-    private function contrat(array $attributs = [], bool $avecFonction = true): Contrat
+    /**
+     * Instantané produit par le vrai service à partir de modèles en mémoire (aucune base) : le
+     * modèle partagé est testé sur les données exactes d'une génération.
+     *
+     * @return array<string, mixed>
+     */
+    private function instantaneContrat(): array
     {
-        $contrat = (new Contrat)->forceFill(array_merge([
+        $contrat = (new Contrat)->forceFill([
             'id' => '01JCONTRAT0000000000000001', 'type_contrat' => TypeContrat::CDI, 'statut_contrat' => StatutContrat::ACTIF,
             'date_debut' => '2026-01-15', 'date_fin' => null, 'salaire_base' => '750000.00',
-        ], $attributs));
-
-        $employe = (new Employe)->forceFill([
-            'matricule' => '373601', 'fonction_rh_id' => $avecFonction ? 'fonction' : null, 'date_embauche' => '2026-01-10',
         ]);
+        $employe = (new Employe)->forceFill(['matricule' => '373601', 'fonction_rh_id' => 'fonction', 'date_embauche' => '2026-01-10']);
         $employe->setRelation('personne', (new Personne)->forceFill([
             'prenom' => 'Thierno Oumar', 'nom' => 'DIALLO', 'civilite' => Civilite::MONSIEUR,
             'date_naissance' => '1994-03-02', 'lieu_naissance' => 'Labé', 'nationalite' => 'Guinéenne',
         ]));
-        $employe->setRelation('fonction', $avecFonction ? new FonctionRh(['libelle' => 'Chauffeur-livreur']) : null);
+        $employe->setRelation('fonction', new FonctionRh(['libelle' => 'Chauffeur-livreur']));
         $employe->setRelation('service', new ServiceRh(['libelle' => 'Logistique']));
         $employe->setRelation('site', new Site(['nom' => 'Matoto', 'ville' => 'Conakry']));
         $contrat->setRelation('employe', $employe);
 
-        return $contrat;
+        $modele = new ModeleContrat([
+            'type_contrat' => TypeContrat::CDI, 'titre' => TrameModeleContrat::titre(TypeContrat::CDI),
+            'articles' => TrameModeleContrat::articles(TypeContrat::CDI), 'revision' => 3,
+        ]);
+
+        $prime = (new AffectationRemuneration)->forceFill(['id' => '01JPRIME000000000000000001', 'montant' => '50000.00']);
+        $prime->setRelation('type', new TypeRemuneration([
+            'libelle' => 'Prime de transport', 'categorie' => CategorieTypeRemuneration::PRIME, 'mode_calcul' => ModeCalculRemuneration::MONTANT_FIXE,
+            'periodicite' => PeriodiciteRemuneration::MENSUELLE, 'nature_montant' => NatureMontantRemuneration::FIXE,
+        ]));
+
+        return app(DocumentContratService::class)->instantane($contrat, $this->org, $modele, [
+            'representant_nom' => 'Mamadou BAH', 'representant_qualite' => 'Directeur général',
+            'lieu_travail' => 'Matoto, Conakry', 'periode_essai' => 'trois (3) mois', 'horaires' => '40 heures par semaine',
+            'motif_cdd' => null, 'lieu_signature' => 'Conakry',
+        ], collect([$prime]), 1);
     }
 
     private function utilisateur(string $prenom, string $nom): User

@@ -75,6 +75,8 @@ class VehiculeController extends Controller
             // Capacités maximales de chargement, propres à CE véhicule (aucun héritage depuis
             // le type — cf. VehiculeCapaciteService).
             'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
+            // Catégories exigeant une capacité pour être vendues, absentes de ce véhicule (ADR 0042).
+            'capacites_manquantes' => $this->vehiculeCapaciteService->capacitesObligatoiresManquantes($v),
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'categorie' => $v->categorie?->value,
@@ -658,8 +660,12 @@ class VehiculeController extends Controller
     {
         return Categorie::where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
-            ->get(['id', 'nom'])
-            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
+            ->get(['id', 'nom', 'capacite_vehicule_obligatoire'])
+            ->map(fn (Categorie $c) => [
+                'value' => $c->id,
+                'label' => $c->nom,
+                'obligatoire' => $c->capacite_vehicule_obligatoire,
+            ])
             ->toArray();
     }
 

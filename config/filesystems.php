@@ -58,6 +58,16 @@ return [
             'report' => false,
         ],
 
+        // Contrats de travail générés (ADR 0044) : salaire et identité du salarié. Disque privé,
+        // jamais lié au symlink public/storage ; servi uniquement par les contrôleurs RH.
+        'contrats_rh' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/contrats-rh'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

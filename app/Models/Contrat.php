@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Contrat extends Model
@@ -43,5 +45,17 @@ class Contrat extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    /** Versions générées du contrat de travail (ADR 0044), de la plus récente à la plus ancienne. */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(DocumentContrat::class)->orderByDesc('version');
+    }
+
+    /** Dernière version générée : celle qu'ouvrent « Voir » et « Télécharger » dans la liste. */
+    public function documentCourant(): HasOne
+    {
+        return $this->hasOne(DocumentContrat::class)->ofMany('version', 'max');
     }
 }

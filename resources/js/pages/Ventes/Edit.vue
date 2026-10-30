@@ -60,6 +60,7 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacites: CapaciteCategorie[];
+    capacites_manquantes: { categorie_id: number; categorie_nom: string }[];
     livreur_nom: string | null;
 }
 
@@ -590,6 +591,27 @@ const capaciteVehiculeConforme = computed(() => {
     });
 });
 
+// Catégories vendues dont la capacité est obligatoire (ADR 0042) mais absente de ce véhicule :
+// le serveur refusera la vente — même liste que VehiculeCapaciteService::
+// capacitesObligatoiresManquantes(), croisée avec les catégories présentes dans la commande.
+const capacitesManquantesVendues = computed(() => {
+    const manquantes = vehiculeSelectionne.value?.capacites_manquantes ?? [];
+    if (manquantes.length === 0) return [];
+
+    const categoriesVendues = new Set(
+        form.lignes
+            .filter((l) => l.produit_id !== null && (l.qte ?? 0) > 0)
+            .map(
+                (l) =>
+                    props.produits.find((p) => p.id === l.produit_id)
+                        ?.categorie_id ?? null,
+            )
+            .filter((id): id is number => id !== null),
+    );
+
+    return manquantes.filter((m) => categoriesVendues.has(m.categorie_id));
+});
+
 // Plafond "doux" affiché sur le champ quantité d'une ligne : celui de la catégorie du
 // produit sélectionné sur cette ligne (undefined si aucune catégorie ou produit non choisi).
 // Ne tient pas compte des autres lignes de la même catégorie — le vrai contrôle cumulé reste
@@ -628,6 +650,7 @@ const canSubmit = computed(
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         capaciteVehiculeConforme.value &&
+        capacitesManquantesVendues.value.length === 0 &&
         !form.processing,
 );
 
@@ -926,7 +949,19 @@ function submit() {
 
                     <template v-if="form.vehicule_id !== null">
                         <p
-                            v-if="capacitesSelectionnees.length === 0"
+                            v-for="m in capacitesManquantesVendues"
+                            :key="`manquante-${m.categorie_id}`"
+                            class="mb-1 text-xs font-medium text-destructive"
+                        >
+                            {{ m.categorie_nom }} : capacité maximale non
+                            configurée sur ce véhicule — obligatoire pour vendre
+                            cette catégorie.
+                        </p>
+                        <p
+                            v-if="
+                                capacitesSelectionnees.length === 0 &&
+                                capacitesManquantesVendues.length === 0
+                            "
                             class="mb-3 text-xs text-muted-foreground"
                         >
                             Véhicule non plafonné

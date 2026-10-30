@@ -22,9 +22,11 @@ d'organisation et d'agence que le téléchargement. Le lecteur PDF du navigateur
 de télécharger ou d'imprimer le document. Depuis une application installée (PWA), le navigateur
 peut choisir une fenêtre séparée plutôt qu'un onglet.
 
-Le **récapitulatif de contrat de travail** (RH → Contrats, [rh-contrat-pdf.md](rh-contrat-pdf.md))
-utilise aussi ce modèle : pas de tableau de lignes ni de totaux, mais des blocs « libellé : valeur »
-(`sections`) et des emplacements de signature (`signatures`).
+Le **contrat de travail généré** (RH → Contrats, [rh-contrat-pdf.md](rh-contrat-pdf.md),
+ADR 0044) utilise aussi ce modèle : pas de tableau de lignes ni de totaux, mais un intitulé, des
+articles numérotés (`articles`, texte brut toujours échappé) et des emplacements de signature
+(`signatures`). Il est construit depuis l'instantané figé à la génération et stocké, jamais
+recalculé.
 
 Hors périmètre (ce ne sont ni des factures ni des bons) : rapports et états de commissions,
 période et fiche de paiement, salaires, types de dépense, rapport d'activité, impression des
@@ -48,9 +50,9 @@ dépenses, ticket thermique du PDV.
      `counter(pages)`).
 2. **Présentation** — composant `resources/views/components/pdf/document.blade.php`
    (`<x-pdf.document :document="$document" />`) et ses blocs `resources/views/pdf/modele/` :
-   `styles`, `entete`, `parties`, `lignes`, `sections`, `resume` (notes, totaux, encadré),
+   `styles`, `entete`, `parties`, `lignes`, `articles`, `resume` (notes, totaux, encadré),
    `signatures`, `pied`. Sans colonnes, le tableau des lignes n'est pas affiché ; sans totaux ni
-   notes, le bloc notes / totaux non plus (l'encadré reste) ; `sections` (deux par ligne) et
+   notes, le bloc notes / totaux non plus (l'encadré reste) ; `intitule`, `articles` et
    `signatures` sont vides par défaut, donc sans effet sur les factures et bons. Le slot par
    défaut du composant accueille un complément propre à un document, affiché après les totaux.
 3. **Vue par type** : une ligne qui délègue au composant. Elle ne contient ni HTML ni CSS.

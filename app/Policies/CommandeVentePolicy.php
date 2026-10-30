@@ -217,6 +217,17 @@ class CommandeVentePolicy
             && $this->sameOrganization($user, $commande);
     }
 
+    /**
+     * Régularisation d'une vente déjà encaissée (ADR 0043) — permission dédiée, super_admin par
+     * défaut. L'état de la commande est vérifié par RegularisationVenteService::raisonNonEligible()
+     * (Gate::before du super admin).
+     */
+    public function regulariserApresEncaissement(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.regulariser_apres_encaissement')
+            && $this->sameOrganization($user, $commande);
+    }
+
     private function sameOrganization(User $user, CommandeVente $commande): bool
     {
         return $user->organization_id === $commande->organization_id;

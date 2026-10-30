@@ -29,7 +29,7 @@ class ContratController extends Controller
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : [];
 
-        $query = Contrat::with(['employe:id,personne_id,matricule,site_id', 'employe.personne'])
+        $query = Contrat::with(['employe:id,personne_id,matricule,site_id', 'employe.personne', 'documentCourant'])
             ->where('organization_id', $orgId);
 
         // Périmètre de consultation : contrats des employés de ses agences (ADR 0025).
@@ -49,8 +49,16 @@ class ContratController extends Controller
             $query->where('type_contrat', $filters['type_contrat']);
         }
 
+        // Générer un contrat de travail (ADR 0044) : permissions et agence de rattachement du salarié,
+        // mêmes règles que Rh\Contrats\VerifieAccesContrat — le lien n'est jamais affiché pour rien.
+        $peutGenerer = $user->can('rh-contrats.update') && $user->can('rh-remunerations.read');
+        $sitesEcriture = $user->agitSurToutesLesAgences() ? null : app(SiteScopeService::class)->assignedSiteIds($user);
+
         $contrats = $query->orderByDesc('date_debut')->get()
-            ->map(fn (Contrat $c) => $this->toRow($c));
+            ->map(fn (Contrat $c) => [
+                ...$this->toRow($c),
+                'peut_generer' => $peutGenerer && ($sitesEcriture === null || ($c->employe?->site_id !== null && $sitesEcriture->contains($c->employe->site_id))),
+            ]);
 
         $sites = $user->voitToutesLesAgences()
             ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
@@ -228,6 +236,12 @@ class ContratController extends Controller
             'date_fin' => $c->date_fin?->format('Y-m-d'),
             // Salaire : seulement avec `rh-remunerations.read`.
             'salaire_base' => auth()->user()?->can('rh-remunerations.read') ? $c->salaire_base : null,
+            // Dernière version générée du contrat de travail (ADR 0044), null tant qu'aucune.
+            'document_courant' => $c->relationLoaded('documentCourant') && $c->documentCourant ? [
+                'version' => $c->documentCourant->version,
+                'statut' => $c->documentCourant->statut->value,
+                'statut_label' => $c->documentCourant->statut->label(),
+            ] : null,
         ];
     }
 

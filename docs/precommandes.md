@@ -271,6 +271,10 @@ facture est recalculé depuis l'encaissé net (`recalculStatut()`) — une factu
 devenir « Payée » — et l'excédent apparaît comme trop-perçu.
 
 ### 8.5 Remboursement
+Même action ouverte, depuis le 30/10/2026, au trop-perçu d'une **vente régularisée après
+encaissement** « montant reçu » (ADR 0043, [regularisation-vente.md](regularisation-vente.md)) :
+route `ventes.regularisation.remboursement`, débit client 411 (jamais l'avance 419).
+
 Action « Rembourser » (`ventes.rembourser`) : `PaymentCard` en mode `decaissement` (ADR 0009) —
 espèces depuis la caisse dédiée du payeur, sinon support actif de l'agence ; référence obligatoire
 selon le moyen ; **solde vérifié sous verrou** (`garantirSoldeSuffisant()`). Montant ≤ trop-perçu

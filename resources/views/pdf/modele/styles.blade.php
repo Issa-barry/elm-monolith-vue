@@ -88,13 +88,10 @@
     .totaux .cle { padding-right: 42px; font-weight: 600; white-space: nowrap; }
     .totaux .val { font-weight: 400; text-align: right; white-space: nowrap; }
 
-    .sections { width: 100%; table-layout: fixed; margin-bottom: 28px; page-break-inside: avoid; }
-    .sections > tbody > tr > td.section { width: 50%; padding: 0; vertical-align: top; }
-    .sections > tbody > tr > td.section.suivante { padding-left: 28px; }
-    .section-titre { margin: 0 0 7px; padding-bottom: 7px; border-bottom: 1px solid #e2e8f0; font-weight: 600; }
-    .section-lignes { width: 100%; table-layout: fixed; }
-    .section-lignes td { padding: 7px 0; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-    .section-lignes .cle { padding-right: 14px; color: #64748b; }
+    .intitule { margin: 0 0 21px; font-size: 15.75px; font-weight: 600; text-align: center; color: #0f172a; }
+    .article { margin-bottom: 14px; }
+    .article-titre { margin-bottom: 7px; font-weight: 600; color: #0f172a; page-break-after: avoid; }
+    .article p { margin: 0 0 7px; line-height: 1.5; text-align: justify; }
 
     .signatures { width: 100%; table-layout: fixed; margin-top: 21px; page-break-inside: avoid; }
     .signatures > tbody > tr > td { padding: 0; vertical-align: top; }
