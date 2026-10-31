@@ -1,12 +1,17 @@
 # Transmission de paie — RH → Comptabilité, figée et versionnée
 
-Décision : [ADR 0040](adr/0040-transmission-paie-figee-versionnee.md). Lot 4 de la conception RH ↔
+Décisions : [ADR 0040](adr/0040-transmission-paie-figee-versionnee.md), révisé le 31/10/2026 par
+[ADR 0047](adr/0047-validation-rh-met-a-disposition-comptabilite.md) (plus de transmission manuelle).
+Lot 4 de la conception RH ↔
 Comptabilité ([paie.md](paie.md)), livré le 29/10/2026. Écran : *RH → Transmission de paie*
 (`/backoffice/transmissions-paie`).
 
-Chaque mois, RH prépare les éléments de rémunération des salariés, les contrôle, les **valide**
-(la version est alors **figée**) et les **transmet** à la Comptabilité. La Comptabilité ne lit
-que cette version transmise, jamais les tables RH : elle la **reprend** dans *Comptabilité →
+Chaque mois, RH prépare les éléments de rémunération des salariés, les contrôle et les **valide** :
+la version est alors **figée** et **aussitôt disponible pour la Comptabilité** (ADR 0047 — plus de
+bouton « Transmettre »). Le brouillon est recalculé automatiquement à l'ouverture et avant la
+validation ; la Comptabilité le voit en lecture seule, comme **provisoire**, sans pouvoir le reprendre
+ni le payer. La Comptabilité ne paie que la version validée, jamais les tables RH : elle la
+**reprend** dans *Comptabilité →
 Paiement salaire* (lot 5, [ADR 0041](adr/0041-reprise-transmission-paie-comptabilite.md),
 [paie.md](paie.md)).
 
@@ -80,16 +85,30 @@ validation est **refusée** tant qu'il reste une anomalie bloquante.
 - **TRANS-010** — *Préparer un mois* crée la **version 1** en brouillon. Un seul brouillon par mois
   à la fois. Préparation sérialisée par un verrou sur l'organisation ; deux préparations
   simultanées n'en créent qu'une (index unique organisation + mois + version).
-- **TRANS-011** — *Recalculer* refait le brouillon à partir des données RH du moment ;
+- **TRANS-011** — *Recalculer* refait le brouillon à partir des données RH du moment ; il est
+  aussi **recalculé automatiquement** quand un utilisateur qui peut préparer la paie ouvre l'écran,
+  si les données RH ont changé (ADR 0047). Un lecteur sans ce droit voit « à recalculer ».
   *Abandonner* le clôt (son numéro reste dans l'historique, le suivant prend le numéro d'après).
-- **TRANS-012** — *Valider et figer* : refusé s'il reste une anomalie bloquante, ou si les données
-  RH ont changé depuis le dernier calcul (le système recalcule et compare l'empreinte) : on ne fige
-  jamais autre chose que ce qui a été consulté. La version devient **figée** : ses lignes et ses
+- **TRANS-012** — *Valider et figer* : refusé s'il reste une anomalie bloquante. Un dernier recalcul
+  a lieu avant : si les montants ont changé, le brouillon est mis à jour et la validation refusée
+  (« vérifiez les nouveaux montants, puis validez ») — on ne fige jamais autre chose que ce qui a été
+  consulté. La version validée prend le statut « Validée et figée par les RH » (`transmise`) : elle est
+  **disponible pour la Comptabilité** sans autre action et remplace la version disponible jusque-là.
+  Valider ne déclenche ni paiement ni écriture comptable. La version devient **figée** : ses lignes et ses
   totaux ne se modifient plus ni ne se suppriment (refus dans les modèles, pas seulement à
   l'écran). Le mois devient figé pour les affectations (AFF-009).
-- **TRANS-013** — *Transmettre à la Comptabilité* : seulement une version validée, une seule fois,
-  et seulement si son contenu correspond à son empreinte. La version transmise auparavant pour le
-  mois devient **remplacée**.
+- **TRANS-013** — *Mettre à disposition de la Comptabilité* : ne subsiste que pour une version
+  validée **avant** l'ADR 0047 (statut `validee`) ; une seule fois, si son contenu correspond à son
+  empreinte. La Comptabilité refuse de lire des lignes dont le contenu ne correspond plus à
+  l'empreinte.
+- **TRANS-013 bis** — **Annuler la validation** (ADR 0047) : droit de validation, toutes agences,
+  même organisation ; motif obligatoire. Seulement pour la version validée en vigueur, **pas encore
+  reprise par la Comptabilité**, et tant que la Comptabilité n'a pas validé, payé ou clôturé le mois.
+  La version est conservée telle quelle (statut « Validation annulée », lignes et empreinte
+  intactes) et ne fige plus le mois côté RH ; la version qu'elle avait remplacée redevient celle de la
+  Comptabilité ; un nouveau brouillon recalculé est ouvert avec le motif (« Validation de la version
+  N annulée : … ») et devra être validé à nouveau. Journalisé (auteur, date, motif). Après reprise,
+  paiement ou clôture : nouvelle version ou régularisation sur le mois suivant (TRANS-014, TRANS-015).
 - **TRANS-014** — **Correction** : *Nouvelle version* (motif obligatoire) ouvre un brouillon
   recalculé, numéroté à la suite. La version précédente reste consultable telle quelle et reste
   celle lue par la Comptabilité tant que la nouvelle n'est pas transmise. Une version validée mais
@@ -117,7 +136,8 @@ validation est **refusée** tant qu'il reste une anomalie bloquante.
 | Consulter les versions et leurs montants | `rh-transmissions-paie.read` | super_admin, admin_entreprise, comptable |
 | Préparer, recalculer, abandonner un brouillon, ouvrir une nouvelle version | `rh-transmissions-paie.preparer` | super_admin, admin_entreprise |
 | Valider (figer) | **`rh-transmissions-paie.valider`** | **super_admin seul** |
-| Transmettre à la Comptabilité | **`rh-transmissions-paie.transmettre`** | **super_admin seul** |
+| Annuler la validation (ADR 0047) | **`rh-transmissions-paie.valider`** | **super_admin seul** |
+| Mettre à disposition une version validée avant l'ADR 0047 | `rh-transmissions-paie.transmettre` (plus utilisée sinon, conservée pour les rôles existants) | super_admin seul |
 
 - Les quatre droits sont séparés et délégables dans *Rôles* ; le serveur les vérifie
   (`TransmissionPaieService`), même par requête directe.

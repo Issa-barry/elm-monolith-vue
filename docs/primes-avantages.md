@@ -133,7 +133,8 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 - **AFF-009** — **Mois figés** : aucun début d'effet, changement de montant, fin d'effet (sauf au
   dernier jour du dernier mois figé), annulation ni montant mensuel ne peut toucher un mois figé. Un
   mois est figé dès qu'une version de sa transmission est validée, ou que la Comptabilité a validé
-  sa paie (`CalendrierPaieService`). Le message indique la première date possible.
+  sa paie (`CalendrierPaieService`). Annuler la validation (ADR 0047) le rouvre si aucune autre
+  version validée ne le fige. Le message indique la première date possible.
 - **AFF-010** — **Montants mensuels** (nature « saisi chaque mois ») : un montant (ou un taux) par
   mois, sur une affectation validée en vigueur ce mois-là ; « à valider » puis validé. Un montant
   validé ne se corrige ou ne se supprime qu'avec le droit de validation. Un mois sans montant validé

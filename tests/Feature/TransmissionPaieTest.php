@@ -7,6 +7,7 @@ use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutTransmissionPaie;
 use App\Enums\StatutTypeRemuneration;
 use App\Models\AffectationRemuneration;
+use App\Models\AuditLog;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
@@ -18,6 +19,7 @@ use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\Rh\Paie\CalculElementsPaieService;
+use App\Services\Rh\Paie\CalendrierPaieService;
 use App\Services\Rh\Paie\TransmissionPaieService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -355,15 +357,13 @@ class TransmissionPaieTest extends TestCase
         $this->actingAs($this->user)->post(route('transmissions-paie.valider', $transmission))->assertForbidden();
         $this->actingAs($super)->post(route('transmissions-paie.transmettre', $transmission))->assertSessionHasErrors('transmission');
 
+        // ADR 0047 : valider fige ET met la version à disposition de la Comptabilité, sans autre clic.
         $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission))->assertSessionHasNoErrors();
         $transmission->refresh();
-        $this->assertSame(StatutTransmissionPaie::VALIDEE, $transmission->statut);
+        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $transmission->statut);
         $this->assertSame($super->id, $transmission->validee_par);
+        $this->assertSame($super->id, $transmission->transmise_par);
         $this->assertTrue(app(TransmissionPaieService::class)->estIntegre($transmission));
-
-        $this->actingAs($this->user)->post(route('transmissions-paie.transmettre', $transmission))->assertForbidden();
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $transmission))->assertSessionHasNoErrors();
-        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $transmission->fresh()->statut);
 
         $this->actingAs($super)->from(route('transmissions-paie.index'))
             ->post(route('transmissions-paie.transmettre', $transmission))->assertSessionHasErrors('transmission');
@@ -410,9 +410,12 @@ class TransmissionPaieTest extends TestCase
         DB::table('transmission_paie_lignes')->where('transmission_paie_id', $transmission->id)->update(['montant' => 1]);
 
         $this->assertFalse(app(TransmissionPaieService::class)->estIntegre($transmission->fresh()));
-        $this->actingAs($super)->from(route('transmissions-paie.index'))
-            ->post(route('transmissions-paie.transmettre', $transmission))->assertSessionHasErrors('transmission');
-        $this->assertSame(StatutTransmissionPaie::VALIDEE, $transmission->fresh()->statut);
+        // La Comptabilité refuse de lire un contenu altéré.
+        try {
+            app(SourceDonneesPaie::class)->lignes($transmission->fresh());
+            $this->fail('Des lignes altérées ont été lues par la Comptabilité.');
+        } catch (ValidationException) {
+        }
     }
 
     public function test_la_validation_est_refusee_si_une_anomalie_bloque_ou_si_les_donnees_ont_change(): void
@@ -426,14 +429,15 @@ class TransmissionPaieTest extends TestCase
         $valider = fn () => $this->actingAs($super)->from(route('transmissions-paie.index'))->post(route('transmissions-paie.valider', $transmission));
         $valider()->assertSessionHasErrors('transmission');
 
-        // L'anomalie est corrigée mais le brouillon n'a pas été recalculé : refus, rien n'est figé à l'aveugle.
+        // L'anomalie est corrigée mais le brouillon n'a pas été recalculé : la validation le recalcule
+        // d'abord et refuse, pour que la version validée soit celle consultée (ADR 0047).
         $proposition->update(['statut' => 'validee']);
         $valider()->assertSessionHasErrors('transmission');
-        $this->assertStringContainsString('recalculez', session('errors')->first('transmission'));
+        $this->assertStringContainsString('vient d\'être recalculé', session('errors')->first('transmission'));
+        $this->assertFalse($transmission->fresh()->aDesAnomaliesBloquantes());
 
-        $this->actingAs($this->user)->post(route('transmissions-paie.recalculer', $transmission))->assertSessionHasNoErrors();
         $valider()->assertSessionHasNoErrors();
-        $this->assertSame(StatutTransmissionPaie::VALIDEE, $transmission->fresh()->statut);
+        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $transmission->fresh()->statut);
     }
 
     // ── Versions et corrections ───────────────────────────────────────────────
@@ -444,9 +448,8 @@ class TransmissionPaieTest extends TestCase
         $e = $this->salarie(3000000);
         $v1 = $this->brouillon();
         $this->actingAs($super)->post(route('transmissions-paie.valider', $v1));
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $v1));
 
-        // Correction du salaire du contrat après transmission.
+        // Correction du salaire du contrat après validation.
         Contrat::where('employe_id', $e->id)->update(['salaire_base' => 3300000]);
         $changements = app(TransmissionPaieService::class)->changementsDepuis($v1->fresh());
         $this->assertCount(1, $changements);
@@ -460,11 +463,9 @@ class TransmissionPaieTest extends TestCase
         // Un seul brouillon à la fois.
         $this->preparer(null, ['motif' => 'Encore'])->assertSessionHasErrors('mois');
 
-        $this->actingAs($super)->post(route('transmissions-paie.valider', $v2));
-        // Validée mais pas encore transmise : la Comptabilité lit toujours la v1.
+        // Tant que la v2 est en brouillon, la Comptabilité lit toujours la v1 ; dès sa validation, la v2.
         $this->assertSame($v1->id, app(SourceDonneesPaie::class)->transmissionCourante($this->org->id, 2026, 11)?->id);
-
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $v2));
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $v2));
         $this->assertSame(StatutTransmissionPaie::REMPLACEE, $v1->fresh()->statut);
         $this->assertSame($v2->id, app(SourceDonneesPaie::class)->transmissionCourante($this->org->id, 2026, 11)?->id);
         $this->assertSame('3000000.00', $v1->fresh()->lignes()->first()->montant);
@@ -514,7 +515,6 @@ class TransmissionPaieTest extends TestCase
         }
 
         $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission));
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $transmission));
 
         $repris = $source->prendreEnCharge($transmission->fresh(), $super, 'periode-11');
         $this->assertNotNull($repris->prise_en_charge_le);
@@ -595,12 +595,12 @@ class TransmissionPaieTest extends TestCase
         $this->salarie();
         $transmission = $this->brouillon();
         $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission));
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $transmission));
 
         $this->actingAs($this->user)->getJson(route('transmissions-paie.historique', $transmission))
             ->assertOk()
-            ->assertJsonCount(3)
-            ->assertJsonFragment(['event_code' => 'transmitted'])
+            // ADR 0047 : préparation puis validation (qui met à disposition) ; plus d'étape « transmise » séparée.
+            ->assertJsonCount(2)
+            ->assertJsonFragment(['event_code' => 'validated'])
             ->assertJsonFragment(['module_label' => 'Transmission de paie']);
     }
 
@@ -703,7 +703,6 @@ class TransmissionPaieTest extends TestCase
         // Version transmise (journal rétabli), puis panne pendant la reprise par la Comptabilité.
         $this->app->forgetInstance(AuditLogService::class);
         $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission));
-        $this->actingAs($super)->post(route('transmissions-paie.transmettre', $transmission));
         $this->simulerPanneDuJournal();
         try {
             app(SourceDonneesPaie::class)->prendreEnCharge($transmission->fresh(), $super, 'periode-11');
@@ -711,5 +710,138 @@ class TransmissionPaieTest extends TestCase
         } catch (\RuntimeException) {
         }
         $this->assertNull($transmission->fresh()->prise_en_charge_le);
+    }
+
+    // ── ADR 0047 : brouillon toujours à jour, validation = mise à disposition, annulation ──
+
+    public function test_le_brouillon_se_recalcule_a_l_ouverture_pour_qui_prepare_la_paie(): void
+    {
+        $e = $this->salarie(3000000);
+        $transmission = $this->brouillon();
+        Contrat::where('employe_id', $e->id)->update(['salaire_base' => 3300000]);
+
+        // Un lecteur sans droit de préparer voit seulement qu'il est à recalculer.
+        $lecteur = $this->managerAgence($this->site, ['rh-transmissions-paie.read', 'sites.lecture_toutes_agences']);
+        $this->actingAs($lecteur)->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page->where('transmission.a_jour', false));
+        $this->assertSame('3000000.00', (string) $transmission->fresh()->total_verse);
+
+        $this->actingAs($this->superAdmin())->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page->where('transmission.a_jour', true));
+        $this->assertSame('3300000.00', (string) $transmission->fresh()->total_verse);
+        $this->assertSame(StatutTransmissionPaie::BROUILLON, $transmission->fresh()->statut);
+    }
+
+    public function test_la_comptabilite_voit_le_brouillon_en_lecture_seule_sans_pouvoir_le_reprendre(): void
+    {
+        $this->salarie(3000000);
+        $transmission = $this->brouillon();
+        $source = app(SourceDonneesPaie::class);
+
+        $brouillon = $source->brouillonEnCours($this->org->id, 2026, 11);
+        $this->assertSame(1, $brouillon['version']);
+        $this->assertSame(3000000.0, $brouillon['total_verse']);
+        $this->assertTrue($brouillon['a_jour']);
+        $this->assertNull($source->transmissionCourante($this->org->id, 2026, 11));
+        try {
+            $source->lignes($transmission);
+            $this->fail('La Comptabilité a lu les lignes d\'un brouillon.');
+        } catch (ValidationException) {
+        }
+    }
+
+    public function test_annuler_la_validation_conserve_la_version_et_ouvre_un_brouillon(): void
+    {
+        $super = $this->superAdmin();
+        $this->salarie(3000000);
+        $v1 = $this->brouillon();
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $v1))->assertSessionHasNoErrors();
+        $this->assertNotNull(app(CalendrierPaieService::class)->premierJourModifiable($this->org->id));
+
+        $this->actingAs($super)->from(route('transmissions-paie.show', $v1))
+            ->post(route('transmissions-paie.annuler-validation', $v1), ['motif' => '  '])->assertSessionHasErrors('motif');
+        $this->actingAs($super)->post(route('transmissions-paie.annuler-validation', $v1), ['motif' => 'Prime de transport oubliée'])
+            ->assertSessionHasNoErrors();
+
+        $v1->refresh();
+        $this->assertSame(StatutTransmissionPaie::VALIDATION_ANNULEE, $v1->statut);
+        $this->assertSame(1, $v1->lignes()->count());
+        $this->assertTrue(app(TransmissionPaieService::class)->estIntegre($v1));
+        $v2 = TransmissionPaie::where('version', 2)->sole();
+        $this->assertSame(StatutTransmissionPaie::BROUILLON, $v2->statut);
+        $this->assertSame('Validation de la version 1 annulée : Prime de transport oubliée', $v2->motif);
+        // Le mois redevient modifiable côté RH ; la Comptabilité n'a plus de version.
+        $this->assertNull(app(CalendrierPaieService::class)->premierJourModifiable($this->org->id));
+        $this->assertNull(app(SourceDonneesPaie::class)->transmissionCourante($this->org->id, 2026, 11));
+        $this->assertTrue(AuditLog::where('auditable_id', $v1->id)->where('event_code', 'cancelled')->exists());
+
+        // La version annulée reste intacte.
+        try {
+            $v1->lignes()->first()->update(['montant' => 1]);
+            $this->fail('Une ligne d\'une version annulée a été modifiée.');
+        } catch (LogicException) {
+        }
+    }
+
+    public function test_annuler_la_validation_d_une_correction_rend_la_version_precedente(): void
+    {
+        $super = $this->superAdmin();
+        $e = $this->salarie(3000000);
+        $v1 = $this->brouillon();
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $v1));
+        Contrat::where('employe_id', $e->id)->update(['salaire_base' => 3300000]);
+        $this->preparer(null, ['motif' => 'Salaire corrigé'])->assertSessionHasNoErrors();
+        $v2 = TransmissionPaie::where('version', 2)->sole();
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $v2))->assertSessionHasNoErrors();
+        $this->assertSame(StatutTransmissionPaie::REMPLACEE, $v1->fresh()->statut);
+
+        $this->actingAs($super)->post(route('transmissions-paie.annuler-validation', $v2), ['motif' => 'Mauvais salaire'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(StatutTransmissionPaie::VALIDATION_ANNULEE, $v2->fresh()->statut);
+        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $v1->fresh()->statut);
+        $this->assertSame($v1->id, app(SourceDonneesPaie::class)->transmissionCourante($this->org->id, 2026, 11)?->id);
+        $this->assertSame(StatutTransmissionPaie::BROUILLON, TransmissionPaie::where('version', 3)->sole()->statut);
+    }
+
+    public function test_l_annulation_est_refusee_apres_reprise_ou_validation_comptable_et_sans_droit(): void
+    {
+        $super = $this->superAdmin();
+        $this->salarie();
+        $transmission = $this->brouillon();
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission));
+        $annuler = fn (User $u) => $this->actingAs($u)->from(route('transmissions-paie.show', $transmission))
+            ->post(route('transmissions-paie.annuler-validation', $transmission), ['motif' => 'Erreur']);
+
+        $annuler($this->user)->assertForbidden();
+        $this->actingAs($this->user)->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page->where('transmission.peut_annuler_validation', false));
+        $this->actingAs($super)->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page->where('transmission.peut_annuler_validation', true));
+
+        // Reprise par la Comptabilité : la correction passe par une nouvelle version.
+        DB::table('transmissions_paie')->where('id', $transmission->id)->update(['prise_en_charge_reference' => 'paie_periode:test']);
+        $annuler($super)->assertSessionHasErrors('transmission');
+        DB::table('transmissions_paie')->where('id', $transmission->id)->update(['prise_en_charge_reference' => null]);
+
+        // Paie du mois validée par la Comptabilité.
+        PaiePeriode::create(['organization_id' => $this->org->id, 'annee' => 2026, 'mois' => 11, 'statut' => 'valide_rh']);
+        $annuler($super)->assertSessionHasErrors('transmission');
+
+        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $transmission->fresh()->statut);
+        $this->assertSame(1, TransmissionPaie::count());
+    }
+
+    public function test_l_annulation_respecte_l_organisation(): void
+    {
+        $this->salarie();
+        $transmission = $this->brouillon();
+        $this->actingAs($this->superAdmin())->post(route('transmissions-paie.valider', $transmission));
+
+        $autreOrg = Organization::factory()->create();
+        $this->actingAs($this->superAdmin($autreOrg))
+            ->post(route('transmissions-paie.annuler-validation', $transmission), ['motif' => 'Erreur'])
+            ->assertForbidden();
+        $this->assertSame(StatutTransmissionPaie::TRANSMISE, $transmission->fresh()->statut);
     }
 }

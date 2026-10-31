@@ -3,6 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,7 @@ import {
     Loader2,
     Lock,
     RefreshCw,
+    RotateCcw,
     Send,
     ShieldAlert,
 } from 'lucide-vue-next';
@@ -58,6 +60,10 @@ interface Transmission extends Resume {
     organisation_complete: boolean;
     total_verse_organisation: number | null;
     total_valorise_organisation: number | null;
+    // Brouillon : reflète-t-il les données RH du moment ? (null pour une version validée)
+    a_jour: boolean | null;
+    // « Annuler la validation » : calculé par le serveur (ADR 0047).
+    peut_annuler_validation: boolean;
 }
 
 interface Ligne {
@@ -210,7 +216,7 @@ const LIBELLES: Record<Action, string> = {
     recalculer: 'Recalculer',
     abandonner: 'Abandonner le brouillon',
     valider: 'Valider et figer',
-    transmettre: 'Transmettre à la Comptabilité',
+    transmettre: 'Mettre à disposition de la Comptabilité',
 };
 
 const EXPLICATIONS: Record<Action, string> = {
@@ -219,9 +225,9 @@ const EXPLICATIONS: Record<Action, string> = {
     abandonner:
         'Le brouillon est abandonné. Son numéro de version reste dans l’historique.',
     valider:
-        'La version est figée : ses montants ne changeront plus. Toute correction ultérieure passera par une nouvelle version.',
+        'Les montants de cette version ne changeront plus et le mois est fermé aux modifications RH (primes, montants mensuels, fins d’effet, départs). La version est aussitôt disponible pour la Comptabilité, qui la contrôle avant de payer : aucun paiement ni aucune écriture n’est déclenché. Vérifiez les salaires, les primes et le total. Tant que la Comptabilité ne l’a pas reprise, vous pourrez annuler la validation avec un motif.',
     transmettre:
-        'La Comptabilité lira cette version pour la paie du mois. Si une version avait déjà été transmise, elle est remplacée.',
+        'Version validée avant la mise à disposition automatique : la Comptabilité la lira pour la paie du mois. Si une version était déjà disponible, elle est remplacée.',
 };
 
 const confirmation = ref<Action | null>(null);
@@ -279,6 +285,25 @@ function nouvelleVersion() {
         .post('/backoffice/transmissions-paie', {
             onSuccess: () => {
                 showNouvelle.value = false;
+            },
+        });
+}
+
+// Annuler la validation (ADR 0047) : motif obligatoire, version conservée, nouveau brouillon.
+const showAnnulation = ref(false);
+const formAnnulation = useForm({ motif: '' });
+const erreurAnnulation = computed(() => {
+    const erreurs = formAnnulation.errors as Record<string, string>;
+    return erreurs.motif ?? erreurs.transmission ?? erreurs.mois ?? '';
+});
+
+function annulerValidation() {
+    formAnnulation
+        .transform((data) => ({ motif: data.motif.trim() }))
+        .post(`${url.value}/annuler-validation`, {
+            onSuccess: () => {
+                showAnnulation.value = false;
+                formAnnulation.reset();
             },
         });
 }
@@ -374,7 +399,17 @@ function periodeLigne(l: Ligne): string {
                         @click="confirmation = 'transmettre'"
                     >
                         <Send class="mr-1.5 h-3.5 w-3.5" />
-                        Transmettre à la Comptabilité
+                        Mettre à disposition de la Comptabilité
+                    </Button>
+                    <Button
+                        v-if="t.peut_annuler_validation"
+                        variant="outline"
+                        size="sm"
+                        data-testid="transmission-annuler-validation"
+                        @click="showAnnulation = true"
+                    >
+                        <RotateCcw class="mr-1.5 h-3.5 w-3.5" />
+                        Annuler la validation
                     </Button>
                     <Button
                         v-if="peutNouvelleVersion"
@@ -401,8 +436,17 @@ function periodeLigne(l: Ligne): string {
                     à partir des contrats et affectations validées.
                 </p>
                 <p class="mt-1 text-sm">
-                    Après une correction RH, recalculez la transmission, puis
-                    validez pour figer les montants.
+                    Recalculé automatiquement à l’ouverture et avant la
+                    validation. La Comptabilité le voit comme provisoire ; il ne
+                    devient sa paie qu’une fois validé et figé.
+                </p>
+                <p
+                    v-if="t.a_jour === false"
+                    class="mt-1 font-medium"
+                    data-testid="transmission-a-recalculer"
+                >
+                    Des données RH ont changé depuis le dernier calcul : ce
+                    brouillon est à recalculer.
                 </p>
                 <span
                     v-if="peutValider && bloquantes.length > 0"
@@ -428,8 +472,8 @@ function periodeLigne(l: Ligne): string {
                         {{ t.validee_par }} : les montants ci-dessous sont
                         définitifs pour cette version.
                         <template v-if="t.transmise_le">
-                            Transmise le {{ t.transmise_le }} par
-                            {{ t.transmise_par }}.
+                            Disponible pour la Comptabilité depuis le
+                            {{ t.transmise_le }}.
                         </template>
                         <template v-if="t.prise_en_charge_le">
                             Reprise par la Comptabilité le
@@ -690,12 +734,19 @@ function periodeLigne(l: Ligne): string {
             <div class="space-y-4">
                 <div class="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <h2 class="text-lg font-semibold tracking-tight">
-                            Détail par salarié
-                        </h2>
-                        <p class="mt-0.5 text-sm text-muted-foreground">
-                            Rémunération et calculs de chaque salarié
-                        </p>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-semibold tracking-tight">
+                                Détail par salarié
+                            </h2>
+                            <InfoTooltip
+                                label="À propos des éléments de rémunération"
+                            >
+                                Primes, indemnités, allocations et avantages en
+                                nature attribués à chaque salarié, avec leurs
+                                dates d’effet. Le salaire de base reste porté
+                                par le contrat.
+                            </InfoTooltip>
+                        </div>
                     </div>
                     <p class="text-sm text-muted-foreground">
                         {{ salaries.length }} résultat{{
@@ -933,6 +984,68 @@ function periodeLigne(l: Ligne): string {
                 </Button>
             </div>
         </template>
+    </Dialog>
+
+    <!-- Annuler la validation -->
+    <Dialog
+        v-model:visible="showAnnulation"
+        modal
+        header="Annuler la validation"
+        :style="{ width: 'min(30rem, 95vw)' }"
+        :draggable="false"
+        :closable="!formAnnulation.processing"
+    >
+        <form class="space-y-3" @submit.prevent="annulerValidation">
+            <p class="text-sm text-muted-foreground">
+                La version {{ t.version }} est conservée telle quelle dans
+                l’historique (« Validation annulée ») et n’est plus la paie de
+                la Comptabilité. Le mois redevient modifiable côté RH, et une
+                nouvelle version s’ouvre en brouillon : corrigez, vérifiez, puis
+                validez-la à nouveau.
+            </p>
+            <div>
+                <Label for="av-motif" class="mb-1.5 block text-xs font-medium">
+                    Motif <span class="text-destructive">*</span>
+                </Label>
+                <textarea
+                    id="av-motif"
+                    v-model="formAnnulation.motif"
+                    rows="2"
+                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+                <p
+                    v-if="erreurAnnulation"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ erreurAnnulation }}
+                </p>
+            </div>
+            <div class="flex justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="formAnnulation.processing"
+                    @click="showAnnulation = false"
+                    >Fermer</Button
+                >
+                <Button
+                    type="submit"
+                    size="sm"
+                    :disabled="
+                        formAnnulation.processing ||
+                        !formAnnulation.motif.trim()
+                    "
+                    data-testid="transmission-annuler-validation-confirmer"
+                >
+                    <Loader2
+                        v-if="formAnnulation.processing"
+                        class="mr-1.5 h-3.5 w-3.5 animate-spin"
+                    />
+                    Annuler la validation
+                </Button>
+            </div>
+        </form>
     </Dialog>
 
     <!-- Nouvelle version -->

@@ -947,6 +947,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('{transmission}/abandonner', [TransmissionPaieController::class, 'abandonner'])->name('abandonner');
                 Route::post('{transmission}/valider', [TransmissionPaieController::class, 'valider'])->name('valider');
                 Route::post('{transmission}/transmettre', [TransmissionPaieController::class, 'transmettre'])->name('transmettre');
+                Route::post('{transmission}/annuler-validation', [TransmissionPaieController::class, 'annulerValidation'])->name('annuler-validation');
             });
             Route::resource('contrats', ContratController::class)->except(['show']);
             // Contrat de travail généré (docs/rh-contrat-pdf.md, ADR 0044) ; ?preview=1 = aperçu.
