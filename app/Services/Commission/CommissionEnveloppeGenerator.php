@@ -194,6 +194,38 @@ class CommissionEnveloppeGenerator
     }
 
     /**
+     * Calcule, SANS RIEN ÉCRIRE, les enveloppes qu'une génération produirait aujourd'hui pour cette
+     * commande, à la date de gain donnée (donc avec les barèmes et le partage d'équipe en vigueur à
+     * cette date) — utilisé par la régularisation après encaissement (ADR 0043) pour comparer la
+     * commission recalculée sur les quantités corrigées à celle déjà générée. Même moteur, mêmes
+     * règles que genererPourCommandeVente() : seule la persistance est omise.
+     *
+     * @return array{enveloppes: array<string, array<string, mixed>>, erreurs: list<array<string, mixed>>}
+     */
+    public static function simulerPourCommandeVente(CommandeVente $commande, Carbon $earnedAt): array
+    {
+        $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
+            $commande->nature_operation,
+            $commande->client?->type,
+            $commande->mode_remise_grossiste,
+        );
+        $identite = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $commande->organization_id, 'code' => $processusCode],
+            [...CommissionProcessusDefaults::pour($commande->organization_id, $processusCode), 'statut' => CommissionActivationStatut::ACTIF->value],
+        );
+
+        $resultat = self::genererDepuisContexte(
+            self::contexteDepuisCommandeVente($commande, $earnedAt),
+            $identite,
+            CommissionProcessusDefaults::processusResolutionBareme($identite),
+            collect(),
+            persister: false,
+        );
+
+        return ['enveloppes' => $resultat['simulation'], 'erreurs' => $resultat['erreurs']];
+    }
+
+    /**
      * Génère la commission d'un transfert logistique via le moteur générique — le seul moteur
      * de commission logistique depuis le 03/09/2026 (retrait de la bascule par organisation
      * et de l'ancien CommissionLogistiqueService). $champQuantite ('quantite_chargee' ou
@@ -692,7 +724,7 @@ class CommissionEnveloppeGenerator
      * @param  list<string>|null  $ciblesAutorisees  restreint la génération à ces cibles (régénération
      *                                               ciblée, cf. regenererEnveloppeEquipe())
      */
-    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes, ?array $ciblesAutorisees = null): array
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processusIdentite, CommissionProcessus $processusBareme, Collection $existantes, ?array $ciblesAutorisees = null, bool $persister = true): array
     {
         $vehicule = $ctx->vehicule;
 
@@ -1148,6 +1180,10 @@ class CommissionEnveloppeGenerator
                     unset($enveloppesACreer[$cle]);
                 }
             }
+        }
+
+        if (! $persister) {
+            return ['erreurs' => $erreurs, 'creees' => [], 'simulation' => $enveloppesACreer];
         }
 
         // Persistance de toutes les cibles correctement résolues, qu'il y ait ou non des

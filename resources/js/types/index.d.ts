@@ -45,6 +45,7 @@ export type StandalonePermission =
     | 'ventes.exporter'
     | 'ventes.rembourser'
     | 'ventes.annuler_exceptionnel'
+    | 'ventes.regulariser_apres_encaissement'
     | 'imports-flotte.create'
     | 'imports-flotte.read'
     | 'imports-produits.create'

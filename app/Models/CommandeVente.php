@@ -398,6 +398,12 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::ANNULEE_ERREUR_SAISIE;
     }
 
+    /** Régularisations après encaissement (ADR 0043), la plus récente d'abord. */
+    public function regularisations(): HasMany
+    {
+        return $this->hasMany(RegularisationVente::class, 'commande_vente_id')->latest('confirmee_at');
+    }
+
     public function annulationExceptionnelle(): HasOne
     {
         return $this->hasOne(AnnulationExceptionnelle::class, 'commande_vente_id');

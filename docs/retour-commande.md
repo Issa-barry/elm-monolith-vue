@@ -190,10 +190,13 @@ recalculé côté serveur.
 ## Non couvert (volontairement)
 
 - Application mobile livreur : l'enregistrement se fait depuis le back-office.
-- Retour **après** encaissement (avoir / remboursement) : il n'existe aucun mécanisme d'avoir ; hors
-  périmètre de cette règle. Une commande **saisie par erreur** (aucune vente réelle) se défait par
-  l'annulation exceptionnelle, pas par un retour — cf. [annulation-exceptionnelle.md](annulation-exceptionnelle.md).
-  Elle est refusée sur une commande qui a déjà un retour enregistré.
+- Retour **après** encaissement : hors périmètre du retour. Depuis le 30/10/2026, une quantité
+  saisie en trop sur une vente déjà encaissée se corrige par la **régularisation après encaissement**
+  ([regularisation-vente.md](regularisation-vente.md), ADR 0043), qui réutilise le même mouvement
+  (`commande_vente_retours.nature = regularisation`, motif réservé, refusé par le formulaire de
+  retour). Une commande **saisie par erreur** (aucune vente réelle) se défait par l'annulation
+  exceptionnelle — cf. [annulation-exceptionnelle.md](annulation-exceptionnelle.md). Elle est refusée
+  sur une commande qui a déjà un retour enregistré.
 - Étiquette de retour sur le ticket imprimé et l'export des ventes.
 - Le raccourci `VehiculeSituationVentesService` exclut les commandes `retournee` (comme `annulee`) ;
   « quantité vendue » y lit `quantite_livree` et reflète donc les retours partiels.

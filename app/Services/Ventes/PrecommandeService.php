@@ -265,7 +265,13 @@ class PrecommandeService
      */
     public function rembourser(CommandeVente $commande, User $payeur, array $paiement, string $motif = RemboursementVente::MOTIF_TROP_PERCU): RemboursementVente
     {
-        abort_if(! $commande->est_precommande, 422, 'Seule une précommande donne lieu à un remboursement.');
+        // Précommande (ADR 0019) ou vente régularisée « montant reçu » (ADR 0043) : seuls cas où un
+        // trop-perçu peut exister.
+        abort_if(
+            ! $commande->est_precommande && ! $commande->regularisations()->exists(),
+            422,
+            'Seule une précommande ou une vente régularisée donne lieu à un remboursement.',
+        );
 
         $support = $this->supportRemboursement($commande, $payeur, $paiement['mode_paiement'], $paiement['compte_tresorerie_id'] ?? null);
         $montant = round((float) $paiement['montant'], 2);
@@ -307,7 +313,8 @@ class PrecommandeService
             ]);
 
             $facture->update(['montant_rembourse' => round($facture->montantRembourse() + $montant, 2)]);
-            $this->comptabilite->comptabiliserRemboursement($remboursement, $commande->remise_at !== null);
+            // Vente réalisée : précommande remise, ou vente ordinaire régularisée (créance client 411).
+            $this->comptabilite->comptabiliserRemboursement($remboursement, $commande->remise_at !== null || ! $commande->est_precommande);
 
             $this->audit->record($commande, AuditEvent::PAID, $payeur, null, [
                 'remboursement' => true,

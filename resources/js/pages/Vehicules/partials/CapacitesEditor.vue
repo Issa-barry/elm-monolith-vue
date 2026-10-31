@@ -9,6 +9,8 @@ import { computed } from 'vue';
 export interface CategorieOption {
     value: string;
     label: string;
+    /** Capacité exigée pour vendre les produits de cette catégorie (ADR 0042). */
+    obligatoire?: boolean;
 }
 
 /**
@@ -53,6 +55,12 @@ function categoriesDisponibles(excludeIndex: number): CategorieOption[] {
 
 const categoriesRestantes = computed(() => categoriesDisponibles(-1));
 
+// Catégories exigeant une capacité pour être vendues et sans ligne renseignée — l'enregistrement
+// du véhicule reste possible, mais il ne pourra pas vendre leurs produits.
+const obligatoiresManquantes = computed(() =>
+    categoriesRestantes.value.filter((c) => c.obligatoire),
+);
+
 function addRow(): void {
     emit('update:modelValue', [
         ...props.modelValue,
@@ -86,7 +94,17 @@ function removeRow(index: number): void {
             Limites propres à ce véhicule, par catégorie de produit (ex : Sachet
             eau, Bouteille) — utilisées pour bloquer toute vente ou tout
             chargement qui les dépasse. Aucune limite définie = véhicule non
-            plafonné pour cette catégorie.
+            plafonné pour cette catégorie, sauf si la catégorie exige une
+            capacité pour vendre.
+        </p>
+
+        <p
+            v-if="obligatoiresManquantes.length > 0"
+            class="mt-2 text-xs text-amber-600 dark:text-amber-400"
+        >
+            Obligatoire pour vendre :
+            {{ obligatoiresManquantes.map((c) => c.label).join(', ') }} — sans
+            capacité renseignée, ce véhicule ne pourra pas vendre ces produits.
         </p>
 
         <div v-if="modelValue.length > 0" class="mt-4 space-y-3">

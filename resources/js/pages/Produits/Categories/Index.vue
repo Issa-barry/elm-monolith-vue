@@ -30,6 +30,8 @@ interface Categorie {
     parent_id: string | null;
     position: number;
     produits_count: number;
+    capacite_vehicule_obligatoire: boolean;
+    vehicules_sans_capacite_count: number;
 }
 
 const props = defineProps<{
@@ -119,6 +121,7 @@ const form = useForm({
     parent_id: null as string | null,
     description: null as string | null,
     statut: 'actif',
+    capacite_vehicule_obligatoire: false,
 });
 
 // Une catégorie ne peut pas devenir son propre parent ni celui d'un de ses descendants
@@ -152,6 +155,7 @@ function openCreate() {
     form.reset();
     form.parent_id = null;
     form.statut = 'actif';
+    form.capacite_vehicule_obligatoire = false;
     showDialog.value = true;
 }
 
@@ -161,6 +165,8 @@ function openEdit(categorie: Categorie) {
     form.parent_id = categorie.parent_id;
     form.description = categorie.description;
     form.statut = categorie.statut;
+    form.capacite_vehicule_obligatoire =
+        categorie.capacite_vehicule_obligatoire;
     showDialog.value = true;
 }
 
@@ -374,6 +380,39 @@ function destroy(categorie: Categorie) {
                                     >
                                         Réf. {{ c.source.reference }}
                                     </div>
+                                    <div
+                                        v-if="
+                                            c.source
+                                                .capacite_vehicule_obligatoire
+                                        "
+                                        class="mt-0.5 text-xs"
+                                    >
+                                        <span class="text-muted-foreground"
+                                            >Capacité véhicule obligatoire</span
+                                        >
+                                        <span
+                                            v-if="
+                                                c.source
+                                                    .vehicules_sans_capacite_count >
+                                                0
+                                            "
+                                            class="text-amber-600 dark:text-amber-400"
+                                        >
+                                            ·
+                                            {{
+                                                c.source
+                                                    .vehicules_sans_capacite_count
+                                            }}
+                                            {{
+                                                c.source
+                                                    .vehicules_sans_capacite_count >
+                                                1
+                                                    ? 'véhicules'
+                                                    : 'véhicule'
+                                            }}
+                                            sans capacité
+                                        </span>
+                                    </div>
                                 </div>
                             </td>
                             <td
@@ -514,6 +553,48 @@ function destroy(categorie: Categorie) {
                     <p class="text-xs text-muted-foreground">
                         Une catégorie inactive n'est plus proposée à la
                         sélection sur un produit.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-start gap-3">
+                <Checkbox
+                    id="cat-capacite-obligatoire"
+                    class="mt-0.5"
+                    :model-value="form.capacite_vehicule_obligatoire"
+                    @update:model-value="
+                        form.capacite_vehicule_obligatoire = $event === true
+                    "
+                />
+                <div>
+                    <Label
+                        for="cat-capacite-obligatoire"
+                        class="cursor-pointer font-medium"
+                        >Capacité véhicule obligatoire pour vendre</Label
+                    >
+                    <p class="text-xs text-muted-foreground">
+                        Un véhicule ne peut vendre les produits de cette
+                        catégorie que si sa capacité maximale est renseignée
+                        pour elle (fiche véhicule).
+                    </p>
+                    <p
+                        v-if="
+                            form.capacite_vehicule_obligatoire &&
+                            editingCategorie &&
+                            !editingCategorie.capacite_vehicule_obligatoire &&
+                            editingCategorie.vehicules_sans_capacite_count > 0
+                        "
+                        class="mt-1 text-xs text-amber-600 dark:text-amber-400"
+                    >
+                        {{ editingCategorie.vehicules_sans_capacite_count }}
+                        {{
+                            editingCategorie.vehicules_sans_capacite_count > 1
+                                ? 'véhicules actifs n’ont'
+                                : 'véhicule actif n’a'
+                        }}
+                        pas encore de capacité pour cette catégorie : ils ne
+                        pourront plus en vendre tant qu'elle n'est pas
+                        renseignée.
                     </p>
                 </div>
             </div>

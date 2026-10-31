@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MontantInput from '@/components/MontantInput.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -186,7 +187,7 @@ const typeOptions = [
 const varForm = useForm({
     type: 'retenue',
     libelle: '',
-    montant: 0,
+    montant: null as number | null,
     note: '',
 });
 
@@ -721,12 +722,11 @@ function fmt(n: number) {
                 </div>
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Montant</label>
-                    <input
-                        v-model.number="varForm.montant"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+                    <MontantInput
+                        v-model="varForm.montant"
+                        :decimales="2"
+                        unite="GNF"
+                        :invalid="!!varForm.errors.montant"
                     />
                     <p
                         v-if="varForm.errors.montant"

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\MotifAjustementStock;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommandeVenteRetour;
 use App\Models\CommandeVenteRetourLigne;
 use App\Models\MouvementStock;
 use App\Models\ReceptionAchatLigne;
@@ -86,7 +87,9 @@ class MouvementStockMotifService
             : CommandeVenteRetourLigne::whereIn('id', $ligneRetourIds)
                 ->with('retour.commande:id,reference')
                 ->get()
-                ->mapWithKeys(fn (CommandeVenteRetourLigne $l) => [$l->id => $l->retour?->commande?->reference]);
+                // Régularisation après encaissement (ADR 0043) : même mouvement qu'un retour, signalée.
+                ->mapWithKeys(fn (CommandeVenteRetourLigne $l) => [$l->id => $l->retour?->commande?->reference
+                    .($l->retour?->nature === CommandeVenteRetour::NATURE_REGULARISATION ? ' (régularisation)' : '')]);
 
         $ligneRetourTransfertIds = $mouvements
             ->where('source_type', TransfertRetourLigne::class)

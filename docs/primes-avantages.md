@@ -19,7 +19,7 @@ Le **salaire de base reste porté par le contrat** : il n'est jamais une affecta
 | Libellé | Obligatoire, 100 caractères, unique dans l'organisation (sans tenir compte de la casse) |
 | Code | Unique dans l'organisation, types inactifs compris. Proposé depuis le libellé (« Prime de transport » → `PRIME_DE_TRANSPORT`, suffixe `_2`… si pris) ; saisi, il est normalisé (majuscules, chiffres, `_`, 30 caractères) |
 | Description | Facultative (conditions d'attribution, observations) |
-| Catégorie | Prime, indemnité, allocation, avantage en nature. Un **avantage en nature est valorisé** (valeur estimée, jamais versée dans le net à payer) ; les autres catégories sont versées |
+| Catégorie | **Plus saisie depuis le 31/10/2026 (ADR 0046)** : tout type créé est une **prime**, versée en argent. La catégorie d'un type existant (indemnité, allocation, avantage en nature) est conservée et ne change jamais ; un **avantage en nature reste valorisé** (valeur estimée, jamais versée dans le net à payer), indemnités et allocations sont versées comme une prime |
 | Mode de calcul | Montant fixe, ou pourcentage du salaire de base |
 | Valeur par défaut | Facultative : montant (> 0) pour un montant fixe, taux (> 0, ≤ 100 %) pour un pourcentage. Proposée à l'attribution, jamais imposée |
 | Périodicité | Mensuelle ou ponctuelle (un seul mois) |
@@ -28,6 +28,16 @@ Le **salaire de base reste porté par le contrat** : il n'est jamais une affecta
 | Cumul autorisé | Un salarié peut recevoir plusieurs affectations simultanées du type |
 | Période d'application | Début et fin facultatifs ; fin ≥ début |
 | Statut, auteurs, dates | Créé par, modifié par, validé par et le, date de désactivation, dates de création et de modification |
+
+## Formulaire simplifié (31/10/2026, ADR 0046)
+
+Le responsable RH donne le **nom de la prime**, le mode de calcul, la périodicité, la valeur par
+défaut et une description facultative. Code, nature du montant, période d'application, prorata et
+cumul sont regroupés dans **Options avancées** (repliées, ouvertes d'office si l'une est en
+erreur). Aucune catégorie n'est demandée ni acceptée par le serveur. Un type enregistré avant la
+simplification affiche sa catégorie d'origine à la modification ; un avantage en nature porte le
+repère « Avantage en nature · non versé » dans les listes. Le filtre par catégorie est retiré des
+écrans Primes et avantages et Primes des salariés.
 
 ## Règles du référentiel
 
@@ -48,8 +58,9 @@ Le **salaire de base reste porté par le contrat** : il n'est jamais une affecta
 - **PRIME-006** — Suppression (`rh-types-remuneration.delete`) : possible **tant que le type n'a
   jamais été attribué** (décision du 28/10/2026) — une affectation, même annulée, compte ; sinon il
   se désactive. Un type déjà validé exige en plus le droit de validation.
-- **PRIME-007** — Un type déjà attribué garde ses caractéristiques de calcul (code, catégorie, mode
-  de calcul, périodicité, nature du montant) : il faut créer un nouveau type. Libellé, description,
+- **PRIME-007** — Un type déjà attribué garde ses caractéristiques de calcul (code, mode de calcul,
+  périodicité, nature du montant ; la catégorie, elle, ne se modifie jamais) : il faut créer un
+  nouveau type. Libellé, description,
   valeurs par défaut et période restent modifiables.
 - **PRIME-008** — *Fermer* maintient les bénéficiaires actuels (leurs affectations continuent, un
   changement de montant reste possible) et refuse toute nouvelle attribution, y compris la
@@ -132,7 +143,7 @@ Le **salaire de base reste porté par le contrat** : il n'est jamais une affecta
   montants mensuels saisis, corrigés, validés, supprimés, arrêts dus à une désactivation. Menu ⋮ →
   *Historique* de la ligne.
 - **AFF-015** — Liste filtrable par agence, statut (à valider, à venir, en cours, terminée,
-  annulée), salarié, type, catégorie et période d'effet (affectations en vigueur au moins un jour
+  annulée), salarié, type et période d'effet (affectations en vigueur au moins un jour
   sur la période).
 
 ## Permissions

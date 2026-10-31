@@ -41,6 +41,7 @@ import {
     Printer,
     Receipt,
     RotateCcw,
+    Scale,
     ShieldAlert,
     Truck,
     XCircle,
@@ -56,6 +57,7 @@ import PrecommandeActions, {
     type PrecommandeData,
 } from './partials/PrecommandeActions.vue';
 import ReceptionDialog from './partials/ReceptionDialog.vue';
+import RegularisationDialog from './partials/RegularisationDialog.vue';
 import RetourDialog from './partials/RetourDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -247,6 +249,8 @@ interface CommandeData {
     can_annuler: boolean;
     /** Permission `ventes.annuler_exceptionnel` et commande éligible (cf. AnnulationExceptionnelleService). */
     can_annuler_exceptionnel: boolean;
+    /** Permission `ventes.regulariser_apres_encaissement` et vente éligible (ADR 0043). */
+    can_regulariser: boolean;
     can_encaisser: boolean;
     /** Précommande pas encore remise : le prochain encaissement est un acompte (ADR 0019). */
     encaissement_est_acompte: boolean;
@@ -285,6 +289,8 @@ interface RetourLigneEntry {
 
 interface RetourEntry {
     id: string;
+    /** `retour_livraison`, ou `regularisation` (quantité retirée après encaissement, ADR 0043). */
+    nature: string;
     created_at: string;
     created_by: string;
     motif: string;
@@ -301,6 +307,53 @@ interface MotifRetour {
     label: string;
 }
 
+interface EcartCommissionEntry {
+    id: string;
+    beneficiaire: string | null;
+    montant_avant: number;
+    montant_apres: number;
+    montant_verse: number;
+    ecart: number;
+    sens: 'trop_percu' | 'complement' | 'aucun';
+    sens_label: string;
+    statut: string;
+    statut_label: string;
+    commentaire: string | null;
+    regularise_par: string | null;
+    regularise_at: string | null;
+    can_marquer_regularise: boolean;
+}
+
+interface RegularisationEntry {
+    id: string;
+    confirmee_at: string | null;
+    par: string;
+    motif: string;
+    montant_avant: number;
+    montant_apres: number;
+    excedent: number;
+    traitement_excedent_label: string | null;
+    commissions_avant: number;
+    commissions_apres: number;
+    lignes: {
+        produit: string;
+        quantite_avant: number;
+        quantite_apres: number;
+    }[];
+    ecarts: EcartCommissionEntry[];
+}
+
+interface RegularisationRemboursement {
+    trop_percu: number;
+    rembourse: number;
+    can_rembourser: boolean;
+    decaissement: {
+        moyens: MoyenEncaissement[];
+        especes_disponibles: boolean;
+        solde_especes: number | null;
+    } | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
@@ -313,6 +366,10 @@ const props = defineProps<{
     motifs_retour: MotifRetour[];
     /** Données de la précommande (ADR 0019) — null pour une vente ordinaire. */
     precommande: PrecommandeData | null;
+    /** Régularisations après encaissement (ADR 0043), la plus récente d'abord. */
+    regularisations: RegularisationEntry[];
+    /** Trop-perçu laissé par une régularisation « montant reçu », à rembourser. */
+    regularisation_remboursement: RegularisationRemboursement | null;
 }>();
 
 const toast = useToast();
@@ -619,6 +676,81 @@ function submitAnnuler() {
 
 const annulationExceptionnelleVisible = ref(false);
 
+// ── Régularisation après encaissement (ADR 0043) ─────────────────────────────
+const regularisationVisible = ref(false);
+
+// Quantité vendue = chargée − déjà retirée (retours, régularisations) ; prix réellement facturé.
+const lignesPourRegularisation = computed(() =>
+    props.commande.lignes.map((l) => ({
+        id: l.id,
+        produit: l.produit_nom ?? 'Produit',
+        quantite_vendue: (l.quantite_chargee ?? 0) - l.quantite_retournee,
+        prix_unitaire: ligneUnitPrice(l),
+    })),
+);
+
+const retoursLivraison = computed(() =>
+    props.retours.filter((r) => r.nature !== 'regularisation'),
+);
+
+const ecartEnCours = ref<EcartCommissionEntry | null>(null);
+const ecartCommentaire = ref('');
+const ecartProcessing = ref(false);
+const ecartErreur = ref<string | null>(null);
+
+function ouvrirEcart(ecart: EcartCommissionEntry) {
+    ecartEnCours.value = ecart;
+    ecartCommentaire.value = '';
+    ecartErreur.value = null;
+}
+
+function marquerEcartRegularise() {
+    if (!ecartEnCours.value) return;
+    ecartProcessing.value = true;
+    ecartErreur.value = null;
+    router.post(
+        `/backoffice/ventes/${props.commande.id}/regularisation/ecarts/${ecartEnCours.value.id}/regularise`,
+        { commentaire: ecartCommentaire.value.trim() },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                ecartEnCours.value = null;
+            },
+            onError: (e) => {
+                ecartErreur.value = Object.values(e).flat().join(' ');
+            },
+            onFinish: () => {
+                ecartProcessing.value = false;
+            },
+        },
+    );
+}
+
+const remboursementVisible = ref(false);
+const remboursementProcessing = ref(false);
+const remboursementErrors = ref<Record<string, string>>({});
+
+function rembourserTropPercu(payload: EncaissementPayload) {
+    remboursementProcessing.value = true;
+    remboursementErrors.value = {};
+    router.post(
+        `/backoffice/ventes/${props.commande.id}/regularisation/remboursement`,
+        { ...payload },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                remboursementVisible.value = false;
+            },
+            onError: (e) => {
+                remboursementErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                remboursementProcessing.value = false;
+            },
+        },
+    );
+}
+
 const annulerDisabled = computed(
     () =>
         annulerForm.processing ||
@@ -908,6 +1040,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_enregistrer_retour ||
                         commande.can_annuler ||
                         commande.can_annuler_exceptionnel ||
+                        commande.can_regulariser ||
                         can('ventes.read')
                     "
                     class="absolute right-4"
@@ -1027,6 +1160,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         commande.can_annuler)
                                 "
                             />
+                            <DropdownMenuItem
+                                v-if="commande.can_regulariser"
+                                class="cursor-pointer text-amber-600 focus:text-amber-600"
+                                @click="regularisationVisible = true"
+                            >
+                                <Scale class="h-4 w-4" />
+                                Régulariser la vente
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                                 v-if="commande.can_annuler_exceptionnel"
                                 class="cursor-pointer text-red-600 focus:text-red-600"
@@ -1217,6 +1358,18 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             Annuler
                         </Button>
                     </template>
+
+                    <!-- Régularisation après encaissement (ADR 0043) -->
+                    <Button
+                        v-if="commande.can_regulariser"
+                        variant="outline"
+                        size="sm"
+                        class="border-amber-300 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                        @click="regularisationVisible = true"
+                    >
+                        <Scale class="mr-2 h-4 w-4" />
+                        Régulariser la vente
+                    </Button>
 
                     <!-- Annulation exceptionnelle (commande saisie par erreur, même encaissée) -->
                     <Button
@@ -1902,7 +2055,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
 
                 <!-- Retours de livraison enregistrés sur cette commande -->
                 <div
-                    v-if="retours.length > 0"
+                    v-if="retoursLivraison.length > 0"
                     class="mt-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5"
                 >
                     <h3
@@ -1912,7 +2065,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     </h3>
                     <ol class="space-y-4">
                         <li
-                            v-for="retour in retours"
+                            v-for="retour in retoursLivraison"
                             :key="retour.id"
                             class="rounded-lg border px-4 py-3"
                         >
@@ -1962,10 +2115,174 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </li>
                     </ol>
                 </div>
+
+                <!-- Régularisations après encaissement (ADR 0043) -->
+                <div
+                    v-if="regularisations.length > 0"
+                    class="mt-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+                    data-testid="regularisations"
+                >
+                    <h3
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Régularisations après encaissement
+                    </h3>
+                    <ol class="space-y-4">
+                        <li
+                            v-for="r in regularisations"
+                            :key="r.id"
+                            class="rounded-lg border px-4 py-3 text-sm"
+                        >
+                            <div
+                                class="flex flex-wrap items-baseline justify-between gap-2"
+                            >
+                                <p class="min-w-0 break-words">{{ r.motif }}</p>
+                                <span class="text-xs text-muted-foreground"
+                                    >{{ r.par }} — {{ r.confirmee_at }}</span
+                                >
+                            </div>
+                            <ul class="mt-2 space-y-1">
+                                <li
+                                    v-for="(l, i) in r.lignes"
+                                    :key="i"
+                                    class="flex justify-between gap-3"
+                                >
+                                    <span>{{ l.produit }}</span>
+                                    <span class="tabular-nums"
+                                        >{{ l.quantite_avant }} →
+                                        <strong>{{
+                                            l.quantite_apres
+                                        }}</strong></span
+                                    >
+                                </li>
+                            </ul>
+                            <dl
+                                class="mt-2 grid gap-1 border-t pt-2 sm:grid-cols-2"
+                            >
+                                <div class="flex justify-between gap-3">
+                                    <dt class="text-muted-foreground">
+                                        Facture
+                                    </dt>
+                                    <dd class="tabular-nums">
+                                        {{ formatGNF(r.montant_avant) }} →
+                                        <strong>{{
+                                            formatGNF(r.montant_apres)
+                                        }}</strong>
+                                    </dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="text-muted-foreground">
+                                        Commissions
+                                    </dt>
+                                    <dd class="tabular-nums">
+                                        {{ formatGNF(r.commissions_avant) }} →
+                                        <strong>{{
+                                            formatGNF(r.commissions_apres)
+                                        }}</strong>
+                                    </dd>
+                                </div>
+                                <div
+                                    v-if="r.excedent > 0"
+                                    class="flex justify-between gap-3 sm:col-span-2"
+                                >
+                                    <dt class="text-muted-foreground">
+                                        Excédent {{ formatGNF(r.excedent) }}
+                                    </dt>
+                                    <dd>{{ r.traitement_excedent_label }}</dd>
+                                </div>
+                            </dl>
+                            <div
+                                v-if="r.ecarts.length"
+                                class="mt-3 border-t pt-2"
+                            >
+                                <p
+                                    class="mb-1 text-xs font-medium text-muted-foreground"
+                                >
+                                    Commissions déjà payées — écarts
+                                </p>
+                                <ul class="space-y-2">
+                                    <li
+                                        v-for="e in r.ecarts"
+                                        :key="e.id"
+                                        class="flex flex-wrap items-center justify-between gap-2"
+                                    >
+                                        <span class="min-w-0">
+                                            {{ e.beneficiaire ?? '—' }} : versé
+                                            {{ formatGNF(e.montant_verse) }}, dû
+                                            {{ formatGNF(e.montant_apres) }}
+                                            <span
+                                                v-if="e.sens !== 'aucun'"
+                                                class="font-medium text-amber-700 dark:text-amber-400"
+                                            >
+                                                — {{ e.sens_label }}
+                                                {{
+                                                    formatGNF(Math.abs(e.ecart))
+                                                }}
+                                            </span>
+                                            <span
+                                                v-if="e.commentaire"
+                                                class="block text-xs text-muted-foreground"
+                                                >{{ e.commentaire }} ({{
+                                                    e.regularise_par
+                                                }}, {{ e.regularise_at }})</span
+                                            >
+                                        </span>
+                                        <span class="flex items-center gap-2">
+                                            <StatusDot
+                                                :status="e.statut"
+                                                :label="e.statut_label"
+                                            />
+                                            <Button
+                                                v-if="e.can_marquer_regularise"
+                                                variant="outline"
+                                                size="sm"
+                                                @click="ouvrirEcart(e)"
+                                            >
+                                                Marquer régularisé
+                                            </Button>
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
             </div>
 
             <!-- Onglet : Facturation ────────────────────────────────────────── -->
             <div v-else-if="activeTab === 'facturation'">
+                <!-- Trop-perçu laissé par une régularisation « montant reçu » (ADR 0043) -->
+                <div
+                    v-if="regularisation_remboursement"
+                    class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40"
+                >
+                    <div>
+                        <p
+                            class="font-semibold text-amber-800 dark:text-amber-300"
+                        >
+                            Trop-perçu à rembourser :
+                            {{
+                                formatGNF(
+                                    regularisation_remboursement.trop_percu,
+                                )
+                            }}
+                        </p>
+                        <p class="mt-0.5 text-amber-900 dark:text-amber-200">
+                            Montant encaissé au-delà de la facture régularisée.
+                        </p>
+                    </div>
+                    <Button
+                        v-if="
+                            regularisation_remboursement.can_rembourser &&
+                            regularisation_remboursement.decaissement
+                        "
+                        size="sm"
+                        @click="remboursementVisible = true"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        Rembourser le trop-perçu
+                    </Button>
+                </div>
                 <div
                     v-if="facture"
                     class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
@@ -2761,6 +3078,96 @@ function stepLabel(idx: number, defaultLabel: string): string {
             :motifs="motifs_retour"
             :montant-facture="facture ? facture.montant_net : null"
         />
+
+        <!-- Régularisation après encaissement (ADR 0043) -->
+        <RegularisationDialog
+            v-if="commande.can_regulariser"
+            v-model:visible="regularisationVisible"
+            :commande-id="commande.id"
+            :reference="commande.reference"
+            :lignes="lignesPourRegularisation"
+        />
+
+        <PaymentCard
+            v-if="regularisation_remboursement?.decaissement"
+            v-model:visible="remboursementVisible"
+            title="Rembourser le trop-perçu"
+            sens="decaissement"
+            solde-label="Trop-perçu à rembourser"
+            :solde="regularisation_remboursement.trop_percu"
+            :info-rows="[{ label: 'Commande', value: commande.reference }]"
+            :moyens="regularisation_remboursement.decaissement.moyens"
+            :especes-disponibles="
+                regularisation_remboursement.decaissement.especes_disponibles
+            "
+            :solde-especes="
+                regularisation_remboursement.decaissement.solde_especes
+            "
+            :processing="remboursementProcessing"
+            :errors="remboursementErrors"
+            @submit="rembourserTropPercu"
+        />
+
+        <Dialog
+            :visible="ecartEnCours !== null"
+            modal
+            header="Marquer l'écart comme régularisé"
+            :style="{ width: 'min(520px, calc(100vw - 2rem))' }"
+            :closable="!ecartProcessing"
+            @update:visible="
+                (v: boolean) => !v && !ecartProcessing && (ecartEnCours = null)
+            "
+        >
+            <div v-if="ecartEnCours" class="space-y-3 text-sm">
+                <p>
+                    {{ ecartEnCours.beneficiaire ?? 'Bénéficiaire' }} —
+                    {{ ecartEnCours.sens_label }} :
+                    <strong>{{
+                        formatGNF(Math.abs(ecartEnCours.ecart))
+                    }}</strong>
+                </p>
+                <p class="text-muted-foreground">
+                    Décrivez comment le trop-perçu a été récupéré (retenue,
+                    remboursement par le bénéficiaire…). Aucun montant ni aucun
+                    paiement n'est modifié.
+                </p>
+                <label for="ecart-commentaire" class="font-medium">
+                    Commentaire <span class="text-red-600">*</span>
+                </label>
+                <Textarea
+                    id="ecart-commentaire"
+                    v-model="ecartCommentaire"
+                    rows="3"
+                    maxlength="2000"
+                    class="w-full"
+                    :disabled="ecartProcessing"
+                />
+                <p v-if="ecartErreur" class="text-red-600 dark:text-red-400">
+                    {{ ecartErreur }}
+                </p>
+            </div>
+            <template #footer>
+                <Button
+                    variant="outline"
+                    :disabled="ecartProcessing"
+                    @click="ecartEnCours = null"
+                >
+                    Annuler
+                </Button>
+                <Button
+                    :disabled="
+                        ecartProcessing || ecartCommentaire.trim().length < 10
+                    "
+                    @click="marquerEcartRegularise"
+                >
+                    <span
+                        v-if="ecartProcessing"
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    Marquer régularisé
+                </Button>
+            </template>
+        </Dialog>
 
         <!-- Dialog Annulation exceptionnelle (commande saisie par erreur) -->
         <AnnulationExceptionnelleDialog

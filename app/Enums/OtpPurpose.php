@@ -26,4 +26,6 @@ enum OtpPurpose: string
     case ANNULATION_EXCEPTIONNELLE = 'annulation_exceptionnelle';
     /** Confirmation renforcée de l'annulation d'une précommande en préparation ou préparée (ADR 0019, D1). */
     case ANNULATION_PRECOMMANDE = 'annulation_precommande';
+    /** Confirmation d'une régularisation de vente après encaissement (ADR 0043). */
+    case REGULARISATION_VENTE = 'regularisation_vente';
 }

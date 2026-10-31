@@ -32,6 +32,11 @@ use Illuminate\Validation\ValidationException;
  *
  * Contrôle strict, sans exception de rôle : la capacité d'un véhicule ne peut jamais être
  * dépassée, quel que soit l'utilisateur.
+ *
+ * Capacité obligatoire (ADR 0042) : une catégorie marquée `capacite_vehicule_obligatoire` ne peut
+ * être VENDUE avec un véhicule que si ce véhicule a une capacité configurée pour elle — l'absence
+ * de plafond n'y vaut plus « illimité » mais « vente refusée ». Les transferts logistiques ne sont
+ * pas concernés (l'appelant décide via `$exigerCapaciteObligatoire`).
  */
 class VehiculeCapaciteService
 {
@@ -99,10 +104,11 @@ class VehiculeCapaciteService
         array $lignes,
         string $qteKey,
         bool $exigerChargementComplet,
+        bool $exigerCapaciteObligatoire = false,
     ): void {
         $capacitesParCategorie = $this->capacitesParCategorie($vehicule);
 
-        if ($capacitesParCategorie->isEmpty()) {
+        if ($capacitesParCategorie->isEmpty() && ! $exigerCapaciteObligatoire) {
             return;
         }
 
@@ -120,9 +126,14 @@ class VehiculeCapaciteService
             $qteParCategorie[$categorieId] = ($qteParCategorie[$categorieId] ?? 0) + (int) ($ligne[$qteKey] ?? 0);
         }
 
+        if ($exigerCapaciteObligatoire) {
+            $this->verifierCapacitesObligatoires($vehicule, $capacitesParCategorie, $qteParCategorie);
+        }
+
         foreach ($qteParCategorie as $categorieId => $qte) {
             $max = $capacitesParCategorie->get($categorieId);
-            // Catégorie vendue mais sans plafond configuré pour ce véhicule : illimité.
+            // Catégorie vendue sans plafond configuré pour ce véhicule (et non obligatoire) :
+            // illimité.
             if ($max === null) {
                 continue;
             }
@@ -141,5 +152,69 @@ class VehiculeCapaciteService
                 ]);
             }
         }
+    }
+
+    /**
+     * Catégories exigeant une capacité (ADR 0042) pour lesquelles CE véhicule n'en a aucune —
+     * ce véhicule ne peut pas vendre leurs produits tant qu'elles ne sont pas configurées.
+     *
+     * @return array<int, array{categorie_id: string, categorie_nom: string}>
+     */
+    public function capacitesObligatoiresManquantes(Vehicule $vehicule): array
+    {
+        $configurees = $this->capacitesParCategorie($vehicule)->keys()->all();
+
+        return $this->categoriesObligatoires($vehicule->organization_id)
+            ->reject(fn (Categorie $c) => in_array($c->id, $configurees, true))
+            ->map(fn (Categorie $c) => ['categorie_id' => $c->id, 'categorie_nom' => $c->nom])
+            ->values()
+            ->all();
+    }
+
+    /** @var array<string, Collection<int, Categorie>> */
+    private array $categoriesObligatoiresParOrg = [];
+
+    /** @return Collection<int, Categorie> */
+    private function categoriesObligatoires(string $orgId): Collection
+    {
+        return $this->categoriesObligatoiresParOrg[$orgId] ??= Categorie::query()
+            ->where('organization_id', $orgId)
+            ->where('capacite_vehicule_obligatoire', true)
+            ->orderBy('nom')
+            ->get(['id', 'nom']);
+    }
+
+    /**
+     * @param  Collection<string, int>  $capacitesParCategorie
+     * @param  array<string, int>  $qteParCategorie
+     *
+     * @throws ValidationException
+     */
+    private function verifierCapacitesObligatoires(Vehicule $vehicule, Collection $capacitesParCategorie, array $qteParCategorie): void
+    {
+        $vendues = array_keys(array_filter($qteParCategorie, fn (int $qte) => $qte > 0));
+        if ($vendues === []) {
+            return;
+        }
+
+        $manquantes = Categorie::query()
+            ->whereIn('id', $vendues)
+            ->where('capacite_vehicule_obligatoire', true)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->reject(fn (Categorie $c) => $capacitesParCategorie->has($c->id));
+
+        if ($manquantes->isEmpty()) {
+            return;
+        }
+
+        $noms = $manquantes->map(fn (Categorie $c) => "« {$c->nom} »")->implode(', ');
+        $pluriel = $manquantes->count() > 1;
+
+        throw ValidationException::withMessages([
+            'lignes' => "Le véhicule « {$vehicule->nom_vehicule} » n'a pas de capacité maximale configurée pour {$noms}"
+                .($pluriel ? " : ces catégories l'exigent" : " : cette catégorie l'exige")
+                .' pour vendre. Renseignez-la dans la fiche du véhicule (Modifier → Capacités maximales de chargement).',
+        ]);
     }
 }

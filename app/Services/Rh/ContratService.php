@@ -29,6 +29,14 @@ class ContratService
         return DB::transaction(function () use ($data, $organizationId) {
             $employe = $this->verrouillerEmploye($data['employe_id'], $organizationId);
             $this->assertAucunAutreContratActif($employe->id);
+            $this->assertPasDeChevauchement($employe->id, $data['date_debut'], $data['date_fin'] ?? null);
+
+            // Date d'embauche du dossier : reprise du premier contrat quand elle n'est pas encore
+            // connue (elle n'est plus saisie à la création de l'employé). Une date déjà renseignée
+            // (ancienneté antérieure, import) n'est jamais modifiée ici.
+            if ($employe->date_embauche === null) {
+                $employe->update(['date_embauche' => $data['date_debut']]);
+            }
 
             return Contrat::create([
                 ...$data,
@@ -36,6 +44,31 @@ class ContratService
                 'statut_contrat' => StatutContrat::ACTIF->value,
             ]);
         });
+    }
+
+    /**
+     * Deux contrats d'un même employé ne peuvent pas couvrir les mêmes jours : la paie les refuse
+     * (anomalie bloquante « contrats_chevauchants »), la saisie les refuse donc dès l'enregistrement.
+     * Un contrat terminé ou rompu sans date de fin n'a pas de période connue : il est ignoré,
+     * comme dans la paie.
+     */
+    public function assertPasDeChevauchement(string $employeId, string $dateDebut, ?string $dateFin, ?string $saufContratId = null): void
+    {
+        $autre = Contrat::where('employe_id', $employeId)
+            ->when($saufContratId, fn ($q) => $q->whereKeyNot($saufContratId))
+            ->where(fn ($q) => $q->where('statut_contrat', StatutContrat::ACTIF->value)->orWhereNotNull('date_fin'))
+            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $dateDebut))
+            ->when($dateFin !== null, fn ($q) => $q->whereDate('date_debut', '<=', $dateFin))
+            ->orderBy('date_debut')
+            ->lockForUpdate()
+            ->first();
+
+        if ($autre !== null) {
+            $periode = 'du '.$autre->date_debut->format('d/m/Y').($autre->date_fin ? ' au '.$autre->date_fin->format('d/m/Y') : ', sans date de fin');
+            throw ValidationException::withMessages([
+                'date_debut' => "Ces dates chevauchent un autre contrat de cet employé ({$autre->type_contrat->label()} {$periode}).",
+            ]);
+        }
     }
 
     /** Employé de l'organisation, verrouillé jusqu'à la fin de la transaction (404 sinon). */

@@ -270,6 +270,9 @@ final class CommandeVenteFormBuilder
             // (VehiculeCapaciteService::capacitesParCategorie), pour que le frontend affiche
             // exactement ce que le backend va vérifier. Vide = véhicule non limité.
             'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
+            // Catégories dont la vente exige une capacité que ce véhicule n'a pas (ADR 0042) —
+            // le serveur refusera toute vente de leurs produits avec ce véhicule.
+            'capacites_manquantes' => $this->vehiculeCapaciteService->capacitesObligatoiresManquantes($v),
             'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
             'chauffeur_indisponible_motif' => $this->motifChauffeurIndisponible($v),
             'livreur_telephone' => $v->equipe?->membres
@@ -508,6 +511,7 @@ final class CommandeVenteFormBuilder
             $data['lignes'] ?? [],
             'qte',
             ! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
+            exigerCapaciteObligatoire: true,
         );
     }
 

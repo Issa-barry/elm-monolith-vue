@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Rh\TypesRemuneration;
 
-use App\Enums\CategorieTypeRemuneration;
 use App\Enums\ModeCalculRemuneration;
 use App\Enums\NatureMontantRemuneration;
 use App\Enums\PeriodiciteRemuneration;
@@ -66,7 +65,6 @@ class IndexTypeRemunerationController extends Controller
 
         return Inertia::render('TypesRemuneration/Index', [
             'types' => $types,
-            'categories' => CategorieTypeRemuneration::options(),
             'modes_calcul' => ModeCalculRemuneration::options(),
             'periodicites' => PeriodiciteRemuneration::options(),
             'natures_montant' => NatureMontantRemuneration::options(),

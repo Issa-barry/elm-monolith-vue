@@ -34,6 +34,7 @@ class UpdateCategorieRequest extends FormRequest
                 Rule::notIn($interdits),
             ],
             'position' => ['nullable', 'integer', 'min:0'],
+            'capacite_vehicule_obligatoire' => ['sometimes', 'boolean'],
         ];
     }
 

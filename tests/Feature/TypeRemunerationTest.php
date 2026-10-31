@@ -88,7 +88,6 @@ class TypeRemunerationTest extends TestCase
         return [
             'libelle' => 'Prime de transport',
             'description' => 'Versée aux salariés qui se déplacent.',
-            'categorie' => 'prime',
             'mode_calcul' => 'montant_fixe',
             'periodicite' => 'mensuelle',
             'nature_montant' => 'fixe',
@@ -324,11 +323,45 @@ class TypeRemunerationTest extends TestCase
         $this->creer(['code' => '---'])->assertSessionHasErrors('code');
     }
 
+    // ── Une seule catégorie : Prime (ADR 0046, 31/10/2026) ────────────────────
+
+    public function test_toute_creation_est_une_prime_quelle_que_soit_la_valeur_envoyee(): void
+    {
+        $this->creer(['categorie' => 'avantage_nature'])->assertSessionHasNoErrors();
+
+        $type = TypeRemuneration::sole();
+        $this->assertSame('prime', $type->categorie->value);
+        $this->assertFalse($type->categorie->estValorise());
+    }
+
+    public function test_un_ancien_type_garde_sa_categorie_et_son_traitement_a_la_modification(): void
+    {
+        $super = $this->superAdmin();
+        $avantage = $this->type(['code' => 'LOGEMENT', 'libelle' => 'Logement fourni', 'categorie' => 'avantage_nature', 'statut' => 'actif']);
+        $indemnite = $this->type(['code' => 'TRANSPORT', 'libelle' => 'Indemnité de transport', 'categorie' => 'indemnite', 'statut' => 'actif']);
+
+        foreach ([$avantage, $indemnite] as $type) {
+            $this->actingAs($super)->from(route('types-remuneration.index'))
+                ->put(route('types-remuneration.update', $type), [
+                    'libelle' => $type->libelle.' (revu)', 'categorie' => 'prime', 'mode_calcul' => 'montant_fixe',
+                    'periodicite' => 'mensuelle', 'nature_montant' => 'variable',
+                ])->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame('avantage_nature', $avantage->fresh()->categorie->value);
+        $this->assertTrue($avantage->fresh()->categorie->estValorise());
+        $this->assertSame('indemnite', $indemnite->fresh()->categorie->value);
+        $this->assertSame('Logement fourni (revu)', $avantage->fresh()->libelle);
+
+        $this->actingAs($this->user)->get(route('types-remuneration.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('types', fn ($types) => collect($types)
+                ->contains(fn ($t) => $t['code'] === 'LOGEMENT' && $t['valorise'] === true && $t['categorie'] === 'avantage_nature')));
+    }
+
     // ── Règles de saisie ──────────────────────────────────────────────────────
 
     public function test_regles_de_saisie(): void
     {
-        $this->creer(['categorie' => 'salaire'])->assertSessionHasErrors('categorie');
         $this->creer(['mode_calcul' => 'pourcentage_salaire_base', 'taux_defaut' => 120])->assertSessionHasErrors('taux_defaut');
         $this->creer(['montant_defaut' => 0])->assertSessionHasErrors('montant_defaut');
         $this->creer(['date_debut_application' => '2026-12-01', 'date_fin_application' => '2026-11-30'])
@@ -537,7 +570,7 @@ class TypeRemunerationTest extends TestCase
                 ->where('types.0.code', 'PRIME_DE_TRANSPORT')
                 ->where('types.0.statut', 'actif')
                 ->where('types.0.attribuable', true)
-                ->has('categories', 4)
+                ->missing('categories')
                 ->has('statuts', 4));
 
         $historique = $this->actingAs($this->user)->getJson(route('types-remuneration.historique', $type))

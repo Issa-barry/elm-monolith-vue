@@ -88,6 +88,18 @@
     .totaux .cle { padding-right: 42px; font-weight: 600; white-space: nowrap; }
     .totaux .val { font-weight: 400; text-align: right; white-space: nowrap; }
 
+    .intitule { margin: 0 0 21px; font-size: 15.75px; font-weight: 600; text-align: center; color: #0f172a; }
+    .article { margin-bottom: 14px; }
+    .article-titre { margin-bottom: 7px; font-weight: 600; color: #0f172a; page-break-after: avoid; }
+    .article p { margin: 0 0 7px; line-height: 1.5; text-align: justify; }
+
+    .signatures { width: 100%; table-layout: fixed; margin-top: 21px; page-break-inside: avoid; }
+    .signatures > tbody > tr > td { padding: 0; vertical-align: top; }
+    .signatures > tbody > tr > td.suivante { padding-left: 28px; }
+    .signature-titre { margin-bottom: 7px; font-weight: 600; }
+    .signature-zone { height: 64px; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
+    .signature-zone p { margin: 0; font-size: 10.5px; color: #64748b; }
+
     .encadre { margin-top: 42px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 6px; page-break-inside: avoid; }
     .encadre-titre { margin-bottom: 7px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
     .encadre p { margin: 0 0 4px; }

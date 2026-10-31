@@ -3,6 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import MontantInput from '@/components/MontantInput.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -139,7 +140,6 @@ const props = defineProps<{
     sites: { id: string; nom: string }[];
     employes: EmployeOption[];
     types: TypeOption[];
-    categories: Option[];
     etats: Option[];
 }>();
 
@@ -184,12 +184,6 @@ const filterFields = computed((): FilterField[] => [
         type: 'select',
         options: props.types.map((t) => ({ value: t.value, label: t.label })),
         searchable: true,
-    },
-    {
-        key: 'categorie',
-        label: 'Catégorie',
-        type: 'select',
-        options: props.categories,
     },
     {
         key: 'periode',
@@ -334,17 +328,7 @@ function valeurSaisie(a: Affectation, s: Saisie): string {
         : `${formatGnf.format(s.montant ?? 0)} GNF`;
 }
 
-// Catégorie (pas un statut) : fond coloré autorisé.
-const categorieColors: Record<string, string> = {
-    prime: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    indemnite: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
-    allocation:
-        'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-    avantage_nature:
-        'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-};
-
-function nombreOuNull(valeur: string | number): number | null {
+function nombreOuNull(valeur: string | number | null): number | null {
     return valeur === '' || valeur === null ? null : Number(valeur);
 }
 
@@ -373,7 +357,7 @@ const form = useForm({
     date_debut: '',
     date_fin: '',
     mois_versement: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -495,7 +479,7 @@ const changement = ref<Affectation | null>(null);
 const formChangement = useForm({
     date_effet: '',
     date_fin: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -569,7 +553,7 @@ function enregistrerFin(valider: boolean) {
 const saisiesDe = ref<Affectation | null>(null);
 const formSaisie = useForm({
     mois: '',
-    montant: '' as string | number,
+    montant: '' as string | number | null,
     taux: '' as string | number,
     commentaire: '',
     valider: false,
@@ -820,19 +804,10 @@ const champSelect =
                             <p class="flex flex-wrap items-center gap-2">
                                 {{ data.type.libelle }}
                                 <span
-                                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                    :class="
-                                        categorieColors[data.type.categorie] ??
-                                        'bg-muted text-muted-foreground'
-                                    "
-                                    >{{ data.type.categorie_label }}</span
+                                    v-if="data.type.valorise"
+                                    class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                                    >Avantage en nature · hors net à payer</span
                                 >
-                            </p>
-                            <p
-                                v-if="data.type.valorise"
-                                class="text-[11px] text-muted-foreground"
-                            >
-                                Valorisé, hors net à payer
                             </p>
                             <p
                                 v-if="data.est_changement"
@@ -1088,7 +1063,8 @@ const champSelect =
                             :key="t.value"
                             :value="t.value"
                         >
-                            {{ t.label }} ({{ t.categorie_label }})
+                            {{ t.label
+                            }}{{ t.valorise ? ' (avantage en nature)' : '' }}
                         </option>
                     </select>
                     <p
@@ -1211,12 +1187,10 @@ const champSelect =
                         Montant attribué (GNF, par mois)
                         <span class="text-destructive">*</span>
                     </Label>
-                    <Input
+                    <MontantInput
                         id="af-montant"
-                        v-model.number="form.montant"
-                        type="number"
-                        min="0"
-                        step="1"
+                        v-model="form.montant"
+                        class="h-9"
                     />
                     <p
                         v-if="form.errors.montant"
@@ -1404,12 +1378,10 @@ const champSelect =
                     Nouveau montant (GNF, par mois)
                     <span class="text-destructive">*</span>
                 </Label>
-                <Input
+                <MontantInput
                     id="ch-montant"
-                    v-model.number="formChangement.montant"
-                    type="number"
-                    min="0"
-                    step="1"
+                    v-model="formChangement.montant"
+                    class="h-9"
                 />
                 <p
                     v-if="formChangement.errors.montant"
@@ -1704,12 +1676,10 @@ const champSelect =
                             Montant du mois (GNF)
                             <span class="text-destructive">*</span>
                         </Label>
-                        <Input
+                        <MontantInput
                             id="sa-montant"
-                            v-model.number="formSaisie.montant"
-                            type="number"
-                            min="0"
-                            step="1"
+                            v-model="formSaisie.montant"
+                            class="h-9"
                         />
                         <p
                             v-if="formSaisie.errors.montant"

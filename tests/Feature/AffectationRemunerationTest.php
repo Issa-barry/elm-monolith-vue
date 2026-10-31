@@ -581,9 +581,9 @@ class AffectationRemunerationTest extends TestCase
             ->delete(route('types-remuneration.destroy', $type))->assertSessionHasErrors('type');
         $this->actingAs($super)->from(route('types-remuneration.index'))
             ->put(route('types-remuneration.update', $type), [
-                'libelle' => $type->libelle, 'categorie' => 'indemnite', 'mode_calcul' => 'montant_fixe',
+                'libelle' => $type->libelle, 'mode_calcul' => 'pourcentage_salaire_base',
                 'periodicite' => 'mensuelle', 'nature_montant' => 'fixe',
-            ])->assertSessionHasErrors('categorie');
+            ])->assertSessionHasErrors('mode_calcul');
         $this->assertTrue(TypeRemuneration::whereKey($type->id)->exists());
     }
 
@@ -663,7 +663,7 @@ class AffectationRemunerationTest extends TestCase
 
     // ── Liste, filtres, historique ────────────────────────────────────────────
 
-    public function test_la_liste_filtre_par_salarie_type_categorie_et_periode(): void
+    public function test_la_liste_filtre_par_salarie_type_et_periode(): void
     {
         $a = $this->employe();
         $b = $this->employe();
@@ -676,7 +676,6 @@ class AffectationRemunerationTest extends TestCase
 
         $liste(['employe_id' => $a->id])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
         $liste(['type_remuneration_id' => $prime->id])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
-        $liste(['categorie' => 'avantage_nature'])->assertInertia(fn (Assert $p) => $p->has('affectations', 1));
         $liste(['periode_du' => '2026-11-01', 'periode_au' => '2026-11-30'])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
         $liste(['etat' => 'terminee'])->assertInertia(fn (Assert $p) => $p->has('affectations', 1)->where('affectations.0.etat', 'terminee'));
         $liste(['site_ids' => [$this->site->id]])->assertInertia(fn (Assert $p) => $p->has('affectations', 3));

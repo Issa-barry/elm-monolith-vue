@@ -419,6 +419,34 @@ class ContratTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('contrat.salaire_base', fn ($v) => (float) $v === 3_000_000.0));
     }
 
+    /**
+     * Le champ formaté (« 750 500 ») envoie un nombre propre ; un champ vidé envoie null. Un texte
+     * avec séparateurs n'est jamais accepté tel quel par le serveur.
+     */
+    public function test_le_salaire_est_recu_comme_un_nombre_sans_separateur(): void
+    {
+        Permission::firstOrCreate(['name' => 'rh-remunerations.read', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('rh-remunerations.read');
+        $employe = $this->makeEmploye();
+        $donnees = ['employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-01'];
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [...$donnees, 'salaire_base' => '750 000'])
+            ->assertSessionHasErrors('salaire_base');
+        $this->assertSame(0, Contrat::where('employe_id', $employe->id)->count());
+
+        $this->actingAs($this->user)
+            ->post(route('contrats.store'), [...$donnees, 'salaire_base' => 750_500])
+            ->assertSessionHasNoErrors();
+        $contrat = Contrat::where('employe_id', $employe->id)->sole();
+        $this->assertEquals(750_500, (float) $contrat->salaire_base);
+
+        $this->actingAs($this->user)
+            ->put(route('contrats.update', $contrat), [...$donnees, 'salaire_base' => null])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($contrat->fresh()->salaire_base);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_modifies_contrat(): void

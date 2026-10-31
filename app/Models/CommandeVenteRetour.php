@@ -17,11 +17,21 @@ class CommandeVenteRetour extends Model
 {
     use HasUlids;
 
+    /** Retour de livraison avant encaissement (cf. CommandeVenteRetourService). */
+    public const NATURE_RETOUR_LIVRAISON = 'retour_livraison';
+
+    /**
+     * Quantité retirée par une régularisation après encaissement (ADR 0043) : mêmes effets sur la
+     * quantité livrée, le stock et la comptabilité, mais ce n'est pas un retour de marchandise.
+     */
+    public const NATURE_REGULARISATION = 'regularisation';
+
     protected $table = 'commande_vente_retours';
 
     protected $fillable = [
         'organization_id',
         'commande_vente_id',
+        'nature',
         'motif',
         'commentaire',
         'quantite_totale',
