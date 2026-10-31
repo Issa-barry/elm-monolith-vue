@@ -109,6 +109,17 @@ Limitées aux agences de l'utilisateur (agence actuelle de l'employé), sauf vis
 agences (ADR 0025) ; un employé sans agence n'apparaît qu'à ces derniers. Filtre Agence
 (`site_ids[]`), plus filtre Service pour les employés.
 
+**Fiche et contrats (31/10/2026)** : même cloisonnement en accès direct, vérifié par le serveur
+(`App\Support\Rh\PerimetreEmploye`, règle unique aussi utilisée par les primes et le départ) :
+- consulter la fiche : agences de rattachement, ou vision de toutes les agences ;
+- modifier, transférer, supprimer l'employé, créer, modifier ou supprimer ses contrats : agences de
+  rattachement, sauf administrateur ou superviseur (ADR 0034) — la vision de toutes les agences
+  n'ouvre que la lecture ;
+- toujours limité à l'organisation, super administrateur compris.
+Les boutons Modifier / Supprimer / Nouveau contrat de la liste et de la fiche suivent la même règle
+(`dans_perimetre_ecriture` calculé par le serveur). Le formulaire de création de contrat ne propose
+que les salariés actifs des agences de rattachement.
+
 ## Modification
 
 - Effacer le téléphone est refusé quand la Personne porte aussi un compte, ou est aussi client,

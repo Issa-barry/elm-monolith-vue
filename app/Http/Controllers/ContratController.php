@@ -9,6 +9,7 @@ use App\Models\Employe;
 use App\Models\Site;
 use App\Services\Rh\ContratService;
 use App\Services\SiteScopeService;
+use App\Support\Rh\PerimetreEmploye;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,9 +80,12 @@ class ContratController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
+        // Salariés actifs des agences de rattachement : ceux pour qui la création serait acceptée.
+        $user = auth()->user();
         $employes = Employe::with('personne')
             ->where('organization_id', $orgId)
             ->where('statut', 'actif')
+            ->when(! $user->agitSurToutesLesAgences(), fn ($q) => $q->whereIn('site_id', app(SiteScopeService::class)->assignedSiteIds($user)))
             ->get(['id', 'personne_id', 'matricule'])
             ->sortBy('nom')
             ->map(fn ($e) => [
@@ -105,6 +109,7 @@ class ContratController extends Controller
         abort_if(! $orgId, 403);
 
         $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
+        $this->exigerPerimetre(Employe::where('organization_id', $orgId)->find($data['employe_id']));
 
         // Règle « un seul contrat actif », sous verrou de l'employé : commune avec l'import RH.
         $contrat = app(ContratService::class)->creer($data, $orgId);
@@ -116,6 +121,7 @@ class ContratController extends Controller
     public function edit(Contrat $contrat): Response
     {
         $this->authorize('update', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         $orgId = auth()->user()->organization_id;
 
@@ -139,12 +145,14 @@ class ContratController extends Controller
     public function update(Request $request, Contrat $contrat): RedirectResponse
     {
         $this->authorize('update', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         // Organisation du contrat, pas celle de l'acteur : le Gate::before du super administrateur
         // laisse passer la Policy, l'employé cible doit rester dans l'organisation du contrat.
         $orgId = $contrat->organization_id;
 
         $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
+        $this->exigerPerimetre(Employe::where('organization_id', $orgId)->find($data['employe_id']));
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
@@ -164,6 +172,10 @@ class ContratController extends Controller
             $statutFinal = $data['statut_contrat'] ?? $contrat->statut_contrat->value;
             if ($statutFinal === StatutContrat::ACTIF->value) {
                 $contrats->assertAucunAutreContratActif($employe->id, $contrat->id);
+                // Réactiver un contrat d'un salarié sorti équivaudrait à une réembauche non définie.
+                if ($contrat->statut_contrat !== StatutContrat::ACTIF) {
+                    $contrats->assertPasSorti($employe);
+                }
             }
             // Un contrat terminé sans date de fin n'a pas de période connue (ignoré comme dans la paie).
             if ($statutFinal === StatutContrat::ACTIF->value || ($data['date_fin'] ?? null) !== null) {
@@ -180,12 +192,22 @@ class ContratController extends Controller
     public function destroy(Contrat $contrat): RedirectResponse
     {
         $this->authorize('delete', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         $employeId = $contrat->employe_id;
         $contrat->delete();
 
         return redirect()->route('employes.edit', $employeId)
             ->with('success', 'Contrat supprimé.');
+    }
+
+    /**
+     * Créer, modifier ou supprimer un contrat : salarié d'une agence de rattachement (PerimetreEmploye),
+     * comme la fiche employé. Un employé introuvable est laissé à ContratService (404).
+     */
+    private function exigerPerimetre(?Employe $employe): void
+    {
+        abort_if($employe !== null && ! PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
     }
 
     /**

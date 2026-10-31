@@ -496,12 +496,13 @@ class TypeRemunerationTest extends TestCase
             ->assertSessionHasErrors('type');
         $this->assertNotNull($type->fresh());
 
-        // Libellé et description restent modifiables ; le mode de calcul est figé.
+        // Le code reste figé. Révision du 31/10/2026 : le mode de calcul ne l'est plus quand aucune
+        // attribution ne porte sur un mois ouvert (cas ici) — cf. AffectationRemunerationTest.
         $this->actingAs($super)->from(route('types-remuneration.index'))
             ->put(route('types-remuneration.update', $type), $this->donnees([
-                'libelle' => 'Prime de rendement', 'nature_montant' => 'variable', 'mode_calcul' => 'pourcentage_salaire_base',
+                'libelle' => 'Prime de rendement', 'nature_montant' => 'variable', 'code' => 'AUTRE_CODE',
             ]))
-            ->assertSessionHasErrors('mode_calcul');
+            ->assertSessionHasErrors('code');
         $this->actingAs($super)->from(route('types-remuneration.index'))
             ->put(route('types-remuneration.update', $type), $this->donnees([
                 'libelle' => 'Prime de rendement mensuelle', 'nature_montant' => 'variable', 'code' => '',

@@ -42,6 +42,8 @@ interface ContratActif {
 
 interface Employe {
     id: string;
+    // Modifier / supprimer / nouveau contrat : agence de rattachement (calculé par le serveur).
+    dans_perimetre_ecriture: boolean;
     matricule: string | null;
     nom_complet: string;
     nom: string;
@@ -416,7 +418,10 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="can('rh-employes.update')"
+                                            v-if="
+                                                can('rh-employes.update') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -429,7 +434,11 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="can('rh-contrats.create')"
+                                            v-if="
+                                                can('rh-contrats.create') &&
+                                                data.dans_perimetre_ecriture &&
+                                                data.statut !== 'sorti'
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -442,10 +451,16 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
-                                            v-if="can('rh-employes.delete')"
+                                            v-if="
+                                                can('rh-employes.delete') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('rh-employes.delete')"
+                                            v-if="
+                                                can('rh-employes.delete') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

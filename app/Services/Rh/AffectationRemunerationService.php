@@ -17,6 +17,7 @@ use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\Rh\Paie\CalendrierPaieService;
+use App\Support\Rh\PerimetreEmploye;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -576,10 +577,7 @@ class AffectationRemunerationService
         if ($employe->organization_id !== $this->organisationDe($acteur)) {
             throw new AuthorizationException;
         }
-        if ($acteur->agitSurToutesLesAgences()) {
-            return;
-        }
-        if ($employe->site_id === null || ! $acteur->sites()->whereKey($employe->site_id)->exists()) {
+        if (! PerimetreEmploye::peutModifier($acteur, $employe)) {
             throw new AuthorizationException('Ce salarié n\'est pas rattaché à l\'une de vos agences.');
         }
     }
@@ -587,14 +585,7 @@ class AffectationRemunerationService
     /** Consultation : agences consultables (vision 360° comprise, ADR 0025). */
     public static function peutConsulter(Employe $employe, User $user): bool
     {
-        if ($employe->organization_id !== $user->organization_id) {
-            return false;
-        }
-        if ($user->voitToutesLesAgences()) {
-            return true;
-        }
-
-        return $employe->site_id !== null && $user->sites()->whereKey($employe->site_id)->exists();
+        return PerimetreEmploye::peutConsulter($user, $employe);
     }
 
     private function appliquerValidation(AffectationRemuneration $affectation, User $acteur): AffectationRemuneration

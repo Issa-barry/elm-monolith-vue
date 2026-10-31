@@ -90,6 +90,8 @@ interface EmployeData {
     compte: CompteInfo | null;
     // Enregistrer / annuler le départ : calculé par le serveur (permissions, organisation, agence).
     peut_gerer_depart: boolean;
+    // Modifier, nouveau contrat : agence de rattachement (calculé par le serveur).
+    dans_perimetre_ecriture: boolean;
 }
 
 interface PrimeRow {
@@ -199,7 +201,10 @@ function dateFr(iso: string | null): string {
                 <template #actions>
                     <Link
                         v-if="
-                            can('rh-contrats.create') && !employe.contrat_actif
+                            can('rh-contrats.create') &&
+                            !employe.contrat_actif &&
+                            employe.statut !== 'sorti' &&
+                            employe.dans_perimetre_ecriture
                         "
                         :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                     >
@@ -235,7 +240,10 @@ function dateFr(iso: string | null): string {
                         Annuler le départ
                     </Button>
                     <Link
-                        v-if="can('rh-employes.update')"
+                        v-if="
+                            can('rh-employes.update') &&
+                            employe.dans_perimetre_ecriture
+                        "
                         :href="`/backoffice/employes/${employe.id}/edit`"
                     >
                         <Button size="sm">
@@ -555,6 +563,16 @@ function dateFr(iso: string | null): string {
                                 Contrats
                             </h3>
                         </div>
+                        <p
+                            v-if="employe.statut === 'sorti'"
+                            class="border-b bg-muted/40 px-5 py-3 text-xs text-muted-foreground"
+                            data-testid="reembauche-non-definie"
+                        >
+                            Salarié sorti : aucun nouveau contrat ne peut lui
+                            être créé tant qu'une procédure de réembauche n'est
+                            pas définie. « Annuler le départ » reste possible si
+                            le départ a été enregistré par erreur.
+                        </p>
                         <div
                             v-if="employe.contrats.length === 0"
                             class="p-8 text-center text-sm text-muted-foreground"
@@ -608,7 +626,10 @@ function dateFr(iso: string | null): string {
                                     </p>
                                 </div>
                                 <Link
-                                    v-if="can('rh-contrats.update')"
+                                    v-if="
+                                        can('rh-contrats.update') &&
+                                        employe.dans_perimetre_ecriture
+                                    "
                                     :href="`/backoffice/contrats/${c.id}/edit`"
                                 >
                                     <Button
