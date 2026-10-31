@@ -2,11 +2,13 @@
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import { type NationaliteOption } from '@/components/rh/NationaliteSelect.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { lienVersFormulaire } from '@/lib/contactUrgence';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -66,7 +68,7 @@ interface EmployeData {
     motif_sortie: string | null;
     date_naissance: string | null;
     lieu_naissance: string | null;
-    sexe: string | null;
+    civilite: string | null;
     nationalite: string | null;
     contact_urgence_nom: string | null;
     contact_urgence_lien: string | null;
@@ -74,10 +76,6 @@ interface EmployeData {
     // null sans la permission rh-employes.donnees_sensibles (jamais envoyé)
     donnees_sensibles: {
         numero_cnss: string | null;
-        paiement_mode: string | null;
-        paiement_etablissement: string | null;
-        paiement_numero_compte: string | null;
-        paiement_titulaire: string | null;
     } | null;
     contrats: ContratRow[];
     contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
@@ -91,7 +89,9 @@ const props = defineProps<{
     sites: Option[];
     fonctions: Option[];
     services: Option[];
-    mode_paiement_options: Option[];
+    civilite_options: Option[];
+    nationalite_options: NationaliteOption[];
+    lien_contact_options: Option[];
 }>();
 
 const { can } = usePermissions();
@@ -117,23 +117,17 @@ const form = useForm({
     // Dossier salarié
     service_rh_id: props.employe.service_rh_id ?? null,
     date_embauche: props.employe.date_embauche_iso ?? '',
-    date_sortie: props.employe.date_sortie ?? '',
-    motif_sortie: props.employe.motif_sortie ?? '',
     date_naissance: props.employe.date_naissance ?? '',
     lieu_naissance: props.employe.lieu_naissance ?? '',
-    sexe: props.employe.sexe ?? '',
+    civilite: props.employe.civilite ?? '',
     nationalite: props.employe.nationalite ?? '',
     contact_urgence_nom: props.employe.contact_urgence_nom ?? '',
-    contact_urgence_lien: props.employe.contact_urgence_lien ?? '',
+    ...lienVersFormulaire(
+        props.employe.contact_urgence_lien,
+        props.lien_contact_options,
+    ),
     contact_urgence_telephone: props.employe.contact_urgence_telephone ?? '',
     numero_cnss: props.employe.donnees_sensibles?.numero_cnss ?? '',
-    paiement_mode: props.employe.donnees_sensibles?.paiement_mode ?? '',
-    paiement_etablissement:
-        props.employe.donnees_sensibles?.paiement_etablissement ?? '',
-    paiement_numero_compte:
-        props.employe.donnees_sensibles?.paiement_numero_compte ?? '',
-    paiement_titulaire:
-        props.employe.donnees_sensibles?.paiement_titulaire ?? '',
 });
 
 function submit() {
@@ -172,7 +166,7 @@ function deleteContrat(c: ContratRow) {
         ><title>{{ employe.prenom }} {{ employe.nom }}</title></Head
     >
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="mx-auto w-full max-w-7xl p-4 sm:p-6">
             <!-- Header -->
             <div class="mb-6 flex items-start justify-between">
                 <div class="flex items-center gap-4">
@@ -334,8 +328,22 @@ function deleteContrat(c: ContratRow) {
                                     :options="statut_options"
                                     option-label="label"
                                     option-value="value"
+                                    :disabled="employe.statut === 'sorti'"
                                     class="w-full"
                                 />
+                                <p
+                                    v-if="employe.statut === 'sorti'"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Salarié sorti : « Annuler le départ » sur sa
+                                    fiche le rétablit.
+                                </p>
+                                <p
+                                    v-if="form.errors.statut"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.statut }}
+                                </p>
                             </div>
                             <div>
                                 <label class="mb-1.5 block text-sm font-medium"
@@ -375,7 +383,9 @@ function deleteContrat(c: ContratRow) {
                     <EmployeDossierFields
                         v-model:form="form"
                         :services="services"
-                        :mode-paiement-options="mode_paiement_options"
+                        :civilite-options="civilite_options"
+                        :nationalite-options="nationalite_options"
+                        :lien-contact-options="lien_contact_options"
                     />
 
                     <!-- Historique d'affectation (site + fonction) -->

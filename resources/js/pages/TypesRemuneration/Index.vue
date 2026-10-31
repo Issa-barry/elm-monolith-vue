@@ -4,6 +4,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import MontantInput from '@/components/MontantInput.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -86,7 +87,6 @@ type ActionStatut = 'valider' | 'fermer' | 'desactiver' | 'reactiver';
 
 const props = defineProps<{
     types: TypeRemuneration[];
-    categories: Option[];
     modes_calcul: Option[];
     periodicites: Option[];
     natures_montant: Option[];
@@ -145,7 +145,6 @@ function aDesActions(t: TypeRemuneration): boolean {
 // « Filtres », comme Dépenses → Types) ─────────────────────────────────────────
 
 const selectedStatut = ref('');
-const selectedCategorie = ref('');
 const selectedTexte = ref('');
 
 const filterFields = computed((): FilterField[] => [
@@ -154,12 +153,6 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select',
         options: props.statuts,
-    },
-    {
-        key: 'categorie',
-        label: 'Catégorie',
-        type: 'select',
-        options: props.categories,
     },
     {
         key: 'texte',
@@ -175,13 +168,11 @@ function premiere(valeur: unknown): string {
 
 function handleApply(values: Record<string, unknown>) {
     selectedStatut.value = premiere(values.statut);
-    selectedCategorie.value = premiere(values.categorie);
     selectedTexte.value = premiere(values.texte);
 }
 
 function resetFilters() {
     selectedStatut.value = '';
-    selectedCategorie.value = '';
     selectedTexte.value = '';
 }
 
@@ -190,8 +181,6 @@ const filtered = computed(() => {
     return props.types.filter(
         (t) =>
             (!selectedStatut.value || t.statut === selectedStatut.value) &&
-            (!selectedCategorie.value ||
-                t.categorie === selectedCategorie.value) &&
             (!texte ||
                 t.libelle.toLowerCase().includes(texte) ||
                 t.code.toLowerCase().includes(texte)),
@@ -234,38 +223,25 @@ function fenetre(t: TypeRemuneration): string {
     return `Jusqu’au ${formatDate(t.date_fin_application)}`;
 }
 
-// Catégorie (pas un statut) : fond coloré autorisé.
-const categorieColors: Record<string, string> = {
-    prime: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    indemnite: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
-    allocation:
-        'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-    avantage_nature:
-        'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-};
-
 // ── Formulaire création / modification ───────────────────────────────────────
 
 const showDialog = ref(false);
 const editingType = ref<TypeRemuneration | null>(null);
 
 const dialogTitle = computed(() =>
-    editingType.value
-        ? 'Modifier le type'
-        : 'Nouveau type de prime ou avantage',
+    editingType.value ? 'Modifier la prime' : 'Nouvelle prime',
 );
 
 const form = useForm({
     libelle: '',
     code: '',
     description: '',
-    categorie: 'prime',
     mode_calcul: 'montant_fixe',
     periodicite: 'mensuelle',
     nature_montant: 'fixe',
     proratisable: false,
     cumul_autorise: false,
-    montant_defaut: '' as string | number,
+    montant_defaut: '' as string | number | null,
     taux_defaut: '' as string | number,
     date_debut_application: '',
     date_fin_application: '',
@@ -283,7 +259,29 @@ const peutEnregistrerEtValider = computed(
         (!editingType.value || editingType.value.statut === 'a_valider'),
 );
 
+// Options avancées : repliées par défaut, ouvertes d'office si l'une d'elles est en erreur.
+const avanceOuvert = ref(false);
+const CHAMPS_AVANCES = [
+    'code',
+    'nature_montant',
+    'date_debut_application',
+    'date_fin_application',
+];
+const erreurAvancee = computed(() =>
+    CHAMPS_AVANCES.some((c) => !!(form.errors as Record<string, string>)[c]),
+);
+
+// Catégorie enregistrée avant la simplification (ADR 0046) : conservée, avec son traitement.
+const categorieHistorique = computed(() => {
+    const t = editingType.value;
+    if (!t || t.categorie === 'prime') return null;
+    return t.valorise
+        ? 'Avantage en nature (catégorie conservée) : valorisé, jamais versé dans le net à payer.'
+        : `Enregistré comme « ${t.categorie_label} » avant la simplification : traité comme une prime, versé en argent.`;
+});
+
 function openCreate() {
+    avanceOuvert.value = false;
     editingType.value = null;
     form.reset();
     form.clearErrors();
@@ -291,12 +289,12 @@ function openCreate() {
 }
 
 function openEdit(t: TypeRemuneration) {
+    avanceOuvert.value = false;
     editingType.value = t;
     form.clearErrors();
     form.libelle = t.libelle;
     form.code = t.code;
     form.description = t.description ?? '';
-    form.categorie = t.categorie;
     form.mode_calcul = t.mode_calcul;
     form.periodicite = t.periodicite;
     form.nature_montant = t.nature_montant;
@@ -310,7 +308,7 @@ function openEdit(t: TypeRemuneration) {
     showDialog.value = true;
 }
 
-function nombreOuNull(valeur: string | number): number | null {
+function nombreOuNull(valeur: string | number | null): number | null {
     return valeur === '' || valeur === null ? null : Number(valeur);
 }
 
@@ -450,7 +448,7 @@ function ouvrirHistorique(t: TypeRemuneration) {
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <HeadingSmall
                         title="Primes et avantages"
-                        description="Les types de primes, indemnités, allocations et avantages en nature de votre organisation. Un type doit être validé avant de pouvoir être attribué à un salarié."
+                        description="Les primes de votre organisation : transport, logement, rendement, ancienneté, exceptionnelle… Une prime doit être validée avant de pouvoir être attribuée à un salarié."
                     />
                     <div class="flex items-center gap-2">
                         <DataFilters
@@ -458,7 +456,6 @@ function ouvrirHistorique(t: TypeRemuneration) {
                             :fields="filterFields"
                             :values="{
                                 statut: selectedStatut,
-                                categorie: selectedCategorie,
                                 texte: selectedTexte,
                             }"
                             :result-count="filtered.length"
@@ -527,6 +524,12 @@ function ouvrirHistorique(t: TypeRemuneration) {
                                         >
                                             {{ data.code }}
                                         </span>
+                                        <span
+                                            v-if="data.valorise"
+                                            class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                                            >Avantage en nature · non
+                                            versé</span
+                                        >
                                     </p>
                                     <p
                                         v-if="data.description"
@@ -535,31 +538,6 @@ function ouvrirHistorique(t: TypeRemuneration) {
                                         {{ data.description }}
                                     </p>
                                 </div>
-                            </template>
-                        </Column>
-
-                        <Column
-                            field="categorie_label"
-                            header="Catégorie"
-                            sortable
-                            style="width: 160px"
-                        >
-                            <template #body="{ data }">
-                                <span
-                                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                    :class="
-                                        categorieColors[data.categorie] ??
-                                        'bg-muted text-muted-foreground'
-                                    "
-                                >
-                                    {{ data.categorie_label }}
-                                </span>
-                                <p
-                                    v-if="data.valorise"
-                                    class="mt-1 text-[11px] text-muted-foreground"
-                                >
-                                    Valorisé, non versé
-                                </p>
                             </template>
                         </Column>
 
@@ -763,105 +741,36 @@ function ouvrirHistorique(t: TypeRemuneration) {
         @hide="form.clearErrors()"
     >
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="submit(false)">
-            <div class="grid gap-4 sm:grid-cols-3">
-                <div class="sm:col-span-2">
-                    <Label
-                        for="tr-libelle"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Libellé <span class="text-destructive">*</span>
-                    </Label>
-                    <Input
-                        id="tr-libelle"
-                        v-model="form.libelle"
-                        placeholder="Ex : Prime de transport"
-                        :class="{ 'border-destructive': form.errors.libelle }"
-                    />
-                    <p
-                        v-if="form.errors.libelle"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.libelle }}
-                    </p>
-                </div>
-                <div>
-                    <Label
-                        for="tr-code"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Code</Label
-                    >
-                    <Input
-                        id="tr-code"
-                        v-model="form.code"
-                        placeholder="Proposé automatiquement"
-                        class="font-mono uppercase"
-                        :class="{ 'border-destructive': form.errors.code }"
-                    />
-                    <p
-                        v-if="form.errors.code"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.code }}
-                    </p>
-                </div>
-            </div>
-
             <div>
                 <Label
-                    for="tr-description"
+                    for="tr-libelle"
                     class="mb-1.5 block text-xs font-medium"
-                    >Description</Label
                 >
-                <textarea
-                    id="tr-description"
-                    v-model="form.description"
-                    rows="2"
-                    placeholder="Conditions d’attribution, observations…"
-                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    Nom de la prime <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                    id="tr-libelle"
+                    v-model="form.libelle"
+                    placeholder="Ex : Prime de transport, prime de rendement"
+                    :class="{ 'border-destructive': form.errors.libelle }"
                 />
                 <p
-                    v-if="form.errors.description"
+                    v-if="form.errors.libelle"
                     class="mt-1 text-xs text-destructive"
                 >
-                    {{ form.errors.description }}
+                    {{ form.errors.libelle }}
                 </p>
             </div>
 
+            <p
+                v-if="categorieHistorique"
+                class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+                data-testid="categorie-historique"
+            >
+                {{ categorieHistorique }}
+            </p>
+
             <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <Label
-                        for="tr-categorie"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Catégorie <span class="text-destructive">*</span>
-                    </Label>
-                    <select
-                        id="tr-categorie"
-                        v-model="form.categorie"
-                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                    >
-                        <option
-                            v-for="c in categories"
-                            :key="c.value"
-                            :value="c.value"
-                        >
-                            {{ c.label }}
-                        </option>
-                    </select>
-                    <p
-                        v-if="form.categorie === 'avantage_nature'"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Un avantage en nature est valorisé (valeur estimée),
-                        jamais versé dans le net à payer.
-                    </p>
-                    <p
-                        v-if="form.errors.categorie"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.categorie }}
-                    </p>
-                </div>
                 <div>
                     <Label
                         for="tr-mode"
@@ -909,28 +818,12 @@ function ouvrirHistorique(t: TypeRemuneration) {
                             {{ p.label }}
                         </option>
                     </select>
-                </div>
-                <div>
-                    <Label
-                        for="tr-nature"
-                        class="mb-1.5 block text-xs font-medium"
+                    <p
+                        v-if="form.errors.periodicite"
+                        class="mt-1 text-xs text-destructive"
                     >
-                        Nature du montant
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <select
-                        id="tr-nature"
-                        v-model="form.nature_montant"
-                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                    >
-                        <option
-                            v-for="n in natures_montant"
-                            :key="n.value"
-                            :value="n.value"
-                        >
-                            {{ n.label }}
-                        </option>
-                    </select>
+                        {{ form.errors.periodicite }}
+                    </p>
                 </div>
             </div>
 
@@ -966,16 +859,12 @@ function ouvrirHistorique(t: TypeRemuneration) {
                         class="mb-1.5 block text-xs font-medium"
                         >Montant par défaut (GNF)</Label
                     >
-                    <Input
+                    <MontantInput
                         id="tr-montant"
-                        v-model.number="form.montant_defaut"
-                        type="number"
-                        min="0"
-                        step="1"
+                        v-model="form.montant_defaut"
+                        class="h-9"
                         placeholder="Facultatif — proposé à l’attribution"
-                        :class="{
-                            'border-destructive': form.errors.montant_defaut,
-                        }"
+                        :invalid="!!form.errors.montant_defaut"
                     />
                     <p
                         v-if="form.errors.montant_defaut"
@@ -986,85 +875,177 @@ function ouvrirHistorique(t: TypeRemuneration) {
                 </template>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <Label
-                        for="tr-debut"
-                        class="mb-1.5 block text-xs font-medium"
-                        >Applicable à partir du</Label
-                    >
-                    <Input
-                        id="tr-debut"
-                        v-model="form.date_debut_application"
-                        type="date"
-                    />
-                    <p
-                        v-if="form.errors.date_debut_application"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.date_debut_application }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="tr-fin" class="mb-1.5 block text-xs font-medium"
-                        >Applicable jusqu’au</Label
-                    >
-                    <Input
-                        id="tr-fin"
-                        v-model="form.date_fin_application"
-                        type="date"
-                    />
-                    <p
-                        v-if="form.errors.date_fin_application"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.date_fin_application }}
-                    </p>
-                </div>
+            <div>
+                <Label
+                    for="tr-description"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Description</Label
+                >
+                <textarea
+                    id="tr-description"
+                    v-model="form.description"
+                    rows="2"
+                    placeholder="Facultatif — conditions d’attribution, observations…"
+                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                />
+                <p
+                    v-if="form.errors.description"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.description }}
+                </p>
             </div>
 
-            <div class="space-y-2.5 rounded-lg border bg-muted/30 p-3">
-                <div class="flex items-center gap-3">
-                    <Checkbox
-                        id="tr-prorata"
-                        :model-value="form.proratisable"
-                        @update:model-value="
-                            form.proratisable = $event === true
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="tr-prorata"
-                            class="cursor-pointer text-sm font-medium"
-                            >Proratisable</Label
-                        >
-                        <p class="text-xs text-muted-foreground">
-                            Réduit au prorata en cas d’entrée ou de sortie en
-                            cours de mois.
-                        </p>
+            <details
+                class="rounded-lg border"
+                :open="avanceOuvert || erreurAvancee"
+                data-testid="options-avancees"
+                @toggle="
+                    avanceOuvert = ($event.target as HTMLDetailsElement).open
+                "
+            >
+                <summary
+                    class="cursor-pointer px-3 py-2 text-sm font-medium select-none"
+                >
+                    Options avancées
+                    <span class="ml-1 text-xs font-normal text-muted-foreground"
+                        >code, nature du montant, période d’application,
+                        prorata, cumul</span
+                    >
+                </summary>
+                <div class="space-y-4 border-t p-3">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label
+                                for="tr-code"
+                                class="mb-1.5 block text-xs font-medium"
+                                >Code</Label
+                            >
+                            <Input
+                                id="tr-code"
+                                v-model="form.code"
+                                placeholder="Proposé automatiquement"
+                                class="font-mono uppercase"
+                                :class="{
+                                    'border-destructive': form.errors.code,
+                                }"
+                            />
+                            <p
+                                v-if="form.errors.code"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.code }}
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="tr-nature"
+                                class="mb-1.5 block text-xs font-medium"
+                            >
+                                Nature du montant
+                            </Label>
+                            <select
+                                id="tr-nature"
+                                v-model="form.nature_montant"
+                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                            >
+                                <option
+                                    v-for="n in natures_montant"
+                                    :key="n.value"
+                                    :value="n.value"
+                                >
+                                    {{ n.label }}
+                                </option>
+                            </select>
+                            <p
+                                v-if="form.errors.nature_montant"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.nature_montant }}
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="tr-debut"
+                                class="mb-1.5 block text-xs font-medium"
+                                >Applicable à partir du</Label
+                            >
+                            <Input
+                                id="tr-debut"
+                                v-model="form.date_debut_application"
+                                type="date"
+                            />
+                            <p
+                                v-if="form.errors.date_debut_application"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.date_debut_application }}
+                            </p>
+                        </div>
+                        <div>
+                            <Label
+                                for="tr-fin"
+                                class="mb-1.5 block text-xs font-medium"
+                                >Applicable jusqu’au</Label
+                            >
+                            <Input
+                                id="tr-fin"
+                                v-model="form.date_fin_application"
+                                type="date"
+                            />
+                            <p
+                                v-if="form.errors.date_fin_application"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.date_fin_application }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2.5">
+                        <div class="flex items-center gap-3">
+                            <Checkbox
+                                id="tr-prorata"
+                                :model-value="form.proratisable"
+                                @update:model-value="
+                                    form.proratisable = $event === true
+                                "
+                            />
+                            <div>
+                                <Label
+                                    for="tr-prorata"
+                                    class="cursor-pointer text-sm font-medium"
+                                    >Proratisable</Label
+                                >
+                                <p class="text-xs text-muted-foreground">
+                                    Réduite au prorata en cas d’entrée ou de
+                                    sortie en cours de mois.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <Checkbox
+                                id="tr-cumul"
+                                :model-value="form.cumul_autorise"
+                                @update:model-value="
+                                    form.cumul_autorise = $event === true
+                                "
+                            />
+                            <div>
+                                <Label
+                                    for="tr-cumul"
+                                    class="cursor-pointer text-sm font-medium"
+                                    >Cumul autorisé</Label
+                                >
+                                <p class="text-xs text-muted-foreground">
+                                    Un salarié peut la recevoir plusieurs fois
+                                    sur la même période.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-3">
-                    <Checkbox
-                        id="tr-cumul"
-                        :model-value="form.cumul_autorise"
-                        @update:model-value="
-                            form.cumul_autorise = $event === true
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="tr-cumul"
-                            class="cursor-pointer text-sm font-medium"
-                            >Cumul autorisé</Label
-                        >
-                        <p class="text-xs text-muted-foreground">
-                            Un salarié peut le recevoir plusieurs fois sur la
-                            même période.
-                        </p>
-                    </div>
-                </div>
-            </div>
+            </details>
 
             <p
                 v-if="!peutValider"

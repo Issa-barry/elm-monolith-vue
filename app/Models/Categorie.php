@@ -24,6 +24,7 @@ class Categorie extends Model
         'reference',
         'description',
         'statut',
+        'capacite_vehicule_obligatoire',
         'position',
         'created_by',
         'updated_by',
@@ -31,6 +32,7 @@ class Categorie extends Model
 
     protected $casts = [
         'statut' => CategorieStatut::class,
+        'capacite_vehicule_obligatoire' => 'boolean',
         'position' => 'integer',
     ];
 

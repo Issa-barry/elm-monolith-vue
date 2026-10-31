@@ -57,7 +57,7 @@ final class PermissionCatalog
         'rh-paie.close' => 'Paie — clôturer une période',
         'rh-employes.donnees_sensibles' => 'Employés — voir et modifier les données sensibles (n° CNSS, coordonnées de paiement)',
         'rh-remunerations.read' => 'Employés — voir les salaires et rémunérations (contrats, fiche employé)',
-        'rh-referentiels.gerer' => 'RH — gérer les fonctions et services',
+        'rh-referentiels.gerer' => 'RH — gérer les fonctions, services et modèles de contrat',
         'imports-rh.create' => 'Import RH — mettre à jour les dossiers et contrats par fichier Excel',
         'imports-rh.read' => 'Import RH — consulter les imports',
         'rh-types-remuneration.valider' => 'Primes et avantages — valider, fermer, désactiver, réactiver un type (et modifier un type validé)',
@@ -115,6 +115,7 @@ final class PermissionCatalog
         'ventes.valider_reception' => 'Ventes — valider la réception',
         'ventes.enregistrer_retour' => 'Ventes — enregistrer un retour de livraison',
         'ventes.annuler_exceptionnel' => 'Ventes — annulation exceptionnelle (commande saisie par erreur, même encaissée)',
+        'ventes.regulariser_apres_encaissement' => 'Ventes — régulariser une vente déjà encaissée (quantité saisie en trop)',
         'ventes.exporter' => 'Ventes — exporter',
         'factures.encaisser' => 'Factures — encaisser',
         'factures.encaisser_autre_agence' => "Factures — encaisser dans son agence une commande d'une autre agence",
@@ -162,7 +163,7 @@ final class PermissionCatalog
                 'Cycle de vente' => [
                     'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement',
                     'ventes.valider_chargement', 'ventes.valider_reception', 'ventes.enregistrer_retour',
-                    'ventes.annuler_exceptionnel',
+                    'ventes.annuler_exceptionnel', 'ventes.regulariser_apres_encaissement',
                     'ventes.qte.update', 'ventes.prix.update',
                 ],
                 'Précommandes' => [

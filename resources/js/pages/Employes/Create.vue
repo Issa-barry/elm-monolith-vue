@@ -2,6 +2,7 @@
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import { type NationaliteOption } from '@/components/rh/NationaliteSelect.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -23,7 +24,9 @@ defineProps<{
     sites: Option[];
     fonctions: Option[];
     services: Option[];
-    mode_paiement_options: Option[];
+    civilite_options: Option[];
+    nationalite_options: NationaliteOption[];
+    lien_contact_options: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -43,21 +46,15 @@ const form = useForm({
     statut: 'actif',
     // Dossier salarié (facultatif)
     service_rh_id: null as string | null,
-    date_embauche: '',
-    date_sortie: '',
-    motif_sortie: '',
     date_naissance: '',
     lieu_naissance: '',
-    sexe: '',
+    civilite: '',
     nationalite: '',
     contact_urgence_nom: '',
     contact_urgence_lien: '',
+    contact_urgence_lien_precision: '',
     contact_urgence_telephone: '',
     numero_cnss: '',
-    paiement_mode: '',
-    paiement_etablissement: '',
-    paiement_numero_compte: '',
-    paiement_titulaire: '',
 });
 
 function submit() {
@@ -68,7 +65,7 @@ function submit() {
 <template>
     <Head><title>Nouvel employé</title></Head>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="mx-auto w-full max-w-4xl p-4 sm:p-6">
             <div class="mb-6 flex items-center gap-4">
                 <Link href="/backoffice/employes">
                     <Button variant="ghost" size="icon"
@@ -85,7 +82,7 @@ function submit() {
                 </div>
             </div>
 
-            <form class="max-w-2xl space-y-6" @submit.prevent="submit">
+            <form class="space-y-6" @submit.prevent="submit">
                 <div class="space-y-5 rounded-xl border bg-card p-6 shadow-sm">
                     <h3
                         class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
@@ -256,7 +253,10 @@ function submit() {
                 <EmployeDossierFields
                     v-model:form="form"
                     :services="services"
-                    :mode-paiement-options="mode_paiement_options"
+                    :civilite-options="civilite_options"
+                    :nationalite-options="nationalite_options"
+                    :lien-contact-options="lien_contact_options"
+                    creation
                 />
 
                 <div class="flex items-center justify-between">

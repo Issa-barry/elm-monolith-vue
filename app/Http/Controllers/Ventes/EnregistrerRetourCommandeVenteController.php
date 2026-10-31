@@ -23,7 +23,7 @@ class EnregistrerRetourCommandeVenteController extends Controller
         $this->authorize('enregistrerRetour', $commande_vente);
 
         $data = $request->validate([
-            'motif' => ['required', Rule::enum(MotifRetourCommande::class)],
+            'motif' => ['required', Rule::enum(MotifRetourCommande::class)->except([MotifRetourCommande::REGULARISATION])],
             'commentaire' => ['nullable', 'string', 'max:1000', 'required_if:motif,'.MotifRetourCommande::AUTRE->value],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.id' => ['required', 'string'],

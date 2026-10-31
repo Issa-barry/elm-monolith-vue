@@ -171,6 +171,55 @@ class CategorieTest extends TestCase
         $this->assertDatabaseHas('categories', ['id' => $categorie->id, 'nom' => 'Nouveau nom']);
     }
 
+    public function test_store_et_update_enregistrent_la_capacite_vehicule_obligatoire(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.categories.store'), ['nom' => 'Sachet eau', 'capacite_vehicule_obligatoire' => true])
+            ->assertSessionHasNoErrors();
+
+        $categorie = Categorie::where('organization_id', $this->org->id)->where('nom', 'Sachet eau')->firstOrFail();
+        $this->assertTrue($categorie->capacite_vehicule_obligatoire);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.categories.update', $categorie), ['capacite_vehicule_obligatoire' => false])
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($categorie->fresh()->capacite_vehicule_obligatoire);
+    }
+
+    public function test_par_defaut_une_categorie_nexige_pas_de_capacite_vehicule(): void
+    {
+        $this->assertFalse($this->makeCategorie($this->org)->fresh()->capacite_vehicule_obligatoire);
+    }
+
+    /** Annonce l'impact du réglage : véhicules actifs pouvant vendre et sans capacité pour la catégorie. */
+    public function test_index_compte_les_vehicules_sans_capacite_pour_la_categorie(): void
+    {
+        $categorie = $this->makeCategorie($this->org, ['capacite_vehicule_obligatoire' => true]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $creer = fn (array $attrs) => Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $type->id,
+            'proprietaire_id' => $proprietaire->id,
+            'is_active' => true,
+            'livraison_vente' => true,
+            ...$attrs,
+        ]);
+
+        $creer([]);
+        $configure = $creer([]);
+        $configure->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $categorie->id, 'capacite_max' => 270]);
+        $creer(['is_active' => false]);
+        $creer(['livraison_vente' => false, 'livraison_logistique' => false, 'livraison_grossiste' => false]);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.categories.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('categories.0.capacite_vehicule_obligatoire', true)
+                ->where('categories.0.vehicules_sans_capacite_count', 1));
+    }
+
     /**
      * Le renommage d'une catégorie ne doit jamais régénérer sa `reference` — c'est précisément
      * ce qui la rend utilisable comme référence stable par l'import flotte malgré un renommage

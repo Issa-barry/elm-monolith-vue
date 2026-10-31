@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import InfoTooltip from '@/components/InfoTooltip.vue';
+import MontantInput from '@/components/MontantInput.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -44,7 +46,10 @@ const form = useForm({
     type_contrat: props.contrat.type_contrat,
     date_debut: props.contrat.date_debut ?? '',
     date_fin: props.contrat.date_fin ?? '',
-    salaire_base: props.contrat.salaire_base ?? '',
+    salaire_base:
+        props.contrat.salaire_base === null
+            ? null
+            : Number(props.contrat.salaire_base),
     statut_contrat: props.contrat.statut_contrat,
 });
 
@@ -58,7 +63,7 @@ function submit() {
 <template>
     <Head><title>Modifier le contrat</title></Head>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="mx-auto w-full max-w-2xl p-4 sm:p-6">
             <div class="mb-6 flex items-center gap-4">
                 <Link href="/backoffice/contrats">
                     <Button variant="ghost" size="icon"
@@ -70,7 +75,7 @@ function submit() {
                 </h1>
             </div>
 
-            <form class="max-w-xl space-y-6" @submit.prevent="submit">
+            <form class="space-y-6" @submit.prevent="submit">
                 <div class="space-y-5 rounded-xl border bg-card p-6 shadow-sm">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium"
@@ -120,10 +125,24 @@ function submit() {
                             />
                         </div>
                         <div>
-                            <label class="mb-1.5 block text-sm font-medium"
-                                >Date de début
-                                <span class="text-destructive">*</span></label
-                            >
+                            <div class="mb-1.5 flex items-center gap-1.5">
+                                <label class="text-sm font-medium"
+                                    >Date de début
+                                    <span class="text-destructive"
+                                        >*</span
+                                    ></label
+                                >
+                                <InfoTooltip
+                                    label="Aide : date de début du contrat"
+                                >
+                                    Premier jour prévu d'exécution du contrat de
+                                    travail. Le premier contrat d'un salarié
+                                    renseigne aussi sa date d'embauche si elle
+                                    est encore vide. Deux contrats d'un même
+                                    salarié ne peuvent pas couvrir les mêmes
+                                    jours.
+                                </InfoTooltip>
+                            </div>
                             <input
                                 v-model="form.date_debut"
                                 type="date"
@@ -141,17 +160,28 @@ function submit() {
                             </p>
                         </div>
                         <div>
-                            <label class="mb-1.5 block text-sm font-medium">
-                                Date de fin
-                                <span v-if="isCdd" class="text-destructive"
-                                    >*</span
+                            <div class="mb-1.5 flex items-center gap-1.5">
+                                <label class="text-sm font-medium">
+                                    Date de fin
+                                    <span v-if="isCdd" class="text-destructive"
+                                        >*</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >(CDI = indéterminé)</span
+                                    >
+                                </label>
+                                <InfoTooltip
+                                    label="Aide : date de fin du contrat"
                                 >
-                                <span
-                                    v-else
-                                    class="text-xs text-muted-foreground"
-                                    >(CDI = indéterminé)</span
-                                >
-                            </label>
+                                    Date de fin prévue du contrat, obligatoire
+                                    pour un CDD. Elle est distincte de la date
+                                    de sortie effective, qui s'enregistre avec «
+                                    Enregistrer le départ » sur la fiche du
+                                    salarié.
+                                </InfoTooltip>
+                            </div>
                             <input
                                 v-model="form.date_fin"
                                 type="date"
@@ -172,16 +202,32 @@ function submit() {
                             v-if="can('rh-remunerations.read')"
                             class="sm:col-span-2"
                         >
-                            <label class="mb-1.5 block text-sm font-medium"
-                                >Salaire de base (GNF)</label
-                            >
-                            <input
+                            <div class="mb-1.5 flex items-center gap-1.5">
+                                <label
+                                    for="contrat-salaire"
+                                    class="text-sm font-medium"
+                                    >Salaire de base</label
+                                >
+                                <InfoTooltip label="Aide : salaire de base">
+                                    Salaire de base mensuel prévu au contrat,
+                                    distinct des primes et autres éléments de
+                                    rémunération (écran « Primes des salariés
+                                    »).
+                                </InfoTooltip>
+                            </div>
+                            <MontantInput
+                                id="contrat-salaire"
                                 v-model="form.salaire_base"
-                                type="number"
-                                min="0"
-                                step="1000"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                unite="GNF"
+                                placeholder="Ex : 750 000"
+                                :invalid="!!form.errors.salaire_base"
                             />
+                            <p
+                                v-if="form.errors.salaire_base"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.salaire_base }}
+                            </p>
                         </div>
                     </div>
                 </div>

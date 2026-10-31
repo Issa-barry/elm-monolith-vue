@@ -1,22 +1,28 @@
 <script setup lang="ts">
 import DetailHeader from '@/components/DetailHeader.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Briefcase,
     Gift,
     History,
+    Loader2,
+    LogOut,
     Pencil,
     Plus,
+    RotateCcw,
     ShieldCheck,
     UserRound,
     Warehouse,
 } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
+import { computed, ref } from 'vue';
 
 interface ContratRow {
     id: string;
@@ -65,7 +71,7 @@ interface EmployeData {
     motif_sortie: string | null;
     date_naissance: string | null;
     lieu_naissance: string | null;
-    sexe: string | null;
+    civilite_label: string | null;
     nationalite: string | null;
     contact_urgence_nom: string | null;
     contact_urgence_lien: string | null;
@@ -82,6 +88,8 @@ interface EmployeData {
     contrats: ContratRow[];
     affectations: AffectationRow[];
     compte: CompteInfo | null;
+    // Enregistrer / annuler le départ : calculé par le serveur (permissions, organisation, agence).
+    peut_gerer_depart: boolean;
 }
 
 interface PrimeRow {
@@ -126,7 +134,33 @@ const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
-const SEXE_LABEL: Record<string, string> = { F: 'Femme', M: 'Homme' };
+// Départ du salarié (docs/rh-depart-salarie.md)
+const aujourdhui = new Date().toLocaleDateString('en-CA');
+const departOuvert = ref(false);
+const annulationOuverte = ref(false);
+const depart = useForm({ date_sortie: aujourdhui, motif_sortie: '' });
+const annulation = useForm({});
+// Refus serveur de l'annulation (paie figée, autre contrat actif) : clé `depart`.
+const erreurAnnulation = computed(
+    () => (annulation.errors as Record<string, string | undefined>).depart,
+);
+
+function enregistrerDepart() {
+    depart.post(`/backoffice/employes/${props.employe.id}/depart`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            departOuvert.value = false;
+            depart.reset();
+        },
+    });
+}
+
+function annulerDepart() {
+    annulation.delete(`/backoffice/employes/${props.employe.id}/depart`, {
+        preserveScroll: true,
+        onSuccess: () => (annulationOuverte.value = false),
+    });
+}
 
 /** Date ISO (AAAA-MM-JJ) → JJ/MM/AAAA, sans dépendre du fuseau du navigateur. */
 function dateFr(iso: string | null): string {
@@ -174,6 +208,32 @@ function dateFr(iso: string | null): string {
                             Nouveau contrat
                         </Button>
                     </Link>
+                    <Button
+                        v-if="
+                            employe.peut_gerer_depart &&
+                            employe.statut !== 'sorti'
+                        "
+                        variant="outline"
+                        size="sm"
+                        data-testid="enregistrer-depart"
+                        @click="departOuvert = true"
+                    >
+                        <LogOut class="mr-1.5 h-4 w-4" />
+                        Enregistrer le départ
+                    </Button>
+                    <Button
+                        v-if="
+                            employe.peut_gerer_depart &&
+                            employe.statut === 'sorti'
+                        "
+                        variant="outline"
+                        size="sm"
+                        data-testid="annuler-depart"
+                        @click="annulationOuverte = true"
+                    >
+                        <RotateCcw class="mr-1.5 h-4 w-4" />
+                        Annuler le départ
+                    </Button>
                     <Link
                         v-if="can('rh-employes.update')"
                         :href="`/backoffice/employes/${employe.id}/edit`"
@@ -311,14 +371,10 @@ function dateFr(iso: string | null): string {
                             </div>
                             <div>
                                 <dt class="text-xs text-muted-foreground">
-                                    Sexe · nationalité
+                                    Civilité · nationalité
                                 </dt>
                                 <dd class="mt-0.5 font-medium">
-                                    {{
-                                        employe.sexe
-                                            ? SEXE_LABEL[employe.sexe]
-                                            : '—'
-                                    }}
+                                    {{ employe.civilite_label ?? '—' }}
                                     · {{ employe.nationalite ?? '—' }}
                                 </dd>
                             </div>
@@ -380,14 +436,20 @@ function dateFr(iso: string | null): string {
                                     }}
                                 </dd>
                             </div>
-                            <div>
+                            <!-- Coordonnées saisies avant le 30/10/2026 : lecture seule, le mode est désormais choisi par la Comptabilité au paiement. -->
+                            <div
+                                v-if="
+                                    employe.donnees_sensibles
+                                        .paiement_mode_label
+                                "
+                            >
                                 <dt class="text-xs text-muted-foreground">
-                                    Paiement du salaire
+                                    Paiement du salaire (ancienne saisie)
                                 </dt>
                                 <dd class="mt-0.5 font-medium">
                                     {{
                                         employe.donnees_sensibles
-                                            .paiement_mode_label ?? '—'
+                                            .paiement_mode_label
                                     }}
                                     <template
                                         v-if="
@@ -409,6 +471,8 @@ function dateFr(iso: string | null): string {
                             </div>
                             <div
                                 v-if="
+                                    employe.donnees_sensibles
+                                        .paiement_mode_label &&
                                     employe.donnees_sensibles.paiement_titulaire
                                 "
                                 class="col-span-2"
@@ -675,5 +739,150 @@ function dateFr(iso: string | null): string {
                 </div>
             </div>
         </div>
+
+        <Dialog
+            :visible="departOuvert"
+            modal
+            :closable="!depart.processing"
+            header="Enregistrer le départ"
+            :style="{ width: '30rem' }"
+            @update:visible="
+                (v: boolean) => {
+                    if (!v && !depart.processing) departOuvert = false;
+                }
+            "
+        >
+            <div class="space-y-4">
+                <p class="text-sm text-muted-foreground">
+                    Le salarié passe en « Sorti » à cette date. Son contrat en
+                    cours est terminé à la même date et la paie s'arrête à la
+                    date de sortie. Le départ peut être annulé tant que la paie
+                    du mois n'est pas figée.
+                </p>
+                <div>
+                    <div class="mb-1.5 flex items-center gap-1.5">
+                        <label for="depart-date" class="text-xs font-medium"
+                            >Date de sortie effective</label
+                        >
+                        <InfoTooltip label="Aide : date de sortie effective">
+                            Date à laquelle le salarié quitte effectivement
+                            l'entreprise. Elle est distincte de la date de fin
+                            prévue d'un CDD et ne peut pas être dans le futur.
+                        </InfoTooltip>
+                    </div>
+                    <input
+                        id="depart-date"
+                        v-model="depart.date_sortie"
+                        type="date"
+                        :max="aujourdhui"
+                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                    <p
+                        v-if="depart.errors.date_sortie"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ depart.errors.date_sortie }}
+                    </p>
+                </div>
+                <div>
+                    <div class="mb-1.5 flex items-center gap-1.5">
+                        <label for="depart-motif" class="text-xs font-medium"
+                            >Motif de sortie</label
+                        >
+                        <InfoTooltip label="Aide : motif de sortie">
+                            Raison du départ, selon les procédures RH : fin de
+                            CDD, démission, licenciement, départ à la retraite…
+                        </InfoTooltip>
+                    </div>
+                    <input
+                        id="depart-motif"
+                        v-model="depart.motif_sortie"
+                        type="text"
+                        maxlength="255"
+                        placeholder="Ex : fin de CDD, démission"
+                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                    <p
+                        v-if="depart.errors.motif_sortie"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ depart.errors.motif_sortie }}
+                    </p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="depart.processing"
+                        @click="departOuvert = false"
+                        >Annuler</Button
+                    >
+                    <Button
+                        size="sm"
+                        :disabled="
+                            depart.processing ||
+                            !depart.date_sortie ||
+                            !depart.motif_sortie.trim()
+                        "
+                        data-testid="confirmer-depart"
+                        @click="enregistrerDepart"
+                    >
+                        <Loader2
+                            v-if="depart.processing"
+                            class="mr-1.5 h-3.5 w-3.5 animate-spin"
+                        />
+                        Enregistrer le départ
+                    </Button>
+                </div>
+            </div>
+        </Dialog>
+
+        <Dialog
+            :visible="annulationOuverte"
+            modal
+            :closable="!annulation.processing"
+            header="Annuler le départ"
+            :style="{ width: '28rem' }"
+            @update:visible="
+                (v: boolean) => {
+                    if (!v && !annulation.processing) annulationOuverte = false;
+                }
+            "
+        >
+            <div class="space-y-4">
+                <p class="text-sm text-muted-foreground">
+                    Le salarié redevient actif, la date et le motif de sortie
+                    sont effacés et le contrat terminé par ce départ est rétabli
+                    tel qu'il était.
+                </p>
+                <p
+                    v-if="erreurAnnulation"
+                    class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                    {{ erreurAnnulation }}
+                </p>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="annulation.processing"
+                        @click="annulationOuverte = false"
+                        >Fermer</Button
+                    >
+                    <Button
+                        size="sm"
+                        :disabled="annulation.processing"
+                        data-testid="confirmer-annulation-depart"
+                        @click="annulerDepart"
+                    >
+                        <Loader2
+                            v-if="annulation.processing"
+                            class="mr-1.5 h-3.5 w-3.5 animate-spin"
+                        />
+                        Annuler le départ
+                    </Button>
+                </div>
+            </div>
+        </Dialog>
     </AppLayout>
 </template>

@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\CategorieTypeRemuneration;
 use App\Enums\ModeCalculRemuneration;
 use App\Enums\NatureMontantRemuneration;
 use App\Enums\PeriodiciteRemuneration;
@@ -34,7 +33,8 @@ class TypeRemunerationRequest extends FormRequest
             'libelle' => ['required', 'string', 'max:100'],
             'code' => ['nullable', 'string', 'max:30'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'categorie' => ['required', Rule::in(CategorieTypeRemuneration::values())],
+            // Pas de catégorie : toute création est une prime, la catégorie d'un type existant ne
+            // change jamais (ADR 0046). Une valeur envoyée est ignorée.
             'mode_calcul' => ['required', Rule::in(ModeCalculRemuneration::values())],
             'periodicite' => ['required', Rule::in(PeriodiciteRemuneration::values())],
             'nature_montant' => ['required', Rule::in(NatureMontantRemuneration::values())],
@@ -54,8 +54,6 @@ class TypeRemunerationRequest extends FormRequest
             'libelle.required' => 'Le libellé est obligatoire.',
             'libelle.max' => 'Le libellé ne doit pas dépasser 100 caractères.',
             'code.max' => 'Le code ne doit pas dépasser 30 caractères.',
-            'categorie.required' => 'La catégorie est obligatoire.',
-            'categorie.in' => 'Catégorie inconnue.',
             'mode_calcul.required' => 'Le mode de calcul est obligatoire.',
             'mode_calcul.in' => 'Mode de calcul inconnu.',
             'periodicite.required' => 'La périodicité est obligatoire.',

@@ -93,6 +93,10 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
         rhItems.push(
             { title: 'Fonctions RH', href: '/backoffice/fonctions-rh' },
             { title: 'Services RH', href: '/backoffice/services-rh' },
+            {
+                title: 'Modèles de contrat',
+                href: '/backoffice/modeles-contrat',
+            },
         );
     }
     if (moduleRhActif && can('rh-types-remuneration.read')) {

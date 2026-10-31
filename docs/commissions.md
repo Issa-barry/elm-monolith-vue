@@ -1688,3 +1688,25 @@ de partage qu'à partir de sa création, et une relance partielle se fait à la 
   qui a chargé (équipe dont `created_at` ≤ `chargement_valide_at` < `deleted_at`), puis « Relancer
   la génération » depuis la fiche commande : la part Livreurs est créée à la date d'origine.
 - Tests : `tests/Feature/CommissionTriggerVenteTest.php` (section COMM-023).
+
+## Régularisation d'une vente après encaissement — recalcul immédiat (30/10/2026, ADR 0043)
+
+Une baisse de quantité sur une vente déjà encaissée (cf. [regularisation-vente.md](regularisation-vente.md))
+recalcule **immédiatement** sa commission, avec le moteur officiel, à la date de gain d'origine
+(`CommissionEnveloppeGenerator::simulerPourCommandeVente()`, sans écriture, puis
+`RegularisationCommissionService`) :
+
+- part **non engagée** : remplacée par la part recalculée, période rouverte et recalculée (mécanisme
+  commun : ligne obsolète / commission hors fiche) ;
+- part **engagée** (versement, fiche figée, période clôturée) : conservée avec ses paiements, montant
+  théorique recalculé en place, écart `versé − recalculé` enregistré dans
+  `commission_ecarts_regularisation` (trop-perçu ou complément, « À régulariser ») ;
+- jamais de commission négative ni de compensation entre bénéficiaires ; le reste à payer d'une
+  fiche figée est ramené au montant recalculé (`paiement_fiches.reduction_regularisation`, montants
+  figés intacts) : un complément se paie par la fiche et se solde seul, un trop-perçu est constaté
+  par « Marquer régularisé » (fiche commande, commentaire obligatoire) ;
+- `CommissionEnveloppePart::recalculStatut()` : versé ≥ montant dû (même ramené à 0) = « payée ».
+
+Révise, pour ce seul cas, « une commission n'est jamais recalculée après une décision humaine » :
+le retour de livraison et l'annulation exceptionnelle gardent leur refus.
+

@@ -16,6 +16,11 @@ enum MotifRetourCommande: string
     case ERREUR_PREPARATION = 'erreur_preparation';
     case PROBLEME_LIVRAISON = 'probleme_livraison';
     case AUTRE = 'autre';
+    /**
+     * Mouvement d'une régularisation après encaissement (ADR 0043) — jamais proposé pour un retour
+     * de livraison (exclu de options()).
+     */
+    case REGULARISATION = 'regularisation';
 
     public function label(): string
     {
@@ -26,6 +31,7 @@ enum MotifRetourCommande: string
             self::ERREUR_PREPARATION => 'Erreur de préparation',
             self::PROBLEME_LIVRAISON => 'Problème de livraison',
             self::AUTRE => 'Autre',
+            self::REGULARISATION => 'Régularisation après encaissement',
         };
     }
 
@@ -34,7 +40,7 @@ enum MotifRetourCommande: string
     {
         return array_map(
             fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
-            self::cases()
+            array_values(array_filter(self::cases(), fn (self $case) => $case !== self::REGULARISATION)),
         );
     }
 }

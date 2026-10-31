@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\StatutCommandeVente;
 use App\Features\ModuleFeature;
 use App\Models\Categorie;
+use App\Models\CommandeVente;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -672,5 +674,183 @@ class VehiculeCapaciteTest extends TestCase
 
         $response->assertSessionHasErrors('lignes');
         $this->assertDatabaseMissing('transferts_logistiques', ['vehicule_id' => $vehicule->id]);
+    }
+
+    // ── Capacité obligatoire par catégorie (ADR 0042) ────────────────────────────────
+
+    private function makeCategorieObligatoire(string $nom): Categorie
+    {
+        return Categorie::create(['organization_id' => $this->org->id, 'nom' => $nom, 'capacite_vehicule_obligatoire' => true]);
+    }
+
+    /**
+     * Incident VTE-301026-029 (30/10/2026) : véhicule plafonné pour les bouteilles seulement,
+     * 2 700 packs de sachets saisis au lieu de 270 — la catégorie sans plafond passait pour
+     * illimitée.
+     */
+    public function test_vente_refusee_si_categorie_obligatoire_sans_capacite_sur_le_vehicule(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $bouteilles = $this->makeCategorie($this->org, 'Bouteille');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteilles->id, 'capacite_max' => 600]);
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'qte' => 2700, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasErrors(['lignes' => "Le véhicule « {$vehicule->nom_vehicule} » n'a pas de capacité maximale configurée pour « Sachet eau » : cette catégorie l'exige pour vendre. Renseignez-la dans la fiche du véhicule (Modifier → Capacités maximales de chargement)."]);
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_vente_refusee_si_categorie_obligatoire_et_vehicule_sans_aucune_capacite(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'qte' => 10, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    /** Une capacité à 0 n'est pas saisissable (minimum 1) ; présente en base, elle bloque tout. */
+    public function test_capacite_a_zero_bloque_la_vente_comme_une_capacite_absente(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 0]);
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'qte' => 1, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_vente_acceptee_quand_la_capacite_obligatoire_est_configuree_et_respectee(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 270]);
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'qte' => 270, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_capacite_obligatoire_nempeche_pas_de_vendre_une_autre_categorie(): void
+    {
+        $this->makeCategorieObligatoire('Sachet eau');
+        $bouteilles = $this->makeCategorie($this->org, 'Bouteille');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $produitBouteille = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 1.5L', 'categorie_id' => $bouteilles->id], ['prix_vente' => 3000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitBouteille->id, 'qte' => 500, 'prix_vente' => 3000]],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+    }
+
+    public function test_modification_de_commande_refusee_si_categorie_obligatoire_sans_capacite(): void
+    {
+        $sachets = $this->makeCategorie($this->org, 'Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'qte' => 270, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->firstOrFail();
+        $commande->update(['statut' => StatutCommandeVente::BROUILLON]);
+        $sachets->update(['capacite_vehicule_obligatoire' => true]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['id' => $commande->lignes->first()->id, 'produit_id' => $produitSachet->id, 'qte' => 2700, 'prix_vente' => 6000]],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertSame(270, (int) $commande->lignes()->first()->quantite_demandee);
+    }
+
+    public function test_pdv_refuse_une_categorie_obligatoire_sans_capacite(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+        $this->makeStock($produitSachet, 5000);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'quantite' => 2700]],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
+    /** Le réglage porte sur la VENTE : un transfert logistique n'est pas concerné. */
+    public function test_logistique_nest_pas_concernee_par_la_capacite_obligatoire(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org), logistique: true);
+        $siteDestination = $this->makeSiteDestination($this->org);
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack de 25 sachets', 'categorie_id' => $sachets->id], ['prix_vente' => 6000]);
+        $this->seedVarianteStockSuffisant($produitSachet->variantePrincipale()->first(), $this->defaultSite);
+
+        $this->actingAs($this->user)
+            ->post(route('logistique.store'), [
+                'site_source_id' => $this->defaultSite->id,
+                'site_destination_id' => $siteDestination->id,
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produitSachet->id, 'quantite_demandee' => 100, 'notes' => '']],
+            ])
+            ->assertSessionDoesntHaveErrors('lignes');
+
+        $this->assertDatabaseHas('transferts_logistiques', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_formulaire_de_vente_signale_les_capacites_obligatoires_manquantes(): void
+    {
+        $sachets = $this->makeCategorieObligatoire('Sachet eau');
+        $bouteilles = $this->makeCategorieObligatoire('Bouteille');
+        $vehicule = $this->makeVehicule($this->org, $this->makeTypeVehicule($this->org));
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteilles->id, 'capacite_max' => 600]);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.id', $vehicule->id)
+                ->has('vehicules.0.capacites_manquantes', 1)
+                ->where('vehicules.0.capacites_manquantes.0.categorie_id', $sachets->id)
+                ->where('vehicules.0.capacites_manquantes.0.categorie_nom', 'Sachet eau'));
     }
 }
