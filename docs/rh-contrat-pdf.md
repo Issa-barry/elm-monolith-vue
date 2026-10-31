@@ -81,7 +81,7 @@ consultables), variable vide, prime non retenue.
 
 | Action | Règle (serveur, `Rh\Contrats\VerifieAccesContrat`) |
 |---|---|
-| Consulter la page, voir/télécharger une version | `rh-contrats.read`, même organisation, agence du salarié dans le périmètre de consultation (sauf vision toutes agences) |
+| Consulter la page, voir/télécharger une version | `rh-contrats.read` + `rh-remunerations.read` (le PDF contient le salaire, masqué dans la liste sans ce droit), même organisation, agence du salarié dans le périmètre de consultation (sauf vision toutes agences) |
 | Générer, marquer signé | `rh-contrats.update` + `rh-remunerations.read` (le contrat contient le salaire), même organisation, agence du salarié dans les agences de rattachement (sauf administrateur ou superviseur) |
 | Modèles de contrat | `rh-referentiels.gerer` |
 

@@ -11,7 +11,8 @@ use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 
 /**
- * Accès aux contrats de travail générés (ADR 0044) : policy du contrat, même organisation et agence
+ * Accès aux contrats de travail générés (ADR 0044) : policy du contrat, droit de voir les salaires,
+ * même organisation et agence
  * actuelle du salarié dans le périmètre — de consultation pour lire, d'écriture (agences de
  * rattachement) pour générer ou enregistrer une signature. Organisation et agence vérifiées
  * explicitement : le Gate::before du super administrateur court-circuite les policies.
@@ -29,8 +30,9 @@ trait VerifieAccesContrat
             return false;
         }
 
-        // Le contrat contient le salaire : générer ou enregistrer une signature exige de pouvoir le voir.
-        if ($ecriture && ! $user->can('rh-remunerations.read')) {
+        // Le contrat contient le salaire : le consulter, le générer ou le signer exige de pouvoir le
+        // voir, comme dans la liste des contrats (salaire masqué sans cette permission).
+        if (! $user->can('rh-remunerations.read')) {
             return false;
         }
 

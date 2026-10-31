@@ -304,7 +304,7 @@ class DocumentContratTest extends TestCase
         $contrat = $this->contrat($this->site);
         $this->generer($this->utilisateur(self::GENERATION), $contrat)->assertSessionHasNoErrors();
         $document = DocumentContrat::sole();
-        $lecteur = $this->utilisateur(['rh-contrats.read']);
+        $lecteur = $this->utilisateur(['rh-contrats.read', 'rh-remunerations.read']);
 
         $this->generer($lecteur, $contrat)->assertForbidden();
         $this->actingAs($lecteur)->post(route('contrats.documents.signature', [$contrat, $document]), ['signe_le' => today()->toDateString()])->assertForbidden();
@@ -316,6 +316,22 @@ class DocumentContratTest extends TestCase
                 ->where('peut_generer', false)
                 ->where('variables', [])
                 ->has('versions', 1));
+    }
+
+    public function test_consulter_un_contrat_genere_exige_de_pouvoir_voir_les_salaires(): void
+    {
+        $this->activerModele();
+        $contrat = $this->contrat($this->site);
+        $this->generer($this->utilisateur(self::GENERATION), $contrat)->assertSessionHasNoErrors();
+        $document = DocumentContrat::sole();
+        $sansSalaires = $this->utilisateur(['rh-contrats.read']);
+
+        // La liste masque le salaire à ce profil : le PDF, qui le contient, ne doit pas le montrer non plus.
+        $this->actingAs($sansSalaires)->get(route('contrats.pdf', $contrat))->assertForbidden();
+        $this->actingAs($sansSalaires)->get(route('contrats.documents.pdf', [$contrat, $document]))->assertForbidden();
+        $this->actingAs($sansSalaires)->get(route('contrats.document', $contrat))->assertForbidden();
+        $this->actingAs($sansSalaires)->get(route('contrats.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('contrats.0.salaire_base', null));
     }
 
     public function test_generer_exige_de_pouvoir_voir_les_salaires(): void
@@ -367,7 +383,7 @@ class DocumentContratTest extends TestCase
     {
         $contrat = $this->contrat($this->site);
 
-        $this->actingAs($this->utilisateur(['rh-contrats.read']))->get(route('contrats.pdf', $contrat))->assertNotFound();
+        $this->actingAs($this->utilisateur(['rh-contrats.read', 'rh-remunerations.read']))->get(route('contrats.pdf', $contrat))->assertNotFound();
     }
 
     public function test_une_version_d_un_autre_contrat_est_introuvable(): void

@@ -17,7 +17,8 @@ use Inertia\Response;
 /**
  * Page « Contrat de travail » d'un contrat (ADR 0044) : données reprises, champs à compléter,
  * primes et avantages à retenir, puis historique des versions générées. La lecture suit l'accès à
- * la liste ; la génération exige l'accès en écriture (bouton masqué sinon).
+ * la liste et exige de voir les salaires ; la génération exige l'accès en écriture (bouton masqué
+ * sinon).
  */
 class ShowDocumentContratController extends Controller
 {

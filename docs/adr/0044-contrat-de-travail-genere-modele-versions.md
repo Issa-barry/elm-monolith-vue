@@ -37,7 +37,9 @@ système RH parallèle, et sans qu'un contrat signé puisse changer après coup.
    à signer ; la version est alors figée. Régénérer remplace une version à signer (statut
    `remplace`, fichier conservé) ; après signature, une génération crée une version de plus sans
    toucher à la version signée.
-7. **Accès** : lecture = `rh-contrats.read` + organisation + périmètre de consultation ; génération
+7. **Accès** : lecture = `rh-contrats.read` + `rh-remunerations.read` (le PDF contient le
+   salaire ; révision du 30/10 après test : la seule lecture des contrats l'ouvrait alors que la
+   liste masque le salaire) + organisation + périmètre de consultation ; génération
    et signature = `rh-contrats.update` + `rh-remunerations.read` + agence de rattachement ; modèles
    = `rh-referentiels.gerer` (permission existante, libellé élargi). Aucune nouvelle permission,
    donc aucune migration de droits.

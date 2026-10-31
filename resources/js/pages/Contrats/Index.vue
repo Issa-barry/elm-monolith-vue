@@ -75,6 +75,18 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+
+// Le menu ⋮ n'est affiché que s'il propose au moins une action.
+function aDesActions(contrat: Contrat): boolean {
+    return (
+        contrat.peut_generer ||
+        (contrat.document_courant !== null &&
+            can('rh-contrats.read') &&
+            can('rh-remunerations.read')) ||
+        can('rh-contrats.update') ||
+        can('rh-contrats.delete')
+    );
+}
 const confirm = useConfirm();
 const toast = useToast();
 
@@ -254,7 +266,7 @@ function confirmDelete(c: Contrat) {
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
-                                <DropdownMenu>
+                                <DropdownMenu v-if="aDesActions(data)">
                                     <DropdownMenuTrigger as-child>
                                         <Button
                                             variant="ghost"
@@ -287,6 +299,7 @@ function confirmDelete(c: Contrat) {
                                         <template
                                             v-if="
                                                 can('rh-contrats.read') &&
+                                                can('rh-remunerations.read') &&
                                                 data.document_courant
                                             "
                                         >
@@ -337,7 +350,10 @@ function confirmDelete(c: Contrat) {
                                         </template>
                                         <DropdownMenuSeparator
                                             v-if="
-                                                (data.document_courant ||
+                                                ((data.document_courant &&
+                                                    can(
+                                                        'rh-remunerations.read',
+                                                    )) ||
                                                     data.peut_generer) &&
                                                 (can('rh-contrats.update') ||
                                                     can('rh-contrats.delete'))
